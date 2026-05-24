@@ -467,6 +467,8 @@ class NumericMixin:
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
+        if type(self.val) is not datetime.datetime and (math.isnan(self.val) or math.isnan(other)):
+            return self.error('Expected <%s> to be close to <%s> within tolerance <%s>, but was not.' % (self.val, other, tolerance))
         if self.val < (other-tolerance) or self.val > (other+tolerance):
             if type(self.val) is datetime.datetime:
                 tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000

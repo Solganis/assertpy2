@@ -28,6 +28,7 @@
 
 import collections
 import datetime
+import math
 import numbers
 
 __tracebackhide__ = True
@@ -104,6 +105,8 @@ class HelpersMixin:
                 raise TypeError('given arg must be numeric')
             if isinstance(tolerance, numbers.Number) is False:
                 raise TypeError('given tolerance arg must be numeric')
+            if math.isnan(tolerance):
+                raise ValueError('given tolerance arg must not be NaN')
             if tolerance < 0:
                 raise ValueError('given tolerance arg must be positive')
 
