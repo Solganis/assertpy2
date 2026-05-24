@@ -26,7 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
 def test_expected_exception():
@@ -161,6 +161,6 @@ def func_all(arg1, arg2, *args, **kwargs):
     raise RuntimeError('all err: arg1=%s, arg2=%s, args=%s, kwargs=%s' % (arg1, arg2, args, [(k, kwargs[k]) for k in sorted(kwargs.keys())]))
 
 
-class Foo(object):
+class Foo:
     def bar(self):
         raise RuntimeError('method err')

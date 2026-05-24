@@ -28,10 +28,10 @@
 
 import abc
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
-class Person(object):
+class Person:
     def __init__(self, first_name, last_name):
         self.first_name = first_name
         self.last_name = last_name
@@ -49,7 +49,7 @@ class Developer(Person):
         return '%s writes code.' % self.first_name
 
 
-class AbstractAutomobile(object):
+class AbstractAutomobile:
     __metaclass__ = abc.ABCMeta
 
     def __init__(self):

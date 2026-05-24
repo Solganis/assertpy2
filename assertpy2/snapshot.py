@@ -26,16 +26,15 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import os
-import sys
 import datetime
 import inspect
 import json
+import os
 
 __tracebackhide__ = True
 
 
-class SnapshotMixin(object):
+class SnapshotMixin:
     """Snapshot mixin.
 
     Take a snapshot of a python data structure, store it on disk in JSON format, and automatically
@@ -118,9 +117,6 @@ class SnapshotMixin(object):
         Raises:
             AssertionError: if val does **not** equal to on-disk snapshot
         """
-        if sys.version_info[0] < 3:
-            raise NotImplementedError('snapshot testing requires Python 3')
-
         class _Encoder(json.JSONEncoder):
             def default(self, o):
                 if isinstance(o, set):
@@ -163,14 +159,14 @@ class SnapshotMixin(object):
                 json.dump(val, fp, indent=2, separators=(',', ': '), sort_keys=True, cls=_Encoder)
 
         def _load(name):
-            with open(name, 'r') as fp:
+            with open(name) as fp:
                 return json.load(fp, cls=_Decoder)
 
         def _name(path, name):
             try:
                 return os.path.join(path, 'snap-%s.json' % name.replace(' ', '_').lower())
-            except Exception:
-                raise ValueError('failed to create snapshot filename, either bad path or bad name')
+            except (TypeError, AttributeError):
+                raise ValueError('failed to create snapshot filename, either bad path or bad name') from None
 
         if id:
             # custom id

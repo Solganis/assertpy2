@@ -26,14 +26,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy import assert_that, fail
 
-import sys
+from assertpy2 import assert_that, fail
 
-if sys.version_info[0] == 3:
-    unicode = str
-else:
-    unicode = unicode
+unicode = str
 
 
 def test_is_length():

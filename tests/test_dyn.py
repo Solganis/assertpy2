@@ -26,10 +26,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
-class Person(object):
+class Person:
     def __init__(self, first_name, last_name, shoe_size):
         self.first_name = first_name
         self.last_name = last_name

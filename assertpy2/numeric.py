@@ -26,20 +26,18 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import division
-import sys
+import datetime
 import math
 import numbers
-import datetime
 
 __tracebackhide__ = True
 
 
-class NumericMixin(object):
+class NumericMixin:
     """Numeric assertions mixin."""
 
-    _NUMERIC_COMPAREABLE = set([datetime.datetime, datetime.timedelta, datetime.date, datetime.time])
-    _NUMERIC_NON_COMPAREABLE = set([complex])
+    _NUMERIC_COMPAREABLE = frozenset({datetime.datetime, datetime.timedelta, datetime.date, datetime.time})
+    _NUMERIC_NON_COMPAREABLE = frozenset({complex})
 
     def _validate_compareable(self, other):
         self_type = type(self.val)

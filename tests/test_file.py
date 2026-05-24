@@ -26,16 +26,17 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import os
+
 import pytest
-from assertpy import assert_that, contents_of, fail
+
+from assertpy2 import assert_that, contents_of, fail
 
 
 @pytest.fixture()
 def tmpfile(tmpdir):
     tmp = tmpdir.join('test.txt')
-    tmp.write('foobar'.encode('utf-8'))
+    tmp.write(b'foobar')
     with tmp.open('rb') as f:
         yield f
 
@@ -51,21 +52,13 @@ def test_contents_of_path_ascii(tmpfile):
 
 
 def test_contents_of_return_type(tmpfile):
-    if sys.version_info[0] == 3:
-        contents = contents_of(tmpfile.name)
-        assert_that(contents).is_type_of(str)
-    else:
-        contents = contents_of(tmpfile.name)
-        assert_that(contents).is_type_of(unicode)
+    contents = contents_of(tmpfile.name)
+    assert_that(contents).is_type_of(str)
 
 
 def test_contents_of_return_type_ascii(tmpfile):
-    if sys.version_info[0] == 3:
-        contents = contents_of(tmpfile.name, 'ascii')
-        assert_that(contents).is_type_of(str)
-    else:
-        contents = contents_of(tmpfile.name, 'ascii')
-        assert_that(contents).is_type_of(str)
+    contents = contents_of(tmpfile.name, 'ascii')
+    assert_that(contents).is_type_of(str)
 
 
 def test_contents_of_file(tmpfile):
@@ -90,7 +83,7 @@ def test_contains_of_missing_file_failure(tmpfile):
     try:
         contents_of('missing.txt')
         fail('should have raised error')
-    except IOError as ex:
+    except OSError as ex:
         assert_that(str(ex)).contains_ignoring_case('no such file')
 
 
@@ -124,7 +117,7 @@ def test_does_not_exist_failure(tmpfile):
         assert_that(tmpfile.name).does_not_exist()
         fail('should have raised error')
     except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to('Expected <{}> to not exist, but was found.'.format(tmpfile.name))
+        assert_that(str(ex)).is_equal_to(f'Expected <{tmpfile.name}> to not exist, but was found.')
 
 
 def test_does_not_exist_bad_val_failure(tmpfile):

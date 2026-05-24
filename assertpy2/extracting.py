@@ -26,20 +26,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import collections
-
-if sys.version_info[0] == 3:
-    str_types = (str,)
-    Iterable = collections.abc.Iterable
-else:
-    str_types = (basestring,)
-    Iterable = collections.Iterable
+import collections.abc
 
 __tracebackhide__ = True
 
 
-class ExtractingMixin(object):
+class ExtractingMixin:
     """Collection flattening mixin.
 
     It is often necessary to test collections of objects.  Use the ``extracting()`` helper to
@@ -108,7 +100,7 @@ class ExtractingMixin(object):
 
         assert_that(users).extracting('user', sort='age').is_equal_to(['Charlie', 'Alice', 'Bob'])
 
-    The *sort* can be an ``iterable`` of names and the extracted items are ordered by
+    The *sort* can be an iterable of names and the extracted items are ordered by
     corresponding value of the first name, ties are broken by the corresponding values of the
     second name, and so on::
 
@@ -164,9 +156,9 @@ class ExtractingMixin(object):
         Returns:
             AssertionBuilder: returns a new instance (now with the extracted list as the val) to chain to the next assertion
         """
-        if not isinstance(self.val, Iterable):
+        if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError('val is not iterable')
-        if isinstance(self.val, str_types):
+        if isinstance(self.val, str):
             raise TypeError('val must not be string')
         if len(names) == 0:
             raise ValueError('one or more name args must be given')
@@ -182,7 +174,7 @@ class ExtractingMixin(object):
                     return getattr(x, name)
                 else: #val has no attribute <foo>
                     raise ValueError('item attributes %s did no contain attribute <%s>' % (x._fields, name))
-            elif isinstance(x, Iterable): # FIXME, this does __getitem__, but doesn't check for it...
+            elif isinstance(x, collections.abc.Iterable): # FIXME, this does __getitem__, but doesn't check for it...
                 self._check_iterable(x, name='item')
                 return x[name]
             elif hasattr(x, name):
@@ -191,7 +183,7 @@ class ExtractingMixin(object):
                     try:
                         return attr()
                     except TypeError:
-                        raise ValueError('item method <%s()> exists, but is not zero-arg method' % name)
+                        raise ValueError('item method <%s()> exists, but is not zero-arg method' % name) from None
                 else:
                     return attr
             else:
@@ -199,13 +191,12 @@ class ExtractingMixin(object):
 
         def _filter(x):
             if 'filter' in kwargs:
-                if isinstance(kwargs['filter'], str_types):
+                if isinstance(kwargs['filter'], str):
                     return bool(_extract(x, kwargs['filter']))
                 elif self._check_dict_like(kwargs['filter'], check_values=False, return_as_bool=True):
                     for k in kwargs['filter']:
-                        if isinstance(k, str_types):
-                            if _extract(x, k) != kwargs['filter'][k]:
-                                return False
+                        if isinstance(k, str) and _extract(x, k) != kwargs['filter'][k]:
+                            return False
                     return True
                 elif callable(kwargs['filter']):
                     return kwargs['filter'](x)
@@ -214,12 +205,12 @@ class ExtractingMixin(object):
 
         def _sort(x):
             if 'sort' in kwargs:
-                if isinstance(kwargs['sort'], str_types):
+                if isinstance(kwargs['sort'], str):
                     return _extract(x, kwargs['sort'])
-                elif isinstance(kwargs['sort'], Iterable):
+                elif isinstance(kwargs['sort'], collections.abc.Iterable):
                     items = []
                     for k in kwargs['sort']:
-                        if isinstance(k, str_types):
+                        if isinstance(k, str):
                             items.append(_extract(x, k))
                     return tuple(items)
                 elif callable(kwargs['sort']):

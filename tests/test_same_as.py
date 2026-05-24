@@ -27,7 +27,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-from assertpy import assert_that, fail
+
+from assertpy2 import assert_that, fail
 
 
 def test_is_same_as():

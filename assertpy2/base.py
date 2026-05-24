@@ -29,7 +29,7 @@
 __tracebackhide__ = True
 
 
-class BaseMixin(object):
+class BaseMixin:
     """Base mixin."""
 
     def described_as(self, description):
@@ -392,7 +392,7 @@ class BaseMixin(object):
                 t = self._type(self.val)
                 return self.error('Expected <%s:%s> to be instance of class <%s>, but was not.' % (self.val, t, some_class.__name__))
         except TypeError:
-            raise TypeError('given arg must be a class')
+            raise TypeError('given arg must be a class') from None
         return self
 
     def is_length(self, length):

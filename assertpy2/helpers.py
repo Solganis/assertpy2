@@ -26,20 +26,14 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import numbers
-import datetime
 import collections
-
-if sys.version_info[0] == 3:
-    Iterable = collections.abc.Iterable
-else:
-    Iterable = collections.Iterable
+import datetime
+import numbers
 
 __tracebackhide__ = True
 
 
-class HelpersMixin(object):
+class HelpersMixin:
     """Helpers mixin.  For internal use only."""
 
     def _fmt_items(self, i):
@@ -115,39 +109,35 @@ class HelpersMixin(object):
 
     def _check_dict_like(self, d, check_keys=True, check_values=True, check_getitem=True, name='val', return_as_bool=False):
         """Helper to check if given val has various dict-like attributes."""
-        if not isinstance(d, Iterable):
+        if not isinstance(d, collections.abc.Iterable):
             if return_as_bool:
                 return False
             else:
                 raise TypeError('%s <%s> is not dict-like: not iterable' % (name, type(d).__name__))
-        if check_keys:
-            if not hasattr(d, 'keys') or not callable(getattr(d, 'keys')):
-                if return_as_bool:
-                    return False
-                else:
-                    raise TypeError('%s <%s> is not dict-like: missing keys()' % (name, type(d).__name__))
-        if check_values:
-            if not hasattr(d, 'values') or not callable(getattr(d, 'values')):
-                if return_as_bool:
-                    return False
-                else:
-                    raise TypeError('%s <%s> is not dict-like: missing values()' % (name, type(d).__name__))
-        if check_getitem:
-            if not hasattr(d, '__getitem__'):
-                if return_as_bool:
-                    return False
-                else:
-                    raise TypeError('%s <%s> is not dict-like: missing [] accessor' % (name, type(d).__name__))
+        if check_keys and (not hasattr(d, 'keys') or not callable(d.keys)):
+            if return_as_bool:
+                return False
+            else:
+                raise TypeError('%s <%s> is not dict-like: missing keys()' % (name, type(d).__name__))
+        if check_values and (not hasattr(d, 'values') or not callable(d.values)):
+            if return_as_bool:
+                return False
+            else:
+                raise TypeError('%s <%s> is not dict-like: missing values()' % (name, type(d).__name__))
+        if check_getitem and not hasattr(d, '__getitem__'):
+            if return_as_bool:
+                return False
+            else:
+                raise TypeError('%s <%s> is not dict-like: missing [] accessor' % (name, type(d).__name__))
         if return_as_bool:
             return True
 
-    def _check_iterable(self, l, check_getitem=True, name='val'):
-        """Helper to check if given val has various iterable attributes."""
-        if not isinstance(l, Iterable):
-            raise TypeError('%s <%s> is not iterable' % (name, type(l).__name__))
-        if check_getitem:
-            if not hasattr(l, '__getitem__'):
-                raise TypeError('%s <%s> does not have [] accessor' % (name, type(l).__name__))
+    def _check_iterable(self, val, check_getitem=True, name='val'):
+        """Helper to check if given val is iterable with optional item access."""
+        if not isinstance(val, collections.abc.Iterable):
+            raise TypeError('%s <%s> is not iterable' % (name, type(val).__name__))
+        if check_getitem and not hasattr(val, '__getitem__'):
+            raise TypeError('%s <%s> does not have [] accessor' % (name, type(val).__name__))
 
     def _dict_not_equal(self, val, other, ignore=None, include=None):
         """Helper to compare dicts."""
@@ -171,19 +161,19 @@ class HelpersMixin(object):
 
             # calc val keys given ignores and includes
             if ignore and include:
-                k1 = set([k for k in val if k not in ignores and k in includes])
+                k1 = {k for k in val if k not in ignores and k in includes}
             elif ignore:
-                k1 = set([k for k in val if k not in ignores])
+                k1 = {k for k in val if k not in ignores}
             else:  # include
-                k1 = set([k for k in val if k in includes])
+                k1 = {k for k in val if k in includes}
 
             # calc other keys given ignores and includes
             if ignore and include:
-                k2 = set([k for k in other if k not in ignores and k in includes])
+                k2 = {k for k in other if k not in ignores and k in includes}
             elif ignore:
-                k2 = set([k for k in other if k not in ignores])
+                k2 = {k for k in other if k not in ignores}
             else:  # include
-                k2 = set([k for k in other if k in includes])
+                k2 = {k for k in other if k in includes}
 
             if k1 != k2:
                 # different set of keys, so not equal
@@ -218,22 +208,23 @@ class HelpersMixin(object):
     def _dict_err(self, val, other, ignore=None, include=None):
         """Helper to construct error message for dict comparison."""
         def _dict_repr(d, other):
-            out = ''
+            parts = []
             ellip = False
             for k, v in sorted(d.items()):
                 if k not in other:
-                    out += '%s%s: %s' % (', ' if len(out) > 0 else '', repr(k), repr(v))
+                    parts.append('%s: %s' % (repr(k), repr(v)))
                 elif v != other[k]:
-                    out += '%s%s: %s' % (
-                        ', ' if len(out) > 0 else '',
-                        repr(k),
-                        _dict_repr(v, other[k]) if self._check_dict_like(
-                            v, check_values=False, return_as_bool=True) and self._check_dict_like(
-                                other[k], check_values=False, return_as_bool=True) else repr(v)
+                    val_repr = (
+                        _dict_repr(v, other[k])
+                        if self._check_dict_like(v, check_values=False, return_as_bool=True)
+                        and self._check_dict_like(other[k], check_values=False, return_as_bool=True)
+                        else repr(v)
                     )
+                    parts.append('%s: %s' % (repr(k), val_repr))
                 else:
                     ellip = True
-            return '{%s%s}' % ('..' if ellip and len(out) == 0 else '.., ' if ellip else '', out)
+            out = ', '.join(parts)
+            return '{%s%s}' % ('..' if ellip and not parts else '.., ' if ellip else '', out)
 
         if ignore:
             ignores = self._dict_ignore(ignore)

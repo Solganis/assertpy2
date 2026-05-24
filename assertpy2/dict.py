@@ -29,7 +29,7 @@
 __tracebackhide__ = True
 
 
-class DictMixin(object):
+class DictMixin:
     """Dict assertions mixin."""
 
     def contains_key(self, *keys):

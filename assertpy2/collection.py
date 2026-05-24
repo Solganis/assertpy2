@@ -26,22 +26,16 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import collections
-
-if sys.version_info[0] == 3:
-    Iterable = collections.abc.Iterable
-else:
-    Iterable = collections.Iterable
 
 __tracebackhide__ = True
 
 
-class CollectionMixin(object):
+class CollectionMixin:
     """Collection assertions mixin."""
 
     def is_iterable(self):
-        """Asserts that val is iterable collection.
+        """Asserts that val is iterable.
 
         Examples:
             Usage::
@@ -56,12 +50,12 @@ class CollectionMixin(object):
         Raises:
             AssertionError: if val is **not** iterable
         """
-        if not isinstance(self.val, Iterable):
+        if not isinstance(self.val, collections.abc.Iterable):
             return self.error('Expected iterable, but was not.')
         return self
 
     def is_not_iterable(self):
-        """Asserts that val is not iterable collection.
+        """Asserts that val is not iterable.
 
         Examples:
             Usage::
@@ -77,7 +71,7 @@ class CollectionMixin(object):
         Raises:
             AssertionError: if val **is** iterable
         """
-        if isinstance(self.val, Iterable):
+        if isinstance(self.val, collections.abc.Iterable):
             return self.error('Expected not iterable, but was.')
         return self
 
@@ -109,21 +103,21 @@ class CollectionMixin(object):
         Raises:
             AssertionError: if val is **not** subset of given superset (or supersets)
         """
-        if not isinstance(self.val, Iterable):
+        if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError('val is not iterable')
         if len(supersets) == 0:
             raise ValueError('one or more superset args must be given')
 
         missing = []
-        if hasattr(self.val, 'keys') and callable(getattr(self.val, 'keys')) and hasattr(self.val, '__getitem__'):
+        if hasattr(self.val, 'keys') and callable(self.val.keys) and hasattr(self.val, '__getitem__'):
             # flatten superset dicts
             superdict = {}
-            for l, j in enumerate(supersets):
-                self._check_dict_like(j, check_values=False, name='arg #%d' % (l+1))
-                for k in j.keys():
+            for idx, j in enumerate(supersets):
+                self._check_dict_like(j, check_values=False, name='arg #%d' % (idx+1))
+                for k in j:
                     superdict.update({k: j[k]})
 
-            for i in self.val.keys():
+            for i in self.val:
                 if i not in superdict:
                     missing.append({i: self.val[i]})  # bad key
                 elif self.val[i] != superdict[i]:
@@ -138,7 +132,7 @@ class CollectionMixin(object):
                 try:
                     for k in j:
                         superset.add(k)
-                except Exception:
+                except TypeError:
                     superset.add(j)
 
             for i in self.val:
@@ -180,9 +174,10 @@ class CollectionMixin(object):
         Raises:
             AssertionError: if val is **not** sorted
         """
-        if not isinstance(self.val, Iterable):
+        if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError('val is not iterable')
 
+        prev = None
         for i, x in enumerate(self.val):
             if i > 0:
                 if reverse:

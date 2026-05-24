@@ -26,23 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
+import collections.abc
 import re
-import collections
-
-if sys.version_info[0] == 3:
-    str_types = (str,)
-    unicode = str
-    Iterable = collections.abc.Iterable
-else:
-    str_types = (basestring,)
-    unicode = unicode
-    Iterable = collections.Iterable
 
 __tracebackhide__ = True
 
 
-class StringMixin(object):
+class StringMixin:
     """String assertions mixin."""
 
     def is_equal_to_ignoring_case(self, other):
@@ -66,9 +56,9 @@ class StringMixin(object):
         Raises:
             AssertionError: if actual is **not** case-insensitive equal to expected
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
-        if not isinstance(other, str_types):
+        if not isinstance(other, str):
             raise TypeError('given arg must be a string')
         if self.val.lower() != other.lower():
             return self.error('Expected <%s> to be case-insensitive equal to <%s>, but was not.' % (self.val, other))
@@ -98,30 +88,30 @@ class StringMixin(object):
         """
         if len(items) == 0:
             raise ValueError('one or more args must be given')
-        if isinstance(self.val, str_types):
+        if isinstance(self.val, str):
             if len(items) == 1:
-                if not isinstance(items[0], str_types):
+                if not isinstance(items[0], str):
                     raise TypeError('given arg must be a string')
                 if items[0].lower() not in self.val.lower():
                     return self.error('Expected <%s> to case-insensitive contain item <%s>, but did not.' % (self.val, items[0]))
             else:
                 missing = []
                 for i in items:
-                    if not isinstance(i, str_types):
+                    if not isinstance(i, str):
                         raise TypeError('given args must all be strings')
                     if i.lower() not in self.val.lower():
                         missing.append(i)
                 if missing:
                     return self.error('Expected <%s> to case-insensitive contain items %s, but did not contain %s.' % (
                         self.val, self._fmt_items(items), self._fmt_items(missing)))
-        elif isinstance(self.val, Iterable):
+        elif isinstance(self.val, collections.abc.Iterable):
             missing = []
             for i in items:
-                if not isinstance(i, str_types):
+                if not isinstance(i, str):
                     raise TypeError('given args must all be strings')
                 found = False
                 for v in self.val:
-                    if not isinstance(v, str_types):
+                    if not isinstance(v, str):
                         raise TypeError('val items must all be strings')
                     if i.lower() == v.lower():
                         found = True
@@ -157,14 +147,14 @@ class StringMixin(object):
         """
         if prefix is None:
             raise TypeError('given prefix arg must not be none')
-        if isinstance(self.val, str_types):
-            if not isinstance(prefix, str_types):
+        if isinstance(self.val, str):
+            if not isinstance(prefix, str):
                 raise TypeError('given prefix arg must be a string')
             if len(prefix) == 0:
                 raise ValueError('given prefix arg must not be empty')
             if not self.val.startswith(prefix):
                 return self.error('Expected <%s> to start with <%s>, but did not.' % (self.val, prefix))
-        elif isinstance(self.val, Iterable):
+        elif isinstance(self.val, collections.abc.Iterable):
             if len(self.val) == 0:
                 raise ValueError('val must not be empty')
             first = next(iter(self.val))
@@ -196,20 +186,18 @@ class StringMixin(object):
         """
         if suffix is None:
             raise TypeError('given suffix arg must not be none')
-        if isinstance(self.val, str_types):
-            if not isinstance(suffix, str_types):
+        if isinstance(self.val, str):
+            if not isinstance(suffix, str):
                 raise TypeError('given suffix arg must be a string')
             if len(suffix) == 0:
                 raise ValueError('given suffix arg must not be empty')
             if not self.val.endswith(suffix):
                 return self.error('Expected <%s> to end with <%s>, but did not.' % (self.val, suffix))
-        elif isinstance(self.val, Iterable):
+        elif isinstance(self.val, collections.abc.Iterable):
             if len(self.val) == 0:
                 raise ValueError('val must not be empty')
-            last = None
-            for last in self.val:
-                pass
-            if last != suffix:
+            items = list(self.val)
+            if items[-1] != suffix:
                 return self.error('Expected %s to end with <%s>, but did not.' % (self.val, suffix))
         else:
             raise TypeError('val is not a string or iterable')
@@ -264,9 +252,9 @@ class StringMixin(object):
             underlying ``re.match`` method).  So, if you need to match the entire string, you must
             include anchors in the regex pattern.
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
-        if not isinstance(pattern, str_types):
+        if not isinstance(pattern, str):
             raise TypeError('given pattern arg must be a string')
         if len(pattern) == 0:
             raise ValueError('given pattern arg must not be empty')
@@ -295,9 +283,9 @@ class StringMixin(object):
         See Also:
             :meth:`matches` - for more about regex patterns
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
-        if not isinstance(pattern, str_types):
+        if not isinstance(pattern, str):
             raise TypeError('given pattern arg must be a string')
         if len(pattern) == 0:
             raise ValueError('given pattern arg must not be empty')
@@ -319,7 +307,7 @@ class StringMixin(object):
         Raises:
             AssertionError: if val is **not** alphabetic
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
         if len(self.val) == 0:
             raise ValueError('val is empty')
@@ -341,7 +329,7 @@ class StringMixin(object):
         Raises:
             AssertionError: if val is **not** digits
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
         if len(self.val) == 0:
             raise ValueError('val is empty')
@@ -363,7 +351,7 @@ class StringMixin(object):
         Raises:
             AssertionError: if val is **not** lowercase
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
         if len(self.val) == 0:
             raise ValueError('val is empty')
@@ -385,7 +373,7 @@ class StringMixin(object):
         Raises:
             AssertionError: if val is **not** uppercase
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a string')
         if len(self.val) == 0:
             raise ValueError('val is empty')
@@ -408,6 +396,6 @@ class StringMixin(object):
         Raises:
             AssertionError: if val is **not** a unicode string
         """
-        if type(self.val) is not unicode:
+        if not isinstance(self.val, str):
             return self.error('Expected <%s> to be unicode, but was <%s>.' % (self.val, type(self.val).__name__))
         return self

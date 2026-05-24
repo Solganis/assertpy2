@@ -26,10 +26,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import collections
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
 def test_is_length():
@@ -327,11 +326,10 @@ def test_starts_with():
     assert_that(['a', 'b', 'c']).starts_with('a')
     assert_that((1, 2, 3)).starts_with(1)
 
-    if sys.version_info[0] == 3:
-        ordered = collections.OrderedDict([('z', 9), ('x', 7), ('y', 8)])
-        assert_that(ordered.keys()).starts_with('z')
-        assert_that(ordered.values()).starts_with(9)
-        assert_that(ordered.items()).starts_with(('z', 9))
+    ordered = collections.OrderedDict([('z', 9), ('x', 7), ('y', 8)])
+    assert_that(ordered.keys()).starts_with('z')
+    assert_that(ordered.values()).starts_with(9)
+    assert_that(ordered.items()).starts_with(('z', 9))
 
 
 def test_starts_with_failure():
@@ -355,21 +353,17 @@ def test_starts_with_bad_prefix_failure():
         assert_that(['a', 'b', 'c']).starts_with('a', 'b')
         fail('should have raised error')
     except TypeError as ex:
-        if sys.version_info[0] == 3:
-            assert_that(str(ex)).contains('starts_with() takes 2 positional arguments but 3 were given')
-        else:
-            assert_that(str(ex)).contains('starts_with() takes exactly 2 arguments (3 given)')
+        assert_that(str(ex)).contains('starts_with() takes 2 positional arguments but 3 were given')
 
 
 def test_ends_with():
     assert_that(['a', 'b', 'c']).ends_with('c')
     assert_that((1, 2, 3)).ends_with(3)
 
-    if sys.version_info[0] == 3:
-        ordered = collections.OrderedDict([('z', 9), ('x', 7), ('y', 8)])
-        assert_that(ordered.keys()).ends_with('y')
-        assert_that(ordered.values()).ends_with(8)
-        assert_that(ordered.items()).ends_with(('y', 8))
+    ordered = collections.OrderedDict([('z', 9), ('x', 7), ('y', 8)])
+    assert_that(ordered.keys()).ends_with('y')
+    assert_that(ordered.values()).ends_with(8)
+    assert_that(ordered.items()).ends_with(('y', 8))
 
 
 def test_ends_with_failure():
@@ -393,10 +387,7 @@ def test_ends_with_bad_prefix_failure():
         assert_that(['a', 'b', 'c']).ends_with('b', 'c')
         fail('should have raised error')
     except TypeError as ex:
-        if sys.version_info[0] == 3:
-            assert_that(str(ex)).contains('ends_with() takes 2 positional arguments but 3 were given')
-        else:
-            assert_that(str(ex)).contains('ends_with() takes exactly 2 arguments (3 given)')
+        assert_that(str(ex)).contains('ends_with() takes 2 positional arguments but 3 were given')
 
 
 def test_chaining():
@@ -442,6 +433,6 @@ def test_list_of_dicts():
     assert_that(l[2]['c']).is_equal_to(3)
 
 
-class Person(object):
+class Person:
     def __init__(self, name):
         self.name = name
