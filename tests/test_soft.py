@@ -188,6 +188,44 @@ def test_nested():
         assert_that(out).contains('5. Expected <a> to be equal to <A2>, but was not.')
 
 
+def test_raises_no_exception_chaining():
+    try:
+        with soft_assertions():
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to('dog').matches('cat')
+        fail('should have raised error')
+    except AssertionError as e:
+        out = str(e)
+        assert_that(out).contains('Expected <<lambda>> to raise <ZeroDivisionError> when called with (1).')
+        assert_that(out).does_not_contain('TypeError')
+
+
+def test_raises_wrong_exception_chaining():
+    try:
+        with soft_assertions():
+            assert_that({}.__getitem__).raises(RuntimeError).when_called_with('a').contains('dog')
+        fail('should have raised error')
+    except AssertionError as e:
+        out = str(e)
+        assert_that(out).contains('Expected <__getitem__> to raise <RuntimeError>')
+        assert_that(out).contains('but raised <KeyError>')
+        assert_that(out).does_not_contain('TypeError')
+
+
+def test_raises_mixed_chaining():
+    try:
+        with soft_assertions():
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to('dog')
+            assert_that({}.__getitem__).raises(RuntimeError).when_called_with('a').contains('dog')
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(0).matches('dog')
+        fail('should have raised error')
+    except AssertionError as e:
+        out = str(e)
+        assert_that(out).contains('1.')
+        assert_that(out).contains('2.')
+        assert_that(out).contains('3.')
+        assert_that(out).does_not_contain('TypeError')
+
+
 def test_recursive_nesting():
     def recurs(i):
         if i <= 0:
