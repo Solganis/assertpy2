@@ -537,6 +537,34 @@ def test_is_close_to_negative_tolerance_failure():
         assert_that(str(ex)).is_equal_to('given tolerance arg must be positive')
 
 
+def test_is_close_to_nan_val_failure():
+    try:
+        assert_that(float('nan')).is_close_to(123, 0.1)
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains('to be close to')
+
+
+def test_is_close_to_nan_other_failure():
+    try:
+        assert_that(123).is_close_to(float('nan'), 0.1)
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains('to be close to')
+
+
+def test_is_close_to_nan_tolerance_failure():
+    try:
+        assert_that(123).is_close_to(123, float('nan'))
+        fail('should have raised error')
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to('given tolerance arg must not be NaN')
+
+
+def test_is_not_close_to_nan():
+    assert_that(float('nan')).is_not_close_to(123, 0.1)
+
+
 def test_is_not_close_to():
     assert_that(123.01).is_not_close_to(122, 1)
     assert_that(0.01).is_not_close_to(0, 0.001)
