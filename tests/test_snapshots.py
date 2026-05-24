@@ -27,9 +27,12 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import collections
+import contextlib
 import datetime
+import json
 import os
 import shutil
+import sys
 
 import pytest
 
@@ -167,6 +170,59 @@ def test_snapshot_custom_path_none():
         fail('should have raised error')
     except ValueError as ex:
         assert_that(str(ex)).starts_with('failed to create snapshot filename')
+
+def test_snapshot_does_not_import_arbitrary_modules(tmp_path):
+    snap_dir = tmp_path / '__snapshots'
+    snap_dir.mkdir()
+    snap_file = snap_dir / 'snap-cve156.json'
+    snap_file.write_text(json.dumps({
+        '__type__': 'instance',
+        '__class__': 'Exploit',
+        '__module__': 'cve156_fake_module',
+        '__data__': {'pwned': True},
+    }))
+
+    assert 'cve156_fake_module' not in sys.modules
+
+    with contextlib.suppress(AssertionError):
+        assert_that({'safe': True}).snapshot(id='cve156', path=str(snap_dir))
+
+    assert 'cve156_fake_module' not in sys.modules
+
+
+def test_snapshot_returns_dict_for_unknown_module(tmp_path):
+    snap_dir = tmp_path / '__snapshots'
+    snap_dir.mkdir()
+    payload = {
+        '__type__': 'instance',
+        '__class__': 'Nope',
+        '__module__': 'nonexistent_module_xyz',
+        '__data__': {'x': 1},
+    }
+    snap_file = snap_dir / 'snap-fallback.json'
+    snap_file.write_text(json.dumps(payload))
+
+    with contextlib.suppress(AssertionError):
+        assert_that(payload).snapshot(id='fallback', path=str(snap_dir))
+
+    assert 'nonexistent_module_xyz' not in sys.modules
+
+
+def test_snapshot_returns_dict_for_missing_class(tmp_path):
+    snap_dir = tmp_path / '__snapshots'
+    snap_dir.mkdir()
+    payload = {
+        '__type__': 'instance',
+        '__class__': 'ClassThatDoesNotExist',
+        '__module__': 'os',
+        '__data__': {},
+    }
+    snap_file = snap_dir / 'snap-noclass.json'
+    snap_file.write_text(json.dumps(payload))
+
+    with contextlib.suppress(AssertionError):
+        assert_that(payload).snapshot(id='noclass', path=str(snap_dir))
+
 
 class Foo:
     def __init__(self, x=0):

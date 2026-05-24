@@ -30,6 +30,7 @@ import datetime
 import inspect
 import json
 import os
+import sys
 
 __tracebackhide__ = True
 
@@ -147,8 +148,13 @@ class SnapshotMixin:
                     elif d['__type__'] == 'datetime':
                         return datetime.datetime.strptime(d['__data__'], '%Y-%m-%d %H:%M:%S')
                     elif d['__type__'] == 'instance':
-                        mod = __import__(d['__module__'], fromlist=[d['__class__']])
-                        klass = getattr(mod, d['__class__'])
+                        module_name = d['__module__']
+                        if module_name not in sys.modules:
+                            return d
+                        mod = sys.modules[module_name]
+                        klass = getattr(mod, d['__class__'], None)
+                        if klass is None:
+                            return d
                         inst = klass.__new__(klass)
                         inst.__dict__ = d['__data__']
                         return inst
