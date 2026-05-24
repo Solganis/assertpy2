@@ -31,6 +31,16 @@
 __tracebackhide__ = True
 
 
+class _InertBuilder:
+    """No-op builder returned after a failed raises/when_called_with in soft mode.
+
+    Silently absorbs all chained assertions so they don't crash on wrong val type.
+    """
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self
+
+
 class ExceptionMixin:
     """Expected exception mixin."""
 
@@ -94,14 +104,16 @@ class ExceptionMixin:
                 return self.builder(str(e), self.description, self.kind)
             else:
                 # got exception, but wrong type, so raise
-                return self.error('Expected <%s> to raise <%s> when called with (%s), but raised <%s>.' % (
+                self.error('Expected <%s> to raise <%s> when called with (%s), but raised <%s>.' % (
                     self.val.__name__,
                     self.expected.__name__,
                     self._fmt_args_kwargs(*some_args, **some_kwargs),
                     type(e).__name__))
+                return _InertBuilder()
 
         # didn't fail as expected, so raise
-        return self.error('Expected <%s> to raise <%s> when called with (%s).' % (
+        self.error('Expected <%s> to raise <%s> when called with (%s).' % (
             self.val.__name__,
             self.expected.__name__,
             self._fmt_args_kwargs(*some_args, **some_kwargs)))
+        return _InertBuilder()
