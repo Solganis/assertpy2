@@ -211,3 +211,60 @@ class FileMixin:
         if not val_abspath.startswith(parent_abspath):
             return self.error('Expected file <%s> to be a child of <%s>, but was not.' % (val_abspath, parent_abspath))
         return self
+
+    def is_readable(self):
+        """Asserts that val is an existing path and is readable.
+
+        Examples:
+            Usage::
+
+                assert_that('/path/to/file.txt').is_readable()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** exist, or is **not** readable
+        """
+        self.exists()
+        if not os.access(self.val, os.R_OK):
+            return self.error('Expected <%s> to be readable, but was not.' % self.val)
+        return self
+
+    def is_writable(self):
+        """Asserts that val is an existing path and is writable.
+
+        Examples:
+            Usage::
+
+                assert_that('/path/to/file.txt').is_writable()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** exist, or is **not** writable
+        """
+        self.exists()
+        if not os.access(self.val, os.W_OK):
+            return self.error('Expected <%s> to be writable, but was not.' % self.val)
+        return self
+
+    def is_executable(self):
+        """Asserts that val is an existing path and is executable.
+
+        Examples:
+            Usage::
+
+                assert_that('/path/to/script.sh').is_executable()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** exist, or is **not** executable
+        """
+        self.exists()
+        if not os.access(self.val, os.X_OK):
+            return self.error('Expected <%s> to be executable, but was not.' % self.val)
+        return self

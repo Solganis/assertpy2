@@ -210,3 +210,39 @@ def test_is_child_of_bad_arg_type_failure(tmpfile):
         fail('should have raised error')
     except TypeError as ex:
         assert_that(str(ex)).matches('given parent directory arg must be a path')
+
+
+def test_is_readable(tmpfile):
+    assert_that(tmpfile.name).is_readable()
+
+
+def test_is_readable_failure():
+    try:
+        assert_that('missing.txt').is_readable()
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains('to exist, but was not found.')
+
+
+def test_is_writable(tmpfile):
+    assert_that(tmpfile.name).is_writable()
+
+
+def test_is_writable_failure():
+    try:
+        assert_that('missing.txt').is_writable()
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains('to exist, but was not found.')
+
+
+def test_is_executable_failure():
+    try:
+        assert_that('missing.txt').is_executable()
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains('to exist, but was not found.')
+
+
+def test_is_readable_chaining(tmpfile):
+    assert_that(tmpfile.name).is_file().is_readable().is_writable()
