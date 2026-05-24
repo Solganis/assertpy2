@@ -27,7 +27,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import numbers
-from assertpy import assert_that, add_extension, remove_extension, fail
+
+from assertpy2 import add_extension, assert_that, fail, remove_extension
 
 
 def is_even(self):

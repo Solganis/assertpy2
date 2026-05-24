@@ -26,19 +26,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-
-if sys.version_info[0] == 3:
-    str_types = (str,)
-    xrange = range
-else:
-    str_types = (basestring,)
-    xrange = xrange
 
 __tracebackhide__ = True
 
 
-class ContainsMixin(object):
+class ContainsMixin:
     """Containment assertions mixin."""
 
     def contains(self, *items):
@@ -203,14 +195,14 @@ class ContainsMixin(object):
             raise ValueError('one or more args must be given')
         else:
             try:
-                for i in xrange(len(self.val) - len(items) + 1):
-                    for j in xrange(len(items)):
+                for i in range(len(self.val) - len(items) + 1):
+                    for j in range(len(items)):
                         if self.val[i+j] != items[j]:
                             break
                     else:
                         return self
             except TypeError:
-                raise TypeError('val is not iterable')
+                raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to contain sequence %s, but did not.' % (self.val, self._fmt_items(items)))
 
     def contains_duplicates(self):
@@ -233,7 +225,7 @@ class ContainsMixin(object):
             if len(self.val) != len(set(self.val)):
                 return self
         except TypeError:
-            raise TypeError('val is not iterable')
+            raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to contain duplicates, but did not.' % self.val)
 
     def does_not_contain_duplicates(self):
@@ -256,7 +248,7 @@ class ContainsMixin(object):
             if len(self.val) == len(set(self.val)):
                 return self
         except TypeError:
-            raise TypeError('val is not iterable')
+            raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to not contain duplicates, but did.' % self.val)
 
     def is_empty(self):
@@ -278,7 +270,7 @@ class ContainsMixin(object):
             AssertionError: if val is **not** empty
         """
         if len(self.val) != 0:
-            if isinstance(self.val, str_types):
+            if isinstance(self.val, str):
                 return self.error('Expected <%s> to be empty string, but was not.' % self.val)
             else:
                 return self.error('Expected <%s> to be empty, but was not.' % self.val)
@@ -303,7 +295,7 @@ class ContainsMixin(object):
             AssertionError: if val **is** empty
         """
         if len(self.val) == 0:
-            if isinstance(self.val, str_types):
+            if isinstance(self.val, str):
                 return self.error('Expected not empty string, but was empty.')
             else:
                 return self.error('Expected not empty, but was empty.')

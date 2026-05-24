@@ -28,34 +28,34 @@
 
 """Assertion library for python unit testing with a fluent API"""
 
-from __future__ import print_function
-import os
 import contextlib
 import inspect
 import logging
+import os
 import sys
 import types
+
 from .base import BaseMixin
 from .collection import CollectionMixin
 from .contains import ContainsMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .extracting import ExtractingMixin
 from .exception import ExceptionMixin
+from .extracting import ExtractingMixin
 from .file import FileMixin
 from .helpers import HelpersMixin
 from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = '1.1'
+__version__ = '2.0.0'
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # monkey patch contextlib with clean py.test tracebacks
 
 # assertpy files
-ASSERTPY_FILES = [os.path.join('assertpy', file) for file in [
+ASSERTPY_FILES = [os.path.join('assertpy2', file) for file in [
     'assertpy.py',
     'base.py',
     'collection.py',
@@ -88,7 +88,7 @@ def soft_assertions():
     Examples:
         Create a soft assertion context, and some failing tests::
 
-            from assertpy import assert_that, soft_assertions
+            from assertpy2 import assert_that, soft_assertions
 
             with soft_assertions():
                 assert_that('foo').is_length(4)
@@ -129,10 +129,7 @@ def soft_assertions():
         _soft_ctx -= 1
 
     if _soft_err and _soft_ctx == 0:
-        out = 'soft assertion failures:'
-        for i, msg in enumerate(_soft_err):
-            out += '\n%d. %s' % (i+1, msg)
-        # reset msg, then raise
+        out = 'soft assertion failures:\n' + '\n'.join('%d. %s' % (i + 1, msg) for i, msg in enumerate(_soft_err))
         _soft_err = []
         raise AssertionError(out)
 
@@ -152,7 +149,7 @@ def assert_that(val, description=''):
     Examples:
         Just import it once at the top of your test file, and away you go...::
 
-            from assertpy import assert_that
+            from assertpy2 import assert_that
 
             def test_something():
                 assert_that(1 + 2).is_equal_to(3)
@@ -185,7 +182,7 @@ def assert_warn(val, description='', logger=None):
     Examples:
         Usage::
 
-            from assertpy import assert_warn
+            from assertpy2 import assert_warn
 
             assert_warn('foo').is_length(4)
             assert_warn('foo').is_empty()
@@ -219,7 +216,7 @@ def fail(msg=''):
     Examples:
         Fail a test::
 
-            from assertpy import assert_that, fail
+            from assertpy2 import assert_that, fail
 
             def test_fail():
                 fail('forced fail!')
@@ -251,7 +248,7 @@ def soft_fail(msg=''):
     Examples:
         Failing soft assertions::
 
-            from assertpy import assert_that, soft_assertions, soft_fail
+            from assertpy2 import assert_that, soft_assertions, soft_fail
 
             with soft_assertions():
                 assert_that(1).is_equal_to(2)
@@ -290,7 +287,7 @@ def add_extension(func):
     Examples:
         Usage::
 
-            from assertpy import add_extension
+            from assertpy2 import add_extension
 
             def is_5(self):
                 if self.val != 5:
@@ -320,7 +317,7 @@ def remove_extension(func):
     Examples:
         Usage::
 
-            from assertpy import remove_extension
+            from assertpy2 import remove_extension
 
             remove_extension(is_5)
     """
@@ -365,7 +362,7 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
         return '[%s:%d]: %s' % (os.path.basename(filename), lineno, msg), kwargs
 
 
-_logger = logging.getLogger('assertpy')
+_logger = logging.getLogger('assertpy2')
 _handler = logging.StreamHandler(sys.stdout)
 _handler.setLevel(logging.WARNING)
 _format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -387,8 +384,7 @@ class AssertionBuilder(
     DateMixin,
     ContainsMixin,
     CollectionMixin,
-    BaseMixin,
-    object
+    BaseMixin
 ):
     """The main assertion class.  Never call the constructor directly, always use the
     :meth:`assert_that` helper instead.  Or if you just want warning messages, use the

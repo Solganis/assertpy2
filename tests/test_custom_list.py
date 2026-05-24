@@ -26,10 +26,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
-class CustomList(object):
+class CustomList:
 
     def __init__(self, s):
         self._s = s
@@ -42,7 +42,7 @@ class CustomList(object):
         try:
             result = self._s[self._idx]
         except IndexError:
-            raise StopIteration
+            raise StopIteration from None
         self._idx += 1
         return result
 
@@ -51,7 +51,7 @@ class CustomList(object):
 
 
 def test_custom_list():
-    l = CustomList('foobar')
+    CustomList('foobar')
     assert_that([CustomList('foo'), CustomList('bar')]).extracting(0, -1).is_equal_to([('f', 'o'), ('b', 'r')])
 
 

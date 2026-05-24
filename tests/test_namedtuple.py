@@ -28,8 +28,7 @@
 
 import collections
 
-from assertpy import assert_that, fail
-
+from assertpy2 import assert_that, fail
 
 Foo = collections.namedtuple('Foo', ['bar', 'baz'])
 foo = Foo(bar='abc', baz=123)

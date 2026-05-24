@@ -26,10 +26,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import collections
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
 def test_is_iterable():
@@ -101,8 +99,7 @@ def test_is_subset_of_failure_single_item_superset():
         assert_that(['a', 'b', 'c']).is_subset_of(['x'])
         fail('should have raised error')
     except AssertionError as ex:
-        if sys.version_info[0] == 3:
-            assert_that(str(ex)).contains("to be subset of <{'x'}>")
+        assert_that(str(ex)).contains("to be subset of <{'x'}>")
         assert_that(str(ex)).contains("but <'a', 'b', 'c'> were missing.")
 
 
@@ -194,11 +191,10 @@ def test_is_sorted():
     assert_that([]).is_sorted()
     assert_that([1]).is_sorted()
 
-    if sys.version_info[0] == 3:
-        import collections
-        ordered = collections.OrderedDict([('a', 2), ('b', 1)])
-        assert_that(ordered).is_sorted()
-        assert_that(ordered.keys()).is_sorted()
+    import collections
+    ordered = collections.OrderedDict([('a', 2), ('b', 1)])
+    assert_that(ordered).is_sorted()
+    assert_that(ordered.keys()).is_sorted()
 
 
 def test_is_sorted_failure():

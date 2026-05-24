@@ -26,18 +26,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import collections
-
-if sys.version_info[0] == 3:
-    Iterable = collections.abc.Iterable
-else:
-    Iterable = collections.Iterable
 
 __tracebackhide__ = True
 
 
-class DynamicMixin(object):
+class DynamicMixin:
     """Dynamic assertions mixin.
 
     When testing attributes of an object (or the contents of a dict), the
@@ -80,7 +74,7 @@ class DynamicMixin(object):
         attr_name = attr[4:]
         err_msg = False
         is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, '_fields')
-        is_dict = isinstance(self.val, Iterable) and hasattr(self.val, '__getitem__')
+        is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, '__getitem__')
 
         if not hasattr(self.val, attr_name):
             if is_dict and not is_namedtuple:
@@ -96,16 +90,13 @@ class DynamicMixin(object):
                 if len(args) != 1:
                     raise TypeError('assertion <%s()> takes exactly 1 argument (%d given)' % (attr, len(args)))
 
-                if is_dict and not is_namedtuple:
-                    val_attr = self.val[attr_name]
-                else:
-                    val_attr = getattr(self.val, attr_name)
+                val_attr = self.val[attr_name] if is_dict and not is_namedtuple else getattr(self.val, attr_name)
 
                 if callable(val_attr):
                     try:
                         actual = val_attr()
                     except TypeError:
-                        raise TypeError('val does not have zero-arg method <%s()>' % attr_name)
+                        raise TypeError('val does not have zero-arg method <%s()>' % attr_name) from None
                 else:
                     actual = val_attr
 

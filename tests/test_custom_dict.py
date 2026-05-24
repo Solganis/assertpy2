@@ -26,7 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
 def test_custom_dict():
@@ -71,7 +71,7 @@ def test_requests():
         pass
 
 
-class CustomDict(object):
+class CustomDict:
 
     def __init__(self, d):
         self._dict = d
@@ -84,7 +84,7 @@ class CustomDict(object):
         try:
             result = self.keys()[self._idx]
         except IndexError:
-            raise StopIteration
+            raise StopIteration from None
         self._idx += 1
         return result
 
@@ -175,7 +175,7 @@ def test_check_dict_like_no_getitem():
         assert_that(str(e)).contains('is not dict-like: missing [] accessor')
 
 
-class CustomDictNoKeys(object):
+class CustomDictNoKeys:
     def __iter__(self):
         return self
 
@@ -183,7 +183,7 @@ class CustomDictNoKeys(object):
         return 1
 
 
-class CustomDictNoKeysCallable(object):
+class CustomDictNoKeysCallable:
     def __init__(self):
         self.keys = 'foo'
 
@@ -194,7 +194,7 @@ class CustomDictNoKeysCallable(object):
         return 1
 
 
-class CustomDictNoValues(object):
+class CustomDictNoValues:
     def __iter__(self):
         return self
 
@@ -205,7 +205,7 @@ class CustomDictNoValues(object):
         return 'foo'
 
 
-class CustomDictNoValuesCallable(object):
+class CustomDictNoValuesCallable:
     def __init__(self):
         self.values = 'foo'
 
@@ -219,7 +219,7 @@ class CustomDictNoValuesCallable(object):
         return 'foo'
 
 
-class CustomDictNoGetitem(object):
+class CustomDictNoGetitem:
     def __iter__(self):
         return self
 

@@ -26,18 +26,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import collections
 
-if sys.version_info[0] == 3:
-    Iterable = collections.abc.Iterable
-else:
-    Iterable = collections.Iterable
 
 __tracebackhide__ = True
 
 
-class ExceptionMixin(object):
+class ExceptionMixin:
     """Expected exception mixin."""
 
     def raises(self, ex):

@@ -28,7 +28,8 @@
 
 import sys
 import traceback
-from assertpy import assert_that, fail
+
+from assertpy2 import assert_that, fail
 
 
 def test_traceback():
@@ -51,7 +52,7 @@ def test_traceback():
 
             assert_that(frames[0][0]).ends_with('test_traceback.py')
             assert_that(frames[0][1]).is_equal_to('test_traceback')
-            assert_that(frames[0][2]).is_equal_to(36)
+            assert_that(frames[0][2]).is_equal_to(37)
 
             assert_that(frames[1][0]).ends_with('base.py')
             assert_that(frames[1][1]).is_equal_to('is_equal_to')

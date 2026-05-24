@@ -26,10 +26,9 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
 import collections
 
-from assertpy import assert_that, fail
+from assertpy2 import assert_that, fail
 
 
 def test_ignore_key():
@@ -65,9 +64,8 @@ def test_ignore_deep_key():
 
 
 def test_ordered():
-    if sys.version_info[0] == 3:
-        ordered = collections.OrderedDict([('a', 1), ('b', 2)])
-        assert_that(ordered).is_equal_to({'a': 1, 'b': 2})
+    ordered = collections.OrderedDict([('a', 1), ('b', 2)])
+    assert_that(ordered).is_equal_to({'a': 1, 'b': 2})
 
 
 def test_failure():

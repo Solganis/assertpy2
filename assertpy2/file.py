@@ -27,12 +27,6 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-import sys
-
-if sys.version_info[0] == 3:
-    str_types = (str,)
-else:
-    str_types = (basestring,)
 
 __tracebackhide__ = True
 
@@ -47,7 +41,7 @@ def contents_of(file, encoding='utf-8'):
     Examples:
         Usage::
 
-            from assertpy import assert_that, contents_of
+            from assertpy2 import assert_that, contents_of
 
             contents = contents_of('foo.txt')
             assert_that(contents).starts_with('foo').ends_with('bar').contains('oob')
@@ -63,32 +57,26 @@ def contents_of(file, encoding='utf-8'):
         contents = file.read()
     except AttributeError:
         try:
-            with open(file, 'r') as fp:
+            with open(file) as fp:
                 contents = fp.read()
         except TypeError:
-            raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__)
+            raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
         except OSError:
-            if not isinstance(file, str_types):
-                raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__)
+            if not isinstance(file, str):
+                raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
             raise
 
-    if sys.version_info[0] == 3 and type(contents) is bytes:
-        # in PY3 force decoding of bytes to target encoding
+    if type(contents) is bytes:
         return contents.decode(encoding, 'replace')
-    elif sys.version_info[0] == 2 and encoding == 'ascii':
-        # in PY2 force encoding back to ascii
-        return contents.encode('ascii', 'replace')
-    else:
-        # in all other cases, try to decode to target encoding
-        try:
-            return contents.decode(encoding, 'replace')
-        except AttributeError:
-            pass
+    try:
+        return contents.decode(encoding, 'replace')
+    except AttributeError:
+        pass
     # if all else fails, just return the contents "as is"
     return contents
 
 
-class FileMixin(object):
+class FileMixin:
     """File assertions mixin."""
 
     def exists(self):
@@ -106,7 +94,7 @@ class FileMixin(object):
         Raises:
             AssertionError: if val does **not** exist
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a path')
         if not os.path.exists(self.val):
             return self.error('Expected <%s> to exist, but was not found.' % self.val)
@@ -127,7 +115,7 @@ class FileMixin(object):
         Raises:
             AssertionError: if val **does** exist
         """
-        if not isinstance(self.val, str_types):
+        if not isinstance(self.val, str):
             raise TypeError('val is not a path')
         if os.path.exists(self.val):
             return self.error('Expected <%s> to not exist, but was found.' % self.val)
@@ -189,7 +177,7 @@ class FileMixin(object):
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** named the given filename
         """
         self.is_file()
-        if not isinstance(filename, str_types):
+        if not isinstance(filename, str):
             raise TypeError('given filename arg must be a path')
         val_filename = os.path.basename(os.path.abspath(self.val))
         if val_filename != filename:
@@ -216,7 +204,7 @@ class FileMixin(object):
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** a child of the given directory
         """
         self.is_file()
-        if not isinstance(parent, str_types):
+        if not isinstance(parent, str):
             raise TypeError('given parent directory arg must be a path')
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent)

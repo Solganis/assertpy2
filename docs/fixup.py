@@ -1,6 +1,4 @@
 import os
-import re
-
 
 # conf
 PROJECT = 'assertpy'
@@ -11,7 +9,7 @@ OUT = os.path.join(OUT_DIR, 'docs.html')
 
 
 def load(filename):
-    with open(filename, 'r') as fp:
+    with open(filename) as fp:
         return fp.read()
 
 

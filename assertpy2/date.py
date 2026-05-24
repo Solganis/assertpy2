@@ -31,7 +31,7 @@ import datetime
 __tracebackhide__ = True
 
 
-class DateMixin(object):
+class DateMixin:
     """Date and time assertions mixin."""
 
     def is_before(self, other):

@@ -26,10 +26,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import sys
-import os
 import datetime
-from assertpy import assert_that, assert_warn, soft_assertions, contents_of, fail
+import os
+import sys
+
+from assertpy2 import assert_that, assert_warn, contents_of, fail, soft_assertions
 
 
 def setup_module():
@@ -61,10 +62,7 @@ def test_strings():
     assert_that('foo').is_not_equal_to('bar')
     assert_that('foo').is_equal_to_ignoring_case('FOO')
 
-    if sys.version_info[0] == 3:
-        assert_that('foo').is_unicode()
-    else:
-        assert_that(u'foo').is_unicode()
+    assert_that('foo').is_unicode()
 
     assert_that('foo').contains('f')
     assert_that('foo').contains('f', 'oo')
@@ -495,7 +493,7 @@ def some_func(arg):
     raise RuntimeError('some err')
 
 
-class Person(object):
+class Person:
     def __init__(self, first_name, last_name, shoe_size=12):
         self.first_name = first_name
         self.last_name = last_name

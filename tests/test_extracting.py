@@ -27,10 +27,11 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import sys
-from assertpy import assert_that, fail
+
+from assertpy2 import assert_that, fail
 
 
-class Person(object):
+class Person:
     def __init__(self, first_name, last_name, shoe_size):
         self.first_name = first_name
         self.last_name = last_name
@@ -213,15 +214,14 @@ def test_extracting_filter_bad_values():
         {'user': 'Bob', 'age': 'bad'},
         {'user': 'Johnny', 'age': 13}
     ]
-    if sys.version_info[0] == 3:
-        try:
-            assert_that(bad).extracting('user', filter=lambda x: x['age'] > 20)
-            fail('should have raised error')
-        except TypeError as ex:
-            if sys.version_info[1] <= 5:
-                assert_that(str(ex)).contains('unorderable types')
-            else:
-                assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
+    try:
+        assert_that(bad).extracting('user', filter=lambda x: x['age'] > 20)
+        fail('should have raised error')
+    except TypeError as ex:
+        if sys.version_info[1] <= 5:
+            assert_that(str(ex)).contains('unorderable types')
+        else:
+            assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
 
 
 def test_extracting_sort():
@@ -298,15 +298,14 @@ def test_extracting_sort_bad_values():
         {'user': 'Bob', 'age': 'bad'},
         {'user': 'Johnny', 'age': 13}
     ]
-    if sys.version_info[0] == 3:
-        try:
-            assert_that(bad).extracting('user', sort='age')
-            fail('should have raised error')
-        except TypeError as ex:
-            if sys.version_info[1] <= 5:
-                assert_that(str(ex)).contains('unorderable types')
-            else:
-                assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
+    try:
+        assert_that(bad).extracting('user', sort='age')
+        fail('should have raised error')
+    except TypeError as ex:
+        if sys.version_info[1] <= 5:
+            assert_that(str(ex)).contains('unorderable types')
+        else:
+            assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
 
 
 def test_extracting_iterable_of_lists():

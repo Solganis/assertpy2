@@ -1,0 +1,67 @@
+[project]
+name = "assertpy2"
+version = "2.0.0"
+description = "Fluent assertion library for Python with soft assertions support"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.10"
+authors = [
+    { name = "Justin Shacklette", email = "justin@saturnboy.com" },
+]
+maintainers = [
+    { name = "Solganis" },
+]
+keywords = ["test", "testing", "assert", "assertion", "assertthat", "assert_that", "pytest", "unittest"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/Solganis/assertpy2"
+Repository = "https://github.com/Solganis/assertpy2"
+Issues = "https://github.com/Solganis/assertpy2/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=6.1",
+    "ruff>=0.15.14",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["assertpy2"]
+
+[tool.coverage.report]
+omit = ["tests/*", "assertpy2/__init__.py"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["UP031", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E741", "SIM102"]
