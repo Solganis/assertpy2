@@ -34,6 +34,7 @@ import logging
 import os
 import sys
 import types
+from collections.abc import Iterator
 
 from .base import BaseMixin
 from .collection import CollectionMixin
@@ -78,7 +79,7 @@ _soft_err = []
 
 
 @contextlib.contextmanager
-def soft_assertions():
+def soft_assertions() -> Iterator[None]:
     """Create a soft assertion context.
 
     Normally, any assertion failure will halt test execution immediately by raising an error.
