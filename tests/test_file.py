@@ -247,6 +247,7 @@ def test_is_writable_failure():
 
 
 def test_is_executable(tmpfile):
+    os.chmod(tmpfile.name, 0o755)
     assert_that(tmpfile.name).is_executable()
 
 
