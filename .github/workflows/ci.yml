@@ -31,11 +31,14 @@ jobs:
         run: uv run ruff check .
 
       - name: Test with coverage
-        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing tests
+        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml tests
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.14'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
 
   lint:
     runs-on: ubuntu-latest
