@@ -163,7 +163,7 @@ from assertpy2 import assert_that, soft_assertions
 |  | assertpy | assertpy2 |
 |---|---|---|
 | Maintained | Last release 2020 | Active |
-| Python | 2.7+ | 3.10-3.14 |
+| Python | 2.7+ | 3.10-3.15 |
 | Type safety | No annotations | `Self` return types, `py.typed` (PEP 561) |
 | IDE support | No type info | Full autocomplete and chaining inference |
 | Soft assertions | Basic | Stable, with `soft_fail()` support |
