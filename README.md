@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="docs/logo.svg" alt="assertpy2" width="280">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/logo.svg">
+    <img src="docs/logo.svg" alt="assertpy2" width="280">
+  </picture>
 </p>
 
 <p align="center">
@@ -14,6 +18,7 @@
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/pyversions/assertpy2" alt="Python"></a>
   <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <a href="https://github.com/Solganis/assertpy2/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Solganis/assertpy2" alt="License"></a>
+  <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
 
 
