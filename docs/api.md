@@ -22,6 +22,10 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [Custom Error Messages](#custom-error-messages)
 - [Warnings](#just-a-warning)
 - [Soft Assertions](#soft-assertions)
+- [Composable Matchers](#composable-matchers)
+- [Structural Matching](#structural-matching)
+- [Async Assertions](#async-assertions)
+- [Structured Errors](#structured-errors)
 - [Snapshot Testing](#snapshot-testing)
 - [Extension System](#extension-system---adding-custom-assertions)
 - [Chaining](#chaining)
@@ -867,6 +871,272 @@ AssertionError: soft assertion failures:
 Also, note that *only* assertion failures are collected, errors such as `TypeError` or `ValueError` are raised immediately.
 Triggering an explicit test failure with `fail()` will similarly halt execution immediately.  If you need more
 forgiving behavior, you can use `soft_fail()` which is collected like any other failing assertion within a soft assertions block.
+
+Soft assertions are thread-safe and async-safe. Each thread and each `asyncio.Task` gets its own independent failure state via `contextvars`, so concurrent tests never interfere with each other.
+
+[Back to top](#table-of-contents)
+
+## Composable Matchers
+
+Matchers are reusable condition objects that can be composed with `&` (and), `|` (or), `~` (not) operators. Import the `match` namespace to access all built-in matchers:
+
+```py
+from assertpy2 import assert_that, match
+```
+
+### Using satisfies()
+
+Test a value against a matcher or composed matcher:
+
+```py
+assert_that(42).satisfies(match.greater_than(0))
+assert_that(42).satisfies(match.greater_than(0) & match.less_than(100))
+assert_that("hello").satisfies(~match.equal_to("world"))
+assert_that(150).satisfies(match.is_negative() | match.greater_than(100))
+```
+
+### Using each()
+
+Check that every element in a collection satisfies a matcher:
+
+```py
+assert_that([18, 25, 30]).each(match.between(18, 120))
+assert_that(["a", "bb", "ccc"]).each(match.is_instance_of(str))
+```
+
+`each()` also accepts a plain callable (predicate):
+
+```py
+assert_that([2, 4, 6]).each(lambda x: x % 2 == 0)
+```
+
+### Matchers inside contains()
+
+When a `Matcher` object is passed to `contains()`, each element in the collection is tested against it:
+
+```py
+assert_that([3, 7, 12]).contains(match.greater_than(10))
+assert_that(["foo", "bar"]).contains(match.matches_regex(r"^f"))
+```
+
+### Composing matchers
+
+Matchers support Python operators for composition:
+
+```py
+# all conditions must match (AND)
+positive_and_small = match.is_positive() & match.less_than(10)
+assert_that(5).satisfies(positive_and_small)
+
+# at least one condition must match (OR)
+extreme = match.less_than(-100) | match.greater_than(100)
+assert_that(200).satisfies(extreme)
+
+# invert a condition (NOT)
+not_empty = ~match.is_empty()
+assert_that([1, 2]).satisfies(not_empty)
+
+# nested composition
+complex_check = (match.greater_than(0) & match.less_than(100)) | match.equal_to(-1)
+assert_that(50).satisfies(complex_check)
+assert_that(-1).satisfies(complex_check)
+```
+
+### Available matchers
+
+| Matcher | Description |
+|---|---|
+| `match.equal_to(val)` | Equality check |
+| `match.greater_than(val)` | Greater than |
+| `match.greater_than_or_equal_to(val)` | Greater than or equal |
+| `match.less_than(val)` | Less than |
+| `match.less_than_or_equal_to(val)` | Less than or equal |
+| `match.between(low, high)` | Inclusive range check |
+| `match.close_to(val, tolerance)` | Within tolerance |
+| `match.is_none()` | Is None |
+| `match.is_not_none()` | Is not None |
+| `match.is_instance_of(type)` | isinstance check |
+| `match.has_length(n)` | Length check |
+| `match.is_empty()` | Empty collection/string |
+| `match.is_not_empty()` | Non-empty collection/string |
+| `match.is_positive()` | Positive number |
+| `match.is_negative()` | Negative number |
+| `match.contains_string(sub)` | Substring check |
+| `match.matches_regex(pattern)` | Regex match |
+| `match.is_uuid()` | Valid UUID string |
+| `match.is_non_empty_string()` | Non-empty string |
+| `match.ignore()` | Always matches (for structural matching) |
+| `match.each_item(matcher)` | Every item in iterable matches |
+| `match.structure(spec)` | Recursive dict matching |
+
+[Back to top](#table-of-contents)
+
+## Structural Matching
+
+Validate dict structure declaratively using matchers as value specifications. Useful for API response testing where some values are dynamic (IDs, timestamps):
+
+```py
+from assertpy2 import assert_that, match
+
+response = {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Alice",
+    "age": 30,
+    "active": True,
+}
+
+assert_that(response).matches_structure({
+    "id": match.is_uuid(),
+    "name": match.equal_to("Alice"),
+    "age": match.between(18, 120),
+    "active": match.equal_to(True),
+})
+```
+
+### Nested structures
+
+Use `match.structure()` for nested dicts:
+
+```py
+assert_that({
+    "user": {"name": "Alice", "role": "admin"},
+    "metadata": {"version": 2},
+}).matches_structure({
+    "user": match.structure({
+        "name": match.is_non_empty_string(),
+        "role": match.contains_string("admin"),
+    }),
+    "metadata": match.structure({
+        "version": match.greater_than(0),
+    }),
+})
+```
+
+### Ignoring fields
+
+Use `match.ignore()` to skip fields you don't care about:
+
+```py
+assert_that({"id": "abc-123", "data": [1, 2, 3]}).matches_structure({
+    "id": match.ignore(),
+    "data": match.has_length(3),
+})
+```
+
+### Validating collections inside structures
+
+Use `match.each_item()` to check every element in a nested collection:
+
+```py
+assert_that({"tags": ["python", "testing"]}).matches_structure({
+    "tags": match.each_item(match.is_instance_of(str)),
+})
+```
+
+[Back to top](#table-of-contents)
+
+## Async Assertions
+
+The `eventually()` method creates a polling assertion that retries until the condition is met or a timeout is reached. Useful for testing async operations, eventual consistency, and reactive systems:
+
+```py
+from assertpy2 import assert_that
+
+async def test_status_converges():
+    await assert_that(get_status).eventually().is_equal_to("ready")
+```
+
+### Configuring timeout and interval
+
+By default, `eventually()` polls for 5 seconds with 0.5 second intervals. Use `within()` and `every()` to configure:
+
+```py
+# poll for up to 10 seconds, checking every 0.2 seconds
+await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
+```
+
+### Async callables
+
+Both sync and async callables are supported:
+
+```py
+# sync callable
+def get_status():
+    return fetch_status_from_db()
+
+await assert_that(get_status).eventually().is_equal_to("done")
+
+# async callable
+async def async_get_status():
+    return await fetch_status_async()
+
+await assert_that(async_get_status).eventually().is_equal_to("done")
+```
+
+### Any assertion method
+
+Any assertion method available on `AssertionBuilder` can be used after `eventually()`:
+
+```py
+await assert_that(get_name).eventually().starts_with("Al")
+await assert_that(get_items).eventually().contains("expected_item")
+await assert_that(get_count).eventually().is_between(10, 20)
+```
+
+### Error handling
+
+Only `AssertionError` is retried. Other exceptions (`TypeError`, `ValueError`, etc.) propagate immediately. On timeout, the last `AssertionError` is chained to provide context:
+
+```
+AssertionError: Expected condition not met after 5.0 seconds: ...
+
+The above exception was the direct cause of the following exception:
+
+AssertionError: Expected <pending> to be equal to <ready>, but was not.
+```
+
+[Back to top](#table-of-contents)
+
+## Structured Errors
+
+When an assertion fails, `assertpy2` raises `AssertionFailure` (a subclass of `AssertionError`) with structured data attached:
+
+```py
+from assertpy2 import assert_that
+
+try:
+    assert_that(1).is_equal_to(2)
+except AssertionError as e:
+    print(e.actual)     # 1
+    print(e.expected)   # 2
+```
+
+For dict comparisons, a `DiffResult` with per-key entries is available:
+
+```py
+try:
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
+except AssertionError as e:
+    print(e.diff)
+    # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+`AssertionFailure` is a subclass of `AssertionError`, so all existing `except AssertionError` handlers continue to work.
+
+### Pytest integration
+
+When the `assertpy2` pytest plugin is active, `AssertionFailure` data is automatically rendered as extra sections in the test report:
+
+```
+FAILED test_example.py::test_comparison
+--- AssertionFailure ---
+  actual:   {'a': 1, 'b': 2}
+  expected: {'a': 1, 'b': 99}
+--- Structured Diff ---
+DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+The plugin is auto-registered via the `pytest11` entry point. No configuration needed.
 
 [Back to top](#table-of-contents)
 

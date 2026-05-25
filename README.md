@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <b>Fluent assertion library for Python with full type safety and soft assertions.</b><br>
+  <b>Fluent assertion library for Python with composable matchers, structural matching, and full type safety.</b><br>
   Maintained fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>.
 </p>
 
@@ -40,14 +40,41 @@ def test_user():
     assert_that(user).has_name("Alice")
 ```
 
-When an assertion fails, the error message tells you exactly what went wrong:
+Composable matchers and structural matching:
 
 ```py
-assert_that(user["age"]).is_between(50, 120)
-# AssertionError: Expected <30> to be between <50> and <120>, but was not.
+from assertpy2 import assert_that, match
 
-assert_that(user["roles"]).contains("admin")
-# AssertionError: Expected <['viewer', 'editor']> to contain <admin>, but did not.
+# matchers with & | ~ operators
+assert_that([3, 7, 12]).contains(match.greater_than(10))
+assert_that(42).satisfies(match.greater_than(0) & match.less_than(100))
+
+# validate dict structure declaratively
+assert_that(api_response).matches_structure({
+    "id": match.is_uuid(),
+    "name": match.equal_to("Alice"),
+    "status": match.is_non_empty_string(),
+})
+```
+
+Structured errors with rich data:
+
+```py
+try:
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
+except AssertionError as e:
+    e.actual    # {"a": 1, "b": 2}
+    e.expected  # {"a": 1, "b": 99}
+    e.diff      # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+The pytest plugin auto-renders this as rich diff sections in failure reports:
+
+```
+FAILED test_example.py::test_comparison
+--- AssertionFailure ---
+  actual:   {'a': 1, 'b': 2}
+  expected: {'a': 1, 'b': 99}
 ```
 
 
@@ -74,9 +101,13 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 
 ## Features
 
+- **Composable matchers**: `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~` operators.
+- **Structural matching**: `matches_structure()` for declarative dict/API response validation.
+- **Async assertions**: `eventually()` with polling/retry for async and eventual consistency testing.
+- **Structured errors**: `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
+- **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
 - **Type safety**: `Self` return types, `py.typed` ([PEP 561](https://peps.python.org/pep-0561/)).
-- **IDE support**: full autocomplete and chaining inference out of the box.
-- **Soft assertions**: collect all failures with `soft_assertions()`, plus `soft_fail()` for non-halting explicit failures.
+- **Soft assertions**: thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`.
 - **Fluent chaining**: write assertions as readable one-liners that chain naturally.
 - **Dynamic assertions**: `has_<name>()` for any attribute, property, or zero-argument method on objects and dicts.
 - **Dict comparison**: `is_equal_to()` with `ignore` and `include` for selective key matching.
@@ -85,6 +116,69 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 - **Snapshot testing**: store and compare data structures in JSON format, inspired by Jest.
 - **Extensions**: add custom assertions via `add_extension()`.
 - Strings, numbers, lists, tuples, sets, dicts, dates, booleans, objects, exceptions.
+
+
+## Composable matchers
+
+Matchers are objects that describe conditions. Combine them with `&` (and), `|` (or), `~` (not):
+
+```py
+from assertpy2 import assert_that, match
+
+# check a value against a composed condition
+assert_that(42).satisfies(match.greater_than(0) & match.less_than(100))
+
+# matchers inside contains - find element by condition
+assert_that([3, 7, 12]).contains(match.greater_than(10))
+
+# check every element in a collection
+assert_that([18, 25, 30]).each(match.between(18, 120))
+
+# invert with ~
+assert_that("hello").satisfies(~match.equal_to("world"))
+
+# combine freely
+assert_that(150).satisfies(match.is_negative() | match.greater_than(100))
+```
+
+Available matchers: `equal_to`, `greater_than`, `greater_than_or_equal_to`, `less_than`, `less_than_or_equal_to`, `between`, `close_to`, `is_none`, `is_not_none`, `is_instance_of`, `has_length`, `is_empty`, `is_not_empty`, `is_positive`, `is_negative`, `contains_string`, `matches_regex`, `is_uuid`, `is_non_empty_string`, `ignore`, `each_item`, `structure`.
+
+
+## Structural matching
+
+Validate dict structure declaratively, even when values are dynamic (UUIDs, timestamps):
+
+```py
+from assertpy2 import assert_that, match
+
+assert_that(api_response).matches_structure({
+    "id": match.is_uuid(),
+    "name": match.equal_to("Alice"),
+    "created_at": match.is_non_empty_string(),
+    "metadata": match.structure({
+        "version": match.greater_than(0),
+        "tags": match.each_item(match.is_instance_of(str)),
+    }),
+    "debug_info": match.ignore(),
+})
+```
+
+
+## Async assertions
+
+Poll a callable until the assertion passes or timeout is reached:
+
+```py
+from assertpy2 import assert_that
+
+async def test_eventual_consistency():
+    await assert_that(get_status).eventually().within(5).every(0.5).is_equal_to("ready")
+
+    # works with async callables
+    await assert_that(async_get_count).eventually().within(10).is_greater_than(100)
+```
+
+Any assertion method is available after `eventually()`. Only `AssertionError` is retried, other exceptions propagate immediately.
 
 
 ## Soft assertions
@@ -112,8 +206,45 @@ AssertionError: soft assertion failures:
 
 Use `soft_fail("message")` inside the block for non-halting explicit failures (unlike `fail()`, which stops immediately).
 
+Soft assertions are thread-safe and async-safe: each thread and each `asyncio` task gets independent state via `contextvars`.
 
-## API highlights
+
+## Structured errors
+
+When assertions fail, `AssertionFailure` carries structured data alongside the human-readable message:
+
+```py
+try:
+    assert_that(1).is_equal_to(2)
+except AssertionError as e:
+    e.actual    # 1
+    e.expected  # 2
+```
+
+For dict comparisons, a `DiffResult` with per-key diff entries is available:
+
+```py
+try:
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
+except AssertionError as e:
+    e.diff  # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+`AssertionFailure` is a subclass of `AssertionError`, so all existing `except AssertionError` handlers work unchanged.
+
+The pytest plugin (auto-registered, no configuration needed) renders structured data as extra sections in failure reports:
+
+```
+FAILED test_example.py::test_comparison
+--- AssertionFailure ---
+  actual:   {'a': 1, 'b': 2}
+  expected: {'a': 1, 'b': 99}
+--- Structured Diff ---
+DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+
+## More features
 
 ### Dict comparison with ignore/include
 
@@ -142,10 +273,35 @@ assert_that(some_func).raises(RuntimeError).when_called_with("bad_arg")\
     .is_length(8).starts_with("some").is_equal_to("some err")
 ```
 
+### Dynamic assertions
+
+```py
+fred = {"first_name": "Fred", "last_name": "Smith", "shoe_size": 12}
+
+assert_that(fred).has_first_name("Fred")
+assert_that(fred).has_last_name("Smith")
+assert_that(fred).has_shoe_size(12)
+```
+
 ### Snapshot testing
 
 ```py
 assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
+```
+
+### Extensions
+
+```py
+from assertpy2 import add_extension
+
+def is_even(self):
+    if self.val % 2 != 0:
+        return self.error(f'{self.val} is not even!')
+    return self
+
+add_extension(is_even)
+
+assert_that(4).is_even()
 ```
 
 See the [full API reference](docs/api.md) for all assertion methods, examples, and advanced features.
@@ -169,9 +325,14 @@ from assertpy2 import assert_that, soft_assertions
 |---|---|---|
 | Maintained | Last release 2020 | Active |
 | Python | 2.7+ | 3.10-3.15 |
-| Type safety | No annotations | `Self` return types, `py.typed` (PEP 561) |
-| IDE support | No type info | Full autocomplete and chaining inference |
-| Soft assertions | Basic | Stable, with `soft_fail()` support |
+| Type safety | No annotations | `Self` return types, `py.typed`, typed `@overload` on `assert_that()` |
+| IDE support | No type info | Full autocomplete, type-specific method suggestions |
+| Matchers | None | Composable matchers with `&` `\|` `~` operators |
+| Structural matching | None | `matches_structure()` with recursive dict validation |
+| Async | None | `eventually()` with polling/retry |
+| Error reporting | Flat strings | `AssertionFailure` with `.actual`, `.expected`, `.diff` |
+| Pytest integration | None | Rich diff sections in failure reports |
+| Soft assertions | Global state, not thread-safe | `contextvars`, thread-safe and async-safe |
 | Security | [CVE in snapshots](https://github.com/assertpy/assertpy/issues/156) | Fixed |
 | Open bugs | 15+ unresolved | All resolved |
 
