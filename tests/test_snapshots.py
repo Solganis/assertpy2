@@ -150,12 +150,12 @@ def test_snapshot_v3(count):
 
     assert_that({'__type__': 'foo', '__data__': 'bar'}).snapshot()
 
-# def test_snapshot_not_serializable():
-#     try:
-#         assert_that(range(5)).snapshot()
-#         fail('should have raised error')
-#     except TypeError as ex:
-#         assert_that(str(ex)).ends_with('is not JSON serializable')
+def test_snapshot_not_serializable(tmp_path):
+    try:
+        assert_that(range(5)).snapshot(id='nonser', path=str(tmp_path))
+        fail('should have raised error')
+    except TypeError as ex:
+        assert_that(str(ex)).ends_with('is not JSON serializable')
 
 def test_snapshot_custom_id_int():
     try:

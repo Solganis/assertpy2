@@ -133,7 +133,7 @@ class SnapshotMixin:
                         '__module__': o.__class__.__module__,
                         '__data__': o.__dict__
                     }
-                return json.JSONEncoder.default(self, o)  # pragma: no cover - unreachable without __slots__-only types
+                return json.JSONEncoder.default(self, o)
 
         class _Decoder(json.JSONDecoder):
             def __init__(self):
