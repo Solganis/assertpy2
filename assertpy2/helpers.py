@@ -44,7 +44,12 @@ class HelpersMixin:
         elif len(i) == 1 and hasattr(i, '__getitem__'):
             return '<%s>' % (i[0],)
         else:
-            return '<%s>' % str(i).lstrip('([').rstrip(',])')
+            s = str(i)
+            if s[0] in '([':
+                s = s[1:]
+            if s[-1] in ')]':
+                s = s[:-1]
+            return '<%s>' % s
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""

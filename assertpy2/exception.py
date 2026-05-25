@@ -67,7 +67,7 @@ class ExceptionMixin:
             raise TypeError('given arg must be exception')
 
         # chain on with ex as the expected exception
-        return self.builder(self.val, self.description, self.kind, ex)
+        return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
     def when_called_with(self, *some_args, **some_kwargs):
         """Asserts that val, when invoked with the given args and kwargs, raises the expected exception.
@@ -101,7 +101,7 @@ class ExceptionMixin:
         except BaseException as e:
             if issubclass(type(e), self.expected):
                 # chain on with error message
-                return self.builder(str(e), self.description, self.kind)
+                return self.builder(str(e), self.description, self.kind, logger=self.logger)
             else:
                 # got exception, but wrong type, so raise
                 self.error('Expected <%s> to raise <%s> when called with (%s), but raised <%s>.' % (

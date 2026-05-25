@@ -27,6 +27,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -77,6 +79,14 @@ def test_contains_of_bad_type_failure(tmpfile):
         fail('should have raised error')
     except ValueError as ex:
         assert_that(str(ex)).is_equal_to('val must be file or path, but was type <int>')
+
+
+def test_contains_of_bad_type_list_failure(tmpfile):
+    try:
+        contents_of([1, 2, 3])
+        fail('should have raised error')
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to('val must be file or path, but was type <list>')
 
 
 def test_contains_of_missing_file_failure(tmpfile):
@@ -236,6 +246,10 @@ def test_is_writable_failure():
         assert_that(str(ex)).contains('to exist, but was not found.')
 
 
+def test_is_executable(tmpfile):
+    assert_that(tmpfile.name).is_executable()
+
+
 def test_is_executable_failure():
     try:
         assert_that('missing.txt').is_executable()
@@ -246,3 +260,69 @@ def test_is_executable_failure():
 
 def test_is_readable_chaining(tmpfile):
     assert_that(tmpfile.name).is_file().is_readable().is_writable()
+
+
+def test_exists_path_object(tmpfile):
+    assert_that(Path(tmpfile.name)).exists()
+
+
+def test_is_file_path_object(tmpfile):
+    assert_that(Path(tmpfile.name)).is_file()
+
+
+def test_is_directory_path_object(tmpfile):
+    assert_that(Path(os.path.dirname(tmpfile.name))).is_directory()
+
+
+def test_is_named_path_object(tmpfile):
+    basename = os.path.basename(tmpfile.name)
+    assert_that(Path(tmpfile.name)).is_named(basename)
+
+
+def test_is_child_of_path_object(tmpfile):
+    dirname = os.path.dirname(tmpfile.name)
+    assert_that(Path(tmpfile.name)).is_child_of(dirname)
+
+
+def test_contents_of_path_object(tmpfile):
+    contents = contents_of(Path(tmpfile.name))
+    assert_that(contents).is_equal_to('foobar')
+
+
+def test_does_not_exist_path_object():
+    assert_that(Path('missing.txt')).does_not_exist()
+
+
+def test_contents_of_missing_path_object():
+    try:
+        contents_of(Path('missing.txt'))
+        fail('should have raised error')
+    except OSError as ex:
+        assert_that(str(ex)).contains_ignoring_case('no such file')
+
+
+def test_is_readable_not_readable(tmpfile):
+    with patch('os.access', return_value=False):
+        try:
+            assert_that(tmpfile.name).is_readable()
+            fail('should have raised error')
+        except AssertionError as ex:
+            assert_that(str(ex)).matches('Expected <.*> to be readable, but was not.')
+
+
+def test_is_writable_not_writable(tmpfile):
+    with patch('os.access', return_value=False):
+        try:
+            assert_that(tmpfile.name).is_writable()
+            fail('should have raised error')
+        except AssertionError as ex:
+            assert_that(str(ex)).matches('Expected <.*> to be writable, but was not.')
+
+
+def test_is_executable_not_executable(tmpfile):
+    with patch('os.access', return_value=False):
+        try:
+            assert_that(tmpfile.name).is_executable()
+            fail('should have raised error')
+        except AssertionError as ex:
+            assert_that(str(ex)).matches('Expected <.*> to be executable, but was not.')

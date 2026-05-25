@@ -26,7 +26,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from assertpy2 import assert_that, fail
+import logging
+from io import StringIO
+
+from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, fail
 
 
 def test_expected_exception():
@@ -159,6 +162,36 @@ def func_kwargs(**kwargs):
 
 def func_all(arg1, arg2, *args, **kwargs):
     raise RuntimeError('all err: arg1=%s, arg2=%s, args=%s, kwargs=%s' % (arg1, arg2, args, [(k, kwargs[k]) for k in sorted(kwargs.keys())]))
+
+
+def test_expected_exception_warn_preserves_logger():
+    capture = StringIO()
+    logger = logging.getLogger('capture_exc')
+    handler = logging.StreamHandler(capture)
+    logger.addHandler(handler)
+    adapted = WarningLoggingAdapter(logger, None)
+
+    assert_warn(func_no_arg, logger=adapted).raises(RuntimeError).when_called_with().is_equal_to('wrong msg')
+
+    out = capture.getvalue()
+    capture.close()
+
+    assert_that(out).contains('Expected <no arg err> to be equal to <wrong msg>, but was not.')
+
+
+def test_expected_exception_warn_wrong_type_preserves_logger():
+    capture = StringIO()
+    logger = logging.getLogger('capture_exc2')
+    handler = logging.StreamHandler(capture)
+    logger.addHandler(handler)
+    adapted = WarningLoggingAdapter(logger, None)
+
+    assert_warn(func_no_arg, logger=adapted).raises(ValueError).when_called_with()
+
+    out = capture.getvalue()
+    capture.close()
+
+    assert_that(out).contains('Expected <func_no_arg> to raise <ValueError>')
 
 
 class Foo:
