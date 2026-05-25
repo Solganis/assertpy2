@@ -38,15 +38,15 @@ class Person:
 
     @property
     def name(self):
-        return '%s %s' % (self.first_name, self.last_name)
+        return "%s %s" % (self.first_name, self.last_name)
 
     def say_hello(self):
-        return 'Hello, %s!' % self.first_name
+        return "Hello, %s!" % self.first_name
 
 
 class Developer(Person):
     def say_hello(self):
-        return '%s writes code.' % self.first_name
+        return "%s writes code." % self.first_name
 
 
 class AbstractAutomobile:
@@ -57,23 +57,23 @@ class AbstractAutomobile:
 
     @abc.abstractproperty
     def classification(self):
-        raise NotImplementedError('This method must be overridden')
+        raise NotImplementedError("This method must be overridden")
 
 
 class Car(AbstractAutomobile):
     @property
     def classification(self):
-        return 'car'
+        return "car"
 
 
 class Truck(AbstractAutomobile):
     @property
     def classification(self):
-        return 'truck'
+        return "truck"
 
 
-fred = Person('Fred', 'Smith')
-joe = Developer('Joe', 'Coder')
+fred = Person("Fred", "Smith")
+joe = Developer("Joe", "Coder")
 people = [fred, joe]
 car = Car()
 truck = Truck()
@@ -93,9 +93,9 @@ def test_is_type_of_class():
 def test_is_type_of_class_failure():
     try:
         assert_that(fred.__class__).is_type_of(Person)
-        fail('should have raised error')
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).contains('to be of type <Person>, but was not')
+        assert_that(str(ex)).contains("to be of type <Person>, but was not")
 
 
 def test_is_instance_of():
@@ -122,23 +122,23 @@ def test_is_instance_of_class():
 def test_is_instance_of_class_failure():
     try:
         assert_that(fred.__class__).is_instance_of(Person)
-        fail('should have raised error')
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).contains('to be instance of class <Person>, but was not')
+        assert_that(str(ex)).contains("to be instance of class <Person>, but was not")
 
 
 def test_extract_attribute():
-    assert_that(people).extracting('first_name').is_equal_to(['Fred', 'Joe'])
-    assert_that(people).extracting('first_name').contains('Fred', 'Joe')
+    assert_that(people).extracting("first_name").is_equal_to(["Fred", "Joe"])
+    assert_that(people).extracting("first_name").contains("Fred", "Joe")
 
 
 def test_extract_property():
-    assert_that(people).extracting('name').contains('Fred Smith', 'Joe Coder')
+    assert_that(people).extracting("name").contains("Fred Smith", "Joe Coder")
 
 
 def test_extract_multiple():
-    assert_that(people).extracting('first_name', 'name').contains(('Fred', 'Fred Smith'), ('Joe', 'Joe Coder'))
+    assert_that(people).extracting("first_name", "name").contains(("Fred", "Fred Smith"), ("Joe", "Joe Coder"))
 
 
 def test_extract_zero_arg_method():
-    assert_that(people).extracting('say_hello').contains('Hello, Fred!', 'Joe writes code.')
+    assert_that(people).extracting("say_hello").contains("Hello, Fred!", "Joe writes code.")

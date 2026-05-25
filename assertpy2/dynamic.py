@@ -70,27 +70,27 @@ class DynamicMixin:
     def __getattr__(self, attr):
         """Asserts that val has attribute attr and that its value is equal to other via a dynamic
         assertion of the form ``has_<attr>()``."""
-        if not attr.startswith('has_'):
-            raise AttributeError('assertpy has no assertion <%s()>' % attr)
+        if not attr.startswith("has_"):
+            raise AttributeError("assertpy has no assertion <%s()>" % attr)
 
         attr_name = attr[4:]
         err_msg = False
-        is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, '_fields')
-        is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, '__getitem__')
+        is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, "_fields")
+        is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
 
         if not hasattr(self.val, attr_name):
             if is_dict and not is_namedtuple:
                 if attr_name not in self.val:
-                    err_msg = 'Expected key <%s>, but val has no key <%s>.' % (attr_name, attr_name)
+                    err_msg = "Expected key <%s>, but val has no key <%s>." % (attr_name, attr_name)
             else:
-                err_msg = 'Expected attribute <%s>, but val has no attribute <%s>.' % (attr_name, attr_name)
+                err_msg = "Expected attribute <%s>, but val has no attribute <%s>." % (attr_name, attr_name)
 
         def _wrapper(*args, **kwargs):
             if err_msg:
                 return self.error(err_msg)  # ok to raise AssertionError now that we are inside wrapper
             else:
                 if len(args) != 1:
-                    raise TypeError('assertion <%s()> takes exactly 1 argument (%d given)' % (attr, len(args)))
+                    raise TypeError("assertion <%s()> takes exactly 1 argument (%d given)" % (attr, len(args)))
 
                 val_attr = self.val[attr_name] if is_dict and not is_namedtuple else getattr(self.val, attr_name)
 
@@ -98,13 +98,16 @@ class DynamicMixin:
                     try:
                         actual = val_attr()
                     except TypeError:
-                        raise TypeError('val does not have zero-arg method <%s()>' % attr_name) from None
+                        raise TypeError("val does not have zero-arg method <%s()>" % attr_name) from None
                 else:
                     actual = val_attr
 
                 expected = args[0]
                 if actual != expected:
-                    return self.error('Expected <%s> to be equal to <%s> on %s <%s>, but was not.' % (actual, expected, 'key' if is_dict else 'attribute', attr_name))
+                    return self.error(
+                        "Expected <%s> to be equal to <%s> on %s <%s>, but was not."
+                        % (actual, expected, "key" if is_dict else "attribute", attr_name)
+                    )
             return self
 
         return _wrapper

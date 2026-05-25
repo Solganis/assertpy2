@@ -79,7 +79,7 @@ class SnapshotMixin:
         Snapshots require Python 3.x
     """
 
-    def snapshot(self, id=None, path='__snapshots') -> Self:
+    def snapshot(self, id=None, path="__snapshots") -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,
@@ -124,20 +124,21 @@ class SnapshotMixin:
         Raises:
             AssertionError: if val does **not** equal to on-disk snapshot
         """
+
         class _Encoder(json.JSONEncoder):
             def default(self, o):
                 if isinstance(o, set):
-                    return {'__type__': 'set', '__data__': list(o)}
+                    return {"__type__": "set", "__data__": list(o)}
                 elif isinstance(o, complex):
-                    return {'__type__': 'complex', '__data__': [o.real, o.imag]}
+                    return {"__type__": "complex", "__data__": [o.real, o.imag]}
                 elif isinstance(o, datetime.datetime):
-                    return {'__type__': 'datetime', '__data__': o.strftime('%Y-%m-%d %H:%M:%S')}
-                elif '__dict__' in dir(o) and type(o) is not type:
+                    return {"__type__": "datetime", "__data__": o.strftime("%Y-%m-%d %H:%M:%S")}
+                elif "__dict__" in dir(o) and type(o) is not type:
                     return {
-                        '__type__': 'instance',
-                        '__class__': o.__class__.__name__,
-                        '__module__': o.__class__.__module__,
-                        '__data__': o.__dict__
+                        "__type__": "instance",
+                        "__class__": o.__class__.__name__,
+                        "__module__": o.__class__.__module__,
+                        "__data__": o.__dict__,
                     }
                 return json.JSONEncoder.default(self, o)
 
@@ -146,29 +147,29 @@ class SnapshotMixin:
                 json.JSONDecoder.__init__(self, object_hook=self.object_hook)
 
             def object_hook(self, d):
-                if '__type__' in d and '__data__' in d:
-                    if d['__type__'] == 'set':
-                        return set(d['__data__'])
-                    elif d['__type__'] == 'complex':
-                        return complex(d['__data__'][0], d['__data__'][1])
-                    elif d['__type__'] == 'datetime':
-                        return datetime.datetime.strptime(d['__data__'], '%Y-%m-%d %H:%M:%S')
-                    elif d['__type__'] == 'instance':
-                        module_name = d['__module__']
+                if "__type__" in d and "__data__" in d:
+                    if d["__type__"] == "set":
+                        return set(d["__data__"])
+                    elif d["__type__"] == "complex":
+                        return complex(d["__data__"][0], d["__data__"][1])
+                    elif d["__type__"] == "datetime":
+                        return datetime.datetime.strptime(d["__data__"], "%Y-%m-%d %H:%M:%S")
+                    elif d["__type__"] == "instance":
+                        module_name = d["__module__"]
                         if module_name not in sys.modules:
                             return d
                         mod = sys.modules[module_name]
-                        klass = getattr(mod, d['__class__'], None)
+                        klass = getattr(mod, d["__class__"], None)
                         if klass is None:
                             return d
                         inst = klass.__new__(klass)
-                        inst.__dict__ = d['__data__']
+                        inst.__dict__ = d["__data__"]
                         return inst
                 return d
 
         def _save(name, val):
-            with open(name, 'w') as fp:
-                json.dump(val, fp, indent=2, separators=(',', ': '), sort_keys=True, cls=_Encoder)
+            with open(name, "w") as fp:
+                json.dump(val, fp, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
 
         def _load(name):
             with open(name) as fp:
@@ -176,9 +177,9 @@ class SnapshotMixin:
 
         def _name(path, name):
             try:
-                return os.path.join(path, 'snap-%s.json' % name.replace(' ', '_').lower())
+                return os.path.join(path, "snap-%s.json" % name.replace(" ", "_").lower())
             except (TypeError, AttributeError):
-                raise ValueError('failed to create snapshot filename, either bad path or bad name') from None
+                raise ValueError("failed to create snapshot filename, either bad path or bad name") from None
 
         if id:
             # custom id

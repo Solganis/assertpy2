@@ -32,46 +32,51 @@ from assertpy2 import assert_that, fail
 
 
 def test_custom_dict():
-    d = CustomDict({
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Accept': 'application/json',
-        'User-Agent': 'python-requests/2.9.1'})
+    d = CustomDict(
+        {
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Accept": "application/json",
+            "User-Agent": "python-requests/2.9.1",
+        }
+    )
 
     assert_that(d).is_not_none()
 
-    assert_that(d.keys()).contains('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
-    assert_that(d).contains_key('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
+    assert_that(d.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(d).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
 
-    assert_that(d.values()).contains('gzip, deflate', 'keep-alive', 'application/json', 'python-requests/2.9.1')
-    assert_that(d).contains_value('application/json')
+    assert_that(d.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
+    assert_that(d).contains_value("application/json")
 
-    assert_that(d['Accept']).is_equal_to('application/json')
-    assert_that(d).contains_entry({'Accept': 'application/json'})
+    assert_that(d["Accept"]).is_equal_to("application/json")
+    assert_that(d).contains_entry({"Accept": "application/json"})
 
 
 def test_requests():
     requests = pytest.importorskip("requests")
-    d = requests.structures.CaseInsensitiveDict({
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Accept': 'application/json',
-        'User-Agent': 'python-requests/2.9.1'})
+    d = requests.structures.CaseInsensitiveDict(
+        {
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Accept": "application/json",
+            "User-Agent": "python-requests/2.9.1",
+        }
+    )
 
     assert_that(d).is_not_none()
 
-    assert_that(d.keys()).contains('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
-    assert_that(d).contains_key('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
+    assert_that(d.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(d).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
 
-    assert_that(d.values()).contains('gzip, deflate', 'keep-alive', 'application/json', 'python-requests/2.9.1')
-    assert_that(d).contains_value('application/json')
+    assert_that(d.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
+    assert_that(d).contains_value("application/json")
 
-    assert_that(d['Accept']).is_equal_to('application/json')
-    assert_that(d).contains_entry({'Accept': 'application/json'})
+    assert_that(d["Accept"]).is_equal_to("application/json")
+    assert_that(d).contains_entry({"Accept": "application/json"})
 
 
 class CustomDict:
-
     def __init__(self, d):
         self._dict = d
         self._idx = 0
@@ -101,7 +106,7 @@ class CustomDict:
 
 
 def test_check_dict_like():
-    d = CustomDict({'a': 1})
+    d = CustomDict({"a": 1})
     ab = assert_that(None)
     ab._check_dict_like(d)
     ab._check_dict_like(d, True, True, True)
@@ -133,45 +138,45 @@ def test_check_dict_like_no_keys():
     try:
         ab = assert_that(None)
         ab._check_dict_like(CustomDictNoKeys())
-        fail('should have raised error')
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('is not dict-like: missing keys()')
+        assert_that(str(e)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_keys_callable():
     try:
         ab = assert_that(None)
         ab._check_dict_like(CustomDictNoKeysCallable())
-        fail('should have raised error')
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('is not dict-like: missing keys()')
+        assert_that(str(e)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_values():
     try:
         ab = assert_that(None)
         ab._check_dict_like(CustomDictNoValues())
-        fail('should have raised error')
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('is not dict-like: missing values()')
+        assert_that(str(e)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_values_callable():
     try:
         ab = assert_that(None)
         ab._check_dict_like(CustomDictNoValuesCallable())
-        fail('should have raised error')
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('is not dict-like: missing values()')
+        assert_that(str(e)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_getitem():
     try:
         ab = assert_that(None)
         ab._check_dict_like(CustomDictNoGetitem())
-        fail('should have raised error')
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('is not dict-like: missing [] accessor')
+        assert_that(str(e)).contains("is not dict-like: missing [] accessor")
 
 
 class CustomDictNoKeys:
@@ -184,7 +189,7 @@ class CustomDictNoKeys:
 
 class CustomDictNoKeysCallable:
     def __init__(self):
-        self.keys = 'foo'
+        self.keys = "foo"
 
     def __iter__(self):
         return self
@@ -201,12 +206,12 @@ class CustomDictNoValues:
         return 1
 
     def keys(self):
-        return 'foo'
+        return "foo"
 
 
 class CustomDictNoValuesCallable:
     def __init__(self):
-        self.values = 'foo'
+        self.values = "foo"
 
     def __iter__(self):
         return self
@@ -215,7 +220,7 @@ class CustomDictNoValuesCallable:
         return 1
 
     def keys(self):
-        return 'foo'
+        return "foo"
 
 
 class CustomDictNoGetitem:
@@ -226,7 +231,7 @@ class CustomDictNoGetitem:
         return 1
 
     def keys(self):
-        return 'foo'
+        return "foo"
 
     def values(self):
-        return 'bar'
+        return "bar"

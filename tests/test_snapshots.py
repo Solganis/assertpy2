@@ -39,16 +39,16 @@ import pytest
 from assertpy2 import assert_that, fail
 
 
-@pytest.mark.parametrize('count', [1, 2])
+@pytest.mark.parametrize("count", [1, 2])
 def test_snapshot_v3(count):
     # test runs twice
     if count == 1:
         # on first pass, delete old snapshots...so they are re-created and saved
-        if os.path.exists('__snapshots'):
-            shutil.rmtree('__snapshots')
+        if os.path.exists("__snapshots"):
+            shutil.rmtree("__snapshots")
     if count == 2:
         # on second pass, snapshots are loaded and checked
-        assert_that('__snapshots').exists().is_directory()
+        assert_that("__snapshots").exists().is_directory()
 
     assert_that(None).snapshot()
 
@@ -61,28 +61,28 @@ def test_snapshot_v3(count):
     assert_that(123.456).snapshot()
     assert_that(-987.654).snapshot()
 
-    assert_that('').snapshot()
-    assert_that('foo').snapshot()
+    assert_that("").snapshot()
+    assert_that("foo").snapshot()
 
     assert_that([1, 2, 3]).snapshot()
 
-    assert_that(['a', 'b', 'c']).snapshot()
+    assert_that(["a", "b", "c"]).snapshot()
 
-    assert_that([[1, 2, 3], ['a', 'b', 'c']]).snapshot()
+    assert_that([[1, 2, 3], ["a", "b", "c"]]).snapshot()
 
-    assert_that(set(['a', 'b', 'c', 'a'])).snapshot()
+    assert_that(set(["a", "b", "c", "a"])).snapshot()
 
-    assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot()
+    assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 
-    assert_that({'a': {'x': 1}, 'b': {'y': 2}, 'c': {'z': 3}}).snapshot()
+    assert_that({"a": {"x": 1}, "b": {"y": 2}, "c": {"z": 3}}).snapshot()
 
-    assert_that({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]}).snapshot()
+    assert_that({"a": [1, 2], "b": [3, 4], "c": [5, 6]}).snapshot()
 
-    assert_that({'a': set([1, 2]), 'b': set([3, 4]), 'c': set([5, 6])}).snapshot()
+    assert_that({"a": set([1, 2]), "b": set([3, 4]), "c": set([5, 6])}).snapshot()
 
-    assert_that({'a': {'b': {'c': {'x': {'y': {'z': 1}}}}}}).snapshot()
+    assert_that({"a": {"b": {"c": {"x": {"y": {"z": 1}}}}}}).snapshot()
 
-    assert_that(collections.OrderedDict([('a', 1), ('c', 3), ('b', 2)])).snapshot()
+    assert_that(collections.OrderedDict([("a", 1), ("c", 3), ("b", 2)])).snapshot()
 
     assert_that(datetime.datetime(2000, 11, 22, 3, 44, 55)).snapshot()
 
@@ -92,26 +92,28 @@ def test_snapshot_v3(count):
     # assert_that((1, 2, 3)).snapshot()
     # assert_that({'a': (1,2), 'b': (3,4), 'c': (5,6)}).snapshot()
 
-    assert_that({'custom': 'id'}).snapshot(id='mycustomid')
+    assert_that({"custom": "id"}).snapshot(id="mycustomid")
 
-    assert_that({'custom': 'path'}).snapshot(path='mycustompath')
+    assert_that({"custom": "path"}).snapshot(path="mycustompath")
 
     foo = Foo()
-    foo2 = Foo({
-        'a': 1,
-        'b': [1, 2, 3],
-        'c': {'x': 1, 'y': 2, 'z': 3},
-        'd': set([-1, 2, -3]),
-        'e': datetime.datetime(2000, 11, 22, 3, 44, 55),
-        'f': -1 - 2j
-    })
+    foo2 = Foo(
+        {
+            "a": 1,
+            "b": [1, 2, 3],
+            "c": {"x": 1, "y": 2, "z": 3},
+            "d": set([-1, 2, -3]),
+            "e": datetime.datetime(2000, 11, 22, 3, 44, 55),
+            "f": -1 - 2j,
+        }
+    )
     bar = Bar()
 
     assert_that(foo.x).is_equal_to(0)
     assert_that(foo.y).is_equal_to(1)
 
-    assert_that(foo2.x['a']).is_equal_to(1)
-    assert_that(foo2.x['b']).is_equal_to([1, 2, 3])
+    assert_that(foo2.x["a"]).is_equal_to(1)
+    assert_that(foo2.x["b"]).is_equal_to([1, 2, 3])
     assert_that(foo2.y).is_equal_to(1)
 
     assert_that(bar.x).is_equal_to(0)
@@ -123,105 +125,117 @@ def test_snapshot_v3(count):
     try:
         assert_that(bar).snapshot()
         if count == 2:
-            fail('should have raised error')
+            fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).contains('Expected ').contains(' to be equal to ').contains('test_snapshots.Bar').contains(', but was not.')
+        assert_that(str(ex)).contains("Expected ").contains(" to be equal to ").contains("test_snapshots.Bar").contains(
+            ", but was not."
+        )
 
-    assert_that({
-        'none': None,
-        'truthy': True,
-        'falsy': False,
-        'int': 123,
-        'intneg': -456,
-        'float': 123.456,
-        'floatneg': -987.654,
-        'empty': '',
-        'str': 'foo',
-        'list': [1, 2, 3],
-        'liststr': ['a', 'b', 'c'],
-        'listmix': [1, 'a', [2, 4, 6], set([1, 2, 3]), 3+6j],
-        'set': set([1, 2, 3]),
-        'dict': {'a': 1, 'b': 2, 'c': 3},
-        'time': datetime.datetime(2000, 11, 22, 3, 44, 55),
-        'complex': 1 + 2j,
-        'foo': foo,
-        'foo2': foo2
-    }).snapshot()
+    assert_that(
+        {
+            "none": None,
+            "truthy": True,
+            "falsy": False,
+            "int": 123,
+            "intneg": -456,
+            "float": 123.456,
+            "floatneg": -987.654,
+            "empty": "",
+            "str": "foo",
+            "list": [1, 2, 3],
+            "liststr": ["a", "b", "c"],
+            "listmix": [1, "a", [2, 4, 6], set([1, 2, 3]), 3 + 6j],
+            "set": set([1, 2, 3]),
+            "dict": {"a": 1, "b": 2, "c": 3},
+            "time": datetime.datetime(2000, 11, 22, 3, 44, 55),
+            "complex": 1 + 2j,
+            "foo": foo,
+            "foo2": foo2,
+        }
+    ).snapshot()
 
-    assert_that({'__type__': 'foo', '__data__': 'bar'}).snapshot()
+    assert_that({"__type__": "foo", "__data__": "bar"}).snapshot()
+
 
 def test_snapshot_not_serializable(tmp_path):
     try:
-        assert_that(range(5)).snapshot(id='nonser', path=str(tmp_path))
-        fail('should have raised error')
+        assert_that(range(5)).snapshot(id="nonser", path=str(tmp_path))
+        fail("should have raised error")
     except TypeError as ex:
-        assert_that(str(ex)).ends_with('is not JSON serializable')
+        assert_that(str(ex)).ends_with("is not JSON serializable")
+
 
 def test_snapshot_custom_id_int():
     try:
-        assert_that('foo').snapshot(id=123)
-        fail('should have raised error')
+        assert_that("foo").snapshot(id=123)
+        fail("should have raised error")
     except ValueError as ex:
-        assert_that(str(ex)).starts_with('failed to create snapshot filename')
+        assert_that(str(ex)).starts_with("failed to create snapshot filename")
+
 
 def test_snapshot_custom_path_none():
     try:
-        assert_that('foo').snapshot(path=None)
-        fail('should have raised error')
+        assert_that("foo").snapshot(path=None)
+        fail("should have raised error")
     except ValueError as ex:
-        assert_that(str(ex)).starts_with('failed to create snapshot filename')
+        assert_that(str(ex)).starts_with("failed to create snapshot filename")
+
 
 def test_snapshot_does_not_import_arbitrary_modules(tmp_path):
-    snap_dir = tmp_path / '__snapshots'
+    snap_dir = tmp_path / "__snapshots"
     snap_dir.mkdir()
-    snap_file = snap_dir / 'snap-cve156.json'
-    snap_file.write_text(json.dumps({
-        '__type__': 'instance',
-        '__class__': 'Exploit',
-        '__module__': 'cve156_fake_module',
-        '__data__': {'pwned': True},
-    }))
+    snap_file = snap_dir / "snap-cve156.json"
+    snap_file.write_text(
+        json.dumps(
+            {
+                "__type__": "instance",
+                "__class__": "Exploit",
+                "__module__": "cve156_fake_module",
+                "__data__": {"pwned": True},
+            }
+        )
+    )
 
-    assert 'cve156_fake_module' not in sys.modules
+    assert "cve156_fake_module" not in sys.modules
 
     with contextlib.suppress(AssertionError):
-        assert_that({'safe': True}).snapshot(id='cve156', path=str(snap_dir))
+        assert_that({"safe": True}).snapshot(id="cve156", path=str(snap_dir))
 
-    assert 'cve156_fake_module' not in sys.modules
+    assert "cve156_fake_module" not in sys.modules
 
 
 def test_snapshot_returns_dict_for_unknown_module(tmp_path):
-    snap_dir = tmp_path / '__snapshots'
+    snap_dir = tmp_path / "__snapshots"
     snap_dir.mkdir()
     payload = {
-        '__type__': 'instance',
-        '__class__': 'Nope',
-        '__module__': 'nonexistent_module_xyz',
-        '__data__': {'x': 1},
+        "__type__": "instance",
+        "__class__": "Nope",
+        "__module__": "nonexistent_module_xyz",
+        "__data__": {"x": 1},
     }
-    snap_file = snap_dir / 'snap-fallback.json'
+    snap_file = snap_dir / "snap-fallback.json"
     snap_file.write_text(json.dumps(payload))
 
     with contextlib.suppress(AssertionError):
-        assert_that(payload).snapshot(id='fallback', path=str(snap_dir))
+        assert_that(payload).snapshot(id="fallback", path=str(snap_dir))
 
-    assert 'nonexistent_module_xyz' not in sys.modules
+    assert "nonexistent_module_xyz" not in sys.modules
 
 
 def test_snapshot_returns_dict_for_missing_class(tmp_path):
-    snap_dir = tmp_path / '__snapshots'
+    snap_dir = tmp_path / "__snapshots"
     snap_dir.mkdir()
     payload = {
-        '__type__': 'instance',
-        '__class__': 'ClassThatDoesNotExist',
-        '__module__': 'os',
-        '__data__': {},
+        "__type__": "instance",
+        "__class__": "ClassThatDoesNotExist",
+        "__module__": "os",
+        "__data__": {},
     }
-    snap_file = snap_dir / 'snap-noclass.json'
+    snap_file = snap_dir / "snap-noclass.json"
     snap_file.write_text(json.dumps(payload))
 
     with contextlib.suppress(AssertionError):
-        assert_that(payload).snapshot(id='noclass', path=str(snap_dir))
+        assert_that(payload).snapshot(id="noclass", path=str(snap_dir))
 
 
 class Foo:
@@ -233,6 +247,7 @@ class Foo:
         if isinstance(self, other.__class__):
             return self.__dict__ == other.__dict__
         return NotImplemented
+
 
 class Bar(Foo):
     def __eq__(self, other):

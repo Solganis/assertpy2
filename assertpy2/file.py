@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-def contents_of(file, encoding='utf-8'):
+def contents_of(file, encoding="utf-8"):
     """Helper to read the contents of the given file or path into a string with the given encoding.
 
     Args:
@@ -66,16 +66,16 @@ def contents_of(file, encoding='utf-8'):
             with open(file) as fp:
                 contents = fp.read()
         except TypeError:
-            raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
+            raise ValueError("val must be file or path, but was type <%s>" % type(file).__name__) from None
         except OSError:
             if not isinstance(file, (str, os.PathLike)):
-                raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
+                raise ValueError("val must be file or path, but was type <%s>" % type(file).__name__) from None
             raise
 
     if type(contents) is bytes:
-        return contents.decode(encoding, 'replace')
+        return contents.decode(encoding, "replace")
     try:
-        return contents.decode(encoding, 'replace')
+        return contents.decode(encoding, "replace")
     except AttributeError:
         pass
     # if all else fails, just return the contents "as is"
@@ -101,9 +101,9 @@ class FileMixin:
             AssertionError: if val does **not** exist
         """
         if not isinstance(self.val, (str, os.PathLike)):
-            raise TypeError('val is not a path')
+            raise TypeError("val is not a path")
         if not os.path.exists(self.val):
-            return self.error('Expected <%s> to exist, but was not found.' % self.val)
+            return self.error("Expected <%s> to exist, but was not found." % self.val)
         return self
 
     def does_not_exist(self) -> Self:
@@ -122,9 +122,9 @@ class FileMixin:
             AssertionError: if val **does** exist
         """
         if not isinstance(self.val, (str, os.PathLike)):
-            raise TypeError('val is not a path')
+            raise TypeError("val is not a path")
         if os.path.exists(self.val):
-            return self.error('Expected <%s> to not exist, but was found.' % self.val)
+            return self.error("Expected <%s> to not exist, but was found." % self.val)
         return self
 
     def is_file(self) -> Self:
@@ -143,7 +143,7 @@ class FileMixin:
         """
         self.exists()
         if not os.path.isfile(self.val):
-            return self.error('Expected <%s> to be a file, but was not.' % self.val)
+            return self.error("Expected <%s> to be a file, but was not." % self.val)
         return self
 
     def is_directory(self) -> Self:
@@ -162,7 +162,7 @@ class FileMixin:
         """
         self.exists()
         if not os.path.isdir(self.val):
-            return self.error('Expected <%s> to be a directory, but was not.' % self.val)
+            return self.error("Expected <%s> to be a directory, but was not." % self.val)
         return self
 
     def is_named(self, filename) -> Self:
@@ -184,10 +184,10 @@ class FileMixin:
         """
         self.is_file()
         if not isinstance(filename, (str, os.PathLike)):
-            raise TypeError('given filename arg must be a path')
+            raise TypeError("given filename arg must be a path")
         val_filename = os.path.basename(os.path.abspath(self.val))
         if val_filename != filename:
-            return self.error('Expected filename <%s> to be equal to <%s>, but was not.' % (val_filename, filename))
+            return self.error("Expected filename <%s> to be equal to <%s>, but was not." % (val_filename, filename))
         return self
 
     def is_child_of(self, parent) -> Self:
@@ -211,11 +211,11 @@ class FileMixin:
         """
         self.is_file()
         if not isinstance(parent, (str, os.PathLike)):
-            raise TypeError('given parent directory arg must be a path')
+            raise TypeError("given parent directory arg must be a path")
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent)
         if not val_abspath.startswith(parent_abspath):
-            return self.error('Expected file <%s> to be a child of <%s>, but was not.' % (val_abspath, parent_abspath))
+            return self.error("Expected file <%s> to be a child of <%s>, but was not." % (val_abspath, parent_abspath))
         return self
 
     def is_readable(self) -> Self:
@@ -234,7 +234,7 @@ class FileMixin:
         """
         self.exists()
         if not os.access(self.val, os.R_OK):
-            return self.error('Expected <%s> to be readable, but was not.' % self.val)
+            return self.error("Expected <%s> to be readable, but was not." % self.val)
         return self
 
     def is_writable(self) -> Self:
@@ -253,7 +253,7 @@ class FileMixin:
         """
         self.exists()
         if not os.access(self.val, os.W_OK):
-            return self.error('Expected <%s> to be writable, but was not.' % self.val)
+            return self.error("Expected <%s> to be writable, but was not." % self.val)
         return self
 
     def is_executable(self) -> Self:
@@ -272,5 +272,5 @@ class FileMixin:
         """
         self.exists()
         if not os.access(self.val, os.X_OK):
-            return self.error('Expected <%s> to be executable, but was not.' % self.val)
+            return self.error("Expected <%s> to be executable, but was not." % self.val)
         return self

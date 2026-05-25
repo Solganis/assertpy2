@@ -56,28 +56,31 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = '2.0.0'
+__version__ = "2.0.0"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # monkey patch contextlib with clean py.test tracebacks
 
 # assertpy files
-ASSERTPY_FILES = [os.path.join('assertpy2', file) for file in [
-    'assertpy.py',
-    'base.py',
-    'collection.py',
-    'contains.py',
-    'date.py',
-    'dict.py',
-    'dynamic.py',
-    'exception.py',
-    'extracting.py',
-    'file.py',
-    'helpers.py',
-    'numeric.py',
-    'snapshot.py',
-    'string.py'
-]]
+ASSERTPY_FILES = [
+    os.path.join("assertpy2", file)
+    for file in [
+        "assertpy.py",
+        "base.py",
+        "collection.py",
+        "contains.py",
+        "date.py",
+        "dict.py",
+        "dynamic.py",
+        "exception.py",
+        "extracting.py",
+        "file.py",
+        "helpers.py",
+        "numeric.py",
+        "snapshot.py",
+        "string.py",
+    ]
+]
 
 # soft assertions
 _soft_ctx = 0
@@ -136,13 +139,13 @@ def soft_assertions() -> Iterator[None]:
         _soft_ctx -= 1
 
     if _soft_err and _soft_ctx == 0:
-        out = 'soft assertion failures:\n' + '\n'.join('%d. %s' % (i + 1, msg) for i, msg in enumerate(_soft_err))
+        out = "soft assertion failures:\n" + "\n".join("%d. %s" % (i + 1, msg) for i, msg in enumerate(_soft_err))
         _soft_err = []
         raise AssertionError(out)
 
 
 # factory methods
-def assert_that(val, description=''):
+def assert_that(val, description=""):
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
     This is a factory method for the :class:`AssertionBuilder`, and the single most important
@@ -165,11 +168,11 @@ def assert_that(val, description=''):
     """
     global _soft_ctx
     if _soft_ctx:
-        return _builder(val, description, 'soft')
+        return _builder(val, description, "soft")
     return _builder(val, description)
 
 
-def assert_warn(val, description='', logger=None):
+def assert_warn(val, description="", logger=None):
     """Set the value to be tested, and optional description and logger, and allow assertions to be
     called, but never fail, only log warnings.
 
@@ -211,10 +214,10 @@ def assert_warn(val, description='', logger=None):
         Use :meth:`assert_warn` if and only if you have a *really* good reason to log assertion
         failures instead of failing.
     """
-    return _builder(val, description, 'warn', logger=logger)
+    return _builder(val, description, "warn", logger=logger)
 
 
-def fail(msg=''):
+def fail(msg=""):
     """Force immediate test failure with the given message.
 
     Args:
@@ -239,10 +242,10 @@ def fail(msg=''):
                 except TypeError as e:
                     assert_that(str(e)).contains('unsupported operand')
     """
-    raise AssertionError('Fail: %s!' % msg if msg else 'Fail!')
+    raise AssertionError("Fail: %s!" % msg if msg else "Fail!")
 
 
-def soft_fail(msg=''):
+def soft_fail(msg=""):
     """Within a :meth:`soft_assertions` context, append the failure message to the soft error list,
     but do not halt test execution.
 
@@ -273,7 +276,7 @@ def soft_fail(msg=''):
     global _soft_ctx
     if _soft_ctx:
         global _soft_err
-        _soft_err.append('Fail: %s!' % msg if msg else 'Fail!')
+        _soft_err.append("Fail: %s!" % msg if msg else "Fail!")
         return
     fail(msg)
 
@@ -311,7 +314,7 @@ def add_extension(func):
                 # 6 is NOT 5!
     """
     if not callable(func):
-        raise TypeError('func must be callable')
+        raise TypeError("func must be callable")
     _extensions[func.__name__] = func
 
 
@@ -329,12 +332,12 @@ def remove_extension(func):
             remove_extension(is_5)
     """
     if not callable(func):
-        raise TypeError('func must be callable')
+        raise TypeError("func must be callable")
     if func.__name__ in _extensions:
         del _extensions[func.__name__]
 
 
-def _builder(val, description='', kind=None, expected=None, logger=None):
+def _builder(val, description="", kind=None, expected=None, logger=None):
     """Internal helper to build a new :class:`AssertionBuilder` instance and glue on any extension methods."""
     ab = AssertionBuilder(val, description, kind, expected, logger)
     if _extensions:
@@ -366,13 +369,13 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
                 prev = frame
 
         filename, lineno = _unwind(inspect.currentframe())
-        return '[%s:%d]: %s' % (os.path.basename(filename), lineno, msg), kwargs
+        return "[%s:%d]: %s" % (os.path.basename(filename), lineno, msg), kwargs
 
 
-_logger = logging.getLogger('assertpy2')
+_logger = logging.getLogger("assertpy2")
 _handler = logging.StreamHandler(sys.stdout)
 _handler.setLevel(logging.WARNING)
-_format = logging.Formatter('%(asctime)s %(levelname)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 _handler.setFormatter(_format)
 _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
@@ -391,7 +394,7 @@ class AssertionBuilder(
     DateMixin,
     ContainsMixin,
     CollectionMixin,
-    BaseMixin
+    BaseMixin,
 ):
     """The main assertion class.  Never call the constructor directly, always use the
     :meth:`assert_that` helper instead.  Or if you just want warning messages, use the
@@ -407,7 +410,7 @@ class AssertionBuilder(
         logger (Logger, optional): the logger for warning messages.  Defaults to ``None``
     """
 
-    def __init__(self, val, description='', kind=None, expected=None, logger=None):
+    def __init__(self, val, description="", kind=None, expected=None, logger=None):
         """Never call this constructor directly."""
         self.val = val
         self.description = description
@@ -415,7 +418,7 @@ class AssertionBuilder(
         self.expected = expected
         self.logger = logger if logger else _default_logger
 
-    def builder(self, val, description='', kind=None, expected=None, logger=None):
+    def builder(self, val, description="", kind=None, expected=None, logger=None):
         """Helper to build a new :class:`AssertionBuilder` instance. Use this only if not chaining to ``self``.
 
         Args:
@@ -453,11 +456,11 @@ class AssertionBuilder(
             AssertionBuilder: returns this instance to chain to the next assertion, but only when
                 ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
         """
-        out = '%s%s' % ('[%s] ' % self.description if len(self.description) > 0 else '', msg)
-        if self.kind == 'warn':
+        out = "%s%s" % ("[%s] " % self.description if len(self.description) > 0 else "", msg)
+        if self.kind == "warn":
             self.logger.warning(out)
             return self
-        elif self.kind == 'soft':
+        elif self.kind == "soft":
             global _soft_err
             _soft_err.append(out)
             return self

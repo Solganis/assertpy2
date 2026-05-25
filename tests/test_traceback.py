@@ -34,10 +34,10 @@ from assertpy2 import assert_that, fail
 
 def test_traceback():
     try:
-        assert_that('foo').is_equal_to('bar')
-        fail('should have raised error')
+        assert_that("foo").is_equal_to("bar")
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to('Expected <foo> to be equal to <bar>, but was not.')
+        assert_that(str(ex)).is_equal_to("Expected <foo> to be equal to <bar>, but was not.")
         assert_that(ex).is_type_of(AssertionError)
 
         # extract all stack frames from the traceback
@@ -50,14 +50,14 @@ def test_traceback():
 
             assert_that(frames).is_length(3)
 
-            assert_that(frames[0][0]).ends_with('test_traceback.py')
-            assert_that(frames[0][1]).is_equal_to('test_traceback')
+            assert_that(frames[0][0]).ends_with("test_traceback.py")
+            assert_that(frames[0][1]).is_equal_to("test_traceback")
             assert_that(frames[0][2]).is_equal_to(37)
 
-            assert_that(frames[1][0]).ends_with('base.py')
-            assert_that(frames[1][1]).is_equal_to('is_equal_to')
+            assert_that(frames[1][0]).ends_with("base.py")
+            assert_that(frames[1][1]).is_equal_to("is_equal_to")
             assert_that(frames[1][2]).is_greater_than(40)
 
-            assert_that(frames[2][0]).ends_with('assertpy.py')
-            assert_that(frames[2][1]).is_equal_to('error')
+            assert_that(frames[2][0]).ends_with("assertpy.py")
+            assert_that(frames[2][1]).is_equal_to("error")
             assert_that(frames[2][2]).is_greater_than(100)

@@ -163,25 +163,25 @@ class ExtractingMixin:
             AssertionBuilder: returns a new instance (now with the extracted list as the val) to chain to the next assertion
         """
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError('val is not iterable')
+            raise TypeError("val is not iterable")
         if isinstance(self.val, str):
-            raise TypeError('val must not be string')
+            raise TypeError("val must not be string")
         if len(names) == 0:
-            raise ValueError('one or more name args must be given')
+            raise ValueError("one or more name args must be given")
 
         def _extract(x, name):
             if self._check_dict_like(x, check_values=False, return_as_bool=True):
                 if name in x:
                     return x[name]
                 else:
-                    raise ValueError('item keys %s did not contain key <%s>' % (list(x.keys()), name))
-            elif isinstance(x, tuple) and hasattr(x, '_fields') and type(name) is str:
+                    raise ValueError("item keys %s did not contain key <%s>" % (list(x.keys()), name))
+            elif isinstance(x, tuple) and hasattr(x, "_fields") and type(name) is str:
                 if name in x._fields:
                     return getattr(x, name)
-                else: #val has no attribute <foo>
-                    raise ValueError('item attributes %s did no contain attribute <%s>' % (x._fields, name))
-            elif isinstance(x, collections.abc.Iterable): # FIXME, this does __getitem__, but doesn't check for it...
-                self._check_iterable(x, name='item')
+                else:  # val has no attribute <foo>
+                    raise ValueError("item attributes %s did no contain attribute <%s>" % (x._fields, name))
+            elif isinstance(x, collections.abc.Iterable):  # FIXME, this does __getitem__, but doesn't check for it...
+                self._check_iterable(x, name="item")
                 return x[name]
             elif hasattr(x, name):
                 attr = getattr(x, name)
@@ -189,38 +189,38 @@ class ExtractingMixin:
                     try:
                         return attr()
                     except TypeError:
-                        raise ValueError('item method <%s()> exists, but is not zero-arg method' % name) from None
+                        raise ValueError("item method <%s()> exists, but is not zero-arg method" % name) from None
                 else:
                     return attr
             else:
-                raise ValueError('item does not have property or zero-arg method <%s>' % name)
+                raise ValueError("item does not have property or zero-arg method <%s>" % name)
 
         def _filter(x):
-            if 'filter' in kwargs:
-                if isinstance(kwargs['filter'], str):
-                    return bool(_extract(x, kwargs['filter']))
-                elif self._check_dict_like(kwargs['filter'], check_values=False, return_as_bool=True):
-                    for k in kwargs['filter']:
-                        if isinstance(k, str) and _extract(x, k) != kwargs['filter'][k]:
+            if "filter" in kwargs:
+                if isinstance(kwargs["filter"], str):
+                    return bool(_extract(x, kwargs["filter"]))
+                elif self._check_dict_like(kwargs["filter"], check_values=False, return_as_bool=True):
+                    for k in kwargs["filter"]:
+                        if isinstance(k, str) and _extract(x, k) != kwargs["filter"][k]:
                             return False
                     return True
-                elif callable(kwargs['filter']):
-                    return kwargs['filter'](x)
-                return kwargs['filter'] is None
+                elif callable(kwargs["filter"]):
+                    return kwargs["filter"](x)
+                return kwargs["filter"] is None
             return True
 
         def _sort(x):
-            if 'sort' in kwargs:
-                if isinstance(kwargs['sort'], str):
-                    return _extract(x, kwargs['sort'])
-                elif isinstance(kwargs['sort'], collections.abc.Iterable):
+            if "sort" in kwargs:
+                if isinstance(kwargs["sort"], str):
+                    return _extract(x, kwargs["sort"])
+                elif isinstance(kwargs["sort"], collections.abc.Iterable):
                     items = []
-                    for k in kwargs['sort']:
+                    for k in kwargs["sort"]:
                         if isinstance(k, str):
                             items.append(_extract(x, k))
                     return tuple(items)
-                elif callable(kwargs['sort']):
-                    return kwargs['sort'](x)
+                elif callable(kwargs["sort"]):
+                    return kwargs["sort"](x)
             return 0
 
         extracted = []
