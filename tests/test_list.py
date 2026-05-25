@@ -251,6 +251,41 @@ def test_contains_sequence_no_args_failure():
         assert_that(str(ex)).is_equal_to('one or more args must be given')
 
 
+def test_contains_sequence_string_substrings():
+    assert_that('foobar').contains_sequence('foo', 'bar')
+    assert_that('foobar').contains_sequence('f', 'bar')
+    assert_that('foobar').contains_sequence('fo', 'ob', 'ar')
+    assert_that('foobar').contains_sequence('foo')
+    assert_that('foobar').contains_sequence('bar')
+    assert_that('abcdef').contains_sequence('ab', 'cd', 'ef')
+    assert_that('abcdef').contains_sequence('a', 'f')
+    assert_that('hello world').contains_sequence('hello', 'world')
+
+
+def test_contains_sequence_string_substrings_failure():
+    try:
+        assert_that('foobar').contains_sequence('bar', 'foo')
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain sequence <'bar', 'foo'>, but did not.")
+
+
+def test_contains_sequence_string_substrings_not_found():
+    try:
+        assert_that('foobar').contains_sequence('foo', 'xyz')
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain sequence <'foo', 'xyz'>, but did not.")
+
+
+def test_contains_sequence_string_bad_arg_type():
+    try:
+        assert_that('foobar').contains_sequence('foo', 123)
+        fail('should have raised error')
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to('given args must be strings when val is a string')
+
+
 def test_contains_duplicates():
     assert_that(['a', 'b', 'c', 'a']).contains_duplicates()
     assert_that(('a', 'b', 'c', 'a')).contains_duplicates()

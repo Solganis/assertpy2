@@ -26,6 +26,8 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import pytest
+
 from assertpy2 import assert_that, fail
 
 
@@ -49,26 +51,23 @@ def test_custom_dict():
 
 
 def test_requests():
-    try:
-        import requests
-        d = requests.structures.CaseInsensitiveDict({
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Accept': 'application/json',
-            'User-Agent': 'python-requests/2.9.1'})
+    requests = pytest.importorskip("requests")
+    d = requests.structures.CaseInsensitiveDict({
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Accept': 'application/json',
+        'User-Agent': 'python-requests/2.9.1'})
 
-        assert_that(d).is_not_none()
+    assert_that(d).is_not_none()
 
-        assert_that(d.keys()).contains('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
-        assert_that(d).contains_key('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
+    assert_that(d.keys()).contains('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
+    assert_that(d).contains_key('Accept-Encoding', 'Connection', 'Accept', 'User-Agent')
 
-        assert_that(d.values()).contains('gzip, deflate', 'keep-alive', 'application/json', 'python-requests/2.9.1')
-        assert_that(d).contains_value('application/json')
+    assert_that(d.values()).contains('gzip, deflate', 'keep-alive', 'application/json', 'python-requests/2.9.1')
+    assert_that(d).contains_value('application/json')
 
-        assert_that(d['Accept']).is_equal_to('application/json')
-        assert_that(d).contains_entry({'Accept': 'application/json'})
-    except ImportError:
-        pass
+    assert_that(d['Accept']).is_equal_to('application/json')
+    assert_that(d).contains_entry({'Accept': 'application/json'})
 
 
 class CustomDict:

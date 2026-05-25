@@ -26,9 +26,15 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import datetime
 import math
 import numbers
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -53,7 +59,10 @@ class NumericMixin:
             if not isinstance(other, numbers.Number):
                 raise TypeError('given arg must be a number, but was <%s>' % other_type.__name__)
             return
-        raise TypeError('ordering is not defined for type <%s>' % self_type.__name__)
+        try:
+            _ = self.val < other
+        except TypeError:
+            raise TypeError('ordering is not defined for type <%s>' % self_type.__name__) from None
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
@@ -65,7 +74,7 @@ class NumericMixin:
         if isinstance(self.val, numbers.Real) is False:
             raise TypeError('val is not real number')
 
-    def is_zero(self):
+    def is_zero(self) -> Self:
         """Asserts that val is numeric and is zero.
 
         Examples:
@@ -82,7 +91,7 @@ class NumericMixin:
         self._validate_number()
         return self.is_equal_to(0)
 
-    def is_not_zero(self):
+    def is_not_zero(self) -> Self:
         """Asserts that val is numeric and is *not* zero.
 
         Examples:
@@ -100,7 +109,7 @@ class NumericMixin:
         self._validate_number()
         return self.is_not_equal_to(0)
 
-    def is_nan(self):
+    def is_nan(self) -> Self:
         """Asserts that val is real number and is ``NaN`` (not a number).
 
         Examples:
@@ -121,7 +130,7 @@ class NumericMixin:
             return self.error('Expected <%s> to be <NaN>, but was not.' % self.val)
         return self
 
-    def is_not_nan(self):
+    def is_not_nan(self) -> Self:
         """Asserts that val is real number and is *not* ``NaN`` (not a number).
 
         Examples:
@@ -143,7 +152,7 @@ class NumericMixin:
             return self.error('Expected not <NaN>, but was.')
         return self
 
-    def is_inf(self):
+    def is_inf(self) -> Self:
         """Asserts that val is real number and is ``Inf`` (infinity).
 
         Examples:
@@ -164,7 +173,7 @@ class NumericMixin:
             return self.error('Expected <%s> to be <Inf>, but was not.' % self.val)
         return self
 
-    def is_not_inf(self):
+    def is_not_inf(self) -> Self:
         """Asserts that val is real number and is *not* ``Inf`` (infinity).
 
         Examples:
@@ -186,7 +195,7 @@ class NumericMixin:
             return self.error('Expected not <Inf>, but was.')
         return self
 
-    def is_greater_than(self, other):
+    def is_greater_than(self, other) -> Self:
         """Asserts that val is numeric and is greater than other.
 
         Args:
@@ -222,7 +231,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be greater than <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_greater_than_or_equal_to(self, other):
+    def is_greater_than_or_equal_to(self, other) -> Self:
         """Asserts that val is numeric and is greater than or equal to other.
 
         Args:
@@ -260,7 +269,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be greater than or equal to <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_less_than(self, other):
+    def is_less_than(self, other) -> Self:
         """Asserts that val is numeric and is less than other.
 
         Args:
@@ -295,7 +304,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be less than <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_less_than_or_equal_to(self, other):
+    def is_less_than_or_equal_to(self, other) -> Self:
         """Asserts that val is numeric and is less than or equal to other.
 
         Args:
@@ -333,7 +342,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be less than or equal to <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_positive(self):
+    def is_positive(self) -> Self:
         """Asserts that val is numeric and is greater than zero.
 
         Examples:
@@ -350,7 +359,7 @@ class NumericMixin:
         """
         return self.is_greater_than(0)
 
-    def is_negative(self):
+    def is_negative(self) -> Self:
         """Asserts that val is numeric and is less than zero.
 
         Examples:
@@ -367,7 +376,7 @@ class NumericMixin:
         """
         return self.is_less_than(0)
 
-    def is_between(self, low, high):
+    def is_between(self, low, high) -> Self:
         """Asserts that val is numeric and is between low and high.
 
         Args:
@@ -407,7 +416,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be between <%s> and <%s>, but was not.' % (self.val, low, high))
         return self
 
-    def is_not_between(self, low, high):
+    def is_not_between(self, low, high) -> Self:
         """Asserts that val is numeric and is *not* between low and high.
 
         Args:
@@ -437,7 +446,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to not be between <%s> and <%s>, but was.' % (self.val, low, high))
         return self
 
-    def is_close_to(self, other, tolerance):
+    def is_close_to(self, other, tolerance) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 
         Args:
@@ -480,7 +489,7 @@ class NumericMixin:
                 return self.error('Expected <%s> to be close to <%s> within tolerance <%s>, but was not.' % (self.val, other, tolerance))
         return self
 
-    def is_not_close_to(self, other, tolerance):
+    def is_not_close_to(self, other, tolerance) -> Self:
         """Asserts that val is numeric and is *not* close to other within tolerance.
 
         Args:

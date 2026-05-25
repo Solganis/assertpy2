@@ -26,13 +26,20 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 __tracebackhide__ = True
 
 
 class BaseMixin:
     """Base mixin."""
 
-    def described_as(self, description):
+    def described_as(self, description) -> Self:
         """Describes the assertion.  On failure, the description is included in the error message.
 
         This is not an assertion itself.  But if the any of the following chained assertions fail,
@@ -53,7 +60,7 @@ class BaseMixin:
         self.description = str(description)
         return self
 
-    def is_equal_to(self, other, **kwargs):
+    def is_equal_to(self, other, **kwargs) -> Self:
         """Asserts that val is equal to other.
 
         Checks actual is equal to expected using the ``==`` operator. When val is *dict-like*,
@@ -126,7 +133,7 @@ class BaseMixin:
                 return self.error('Expected <%s> to be equal to <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_not_equal_to(self, other):
+    def is_not_equal_to(self, other) -> Self:
         """Asserts that val is not equal to other.
 
         Checks actual is not equal to expected using the ``!=`` operator.
@@ -156,7 +163,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be not equal to <%s>, but was.' % (self.val, other))
         return self
 
-    def is_same_as(self, other):
+    def is_same_as(self, other) -> Self:
         """Asserts that val is identical to other.
 
         Checks actual is identical to expected using the ``is`` operator.
@@ -198,7 +205,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be identical to <%s>, but was not.' % (self.val, other))
         return self
 
-    def is_not_same_as(self, other):
+    def is_not_same_as(self, other) -> Self:
         """Asserts that val is not identical to other.
 
         Checks actual is not identical to expected using the ``is`` operator.
@@ -229,7 +236,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be not identical to <%s>, but was.' % (self.val, other))
         return self
 
-    def is_true(self):
+    def is_true(self) -> Self:
         """Asserts that val is true.
 
         Examples:
@@ -254,7 +261,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be <True>, but was not.' % self.val)
         return self
 
-    def is_false(self):
+    def is_false(self) -> Self:
         """Asserts that val is false.
 
         Examples:
@@ -279,7 +286,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be <False>, but was not.' % self.val)
         return self
 
-    def is_none(self):
+    def is_none(self) -> Self:
         """Asserts that val is none.
 
         Examples:
@@ -298,7 +305,7 @@ class BaseMixin:
             return self.error('Expected <%s> to be <None>, but was not.' % self.val)
         return self
 
-    def is_not_none(self):
+    def is_not_none(self) -> Self:
         """Asserts that val is not none.
 
         Examples:
@@ -323,7 +330,7 @@ class BaseMixin:
             return val.__name__
         return val.__class__.__name__
 
-    def is_type_of(self, some_type):
+    def is_type_of(self, some_type) -> Self:
         """Asserts that val is of the given type.
 
         Args:
@@ -354,7 +361,7 @@ class BaseMixin:
             return self.error('Expected <%s:%s> to be of type <%s>, but was not.' % (self.val, t, some_type.__name__))
         return self
 
-    def is_instance_of(self, some_class):
+    def is_instance_of(self, some_class) -> Self:
         """Asserts that val is an instance of the given class.
 
         Args:
@@ -393,7 +400,7 @@ class BaseMixin:
             raise TypeError('given arg must be a class') from None
         return self
 
-    def is_length(self, length):
+    def is_length(self, length) -> Self:
         """Asserts that val is the given length.
 
         Checks val is the given length using the ``len()`` built-in.

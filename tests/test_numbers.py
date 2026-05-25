@@ -619,5 +619,63 @@ def test_is_not_close_to_negative_tolerance_failure():
         assert_that(str(ex)).is_equal_to('given tolerance arg must be positive')
 
 
+def test_comparable_duck_typing():
+    assert_that('b').is_greater_than('a')
+    assert_that('a').is_less_than('b')
+    assert_that('b').is_greater_than_or_equal_to('a')
+    assert_that('b').is_greater_than_or_equal_to('b')
+    assert_that('a').is_less_than_or_equal_to('b')
+    assert_that('a').is_less_than_or_equal_to('a')
+
+
+def test_comparable_duck_typing_custom_class():
+    class Rank:
+        def __init__(self, level):
+            self.level = level
+
+        def __lt__(self, other):
+            return self.level < other.level
+
+        def __le__(self, other):
+            return self.level <= other.level
+
+        def __gt__(self, other):
+            return self.level > other.level
+
+        def __ge__(self, other):
+            return self.level >= other.level
+
+        def __repr__(self):
+            return 'Rank(%d)' % self.level
+
+    low = Rank(1)
+    mid = Rank(5)
+    high = Rank(10)
+
+    assert_that(high).is_greater_than(low)
+    assert_that(low).is_less_than(high)
+    assert_that(mid).is_greater_than_or_equal_to(mid)
+    assert_that(mid).is_less_than_or_equal_to(mid)
+
+
+def test_comparable_duck_typing_failure():
+    try:
+        assert_that('a').is_greater_than('b')
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to('Expected <a> to be greater than <b>, but was not.')
+
+
+def test_comparable_no_ordering_failure():
+    class NoOrder:
+        pass
+
+    try:
+        assert_that(NoOrder()).is_greater_than(NoOrder())
+        fail('should have raised error')
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to('ordering is not defined for type <NoOrder>')
+
+
 def test_chaining():
     assert_that(123).is_greater_than(100).is_less_than(1000).is_between(120, 125).is_close_to(100, 25)

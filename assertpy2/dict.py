@@ -26,13 +26,20 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 __tracebackhide__ = True
 
 
 class DictMixin:
     """Dict assertions mixin."""
 
-    def contains_key(self, *keys):
+    def contains_key(self, *keys) -> Self:
         """Asserts the val is a dict and contains the given key or keys.  Alias for :meth:`~assertpy.contains.ContainsMixin.contains`.
 
         Checks if the dict contains the given key or keys using ``in`` operator.
@@ -55,7 +62,7 @@ class DictMixin:
         self._check_dict_like(self.val, check_values=False, check_getitem=False)
         return self.contains(*keys)
 
-    def does_not_contain_key(self, *keys):
+    def does_not_contain_key(self, *keys) -> Self:
         """Asserts the val is a dict and does not contain the given key or keys.  Alias for :meth:`~assertpy.contains.ContainsMixin.does_not_contain`.
 
         Checks if the dict excludes the given key or keys using ``in`` operator.
@@ -78,7 +85,7 @@ class DictMixin:
         self._check_dict_like(self.val, check_values=False, check_getitem=False)
         return self.does_not_contain(*keys)
 
-    def contains_value(self, *values):
+    def contains_value(self, *values) -> Self:
         """Asserts that val is a dict and contains the given value or values.
 
         Checks if the dict contains the given value or values in *any* key.
@@ -109,7 +116,7 @@ class DictMixin:
             return self.error('Expected <%s> to contain values %s, but did not contain %s.' % (self.val, self._fmt_items(values), self._fmt_items(missing)))
         return self
 
-    def does_not_contain_value(self, *values):
+    def does_not_contain_value(self, *values) -> Self:
         """Asserts that val is a dict and does not contain the given value or values.
 
         Checks if the dict excludes the given value or values across *all* keys.
@@ -141,7 +148,7 @@ class DictMixin:
                 return self.error('Expected <%s> to not contain values %s, but did contain %s.' % (self.val, self._fmt_items(values), self._fmt_items(found)))
         return self
 
-    def contains_entry(self, *args, **kwargs):
+    def contains_entry(self, *args, **kwargs) -> Self:
         """Asserts that val is a dict and contains the given entry or entries.
 
         Checks if the dict contains the given key-value pair or pairs.
@@ -192,7 +199,7 @@ class DictMixin:
             return self.error('Expected <%s> to contain entries %s, but did not contain %s.' % (self.val, self._fmt_items(entries), self._fmt_items(missing)))
         return self
 
-    def does_not_contain_entry(self, *args, **kwargs):
+    def does_not_contain_entry(self, *args, **kwargs) -> Self:
         """Asserts that val is a dict and does not contain the given entry or entries.
 
         Checks if the dict excludes the given key-value pair or pairs.
