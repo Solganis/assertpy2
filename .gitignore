@@ -20,6 +20,9 @@ dist
 # mac
 .DS_Store
 
+# venv
+.venv
+
 # IDE
 /.idea
 .vscode
