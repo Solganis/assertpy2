@@ -34,69 +34,69 @@ from assertpy2 import assert_that, assert_warn, contents_of, fail, soft_assertio
 
 
 def setup_module():
-    print('\nTEST test_readme.py : v%d.%d.%d' % (sys.version_info[0], sys.version_info[1], sys.version_info[2]))
+    print("\nTEST test_readme.py : v%d.%d.%d" % (sys.version_info[0], sys.version_info[1], sys.version_info[2]))
 
 
 def test_something():
     assert_that(1 + 2).is_equal_to(3)
-    assert_that('foobar').is_length(6).starts_with('foo').ends_with('bar')
-    assert_that(['a', 'b', 'c']).contains('a').does_not_contain('x')
+    assert_that("foobar").is_length(6).starts_with("foo").ends_with("bar")
+    assert_that(["a", "b", "c"]).contains("a").does_not_contain("x")
 
 
 def test_strings():
-    assert_that('').is_not_none()
-    assert_that('').is_empty()
-    assert_that('').is_false()
-    assert_that('').is_type_of(str)
-    assert_that('').is_instance_of(str)
+    assert_that("").is_not_none()
+    assert_that("").is_empty()
+    assert_that("").is_false()
+    assert_that("").is_type_of(str)
+    assert_that("").is_instance_of(str)
 
-    assert_that('foo').is_length(3)
-    assert_that('foo').is_not_empty()
-    assert_that('foo').is_true()
-    assert_that('foo').is_alpha()
-    assert_that('123').is_digit()
-    assert_that('foo').is_lower()
-    assert_that('FOO').is_upper()
-    assert_that('foo').is_iterable()
-    assert_that('foo').is_equal_to('foo')
-    assert_that('foo').is_not_equal_to('bar')
-    assert_that('foo').is_equal_to_ignoring_case('FOO')
+    assert_that("foo").is_length(3)
+    assert_that("foo").is_not_empty()
+    assert_that("foo").is_true()
+    assert_that("foo").is_alpha()
+    assert_that("123").is_digit()
+    assert_that("foo").is_lower()
+    assert_that("FOO").is_upper()
+    assert_that("foo").is_iterable()
+    assert_that("foo").is_equal_to("foo")
+    assert_that("foo").is_not_equal_to("bar")
+    assert_that("foo").is_equal_to_ignoring_case("FOO")
 
-    assert_that('foo').is_unicode()
+    assert_that("foo").is_unicode()
 
-    assert_that('foo').contains('f')
-    assert_that('foo').contains('f', 'oo')
-    assert_that('foo').contains_ignoring_case('F', 'oO')
-    assert_that('foo').does_not_contain('x')
-    assert_that('foo').contains_only('f', 'o')
-    assert_that('foo').contains_sequence('o', 'o')
+    assert_that("foo").contains("f")
+    assert_that("foo").contains("f", "oo")
+    assert_that("foo").contains_ignoring_case("F", "oO")
+    assert_that("foo").does_not_contain("x")
+    assert_that("foo").contains_only("f", "o")
+    assert_that("foo").contains_sequence("o", "o")
 
-    assert_that('foo').contains_duplicates()
-    assert_that('fox').does_not_contain_duplicates()
+    assert_that("foo").contains_duplicates()
+    assert_that("fox").does_not_contain_duplicates()
 
-    assert_that('foo').is_in('foo', 'bar', 'baz')
-    assert_that('foo').is_not_in('boo', 'bar', 'baz')
-    assert_that('foo').is_subset_of('abcdefghijklmnopqrstuvwxyz')
+    assert_that("foo").is_in("foo", "bar", "baz")
+    assert_that("foo").is_not_in("boo", "bar", "baz")
+    assert_that("foo").is_subset_of("abcdefghijklmnopqrstuvwxyz")
 
-    assert_that('foo').starts_with('f')
-    assert_that('foo').ends_with('oo')
+    assert_that("foo").starts_with("f")
+    assert_that("foo").ends_with("oo")
 
-    assert_that('foo').matches(r'\w')
-    assert_that('123-456-7890').matches(r'\d{3}-\d{3}-\d{4}')
-    assert_that('foo').does_not_match(r'\d+')
+    assert_that("foo").matches(r"\w")
+    assert_that("123-456-7890").matches(r"\d{3}-\d{3}-\d{4}")
+    assert_that("foo").does_not_match(r"\d+")
 
     # partial matches, these all pass
-    assert_that('foo').matches(r'\w')
-    assert_that('foo').matches(r'oo')
-    assert_that('foo').matches(r'\w{2}')
+    assert_that("foo").matches(r"\w")
+    assert_that("foo").matches(r"oo")
+    assert_that("foo").matches(r"\w{2}")
 
     # match the entire string with an anchored regex pattern, passes
-    assert_that('foo').matches(r'^\w{3}$')
+    assert_that("foo").matches(r"^\w{3}$")
 
     # fails
     try:
-        assert_that('foo').matches(r'^\w{2}$')
-        fail('should have raised error')
+        assert_that("foo").matches(r"^\w{2}$")
+        fail("should have raised error")
     except AssertionError:
         pass
 
@@ -142,9 +142,9 @@ def test_floats():
     assert_that(123.4).is_between(100.1, 200.2)
     assert_that(123.4).is_close_to(123, 0.5)
 
-    assert_that(float('NaN')).is_nan()
+    assert_that(float("NaN")).is_nan()
     assert_that(123.4).is_not_nan()
-    assert_that(float('Inf')).is_inf()
+    assert_that(float("Inf")).is_inf()
     assert_that(123.4).is_not_inf()
 
 
@@ -156,26 +156,26 @@ def test_lists():
     assert_that([]).is_instance_of(list)
     assert_that([]).is_iterable()
 
-    assert_that(['a', 'b']).is_length(2)
-    assert_that(['a', 'b']).is_not_empty()
-    assert_that(['a', 'b']).is_equal_to(['a', 'b'])
-    assert_that(['a', 'b']).is_not_equal_to(['b', 'a'])
+    assert_that(["a", "b"]).is_length(2)
+    assert_that(["a", "b"]).is_not_empty()
+    assert_that(["a", "b"]).is_equal_to(["a", "b"])
+    assert_that(["a", "b"]).is_not_equal_to(["b", "a"])
 
-    assert_that(['a', 'b']).contains('a')
-    assert_that(['a', 'b']).contains('b', 'a')
-    assert_that(['a', 'b']).does_not_contain('x', 'y')
-    assert_that(['a', 'b']).contains_only('a', 'b')
-    assert_that(['a', 'a']).contains_only('a')
-    assert_that(['a', 'b', 'c']).contains_sequence('b', 'c')
-    assert_that(['a', 'b']).is_subset_of(['a', 'b', 'c'])
-    assert_that(['a', 'b', 'c']).is_sorted()
-    assert_that(['c', 'b', 'a']).is_sorted(reverse=True)
+    assert_that(["a", "b"]).contains("a")
+    assert_that(["a", "b"]).contains("b", "a")
+    assert_that(["a", "b"]).does_not_contain("x", "y")
+    assert_that(["a", "b"]).contains_only("a", "b")
+    assert_that(["a", "a"]).contains_only("a")
+    assert_that(["a", "b", "c"]).contains_sequence("b", "c")
+    assert_that(["a", "b"]).is_subset_of(["a", "b", "c"])
+    assert_that(["a", "b", "c"]).is_sorted()
+    assert_that(["c", "b", "a"]).is_sorted(reverse=True)
 
-    assert_that(['a', 'x', 'x']).contains_duplicates()
-    assert_that(['a', 'b', 'c']).does_not_contain_duplicates()
+    assert_that(["a", "x", "x"]).contains_duplicates()
+    assert_that(["a", "b", "c"]).does_not_contain_duplicates()
 
-    assert_that(['a', 'b', 'c']).starts_with('a')
-    assert_that(['a', 'b', 'c']).ends_with('c')
+    assert_that(["a", "b", "c"]).starts_with("a")
+    assert_that(["a", "b", "c"]).ends_with("c")
 
 
 def test_tuples():
@@ -215,62 +215,60 @@ def test_dicts():
     assert_that({}).is_type_of(dict)
     assert_that({}).is_instance_of(dict)
 
-    assert_that({'a': 1, 'b': 2}).is_length(2)
-    assert_that({'a': 1, 'b': 2}).is_not_empty()
-    assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1, 'b': 2})
-    assert_that({'a': 1, 'b': 2}).is_equal_to({'b': 2, 'a': 1})
-    assert_that({'a': 1, 'b': 2}).is_not_equal_to({'a': 1, 'b': 3})
+    assert_that({"a": 1, "b": 2}).is_length(2)
+    assert_that({"a": 1, "b": 2}).is_not_empty()
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 2})
+    assert_that({"a": 1, "b": 2}).is_equal_to({"b": 2, "a": 1})
+    assert_that({"a": 1, "b": 2}).is_not_equal_to({"a": 1, "b": 3})
 
-    assert_that({'a': 1, 'b': 2}).contains('a')
-    assert_that({'a': 1, 'b': 2}).contains('b', 'a')
-    assert_that({'a': 1, 'b': 2}).does_not_contain('x')
-    assert_that({'a': 1, 'b': 2}).does_not_contain('x', 'y')
-    assert_that({'a': 1, 'b': 2}).contains_only('a', 'b')
-    assert_that({'a': 1, 'b': 2}).is_subset_of({'a': 1, 'b': 2, 'c': 3})
+    assert_that({"a": 1, "b": 2}).contains("a")
+    assert_that({"a": 1, "b": 2}).contains("b", "a")
+    assert_that({"a": 1, "b": 2}).does_not_contain("x")
+    assert_that({"a": 1, "b": 2}).does_not_contain("x", "y")
+    assert_that({"a": 1, "b": 2}).contains_only("a", "b")
+    assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1, "b": 2, "c": 3})
 
     # contains_key() is just an alias for contains()
-    assert_that({'a': 1, 'b': 2}).contains_key('a')
-    assert_that({'a': 1, 'b': 2}).contains_key('b', 'a')
+    assert_that({"a": 1, "b": 2}).contains_key("a")
+    assert_that({"a": 1, "b": 2}).contains_key("b", "a")
 
     # does_not_contain_key() is just an alias for does_not_contain()
-    assert_that({'a': 1, 'b': 2}).does_not_contain_key('x')
-    assert_that({'a': 1, 'b': 2}).does_not_contain_key('x', 'y')
+    assert_that({"a": 1, "b": 2}).does_not_contain_key("x")
+    assert_that({"a": 1, "b": 2}).does_not_contain_key("x", "y")
 
-    assert_that({'a': 1, 'b': 2}).contains_value(1)
-    assert_that({'a': 1, 'b': 2}).contains_value(2, 1)
-    assert_that({'a': 1, 'b': 2}).does_not_contain_value(3)
-    assert_that({'a': 1, 'b': 2}).does_not_contain_value(3, 4)
+    assert_that({"a": 1, "b": 2}).contains_value(1)
+    assert_that({"a": 1, "b": 2}).contains_value(2, 1)
+    assert_that({"a": 1, "b": 2}).does_not_contain_value(3)
+    assert_that({"a": 1, "b": 2}).does_not_contain_value(3, 4)
 
-    assert_that({'a': 1, 'b': 2}).contains_entry({'a': 1})
-    assert_that({'a': 1, 'b': 2}).contains_entry({'a': 1}, {'b': 2})
-    assert_that({'a': 1, 'b': 2}).does_not_contain_entry({'a': 2})
-    assert_that({'a': 1, 'b': 2}).does_not_contain_entry({'a': 2}, {'b': 1})
+    assert_that({"a": 1, "b": 2}).contains_entry({"a": 1})
+    assert_that({"a": 1, "b": 2}).contains_entry({"a": 1}, {"b": 2})
+    assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
+    assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2}, {"b": 1})
 
     # lists of dicts can be flattened on key
-    fred = {'first_name': 'Fred', 'last_name': 'Smith'}
-    bob = {'first_name': 'Bob', 'last_name': 'Barr'}
+    fred = {"first_name": "Fred", "last_name": "Smith"}
+    bob = {"first_name": "Bob", "last_name": "Barr"}
     people = [fred, bob]
 
-    assert_that(people).extracting('first_name').is_equal_to(['Fred', 'Bob'])
-    assert_that(people).extracting('first_name').contains('Fred', 'Bob')
+    assert_that(people).extracting("first_name").is_equal_to(["Fred", "Bob"])
+    assert_that(people).extracting("first_name").contains("Fred", "Bob")
 
 
 def test_dict_compare():
     # ignore
-    assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1}, ignore='b')
-    assert_that({'a': 1, 'b': 2, 'c': 3}).is_equal_to({'a': 1}, ignore=['b', 'c'])
-    assert_that({'a': 1, 'b': {'c': 2, 'd': 3}}).is_equal_to({'a': 1, 'b': {'c': 2}}, ignore=('b', 'd'))
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore="b")
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, ignore=["b", "c"])
+    assert_that({"a": 1, "b": {"c": 2, "d": 3}}).is_equal_to({"a": 1, "b": {"c": 2}}, ignore=("b", "d"))
 
     # include
-    assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1}, include='a')
-    assert_that({'a': 1, 'b': 2, 'c': 3}).is_equal_to({'a': 1, 'b': 2}, include=['a', 'b'])
-    assert_that({'a': 1, 'b': {'c': 2, 'd': 3}}).is_equal_to({'b': {'d': 3}}, include=('b', 'd'))
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, include="a")
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 2}, include=["a", "b"])
+    assert_that({"a": 1, "b": {"c": 2, "d": 3}}).is_equal_to({"b": {"d": 3}}, include=("b", "d"))
 
     # both
-    assert_that({'a': 1, 'b': {'c': 2, 'd': 3, 'e': 4, 'f': 5}}).is_equal_to(
-        {'b': {'d': 3, 'f': 5}},
-        ignore=[('b', 'c'), ('b', 'e')],
-        include='b'
+    assert_that({"a": 1, "b": {"c": 2, "d": 3, "e": 4, "f": 5}}).is_equal_to(
+        {"b": {"d": 3, "f": 5}}, ignore=[("b", "c"), ("b", "e")], include="b"
     )
 
 
@@ -281,18 +279,18 @@ def test_sets():
     assert_that(set([])).is_type_of(set)
     assert_that(set([])).is_instance_of(set)
 
-    assert_that(set(['a', 'b'])).is_length(2)
-    assert_that(set(['a', 'b'])).is_not_empty()
-    assert_that(set(['a', 'b'])).is_equal_to(set(['a', 'b']))
-    assert_that(set(['a', 'b'])).is_equal_to(set(['b', 'a']))
-    assert_that(set(['a', 'b'])).is_not_equal_to(set(['a', 'x']))
+    assert_that(set(["a", "b"])).is_length(2)
+    assert_that(set(["a", "b"])).is_not_empty()
+    assert_that(set(["a", "b"])).is_equal_to(set(["a", "b"]))
+    assert_that(set(["a", "b"])).is_equal_to(set(["b", "a"]))
+    assert_that(set(["a", "b"])).is_not_equal_to(set(["a", "x"]))
 
-    assert_that(set(['a', 'b'])).contains('a')
-    assert_that(set(['a', 'b'])).contains('b', 'a')
-    assert_that(set(['a', 'b'])).does_not_contain('x', 'y')
-    assert_that(set(['a', 'b'])).contains_only('a', 'b')
-    assert_that(set(['a', 'b'])).is_subset_of(set(['a', 'b', 'c']))
-    assert_that(set(['a', 'b'])).is_subset_of(set(['a']), set(['b']))
+    assert_that(set(["a", "b"])).contains("a")
+    assert_that(set(["a", "b"])).contains("b", "a")
+    assert_that(set(["a", "b"])).does_not_contain("x", "y")
+    assert_that(set(["a", "b"])).contains_only("a", "b")
+    assert_that(set(["a", "b"])).is_subset_of(set(["a", "b", "c"]))
+    assert_that(set(["a", "b"])).is_subset_of(set(["a"]), set(["b"]))
 
 
 def test_booleans():
@@ -341,29 +339,29 @@ def test_dates():
 
 def test_files():
     # setup
-    with open('foo.txt', 'w') as fp:
-        fp.write('foobar')
+    with open("foo.txt", "w") as fp:
+        fp.write("foobar")
 
-    assert_that('foo.txt').exists()
-    assert_that('missing.txt').does_not_exist()
-    assert_that('foo.txt').is_file()
+    assert_that("foo.txt").exists()
+    assert_that("missing.txt").does_not_exist()
+    assert_that("foo.txt").is_file()
 
     # assert_that('mydir').exists()
-    assert_that('missing_dir').does_not_exist()
+    assert_that("missing_dir").does_not_exist()
     # assert_that('mydir').is_directory()
 
-    assert_that('foo.txt').is_named('foo.txt')
+    assert_that("foo.txt").is_named("foo.txt")
     # assert_that('foo.txt').is_child_of('mydir')
 
-    contents = contents_of('foo.txt', 'ascii')
-    assert_that(contents).starts_with('foo').ends_with('bar').contains('oob')
+    contents = contents_of("foo.txt", "ascii")
+    assert_that(contents).starts_with("foo").ends_with("bar").contains("oob")
 
     # teardown
-    os.remove('foo.txt')
+    os.remove("foo.txt")
 
 
 def test_objects():
-    fred = Person('Fred', 'Smith')
+    fred = Person("Fred", "Smith")
 
     assert_that(fred).is_not_none()
     assert_that(fred).is_true()
@@ -371,126 +369,127 @@ def test_objects():
     assert_that(fred).is_instance_of(object)
     assert_that(fred).is_same_as(fred)
 
-    assert_that(fred.first_name).is_equal_to('Fred')
-    assert_that(fred.name).is_equal_to('Fred Smith')
-    assert_that(fred.say_hello()).is_equal_to('Hello, Fred!')
+    assert_that(fred.first_name).is_equal_to("Fred")
+    assert_that(fred.name).is_equal_to("Fred Smith")
+    assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")
 
-    fred = Person('Fred', 'Smith')
-    bob = Person('Bob', 'Barr')
+    fred = Person("Fred", "Smith")
+    bob = Person("Bob", "Barr")
     people = [fred, bob]
 
-    assert_that(people).extracting('first_name').is_equal_to(['Fred', 'Bob'])
-    assert_that(people).extracting('first_name').contains('Fred', 'Bob')
-    assert_that(people).extracting('first_name').does_not_contain('Charlie')
+    assert_that(people).extracting("first_name").is_equal_to(["Fred", "Bob"])
+    assert_that(people).extracting("first_name").contains("Fred", "Bob")
+    assert_that(people).extracting("first_name").does_not_contain("Charlie")
 
-    fred = Person('Fred', 'Smith')
-    joe = Developer('Joe', 'Coder')
+    fred = Person("Fred", "Smith")
+    joe = Developer("Joe", "Coder")
     people = [fred, joe]
 
-    assert_that(people).extracting('first_name').contains('Fred', 'Joe')
+    assert_that(people).extracting("first_name").contains("Fred", "Joe")
 
-    assert_that(people).extracting('first_name', 'last_name').contains(('Fred', 'Smith'), ('Joe', 'Coder'))
+    assert_that(people).extracting("first_name", "last_name").contains(("Fred", "Smith"), ("Joe", "Coder"))
 
-    assert_that(people).extracting('name').contains('Fred Smith', 'Joe Coder')
-    assert_that(people).extracting('say_hello').contains('Hello, Fred!', 'Joe writes code.')
+    assert_that(people).extracting("name").contains("Fred Smith", "Joe Coder")
+    assert_that(people).extracting("say_hello").contains("Hello, Fred!", "Joe writes code.")
 
 
 def test_dyn():
-    fred = Person('Fred', 'Smith')
+    fred = Person("Fred", "Smith")
 
-    assert_that(fred.first_name).is_equal_to('Fred')
-    assert_that(fred.name).is_equal_to('Fred Smith')
-    assert_that(fred.say_hello()).is_equal_to('Hello, Fred!')
+    assert_that(fred.first_name).is_equal_to("Fred")
+    assert_that(fred.name).is_equal_to("Fred Smith")
+    assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")
 
-    assert_that(fred).has_first_name('Fred')
-    assert_that(fred).has_name('Fred Smith')
-    assert_that(fred).has_say_hello('Hello, Fred!')
+    assert_that(fred).has_first_name("Fred")
+    assert_that(fred).has_name("Fred Smith")
+    assert_that(fred).has_say_hello("Hello, Fred!")
 
 
 def test_failure():
     try:
-        some_func('foo')
-        fail('should have raised error')
+        some_func("foo")
+        fail("should have raised error")
     except RuntimeError as e:
-        assert_that(str(e)).is_equal_to('some err')
+        assert_that(str(e)).is_equal_to("some err")
 
 
 def test_expected_exceptions():
-    assert_that(some_func).raises(RuntimeError).when_called_with('foo')
-    assert_that(some_func).raises(RuntimeError).when_called_with('foo')\
-        .is_length(8).starts_with('some').is_equal_to('some err')
+    assert_that(some_func).raises(RuntimeError).when_called_with("foo")
+    assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_length(8).starts_with("some").is_equal_to(
+        "some err"
+    )
 
 
 def test_custom_error_message():
     try:
-        assert_that(1+2).is_equal_to(2)
-        fail('should have raised error')
+        assert_that(1 + 2).is_equal_to(2)
+        fail("should have raised error")
     except AssertionError as e:
-        assert_that(str(e)).is_equal_to('Expected <3> to be equal to <2>, but was not.')
+        assert_that(str(e)).is_equal_to("Expected <3> to be equal to <2>, but was not.")
 
     try:
-        assert_that(1+2).described_as('adding stuff').is_equal_to(2)
-        fail('should have raised error')
+        assert_that(1 + 2).described_as("adding stuff").is_equal_to(2)
+        fail("should have raised error")
     except AssertionError as e:
-        assert_that(str(e)).is_equal_to('[adding stuff] Expected <3> to be equal to <2>, but was not.')
+        assert_that(str(e)).is_equal_to("[adding stuff] Expected <3> to be equal to <2>, but was not.")
 
 
 def test_assert_warn():
-    assert_warn('foo').is_length(4)
-    assert_warn('foo').is_empty()
-    assert_warn('foo').is_false()
-    assert_warn('foo').is_digit()
-    assert_warn('123').is_alpha()
-    assert_warn('foo').is_upper()
-    assert_warn('FOO').is_lower()
-    assert_warn('foo').is_equal_to('bar')
-    assert_warn('foo').is_not_equal_to('foo')
-    assert_warn('foo').is_equal_to_ignoring_case('BAR')
+    assert_warn("foo").is_length(4)
+    assert_warn("foo").is_empty()
+    assert_warn("foo").is_false()
+    assert_warn("foo").is_digit()
+    assert_warn("123").is_alpha()
+    assert_warn("foo").is_upper()
+    assert_warn("FOO").is_lower()
+    assert_warn("foo").is_equal_to("bar")
+    assert_warn("foo").is_not_equal_to("foo")
+    assert_warn("foo").is_equal_to_ignoring_case("BAR")
 
 
 def test_soft_assertions():
     try:
         with soft_assertions():
-            assert_that('foo').is_length(4)
-            assert_that('foo').is_empty()
-            assert_that('foo').is_false()
-            assert_that('foo').is_digit()
-            assert_that('123').is_alpha()
-            assert_that('foo').is_upper()
-            assert_that('FOO').is_lower()
-            assert_that('foo').is_equal_to('bar')
-            assert_that('foo').is_not_equal_to('foo')
-            assert_that('foo').is_equal_to_ignoring_case('BAR')
-        fail('should have raised error')
+            assert_that("foo").is_length(4)
+            assert_that("foo").is_empty()
+            assert_that("foo").is_false()
+            assert_that("foo").is_digit()
+            assert_that("123").is_alpha()
+            assert_that("foo").is_upper()
+            assert_that("FOO").is_lower()
+            assert_that("foo").is_equal_to("bar")
+            assert_that("foo").is_not_equal_to("foo")
+            assert_that("foo").is_equal_to_ignoring_case("BAR")
+        fail("should have raised error")
     except AssertionError as e:
-        assert_that(str(e)).contains('1. Expected <foo> to be of length <4>, but was <3>.')
-        assert_that(str(e)).contains('2. Expected <foo> to be empty string, but was not.')
-        assert_that(str(e)).contains('3. Expected <foo> to be <False>, but was not.')
-        assert_that(str(e)).contains('4. Expected <foo> to contain only digits, but did not.')
-        assert_that(str(e)).contains('5. Expected <123> to contain only alphabetic chars, but did not.')
-        assert_that(str(e)).contains('6. Expected <foo> to contain only uppercase chars, but did not.')
-        assert_that(str(e)).contains('7. Expected <FOO> to contain only lowercase chars, but did not.')
-        assert_that(str(e)).contains('8. Expected <foo> to be equal to <bar>, but was not.')
-        assert_that(str(e)).contains('9. Expected <foo> to be not equal to <foo>, but was.')
-        assert_that(str(e)).contains('10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.')
+        assert_that(str(e)).contains("1. Expected <foo> to be of length <4>, but was <3>.")
+        assert_that(str(e)).contains("2. Expected <foo> to be empty string, but was not.")
+        assert_that(str(e)).contains("3. Expected <foo> to be <False>, but was not.")
+        assert_that(str(e)).contains("4. Expected <foo> to contain only digits, but did not.")
+        assert_that(str(e)).contains("5. Expected <123> to contain only alphabetic chars, but did not.")
+        assert_that(str(e)).contains("6. Expected <foo> to contain only uppercase chars, but did not.")
+        assert_that(str(e)).contains("7. Expected <FOO> to contain only lowercase chars, but did not.")
+        assert_that(str(e)).contains("8. Expected <foo> to be equal to <bar>, but was not.")
+        assert_that(str(e)).contains("9. Expected <foo> to be not equal to <foo>, but was.")
+        assert_that(str(e)).contains("10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_chaining():
-    fred = Person('Fred', 'Smith')
-    joe = Person('Joe', 'Jones')
+    fred = Person("Fred", "Smith")
+    joe = Person("Joe", "Jones")
     people = [fred, joe]
 
-    assert_that('foo').is_length(3).starts_with('f').ends_with('oo')
+    assert_that("foo").is_length(3).starts_with("f").ends_with("oo")
 
     assert_that([1, 2, 3]).is_type_of(list).contains(1, 2).does_not_contain(4, 5)
 
-    assert_that(fred).has_first_name('Fred').has_last_name('Smith').has_shoe_size(12)
+    assert_that(fred).has_first_name("Fred").has_last_name("Smith").has_shoe_size(12)
 
-    assert_that(people).is_length(2).extracting('first_name').contains('Fred', 'Joe')
+    assert_that(people).is_length(2).extracting("first_name").contains("Fred", "Joe")
 
 
 def some_func(arg):
-    raise RuntimeError('some err')
+    raise RuntimeError("some err")
 
 
 class Person:
@@ -501,12 +500,12 @@ class Person:
 
     @property
     def name(self):
-        return '%s %s' % (self.first_name, self.last_name)
+        return "%s %s" % (self.first_name, self.last_name)
 
     def say_hello(self):
-        return 'Hello, %s!' % self.first_name
+        return "Hello, %s!" % self.first_name
 
 
 class Developer(Person):
     def say_hello(self):
-        return '%s writes code.' % self.first_name
+        return "%s writes code." % self.first_name

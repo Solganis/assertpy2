@@ -30,7 +30,6 @@ from assertpy2 import assert_that, fail
 
 
 class CustomList:
-
     def __init__(self, s):
         self._s = s
         self._idx = 0
@@ -51,12 +50,12 @@ class CustomList:
 
 
 def test_custom_list():
-    CustomList('foobar')
-    assert_that([CustomList('foo'), CustomList('bar')]).extracting(0, -1).is_equal_to([('f', 'o'), ('b', 'r')])
+    CustomList("foobar")
+    assert_that([CustomList("foo"), CustomList("bar")]).extracting(0, -1).is_equal_to([("f", "o"), ("b", "r")])
 
 
 def test_check_iterable():
-    l = CustomList('foobar')
+    l = CustomList("foobar")
     ab = assert_that(None)
     ab._check_iterable(l)
     ab._check_iterable(l, check_getitem=True)
@@ -66,16 +65,16 @@ def test_check_iterable():
 def test_check_iterable_not_iterable():
     try:
         ab = assert_that(None)
-        ab._check_iterable(123, name='my-int')
-        fail('should have raised error')
+        ab._check_iterable(123, name="my-int")
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('my-int <int> is not iterable')
+        assert_that(str(e)).contains("my-int <int> is not iterable")
 
 
 def test_check_iterable_no_getitem():
     try:
         ab = assert_that(None)
-        ab._check_iterable(set([1]), name='my-set')
-        fail('should have raised error')
+        ab._check_iterable(set([1]), name="my-set")
+        fail("should have raised error")
     except TypeError as e:
-        assert_that(str(e)).contains('my-set <set> does not have [] accessor')
+        assert_that(str(e)).contains("my-set <set> does not have [] accessor")

@@ -67,9 +67,9 @@ class ExceptionMixin:
             AssertionBuilder: returns a new instance (now with the given expected exception) to chain to the next assertion
         """
         if not callable(self.val):
-            raise TypeError('val must be callable')
+            raise TypeError("val must be callable")
         if not issubclass(ex, BaseException):
-            raise TypeError('given arg must be exception')
+            raise TypeError("given arg must be exception")
 
         # chain on with ex as the expected exception
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
@@ -100,7 +100,7 @@ class ExceptionMixin:
             TypeError: if expected exception not set via :meth:`raises`
         """
         if not self.expected:
-            raise TypeError('expected exception not set, raises() must be called first')
+            raise TypeError("expected exception not set, raises() must be called first")
         try:
             self.val(*some_args, **some_kwargs)
         except BaseException as e:
@@ -109,16 +109,20 @@ class ExceptionMixin:
                 return self.builder(str(e), self.description, self.kind, logger=self.logger)
             else:
                 # got exception, but wrong type, so raise
-                self.error('Expected <%s> to raise <%s> when called with (%s), but raised <%s>.' % (
-                    self.val.__name__,
-                    self.expected.__name__,
-                    self._fmt_args_kwargs(*some_args, **some_kwargs),
-                    type(e).__name__))
+                self.error(
+                    "Expected <%s> to raise <%s> when called with (%s), but raised <%s>."
+                    % (
+                        self.val.__name__,
+                        self.expected.__name__,
+                        self._fmt_args_kwargs(*some_args, **some_kwargs),
+                        type(e).__name__,
+                    )
+                )
                 return _InertBuilder()
 
         # didn't fail as expected, so raise
-        self.error('Expected <%s> to raise <%s> when called with (%s).' % (
-            self.val.__name__,
-            self.expected.__name__,
-            self._fmt_args_kwargs(*some_args, **some_kwargs)))
+        self.error(
+            "Expected <%s> to raise <%s> when called with (%s)."
+            % (self.val.__name__, self.expected.__name__, self._fmt_args_kwargs(*some_args, **some_kwargs))
+        )
         return _InertBuilder()

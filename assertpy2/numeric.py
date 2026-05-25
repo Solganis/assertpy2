@@ -50,29 +50,29 @@ class NumericMixin:
         other_type = type(other)
 
         if self_type in self._NUMERIC_NON_COMPAREABLE:
-            raise TypeError('ordering is not defined for type <%s>' % self_type.__name__)
+            raise TypeError("ordering is not defined for type <%s>" % self_type.__name__)
         if self_type in self._NUMERIC_COMPAREABLE:
             if other_type is not self_type:
-                raise TypeError('given arg must be <%s>, but was <%s>' % (self_type.__name__, other_type.__name__))
+                raise TypeError("given arg must be <%s>, but was <%s>" % (self_type.__name__, other_type.__name__))
             return
         if isinstance(self.val, numbers.Number):
             if not isinstance(other, numbers.Number):
-                raise TypeError('given arg must be a number, but was <%s>' % other_type.__name__)
+                raise TypeError("given arg must be a number, but was <%s>" % other_type.__name__)
             return
         try:
             _ = self.val < other
         except TypeError:
-            raise TypeError('ordering is not defined for type <%s>' % self_type.__name__) from None
+            raise TypeError("ordering is not defined for type <%s>" % self_type.__name__) from None
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
         if isinstance(self.val, numbers.Number) is False:
-            raise TypeError('val is not numeric')
+            raise TypeError("val is not numeric")
 
     def _validate_real(self):
         """Raise TypeError if val is not real number."""
         if isinstance(self.val, numbers.Real) is False:
-            raise TypeError('val is not real number')
+            raise TypeError("val is not real number")
 
     def is_zero(self) -> Self:
         """Asserts that val is numeric and is zero.
@@ -127,7 +127,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if not math.isnan(self.val):
-            return self.error('Expected <%s> to be <NaN>, but was not.' % self.val)
+            return self.error("Expected <%s> to be <NaN>, but was not." % self.val)
         return self
 
     def is_not_nan(self) -> Self:
@@ -149,7 +149,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if math.isnan(self.val):
-            return self.error('Expected not <NaN>, but was.')
+            return self.error("Expected not <NaN>, but was.")
         return self
 
     def is_inf(self) -> Self:
@@ -170,7 +170,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if not math.isinf(self.val):
-            return self.error('Expected <%s> to be <Inf>, but was not.' % self.val)
+            return self.error("Expected <%s> to be <Inf>, but was not." % self.val)
         return self
 
     def is_not_inf(self) -> Self:
@@ -192,7 +192,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if math.isinf(self.val):
-            return self.error('Expected not <Inf>, but was.')
+            return self.error("Expected not <Inf>, but was.")
         return self
 
     def is_greater_than(self, other) -> Self:
@@ -225,10 +225,12 @@ class NumericMixin:
         self._validate_compareable(other)
         if self.val <= other:
             if type(self.val) is datetime.datetime:
-                return self.error('Expected <%s> to be greater than <%s>, but was not.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to be greater than <%s>, but was not."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                )
             else:
-                return self.error('Expected <%s> to be greater than <%s>, but was not.' % (self.val, other))
+                return self.error("Expected <%s> to be greater than <%s>, but was not." % (self.val, other))
         return self
 
     def is_greater_than_or_equal_to(self, other) -> Self:
@@ -263,10 +265,12 @@ class NumericMixin:
         self._validate_compareable(other)
         if self.val < other:
             if type(self.val) is datetime.datetime:
-                return self.error('Expected <%s> to be greater than or equal to <%s>, but was not.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to be greater than or equal to <%s>, but was not."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                )
             else:
-                return self.error('Expected <%s> to be greater than or equal to <%s>, but was not.' % (self.val, other))
+                return self.error("Expected <%s> to be greater than or equal to <%s>, but was not." % (self.val, other))
         return self
 
     def is_less_than(self, other) -> Self:
@@ -299,9 +303,12 @@ class NumericMixin:
         self._validate_compareable(other)
         if self.val >= other:
             if type(self.val) is datetime.datetime:
-                return self.error('Expected <%s> to be less than <%s>, but was not.' % (self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to be less than <%s>, but was not."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                )
             else:
-                return self.error('Expected <%s> to be less than <%s>, but was not.' % (self.val, other))
+                return self.error("Expected <%s> to be less than <%s>, but was not." % (self.val, other))
         return self
 
     def is_less_than_or_equal_to(self, other) -> Self:
@@ -336,10 +343,12 @@ class NumericMixin:
         self._validate_compareable(other)
         if self.val > other:
             if type(self.val) is datetime.datetime:
-                return self.error('Expected <%s> to be less than or equal to <%s>, but was not.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to be less than or equal to <%s>, but was not."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                )
             else:
-                return self.error('Expected <%s> to be less than or equal to <%s>, but was not.' % (self.val, other))
+                return self.error("Expected <%s> to be less than or equal to <%s>, but was not." % (self.val, other))
         return self
 
     def is_positive(self) -> Self:
@@ -410,10 +419,16 @@ class NumericMixin:
 
         if self.val < low or self.val > high:
             if val_type is datetime.datetime:
-                return self.error('Expected <%s> to be between <%s> and <%s>, but was not.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), low.strftime('%Y-%m-%d %H:%M:%S'), high.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to be between <%s> and <%s>, but was not."
+                    % (
+                        self.val.strftime("%Y-%m-%d %H:%M:%S"),
+                        low.strftime("%Y-%m-%d %H:%M:%S"),
+                        high.strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                )
             else:
-                return self.error('Expected <%s> to be between <%s> and <%s>, but was not.' % (self.val, low, high))
+                return self.error("Expected <%s> to be between <%s> and <%s>, but was not." % (self.val, low, high))
         return self
 
     def is_not_between(self, low, high) -> Self:
@@ -440,10 +455,16 @@ class NumericMixin:
 
         if self.val >= low and self.val <= high:
             if val_type is datetime.datetime:
-                return self.error('Expected <%s> to not be between <%s> and <%s>, but was.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), low.strftime('%Y-%m-%d %H:%M:%S'), high.strftime('%Y-%m-%d %H:%M:%S')))
+                return self.error(
+                    "Expected <%s> to not be between <%s> and <%s>, but was."
+                    % (
+                        self.val.strftime("%Y-%m-%d %H:%M:%S"),
+                        low.strftime("%Y-%m-%d %H:%M:%S"),
+                        high.strftime("%Y-%m-%d %H:%M:%S"),
+                    )
+                )
             else:
-                return self.error('Expected <%s> to not be between <%s> and <%s>, but was.' % (self.val, low, high))
+                return self.error("Expected <%s> to not be between <%s> and <%s>, but was." % (self.val, low, high))
         return self
 
     def is_close_to(self, other, tolerance) -> Self:
@@ -477,16 +498,23 @@ class NumericMixin:
         self._validate_close_to_args(self.val, other, tolerance)
 
         if type(self.val) is not datetime.datetime and (math.isnan(self.val) or math.isnan(other)):
-            return self.error('Expected <%s> to be close to <%s> within tolerance <%s>, but was not.' % (self.val, other, tolerance))
-        if self.val < (other-tolerance) or self.val > (other+tolerance):
+            return self.error(
+                "Expected <%s> to be close to <%s> within tolerance <%s>, but was not." % (self.val, other, tolerance)
+            )
+        if self.val < (other - tolerance) or self.val > (other + tolerance):
             if type(self.val) is datetime.datetime:
                 tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
                 h, rem = divmod(tolerance_seconds, 3600)
                 m, s = divmod(rem, 60)
-                return self.error('Expected <%s> to be close to <%s> within tolerance <%d:%02d:%02d>, but was not.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S'), h, m, s))
+                return self.error(
+                    "Expected <%s> to be close to <%s> within tolerance <%d:%02d:%02d>, but was not."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"), h, m, s)
+                )
             else:
-                return self.error('Expected <%s> to be close to <%s> within tolerance <%s>, but was not.' % (self.val, other, tolerance))
+                return self.error(
+                    "Expected <%s> to be close to <%s> within tolerance <%s>, but was not."
+                    % (self.val, other, tolerance)
+                )
         return self
 
     def is_not_close_to(self, other, tolerance) -> Self:
@@ -510,13 +538,18 @@ class NumericMixin:
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if self.val >= (other-tolerance) and self.val <= (other+tolerance):
+        if self.val >= (other - tolerance) and self.val <= (other + tolerance):
             if type(self.val) is datetime.datetime:
                 tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
                 h, rem = divmod(tolerance_seconds, 3600)
                 m, s = divmod(rem, 60)
-                return self.error('Expected <%s> to not be close to <%s> within tolerance <%d:%02d:%02d>, but was.' % (
-                    self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S'), h, m, s))
+                return self.error(
+                    "Expected <%s> to not be close to <%s> within tolerance <%d:%02d:%02d>, but was."
+                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"), h, m, s)
+                )
             else:
-                return self.error('Expected <%s> to not be close to <%s> within tolerance <%s>, but was.' % (self.val, other, tolerance))
+                return self.error(
+                    "Expected <%s> to not be close to <%s> within tolerance <%s>, but was."
+                    % (self.val, other, tolerance)
+                )
         return self

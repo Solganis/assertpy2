@@ -31,83 +31,84 @@ from assertpy2 import assert_that, fail, soft_assertions
 
 def test_success():
     with soft_assertions():
-        assert_that('foo').is_length(3)
-        assert_that('foo').is_not_empty()
-        assert_that('foo').is_true()
-        assert_that('foo').is_alpha()
-        assert_that('123').is_digit()
-        assert_that('foo').is_lower()
-        assert_that('FOO').is_upper()
-        assert_that('foo').is_equal_to('foo')
-        assert_that('foo').is_not_equal_to('bar')
-        assert_that('foo').is_equal_to_ignoring_case('FOO')
-        assert_that({'a': 1}).has_a(1)
+        assert_that("foo").is_length(3)
+        assert_that("foo").is_not_empty()
+        assert_that("foo").is_true()
+        assert_that("foo").is_alpha()
+        assert_that("123").is_digit()
+        assert_that("foo").is_lower()
+        assert_that("FOO").is_upper()
+        assert_that("foo").is_equal_to("foo")
+        assert_that("foo").is_not_equal_to("bar")
+        assert_that("foo").is_equal_to_ignoring_case("FOO")
+        assert_that({"a": 1}).has_a(1)
 
 
 def test_failure():
     try:
         with soft_assertions():
-            assert_that('foo').is_length(4)
-            assert_that('foo').is_empty()
-            assert_that('foo').is_false()
-            assert_that('foo').is_digit()
-            assert_that('123').is_alpha()
-            assert_that('foo').is_upper()
-            assert_that('FOO').is_lower()
-            assert_that('foo').is_equal_to('bar')
-            assert_that('foo').is_not_equal_to('foo')
-            assert_that('foo').is_equal_to_ignoring_case('BAR')
-            assert_that({'a': 1}).has_a(2)
-            assert_that({'a': 1}).has_foo(1)
-        fail('should have raised error')
+            assert_that("foo").is_length(4)
+            assert_that("foo").is_empty()
+            assert_that("foo").is_false()
+            assert_that("foo").is_digit()
+            assert_that("123").is_alpha()
+            assert_that("foo").is_upper()
+            assert_that("FOO").is_lower()
+            assert_that("foo").is_equal_to("bar")
+            assert_that("foo").is_not_equal_to("foo")
+            assert_that("foo").is_equal_to_ignoring_case("BAR")
+            assert_that({"a": 1}).has_a(2)
+            assert_that({"a": 1}).has_foo(1)
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('Expected <foo> to be of length <4>, but was <3>.')
-        assert_that(out).contains('Expected <foo> to be empty string, but was not.')
-        assert_that(out).contains('Expected <foo> to be <False>, but was not.')
-        assert_that(out).contains('Expected <foo> to contain only digits, but did not.')
-        assert_that(out).contains('Expected <123> to contain only alphabetic chars, but did not.')
-        assert_that(out).contains('Expected <foo> to contain only uppercase chars, but did not.')
-        assert_that(out).contains('Expected <FOO> to contain only lowercase chars, but did not.')
-        assert_that(out).contains('Expected <foo> to be equal to <bar>, but was not.')
-        assert_that(out).contains('Expected <foo> to be not equal to <foo>, but was.')
-        assert_that(out).contains('Expected <foo> to be case-insensitive equal to <BAR>, but was not.')
-        assert_that(out).contains('Expected <1> to be equal to <2> on key <a>, but was not.')
-        assert_that(out).contains('Expected key <foo>, but val has no key <foo>.')
+        assert_that(out).contains("Expected <foo> to be of length <4>, but was <3>.")
+        assert_that(out).contains("Expected <foo> to be empty string, but was not.")
+        assert_that(out).contains("Expected <foo> to be <False>, but was not.")
+        assert_that(out).contains("Expected <foo> to contain only digits, but did not.")
+        assert_that(out).contains("Expected <123> to contain only alphabetic chars, but did not.")
+        assert_that(out).contains("Expected <foo> to contain only uppercase chars, but did not.")
+        assert_that(out).contains("Expected <FOO> to contain only lowercase chars, but did not.")
+        assert_that(out).contains("Expected <foo> to be equal to <bar>, but was not.")
+        assert_that(out).contains("Expected <foo> to be not equal to <foo>, but was.")
+        assert_that(out).contains("Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+        assert_that(out).contains("Expected <1> to be equal to <2> on key <a>, but was not.")
+        assert_that(out).contains("Expected key <foo>, but val has no key <foo>.")
 
 
 def test_failure_chain():
     try:
         with soft_assertions():
-            assert_that('foo').is_length(4).is_empty().is_false().is_digit().is_upper() \
-                .is_equal_to('bar').is_not_equal_to('foo').is_equal_to_ignoring_case('BAR')
-        fail('should have raised error')
+            assert_that("foo").is_length(4).is_empty().is_false().is_digit().is_upper().is_equal_to(
+                "bar"
+            ).is_not_equal_to("foo").is_equal_to_ignoring_case("BAR")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('Expected <foo> to be of length <4>, but was <3>.')
-        assert_that(out).contains('Expected <foo> to be empty string, but was not.')
-        assert_that(out).contains('Expected <foo> to be <False>, but was not.')
-        assert_that(out).contains('Expected <foo> to contain only digits, but did not.')
-        assert_that(out).contains('Expected <foo> to contain only uppercase chars, but did not.')
-        assert_that(out).contains('Expected <foo> to be equal to <bar>, but was not.')
-        assert_that(out).contains('Expected <foo> to be not equal to <foo>, but was.')
-        assert_that(out).contains('Expected <foo> to be case-insensitive equal to <BAR>, but was not.')
+        assert_that(out).contains("Expected <foo> to be of length <4>, but was <3>.")
+        assert_that(out).contains("Expected <foo> to be empty string, but was not.")
+        assert_that(out).contains("Expected <foo> to be <False>, but was not.")
+        assert_that(out).contains("Expected <foo> to contain only digits, but did not.")
+        assert_that(out).contains("Expected <foo> to contain only uppercase chars, but did not.")
+        assert_that(out).contains("Expected <foo> to be equal to <bar>, but was not.")
+        assert_that(out).contains("Expected <foo> to be not equal to <foo>, but was.")
+        assert_that(out).contains("Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_expected_exception_success():
     with soft_assertions():
-        assert_that(func_err).raises(RuntimeError).when_called_with('foo').is_equal_to('err')
+        assert_that(func_err).raises(RuntimeError).when_called_with("foo").is_equal_to("err")
 
 
 def test_expected_exception_failure():
     try:
         with soft_assertions():
-            assert_that(func_err).raises(RuntimeError).when_called_with('foo').is_equal_to('bar')
-            assert_that(func_ok).raises(RuntimeError).when_called_with('baz')
-        fail('should have raised error')
+            assert_that(func_err).raises(RuntimeError).when_called_with("foo").is_equal_to("bar")
+            assert_that(func_ok).raises(RuntimeError).when_called_with("baz")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('Expected <err> to be equal to <bar>, but was not.')
+        assert_that(out).contains("Expected <err> to be equal to <bar>, but was not.")
         assert_that(out).contains("Expected <func_ok> to raise <RuntimeError> when called with ('baz').")
 
 
@@ -116,114 +117,114 @@ def func_ok(arg):
 
 
 def func_err(arg):
-    raise RuntimeError('err')
+    raise RuntimeError("err")
 
 
 def test_fail():
     try:
         with soft_assertions():
             fail()
-        fail('should have raised error')
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).is_equal_to('Fail!')
+        assert_that(out).is_equal_to("Fail!")
 
 
 def test_fail_with_msg():
     try:
         with soft_assertions():
-            fail('foobar')
-        fail('should have raised error')
+            fail("foobar")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).is_equal_to('Fail: foobar!')
+        assert_that(out).is_equal_to("Fail: foobar!")
 
 
 def test_fail_with_soft_failing_asserts():
     try:
         with soft_assertions():
-            assert_that('foo').is_length(4)
-            assert_that('foo').is_empty()
-            fail('foobar')
-            assert_that('foo').is_not_equal_to('foo')
-            assert_that('foo').is_equal_to_ignoring_case('BAR')
-        fail('should have raised error')
+            assert_that("foo").is_length(4)
+            assert_that("foo").is_empty()
+            fail("foobar")
+            assert_that("foo").is_not_equal_to("foo")
+            assert_that("foo").is_equal_to_ignoring_case("BAR")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).is_equal_to('Fail: foobar!')
-        assert_that(out).does_not_contain('Expected <foo> to be of length <4>, but was <3>.')
-        assert_that(out).does_not_contain('Expected <foo> to be empty string, but was not.')
-        assert_that(out).does_not_contain('Expected <foo> to be not equal to <foo>, but was.')
-        assert_that(out).does_not_contain('Expected <foo> to be case-insensitive equal to <BAR>, but was not.')
+        assert_that(out).is_equal_to("Fail: foobar!")
+        assert_that(out).does_not_contain("Expected <foo> to be of length <4>, but was <3>.")
+        assert_that(out).does_not_contain("Expected <foo> to be empty string, but was not.")
+        assert_that(out).does_not_contain("Expected <foo> to be not equal to <foo>, but was.")
+        assert_that(out).does_not_contain("Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_double_fail():
     try:
         with soft_assertions():
             fail()
-            fail('foobar')
-        fail('should have raised error')
+            fail("foobar")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).is_equal_to('Fail!')
+        assert_that(out).is_equal_to("Fail!")
 
 
 def test_nested():
     try:
         with soft_assertions():
-            assert_that('a').is_equal_to('A')
+            assert_that("a").is_equal_to("A")
             with soft_assertions():
-                assert_that('b').is_equal_to('B')
+                assert_that("b").is_equal_to("B")
                 with soft_assertions():
-                    assert_that('c').is_equal_to('C')
-                assert_that('b').is_equal_to('B2')
-            assert_that('a').is_equal_to('A2')
-        fail('should have raised error')
+                    assert_that("c").is_equal_to("C")
+                assert_that("b").is_equal_to("B2")
+            assert_that("a").is_equal_to("A2")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('1. Expected <a> to be equal to <A>, but was not.')
-        assert_that(out).contains('2. Expected <b> to be equal to <B>, but was not.')
-        assert_that(out).contains('3. Expected <c> to be equal to <C>, but was not.')
-        assert_that(out).contains('4. Expected <b> to be equal to <B2>, but was not.')
-        assert_that(out).contains('5. Expected <a> to be equal to <A2>, but was not.')
+        assert_that(out).contains("1. Expected <a> to be equal to <A>, but was not.")
+        assert_that(out).contains("2. Expected <b> to be equal to <B>, but was not.")
+        assert_that(out).contains("3. Expected <c> to be equal to <C>, but was not.")
+        assert_that(out).contains("4. Expected <b> to be equal to <B2>, but was not.")
+        assert_that(out).contains("5. Expected <a> to be equal to <A2>, but was not.")
 
 
 def test_raises_no_exception_chaining():
     try:
         with soft_assertions():
-            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to('dog').matches('cat')
-        fail('should have raised error')
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to("dog").matches("cat")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('Expected <<lambda>> to raise <ZeroDivisionError> when called with (1).')
-        assert_that(out).does_not_contain('TypeError')
+        assert_that(out).contains("Expected <<lambda>> to raise <ZeroDivisionError> when called with (1).")
+        assert_that(out).does_not_contain("TypeError")
 
 
 def test_raises_wrong_exception_chaining():
     try:
         with soft_assertions():
-            assert_that({}.__getitem__).raises(RuntimeError).when_called_with('a').contains('dog')
-        fail('should have raised error')
+            assert_that({}.__getitem__).raises(RuntimeError).when_called_with("a").contains("dog")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('Expected <__getitem__> to raise <RuntimeError>')
-        assert_that(out).contains('but raised <KeyError>')
-        assert_that(out).does_not_contain('TypeError')
+        assert_that(out).contains("Expected <__getitem__> to raise <RuntimeError>")
+        assert_that(out).contains("but raised <KeyError>")
+        assert_that(out).does_not_contain("TypeError")
 
 
 def test_raises_mixed_chaining():
     try:
         with soft_assertions():
-            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to('dog')
-            assert_that({}.__getitem__).raises(RuntimeError).when_called_with('a').contains('dog')
-            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(0).matches('dog')
-        fail('should have raised error')
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(1).is_equal_to("dog")
+            assert_that({}.__getitem__).raises(RuntimeError).when_called_with("a").contains("dog")
+            assert_that(lambda x: 1 / x).raises(ZeroDivisionError).when_called_with(0).matches("dog")
+        fail("should have raised error")
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('1.')
-        assert_that(out).contains('2.')
-        assert_that(out).contains('3.')
-        assert_that(out).does_not_contain('TypeError')
+        assert_that(out).contains("1.")
+        assert_that(out).contains("2.")
+        assert_that(out).contains("3.")
+        assert_that(out).does_not_contain("TypeError")
 
 
 def test_recursive_nesting():
@@ -231,15 +232,16 @@ def test_recursive_nesting():
         if i <= 0:
             return
         with soft_assertions():
-            recurs(i-1)
+            recurs(i - 1)
             assert_that(i).is_equal_to(7)
+
     try:
         recurs(10)
     except AssertionError as e:
         out = str(e)
-        assert_that(out).contains('1. Expected <1> to be equal to <7>, but was not.')
-        assert_that(out).contains('2. Expected <2> to be equal to <7>, but was not.')
-        assert_that(out).contains('3. Expected <3> to be equal to <7>, but was not.')
-        assert_that(out).contains('4. Expected <4> to be equal to <7>, but was not.')
-        assert_that(out).contains('5. Expected <5> to be equal to <7>, but was not.')
-        assert_that(out).contains('6. Expected <6> to be equal to <7>, but was not.')
+        assert_that(out).contains("1. Expected <1> to be equal to <7>, but was not.")
+        assert_that(out).contains("2. Expected <2> to be equal to <7>, but was not.")
+        assert_that(out).contains("3. Expected <3> to be equal to <7>, but was not.")
+        assert_that(out).contains("4. Expected <4> to be equal to <7>, but was not.")
+        assert_that(out).contains("5. Expected <5> to be equal to <7>, but was not.")
+        assert_that(out).contains("6. Expected <6> to be equal to <7>, but was not.")

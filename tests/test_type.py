@@ -38,13 +38,13 @@ class Bar(Foo):
 
 
 def test_is_type_of():
-    assert_that('foo').is_type_of(str)
+    assert_that("foo").is_type_of(str)
     assert_that(123).is_type_of(int)
     assert_that(0.456).is_type_of(float)
-    assert_that(['a', 'b']).is_type_of(list)
-    assert_that(('a', 'b')).is_type_of(tuple)
-    assert_that({'a': 1, 'b': 2}).is_type_of(dict)
-    assert_that(set(['a', 'b'])).is_type_of(set)
+    assert_that(["a", "b"]).is_type_of(list)
+    assert_that(("a", "b")).is_type_of(tuple)
+    assert_that({"a": 1, "b": 2}).is_type_of(dict)
+    assert_that(set(["a", "b"])).is_type_of(set)
     assert_that(None).is_type_of(type(None))
     assert_that(Foo()).is_type_of(Foo)
     assert_that(Bar()).is_type_of(Bar)
@@ -52,37 +52,37 @@ def test_is_type_of():
 
 def test_is_type_of_failure():
     try:
-        assert_that('foo').is_type_of(int)
-        fail('should have raised error')
+        assert_that("foo").is_type_of(int)
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to('Expected <foo:str> to be of type <int>, but was not.')
+        assert_that(str(ex)).is_equal_to("Expected <foo:str> to be of type <int>, but was not.")
 
 
 def test_is_type_of_bad_arg_failure():
     try:
-        assert_that('foo').is_type_of('bad')
-        fail('should have raised error')
+        assert_that("foo").is_type_of("bad")
+        fail("should have raised error")
     except TypeError as ex:
-        assert_that(str(ex)).is_equal_to('given arg must be a type')
+        assert_that(str(ex)).is_equal_to("given arg must be a type")
 
 
 def test_is_type_of_subclass_failure():
     try:
         assert_that(Bar()).is_type_of(Foo)
-        fail('should have raised error')
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).starts_with('Expected <')
-        assert_that(str(ex)).ends_with(':Bar> to be of type <Foo>, but was not.')
+        assert_that(str(ex)).starts_with("Expected <")
+        assert_that(str(ex)).ends_with(":Bar> to be of type <Foo>, but was not.")
 
 
 def test_is_instance_of():
-    assert_that('foo').is_instance_of(str)
+    assert_that("foo").is_instance_of(str)
     assert_that(123).is_instance_of(int)
     assert_that(0.456).is_instance_of(float)
-    assert_that(['a', 'b']).is_instance_of(list)
-    assert_that(('a', 'b')).is_instance_of(tuple)
-    assert_that({'a': 1, 'b': 2}).is_instance_of(dict)
-    assert_that(set(['a', 'b'])).is_instance_of(set)
+    assert_that(["a", "b"]).is_instance_of(list)
+    assert_that(("a", "b")).is_instance_of(tuple)
+    assert_that({"a": 1, "b": 2}).is_instance_of(dict)
+    assert_that(set(["a", "b"])).is_instance_of(set)
     assert_that(None).is_instance_of(type(None))
     assert_that(Foo()).is_instance_of(Foo)
     assert_that(Bar()).is_instance_of(Bar)
@@ -91,15 +91,15 @@ def test_is_instance_of():
 
 def test_is_instance_of_failure():
     try:
-        assert_that('foo').is_instance_of(int)
-        fail('should have raised error')
+        assert_that("foo").is_instance_of(int)
+        fail("should have raised error")
     except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to('Expected <foo:str> to be instance of class <int>, but was not.')
+        assert_that(str(ex)).is_equal_to("Expected <foo:str> to be instance of class <int>, but was not.")
 
 
 def test_is_instance_of_bad_arg_failure():
     try:
-        assert_that('foo').is_instance_of('bad')
-        fail('should have raised error')
+        assert_that("foo").is_instance_of("bad")
+        fail("should have raised error")
     except TypeError as ex:
-        assert_that(str(ex)).is_equal_to('given arg must be a class')
+        assert_that(str(ex)).is_equal_to("given arg must be a class")

@@ -107,13 +107,16 @@ class DictMixin:
         """
         self._check_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
-            raise ValueError('one or more value args must be given')
+            raise ValueError("one or more value args must be given")
         missing = []
         for v in values:
             if v not in self.val.values():
                 missing.append(v)
         if missing:
-            return self.error('Expected <%s> to contain values %s, but did not contain %s.' % (self.val, self._fmt_items(values), self._fmt_items(missing)))
+            return self.error(
+                "Expected <%s> to contain values %s, but did not contain %s."
+                % (self.val, self._fmt_items(values), self._fmt_items(missing))
+            )
         return self
 
     def does_not_contain_value(self, *values) -> Self:
@@ -138,14 +141,17 @@ class DictMixin:
         """
         self._check_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
-            raise ValueError('one or more value args must be given')
+            raise ValueError("one or more value args must be given")
         else:
             found = []
             for v in values:
                 if v in self.val.values():
                     found.append(v)
             if found:
-                return self.error('Expected <%s> to not contain values %s, but did contain %s.' % (self.val, self._fmt_items(values), self._fmt_items(found)))
+                return self.error(
+                    "Expected <%s> to not contain values %s, but did contain %s."
+                    % (self.val, self._fmt_items(values), self._fmt_items(found))
+                )
         return self
 
     def contains_entry(self, *args, **kwargs) -> Self:
@@ -183,20 +189,23 @@ class DictMixin:
         self._check_dict_like(self.val, check_values=False)
         entries = list(args) + [{k: v} for k, v in kwargs.items()]
         if len(entries) == 0:
-            raise ValueError('one or more entry args must be given')
+            raise ValueError("one or more entry args must be given")
         missing = []
         for e in entries:
             if type(e) is not dict:
-                raise TypeError('given entry arg must be a dict')
+                raise TypeError("given entry arg must be a dict")
             if len(e) != 1:
-                raise ValueError('given entry args must contain exactly one key-value pair')
+                raise ValueError("given entry args must contain exactly one key-value pair")
             k = next(iter(e))
             if k not in self.val:
                 missing.append(e)  # bad key
             elif self.val[k] != e[k]:
                 missing.append(e)  # bad val
         if missing:
-            return self.error('Expected <%s> to contain entries %s, but did not contain %s.' % (self.val, self._fmt_items(entries), self._fmt_items(missing)))
+            return self.error(
+                "Expected <%s> to contain entries %s, but did not contain %s."
+                % (self.val, self._fmt_items(entries), self._fmt_items(missing))
+            )
         return self
 
     def does_not_contain_entry(self, *args, **kwargs) -> Self:
@@ -228,16 +237,19 @@ class DictMixin:
         self._check_dict_like(self.val, check_values=False)
         entries = list(args) + [{k: v} for k, v in kwargs.items()]
         if len(entries) == 0:
-            raise ValueError('one or more entry args must be given')
+            raise ValueError("one or more entry args must be given")
         found = []
         for e in entries:
             if type(e) is not dict:
-                raise TypeError('given entry arg must be a dict')
+                raise TypeError("given entry arg must be a dict")
             if len(e) != 1:
-                raise ValueError('given entry args must contain exactly one key-value pair')
+                raise ValueError("given entry args must contain exactly one key-value pair")
             k = next(iter(e))
             if k in self.val and e[k] == self.val[k]:
                 found.append(e)
         if found:
-            return self.error('Expected <%s> to not contain entries %s, but did contain %s.' % (self.val, self._fmt_items(entries), self._fmt_items(found)))
+            return self.error(
+                "Expected <%s> to not contain entries %s, but did contain %s."
+                % (self.val, self._fmt_items(entries), self._fmt_items(found))
+            )
         return self

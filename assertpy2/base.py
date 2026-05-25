@@ -124,13 +124,14 @@ class BaseMixin:
         See Also:
             :meth:`~assertpy.string.StringMixin.is_equal_to_ignoring_case` - for case-insensitive string equality
         """
-        if self._check_dict_like(self.val, check_values=False, return_as_bool=True) and \
-                self._check_dict_like(other, check_values=False, return_as_bool=True):
-            if self._dict_not_equal(self.val, other, ignore=kwargs.get('ignore'), include=kwargs.get('include')):
-                self._dict_err(self.val, other, ignore=kwargs.get('ignore'), include=kwargs.get('include'))
+        if self._check_dict_like(self.val, check_values=False, return_as_bool=True) and self._check_dict_like(
+            other, check_values=False, return_as_bool=True
+        ):
+            if self._dict_not_equal(self.val, other, ignore=kwargs.get("ignore"), include=kwargs.get("include")):
+                self._dict_err(self.val, other, ignore=kwargs.get("ignore"), include=kwargs.get("include"))
         else:
             if self.val != other:
-                return self.error('Expected <%s> to be equal to <%s>, but was not.' % (self.val, other))
+                return self.error("Expected <%s> to be equal to <%s>, but was not." % (self.val, other))
         return self
 
     def is_not_equal_to(self, other) -> Self:
@@ -160,7 +161,7 @@ class BaseMixin:
             AssertionError: if actual **is** equal to expected
         """
         if self.val == other:
-            return self.error('Expected <%s> to be not equal to <%s>, but was.' % (self.val, other))
+            return self.error("Expected <%s> to be not equal to <%s>, but was." % (self.val, other))
         return self
 
     def is_same_as(self, other) -> Self:
@@ -202,7 +203,7 @@ class BaseMixin:
             AssertionError: if actual is **not** identical to expected
         """
         if self.val is not other:
-            return self.error('Expected <%s> to be identical to <%s>, but was not.' % (self.val, other))
+            return self.error("Expected <%s> to be identical to <%s>, but was not." % (self.val, other))
         return self
 
     def is_not_same_as(self, other) -> Self:
@@ -233,7 +234,7 @@ class BaseMixin:
             AssertionError: if actual **is** identical to expected
         """
         if self.val is other:
-            return self.error('Expected <%s> to be not identical to <%s>, but was.' % (self.val, other))
+            return self.error("Expected <%s> to be not identical to <%s>, but was." % (self.val, other))
         return self
 
     def is_true(self) -> Self:
@@ -258,7 +259,7 @@ class BaseMixin:
             AssertionError: if val **is** false
         """
         if not self.val:
-            return self.error('Expected <%s> to be <True>, but was not.' % self.val)
+            return self.error("Expected <%s> to be <True>, but was not." % self.val)
         return self
 
     def is_false(self) -> Self:
@@ -283,7 +284,7 @@ class BaseMixin:
             AssertionError: if val **is** true
         """
         if self.val:
-            return self.error('Expected <%s> to be <False>, but was not.' % self.val)
+            return self.error("Expected <%s> to be <False>, but was not." % self.val)
         return self
 
     def is_none(self) -> Self:
@@ -302,7 +303,7 @@ class BaseMixin:
             AssertionError: if val is **not** none
         """
         if self.val is not None:
-            return self.error('Expected <%s> to be <None>, but was not.' % self.val)
+            return self.error("Expected <%s> to be <None>, but was not." % self.val)
         return self
 
     def is_not_none(self) -> Self:
@@ -322,11 +323,11 @@ class BaseMixin:
             AssertionError: if val **is** none
         """
         if self.val is None:
-            return self.error('Expected not <None>, but was.')
+            return self.error("Expected not <None>, but was.")
         return self
 
     def _type(self, val):
-        if hasattr(val, '__name__'):
+        if hasattr(val, "__name__"):
             return val.__name__
         return val.__class__.__name__
 
@@ -355,10 +356,10 @@ class BaseMixin:
             AssertionError: if val is **not** of the given type
         """
         if type(some_type) is not type and not issubclass(type(some_type), type):
-            raise TypeError('given arg must be a type')
+            raise TypeError("given arg must be a type")
         if type(self.val) is not some_type:
             t = self._type(self.val)
-            return self.error('Expected <%s:%s> to be of type <%s>, but was not.' % (self.val, t, some_type.__name__))
+            return self.error("Expected <%s:%s> to be of type <%s>, but was not." % (self.val, t, some_type.__name__))
         return self
 
     def is_instance_of(self, some_class) -> Self:
@@ -395,9 +396,11 @@ class BaseMixin:
         try:
             if not isinstance(self.val, some_class):
                 t = self._type(self.val)
-                return self.error('Expected <%s:%s> to be instance of class <%s>, but was not.' % (self.val, t, some_class.__name__))
+                return self.error(
+                    "Expected <%s:%s> to be instance of class <%s>, but was not." % (self.val, t, some_class.__name__)
+                )
         except TypeError:
-            raise TypeError('given arg must be a class') from None
+            raise TypeError("given arg must be a class") from None
         return self
 
     def is_length(self, length) -> Self:
@@ -424,9 +427,9 @@ class BaseMixin:
             AssertionError: if val is **not** the given length
         """
         if type(length) is not int:
-            raise TypeError('given arg must be an int')
+            raise TypeError("given arg must be an int")
         if length < 0:
-            raise ValueError('given arg must be a positive int')
+            raise ValueError("given arg must be a positive int")
         if len(self.val) != length:
-            return self.error('Expected <%s> to be of length <%d>, but was <%d>.' % (self.val, length, len(self.val)))
+            return self.error("Expected <%s> to be of length <%d>, but was <%d>." % (self.val, length, len(self.val)))
         return self
