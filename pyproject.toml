@@ -29,6 +29,10 @@ classifiers = [
     "Topic :: Software Development :: Testing",
 ]
 
+dependencies = [
+    "typing_extensions>=4.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/Solganis/assertpy2"
 Repository = "https://github.com/Solganis/assertpy2"

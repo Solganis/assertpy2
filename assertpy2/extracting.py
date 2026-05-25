@@ -26,7 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import collections.abc
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -113,7 +119,7 @@ class ExtractingMixin:
         assert_that(users).extracting('user', sort=lambda x: -x['age']).is_equal_to(['Bob', 'Alice', 'Charlie'])
     """
 
-    def extracting(self, *names, **kwargs):
+    def extracting(self, *names, **kwargs) -> Self:
         """Asserts that val is iterable, then extracts the named attributes, properties, or
         zero-arg methods into a list (or list of tuples if multiple names are given).
 

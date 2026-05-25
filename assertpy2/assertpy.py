@@ -28,6 +28,8 @@
 
 """Assertion library for python unit testing with a fluent API"""
 
+from __future__ import annotations
+
 import contextlib
 import inspect
 import logging
@@ -35,6 +37,10 @@ import os
 import sys
 import types
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 from .base import BaseMixin
 from .collection import CollectionMixin
@@ -423,7 +429,7 @@ class AssertionBuilder(
         """
         return _builder(val, description, kind, expected, logger)
 
-    def error(self, msg):
+    def error(self, msg) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
         If an error description is set by :meth:`~assertpy.base.BaseMixin.described_as`, then that

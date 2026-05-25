@@ -6,6 +6,9 @@ requires-python = ">=3.10"
 name = "assertpy2"
 version = "2.0.0"
 source = { editable = "." }
+dependencies = [
+    { name = "typing-extensions" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -15,6 +18,7 @@ dev = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "typing-extensions", specifier = ">=4.0" }]
 
 [package.metadata.requires-dev]
 dev = [

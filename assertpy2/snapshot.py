@@ -26,11 +26,17 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import datetime
 import inspect
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -73,7 +79,7 @@ class SnapshotMixin:
         Snapshots require Python 3.x
     """
 
-    def snapshot(self, id=None, path='__snapshots'):
+    def snapshot(self, id=None, path='__snapshots') -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,

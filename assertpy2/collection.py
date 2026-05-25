@@ -26,7 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import collections
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -34,7 +40,7 @@ __tracebackhide__ = True
 class CollectionMixin:
     """Collection assertions mixin."""
 
-    def is_iterable(self):
+    def is_iterable(self) -> Self:
         """Asserts that val is iterable.
 
         Examples:
@@ -54,7 +60,7 @@ class CollectionMixin:
             return self.error('Expected iterable, but was not.')
         return self
 
-    def is_not_iterable(self):
+    def is_not_iterable(self) -> Self:
         """Asserts that val is not iterable.
 
         Examples:
@@ -75,7 +81,7 @@ class CollectionMixin:
             return self.error('Expected not iterable, but was.')
         return self
 
-    def is_subset_of(self, *supersets):
+    def is_subset_of(self, *supersets) -> Self:
         """Asserts that val is iterable and a subset of the given superset (or supersets).
 
         Args:
@@ -144,7 +150,7 @@ class CollectionMixin:
 
         return self
 
-    def is_sorted(self, key=lambda x: x, reverse=False):
+    def is_sorted(self, key=lambda x: x, reverse=False) -> Self:
         """Asserts that val is iterable and is sorted.
 
         Args:

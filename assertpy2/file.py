@@ -26,7 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import os
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -79,7 +85,7 @@ def contents_of(file, encoding='utf-8'):
 class FileMixin:
     """File assertions mixin."""
 
-    def exists(self):
+    def exists(self) -> Self:
         """Asserts that val is a path and that it exists.
 
         Examples:
@@ -100,7 +106,7 @@ class FileMixin:
             return self.error('Expected <%s> to exist, but was not found.' % self.val)
         return self
 
-    def does_not_exist(self):
+    def does_not_exist(self) -> Self:
         """Asserts that val is a path and that it does *not* exist.
 
         Examples:
@@ -121,7 +127,7 @@ class FileMixin:
             return self.error('Expected <%s> to not exist, but was found.' % self.val)
         return self
 
-    def is_file(self):
+    def is_file(self) -> Self:
         """Asserts that val is a *file* and that it exists.
 
         Examples:
@@ -140,7 +146,7 @@ class FileMixin:
             return self.error('Expected <%s> to be a file, but was not.' % self.val)
         return self
 
-    def is_directory(self):
+    def is_directory(self) -> Self:
         """Asserts that val is a *directory* and that it exists.
 
         Examples:
@@ -159,7 +165,7 @@ class FileMixin:
             return self.error('Expected <%s> to be a directory, but was not.' % self.val)
         return self
 
-    def is_named(self, filename):
+    def is_named(self, filename) -> Self:
         """Asserts that val is an existing path to a file and that file is named filename.
 
         Args:
@@ -184,7 +190,7 @@ class FileMixin:
             return self.error('Expected filename <%s> to be equal to <%s>, but was not.' % (val_filename, filename))
         return self
 
-    def is_child_of(self, parent):
+    def is_child_of(self, parent) -> Self:
         """Asserts that val is an existing path to a file and that file is a child of parent.
 
         Args:
@@ -212,7 +218,7 @@ class FileMixin:
             return self.error('Expected file <%s> to be a child of <%s>, but was not.' % (val_abspath, parent_abspath))
         return self
 
-    def is_readable(self):
+    def is_readable(self) -> Self:
         """Asserts that val is an existing path and is readable.
 
         Examples:
@@ -231,7 +237,7 @@ class FileMixin:
             return self.error('Expected <%s> to be readable, but was not.' % self.val)
         return self
 
-    def is_writable(self):
+    def is_writable(self) -> Self:
         """Asserts that val is an existing path and is writable.
 
         Examples:
@@ -250,7 +256,7 @@ class FileMixin:
             return self.error('Expected <%s> to be writable, but was not.' % self.val)
         return self
 
-    def is_executable(self):
+    def is_executable(self) -> Self:
         """Asserts that val is an existing path and is executable.
 
         Examples:

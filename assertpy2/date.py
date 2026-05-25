@@ -26,7 +26,13 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -34,7 +40,7 @@ __tracebackhide__ = True
 class DateMixin:
     """Date and time assertions mixin."""
 
-    def is_before(self, other):
+    def is_before(self, other) -> Self:
         """Asserts that val is a date and is before other date.
 
         Args:
@@ -68,7 +74,7 @@ class DateMixin:
             return self.error('Expected <%s> to be before <%s>, but was not.' % (self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
         return self
 
-    def is_after(self, other):
+    def is_after(self, other) -> Self:
         """Asserts that val is a date and is after other date.
 
         Args:
@@ -102,7 +108,7 @@ class DateMixin:
             return self.error('Expected <%s> to be after <%s>, but was not.' % (self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
         return self
 
-    def is_equal_to_ignoring_milliseconds(self, other):
+    def is_equal_to_ignoring_milliseconds(self, other) -> Self:
         """Asserts that val is a date and is equal to other date to the second.
 
         Args:
@@ -132,7 +138,7 @@ class DateMixin:
             return self.error('Expected <%s> to be equal to <%s>, but was not.' % (self.val.strftime('%Y-%m-%d %H:%M:%S'), other.strftime('%Y-%m-%d %H:%M:%S')))
         return self
 
-    def is_equal_to_ignoring_seconds(self, other):
+    def is_equal_to_ignoring_seconds(self, other) -> Self:
         """Asserts that val is a date and is equal to other date to the minute.
 
         Args:
@@ -162,7 +168,7 @@ class DateMixin:
             return self.error('Expected <%s> to be equal to <%s>, but was not.' % (self.val.strftime('%Y-%m-%d %H:%M'), other.strftime('%Y-%m-%d %H:%M')))
         return self
 
-    def is_equal_to_ignoring_time(self, other):
+    def is_equal_to_ignoring_time(self, other) -> Self:
         """Asserts that val is a date and is equal to other date ignoring time.
 
         Args:

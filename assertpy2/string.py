@@ -26,8 +26,14 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
+
 import collections.abc
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -35,7 +41,7 @@ __tracebackhide__ = True
 class StringMixin:
     """String assertions mixin."""
 
-    def is_equal_to_ignoring_case(self, other):
+    def is_equal_to_ignoring_case(self, other) -> Self:
         """Asserts that val is a string and is case-insensitive equal to other.
 
         Checks actual is equal to expected using the ``==`` operator and ``str.lower()``.
@@ -64,7 +70,7 @@ class StringMixin:
             return self.error('Expected <%s> to be case-insensitive equal to <%s>, but was not.' % (self.val, other))
         return self
 
-    def contains_ignoring_case(self, *items):
+    def contains_ignoring_case(self, *items) -> Self:
         """Asserts that val is string and contains the given item or items.
 
         Walks val and checks for item or items using the ``==`` operator and ``str.lower()``.
@@ -125,7 +131,7 @@ class StringMixin:
             raise TypeError('val is not a string or iterable')
         return self
 
-    def starts_with(self, prefix):
+    def starts_with(self, prefix) -> Self:
         """Asserts that val is string or iterable and starts with prefix.
 
         Args:
@@ -164,7 +170,7 @@ class StringMixin:
             raise TypeError('val is not a string or iterable')
         return self
 
-    def ends_with(self, suffix):
+    def ends_with(self, suffix) -> Self:
         """Asserts that val is string or iterable and ends with suffix.
 
         Args:
@@ -203,7 +209,7 @@ class StringMixin:
             raise TypeError('val is not a string or iterable')
         return self
 
-    def matches(self, pattern):
+    def matches(self, pattern) -> Self:
         """Asserts that val is string and matches the given regex pattern.
 
         Args:
@@ -262,7 +268,7 @@ class StringMixin:
             return self.error('Expected <%s> to match pattern <%s>, but did not.' % (self.val, pattern))
         return self
 
-    def does_not_match(self, pattern):
+    def does_not_match(self, pattern) -> Self:
         """Asserts that val is string and does not match the given regex pattern.
 
         Args:
@@ -293,7 +299,7 @@ class StringMixin:
             return self.error('Expected <%s> to not match pattern <%s>, but did.' % (self.val, pattern))
         return self
 
-    def is_alpha(self):
+    def is_alpha(self) -> Self:
         """Asserts that val is non-empty string and all characters are alphabetic (using ``str.isalpha()``).
 
         Examples:
@@ -315,7 +321,7 @@ class StringMixin:
             return self.error('Expected <%s> to contain only alphabetic chars, but did not.' % self.val)
         return self
 
-    def is_digit(self):
+    def is_digit(self) -> Self:
         """Asserts that val is non-empty string and all characters are digits (using ``str.isdigit()``).
 
         Examples:
@@ -337,7 +343,7 @@ class StringMixin:
             return self.error('Expected <%s> to contain only digits, but did not.' % self.val)
         return self
 
-    def is_lower(self):
+    def is_lower(self) -> Self:
         """Asserts that val is non-empty string and all characters are lowercase (using ``str.lower()``).
 
         Examples:
@@ -359,7 +365,7 @@ class StringMixin:
             return self.error('Expected <%s> to contain only lowercase chars, but did not.' % self.val)
         return self
 
-    def is_upper(self):
+    def is_upper(self) -> Self:
         """Asserts that val is non-empty string and all characters are uppercase (using ``str.upper()``).
 
         Examples:
@@ -381,7 +387,7 @@ class StringMixin:
             return self.error('Expected <%s> to contain only uppercase chars, but did not.' % self.val)
         return self
 
-    def is_unicode(self):
+    def is_unicode(self) -> Self:
         """Asserts that val is a unicode string.
 
         Examples:

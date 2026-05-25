@@ -26,7 +26,12 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 __tracebackhide__ = True
 
@@ -44,7 +49,7 @@ class _InertBuilder:
 class ExceptionMixin:
     """Expected exception mixin."""
 
-    def raises(self, ex):
+    def raises(self, ex) -> Self:
         """Asserts that val is callable and set the expected exception.
 
         Just sets the expected exception, but never calls val, and therefore never failes. You must
@@ -69,7 +74,7 @@ class ExceptionMixin:
         # chain on with ex as the expected exception
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
-    def when_called_with(self, *some_args, **some_kwargs):
+    def when_called_with(self, *some_args, **some_kwargs) -> Self:
         """Asserts that val, when invoked with the given args and kwargs, raises the expected exception.
 
         Invokes ``val()`` with the given args and kwargs.  You must first set the expected

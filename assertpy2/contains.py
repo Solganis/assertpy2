@@ -27,13 +27,20 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 __tracebackhide__ = True
 
 
 class ContainsMixin:
     """Containment assertions mixin."""
 
-    def contains(self, *items):
+    def contains(self, *items) -> Self:
         """Asserts that val contains the given item or items.
 
         Checks if the collection contains the given item or items using ``in`` operator.
@@ -86,7 +93,7 @@ class ContainsMixin:
                     return self.error('Expected <%s> to contain items %s, but did not contain %s.' % (self.val, self._fmt_items(items), self._fmt_items(missing)))
         return self
 
-    def does_not_contain(self, *items):
+    def does_not_contain(self, *items) -> Self:
         """Asserts that val does not contain the given item or items.
 
         Checks if the collection excludes the given item or items using ``in`` operator.
@@ -128,7 +135,7 @@ class ContainsMixin:
                 return self.error('Expected <%s> to not contain items %s, but did contain %s.' % (self.val, self._fmt_items(items), self._fmt_items(found)))
         return self
 
-    def contains_only(self, *items):
+    def contains_only(self, *items) -> Self:
         """Asserts that val contains *only* the given item or items.
 
         Checks if the collection contains only the given item or items using ``in`` operator.
@@ -169,7 +176,7 @@ class ContainsMixin:
                 return self.error('Expected <%s> to contain only %s, but did not contain %s.' % (self.val, self._fmt_items(items), self._fmt_items(missing)))
         return self
 
-    def contains_sequence(self, *items):
+    def contains_sequence(self, *items) -> Self:
         """Asserts that val contains the given ordered sequence of items.
 
         Checks if the collection contains the given sequence of items using ``in`` operator.
@@ -193,19 +200,28 @@ class ContainsMixin:
         """
         if len(items) == 0:
             raise ValueError('one or more args must be given')
-        else:
-            try:
-                for i in range(len(self.val) - len(items) + 1):
-                    for j in range(len(items)):
-                        if self.val[i+j] != items[j]:
-                            break
-                    else:
-                        return self
-            except TypeError:
-                raise TypeError('val is not iterable') from None
+        if isinstance(self.val, str):
+            pos = 0
+            for item in items:
+                if not isinstance(item, str):
+                    raise TypeError('given args must be strings when val is a string')
+                idx = self.val.find(item, pos)
+                if idx == -1:
+                    return self.error('Expected <%s> to contain sequence %s, but did not.' % (self.val, self._fmt_items(items)))
+                pos = idx + len(item)
+            return self
+        try:
+            for i in range(len(self.val) - len(items) + 1):
+                for j in range(len(items)):
+                    if self.val[i+j] != items[j]:
+                        break
+                else:
+                    return self
+        except TypeError:
+            raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to contain sequence %s, but did not.' % (self.val, self._fmt_items(items)))
 
-    def contains_duplicates(self):
+    def contains_duplicates(self) -> Self:
         """Asserts that val is iterable and *does* contain duplicates.
 
         Examples:
@@ -228,7 +244,7 @@ class ContainsMixin:
             raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to contain duplicates, but did not.' % self.val)
 
-    def does_not_contain_duplicates(self):
+    def does_not_contain_duplicates(self) -> Self:
         """Asserts that val is iterable and *does not* contain any duplicates.
 
         Examples:
@@ -251,7 +267,7 @@ class ContainsMixin:
             raise TypeError('val is not iterable') from None
         return self.error('Expected <%s> to not contain duplicates, but did.' % self.val)
 
-    def is_empty(self):
+    def is_empty(self) -> Self:
         """Asserts that val is empty.
 
         Examples:
@@ -276,7 +292,7 @@ class ContainsMixin:
                 return self.error('Expected <%s> to be empty, but was not.' % self.val)
         return self
 
-    def is_not_empty(self):
+    def is_not_empty(self) -> Self:
         """Asserts that val is *not* empty.
 
         Examples:
@@ -301,7 +317,7 @@ class ContainsMixin:
                 return self.error('Expected not empty, but was empty.')
         return self
 
-    def is_in(self, *items):
+    def is_in(self, *items) -> Self:
         """Asserts that val is equal to one of the given items.
 
         Args:
@@ -327,7 +343,7 @@ class ContainsMixin:
                     return self
         return self.error('Expected <%s> to be in %s, but was not.' % (self.val, self._fmt_items(items)))
 
-    def is_not_in(self, *items):
+    def is_not_in(self, *items) -> Self:
         """Asserts that val is not equal to one of the given items.
 
         Args:
