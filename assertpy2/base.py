@@ -28,7 +28,10 @@
 
 from __future__ import annotations
 
+import collections.abc
 from typing import TYPE_CHECKING
+
+from .matchers import Matcher, StructureMatcher
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -131,7 +134,130 @@ class BaseMixin:
                 self._dict_err(self.val, other, ignore=kwargs.get("ignore"), include=kwargs.get("include"))
         else:
             if self.val != other:
-                return self.error("Expected <%s> to be equal to <%s>, but was not." % (self.val, other))
+                return self.error(
+                    "Expected <%s> to be equal to <%s>, but was not." % (self.val, other),
+                    actual=self.val,
+                    expected=other,
+                )
+        return self
+
+    def satisfies(self, matcher) -> Self:
+        """Asserts that val satisfies the given matcher.
+
+        Args:
+            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+                a value and returns a bool
+
+        Examples:
+            Usage with matchers::
+
+                from assertpy2 import match
+
+                assert_that(7).satisfies(match.greater_than(5) & match.less_than(10))
+                assert_that('hello').satisfies(match.starts_with('he'))
+
+            Usage with callables::
+
+                assert_that(42).satisfies(lambda x: x % 2 == 0)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** satisfy the matcher
+        """
+        if isinstance(matcher, Matcher):
+            if not matcher.matches(self.val):
+                return self.error("Expected %s, but %s." % (matcher.describe(), matcher.describe_mismatch(self.val)))
+        elif callable(matcher):
+            if not matcher(self.val):
+                return self.error("Expected <%s> to satisfy <%s>, but did not." % (self.val, matcher))
+        else:
+            raise TypeError("given arg must be a Matcher or callable")
+        return self
+
+    def each(self, matcher) -> Self:
+        """Asserts that every item in val satisfies the given matcher.
+
+        Args:
+            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+                a value and returns a bool
+
+        Examples:
+            Usage with matchers::
+
+                from assertpy2 import match
+
+                assert_that([1, 2, 3]).each(match.is_positive())
+                assert_that([10, 20, 30]).each(match.between(1, 100))
+
+            Usage with extracting::
+
+                assert_that(users).extracting('age').each(match.between(18, 120))
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any item does **not** satisfy the matcher
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        if isinstance(matcher, Matcher):
+            for i, item in enumerate(self.val):
+                if not matcher.matches(item):
+                    return self.error(
+                        "Expected all items to satisfy %s, but item at index %d <%s> did not: %s."
+                        % (matcher.describe(), i, item, matcher.describe_mismatch(item))
+                    )
+        elif callable(matcher):
+            for i, item in enumerate(self.val):
+                if not matcher(item):
+                    return self.error(
+                        "Expected all items to satisfy <%s>, but item at index %d <%s> did not." % (matcher, i, item)
+                    )
+        else:
+            raise TypeError("given arg must be a Matcher or callable")
+        return self
+
+    def matches_structure(self, spec: dict) -> Self:
+        """Asserts that val is a dict matching the given structure specification.
+
+        Each key in ``spec`` maps to either a :class:`~assertpy2.matchers.Matcher`, a raw value
+        (checked via ``==``), or a nested ``dict`` for recursive matching.  Extra keys in val
+        that are absent from the spec are allowed.
+
+        Args:
+            spec: a dict where values can be Matcher instances, raw values, or nested dicts
+
+        Examples:
+            Usage::
+
+                from assertpy2 import assert_that, match
+
+                user = {"name": "Alice", "age": 30, "id": "550e8400-e29b-41d4-a716-446655440000"}
+                assert_that(user).matches_structure({
+                    "name": match.is_non_empty_string(),
+                    "age": match.between(18, 120),
+                    "id": match.is_uuid(),
+                })
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** match the structure spec
+        """
+        if not isinstance(self.val, dict):
+            raise TypeError("val must be a dict")
+        if not isinstance(spec, dict):
+            raise TypeError("given arg must be a dict")
+        matcher = StructureMatcher(spec)
+        if not matcher.matches(self.val):
+            return self.error(
+                "Expected <%s> to match structure %s, but %s."
+                % (self.val, matcher.describe(), matcher.describe_mismatch(self.val))
+            )
         return self
 
     def is_not_equal_to(self, other) -> Self:

@@ -31,23 +31,40 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import inspect
 import logging
 import os
 import sys
 import types
 from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
+    import datetime
+    import pathlib
+    from collections.abc import Callable
+
     from typing_extensions import Self
 
+    from ._typing import (
+        _CallableAssertion,
+        _DateAssertion,
+        _DictAssertion,
+        _IterableAssertion,
+        _NumericAssertion,
+        _PathAssertion,
+        _StringAssertion,
+    )
+
+from .async_assertions import AsyncAssertionBuilder
 from .base import BaseMixin
 from .collection import CollectionMixin
 from .contains import ContainsMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
+from .errors import AssertionFailure
 from .exception import ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -66,25 +83,29 @@ ASSERTPY_FILES = [
     os.path.join("assertpy2", file)
     for file in [
         "assertpy.py",
+        "async_assertions.py",
         "base.py",
         "collection.py",
         "contains.py",
         "date.py",
         "dict.py",
         "dynamic.py",
+        "errors.py",
         "exception.py",
         "extracting.py",
         "file.py",
         "helpers.py",
+        "matchers.py",
         "numeric.py",
+        "pytest_plugin.py",
         "snapshot.py",
         "string.py",
     ]
 ]
 
-# soft assertions
-_soft_ctx = 0
-_soft_err = []
+# soft assertions (contextvars for thread/async safety)
+_soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
+_soft_err: contextvars.ContextVar[list[str]] = contextvars.ContextVar("assertpy2_soft_err")
 
 
 @contextlib.contextmanager
@@ -94,6 +115,9 @@ def soft_assertions() -> Iterator[None]:
     Normally, any assertion failure will halt test execution immediately by raising an error.
     Soft assertions are way to collect assertion failures (and failure messages) together, to be
     raised all at once at the end, without halting your test.
+
+    Uses :mod:`contextvars` internally, so each thread and each ``asyncio`` task gets its own
+    independent soft-assertion state.
 
     Examples:
         Create a soft assertion context, and some failing tests::
@@ -124,27 +148,62 @@ def soft_assertions() -> Iterator[None]:
         forgiving behavior, use :meth:`soft_fail` to add a failure message without halting test
         execution.
     """
-    global _soft_ctx
-    global _soft_err
-
-    # init ctx
-    if _soft_ctx == 0:
-        _soft_err = []
-    _soft_ctx += 1
+    ctx = _soft_ctx.get()
+    if ctx == 0:
+        _soft_err.set([])
+    _soft_ctx.set(ctx + 1)
 
     try:
         yield
     finally:
-        # reset ctx
-        _soft_ctx -= 1
+        _soft_ctx.set(_soft_ctx.get() - 1)
 
-    if _soft_err and _soft_ctx == 0:
-        out = "soft assertion failures:\n" + "\n".join("%d. %s" % (i + 1, msg) for i, msg in enumerate(_soft_err))
-        _soft_err = []
+    errs = _soft_err.get([])
+    if errs and _soft_ctx.get() == 0:
+        out = "soft assertion failures:\n" + "\n".join("%d. %s" % (i + 1, msg) for i, msg in enumerate(errs))
+        _soft_err.set([])
         raise AssertionError(out)
 
 
 # factory methods
+
+
+@overload
+def assert_that(val: str, description: str = "") -> _StringAssertion: ...
+
+
+@overload
+def assert_that(val: int | float | complex, description: str = "") -> _NumericAssertion: ...
+
+
+@overload
+def assert_that(val: dict, description: str = "") -> _DictAssertion: ...
+
+
+@overload
+def assert_that(val: list | tuple, description: str = "") -> _IterableAssertion: ...
+
+
+@overload
+def assert_that(val: set | frozenset, description: str = "") -> _IterableAssertion: ...
+
+
+@overload
+def assert_that(val: datetime.date, description: str = "") -> _DateAssertion: ...
+
+
+@overload
+def assert_that(val: pathlib.Path, description: str = "") -> _PathAssertion: ...
+
+
+@overload
+def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
+
+
+@overload
+def assert_that(val: object, description: str = "") -> AssertionBuilder: ...
+
+
 def assert_that(val, description=""):
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
@@ -166,8 +225,7 @@ def assert_that(val, description=""):
                 assert_that('foobar').is_length(6).starts_with('foo').ends_with('bar')
                 assert_that(['a', 'b', 'c']).contains('a').does_not_contain('x')
     """
-    global _soft_ctx
-    if _soft_ctx:
+    if _soft_ctx.get():
         return _builder(val, description, "soft")
     return _builder(val, description)
 
@@ -273,10 +331,8 @@ def soft_fail(msg=""):
             3. Expected <foo> to be equal to <bar>, but was not.
 
     """
-    global _soft_ctx
-    if _soft_ctx:
-        global _soft_err
-        _soft_err.append("Fail: %s!" % msg if msg else "Fail!")
+    if _soft_ctx.get():
+        _soft_err.get().append("Fail: %s!" % msg if msg else "Fail!")
         return
     fail(msg)
 
@@ -362,7 +418,9 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
 
             # in reverse, find the first assertpy frame (and return the previous one)
             prev = None
-            for frame in reversed(frames):
+            for frame in reversed(
+                frames
+            ):  # pragma: no branch - loop always finds an assertpy frame when called from error()
                 for f in ASSERTPY_FILES:
                     if frame[0].endswith(f):
                         return prev
@@ -432,25 +490,23 @@ class AssertionBuilder(
         """
         return _builder(val, description, kind, expected, logger)
 
-    def error(self, msg) -> Self:
+    def error(self, msg, *, actual=None, expected=None, diff=None) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
         If an error description is set by :meth:`~assertpy.base.BaseMixin.described_as`, then that
         description is prepended to the error message.
 
+        When structured data (``actual``, ``expected``, or ``diff``) is provided, raises
+        :class:`~assertpy2.errors.AssertionFailure` instead of plain ``AssertionError``.
+
         Args:
             msg: the error message
-
-        Examples:
-            Used to fail an assertion::
-
-                if self.val != other:
-                    return self.error('Expected <%s> to be equal to <%s>, but was not.' % (self.val, other))
+            actual: the actual value (for structured error reporting)
+            expected: the expected value (for structured error reporting)
+            diff: a :class:`~assertpy2.errors.DiffResult` instance (for structured error reporting)
 
         Raises:
-            AssertionError: always raised unless ``kind`` is ``warn`` (as set when using an
-                :meth:`assert_warn` assertion) or ``kind`` is ``soft`` (as set when inside a
-                :meth:`soft_assertions` context).
+            AssertionError: always raised unless ``kind`` is ``warn`` or ``soft``.
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion, but only when
@@ -461,8 +517,53 @@ class AssertionBuilder(
             self.logger.warning(out)
             return self
         elif self.kind == "soft":
-            global _soft_err
-            _soft_err.append(out)
+            _soft_err.get().append(out)
             return self
         else:
+            if expected is not None or diff is not None:
+                raise AssertionFailure(out, actual=actual, expected=expected, diff=diff)
             raise AssertionError(out)
+
+    def eventually(self, *, timeout: float = 5.0, interval: float = 0.5) -> AsyncAssertionBuilder:
+        """Switch to async polling mode for eventual-consistency assertions.
+
+        The current ``val`` must be a callable (sync or async).  Returns an
+        :class:`~assertpy2.async_assertions.AsyncAssertionBuilder` whose assertion
+        methods are coroutines that poll ``val()`` until the assertion passes or
+        ``timeout`` expires.
+
+        Args:
+            timeout: maximum seconds to keep retrying (default ``5.0``)
+            interval: seconds between retries (default ``0.5``)
+
+        Examples:
+            Usage::
+
+                import asyncio
+                from assertpy2 import assert_that
+
+                counter = {"n": 0}
+
+                def get_count():
+                    counter["n"] += 1
+                    return counter["n"]
+
+                asyncio.run(
+                    assert_that(get_count).eventually(timeout=2).is_equal_to(3)
+                )
+
+        Returns:
+            AsyncAssertionBuilder: an async builder whose assertion methods are awaitable
+
+        Raises:
+            TypeError: if ``val`` is not callable
+        """
+        if not callable(self.val):
+            raise TypeError("val must be callable when using eventually()")
+        return AsyncAssertionBuilder(
+            self.val,
+            builder_func=_builder,
+            description=self.description,
+            timeout=timeout,
+            interval=interval,
+        )

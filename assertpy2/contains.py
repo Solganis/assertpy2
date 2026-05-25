@@ -31,6 +31,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .matchers import Matcher
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
@@ -75,7 +77,12 @@ class ContainsMixin:
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         elif len(items) == 1:
-            if items[0] not in self.val:
+            if isinstance(items[0], Matcher):
+                if not any(items[0].matches(v) for v in self.val):
+                    return self.error(
+                        "Expected <%s> to contain item matching %s, but did not." % (self.val, items[0].describe())
+                    )
+            elif items[0] not in self.val:
                 if self._check_dict_like(self.val, return_as_bool=True):
                     return self.error("Expected <%s> to contain key <%s>, but did not." % (self.val, items[0]))
                 else:
@@ -83,18 +90,27 @@ class ContainsMixin:
         else:
             missing = []
             for i in items:
-                if i not in self.val:
+                if isinstance(i, Matcher):
+                    if not any(i.matches(v) for v in self.val):
+                        missing.append(i)
+                elif i not in self.val:
                     missing.append(i)
             if missing:
+                missing_desc = [m.describe() if isinstance(m, Matcher) else m for m in missing]
                 if self._check_dict_like(self.val, return_as_bool=True):
                     return self.error(
                         "Expected <%s> to contain keys %s, but did not contain key%s %s."
-                        % (self.val, self._fmt_items(items), "" if len(missing) == 0 else "s", self._fmt_items(missing))
+                        % (
+                            self.val,
+                            self._fmt_items(items),
+                            "" if len(missing) == 0 else "s",
+                            self._fmt_items(missing_desc),
+                        )
                     )
                 else:
                     return self.error(
                         "Expected <%s> to contain items %s, but did not contain %s."
-                        % (self.val, self._fmt_items(items), self._fmt_items(missing))
+                        % (self.val, self._fmt_items(items), self._fmt_items(missing_desc))
                     )
         return self
 
