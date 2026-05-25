@@ -27,6 +27,8 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
+import collections
+
 from assertpy2 import assert_that, fail
 
 
@@ -191,7 +193,6 @@ def test_is_sorted():
     assert_that([]).is_sorted()
     assert_that([1]).is_sorted()
 
-    import collections
     ordered = collections.OrderedDict([('a', 2), ('b', 1)])
     assert_that(ordered).is_sorted()
     assert_that(ordered.keys()).is_sorted()

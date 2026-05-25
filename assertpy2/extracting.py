@@ -200,7 +200,7 @@ class ExtractingMixin:
                     return True
                 elif callable(kwargs['filter']):
                     return kwargs['filter'](x)
-                return False
+                return kwargs['filter'] is None
             return True
 
         def _sort(x):

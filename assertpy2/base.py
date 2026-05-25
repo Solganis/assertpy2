@@ -323,7 +323,7 @@ class BaseMixin:
             return val.__name__
         elif hasattr(val, '__class__'):
             return val.__class__.__name__
-        return 'unknown'
+        return 'unknown'  # pragma: no cover - all Python objects have __class__
 
     def is_type_of(self, some_type):
         """Asserts that val is of the given type.

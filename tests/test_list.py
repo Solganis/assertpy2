@@ -186,6 +186,22 @@ def test_contains_only_superlist_failure():
         assert_that(str(ex)).is_equal_to('Expected <[1, 2, 3]> to contain only <1, 2, 3, 4>, but did not contain <4>.')
 
 
+def test_contains_only_tuple_items_failure():
+    try:
+        assert_that([('a',)]).contains_only('a')
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains("but did contain <('a',)>")
+
+
+def test_contains_only_multi_tuple_items_failure():
+    try:
+        assert_that([('a',), ('b',)]).contains_only('x')
+        fail('should have raised error')
+    except AssertionError as ex:
+        assert_that(str(ex)).contains("but did contain <('a',), ('b',)>")
+
+
 def test_contains_sequence():
     assert_that(['a', 'b', 'c']).contains_sequence('a')
     assert_that(['a', 'b', 'c']).contains_sequence('b')

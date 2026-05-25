@@ -62,7 +62,7 @@ def contents_of(file, encoding='utf-8'):
         except TypeError:
             raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
         except OSError:
-            if not isinstance(file, str):
+            if not isinstance(file, (str, os.PathLike)):
                 raise ValueError('val must be file or path, but was type <%s>' % type(file).__name__) from None
             raise
 
@@ -94,7 +94,7 @@ class FileMixin:
         Raises:
             AssertionError: if val does **not** exist
         """
-        if not isinstance(self.val, str):
+        if not isinstance(self.val, (str, os.PathLike)):
             raise TypeError('val is not a path')
         if not os.path.exists(self.val):
             return self.error('Expected <%s> to exist, but was not found.' % self.val)
@@ -115,7 +115,7 @@ class FileMixin:
         Raises:
             AssertionError: if val **does** exist
         """
-        if not isinstance(self.val, str):
+        if not isinstance(self.val, (str, os.PathLike)):
             raise TypeError('val is not a path')
         if os.path.exists(self.val):
             return self.error('Expected <%s> to not exist, but was found.' % self.val)
@@ -177,7 +177,7 @@ class FileMixin:
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** named the given filename
         """
         self.is_file()
-        if not isinstance(filename, str):
+        if not isinstance(filename, (str, os.PathLike)):
             raise TypeError('given filename arg must be a path')
         val_filename = os.path.basename(os.path.abspath(self.val))
         if val_filename != filename:
@@ -204,7 +204,7 @@ class FileMixin:
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** a child of the given directory
         """
         self.is_file()
-        if not isinstance(parent, str):
+        if not isinstance(parent, (str, os.PathLike)):
             raise TypeError('given parent directory arg must be a path')
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent)
