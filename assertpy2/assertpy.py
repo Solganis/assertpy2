@@ -73,7 +73,7 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.0.0"
+__version__ = "2.1.1"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # monkey patch contextlib with clean py.test tracebacks
