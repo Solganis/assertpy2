@@ -269,5 +269,7 @@ class HelpersMixin:
                 _dict_repr(other, val),
                 ignore_err if ignore else "",
                 include_err if include else "",
-            )
+            ),
+            actual=val,
+            expected=other,
         )

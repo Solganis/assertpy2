@@ -29,7 +29,7 @@
 import sys
 import traceback
 
-from assertpy2 import assert_that, fail
+from assertpy2 import AssertionFailure, assert_that, fail
 
 
 def test_traceback():
@@ -38,7 +38,8 @@ def test_traceback():
         fail("should have raised error")
     except AssertionError as ex:
         assert_that(str(ex)).is_equal_to("Expected <foo> to be equal to <bar>, but was not.")
-        assert_that(ex).is_type_of(AssertionError)
+        assert_that(ex).is_instance_of(AssertionError)
+        assert_that(ex).is_instance_of(AssertionFailure)
 
         # extract all stack frames from the traceback
         _, _, tb = sys.exc_info()
