@@ -78,6 +78,25 @@ FAILED test_example.py::test_comparison
 ```
 
 
+## Comparison
+
+<div align="center">
+
+|  | pytest assert | PyHamcrest | assertpy | **assertpy2** |
+|---|:---:|:---:|:---:|:---:|
+| **Type safety** | Partial (mypy plugin) | No | No | **py.typed, @overload, Self** |
+| **IDE autocomplete** | Generic | Generic | Generic | **Type-specific per value** |
+| **Fluent chaining** | No | No | Yes | **Yes** |
+| **Composable matchers** | No | Yes (functions) | No | **Yes (`&` `\|` `~` operators)** |
+| **Structural matching** | No | Flat (has_entries) | No | **Recursive with matchers** |
+| **Async assertions** | No | No | No | **eventually() with polling** |
+| **Soft assertions** | No | No | Yes (not thread-safe) | **Yes (thread-safe, async-safe)** |
+| **Structured errors** | Rewrite only | Mismatch string | String only | **.actual .expected .diff** |
+| **Maintained** | N/A | Minimal | Dead (2020) | **Active (2026)** |
+
+</div>
+
+
 ## Why fluent assertions?
 
 ```py
@@ -323,20 +342,14 @@ from assertpy2 import assert_that, soft_assertions
 
 |  | assertpy | assertpy2 |
 |---|---|---|
-| Maintained | Last release 2020 | Active |
 | Python | 2.7+ | 3.10-3.15 |
-| Type safety | No annotations | `Self` return types, `py.typed`, typed `@overload` on `assert_that()` |
-| IDE support | No type info | Full autocomplete, type-specific method suggestions |
-| Matchers | None | Composable matchers with `&` `\|` `~` operators |
-| Structural matching | None | `matches_structure()` with recursive dict validation |
-| Async | None | `eventually()` with polling/retry |
-| Error reporting | Flat strings | `AssertionFailure` with `.actual`, `.expected`, `.diff` |
-| Pytest integration | None | Rich diff sections in failure reports |
-| Soft assertions | Global state, not thread-safe | `contextvars`, thread-safe and async-safe |
 | Security | [CVE in snapshots](https://github.com/assertpy/assertpy/issues/156) | Fixed |
 | Open bugs | 15+ unresolved | All resolved |
+| Last release | 2020 | Active (2026) |
 
 </div>
+
+See the [full comparison table](#comparison) at the top for feature differences with other libraries.
 
 
 ## Contributing
