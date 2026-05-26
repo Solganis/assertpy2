@@ -6,8 +6,6 @@ from assertpy2.assertpy import AssertionBuilder
 
 
 class TestOverloadsRuntimeBehavior:
-    """Verify that @overload decorators don't affect runtime behavior."""
-
     def test_str_returns_builder(self):
         result = assert_that("hello")
         assert isinstance(result, AssertionBuilder)
