@@ -30,25 +30,28 @@ jobs:
       - name: Build
         run: uv build
 
-      - name: Attest build provenance
+      - name: Attest wheel
+        id: attest-wheel
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
-          subject-path: dist/*
+          subject-path: dist/*.whl
 
-      - name: Export attestation bundles
+      - name: Attest sdist
+        id: attest-sdist
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: dist/*.tar.gz
+
+      - name: Prepare provenance bundles
         run: |
-          mkdir -p attestations
-          for f in dist/*; do
-            name=$(basename "$f")
-            gh attestation download "$f" --repo "$GITHUB_REPOSITORY" -o "attestations/${name}.sigstore.json"
-          done
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          mkdir -p provenance
+          cp "${{ steps.attest-wheel.outputs.bundle-path }}" "provenance/$(basename dist/*.whl).sigstore.json"
+          cp "${{ steps.attest-sdist.outputs.bundle-path }}" "provenance/$(basename dist/*.tar.gz).sigstore.json"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
 
       - name: Upload to GitHub Release
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/* attestations/*
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* provenance/*
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
