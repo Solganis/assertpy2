@@ -19,6 +19,8 @@
   <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <a href="https://github.com/Solganis/assertpy2/blob/main/LICENSE"><img src="https://img.shields.io/github/license/Solganis/assertpy2" alt="License"></a>
   <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://api.scorecard.dev/projects/github.com/Solganis/assertpy2/badge" alt="OpenSSF Scorecard"></a>
 </p>
 
 
@@ -92,7 +94,7 @@ FAILED test_example.py::test_comparison
 | **Async assertions** | No | No | No | **eventually() with polling** |
 | **Soft assertions** | No | No | Yes (not thread-safe) | **Yes (thread-safe, async-safe)** |
 | **Structured errors** | Rewrite only | Mismatch string | String only | **.actual .expected .diff** |
-| **Maintained** | N/A | Minimal | Dead (2020) | **Active (2026)** |
+| **Maintained** | N/A | Minimal | 2020 | **Active (2026)** |
 
 </div>
 
@@ -338,18 +340,7 @@ from assertpy import assert_that, soft_assertions
 from assertpy2 import assert_that, soft_assertions
 ```
 
-<div align="center">
-
-|  | assertpy | assertpy2 |
-|---|---|---|
-| Python | 2.7+ | 3.10-3.15 |
-| Security | [CVE in snapshots](https://github.com/assertpy/assertpy/issues/156) | Fixed |
-| Open bugs | 15+ unresolved | All resolved |
-| Last release | 2020 | Active (2026) |
-
-</div>
-
-See the [full comparison table](#comparison) at the top for feature differences with other libraries.
+See the [comparison table](#comparison) above for feature differences with other libraries.
 
 
 ## Contributing
