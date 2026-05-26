@@ -35,10 +35,20 @@ jobs:
         with:
           subject-path: dist/*
 
+      - name: Export attestation bundles
+        run: |
+          mkdir -p attestations
+          for f in dist/*; do
+            name=$(basename "$f")
+            gh attestation download "$f" --repo "$GITHUB_REPOSITORY" -o "attestations/${name}.sigstore.json"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
 
       - name: Upload to GitHub Release
-        run: gh release upload "${{ github.event.release.tag_name }}" dist/*
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* attestations/*
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
