@@ -490,8 +490,6 @@ class TestContainsWithMatcher:
 
 
 class TestDescribeCoverage:
-    """Ensures all matcher describe() methods are exercised."""
-
     def test_greater_than_or_equal_to_describe(self):
         assert_that(match.greater_than_or_equal_to(5).describe()).contains("greater than or equal to")
 
