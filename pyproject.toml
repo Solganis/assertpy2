@@ -1,6 +1,6 @@
 [project]
 name = "assertpy2"
-version = "2.1.4"
+version = "2.2.0"
 description = "Fluent assertion library for Python with full type safety and soft assertions"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -50,7 +50,7 @@ build-backend = "hatchling.build"
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=6.1",
-    "ruff>=0.15.14",
+    "ruff>=0.15.17",
 ]
 
 [tool.pytest.ini_options]
