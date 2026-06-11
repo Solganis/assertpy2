@@ -180,7 +180,7 @@ class ExtractingMixin:
                     return getattr(x, name)
                 else:  # val has no attribute <foo>
                     raise ValueError("item attributes %s did no contain attribute <%s>" % (x._fields, name))
-            elif isinstance(x, collections.abc.Iterable):  # FIXME, this does __getitem__, but doesn't check for it...
+            elif isinstance(x, collections.abc.Iterable):
                 self._check_iterable(x, name="item")
                 return x[name]
             elif hasattr(x, name):
