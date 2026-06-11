@@ -163,7 +163,7 @@ assert_that("hello").satisfies(~match.equal_to("world"))
 assert_that(150).satisfies(match.is_negative() | match.greater_than(100))
 ```
 
-Available matchers: `equal_to`, `greater_than`, `greater_than_or_equal_to`, `less_than`, `less_than_or_equal_to`, `between`, `close_to`, `is_none`, `is_not_none`, `is_instance_of`, `has_length`, `is_empty`, `is_not_empty`, `is_positive`, `is_negative`, `contains_string`, `matches_regex`, `is_uuid`, `is_non_empty_string`, `ignore`, `each_item`, `structure`.
+Available matchers: `equal_to`, `greater_than`, `greater_than_or_equal_to`, `less_than`, `less_than_or_equal_to`, `between`, `close_to`, `is_none`, `is_not_none`, `is_instance_of`, `has_length`, `is_empty`, `is_not_empty`, `is_positive`, `is_negative`, `is_zero`, `is_even`, `is_odd`, `is_divisible_by`, `is_callable`, `is_in`, `has_property`, `contains_string`, `matches_regex`, `is_uuid`, `is_non_empty_string`, `ignore`, `each_item`, `structure`.
 
 
 ## Structural matching
@@ -316,14 +316,14 @@ assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 ```py
 from assertpy2 import add_extension
 
-def is_even(self):
-    if self.val % 2 != 0:
-        return self.error(f'{self.val} is not even!')
+def is_5(self):
+    if self.val != 5:
+        return self.error(f'{self.val} is NOT 5!')
     return self
 
-add_extension(is_even)
+add_extension(is_5)
 
-assert_that(4).is_even()
+assert_that(5).is_5()
 ```
 
 See the [full API reference](docs/api.md) for all assertion methods, examples, and advanced features.

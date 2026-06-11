@@ -57,6 +57,8 @@ assert_that('foo').is_not_equal_to('bar')
 assert_that('foo').is_equal_to_ignoring_case('FOO')
 
 assert_that('foo').is_unicode()
+assert_that('foo123').is_alphanumeric()
+assert_that('   ').is_whitespace()
 
 assert_that('foo').contains('f')
 assert_that('foo').contains('f','oo')
@@ -64,6 +66,8 @@ assert_that('foo').contains_ignoring_case('F','oO')
 assert_that('foo').does_not_contain('x')
 assert_that('foo').contains_only('f','o')
 assert_that('foo').contains_sequence('o','o')
+assert_that('foobar').contains_any_of('foo', 'xyz')
+assert_that('foobar').contains_none_of('xyz', 'abc')
 
 assert_that('foo').contains_duplicates()
 assert_that('fox').does_not_contain_duplicates()
@@ -125,6 +129,9 @@ assert_that(0).is_zero()
 assert_that(1).is_not_zero()
 assert_that(1).is_positive()
 assert_that(-1).is_negative()
+assert_that(4).is_even()
+assert_that(3).is_odd()
+assert_that(9).is_divisible_by(3)
 
 assert_that(123).is_equal_to(123)
 assert_that(123).is_not_equal_to(456)
@@ -192,6 +199,8 @@ assert_that(['a','b']).does_not_contain('x','y')
 assert_that(['a','b']).contains_only('a','b')
 assert_that(['a','a']).contains_only('a')
 assert_that(['a','b','c']).contains_sequence('b','c')
+assert_that(['a','b','c']).contains_exactly('a','b','c')
+assert_that(['a','x','b','y','c']).contains_in_order('a','b','c')
 assert_that(['a','b']).is_subset_of(['a','b','c'])
 assert_that(['a','b','c']).is_sorted()
 assert_that(['c','b','a']).is_sorted(reverse=True)
@@ -201,7 +210,13 @@ assert_that(['a','b','c']).does_not_contain_duplicates()
 
 assert_that(['a','b','c']).starts_with('a')
 assert_that(['a','b','c']).ends_with('c')
+
+assert_that([1, -2, 3]).any_satisfy(lambda x: x < 0)
+assert_that([1, 2, 3]).all_satisfy(lambda x: x > 0)
+assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
 ```
+
+`any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [composable matchers](#composable-matchers).
 
 ### List Flattening
 
@@ -238,6 +253,8 @@ assert_that((1,2,3)).does_not_contain(4,5,6)
 assert_that((1,2,3)).contains_only(1,2,3)
 assert_that((1,1,1)).contains_only(1)
 assert_that((1,2,3)).contains_sequence(2,3)
+assert_that((1,2,3)).contains_exactly(1,2,3)
+assert_that((1,5,2,8,3)).contains_in_order(1,2,3)
 assert_that((1,2,3)).is_subset_of((1,2,3,4))
 assert_that((1,2,3)).is_sorted()
 assert_that((3,2,1)).is_sorted(reverse=True)
@@ -438,6 +455,10 @@ yesterday = today - datetime.timedelta(days=1)
 
 assert_that(yesterday).is_before(today)
 assert_that(today).is_after(yesterday)
+assert_that(yesterday).is_before_or_equal_to(today)
+assert_that(today).is_before_or_equal_to(today)
+assert_that(today).is_after_or_equal_to(yesterday)
+assert_that(today).is_after_or_equal_to(today)
 ```
 
 You can also make assertions about date equality (ignoring various units of time) like this:
@@ -532,6 +553,8 @@ assert_that(fred).is_true()
 assert_that(fred).is_type_of(Person)
 assert_that(fred).is_instance_of(object)
 assert_that(fred).is_same_as(fred)
+assert_that(fred.say_hello).is_callable()
+assert_that(fred.first_name).is_not_callable()
 ```
 
 Matching an attribute, a property, and a method:
@@ -762,6 +785,14 @@ assert_that(some_func).raises(RuntimeError).when_called_with('foo')\
     .is_length(8).starts_with('some').is_equal_to('some err')
 ```
 
+To verify that a function does **not** raise a specific exception:
+
+```py
+assert_that(safe_func).does_not_raise(ValueError).when_called_with('foo')
+```
+
+If `safe_func` raises `ValueError` (or a subclass), the assertion fails. Any other exception type propagates normally.
+
 
 ### Custom Error Messages
 
@@ -961,6 +992,13 @@ assert_that(-1).satisfies(complex_check)
 | `match.is_not_empty()` | Non-empty collection/string |
 | `match.is_positive()` | Positive number |
 | `match.is_negative()` | Negative number |
+| `match.is_zero()` | Is zero |
+| `match.is_even()` | Even integer |
+| `match.is_odd()` | Odd integer |
+| `match.is_divisible_by(n)` | Divisible by n |
+| `match.is_callable()` | Is callable |
+| `match.is_in(*values)` | Value in given set |
+| `match.has_property(name, matcher?)` | Has attribute, optionally matching a nested matcher |
 | `match.contains_string(sub)` | Substring check |
 | `match.matches_regex(pattern)` | Regex match |
 | `match.is_uuid()` | Valid UUID string |
