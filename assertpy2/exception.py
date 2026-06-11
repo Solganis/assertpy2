@@ -78,7 +78,7 @@ class ExceptionMixin:
         """Asserts that val, when invoked with the given args and kwargs, raises the expected exception.
 
         Invokes ``val()`` with the given args and kwargs.  You must first set the expected
-        exception with :meth:`~raises`.
+        exception with :meth:`~raises` or :meth:`~does_not_raise`.
 
         Args:
             *some_args: the args to call ``val()``
@@ -97,18 +97,20 @@ class ExceptionMixin:
 
         Raises:
             AssertionError: if val does **not** raise the expected exception
-            TypeError: if expected exception not set via :meth:`raises`
+            TypeError: if expected exception not set via :meth:`raises` or :meth:`does_not_raise`
         """
         if not self.expected:
-            raise TypeError("expected exception not set, raises() must be called first")
+            raise TypeError("expected exception not set, raises() or does_not_raise() must be called first")
+
+        if getattr(self, "_not_expected", False):
+            return self._when_called_with_not_expected(*some_args, **some_kwargs)
+
         try:
             self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), self.expected):
-                # chain on with error message
                 return self.builder(str(e), self.description, self.kind, logger=self.logger)
             else:
-                # got exception, but wrong type, so raise
                 self.error(
                     "Expected <%s> to raise <%s> when called with (%s), but raised <%s>."
                     % (
@@ -120,9 +122,47 @@ class ExceptionMixin:
                 )
                 return _InertBuilder()
 
-        # didn't fail as expected, so raise
         self.error(
             "Expected <%s> to raise <%s> when called with (%s)."
             % (self.val.__name__, self.expected.__name__, self._fmt_args_kwargs(*some_args, **some_kwargs))
         )
         return _InertBuilder()
+
+    def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
+        try:
+            self.val(*some_args, **some_kwargs)
+        except BaseException as e:
+            if issubclass(type(e), self.expected):
+                self.error(
+                    f"Expected <{self.val.__name__}> to not raise <{self.expected.__name__}>"
+                    f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
+                    f" but did raise <{type(e).__name__}>."
+                )
+                return _InertBuilder()
+        return self
+
+    def does_not_raise(self, ex) -> Self:
+        """Asserts that val is callable and sets the not-expected exception.
+
+        Just sets the not-expected exception, but never calls val. You must
+        chain to :meth:`~when_called_with` to invoke ``val()``.
+
+        Args:
+            ex: the exception that should **not** be raised
+
+        Examples:
+            Usage::
+
+                assert_that(some_func).does_not_raise(RuntimeError).when_called_with('foo')
+
+        Returns:
+            AssertionBuilder: returns a new instance to chain to the next assertion
+        """
+        if not callable(self.val):
+            raise TypeError("val must be callable")
+        if not issubclass(ex, BaseException):
+            raise TypeError("given arg must be exception")
+
+        new_builder = self.builder(self.val, self.description, self.kind, ex, self.logger)
+        new_builder._not_expected = True
+        return new_builder

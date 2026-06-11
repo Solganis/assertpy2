@@ -393,6 +393,112 @@ class StringMixin:
             return self.error("Expected <%s> to contain only uppercase chars, but did not." % self.val)
         return self
 
+    def is_alphanumeric(self) -> Self:
+        """Asserts that val is non-empty string and all characters are alphanumeric (using ``str.isalnum()``).
+
+        Examples:
+            Usage::
+
+                assert_that('abc123').is_alphanumeric()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** alphanumeric
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if len(self.val) == 0:
+            raise ValueError("val is empty")
+        if not self.val.isalnum():
+            return self.error(f"Expected <{self.val}> to contain only alphanumeric chars, but did not.")
+        return self
+
+    def is_whitespace(self) -> Self:
+        """Asserts that val is non-empty string and all characters are whitespace (using ``str.isspace()``).
+
+        Examples:
+            Usage::
+
+                assert_that('  ').is_whitespace()
+                assert_that('\\t\\n').is_whitespace()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** whitespace
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if len(self.val) == 0:
+            raise ValueError("val is empty")
+        if not self.val.isspace():
+            return self.error(f"Expected <{self.val}> to contain only whitespace, but did not.")
+        return self
+
+    def contains_any_of(self, *items) -> Self:
+        """Asserts that val is a string and contains at least one of the given items.
+
+        Args:
+            *items: the items, at least one of which is expected to be contained
+
+        Examples:
+            Usage::
+
+                assert_that('foobar').contains_any_of('foo', 'xxx')
+                assert_that('foobar').contains_any_of('xxx', 'bar')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** contain any of the items
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        for item in items:
+            if not isinstance(item, str):
+                raise TypeError("given args must all be strings")
+        if not any(item in self.val for item in items):
+            return self.error(f"Expected <{self.val}> to contain any of {self._fmt_items(items)}, but did not.")
+        return self
+
+    def contains_none_of(self, *items) -> Self:
+        """Asserts that val is a string and contains none of the given items.
+
+        Args:
+            *items: the items, none of which should be contained
+
+        Examples:
+            Usage::
+
+                assert_that('foobar').contains_none_of('xxx', 'yyy')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val **does** contain any of the items
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        for item in items:
+            if not isinstance(item, str):
+                raise TypeError("given args must all be strings")
+        found = [item for item in items if item in self.val]
+        if found:
+            return self.error(
+                f"Expected <{self.val}> to contain none of {self._fmt_items(items)},"
+                f" but did contain {self._fmt_items(found)}."
+            )
+        return self
+
     def is_unicode(self) -> Self:
         """Asserts that val is a unicode string.
 

@@ -677,5 +677,145 @@ def test_comparable_no_ordering_failure():
         assert_that(str(ex)).is_equal_to("ordering is not defined for type <NoOrder>")
 
 
+def test_is_even():
+    assert_that(0).is_even()
+    assert_that(2).is_even()
+    assert_that(-4).is_even()
+    assert_that(1000000).is_even()
+
+
+def test_is_even_failure():
+    try:
+        assert_that(1).is_even()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <1> to be even, but was not.")
+
+
+def test_is_even_negative_failure():
+    try:
+        assert_that(-3).is_even()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <-3> to be even, but was not.")
+
+
+def test_is_even_bad_type_float_failure():
+    try:
+        assert_that(2.0).is_even()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+
+
+def test_is_even_bad_type_str_failure():
+    try:
+        assert_that("foo").is_even()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got str")
+
+
+def test_is_even_bad_type_bool_failure():
+    try:
+        assert_that(True).is_even()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got bool")
+
+
+def test_is_odd():
+    assert_that(1).is_odd()
+    assert_that(3).is_odd()
+    assert_that(-5).is_odd()
+    assert_that(999999).is_odd()
+
+
+def test_is_odd_failure():
+    try:
+        assert_that(0).is_odd()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <0> to be odd, but was not.")
+
+
+def test_is_odd_negative_failure():
+    try:
+        assert_that(-4).is_odd()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <-4> to be odd, but was not.")
+
+
+def test_is_odd_bad_type_float_failure():
+    try:
+        assert_that(1.0).is_odd()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+
+
+def test_is_odd_bad_type_bool_failure():
+    try:
+        assert_that(False).is_odd()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got bool")
+
+
+def test_is_divisible_by():
+    assert_that(10).is_divisible_by(5)
+    assert_that(10).is_divisible_by(2)
+    assert_that(10).is_divisible_by(1)
+    assert_that(0).is_divisible_by(7)
+    assert_that(-12).is_divisible_by(3)
+    assert_that(12).is_divisible_by(-3)
+
+
+def test_is_divisible_by_failure():
+    try:
+        assert_that(10).is_divisible_by(3)
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <10> to be divisible by <3>, but was not.")
+
+
+def test_is_divisible_by_bad_type_float_failure():
+    try:
+        assert_that(10.0).is_divisible_by(5)
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+
+
+def test_is_divisible_by_bad_divisor_type_failure():
+    try:
+        assert_that(10).is_divisible_by(2.5)
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("given divisor arg must be an integer, got float")
+
+
+def test_is_divisible_by_bad_divisor_bool_failure():
+    try:
+        assert_that(10).is_divisible_by(True)
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("given divisor arg must be an integer, got bool")
+
+
+def test_is_divisible_by_zero_divisor_failure():
+    try:
+        assert_that(10).is_divisible_by(0)
+        fail("should have raised error")
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to("given divisor arg must not be zero")
+
+
 def test_chaining():
     assert_that(123).is_greater_than(100).is_less_than(1000).is_between(120, 125).is_close_to(100, 25)
+
+
+def test_chaining_even_odd():
+    assert_that(4).is_even().is_positive().is_divisible_by(2)
+    assert_that(3).is_odd().is_positive()

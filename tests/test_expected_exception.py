@@ -96,7 +96,7 @@ def test_expected_exception_no_arg_missing_raises_failure():
         assert_that(func_noop).when_called_with()
         fail("should have raised error")
     except TypeError as ex:
-        assert_that(str(ex)).contains("expected exception not set, raises() must be called first")
+        assert_that(str(ex)).contains("expected exception not set, raises() or does_not_raise() must be called first")
 
 
 def test_expected_exception_one_arg_failure():

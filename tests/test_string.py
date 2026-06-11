@@ -620,6 +620,186 @@ def test_is_unicode_failure():
         assert_that(str(ex)).is_equal_to("Expected <123> to be unicode, but was <int>.")
 
 
+def test_is_alphanumeric():
+    assert_that("abc123").is_alphanumeric()
+    assert_that("hello").is_alphanumeric()
+    assert_that("42").is_alphanumeric()
+
+
+def test_is_alphanumeric_failure():
+    try:
+        assert_that("abc 123").is_alphanumeric()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <abc 123> to contain only alphanumeric chars, but did not.")
+
+
+def test_is_alphanumeric_special_chars_failure():
+    try:
+        assert_that("hello!").is_alphanumeric()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <hello!> to contain only alphanumeric chars, but did not.")
+
+
+def test_is_alphanumeric_bad_type_failure():
+    try:
+        assert_that(123).is_alphanumeric()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not a string")
+
+
+def test_is_alphanumeric_empty_failure():
+    try:
+        assert_that("").is_alphanumeric()
+        fail("should have raised error")
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to("val is empty")
+
+
+def test_is_whitespace():
+    assert_that(" ").is_whitespace()
+    assert_that("  ").is_whitespace()
+    assert_that("\t").is_whitespace()
+    assert_that("\n").is_whitespace()
+    assert_that(" \t\n").is_whitespace()
+
+
+def test_is_whitespace_failure():
+    try:
+        assert_that("foo").is_whitespace()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foo> to contain only whitespace, but did not.")
+
+
+def test_is_whitespace_mixed_failure():
+    try:
+        assert_that(" foo ").is_whitespace()
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected < foo > to contain only whitespace, but did not.")
+
+
+def test_is_whitespace_bad_type_failure():
+    try:
+        assert_that(123).is_whitespace()
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not a string")
+
+
+def test_is_whitespace_empty_failure():
+    try:
+        assert_that("").is_whitespace()
+        fail("should have raised error")
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to("val is empty")
+
+
+def test_contains_any_of():
+    assert_that("foobar").contains_any_of("foo", "xxx")
+    assert_that("foobar").contains_any_of("xxx", "bar")
+    assert_that("foobar").contains_any_of("foo", "bar")
+    assert_that("foobar").contains_any_of("xxx", "yyy", "foo")
+
+
+def test_contains_any_of_failure():
+    try:
+        assert_that("foobar").contains_any_of("xxx", "yyy")
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain any of <'xxx', 'yyy'>, but did not.")
+
+
+def test_contains_any_of_single():
+    assert_that("foobar").contains_any_of("foo")
+
+
+def test_contains_any_of_single_failure():
+    try:
+        assert_that("foobar").contains_any_of("xxx")
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain any of <xxx>, but did not.")
+
+
+def test_contains_any_of_bad_type_failure():
+    try:
+        assert_that(123).contains_any_of("foo")
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not a string")
+
+
+def test_contains_any_of_empty_args_failure():
+    try:
+        assert_that("foo").contains_any_of()
+        fail("should have raised error")
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to("one or more args must be given")
+
+
+def test_contains_any_of_bad_arg_type_failure():
+    try:
+        assert_that("foo").contains_any_of(123)
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("given args must all be strings")
+
+
+def test_contains_none_of():
+    assert_that("foobar").contains_none_of("xxx", "yyy")
+    assert_that("foobar").contains_none_of("baz")
+
+
+def test_contains_none_of_failure():
+    try:
+        assert_that("foobar").contains_none_of("foo", "xxx")
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain none of <'foo', 'xxx'>, but did contain <foo>.")
+
+
+def test_contains_none_of_multiple_found_failure():
+    try:
+        assert_that("foobar").contains_none_of("foo", "bar")
+        fail("should have raised error")
+    except AssertionError as ex:
+        assert_that(str(ex)).is_equal_to(
+            "Expected <foobar> to contain none of <'foo', 'bar'>, but did contain <'foo', 'bar'>."
+        )
+
+
+def test_contains_none_of_bad_type_failure():
+    try:
+        assert_that(123).contains_none_of("foo")
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("val is not a string")
+
+
+def test_contains_none_of_empty_args_failure():
+    try:
+        assert_that("foo").contains_none_of()
+        fail("should have raised error")
+    except ValueError as ex:
+        assert_that(str(ex)).is_equal_to("one or more args must be given")
+
+
+def test_contains_none_of_bad_arg_type_failure():
+    try:
+        assert_that("foo").contains_none_of(123)
+        fail("should have raised error")
+    except TypeError as ex:
+        assert_that(str(ex)).is_equal_to("given args must all be strings")
+
+
 def test_chaining():
     assert_that("foo").is_type_of(str).is_length(3).contains("f").does_not_contain("x")
     assert_that("fred").starts_with("f").ends_with("d").matches(r"^f.*?d$").does_not_match(r"\d")
+
+
+def test_chaining_new_methods():
+    assert_that("abc123").is_alphanumeric().contains_any_of("abc", "xyz").contains_none_of("xyz", "qqq")

@@ -114,6 +114,74 @@ class DateMixin:
             )
         return self
 
+    def is_before_or_equal_to(self, other) -> Self:
+        """Asserts that val is a date and is before or equal to other date.
+
+        Args:
+            other: the other date, expected to be after or equal to val
+
+        Examples:
+            Usage::
+
+                import datetime
+
+                today = datetime.datetime.now()
+                yesterday = today - datetime.timedelta(days=1)
+
+                assert_that(yesterday).is_before_or_equal_to(today)
+                assert_that(today).is_before_or_equal_to(today)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** before or equal to the given date
+        """
+        if type(self.val) is not datetime.datetime:
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
+        if type(other) is not datetime.datetime:
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        if self.val > other:
+            return self.error(
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before or equal to"
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+            )
+        return self
+
+    def is_after_or_equal_to(self, other) -> Self:
+        """Asserts that val is a date and is after or equal to other date.
+
+        Args:
+            other: the other date, expected to be before or equal to val
+
+        Examples:
+            Usage::
+
+                import datetime
+
+                today = datetime.datetime.now()
+                yesterday = today - datetime.timedelta(days=1)
+
+                assert_that(today).is_after_or_equal_to(yesterday)
+                assert_that(today).is_after_or_equal_to(today)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** after or equal to the given date
+        """
+        if type(self.val) is not datetime.datetime:
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
+        if type(other) is not datetime.datetime:
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        if self.val < other:
+            return self.error(
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after or equal to"
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+            )
+        return self
+
     def is_equal_to_ignoring_milliseconds(self, other) -> Self:
         """Asserts that val is a date and is equal to other date to the second.
 
