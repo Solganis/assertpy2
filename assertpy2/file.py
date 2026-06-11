@@ -77,7 +77,7 @@ def contents_of(file, encoding="utf-8"):
     try:
         return contents.decode(encoding, "replace")
     except AttributeError:
-        pass
+        pass  # contents is already a str, no decode needed
     # if all else fails, just return the contents "as is"
     return contents
 
