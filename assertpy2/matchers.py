@@ -288,6 +288,99 @@ class IsZeroMatcher(BaseMatcher):
         return "zero"
 
 
+class IsEvenMatcher(BaseMatcher):
+    def matches(self, value: object) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value % 2 == 0
+
+    def describe(self) -> str:
+        return "an even integer"
+
+    def describe_mismatch(self, value: object) -> str:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{value}>, which is odd"
+
+
+class IsOddMatcher(BaseMatcher):
+    def matches(self, value: object) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value % 2 != 0
+
+    def describe(self) -> str:
+        return "an odd integer"
+
+    def describe_mismatch(self, value: object) -> str:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{value}>, which is even"
+
+
+class IsDivisibleByMatcher(BaseMatcher):
+    def __init__(self, divisor: int):
+        self.divisor = divisor
+
+    def matches(self, value: object) -> bool:
+        return isinstance(value, int) and not isinstance(value, bool) and value % self.divisor == 0
+
+    def describe(self) -> str:
+        return f"an integer divisible by <{self.divisor}>"
+
+    def describe_mismatch(self, value: object) -> str:
+        if isinstance(value, bool) or not isinstance(value, int):
+            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{value}>, which has remainder <{value % self.divisor}>"
+
+
+class IsCallableMatcher(BaseMatcher):
+    def matches(self, value: object) -> bool:
+        return callable(value)
+
+    def describe(self) -> str:
+        return "a callable"
+
+    def describe_mismatch(self, value: object) -> str:
+        return f"was <{value!r}> of type <{type(value).__name__}>, which is not callable"
+
+
+class IsInMatcher(BaseMatcher):
+    def __init__(self, *values: object):
+        self.values = values
+
+    def matches(self, value: object) -> bool:
+        return value in self.values
+
+    def describe(self) -> str:
+        return "a value in <%s>" % (self.values,)
+
+    def describe_mismatch(self, value: object) -> str:
+        return f"was <{value!r}>, which is not in <{self.values}>"
+
+
+class HasPropertyMatcher(BaseMatcher):
+    def __init__(self, name: str, matcher: Matcher | None = None):
+        self.name = name
+        self.matcher = matcher
+
+    def matches(self, value: object) -> bool:
+        if not hasattr(value, self.name):
+            return False
+        if self.matcher is not None:
+            return self.matcher.matches(getattr(value, self.name))
+        return True
+
+    def describe(self) -> str:
+        if self.matcher is not None:
+            return f"an object with property <{self.name}> matching {self.matcher.describe()}"
+        return f"an object with property <{self.name}>"
+
+    def describe_mismatch(self, value: object) -> str:
+        if not hasattr(value, self.name):
+            return f"<{value!r}> has no property <{self.name}>"
+        if self.matcher is not None:
+            actual = getattr(value, self.name)
+            return f"property <{self.name}> was <{actual!r}>, {self.matcher.describe_mismatch(actual)}"
+        return f"was <{value!r}>"
+
+
 # --- String matchers ---
 
 
@@ -541,6 +634,30 @@ class _MatchNamespace:
     @staticmethod
     def is_zero() -> IsZeroMatcher:
         return IsZeroMatcher()
+
+    @staticmethod
+    def is_even() -> IsEvenMatcher:
+        return IsEvenMatcher()
+
+    @staticmethod
+    def is_odd() -> IsOddMatcher:
+        return IsOddMatcher()
+
+    @staticmethod
+    def is_divisible_by(divisor: int) -> IsDivisibleByMatcher:
+        return IsDivisibleByMatcher(divisor)
+
+    @staticmethod
+    def is_callable() -> IsCallableMatcher:
+        return IsCallableMatcher()
+
+    @staticmethod
+    def is_in(*values: object) -> IsInMatcher:
+        return IsInMatcher(*values)
+
+    @staticmethod
+    def has_property(name: str, matcher: Matcher | None = None) -> HasPropertyMatcher:
+        return HasPropertyMatcher(name, matcher)
 
     @staticmethod
     def contains_string(substring: str) -> ContainsStringMatcher:
