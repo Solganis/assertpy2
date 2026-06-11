@@ -349,6 +349,72 @@ class ContainsMixin:
                 return self.error("Expected not empty, but was empty.")
         return self
 
+    def contains_exactly(self, *items) -> Self:
+        """Asserts that val contains exactly the given items in the given order.
+
+        Unlike :meth:`contains_only` (which ignores order) and :meth:`contains_sequence`
+        (which allows extra items), this method requires exact count, items, and order.
+
+        Args:
+            *items: the items expected, in exact order
+
+        Examples:
+            Usage::
+
+                assert_that([1, 2, 3]).contains_exactly(1, 2, 3)
+                assert_that(['a', 'b']).contains_exactly('a', 'b')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** contain exactly the given items in order
+        """
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        try:
+            val_list = list(self.val)
+        except TypeError:
+            raise TypeError("val is not iterable") from None
+        if val_list != list(items):
+            return self.error(f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.")
+        return self
+
+    def contains_in_order(self, *items) -> Self:
+        """Asserts that val contains the given items in the given order (as a subsequence).
+
+        Items must appear in the given order but do not need to be contiguous.
+        Unlike :meth:`contains_sequence` which requires contiguous items.
+
+        Args:
+            *items: the items expected, in order (but not necessarily contiguous)
+
+        Examples:
+            Usage::
+
+                assert_that([1, 5, 2, 8, 3]).contains_in_order(1, 2, 3)
+                assert_that(['a', 'x', 'b', 'y', 'c']).contains_in_order('a', 'b', 'c')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** contain items in the given order
+        """
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        try:
+            val_list = list(self.val)
+        except TypeError:
+            raise TypeError("val is not iterable") from None
+        item_idx = 0
+        for element in val_list:
+            if item_idx < len(items) and element == items[item_idx]:
+                item_idx += 1
+        if item_idx != len(items):
+            return self.error(f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but did not.")
+        return self
+
     def is_in(self, *items) -> Self:
         """Asserts that val is equal to one of the given items.
 

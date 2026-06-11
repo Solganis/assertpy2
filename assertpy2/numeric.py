@@ -467,6 +467,79 @@ class NumericMixin:
                 return self.error("Expected <%s> to not be between <%s> and <%s>, but was." % (self.val, low, high))
         return self
 
+    def _validate_int(self):
+        if isinstance(self.val, bool) or not isinstance(self.val, int):
+            raise TypeError(f"val is not an integer, got {type(self.val).__name__}")
+
+    def is_even(self) -> Self:
+        """Asserts that val is an integer and is even.
+
+        Examples:
+            Usage::
+
+                assert_that(0).is_even()
+                assert_that(2).is_even()
+                assert_that(-4).is_even()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** even
+        """
+        self._validate_int()
+        if self.val % 2 != 0:
+            return self.error(f"Expected <{self.val}> to be even, but was not.")
+        return self
+
+    def is_odd(self) -> Self:
+        """Asserts that val is an integer and is odd.
+
+        Examples:
+            Usage::
+
+                assert_that(1).is_odd()
+                assert_that(3).is_odd()
+                assert_that(-5).is_odd()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** odd
+        """
+        self._validate_int()
+        if self.val % 2 == 0:
+            return self.error(f"Expected <{self.val}> to be odd, but was not.")
+        return self
+
+    def is_divisible_by(self, divisor) -> Self:
+        """Asserts that val is an integer and is divisible by divisor.
+
+        Args:
+            divisor: the divisor to check against (must be a non-zero integer)
+
+        Examples:
+            Usage::
+
+                assert_that(10).is_divisible_by(5)
+                assert_that(12).is_divisible_by(3)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** divisible by divisor
+        """
+        self._validate_int()
+        if isinstance(divisor, bool) or not isinstance(divisor, int):
+            raise TypeError(f"given divisor arg must be an integer, got {type(divisor).__name__}")
+        if divisor == 0:
+            raise ValueError("given divisor arg must not be zero")
+        if self.val % divisor != 0:
+            return self.error(f"Expected <{self.val}> to be divisible by <{divisor}>, but was not.")
+        return self
+
     def is_close_to(self, other, tolerance) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 

@@ -260,6 +260,144 @@ class BaseMixin:
             )
         return self
 
+    def is_callable(self) -> Self:
+        """Asserts that val is callable.
+
+        Examples:
+            Usage::
+
+                assert_that(lambda: None).is_callable()
+                assert_that(print).is_callable()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** callable
+        """
+        if not callable(self.val):
+            return self.error(f"Expected <{self.val}> to be callable, but was not.")
+        return self
+
+    def is_not_callable(self) -> Self:
+        """Asserts that val is not callable.
+
+        Examples:
+            Usage::
+
+                assert_that(42).is_not_callable()
+                assert_that('foo').is_not_callable()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val **is** callable
+        """
+        if callable(self.val):
+            return self.error(f"Expected <{self.val}> to not be callable, but was.")
+        return self
+
+    def any_satisfy(self, matcher) -> Self:
+        """Asserts that at least one item in val satisfies the given matcher.
+
+        Args:
+            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+                a value and returns a bool
+
+        Examples:
+            Usage with matchers::
+
+                from assertpy2 import match
+
+                assert_that([1, -2, 3]).any_satisfy(match.is_negative())
+
+            Usage with callables::
+
+                assert_that([1, 2, 3]).any_satisfy(lambda x: x > 2)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if no item satisfies the matcher
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        if isinstance(matcher, Matcher):
+            if not any(matcher.matches(item) for item in self.val):
+                return self.error(f"Expected any item to satisfy {matcher.describe()}, but none did.")
+        elif callable(matcher):
+            if not any(matcher(item) for item in self.val):
+                return self.error(f"Expected any item to satisfy <{matcher}>, but none did.")
+        else:
+            raise TypeError("given arg must be a Matcher or callable")
+        return self
+
+    def all_satisfy(self, matcher) -> Self:
+        """Asserts that all items in val satisfy the given matcher.
+
+        Semantic alias for :meth:`each`.
+
+        Args:
+            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+                a value and returns a bool
+
+        Examples:
+            Usage with matchers::
+
+                from assertpy2 import match
+
+                assert_that([1, 2, 3]).all_satisfy(match.is_positive())
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any item does **not** satisfy the matcher
+        """
+        return self.each(matcher)
+
+    def none_satisfy(self, matcher) -> Self:
+        """Asserts that no item in val satisfies the given matcher.
+
+        Args:
+            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+                a value and returns a bool
+
+        Examples:
+            Usage with matchers::
+
+                from assertpy2 import match
+
+                assert_that([1, 2, 3]).none_satisfy(match.is_negative())
+
+            Usage with callables::
+
+                assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any item satisfies the matcher
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        if isinstance(matcher, Matcher):
+            for i, item in enumerate(self.val):
+                if matcher.matches(item):
+                    return self.error(
+                        f"Expected no item to satisfy {matcher.describe()}, but item at index {i} <{item}> did."
+                    )
+        elif callable(matcher):
+            for i, item in enumerate(self.val):
+                if matcher(item):
+                    return self.error(f"Expected no item to satisfy <{matcher}>, but item at index {i} <{item}> did.")
+        else:
+            raise TypeError("given arg must be a Matcher or callable")
+        return self
+
     def is_not_equal_to(self, other) -> Self:
         """Asserts that val is not equal to other.
 
