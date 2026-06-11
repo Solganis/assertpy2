@@ -95,7 +95,7 @@ FAILED test_example.py::test_comparison
 | **Async assertions** | No | No | No | **eventually() with polling** |
 | **Soft assertions** | No | No | Yes (not thread-safe) | **Yes (thread-safe, async-safe)** |
 | **Structured errors** | Rewrite only | Mismatch string | String only | **.actual .expected .diff** |
-| **Maintained** | N/A | Minimal | 2020 | **Active (2026)** |
+| **Maintained** | N/A | Minimal | 2020 | **Active** |
 
 </div>
 
