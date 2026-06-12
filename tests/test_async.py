@@ -96,7 +96,7 @@ class TestContextVarsIsolation:
         def thread_func(thread_id):
             try:
                 with soft_assertions():
-                    assert_that("thread-%d-marker" % thread_id).is_equal_to("wrong")
+                    assert_that(f"thread-{thread_id}-marker").is_equal_to("wrong")
             except AssertionError as exc:
                 errors_from_threads[thread_id] = str(exc)
 
@@ -108,10 +108,10 @@ class TestContextVarsIsolation:
 
         assert_that(errors_from_threads).is_length(3)
         for thread_id, error_msg in errors_from_threads.items():
-            assert_that(error_msg).contains("thread-%d-marker" % thread_id)
+            assert_that(error_msg).contains(f"thread-{thread_id}-marker")
             other_ids = [i for i in range(3) if i != thread_id]
             for other_id in other_ids:
-                assert_that(error_msg).does_not_contain("thread-%d-marker" % other_id)
+                assert_that(error_msg).does_not_contain(f"thread-{other_id}-marker")
 
     def test_soft_assertions_async_isolation(self):
         async def task_func(task_id):
@@ -135,7 +135,7 @@ class TestContextVarsIsolation:
         def thread_func(thread_id):
             try:
                 with soft_assertions():
-                    soft_fail("error from thread %d" % thread_id)
+                    soft_fail(f"error from thread {thread_id}")
             except AssertionError as exc:
                 errors_from_threads.append((thread_id, str(exc)))
 
@@ -147,7 +147,7 @@ class TestContextVarsIsolation:
 
         assert_that(errors_from_threads).is_length(2)
         for thread_id, error_msg in errors_from_threads:
-            assert_that(error_msg).contains("thread %d" % thread_id)
+            assert_that(error_msg).contains(f"thread {thread_id}")
 
     def test_nested_soft_assertions_still_work(self):
         with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():

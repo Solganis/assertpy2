@@ -50,19 +50,19 @@ class NumericMixin:
         other_type = type(other)
 
         if self_type in self._NUMERIC_NON_COMPAREABLE:
-            raise TypeError("ordering is not defined for type <%s>" % self_type.__name__)
+            raise TypeError(f"ordering is not defined for type <{self_type.__name__}>")
         if self_type in self._NUMERIC_COMPAREABLE:
             if other_type is not self_type:
-                raise TypeError("given arg must be <%s>, but was <%s>" % (self_type.__name__, other_type.__name__))
+                raise TypeError(f"given arg must be <{self_type.__name__}>, but was <{other_type.__name__}>")
             return
         if isinstance(self.val, numbers.Number):
             if not isinstance(other, numbers.Number):
-                raise TypeError("given arg must be a number, but was <%s>" % other_type.__name__)
+                raise TypeError(f"given arg must be a number, but was <{other_type.__name__}>")
             return
         try:
             _ = self.val < other
         except TypeError:
-            raise TypeError("ordering is not defined for type <%s>" % self_type.__name__) from None
+            raise TypeError(f"ordering is not defined for type <{self_type.__name__}>") from None
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
@@ -127,7 +127,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if not math.isnan(self.val):
-            return self.error("Expected <%s> to be <NaN>, but was not." % self.val)
+            return self.error(f"Expected <{self.val}> to be <NaN>, but was not.")
         return self
 
     def is_not_nan(self) -> Self:
@@ -170,7 +170,7 @@ class NumericMixin:
         self._validate_number()
         self._validate_real()
         if not math.isinf(self.val):
-            return self.error("Expected <%s> to be <Inf>, but was not." % self.val)
+            return self.error(f"Expected <{self.val}> to be <Inf>, but was not.")
         return self
 
     def is_not_inf(self) -> Self:
@@ -226,11 +226,11 @@ class NumericMixin:
         if self.val <= other:
             if type(self.val) is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to be greater than <%s>, but was not."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be greater than"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
                 )
             else:
-                return self.error("Expected <%s> to be greater than <%s>, but was not." % (self.val, other))
+                return self.error(f"Expected <{self.val}> to be greater than <{other}>, but was not.")
         return self
 
     def is_greater_than_or_equal_to(self, other) -> Self:
@@ -266,11 +266,11 @@ class NumericMixin:
         if self.val < other:
             if type(self.val) is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to be greater than or equal to <%s>, but was not."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be greater than or equal to"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
                 )
             else:
-                return self.error("Expected <%s> to be greater than or equal to <%s>, but was not." % (self.val, other))
+                return self.error(f"Expected <{self.val}> to be greater than or equal to <{other}>, but was not.")
         return self
 
     def is_less_than(self, other) -> Self:
@@ -304,11 +304,11 @@ class NumericMixin:
         if self.val >= other:
             if type(self.val) is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to be less than <%s>, but was not."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be less than"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
                 )
             else:
-                return self.error("Expected <%s> to be less than <%s>, but was not." % (self.val, other))
+                return self.error(f"Expected <{self.val}> to be less than <{other}>, but was not.")
         return self
 
     def is_less_than_or_equal_to(self, other) -> Self:
@@ -344,11 +344,11 @@ class NumericMixin:
         if self.val > other:
             if type(self.val) is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to be less than or equal to <%s>, but was not."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be less than or equal to"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
                 )
             else:
-                return self.error("Expected <%s> to be less than or equal to <%s>, but was not." % (self.val, other))
+                return self.error(f"Expected <{self.val}> to be less than or equal to <{other}>, but was not.")
         return self
 
     def is_positive(self) -> Self:
@@ -420,15 +420,11 @@ class NumericMixin:
         if self.val < low or self.val > high:
             if val_type is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to be between <%s> and <%s>, but was not."
-                    % (
-                        self.val.strftime("%Y-%m-%d %H:%M:%S"),
-                        low.strftime("%Y-%m-%d %H:%M:%S"),
-                        high.strftime("%Y-%m-%d %H:%M:%S"),
-                    )
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be between"
+                    f" <{low.strftime('%Y-%m-%d %H:%M:%S')}> and <{high.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
                 )
             else:
-                return self.error("Expected <%s> to be between <%s> and <%s>, but was not." % (self.val, low, high))
+                return self.error(f"Expected <{self.val}> to be between <{low}> and <{high}>, but was not.")
         return self
 
     def is_not_between(self, low, high) -> Self:
@@ -456,15 +452,11 @@ class NumericMixin:
         if self.val >= low and self.val <= high:
             if val_type is datetime.datetime:
                 return self.error(
-                    "Expected <%s> to not be between <%s> and <%s>, but was."
-                    % (
-                        self.val.strftime("%Y-%m-%d %H:%M:%S"),
-                        low.strftime("%Y-%m-%d %H:%M:%S"),
-                        high.strftime("%Y-%m-%d %H:%M:%S"),
-                    )
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to not be between"
+                    f" <{low.strftime('%Y-%m-%d %H:%M:%S')}> and <{high.strftime('%Y-%m-%d %H:%M:%S')}>, but was."
                 )
             else:
-                return self.error("Expected <%s> to not be between <%s> and <%s>, but was." % (self.val, low, high))
+                return self.error(f"Expected <{self.val}> to not be between <{low}> and <{high}>, but was.")
         return self
 
     def _validate_int(self):
@@ -572,7 +564,7 @@ class NumericMixin:
 
         if type(self.val) is not datetime.datetime and (math.isnan(self.val) or math.isnan(other)):
             return self.error(
-                "Expected <%s> to be close to <%s> within tolerance <%s>, but was not." % (self.val, other, tolerance)
+                f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
             )
         if self.val < (other - tolerance) or self.val > (other + tolerance):
             if type(self.val) is datetime.datetime:
@@ -580,13 +572,13 @@ class NumericMixin:
                 h, rem = divmod(tolerance_seconds, 3600)
                 m, s = divmod(rem, 60)
                 return self.error(
-                    "Expected <%s> to be close to <%s> within tolerance <%d:%02d:%02d>, but was not."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"), h, m, s)
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be close to"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}> within tolerance"
+                    f" <{int(h)}:{int(m):02d}:{int(s):02d}>, but was not."
                 )
             else:
                 return self.error(
-                    "Expected <%s> to be close to <%s> within tolerance <%s>, but was not."
-                    % (self.val, other, tolerance)
+                    f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
                 )
         return self
 
@@ -617,12 +609,12 @@ class NumericMixin:
                 h, rem = divmod(tolerance_seconds, 3600)
                 m, s = divmod(rem, 60)
                 return self.error(
-                    "Expected <%s> to not be close to <%s> within tolerance <%d:%02d:%02d>, but was."
-                    % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"), h, m, s)
+                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to not be close to"
+                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}> within tolerance"
+                    f" <{int(h)}:{int(m):02d}:{int(s):02d}>, but was."
                 )
             else:
                 return self.error(
-                    "Expected <%s> to not be close to <%s> within tolerance <%s>, but was."
-                    % (self.val, other, tolerance)
+                    f"Expected <{self.val}> to not be close to <{other}> within tolerance <{tolerance}>, but was."
                 )
         return self

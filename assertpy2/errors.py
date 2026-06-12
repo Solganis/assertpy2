@@ -12,7 +12,7 @@ class DiffEntry:
     expected: object = None
 
     def __str__(self) -> str:
-        return "  at %s: actual=<%s>, expected=<%s>" % (self.path, self.actual, self.expected)
+        return f"  at {self.path}: actual=<{self.actual}>, expected=<{self.expected}>"
 
 
 @dataclass
@@ -25,7 +25,7 @@ class DiffResult:
     def __str__(self) -> str:
         if not self.entries:
             return ""
-        lines = ["diff (%s):" % self.kind]
+        lines = [f"diff ({self.kind}):"]
         for entry in self.entries:
             lines.append(str(entry))
         return "\n".join(lines)

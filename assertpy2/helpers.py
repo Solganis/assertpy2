@@ -31,6 +31,8 @@ import datetime
 import math
 import numbers
 
+from assertpy2.errors import DiffEntry, DiffResult
+
 __tracebackhide__ = True
 
 
@@ -42,14 +44,14 @@ class HelpersMixin:
         if len(i) == 0:
             return "<>"
         elif len(i) == 1 and hasattr(i, "__getitem__"):
-            return "<%s>" % (i[0],)
+            return f"<{i[0]}>"
         else:
             s = str(i)
             if s[0] in "([":
                 s = s[1:]
             if s[-1] in ")]":
                 s = s[:-1]
-            return "<%s>" % s
+            return f"<{s}>"
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""
@@ -78,20 +80,20 @@ class HelpersMixin:
         high_type = type(high)
 
         if val_type in self._NUMERIC_NON_COMPAREABLE:
-            raise TypeError("ordering is not defined for type <%s>" % val_type.__name__)
+            raise TypeError(f"ordering is not defined for type <{val_type.__name__}>")
 
         if val_type in self._NUMERIC_COMPAREABLE:
             if low_type is not val_type:
-                raise TypeError("given low arg must be <%s>, but was <%s>" % (val_type.__name__, low_type.__name__))
+                raise TypeError(f"given low arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
             if high_type is not val_type:
-                raise TypeError("given high arg must be <%s>, but was <%s>" % (val_type.__name__, low_type.__name__))
+                raise TypeError(f"given high arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
         elif isinstance(self.val, numbers.Number):
             if isinstance(low, numbers.Number) is False:
-                raise TypeError("given low arg must be numeric, but was <%s>" % low_type.__name__)
+                raise TypeError(f"given low arg must be numeric, but was <{low_type.__name__}>")
             if isinstance(high, numbers.Number) is False:
-                raise TypeError("given high arg must be numeric, but was <%s>" % high_type.__name__)
+                raise TypeError(f"given high arg must be numeric, but was <{high_type.__name__}>")
         else:
-            raise TypeError("ordering is not defined for type <%s>" % val_type.__name__)
+            raise TypeError(f"ordering is not defined for type <{val_type.__name__}>")
 
         if low > high:
             raise ValueError("given low arg must be less than given high arg")
@@ -106,9 +108,9 @@ class HelpersMixin:
 
         if type(val) is datetime.datetime:
             if type(other) is not datetime.datetime:
-                raise TypeError("given arg must be datetime, but was <%s>" % type(other).__name__)
+                raise TypeError(f"given arg must be datetime, but was <{type(other).__name__}>")
             if type(tolerance) is not datetime.timedelta:
-                raise TypeError("given tolerance arg must be timedelta, but was <%s>" % type(tolerance).__name__)
+                raise TypeError(f"given tolerance arg must be timedelta, but was <{type(tolerance).__name__}>")
         else:
             if isinstance(other, numbers.Number) is False:
                 raise TypeError("given arg must be numeric")
@@ -127,31 +129,31 @@ class HelpersMixin:
             if return_as_bool:
                 return False
             else:
-                raise TypeError("%s <%s> is not dict-like: not iterable" % (name, type(d).__name__))
+                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: not iterable")
         if check_keys and (not hasattr(d, "keys") or not callable(d.keys)):
             if return_as_bool:
                 return False
             else:
-                raise TypeError("%s <%s> is not dict-like: missing keys()" % (name, type(d).__name__))
+                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing keys()")
         if check_values and (not hasattr(d, "values") or not callable(d.values)):
             if return_as_bool:
                 return False
             else:
-                raise TypeError("%s <%s> is not dict-like: missing values()" % (name, type(d).__name__))
+                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing values()")
         if check_getitem and not hasattr(d, "__getitem__"):
             if return_as_bool:
                 return False
             else:
-                raise TypeError("%s <%s> is not dict-like: missing [] accessor" % (name, type(d).__name__))
+                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing [] accessor")
         if return_as_bool:
             return True
 
     def _check_iterable(self, val, check_getitem=True, name="val"):
         """Helper to check if given val is iterable with optional item access."""
         if not isinstance(val, collections.abc.Iterable):
-            raise TypeError("%s <%s> is not iterable" % (name, type(val).__name__))
+            raise TypeError(f"{name} <{type(val).__name__}> is not iterable")
         if check_getitem and not hasattr(val, "__getitem__"):
-            raise TypeError("%s <%s> does not have [] accessor" % (name, type(val).__name__))
+            raise TypeError(f"{name} <{type(val).__name__}> does not have [] accessor")
 
     def _dict_not_equal(self, val, other, ignore=None, include=None):
         """Helper to compare dicts."""
@@ -166,17 +168,15 @@ class HelpersMixin:
                     if i not in val:
                         missing.append(i)
                 if missing:
+                    keys_suffix = "" if len(includes) == 1 else "s"
+                    missing_suffix = "" if len(missing) == 1 else "s"
+                    includes_fmt = self._fmt_items(
+                        [".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes]
+                    )
+                    missing_fmt = self._fmt_items(missing)
                     return self.error(
-                        "Expected <%s> to include key%s %s, but did not include key%s %s."
-                        % (
-                            val,
-                            "" if len(includes) == 1 else "s",
-                            self._fmt_items(
-                                [".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes]
-                            ),
-                            "" if len(missing) == 1 else "s",
-                            self._fmt_items(missing),
-                        )
+                        f"Expected <{val}> to include key{keys_suffix} {includes_fmt},"
+                        f" but did not include key{missing_suffix} {missing_fmt}."
                     )
 
             # calc val keys given ignores and includes
@@ -237,7 +237,7 @@ class HelpersMixin:
             ellip = False
             for k, v in sorted(d.items()):
                 if k not in other:
-                    parts.append("%s: %s" % (repr(k), repr(v)))
+                    parts.append(f"{k!r}: {v!r}")
                 elif v != other[k]:
                     val_repr = (
                         _dict_repr(v, other[k])
@@ -245,31 +245,50 @@ class HelpersMixin:
                         and self._check_dict_like(other[k], check_values=False, return_as_bool=True)
                         else repr(v)
                     )
-                    parts.append("%s: %s" % (repr(k), val_repr))
+                    parts.append(f"{k!r}: {val_repr}")
                 else:
                     ellip = True
             out = ", ".join(parts)
-            return "{%s%s}" % (".." if ellip and not parts else ".., " if ellip else "", out)
+            ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
+            return f"{{{ellip_prefix}{out}}}"
+
+        def _build_diff(actual_dict, expected_dict, prefix=""):
+            entries = []
+            all_keys = sorted(set(actual_dict) | set(expected_dict))
+            for k in all_keys:
+                path = f"{prefix}.{k}" if prefix else str(k)
+                if k not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
+                elif k not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
+                elif actual_dict[k] != expected_dict[k]:
+                    if self._check_dict_like(
+                        actual_dict[k], check_values=False, return_as_bool=True
+                    ) and self._check_dict_like(expected_dict[k], check_values=False, return_as_bool=True):
+                        entries.extend(_build_diff(actual_dict[k], expected_dict[k], prefix=path))
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
+            return entries
 
         if ignore:
             ignores = self._dict_ignore(ignore)
-            ignore_err = " ignoring keys %s" % self._fmt_items(
-                [".".join([str(s) for s in i]) if type(i) is tuple else i for i in ignores]
-            )
+            ignore_fmt = self._fmt_items([".".join([str(s) for s in i]) if type(i) is tuple else i for i in ignores])
+            ignore_err = f" ignoring keys {ignore_fmt}"
         if include:
             includes = self._dict_ignore(include)
-            include_err = " including keys %s" % self._fmt_items(
-                [".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes]
-            )
+            include_fmt = self._fmt_items([".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes])
+            include_err = f" including keys {include_fmt}"
 
+        diff_entries = _build_diff(val, other)
+        diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
+
+        val_repr = _dict_repr(val, other)
+        other_repr = _dict_repr(other, val)
+        ignore_part = ignore_err if ignore else ""
+        include_part = include_err if include else ""
         return self.error(
-            "Expected <%s> to be equal to <%s>%s%s, but was not."
-            % (
-                _dict_repr(val, other),
-                _dict_repr(other, val),
-                ignore_err if ignore else "",
-                include_err if include else "",
-            ),
+            f"Expected <{val_repr}> to be equal to <{other_repr}>{ignore_part}{include_part}, but was not.",
             actual=val,
             expected=other,
+            diff=diff,
         )

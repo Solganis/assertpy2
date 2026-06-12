@@ -26,7 +26,7 @@ class BaseMatcher:
         raise NotImplementedError
 
     def describe_mismatch(self, value: object) -> str:
-        return "was <%s>" % (value,)
+        return f"was <{value}>"
 
     def __and__(self, other: Matcher) -> AllOfMatcher:
         left = list(self.matchers) if isinstance(self, AllOfMatcher) else [self]
@@ -58,11 +58,11 @@ class AllOfMatcher(BaseMatcher):
         return all(m.matches(value) for m in self.matchers)
 
     def describe(self) -> str:
-        return "(%s)" % " and ".join(m.describe() for m in self.matchers)
+        return f"({' and '.join(m.describe() for m in self.matchers)})"
 
     def describe_mismatch(self, value: object) -> str:
         failed = [m for m in self.matchers if not m.matches(value)]
-        return "<%s> did not satisfy: %s" % (value, ", ".join(m.describe() for m in failed))
+        return f"<{value}> did not satisfy: {', '.join(m.describe() for m in failed)}"
 
 
 class AnyOfMatcher(BaseMatcher):
@@ -75,10 +75,10 @@ class AnyOfMatcher(BaseMatcher):
         return any(m.matches(value) for m in self.matchers)
 
     def describe(self) -> str:
-        return "(%s)" % " or ".join(m.describe() for m in self.matchers)
+        return f"({' or '.join(m.describe() for m in self.matchers)})"
 
     def describe_mismatch(self, value: object) -> str:
-        return "<%s> satisfied none of: %s" % (value, ", ".join(m.describe() for m in self.matchers))
+        return f"<{value}> satisfied none of: {', '.join(m.describe() for m in self.matchers)}"
 
 
 class NotMatcher(BaseMatcher):
@@ -91,10 +91,10 @@ class NotMatcher(BaseMatcher):
         return not self.matcher.matches(value)
 
     def describe(self) -> str:
-        return "not %s" % self.matcher.describe()
+        return f"not {self.matcher.describe()}"
 
     def describe_mismatch(self, value: object) -> str:
-        return "<%s> unexpectedly matched %s" % (value, self.matcher.describe())
+        return f"<{value}> unexpectedly matched {self.matcher.describe()}"
 
 
 # --- Value matchers ---
@@ -108,7 +108,7 @@ class EqualToMatcher(BaseMatcher):
         return value == self.expected
 
     def describe(self) -> str:
-        return "a value equal to <%s>" % (self.expected,)
+        return f"a value equal to <{self.expected}>"
 
 
 class GreaterThanMatcher(BaseMatcher):
@@ -119,7 +119,7 @@ class GreaterThanMatcher(BaseMatcher):
         return value > self.boundary
 
     def describe(self) -> str:
-        return "a value greater than <%s>" % (self.boundary,)
+        return f"a value greater than <{self.boundary}>"
 
 
 class GreaterThanOrEqualToMatcher(BaseMatcher):
@@ -130,7 +130,7 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
         return value >= self.boundary
 
     def describe(self) -> str:
-        return "a value greater than or equal to <%s>" % (self.boundary,)
+        return f"a value greater than or equal to <{self.boundary}>"
 
 
 class LessThanMatcher(BaseMatcher):
@@ -141,7 +141,7 @@ class LessThanMatcher(BaseMatcher):
         return value < self.boundary
 
     def describe(self) -> str:
-        return "a value less than <%s>" % (self.boundary,)
+        return f"a value less than <{self.boundary}>"
 
 
 class LessThanOrEqualToMatcher(BaseMatcher):
@@ -152,7 +152,7 @@ class LessThanOrEqualToMatcher(BaseMatcher):
         return value <= self.boundary
 
     def describe(self) -> str:
-        return "a value less than or equal to <%s>" % (self.boundary,)
+        return f"a value less than or equal to <{self.boundary}>"
 
 
 class BetweenMatcher(BaseMatcher):
@@ -164,7 +164,7 @@ class BetweenMatcher(BaseMatcher):
         return self.low <= value <= self.high
 
     def describe(self) -> str:
-        return "a value between <%s> and <%s>" % (self.low, self.high)
+        return f"a value between <{self.low}> and <{self.high}>"
 
 
 class CloseToMatcher(BaseMatcher):
@@ -176,7 +176,7 @@ class CloseToMatcher(BaseMatcher):
         return abs(value - self.expected) <= self.tolerance
 
     def describe(self) -> str:
-        return "a value within <%s> of <%s>" % (self.tolerance, self.expected)
+        return f"a value within <{self.tolerance}> of <{self.expected}>"
 
 
 # --- Type/identity matchers ---
@@ -206,10 +206,10 @@ class IsInstanceOfMatcher(BaseMatcher):
         return isinstance(value, self.expected_type)
 
     def describe(self) -> str:
-        return "an instance of <%s>" % self.expected_type.__name__
+        return f"an instance of <{self.expected_type.__name__}>"
 
     def describe_mismatch(self, value: object) -> str:
-        return "was <%s> of type <%s>" % (value, type(value).__name__)
+        return f"was <{value}> of type <{type(value).__name__}>"
 
 
 class IsTruthyMatcher(BaseMatcher):
@@ -239,10 +239,10 @@ class HasLengthMatcher(BaseMatcher):
         return len(value) == self.expected_length
 
     def describe(self) -> str:
-        return "a value of length <%d>" % self.expected_length
+        return f"a value of length <{self.expected_length}>"
 
     def describe_mismatch(self, value: object) -> str:
-        return "was <%s> with length <%d>" % (value, len(value))
+        return f"was <{value}> with length <{len(value)}>"
 
 
 class IsEmptyMatcher(BaseMatcher):
@@ -349,7 +349,7 @@ class IsInMatcher(BaseMatcher):
         return value in self.values
 
     def describe(self) -> str:
-        return "a value in <%s>" % (self.values,)
+        return f"a value in <{self.values}>"
 
     def describe_mismatch(self, value: object) -> str:
         return f"was <{value!r}>, which is not in <{self.values}>"
@@ -392,7 +392,7 @@ class ContainsStringMatcher(BaseMatcher):
         return isinstance(value, str) and self.substring in value
 
     def describe(self) -> str:
-        return "a string containing <%s>" % self.substring
+        return f"a string containing <{self.substring}>"
 
 
 class MatchesRegexMatcher(BaseMatcher):
@@ -403,7 +403,7 @@ class MatchesRegexMatcher(BaseMatcher):
         return isinstance(value, str) and re.search(self.pattern, value) is not None
 
     def describe(self) -> str:
-        return "a string matching pattern <%s>" % self.pattern
+        return f"a string matching pattern <{self.pattern}>"
 
 
 class StartsWithMatcher(BaseMatcher):
@@ -414,7 +414,7 @@ class StartsWithMatcher(BaseMatcher):
         return isinstance(value, str) and value.startswith(self.prefix)
 
     def describe(self) -> str:
-        return "a string starting with <%s>" % self.prefix
+        return f"a string starting with <{self.prefix}>"
 
 
 class EndsWithMatcher(BaseMatcher):
@@ -425,7 +425,7 @@ class EndsWithMatcher(BaseMatcher):
         return isinstance(value, str) and value.endswith(self.suffix)
 
     def describe(self) -> str:
-        return "a string ending with <%s>" % self.suffix
+        return f"a string ending with <{self.suffix}>"
 
 
 # --- Structural matchers ---
@@ -480,16 +480,16 @@ class EachMatcher(BaseMatcher):
             return False
 
     def describe(self) -> str:
-        return "each item matching %s" % self.matcher.describe()
+        return f"each item matching {self.matcher.describe()}"
 
     def describe_mismatch(self, value: object) -> str:
         try:
             for i, item in enumerate(value):
                 if not self.matcher.matches(item):
-                    return "item at index %d <%s> did not match %s" % (i, item, self.matcher.describe())
+                    return f"item at index {i} <{item}> did not match {self.matcher.describe()}"
         except TypeError:
-            return "was not iterable: <%s>" % (value,)
-        return "was <%s>" % (value,)
+            return f"was not iterable: <{value}>"
+        return f"was <{value}>"
 
 
 class StructureMatcher(BaseMatcher):
@@ -504,49 +504,47 @@ class StructureMatcher(BaseMatcher):
         return self._match_recursive(value, self._spec, "") is None
 
     def describe(self) -> str:
-        return "a dict matching structure %s" % self._describe_spec(self._spec)
+        return f"a dict matching structure {self._describe_spec(self._spec)}"
 
     def describe_mismatch(self, value: object) -> str:
         if not isinstance(value, dict):
-            return "was not a dict: <%s>" % (value,)
+            return f"was not a dict: <{value}>"
         error = self._match_recursive(value, self._spec, "")
         if error:
             return error
-        return "was <%s>" % (value,)
+        return f"was <{value}>"
 
     def _match_recursive(self, value: dict, spec: dict, path: str) -> str | None:
         for key, expected in spec.items():
-            current_path = "%s.%s" % (path, key) if path else str(key)
+            current_path = f"{path}.{key}" if path else str(key)
             if key not in value:
-                return "missing key <%s>" % current_path
+                return f"missing key <{current_path}>"
             actual = value[key]
             if isinstance(expected, Matcher):
                 if not expected.matches(actual):
-                    return "at <%s>: expected %s, but %s" % (
-                        current_path,
-                        expected.describe(),
-                        expected.describe_mismatch(actual),
+                    return (
+                        f"at <{current_path}>: expected {expected.describe()}, but {expected.describe_mismatch(actual)}"
                     )
             elif isinstance(expected, dict):
                 if not isinstance(actual, dict):
-                    return "at <%s>: expected a dict, but was <%s>" % (current_path, actual)
+                    return f"at <{current_path}>: expected a dict, but was <{actual}>"
                 error = self._match_recursive(actual, expected, current_path)
                 if error:
                     return error
             elif actual != expected:
-                return "at <%s>: expected <%s>, but was <%s>" % (current_path, expected, actual)
+                return f"at <{current_path}>: expected <{expected}>, but was <{actual}>"
         return None
 
     def _describe_spec(self, spec: dict) -> str:
         parts = []
         for key, value in spec.items():
             if isinstance(value, Matcher):
-                parts.append("%s: %s" % (key, value.describe()))
+                parts.append(f"{key}: {value.describe()}")
             elif isinstance(value, dict):
-                parts.append("%s: %s" % (key, self._describe_spec(value)))
+                parts.append(f"{key}: {self._describe_spec(value)}")
             else:
-                parts.append("%s: <%s>" % (key, value))
-        return "{%s}" % ", ".join(parts)
+                parts.append(f"{key}: <{value}>")
+        return f"{{{', '.join(parts)}}}"
 
 
 # --- Namespace ---

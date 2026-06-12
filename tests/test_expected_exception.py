@@ -166,8 +166,7 @@ def func_kwargs(**kwargs):
 
 def func_all(arg1, arg2, *args, **kwargs):
     raise RuntimeError(
-        "all err: arg1=%s, arg2=%s, args=%s, kwargs=%s"
-        % (arg1, arg2, args, [(k, kwargs[k]) for k in sorted(kwargs.keys())])
+        f"all err: arg1={arg1}, arg2={arg2}, args={args}, kwargs={[(k, kwargs[k]) for k in sorted(kwargs.keys())]}"
     )
 
 

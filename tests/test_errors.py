@@ -80,7 +80,12 @@ class TestStructuredErrorFromAssertions:
         except AssertionFailure as ex:
             assert_that(ex.actual).is_equal_to(1)
             assert_that(ex.expected).is_equal_to(2)
-            assert_that(ex.diff).is_none()
+            assert_that(ex.diff).is_not_none()
+            assert_that(ex.diff.kind).is_equal_to("scalar")
+            assert_that(ex.diff.entries).is_length(1)
+            assert_that(ex.diff.entries[0].path).is_equal_to(".")
+            assert_that(ex.diff.entries[0].actual).is_equal_to(1)
+            assert_that(ex.diff.entries[0].expected).is_equal_to(2)
         except AssertionError:
             raise AssertionError("expected AssertionFailure, got plain AssertionError") from None
 
@@ -97,6 +102,29 @@ class TestStructuredErrorFromAssertions:
         except AssertionFailure as ex:
             assert_that(ex.actual).is_equal_to({"a": 1, "b": 2})
             assert_that(ex.expected).is_equal_to({"a": 1, "b": 3})
+            assert_that(ex.diff).is_not_none()
+            assert_that(ex.diff.kind).is_equal_to("dict")
+            assert_that(ex.diff.entries).is_length(1)
+            assert_that(ex.diff.entries[0].path).is_equal_to("b")
+            assert_that(ex.diff.entries[0].actual).is_equal_to(2)
+            assert_that(ex.diff.entries[0].expected).is_equal_to(3)
+
+    def test_is_equal_to_dict_nested_diff(self):
+        try:
+            assert_that({"x": {"y": 1}}).is_equal_to({"x": {"y": 2}})
+        except AssertionFailure as ex:
+            assert_that(ex.diff).is_not_none()
+            assert_that(ex.diff.entries).is_length(1)
+            assert_that(ex.diff.entries[0].path).is_equal_to("x.y")
+
+    def test_is_equal_to_dict_missing_keys_diff(self):
+        try:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "c": 3})
+        except AssertionFailure as ex:
+            assert_that(ex.diff).is_not_none()
+            paths = [e.path for e in ex.diff.entries]
+            assert_that(paths).contains("b")
+            assert_that(paths).contains("c")
 
     def test_is_equal_to_dict_with_ignore_raises_assertion_failure(self):
         try:

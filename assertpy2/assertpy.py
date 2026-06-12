@@ -160,7 +160,7 @@ def soft_assertions() -> Iterator[None]:
 
     errs = _soft_err.get([])
     if errs and _soft_ctx.get() == 0:
-        out = "soft assertion failures:\n" + "\n".join("%d. %s" % (i + 1, msg) for i, msg in enumerate(errs))
+        out = "soft assertion failures:\n" + "\n".join(f"{i + 1}. {msg}" for i, msg in enumerate(errs))
         _soft_err.set([])
         raise AssertionError(out)
 
@@ -300,7 +300,7 @@ def fail(msg=""):
                 except TypeError as e:
                     assert_that(str(e)).contains('unsupported operand')
     """
-    raise AssertionError("Fail: %s!" % msg if msg else "Fail!")
+    raise AssertionError(f"Fail: {msg}!" if msg else "Fail!")
 
 
 def soft_fail(msg=""):
@@ -332,7 +332,7 @@ def soft_fail(msg=""):
 
     """
     if _soft_ctx.get():
-        _soft_err.get().append("Fail: %s!" % msg if msg else "Fail!")
+        _soft_err.get().append(f"Fail: {msg}!" if msg else "Fail!")
         return
     fail(msg)
 
@@ -427,7 +427,7 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
                 prev = frame
 
         filename, lineno = _unwind(inspect.currentframe())
-        return "[%s:%d]: %s" % (os.path.basename(filename), lineno, msg), kwargs
+        return f"[{os.path.basename(filename)}:{lineno}]: {msg}", kwargs
 
 
 _logger = logging.getLogger("assertpy2")
@@ -512,7 +512,7 @@ class AssertionBuilder(
             AssertionBuilder: returns this instance to chain to the next assertion, but only when
                 ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
         """
-        out = "%s%s" % ("[%s] " % self.description if len(self.description) > 0 else "", msg)
+        out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self.kind == "warn":
             self.logger.warning(out)
             return self

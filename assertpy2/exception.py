@@ -112,19 +112,15 @@ class ExceptionMixin:
                 return self.builder(str(e), self.description, self.kind, logger=self.logger)
             else:
                 self.error(
-                    "Expected <%s> to raise <%s> when called with (%s), but raised <%s>."
-                    % (
-                        self.val.__name__,
-                        self.expected.__name__,
-                        self._fmt_args_kwargs(*some_args, **some_kwargs),
-                        type(e).__name__,
-                    )
+                    f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
+                    f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
+                    f" but raised <{type(e).__name__}>."
                 )
                 return _InertBuilder()
 
         self.error(
-            "Expected <%s> to raise <%s> when called with (%s)."
-            % (self.val.__name__, self.expected.__name__, self._fmt_args_kwargs(*some_args, **some_kwargs))
+            f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
+            f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
         )
         return _InertBuilder()
 

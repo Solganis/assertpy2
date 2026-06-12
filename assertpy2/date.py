@@ -67,13 +67,13 @@ class DateMixin:
             :meth:`~assertpy.string.NumericMixin.is_less_than_or_equal_to` - numeric assertion, but also works with datetime
         """
         if type(self.val) is not datetime.datetime:
-            raise TypeError("val must be datetime, but was type <%s>" % type(self.val).__name__)
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
         if type(other) is not datetime.datetime:
-            raise TypeError("given arg must be datetime, but was type <%s>" % type(other).__name__)
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
         if self.val >= other:
             return self.error(
-                "Expected <%s> to be before <%s>, but was not."
-                % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before"
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
             )
         return self
 
@@ -104,13 +104,13 @@ class DateMixin:
             :meth:`~assertpy.string.NumericMixin.is_greater_than_or_equal_to` - numeric assertion, but also works with datetime
         """
         if type(self.val) is not datetime.datetime:
-            raise TypeError("val must be datetime, but was type <%s>" % type(self.val).__name__)
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
         if type(other) is not datetime.datetime:
-            raise TypeError("given arg must be datetime, but was type <%s>" % type(other).__name__)
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
         if self.val <= other:
             return self.error(
-                "Expected <%s> to be after <%s>, but was not."
-                % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after"
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
             )
         return self
 
@@ -205,9 +205,9 @@ class DateMixin:
             AssertionError: if val is **not** equal to the given date to the second
         """
         if type(self.val) is not datetime.datetime:
-            raise TypeError("val must be datetime, but was type <%s>" % type(self.val).__name__)
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
         if type(other) is not datetime.datetime:
-            raise TypeError("given arg must be datetime, but was type <%s>" % type(other).__name__)
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
         if (
             self.val.date() != other.date()
             or self.val.hour != other.hour
@@ -215,8 +215,8 @@ class DateMixin:
             or self.val.second != other.second
         ):
             return self.error(
-                "Expected <%s> to be equal to <%s>, but was not."
-                % (self.val.strftime("%Y-%m-%d %H:%M:%S"), other.strftime("%Y-%m-%d %H:%M:%S"))
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
             )
         return self
 
@@ -243,13 +243,13 @@ class DateMixin:
             AssertionError: if val is **not** equal to the given date to the minute
         """
         if type(self.val) is not datetime.datetime:
-            raise TypeError("val must be datetime, but was type <%s>" % type(self.val).__name__)
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
         if type(other) is not datetime.datetime:
-            raise TypeError("given arg must be datetime, but was type <%s>" % type(other).__name__)
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
         if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
             return self.error(
-                "Expected <%s> to be equal to <%s>, but was not."
-                % (self.val.strftime("%Y-%m-%d %H:%M"), other.strftime("%Y-%m-%d %H:%M"))
+                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
+                f" <{other.strftime('%Y-%m-%d %H:%M')}>, but was not."
             )
         return self
 
@@ -276,12 +276,12 @@ class DateMixin:
             AssertionError: if val is **not** equal to the given date ignoring time
         """
         if type(self.val) is not datetime.datetime:
-            raise TypeError("val must be datetime, but was type <%s>" % type(self.val).__name__)
+            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
         if type(other) is not datetime.datetime:
-            raise TypeError("given arg must be datetime, but was type <%s>" % type(other).__name__)
+            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
         if self.val.date() != other.date():
             return self.error(
-                "Expected <%s> to be equal to <%s>, but was not."
-                % (self.val.strftime("%Y-%m-%d"), other.strftime("%Y-%m-%d"))
+                f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
+                f" <{other.strftime('%Y-%m-%d')}>, but was not."
             )
         return self

@@ -73,8 +73,8 @@ class AsyncAssertionBuilder:
                         last_error = exc
                         if loop.time() >= deadline:
                             raise AssertionError(
-                                "Expected condition not met after %.1f seconds. Last failure: %s"
-                                % (self._timeout, last_error)
+                                f"Expected condition not met after {self._timeout:.1f} seconds."
+                                f" Last failure: {last_error}"
                             ) from last_error
                         await asyncio.sleep(self._interval)
 
