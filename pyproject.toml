@@ -42,6 +42,10 @@ Issues = "https://github.com/Solganis/assertpy2/issues"
 [project.entry-points."pytest11"]
 assertpy2 = "assertpy2.pytest_plugin"
 
+[project.optional-dependencies]
+allure = ["allure-pytest>=2.13"]
+behave = ["behave>=1.2.6"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -70,7 +74,7 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
-ignore = ["UP031", "E501"]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E741", "SIM102"]
