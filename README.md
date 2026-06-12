@@ -136,6 +136,8 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 - **Extracting**: flatten collections on attributes with `filter` and `sort` support.
 - **File assertions**: `exists()`, `is_file()`, `is_readable()`, `is_writable()`, `is_executable()` with `pathlib.Path` support.
 - **Snapshot testing**: store and compare data structures in JSON format, inspired by Jest.
+- **Allure integration**: auto-attach structured diff and actual/expected data to Allure reports.
+- **Behave step matchers**: ready-made parameter types (`PositiveInt`, `BoolLike`, etc.) for Behave step definitions.
 - **Extensions**: add custom assertions via `add_extension()`.
 - Strings, numbers, lists, tuples, sets, dicts, dates, booleans, objects, exceptions.
 
@@ -327,6 +329,54 @@ assert_that(5).is_5()
 ```
 
 See the [full API reference](docs/api.md) for all assertion methods, examples, and advanced features.
+
+
+## Allure integration
+
+When `allure-pytest` is installed, the pytest plugin auto-attaches structured failure data to Allure reports as JSON attachments.
+
+```bash
+pip install assertpy2[allure]
+```
+
+Three modes controlled via `pytest.ini` (or `pyproject.toml`):
+
+| Mode | What is attached |
+|---|---|
+| `diff` (default) | Structured Diff JSON (path-level breakdown) |
+| `full` | Structured Diff + actual/expected JSON |
+| `off` | Nothing |
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+assertpy2_allure = "full"
+```
+
+
+## Behave step matchers
+
+Ready-made parameter types for Behave step definitions:
+
+```bash
+pip install assertpy2[behave]
+```
+
+```py
+# in environment.py or steps/conftest.py
+from assertpy2.behave_matchers import register_assertpy_types
+register_assertpy_types()
+```
+
+Then use in step definitions:
+
+```py
+@given('a user aged {age:PositiveInt}')
+def step_impl(context, age):
+    context.age = age  # already validated as int > 0
+```
+
+Available types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyString`, `BoolLike`.
 
 
 ## Migration from assertpy

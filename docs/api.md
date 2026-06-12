@@ -27,6 +27,8 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [Async Assertions](#async-assertions)
 - [Structured Errors](#structured-errors)
 - [Snapshot Testing](#snapshot-testing)
+- [Allure Integration](#allure-integration)
+- [Behave Step Matchers](#behave-step-matchers)
 - [Extension System](#extension-system---adding-custom-assertions)
 - [Chaining](#chaining)
 
@@ -575,10 +577,10 @@ class Person(object):
 
     @property
     def name(self):
-        return '%s %s' % (self.first_name, self.last_name)
+        return f'{self.first_name} {self.last_name}'
 
     def say_hello(self):
-        return 'Hello, %s!' % self.first_name
+        return f'Hello, {self.first_name}!'
 ```
 
 
@@ -601,7 +603,7 @@ Of course `extracting` works with subclasses too...suppose we create a simple cl
 ```py
 class Developer(Person):
     def say_hello(self):
-        return '%s writes code.' % self.first_name
+        return f'{self.first_name} writes code.'
 ```
 
 Testing a mixed collection of parent and child objects works as expected:
@@ -1241,6 +1243,152 @@ Functional testing (which snapshot testing falls under) is very much blackbox te
 
 [Back to top](#table-of-contents)
 
+## Allure Integration
+
+When `allure-pytest` is installed, the assertpy2 pytest plugin automatically attaches structured failure data to Allure reports as JSON attachments. No code changes needed, it works out of the box.
+
+```bash
+pip install assertpy2[allure]
+```
+
+### Attachment modes
+
+Control what gets attached via the `assertpy2_allure` ini option:
+
+| Mode | Structured Diff | Actual/Expected |
+|---|:---:|:---:|
+| `diff` (default) | Yes | No |
+| `full` | Yes | Yes |
+| `off` | No | No |
+
+Configure in `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_allure = "full"
+```
+
+Or via command line:
+
+```bash
+pytest -o "assertpy2_allure=full"
+```
+
+### What gets attached
+
+**Structured Diff** (modes: `diff`, `full`) - a JSON attachment with path-level breakdown of dict/list differences:
+
+```json
+{
+  "kind": "dict",
+  "entries": [
+    {"path": "user.settings.theme", "actual": "'dark'", "expected": "'light'"},
+    {"path": "user.settings.lang", "actual": "'en'", "expected": "'ru'"}
+  ]
+}
+```
+
+**AssertionFailure** (mode: `full` only) - a JSON attachment with actual and expected values:
+
+```json
+{
+  "actual": "{'name': 'Alice', 'age': 30}",
+  "expected": "{'name': 'Alice', 'age': 25}"
+}
+```
+
+### Pytest report sections
+
+Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
+
+```
+--- AssertionFailure ---
+  actual:   {'name': 'Alice', 'age': 30}
+  expected: {'name': 'Alice', 'age': 25}
+--- Structured Diff ---
+diff (dict):
+  at age: actual=<30>, expected=<25>
+```
+
+### Exception safety
+
+If Allure is not installed or `allure.attach()` fails for any reason, the plugin silently continues. Test results are never affected by Allure errors.
+
+### Invalid mode handling
+
+An invalid mode value (e.g. a typo like `assertpy2_allure=diffs`) triggers a warning and falls back to `diff`.
+
+
+[Back to top](#table-of-contents)
+
+## Behave Step Matchers
+
+assertpy2 provides ready-made parameter types for [Behave](https://behave.readthedocs.io/) step definitions. These types parse and validate step parameters automatically.
+
+```bash
+pip install assertpy2[behave]
+```
+
+### Registration
+
+Call `register_assertpy_types()` once, typically in `environment.py` or a step file:
+
+```py
+from assertpy2.behave_matchers import register_assertpy_types
+
+register_assertpy_types()
+```
+
+### Available types
+
+| Type | Pattern | Description | Example input |
+|---|---|---|---|
+| `PositiveInt` | `\d+` | Integer > 0 | `1`, `42`, `100` |
+| `NonNegativeInt` | `\d+` | Integer >= 0 | `0`, `1`, `42` |
+| `PositiveFloat` | `\d+\.?\d*` | Float > 0 | `1.5`, `42`, `0.01` |
+| `NonEmptyString` | `.+?` | Stripped non-blank string | `hello`, `foo bar` |
+| `BoolLike` | `\w+` | Boolean from text | `true`, `yes`, `1`, `on`, `false`, `no`, `0`, `off` |
+
+### Usage in step definitions
+
+```py
+@given('a user aged {age:PositiveInt}')
+def step_user_aged(context, age):
+    context.age = age  # int, guaranteed > 0
+
+@given('the feature is {enabled:BoolLike}')
+def step_feature_toggle(context, enabled):
+    context.enabled = enabled  # bool
+
+@when('the user searches for {query:NonEmptyString}')
+def step_search(context, query):
+    context.query = query  # str, stripped, non-blank
+```
+
+### Validation errors
+
+Invalid values raise `ValueError` with descriptive messages:
+
+```py
+# step: "a user aged 0" -> ValueError: expected positive integer, got 0
+# step: "the feature is maybe" -> ValueError: expected boolean-like value, got 'maybe'
+# step: "the user searches for   " -> ValueError: expected non-empty string, got blank
+```
+
+### Using types directly
+
+The `ASSERTPY_TYPES` dict is available for direct access without Behave:
+
+```py
+from assertpy2.behave_matchers import ASSERTPY_TYPES
+
+parse_int = ASSERTPY_TYPES["PositiveInt"]
+value = parse_int("42")  # 42
+```
+
+
+[Back to top](#table-of-contents)
+
 ## Extension System - adding custom assertions
 
 Sometimes you want to add your own custom assertions to `assertpy2`.  This can be done using the `add_extension()` helper.
@@ -1325,7 +1473,7 @@ def is_multiple_of(self, other):
     # test the negative (is remainder non-zero?)
     if rem > 0:
         # non-zero remainder, so not multiple -> we fail!
-        return self.error('Expected <%s> to be multiple of <%s>, but was not.' % (self.val, other))
+        return self.error(f'Expected <{self.val}> to be multiple of <{other}>, but was not.')
 
     # success, and return self to allow chaining
     return self
