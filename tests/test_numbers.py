@@ -646,7 +646,7 @@ def test_comparable_duck_typing_custom_class():
             return self.level >= other.level
 
         def __repr__(self):
-            return "Rank(%d)" % self.level
+            return f"Rank({self.level})"
 
     low = Rank(1)
     mid = Rank(5)

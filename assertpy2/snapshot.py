@@ -177,7 +177,7 @@ class SnapshotMixin:
 
         def _name(path, name):
             try:
-                return os.path.join(path, "snap-%s.json" % name.replace(" ", "_").lower())
+                return os.path.join(path, f"snap-{name.replace(' ', '_').lower()}.json")
             except (TypeError, AttributeError):
                 raise ValueError("failed to create snapshot filename, either bad path or bad name") from None
 

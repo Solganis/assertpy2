@@ -174,12 +174,12 @@ class ExtractingMixin:
                 if name in x:
                     return x[name]
                 else:
-                    raise ValueError("item keys %s did not contain key <%s>" % (list(x.keys()), name))
+                    raise ValueError(f"item keys {list(x.keys())} did not contain key <{name}>")
             elif isinstance(x, tuple) and hasattr(x, "_fields") and type(name) is str:
                 if name in x._fields:
                     return getattr(x, name)
                 else:  # val has no attribute <foo>
-                    raise ValueError("item attributes %s did no contain attribute <%s>" % (x._fields, name))
+                    raise ValueError(f"item attributes {x._fields} did no contain attribute <{name}>")
             elif isinstance(x, collections.abc.Iterable):
                 self._check_iterable(x, name="item")
                 return x[name]
@@ -189,11 +189,11 @@ class ExtractingMixin:
                     try:
                         return attr()
                     except TypeError:
-                        raise ValueError("item method <%s()> exists, but is not zero-arg method" % name) from None
+                        raise ValueError(f"item method <{name}()> exists, but is not zero-arg method") from None
                 else:
                     return attr
             else:
-                raise ValueError("item does not have property or zero-arg method <%s>" % name)
+                raise ValueError(f"item does not have property or zero-arg method <{name}>")
 
         def _filter(x):
             if "filter" in kwargs:

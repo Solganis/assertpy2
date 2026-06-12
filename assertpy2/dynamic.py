@@ -71,7 +71,7 @@ class DynamicMixin:
         """Asserts that val has attribute attr and that its value is equal to other via a dynamic
         assertion of the form ``has_<attr>()``."""
         if not attr.startswith("has_"):
-            raise AttributeError("assertpy has no assertion <%s()>" % attr)
+            raise AttributeError(f"assertpy has no assertion <{attr}()>")
 
         attr_name = attr[4:]
         err_msg = False
@@ -81,16 +81,16 @@ class DynamicMixin:
         if not hasattr(self.val, attr_name):
             if is_dict and not is_namedtuple:
                 if attr_name not in self.val:
-                    err_msg = "Expected key <%s>, but val has no key <%s>." % (attr_name, attr_name)
+                    err_msg = f"Expected key <{attr_name}>, but val has no key <{attr_name}>."
             else:
-                err_msg = "Expected attribute <%s>, but val has no attribute <%s>." % (attr_name, attr_name)
+                err_msg = f"Expected attribute <{attr_name}>, but val has no attribute <{attr_name}>."
 
         def _wrapper(*args, **kwargs):
             if err_msg:
                 return self.error(err_msg)  # ok to raise AssertionError now that we are inside wrapper
             else:
                 if len(args) != 1:
-                    raise TypeError("assertion <%s()> takes exactly 1 argument (%d given)" % (attr, len(args)))
+                    raise TypeError(f"assertion <{attr}()> takes exactly 1 argument ({len(args)} given)")
 
                 val_attr = self.val[attr_name] if is_dict and not is_namedtuple else getattr(self.val, attr_name)
 
@@ -98,15 +98,15 @@ class DynamicMixin:
                     try:
                         actual = val_attr()
                     except TypeError:
-                        raise TypeError("val does not have zero-arg method <%s()>" % attr_name) from None
+                        raise TypeError(f"val does not have zero-arg method <{attr_name}()>") from None
                 else:
                     actual = val_attr
 
                 expected = args[0]
                 if actual != expected:
+                    kind = "key" if is_dict else "attribute"
                     return self.error(
-                        "Expected <%s> to be equal to <%s> on %s <%s>, but was not."
-                        % (actual, expected, "key" if is_dict else "attribute", attr_name)
+                        f"Expected <{actual}> to be equal to <{expected}> on {kind} <{attr_name}>, but was not."
                     )
             return self
 

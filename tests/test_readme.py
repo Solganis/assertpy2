@@ -34,7 +34,7 @@ from assertpy2 import assert_that, assert_warn, contents_of, fail, soft_assertio
 
 
 def setup_module():
-    print("\nTEST test_readme.py : v%d.%d.%d" % (sys.version_info[0], sys.version_info[1], sys.version_info[2]))
+    print(f"\nTEST test_readme.py : v{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}")
 
 
 def test_something():
@@ -500,12 +500,12 @@ class Person:
 
     @property
     def name(self):
-        return "%s %s" % (self.first_name, self.last_name)
+        return f"{self.first_name} {self.last_name}"
 
     def say_hello(self):
-        return "Hello, %s!" % self.first_name
+        return f"Hello, {self.first_name}!"
 
 
 class Developer(Person):
     def say_hello(self):
-        return "%s writes code." % self.first_name
+        return f"{self.first_name} writes code."

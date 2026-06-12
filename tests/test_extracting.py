@@ -38,10 +38,10 @@ class Person:
         self.shoe_size = shoe_size
 
     def full_name(self):
-        return "%s %s" % (self.first_name, self.last_name)
+        return f"{self.first_name} {self.last_name}"
 
     def say_hello(self, name):
-        return "Hello, %s!" % name
+        return f"Hello, {name}!"
 
 
 fred = Person("Fred", "Smith", 12)

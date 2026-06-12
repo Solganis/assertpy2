@@ -67,7 +67,7 @@ class StringMixin:
         if not isinstance(other, str):
             raise TypeError("given arg must be a string")
         if self.val.lower() != other.lower():
-            return self.error("Expected <%s> to be case-insensitive equal to <%s>, but was not." % (self.val, other))
+            return self.error(f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.")
         return self
 
     def contains_ignoring_case(self, *items) -> Self:
@@ -100,7 +100,7 @@ class StringMixin:
                     raise TypeError("given arg must be a string")
                 if items[0].lower() not in self.val.lower():
                     return self.error(
-                        "Expected <%s> to case-insensitive contain item <%s>, but did not." % (self.val, items[0])
+                        f"Expected <{self.val}> to case-insensitive contain item <{items[0]}>, but did not."
                     )
             else:
                 missing = []
@@ -111,8 +111,8 @@ class StringMixin:
                         missing.append(i)
                 if missing:
                     return self.error(
-                        "Expected <%s> to case-insensitive contain items %s, but did not contain %s."
-                        % (self.val, self._fmt_items(items), self._fmt_items(missing))
+                        f"Expected <{self.val}> to case-insensitive contain items"
+                        f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
                     )
         elif isinstance(self.val, collections.abc.Iterable):
             missing = []
@@ -130,8 +130,8 @@ class StringMixin:
                     missing.append(i)
             if missing:
                 return self.error(
-                    "Expected <%s> to case-insensitive contain items %s, but did not contain %s."
-                    % (self.val, self._fmt_items(items), self._fmt_items(missing))
+                    f"Expected <{self.val}> to case-insensitive contain items"
+                    f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
                 )
         else:
             raise TypeError("val is not a string or iterable")
@@ -165,13 +165,13 @@ class StringMixin:
             if len(prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(prefix):
-                return self.error("Expected <%s> to start with <%s>, but did not." % (self.val, prefix))
+                return self.error(f"Expected <{self.val}> to start with <{prefix}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             if len(self.val) == 0:
                 raise ValueError("val must not be empty")
             first = next(iter(self.val))
             if first != prefix:
-                return self.error("Expected %s to start with <%s>, but did not." % (self.val, prefix))
+                return self.error(f"Expected {self.val} to start with <{prefix}>, but did not.")
         else:
             raise TypeError("val is not a string or iterable")
         return self
@@ -204,13 +204,13 @@ class StringMixin:
             if len(suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(suffix):
-                return self.error("Expected <%s> to end with <%s>, but did not." % (self.val, suffix))
+                return self.error(f"Expected <{self.val}> to end with <{suffix}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             if len(self.val) == 0:
                 raise ValueError("val must not be empty")
             items = list(self.val)
             if items[-1] != suffix:
-                return self.error("Expected %s to end with <%s>, but did not." % (self.val, suffix))
+                return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.")
         else:
             raise TypeError("val is not a string or iterable")
         return self
@@ -271,7 +271,7 @@ class StringMixin:
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is None:
-            return self.error("Expected <%s> to match pattern <%s>, but did not." % (self.val, pattern))
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
         return self
 
     def does_not_match(self, pattern) -> Self:
@@ -302,7 +302,7 @@ class StringMixin:
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is not None:
-            return self.error("Expected <%s> to not match pattern <%s>, but did." % (self.val, pattern))
+            return self.error(f"Expected <{self.val}> to not match pattern <{pattern}>, but did.")
         return self
 
     def is_alpha(self) -> Self:
@@ -324,7 +324,7 @@ class StringMixin:
         if len(self.val) == 0:
             raise ValueError("val is empty")
         if not self.val.isalpha():
-            return self.error("Expected <%s> to contain only alphabetic chars, but did not." % self.val)
+            return self.error(f"Expected <{self.val}> to contain only alphabetic chars, but did not.")
         return self
 
     def is_digit(self) -> Self:
@@ -346,7 +346,7 @@ class StringMixin:
         if len(self.val) == 0:
             raise ValueError("val is empty")
         if not self.val.isdigit():
-            return self.error("Expected <%s> to contain only digits, but did not." % self.val)
+            return self.error(f"Expected <{self.val}> to contain only digits, but did not.")
         return self
 
     def is_lower(self) -> Self:
@@ -368,7 +368,7 @@ class StringMixin:
         if len(self.val) == 0:
             raise ValueError("val is empty")
         if self.val != self.val.lower():
-            return self.error("Expected <%s> to contain only lowercase chars, but did not." % self.val)
+            return self.error(f"Expected <{self.val}> to contain only lowercase chars, but did not.")
         return self
 
     def is_upper(self) -> Self:
@@ -390,7 +390,7 @@ class StringMixin:
         if len(self.val) == 0:
             raise ValueError("val is empty")
         if self.val != self.val.upper():
-            return self.error("Expected <%s> to contain only uppercase chars, but did not." % self.val)
+            return self.error(f"Expected <{self.val}> to contain only uppercase chars, but did not.")
         return self
 
     def is_alphanumeric(self) -> Self:
@@ -515,5 +515,5 @@ class StringMixin:
             AssertionError: if val is **not** a unicode string
         """
         if not isinstance(self.val, str):
-            return self.error("Expected <%s> to be unicode, but was <%s>." % (self.val, type(self.val).__name__))
+            return self.error(f"Expected <{self.val}> to be unicode, but was <{type(self.val).__name__}>.")
         return self

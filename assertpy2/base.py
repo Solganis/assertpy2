@@ -31,6 +31,7 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
+from .errors import DiffEntry, DiffResult
 from .matchers import Matcher, StructureMatcher
 
 if TYPE_CHECKING:
@@ -135,9 +136,10 @@ class BaseMixin:
         else:
             if self.val != other:
                 return self.error(
-                    "Expected <%s> to be equal to <%s>, but was not." % (self.val, other),
+                    f"Expected <{self.val}> to be equal to <{other}>, but was not.",
                     actual=self.val,
                     expected=other,
+                    diff=DiffResult(kind="scalar", entries=[DiffEntry(path=".", actual=self.val, expected=other)]),
                 )
         return self
 
@@ -168,10 +170,10 @@ class BaseMixin:
         """
         if isinstance(matcher, Matcher):
             if not matcher.matches(self.val):
-                return self.error("Expected %s, but %s." % (matcher.describe(), matcher.describe_mismatch(self.val)))
+                return self.error(f"Expected {matcher.describe()}, but {matcher.describe_mismatch(self.val)}.")
         elif callable(matcher):
             if not matcher(self.val):
-                return self.error("Expected <%s> to satisfy <%s>, but did not." % (self.val, matcher))
+                return self.error(f"Expected <{self.val}> to satisfy <{matcher}>, but did not.")
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self
@@ -207,14 +209,14 @@ class BaseMixin:
             for i, item in enumerate(self.val):
                 if not matcher.matches(item):
                     return self.error(
-                        "Expected all items to satisfy %s, but item at index %d <%s> did not: %s."
-                        % (matcher.describe(), i, item, matcher.describe_mismatch(item))
+                        f"Expected all items to satisfy {matcher.describe()}, but item at index {i} <{item}> did not:"
+                        f" {matcher.describe_mismatch(item)}."
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
                 if not matcher(item):
                     return self.error(
-                        "Expected all items to satisfy <%s>, but item at index %d <%s> did not." % (matcher, i, item)
+                        f"Expected all items to satisfy <{matcher}>, but item at index {i} <{item}> did not."
                     )
         else:
             raise TypeError("given arg must be a Matcher or callable")
@@ -255,8 +257,8 @@ class BaseMixin:
         matcher = StructureMatcher(spec)
         if not matcher.matches(self.val):
             return self.error(
-                "Expected <%s> to match structure %s, but %s."
-                % (self.val, matcher.describe(), matcher.describe_mismatch(self.val))
+                f"Expected <{self.val}> to match structure {matcher.describe()}, but"
+                f" {matcher.describe_mismatch(self.val)}."
             )
         return self
 
@@ -425,7 +427,7 @@ class BaseMixin:
             AssertionError: if actual **is** equal to expected
         """
         if self.val == other:
-            return self.error("Expected <%s> to be not equal to <%s>, but was." % (self.val, other))
+            return self.error(f"Expected <{self.val}> to be not equal to <{other}>, but was.")
         return self
 
     def is_same_as(self, other) -> Self:
@@ -467,7 +469,7 @@ class BaseMixin:
             AssertionError: if actual is **not** identical to expected
         """
         if self.val is not other:
-            return self.error("Expected <%s> to be identical to <%s>, but was not." % (self.val, other))
+            return self.error(f"Expected <{self.val}> to be identical to <{other}>, but was not.")
         return self
 
     def is_not_same_as(self, other) -> Self:
@@ -498,7 +500,7 @@ class BaseMixin:
             AssertionError: if actual **is** identical to expected
         """
         if self.val is other:
-            return self.error("Expected <%s> to be not identical to <%s>, but was." % (self.val, other))
+            return self.error(f"Expected <{self.val}> to be not identical to <{other}>, but was.")
         return self
 
     def is_true(self) -> Self:
@@ -523,7 +525,7 @@ class BaseMixin:
             AssertionError: if val **is** false
         """
         if not self.val:
-            return self.error("Expected <%s> to be <True>, but was not." % self.val)
+            return self.error(f"Expected <{self.val}> to be <True>, but was not.")
         return self
 
     def is_false(self) -> Self:
@@ -548,7 +550,7 @@ class BaseMixin:
             AssertionError: if val **is** true
         """
         if self.val:
-            return self.error("Expected <%s> to be <False>, but was not." % self.val)
+            return self.error(f"Expected <{self.val}> to be <False>, but was not.")
         return self
 
     def is_none(self) -> Self:
@@ -567,7 +569,7 @@ class BaseMixin:
             AssertionError: if val is **not** none
         """
         if self.val is not None:
-            return self.error("Expected <%s> to be <None>, but was not." % self.val)
+            return self.error(f"Expected <{self.val}> to be <None>, but was not.")
         return self
 
     def is_not_none(self) -> Self:
@@ -623,7 +625,7 @@ class BaseMixin:
             raise TypeError("given arg must be a type")
         if type(self.val) is not some_type:
             t = self._type(self.val)
-            return self.error("Expected <%s:%s> to be of type <%s>, but was not." % (self.val, t, some_type.__name__))
+            return self.error(f"Expected <{self.val}:{t}> to be of type <{some_type.__name__}>, but was not.")
         return self
 
     def is_instance_of(self, some_class) -> Self:
@@ -661,7 +663,7 @@ class BaseMixin:
             if not isinstance(self.val, some_class):
                 t = self._type(self.val)
                 return self.error(
-                    "Expected <%s:%s> to be instance of class <%s>, but was not." % (self.val, t, some_class.__name__)
+                    f"Expected <{self.val}:{t}> to be instance of class <{some_class.__name__}>, but was not."
                 )
         except TypeError:
             raise TypeError("given arg must be a class") from None
@@ -695,5 +697,5 @@ class BaseMixin:
         if length < 0:
             raise ValueError("given arg must be a positive int")
         if len(self.val) != length:
-            return self.error("Expected <%s> to be of length <%d>, but was <%d>." % (self.val, length, len(self.val)))
+            return self.error(f"Expected <{self.val}> to be of length <{length}>, but was <{len(self.val)}>.")
         return self

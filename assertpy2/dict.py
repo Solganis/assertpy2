@@ -114,8 +114,8 @@ class DictMixin:
                 missing.append(v)
         if missing:
             return self.error(
-                "Expected <%s> to contain values %s, but did not contain %s."
-                % (self.val, self._fmt_items(values), self._fmt_items(missing))
+                f"Expected <{self.val}> to contain values {self._fmt_items(values)},"
+                f" but did not contain {self._fmt_items(missing)}."
             )
         return self
 
@@ -149,8 +149,8 @@ class DictMixin:
                     found.append(v)
             if found:
                 return self.error(
-                    "Expected <%s> to not contain values %s, but did contain %s."
-                    % (self.val, self._fmt_items(values), self._fmt_items(found))
+                    f"Expected <{self.val}> to not contain values {self._fmt_items(values)},"
+                    f" but did contain {self._fmt_items(found)}."
                 )
         return self
 
@@ -203,8 +203,8 @@ class DictMixin:
                 missing.append(e)  # bad val
         if missing:
             return self.error(
-                "Expected <%s> to contain entries %s, but did not contain %s."
-                % (self.val, self._fmt_items(entries), self._fmt_items(missing))
+                f"Expected <{self.val}> to contain entries {self._fmt_items(entries)},"
+                f" but did not contain {self._fmt_items(missing)}."
             )
         return self
 
@@ -249,7 +249,7 @@ class DictMixin:
                 found.append(e)
         if found:
             return self.error(
-                "Expected <%s> to not contain entries %s, but did contain %s."
-                % (self.val, self._fmt_items(entries), self._fmt_items(found))
+                f"Expected <{self.val}> to not contain entries {self._fmt_items(entries)},"
+                f" but did contain {self._fmt_items(found)}."
             )
         return self

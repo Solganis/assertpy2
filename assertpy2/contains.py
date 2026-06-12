@@ -80,13 +80,13 @@ class ContainsMixin:
             if isinstance(items[0], Matcher):
                 if not any(items[0].matches(v) for v in self.val):
                     return self.error(
-                        "Expected <%s> to contain item matching %s, but did not." % (self.val, items[0].describe())
+                        f"Expected <{self.val}> to contain item matching {items[0].describe()}, but did not."
                     )
             elif items[0] not in self.val:
                 if self._check_dict_like(self.val, return_as_bool=True):
-                    return self.error("Expected <%s> to contain key <%s>, but did not." % (self.val, items[0]))
+                    return self.error(f"Expected <{self.val}> to contain key <{items[0]}>, but did not.")
                 else:
-                    return self.error("Expected <%s> to contain item <%s>, but did not." % (self.val, items[0]))
+                    return self.error(f"Expected <{self.val}> to contain item <{items[0]}>, but did not.")
         else:
             missing = []
             for i in items:
@@ -99,18 +99,13 @@ class ContainsMixin:
                 missing_desc = [m.describe() if isinstance(m, Matcher) else m for m in missing]
                 if self._check_dict_like(self.val, return_as_bool=True):
                     return self.error(
-                        "Expected <%s> to contain keys %s, but did not contain key%s %s."
-                        % (
-                            self.val,
-                            self._fmt_items(items),
-                            "" if len(missing) == 0 else "s",
-                            self._fmt_items(missing_desc),
-                        )
+                        f"Expected <{self.val}> to contain keys {self._fmt_items(items)}, but did not contain"
+                        f" key{'' if len(missing) == 0 else 's'} {self._fmt_items(missing_desc)}."
                     )
                 else:
                     return self.error(
-                        "Expected <%s> to contain items %s, but did not contain %s."
-                        % (self.val, self._fmt_items(items), self._fmt_items(missing_desc))
+                        f"Expected <{self.val}> to contain items {self._fmt_items(items)},"
+                        f" but did not contain {self._fmt_items(missing_desc)}."
                     )
         return self
 
@@ -146,7 +141,7 @@ class ContainsMixin:
             raise ValueError("one or more args must be given")
         elif len(items) == 1:
             if items[0] in self.val:
-                return self.error("Expected <%s> to not contain item <%s>, but did." % (self.val, items[0]))
+                return self.error(f"Expected <{self.val}> to not contain item <{items[0]}>, but did.")
         else:
             found = []
             for i in items:
@@ -154,8 +149,8 @@ class ContainsMixin:
                     found.append(i)
             if found:
                 return self.error(
-                    "Expected <%s> to not contain items %s, but did contain %s."
-                    % (self.val, self._fmt_items(items), self._fmt_items(found))
+                    f"Expected <{self.val}> to not contain items {self._fmt_items(items)},"
+                    f" but did contain {self._fmt_items(found)}."
                 )
         return self
 
@@ -191,8 +186,8 @@ class ContainsMixin:
                     extra.append(i)
             if extra:
                 return self.error(
-                    "Expected <%s> to contain only %s, but did contain %s."
-                    % (self.val, self._fmt_items(items), self._fmt_items(extra))
+                    f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
+                    f" but did contain {self._fmt_items(extra)}."
                 )
 
             missing = []
@@ -201,8 +196,8 @@ class ContainsMixin:
                     missing.append(i)
             if missing:
                 return self.error(
-                    "Expected <%s> to contain only %s, but did not contain %s."
-                    % (self.val, self._fmt_items(items), self._fmt_items(missing))
+                    f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
+                    f" but did not contain {self._fmt_items(missing)}."
                 )
         return self
 
@@ -238,7 +233,7 @@ class ContainsMixin:
                 idx = self.val.find(item, pos)
                 if idx == -1:
                     return self.error(
-                        "Expected <%s> to contain sequence %s, but did not." % (self.val, self._fmt_items(items))
+                        f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not."
                     )
                 pos = idx + len(item)
             return self
@@ -251,7 +246,7 @@ class ContainsMixin:
                     return self
         except TypeError:
             raise TypeError("val is not iterable") from None
-        return self.error("Expected <%s> to contain sequence %s, but did not." % (self.val, self._fmt_items(items)))
+        return self.error(f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not.")
 
     def contains_duplicates(self) -> Self:
         """Asserts that val is iterable and *does* contain duplicates.
@@ -274,7 +269,7 @@ class ContainsMixin:
                 return self
         except TypeError:
             raise TypeError("val is not iterable") from None
-        return self.error("Expected <%s> to contain duplicates, but did not." % self.val)
+        return self.error(f"Expected <{self.val}> to contain duplicates, but did not.")
 
     def does_not_contain_duplicates(self) -> Self:
         """Asserts that val is iterable and *does not* contain any duplicates.
@@ -297,7 +292,7 @@ class ContainsMixin:
                 return self
         except TypeError:
             raise TypeError("val is not iterable") from None
-        return self.error("Expected <%s> to not contain duplicates, but did." % self.val)
+        return self.error(f"Expected <{self.val}> to not contain duplicates, but did.")
 
     def is_empty(self) -> Self:
         """Asserts that val is empty.
@@ -319,9 +314,9 @@ class ContainsMixin:
         """
         if len(self.val) != 0:
             if isinstance(self.val, str):
-                return self.error("Expected <%s> to be empty string, but was not." % self.val)
+                return self.error(f"Expected <{self.val}> to be empty string, but was not.")
             else:
-                return self.error("Expected <%s> to be empty, but was not." % self.val)
+                return self.error(f"Expected <{self.val}> to be empty, but was not.")
         return self
 
     def is_not_empty(self) -> Self:
@@ -439,7 +434,7 @@ class ContainsMixin:
             for i in items:
                 if self.val == i:
                     return self
-        return self.error("Expected <%s> to be in %s, but was not." % (self.val, self._fmt_items(items)))
+        return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.")
 
     def is_not_in(self, *items) -> Self:
         """Asserts that val is not equal to one of the given items.
@@ -464,5 +459,5 @@ class ContainsMixin:
         else:
             for i in items:
                 if self.val == i:
-                    return self.error("Expected <%s> to not be in %s, but was." % (self.val, self._fmt_items(items)))
+                    return self.error(f"Expected <{self.val}> to not be in {self._fmt_items(items)}, but was.")
         return self

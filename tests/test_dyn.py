@@ -37,13 +37,13 @@ class Person:
 
     @property
     def name(self):
-        return "%s %s" % (self.first_name, self.last_name)
+        return f"{self.first_name} {self.last_name}"
 
     def say_hello(self):
-        return "Hello, %s!" % self.first_name
+        return f"Hello, {self.first_name}!"
 
     def say_goodbye(self, target):
-        return "Bye, %s!" % target
+        return f"Bye, {target}!"
 
 
 fred = Person("Fred", "Smith", 12)
