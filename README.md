@@ -125,25 +125,25 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 
 ## Features
 
-- **Composable matchers**: `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~` operators.
-- **Structural matching**: `matches_structure()` for declarative dict/API response validation.
-- **Async assertions**: `eventually()` with polling/retry for async and eventual consistency testing.
-- **Structured errors**: `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
+- [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~` operators.
+- [**Structural matching**](docs/api.md#structural-matching): `matches_structure()` for declarative dict/API response validation.
+- [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for async and eventual consistency testing.
+- [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
 - **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
 - **Type safety**: `Self` return types, `py.typed` ([PEP 561](https://peps.python.org/pep-0561/)).
-- **Soft assertions**: thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`.
-- **Fluent chaining**: write assertions as readable one-liners that chain naturally.
-- **Dynamic assertions**: `has_<name>()` for any attribute, property, or zero-argument method on objects and dicts.
-- **Dict comparison**: `is_equal_to()` with `ignore` and `include` for selective key matching.
-- **Extracting**: flatten collections on attributes with `filter` and `sort` support.
-- **File assertions**: `exists()`, `is_file()`, `is_readable()`, `is_writable()`, `is_executable()` with `pathlib.Path` support.
-- **Snapshot testing**: store and compare data structures in JSON format, inspired by Jest.
-- **Allure integration**: auto-attach structured diff and actual/expected data to Allure reports.
-- **Behave step matchers**: ready-made parameter types (`PositiveInt`, `BoolLike`, etc.) for Behave step definitions.
-- **Custom matchers**: register domain-specific matchers via `register_matcher()`, composable with `&`, `|`, `~`.
-- **Regex group extraction**: `extracting_group()` and `matches_with_groups()` to assert on regex captures fluently.
-- **Extensions**: add custom assertions via `add_extension()`.
-- Strings, numbers, lists, tuples, sets, dicts, dates, booleans, objects, exceptions.
+- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`.
+- [**Fluent chaining**](docs/api.md#chaining): write assertions as readable one-liners that chain naturally.
+- [**Dynamic assertions**](docs/api.md#objects): `has_<name>()` for any attribute, property, or zero-argument method on objects and dicts.
+- [**Dict comparison**](docs/api.md#dicts): `is_equal_to()` with `ignore` and `include` for selective key matching.
+- [**Extracting**](docs/api.md#objects): flatten collections on attributes with `filter` and `sort` support.
+- [**File assertions**](docs/api.md#files): `exists()`, `is_file()`, `is_readable()`, `is_writable()`, `is_executable()` with `pathlib.Path` support.
+- [**Snapshot testing**](docs/api.md#snapshot-testing): store and compare data structures in JSON format, inspired by Jest.
+- [**Allure integration**](docs/api.md#allure-integration): auto-attach structured diff and actual/expected data to Allure reports.
+- [**Behave step matchers**](docs/api.md#behave-step-matchers): ready-made parameter types (`PositiveInt`, `BoolLike`, etc.) for Behave step definitions.
+- [**Custom matchers**](docs/api.md#custom-matchers---registering-domain-matchers): register domain-specific matchers via `register_matcher()`, composable with `&`, `|`, `~`.
+- [**Regex group extraction**](docs/api.md#regex-group-extraction): `extracting_group()` and `matches_with_groups()` to assert on regex captures fluently.
+- [**Extensions**](docs/api.md#extension-system---adding-custom-assertions): add custom assertions via `add_extension()`.
+- [Strings](docs/api.md#strings), [numbers](docs/api.md#numbers), [lists](docs/api.md#lists), [tuples](docs/api.md#tuples), [sets](docs/api.md#sets), [dicts](docs/api.md#dicts), [dates](docs/api.md#dates), [booleans](docs/api.md#booleans), [objects](docs/api.md#objects), [exceptions](docs/api.md#failure).
 
 
 ## Composable matchers
