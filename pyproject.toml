@@ -1,6 +1,6 @@
 [project]
 name = "assertpy2"
-version = "2.3.1"
+version = "2.3.2"
 description = "Fluent assertion library for Python with full type safety and soft assertions"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -55,6 +55,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=6.1",
     "ruff>=0.15.17",
+    "ty>=0.0.49",
 ]
 
 [tool.pytest.ini_options]
@@ -73,7 +74,9 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+preview = true
+explicit-preview-rules = true
+select = ["E", "E301", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]

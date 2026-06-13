@@ -31,6 +31,7 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import Matcher, StructureMatcher
 
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-class BaseMixin:
+class BaseMixin(_MixinBase):
     """Base mixin."""
 
     def described_as(self, description) -> Self:

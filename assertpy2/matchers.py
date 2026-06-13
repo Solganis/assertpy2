@@ -2,30 +2,30 @@ from __future__ import annotations
 
 import re
 import uuid as _uuid_mod
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
 class Matcher(Protocol):
     """Protocol for composable matcher objects."""
 
-    def matches(self, value: object) -> bool: ...
+    def matches(self, value: Any) -> bool: ...
 
     def describe(self) -> str: ...
 
-    def describe_mismatch(self, value: object) -> str: ...
+    def describe_mismatch(self, value: Any) -> str: ...
 
 
 class BaseMatcher:
     """Abstract base for all matchers with operator support."""
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         raise NotImplementedError
 
     def describe(self) -> str:
         raise NotImplementedError
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}>"
 
     def __and__(self, other: Matcher) -> AllOfMatcher:
@@ -54,13 +54,13 @@ class AllOfMatcher(BaseMatcher):
     def __init__(self, *matchers: Matcher):
         self.matchers = matchers
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return all(m.matches(value) for m in self.matchers)
 
     def describe(self) -> str:
         return f"({' and '.join(m.describe() for m in self.matchers)})"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         failed = [m for m in self.matchers if not m.matches(value)]
         return f"<{value}> did not satisfy: {', '.join(m.describe() for m in failed)}"
 
@@ -71,13 +71,13 @@ class AnyOfMatcher(BaseMatcher):
     def __init__(self, *matchers: Matcher):
         self.matchers = matchers
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return any(m.matches(value) for m in self.matchers)
 
     def describe(self) -> str:
         return f"({' or '.join(m.describe() for m in self.matchers)})"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"<{value}> satisfied none of: {', '.join(m.describe() for m in self.matchers)}"
 
 
@@ -87,13 +87,13 @@ class NotMatcher(BaseMatcher):
     def __init__(self, matcher: Matcher):
         self.matcher = matcher
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return not self.matcher.matches(value)
 
     def describe(self) -> str:
         return f"not {self.matcher.describe()}"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"<{value}> unexpectedly matched {self.matcher.describe()}"
 
 
@@ -104,7 +104,7 @@ class EqualToMatcher(BaseMatcher):
     def __init__(self, expected: object):
         self.expected = expected
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value == self.expected
 
     def describe(self) -> str:
@@ -115,7 +115,7 @@ class GreaterThanMatcher(BaseMatcher):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value > self.boundary
 
     def describe(self) -> str:
@@ -126,7 +126,7 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value >= self.boundary
 
     def describe(self) -> str:
@@ -137,7 +137,7 @@ class LessThanMatcher(BaseMatcher):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value < self.boundary
 
     def describe(self) -> str:
@@ -148,7 +148,7 @@ class LessThanOrEqualToMatcher(BaseMatcher):
     def __init__(self, boundary: object):
         self.boundary = boundary
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value <= self.boundary
 
     def describe(self) -> str:
@@ -160,7 +160,7 @@ class BetweenMatcher(BaseMatcher):
         self.low = low
         self.high = high
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return self.low <= value <= self.high
 
     def describe(self) -> str:
@@ -172,7 +172,7 @@ class CloseToMatcher(BaseMatcher):
         self.expected = expected
         self.tolerance = tolerance
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return abs(value - self.expected) <= self.tolerance
 
     def describe(self) -> str:
@@ -183,7 +183,7 @@ class CloseToMatcher(BaseMatcher):
 
 
 class IsNoneMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value is None
 
     def describe(self) -> str:
@@ -191,7 +191,7 @@ class IsNoneMatcher(BaseMatcher):
 
 
 class IsNotNoneMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value is not None
 
     def describe(self) -> str:
@@ -202,18 +202,18 @@ class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: type):
         self.expected_type = expected_type
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, self.expected_type)
 
     def describe(self) -> str:
         return f"an instance of <{self.expected_type.__name__}>"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}> of type <{type(value).__name__}>"
 
 
 class IsTruthyMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return bool(value)
 
     def describe(self) -> str:
@@ -221,7 +221,7 @@ class IsTruthyMatcher(BaseMatcher):
 
 
 class IsFalsyMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return not bool(value)
 
     def describe(self) -> str:
@@ -235,18 +235,18 @@ class HasLengthMatcher(BaseMatcher):
     def __init__(self, expected_length: int):
         self.expected_length = expected_length
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return len(value) == self.expected_length
 
     def describe(self) -> str:
         return f"a value of length <{self.expected_length}>"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}> with length <{len(value)}>"
 
 
 class IsEmptyMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return len(value) == 0
 
     def describe(self) -> str:
@@ -254,7 +254,7 @@ class IsEmptyMatcher(BaseMatcher):
 
 
 class IsNotEmptyMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return len(value) > 0
 
     def describe(self) -> str:
@@ -265,7 +265,7 @@ class IsNotEmptyMatcher(BaseMatcher):
 
 
 class IsPositiveMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value > 0
 
     def describe(self) -> str:
@@ -273,7 +273,7 @@ class IsPositiveMatcher(BaseMatcher):
 
 
 class IsNegativeMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value < 0
 
     def describe(self) -> str:
@@ -281,7 +281,7 @@ class IsNegativeMatcher(BaseMatcher):
 
 
 class IsZeroMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value == 0
 
     def describe(self) -> str:
@@ -289,26 +289,26 @@ class IsZeroMatcher(BaseMatcher):
 
 
 class IsEvenMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, int) and not isinstance(value, bool) and value % 2 == 0
 
     def describe(self) -> str:
         return "an even integer"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
             return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
         return f"was <{value}>, which is odd"
 
 
 class IsOddMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, int) and not isinstance(value, bool) and value % 2 != 0
 
     def describe(self) -> str:
         return "an odd integer"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
             return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
         return f"was <{value}>, which is even"
@@ -318,26 +318,26 @@ class IsDivisibleByMatcher(BaseMatcher):
     def __init__(self, divisor: int):
         self.divisor = divisor
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, int) and not isinstance(value, bool) and value % self.divisor == 0
 
     def describe(self) -> str:
         return f"an integer divisible by <{self.divisor}>"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
             return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
         return f"was <{value}>, which has remainder <{value % self.divisor}>"
 
 
 class IsCallableMatcher(BaseMatcher):
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return callable(value)
 
     def describe(self) -> str:
         return "a callable"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"was <{value!r}> of type <{type(value).__name__}>, which is not callable"
 
 
@@ -345,13 +345,13 @@ class IsInMatcher(BaseMatcher):
     def __init__(self, *values: object):
         self.values = values
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return value in self.values
 
     def describe(self) -> str:
         return f"a value in <{self.values}>"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         return f"was <{value!r}>, which is not in <{self.values}>"
 
 
@@ -360,7 +360,7 @@ class HasPropertyMatcher(BaseMatcher):
         self.name = name
         self.matcher = matcher
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         if not hasattr(value, self.name):
             return False
         if self.matcher is not None:
@@ -372,7 +372,7 @@ class HasPropertyMatcher(BaseMatcher):
             return f"an object with property <{self.name}> matching {self.matcher.describe()}"
         return f"an object with property <{self.name}>"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         if not hasattr(value, self.name):
             return f"<{value!r}> has no property <{self.name}>"
         if self.matcher is not None:
@@ -388,7 +388,7 @@ class ContainsStringMatcher(BaseMatcher):
     def __init__(self, substring: str):
         self.substring = substring
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, str) and self.substring in value
 
     def describe(self) -> str:
@@ -399,7 +399,7 @@ class MatchesRegexMatcher(BaseMatcher):
     def __init__(self, pattern: str):
         self.pattern = pattern
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, str) and re.search(self.pattern, value) is not None
 
     def describe(self) -> str:
@@ -410,7 +410,7 @@ class StartsWithMatcher(BaseMatcher):
     def __init__(self, prefix: str):
         self.prefix = prefix
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, str) and value.startswith(self.prefix)
 
     def describe(self) -> str:
@@ -421,7 +421,7 @@ class EndsWithMatcher(BaseMatcher):
     def __init__(self, suffix: str):
         self.suffix = suffix
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, str) and value.endswith(self.suffix)
 
     def describe(self) -> str:
@@ -434,7 +434,7 @@ class EndsWithMatcher(BaseMatcher):
 class IgnoreMatcher(BaseMatcher):
     """Always matches. Used in structure specs to accept any value for a field."""
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return True
 
     def describe(self) -> str:
@@ -444,7 +444,7 @@ class IgnoreMatcher(BaseMatcher):
 class IsUuidMatcher(BaseMatcher):
     """Matches valid UUID strings."""
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         if not isinstance(value, str):
             return False
         try:
@@ -460,7 +460,7 @@ class IsUuidMatcher(BaseMatcher):
 class IsNonEmptyStringMatcher(BaseMatcher):
     """Matches non-empty strings."""
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         return isinstance(value, str) and len(value) > 0
 
     def describe(self) -> str:
@@ -473,7 +473,7 @@ class EachMatcher(BaseMatcher):
     def __init__(self, matcher: Matcher):
         self.matcher = matcher
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         try:
             return all(self.matcher.matches(item) for item in value)
         except TypeError:
@@ -482,7 +482,7 @@ class EachMatcher(BaseMatcher):
     def describe(self) -> str:
         return f"each item matching {self.matcher.describe()}"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         try:
             for i, item in enumerate(value):
                 if not self.matcher.matches(item):
@@ -498,7 +498,7 @@ class StructureMatcher(BaseMatcher):
     def __init__(self, spec: dict):
         self._spec = spec
 
-    def matches(self, value: object) -> bool:
+    def matches(self, value: Any) -> bool:
         if not isinstance(value, dict):
             return False
         return self._match_recursive(value, self._spec, "") is None
@@ -506,7 +506,7 @@ class StructureMatcher(BaseMatcher):
     def describe(self) -> str:
         return f"a dict matching structure {self._describe_spec(self._spec)}"
 
-    def describe_mismatch(self, value: object) -> str:
+    def describe_mismatch(self, value: Any) -> str:
         if not isinstance(value, dict):
             return f"was not a dict: <{value}>"
         error = self._match_recursive(value, self._spec, "")

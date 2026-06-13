@@ -64,3 +64,6 @@ jobs:
 
       - name: Ruff format check
         run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run ty check assertpy2/
