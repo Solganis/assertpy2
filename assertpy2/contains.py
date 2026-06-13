@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
 from .matchers import Matcher
 
 if TYPE_CHECKING:
@@ -39,7 +40,7 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-class ContainsMixin:
+class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
 
     def contains(self, *items) -> Self:

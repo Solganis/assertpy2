@@ -33,10 +33,12 @@ import numbers
 
 from assertpy2.errors import DiffEntry, DiffResult
 
+from ._mixin_base import _MixinBase
+
 __tracebackhide__ = True
 
 
-class HelpersMixin:
+class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
     def _fmt_items(self, i):

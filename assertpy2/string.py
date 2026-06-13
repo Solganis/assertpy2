@@ -32,13 +32,15 @@ import collections.abc
 import re
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
 __tracebackhide__ = True
 
 
-class StringMixin:
+class StringMixin(_MixinBase):
     """String assertions mixin."""
 
     def is_equal_to_ignoring_case(self, other) -> Self:

@@ -77,7 +77,7 @@ def register_assertpy_types() -> None:
         ImportError: if behave is not installed
     """
     try:
-        from behave import register_type
+        from behave import register_type  # ty: ignore[unresolved-import]  # optional dependency
     except ImportError:
         raise ImportError(
             "behave is required for register_assertpy_types(). Install it with: pip install assertpy2[behave]"
