@@ -73,7 +73,7 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.3.4"
+__version__ = "2.3.5"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -397,7 +397,6 @@ def _builder(val, description="", kind=None, expected=None, logger=None):
     """Internal helper to build a new :class:`AssertionBuilder` instance and glue on any extension methods."""
     ab = AssertionBuilder(val, description, kind, expected, logger)
     if _extensions:
-        # glue extension method onto new builder instance
         for name, func in _extensions.items():
             meth = types.MethodType(func, ab)
             setattr(ab, name, meth)
@@ -410,13 +409,11 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
 
     def process(self, msg, kwargs):
         def _unwind(frame):
-            # walk all the frames
             frames = []
             while frame:
                 frames.append((frame.f_code.co_filename, frame.f_lineno))
                 frame = frame.f_back
 
-            # in reverse, find the first assertpy frame (and return the previous one)
             prev = None
             for frame in reversed(
                 frames

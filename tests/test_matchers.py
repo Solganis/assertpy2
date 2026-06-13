@@ -562,3 +562,70 @@ class TestDescribeCoverage:
 
     def test_ends_with_describe(self):
         assert_that(match.ends_with("bar").describe()).is_equal_to("a string ending with <bar>")
+
+
+class TestMatcherEqProtocol:
+    def test_eq_positive_match(self):
+        assert 5 == match.is_positive()
+
+    def test_eq_negative_match(self):
+        assert (-5 == match.is_positive()) is False
+
+    def test_eq_equal_to(self):
+        assert 42 == match.equal_to(42)
+
+    def test_eq_between(self):
+        assert 5 == match.between(1, 10)
+
+    def test_eq_string_matcher(self):
+        assert "hello" == match.is_non_empty_string()
+
+    def test_eq_not_equal(self):
+        assert -5 != match.is_positive()
+
+    def test_eq_reverse_order(self):
+        assert match.is_positive() == 5
+
+    def test_eq_dict(self):
+        assert {"id": 5, "name": "Alice"} == {"id": match.is_positive(), "name": match.is_non_empty_string()}
+
+    def test_eq_dict_mismatch(self):
+        assert {"id": -5} != {"id": match.is_positive()}
+
+    def test_eq_nested_dict(self):
+        data = {"user": {"name": "Alice", "age": 30}}
+        assert data == {"user": {"name": match.is_non_empty_string(), "age": match.is_positive()}}
+
+    def test_eq_list(self):
+        assert [1, 2, 3] == [match.is_positive(), match.is_positive(), match.is_positive()]
+
+    def test_eq_composition_and(self):
+        assert 5 == (match.is_positive() & match.less_than(10))
+
+    def test_eq_composition_or(self):
+        assert -1 == (match.is_positive() | match.is_negative())
+
+    def test_eq_negated_matcher(self):
+        assert -5 == ~match.is_positive()
+
+    def test_hash_unique_instances(self):
+        m1 = match.is_positive()
+        m2 = match.is_positive()
+        s = {m1, m2}
+        assert_that(s).is_length(2)
+
+    def test_hash_same_instance(self):
+        m = match.is_positive()
+        s = {m, m}
+        assert_that(s).is_length(1)
+
+    def test_repr_unchanged(self):
+        assert_that(repr(match.is_positive())).is_equal_to("a positive value")
+
+    def test_eq_with_pytest_assert_message(self):
+        try:
+            assert -5 == match.is_positive()
+        except AssertionError:
+            pass
+        else:
+            raise AssertionError("Expected AssertionError")

@@ -30,7 +30,7 @@ wheels = [
 
 [[package]]
 name = "assertpy2"
-version = "2.3.1"
+version = "2.3.5"
 source = { editable = "." }
 dependencies = [
     { name = "typing-extensions" },
