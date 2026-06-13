@@ -43,6 +43,12 @@ class BaseMatcher:
     def __invert__(self) -> NotMatcher:
         return NotMatcher(self)
 
+    def __eq__(self, other: object) -> bool:
+        return self.matches(other)
+
+    def __hash__(self) -> int:
+        return id(self)
+
     def __repr__(self) -> str:
         return self.describe()
 
@@ -452,8 +458,6 @@ class EndsWithMatcher(BaseMatcher):
 
 
 class IgnoreMatcher(BaseMatcher):
-    """Always matches. Used in structure specs to accept any value for a field."""
-
     def matches(self, value: Any) -> bool:
         return True
 
@@ -462,8 +466,6 @@ class IgnoreMatcher(BaseMatcher):
 
 
 class IsUuidMatcher(BaseMatcher):
-    """Matches valid UUID strings."""
-
     def matches(self, value: Any) -> bool:
         if not isinstance(value, str):
             return False
@@ -478,8 +480,6 @@ class IsUuidMatcher(BaseMatcher):
 
 
 class IsNonEmptyStringMatcher(BaseMatcher):
-    """Matches non-empty strings."""
-
     def matches(self, value: Any) -> bool:
         return isinstance(value, str) and len(value) > 0
 

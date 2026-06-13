@@ -125,7 +125,7 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 
 ## Features
 
-- [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~` operators.
+- [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
 - [**Structural matching**](docs/api.md#structural-matching): `matches_structure()` for declarative dict/API response validation.
 - [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for async and eventual consistency testing.
 - [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
@@ -167,6 +167,15 @@ assert_that("hello").satisfies(~match.equal_to("world"))
 
 # combine freely
 assert_that(150).satisfies(match.is_negative() | match.greater_than(100))
+```
+
+Matchers also support `==` directly, so you can use them with plain `assert` or mix into dicts and lists:
+
+```py
+from assertpy2 import match
+
+assert 42 == match.is_positive()
+assert {"id": 5, "name": "Alice"} == {"id": match.is_positive(), "name": match.is_non_empty_string()}
 ```
 
 Available matchers: `equal_to`, `greater_than`, `greater_than_or_equal_to`, `less_than`, `less_than_or_equal_to`, `between`, `close_to`, `is_none`, `is_not_none`, `is_instance_of`, `has_length`, `is_empty`, `is_not_empty`, `is_positive`, `is_negative`, `is_zero`, `is_even`, `is_odd`, `is_divisible_by`, `is_callable`, `is_in`, `has_property`, `contains_string`, `matches_regex`, `is_uuid`, `is_non_empty_string`, `ignore`, `each_item`, `structure`.

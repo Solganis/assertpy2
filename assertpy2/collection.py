@@ -118,7 +118,6 @@ class CollectionMixin(_MixinBase):
 
         missing = []
         if hasattr(self.val, "keys") and callable(self.val.keys) and hasattr(self.val, "__getitem__"):
-            # flatten superset dicts
             superdict = {}
             for idx, j in enumerate(supersets):
                 self._check_dict_like(j, check_values=False, name=f"arg #{idx + 1}")
@@ -136,7 +135,6 @@ class CollectionMixin(_MixinBase):
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
                 )
         else:
-            # flatten supersets
             superset = set()
             for j in supersets:
                 try:

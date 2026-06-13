@@ -977,6 +977,38 @@ assert_that(50).satisfies(complex_check)
 assert_that(-1).satisfies(complex_check)
 ```
 
+### Using matchers with `==`
+
+Matchers implement `__eq__`, so they work with plain `assert` and pytest introspection. No `assert_that()` wrapper needed:
+
+```py
+from assertpy2 import match
+
+# simple value check
+assert 42 == match.is_positive()
+assert "hello" == match.is_non_empty_string()
+
+# dict comparison with matchers as expected values
+assert {"id": 5, "name": "Alice"} == {
+    "id": match.is_positive(),
+    "name": match.is_non_empty_string(),
+}
+
+# list comparison
+assert [1, 2, 3] == [match.is_positive(), match.is_positive(), match.is_positive()]
+
+# composition works too
+assert 42 == (match.is_positive() & match.less_than(100))
+```
+
+On failure, pytest shows the matcher description in the assertion message:
+
+```
+AssertionError: assert -5 == a positive value
+```
+
+This makes matchers a drop-in addition to existing test suites: add one import, use `match.*` in any `==` comparison, no rewrite required.
+
 ### Available matchers
 
 | Matcher | Description |

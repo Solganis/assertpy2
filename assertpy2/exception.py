@@ -73,7 +73,6 @@ class ExceptionMixin(_MixinBase):
         if not issubclass(ex, BaseException):
             raise TypeError("given arg must be exception")
 
-        # chain on with ex as the expected exception
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
     def when_called_with(self, *some_args, **some_kwargs) -> Self:

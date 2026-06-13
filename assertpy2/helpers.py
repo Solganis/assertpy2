@@ -163,7 +163,6 @@ class HelpersMixin(_MixinBase):
             ignores = self._dict_ignore(ignore)
             includes = self._dict_include(include)
 
-            # guarantee include keys are in val
             if include:
                 missing = []
                 for i in includes:
@@ -181,7 +180,6 @@ class HelpersMixin(_MixinBase):
                         f" but did not include key{missing_suffix} {missing_fmt}."
                     )
 
-            # calc val keys given ignores and includes
             if ignore and include:
                 k1 = {k for k in val if k not in ignores and k in includes}
             elif ignore:
@@ -189,7 +187,6 @@ class HelpersMixin(_MixinBase):
             else:  # include
                 k1 = {k for k in val if k in includes}
 
-            # calc other keys given ignores and includes
             if ignore and include:
                 k2 = {k for k in other if k not in ignores and k in includes}
             elif ignore:
@@ -198,7 +195,6 @@ class HelpersMixin(_MixinBase):
                 k2 = {k for k in other if k in includes}
 
             if k1 != k2:
-                # different set of keys, so not equal
                 return True
             else:
                 for k in k1:
@@ -214,10 +210,8 @@ class HelpersMixin(_MixinBase):
                             else None,
                         )
                         if subdicts_not_equal:
-                            # fast fail inside the loop since sub-dicts are not equal
                             return True
                     elif val[k] != other[k]:
-                        # fast fail inside the loop since values are not equal
                         return True
             return False
         else:
