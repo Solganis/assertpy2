@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import uuid as _uuid_mod
+from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -547,6 +548,65 @@ class StructureMatcher(BaseMatcher):
         return f"{{{', '.join(parts)}}}"
 
 
+# --- Custom matcher registry ---
+
+_custom_matchers: dict[str, Callable[..., BaseMatcher]] = {}
+
+
+def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callable[..., BaseMatcher]]:
+    """Register a custom matcher factory on the ``match`` namespace.
+
+    Args:
+        name: the name to register on ``match`` (e.g. ``"is_valid_email"``)
+
+    Returns:
+        A decorator that registers the wrapped function and returns it unchanged.
+
+    Examples:
+        Register a simple matcher::
+
+            @register_matcher("is_valid_email")
+            def is_valid_email():
+                return match.matches_regex(r"^[\\w.-]+@[\\w.-]+\\.\\w+$")
+
+            assert_that(email).satisfies(match.is_valid_email())
+
+        Register a parametrised matcher::
+
+            @register_matcher("has_status")
+            def has_status(expected: str):
+                return match.has_property("status", match.equal_to(expected))
+
+            assert_that(order).satisfies(match.has_status("active"))
+    """
+    if not isinstance(name, str):
+        raise TypeError("name must be a string")
+    if not name.isidentifier():
+        raise ValueError(f"name must be a valid Python identifier, got {name!r}")
+
+    def decorator(func: Callable[..., BaseMatcher]) -> Callable[..., BaseMatcher]:
+        if not callable(func):
+            raise TypeError("func must be callable")
+        _custom_matchers[name] = func
+        return func
+
+    return decorator
+
+
+def unregister_matcher(name: str) -> None:
+    """Remove a previously registered custom matcher.
+
+    Args:
+        name: the matcher name to remove
+
+    Raises:
+        KeyError: if the name is not registered
+    """
+    if name not in _custom_matchers:
+        raise KeyError(f"no custom matcher registered with name {name!r}")
+    del _custom_matchers[name]
+
+
 # --- Namespace ---
 
 
@@ -704,6 +764,13 @@ class _MatchNamespace:
     @staticmethod
     def structure(spec: dict) -> StructureMatcher:
         return StructureMatcher(spec)
+
+    def __getattr__(self, name: str) -> Callable[..., BaseMatcher]:
+        try:
+            factory = _custom_matchers[name]
+        except KeyError:
+            raise AttributeError(f"match has no matcher {name!r}") from None
+        return factory
 
 
 match = _MatchNamespace()
