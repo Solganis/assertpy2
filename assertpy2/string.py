@@ -519,3 +519,93 @@ class StringMixin(_MixinBase):
         if not isinstance(self.val, str):
             return self.error(f"Expected <{self.val}> to be unicode, but was <{type(self.val).__name__}>.")
         return self
+
+    def extracting_group(self, pattern: str, group: int | str = 0) -> Self:
+        """Search val for ``pattern`` and return a new builder whose val is the captured group.
+
+        Args:
+            pattern: the regular expression pattern (must contain at least one group)
+            group: the group index (int) or name (str) to extract. Defaults to ``0``
+                (the entire match).
+
+        Examples:
+            Usage with positional groups::
+
+                assert_that("status=200 path=/api").extracting_group(r"status=(\\d+)", 1).is_equal_to("200")
+
+            Usage with named groups::
+
+                assert_that("2024-01-15 ERROR").extracting_group(
+                    r"(?P<level>\\w+)$", "level"
+                ).is_equal_to("ERROR")
+
+        Returns:
+            AssertionBuilder: a **new** builder whose val is the extracted group string
+
+        Raises:
+            TypeError: if val is not a string or pattern is not a string
+            ValueError: if pattern is empty
+            AssertionError: if the pattern does not match val or the group does not exist
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if not isinstance(pattern, str):
+            raise TypeError("given pattern arg must be a string")
+        if len(pattern) == 0:
+            raise ValueError("given pattern arg must not be empty")
+        m = re.search(pattern, self.val)
+        if m is None:
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
+        try:
+            extracted = m.group(group)
+        except IndexError:
+            return self.error(f"Expected pattern <{pattern}> to have group <{group}>, but it does not.")
+        if extracted is None:
+            return self.error(
+                f"Expected group <{group}> of pattern <{pattern}> to be matched in <{self.val}>, but it was not."
+            )
+        return self.builder(extracted, self.description, self.kind)
+
+    def matches_with_groups(self, pattern: str) -> Self:
+        """Search val for ``pattern`` and return a new builder whose val is the tuple of all groups.
+
+        If the pattern contains **named** groups, the builder val is a ``dict``
+        of ``{name: value}`` for all named groups.  Otherwise it is the
+        ``tuple`` returned by ``Match.groups()``.
+
+        Args:
+            pattern: the regular expression pattern with one or more groups
+
+        Examples:
+            Positional groups::
+
+                assert_that("2024-01-15 ERROR").matches_with_groups(
+                    r"(\\d{4}-\\d{2}-\\d{2}) (\\w+)"
+                ).is_length(2)
+
+            Named groups::
+
+                assert_that("status=200").matches_with_groups(
+                    r"(?P<key>\\w+)=(?P<val>\\w+)"
+                ).contains_key("key").contains_key("val")
+
+        Returns:
+            AssertionBuilder: a **new** builder whose val is the groups tuple or groupdict
+
+        Raises:
+            TypeError: if val is not a string or pattern is not a string
+            ValueError: if pattern is empty
+            AssertionError: if the pattern does not match val
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if not isinstance(pattern, str):
+            raise TypeError("given pattern arg must be a string")
+        if len(pattern) == 0:
+            raise ValueError("given pattern arg must not be empty")
+        m = re.search(pattern, self.val)
+        if m is None:
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
+        groupdict = m.groupdict()
+        result = groupdict if groupdict else m.groups()
+        return self.builder(result, self.description, self.kind)
