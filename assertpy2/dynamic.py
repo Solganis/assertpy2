@@ -30,10 +30,12 @@ from __future__ import annotations
 
 import collections
 
+from ._mixin_base import _MixinBase
+
 __tracebackhide__ = True
 
 
-class DynamicMixin:
+class DynamicMixin(_MixinBase):
     """Dynamic assertions mixin.
 
     When testing attributes of an object (or the contents of a dict), the

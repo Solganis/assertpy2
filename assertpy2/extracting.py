@@ -31,13 +31,15 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
 __tracebackhide__ = True
 
 
-class ExtractingMixin:
+class ExtractingMixin(_MixinBase):
     """Collection flattening mixin.
 
     It is often necessary to test collections of objects.  Use the ``extracting()`` helper to

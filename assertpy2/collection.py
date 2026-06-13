@@ -31,13 +31,15 @@ from __future__ import annotations
 import collections
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
 __tracebackhide__ = True
 
 
-class CollectionMixin:
+class CollectionMixin(_MixinBase):
     """Collection assertions mixin."""
 
     def is_iterable(self) -> Self:

@@ -7,7 +7,7 @@ import warnings
 import pytest
 
 try:
-    import allure
+    import allure  # ty: ignore[unresolved-import]  # optional dependency
 
     _HAS_ALLURE = True  # pragma: no cover - only when allure-pytest is installed
 except ImportError:

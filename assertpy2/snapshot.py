@@ -35,13 +35,15 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
 __tracebackhide__ = True
 
 
-class SnapshotMixin:
+class SnapshotMixin(_MixinBase):
     """Snapshot mixin.
 
     Take a snapshot of a python data structure, store it on disk in JSON format, and automatically
@@ -187,9 +189,12 @@ class SnapshotMixin:
         else:
             # make id from filename and line number
             f = inspect.currentframe()
-            fpath = os.path.basename(f.f_back.f_code.co_filename)
+            caller = f.f_back if f is not None else None
+            if caller is None:  # pragma: no cover - frame introspection always available in CPython
+                raise RuntimeError("cannot determine caller frame")
+            fpath = os.path.basename(caller.f_code.co_filename)
             fname = os.path.splitext(fpath)[0]
-            lineno = str(f.f_back.f_lineno)
+            lineno = str(caller.f_lineno)
             snapname = _name(path, fname)
 
         if not os.path.exists(path):

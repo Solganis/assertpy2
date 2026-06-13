@@ -73,10 +73,10 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.3.1"
+__version__ = "2.3.2"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
-contextlib.__tracebackhide__ = True  # monkey patch contextlib with clean py.test tracebacks
+contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
 
 # assertpy files
 ASSERTPY_FILES = [
@@ -475,6 +475,7 @@ class AssertionBuilder(
         self.kind = kind
         self.expected = expected
         self.logger = logger if logger else _default_logger
+        self._not_expected = False
 
     def builder(self, val, description="", kind=None, expected=None, logger=None):
         """Helper to build a new :class:`AssertionBuilder` instance. Use this only if not chaining to ``self``.

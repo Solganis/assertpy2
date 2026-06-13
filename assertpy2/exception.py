@@ -28,7 +28,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
+
+from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -46,7 +48,7 @@ class _InertBuilder:
         return lambda *args, **kwargs: self
 
 
-class ExceptionMixin:
+class ExceptionMixin(_MixinBase):
     """Expected exception mixin."""
 
     def raises(self, ex) -> Self:
@@ -116,15 +118,16 @@ class ExceptionMixin:
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but raised <{type(e).__name__}>."
                 )
-                return _InertBuilder()
+                return cast("Self", _InertBuilder())
 
         self.error(
             f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
         )
-        return _InertBuilder()
+        return cast("Self", _InertBuilder())
 
     def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
+        assert self.expected is not None
         try:
             self.val(*some_args, **some_kwargs)
         except BaseException as e:
@@ -134,7 +137,7 @@ class ExceptionMixin:
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but did raise <{type(e).__name__}>."
                 )
-                return _InertBuilder()
+                return cast("Self", _InertBuilder())
         return self
 
     def does_not_raise(self, ex) -> Self:

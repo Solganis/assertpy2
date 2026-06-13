@@ -31,6 +31,8 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from ._mixin_base import _MixinBase
+
 if TYPE_CHECKING:
     from typing_extensions import Self
 
@@ -72,17 +74,12 @@ def contents_of(file, encoding="utf-8"):
                 raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
             raise
 
-    if type(contents) is bytes:
+    if isinstance(contents, (bytes, bytearray)):
         return contents.decode(encoding, "replace")
-    try:
-        return contents.decode(encoding, "replace")
-    except AttributeError:
-        pass  # contents is already a str, no decode needed
-    # if all else fails, just return the contents "as is"
     return contents
 
 
-class FileMixin:
+class FileMixin(_MixinBase):
     """File assertions mixin."""
 
     def exists(self) -> Self:
