@@ -18,6 +18,7 @@
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/pyversions/assertpy2" alt="Python"></a>
   <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <br>
+  <a href="https://github.com/Solganis/assertpy2/blob/main/docs/api.md"><img src="https://img.shields.io/badge/Docs-Read%20The%20Docs-black" alt="Documentation"></a>
   <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
   <a href="https://github.com/astral-sh/ty"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty"></a>
@@ -139,6 +140,8 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 - **Snapshot testing**: store and compare data structures in JSON format, inspired by Jest.
 - **Allure integration**: auto-attach structured diff and actual/expected data to Allure reports.
 - **Behave step matchers**: ready-made parameter types (`PositiveInt`, `BoolLike`, etc.) for Behave step definitions.
+- **Custom matchers**: register domain-specific matchers via `register_matcher()`, composable with `&`, `|`, `~`.
+- **Regex group extraction**: `extracting_group()` and `matches_with_groups()` to assert on regex captures fluently.
 - **Extensions**: add custom assertions via `add_extension()`.
 - Strings, numbers, lists, tuples, sets, dicts, dates, booleans, objects, exceptions.
 
@@ -312,6 +315,51 @@ assert_that(fred).has_shoe_size(12)
 
 ```py
 assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
+```
+
+### Custom matchers
+
+Register domain-specific matchers on the `match` namespace with `register_matcher()`:
+
+```py
+from assertpy2 import assert_that, match, register_matcher
+
+@register_matcher("is_valid_email")
+def is_valid_email():
+    return match.matches_regex(r"^[\w.-]+@[\w.-]+\.\w+$")
+
+# parametrised matchers
+@register_matcher("has_status")
+def has_status(expected: str):
+    return match.has_property("status", match.equal_to(expected))
+
+# use everywhere matchers are accepted
+assert_that("alice@example.com").satisfies(match.is_valid_email())
+assert_that(users).extracting("email").each(match.is_valid_email())
+assert_that(data).matches_structure({"email": match.is_valid_email()})
+
+# composition works automatically
+assert_that(email).satisfies(match.is_valid_email() & match.contains_string("@company.com"))
+```
+
+Remove with `unregister_matcher("is_valid_email")`.
+
+### Regex group extraction
+
+Extract regex groups and continue the fluent chain:
+
+```py
+log = "2024-01-15 ERROR status=500 path=/api/users"
+
+# extract a positional group
+assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")
+
+# extract a named group
+assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")
+
+# get all groups as a tuple or dict (named groups)
+assert_that("key=value").matches_with_groups(r"(?P<k>\w+)=(?P<v>\w+)") \
+    .contains_entry({"k": "key"}).contains_entry({"v": "value"})
 ```
 
 ### Extensions

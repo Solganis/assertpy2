@@ -29,6 +29,8 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [Snapshot Testing](#snapshot-testing)
 - [Allure Integration](#allure-integration)
 - [Behave Step Matchers](#behave-step-matchers)
+- [Custom Matchers](#custom-matchers---registering-domain-matchers)
+- [Regex Group Extraction](#regex-group-extraction)
 - [Extension System](#extension-system---adding-custom-assertions)
 - [Chaining](#chaining)
 
@@ -1386,6 +1388,106 @@ parse_int = ASSERTPY_TYPES["PositiveInt"]
 value = parse_int("42")  # 42
 ```
 
+
+[Back to top](#table-of-contents)
+
+## Custom Matchers - registering domain matchers
+
+The `register_matcher()` decorator lets you add custom matchers to the `match` namespace. Custom matchers support full composition with `&`, `|`, `~` and work everywhere matchers are accepted: `satisfies()`, `each()`, `matches_structure()`, `contains()`.
+
+### Simple (no-argument) matchers
+
+```py
+from assertpy2 import assert_that, match, register_matcher
+
+@register_matcher("is_valid_email")
+def is_valid_email():
+    return match.matches_regex(r"^[\w.-]+@[\w.-]+\.\w+$")
+
+assert_that("alice@example.com").satisfies(match.is_valid_email())
+assert_that(users).extracting("email").each(match.is_valid_email())
+```
+
+### Parametrised matchers
+
+```py
+@register_matcher("has_status")
+def has_status(expected: str):
+    return match.has_property("status", match.equal_to(expected))
+
+assert_that(order).satisfies(match.has_status("active"))
+```
+
+### Composition
+
+Custom matchers compose with built-in matchers using `&`, `|`, `~`:
+
+```py
+assert_that(email).satisfies(
+    match.is_valid_email() & match.contains_string("@company.com")
+)
+assert_that(value).satisfies(~match.is_valid_email())
+```
+
+### In structural matching
+
+```py
+assert_that(response).matches_structure({
+    "email": match.is_valid_email(),
+    "status": match.has_status("active"),
+    "name": match.is_non_empty_string(),
+})
+```
+
+### Removing a custom matcher
+
+```py
+from assertpy2 import unregister_matcher
+
+unregister_matcher("is_valid_email")
+```
+
+[Back to top](#table-of-contents)
+
+## Regex Group Extraction
+
+Extract regex capture groups from strings and continue asserting on the extracted value.
+
+### extracting_group()
+
+Search val for a regex pattern and return a new builder whose val is the captured group:
+
+```py
+log = "2024-01-15 ERROR status=500 path=/api/users"
+
+# extract by positional group index
+assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")
+
+# extract by named group
+assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")
+
+# default group=0 extracts the entire match
+assert_that("abc123").extracting_group(r"\d+").is_equal_to("123")
+
+# chain further assertions on the extracted value
+assert_that("count=42").extracting_group(r"count=(\d+)", 1).is_digit().is_length(2)
+```
+
+### matches_with_groups()
+
+Search val for a pattern and return a new builder whose val is the tuple of all groups (or a dict for named groups):
+
+```py
+# positional groups return a tuple
+assert_that("2024-01-15 ERROR").matches_with_groups(
+    r"(\d{4}-\d{2}-\d{2}) (\w+)"
+).is_equal_to(("2024-01-15", "ERROR"))
+
+# named groups return a dict
+assert_that("key=value").matches_with_groups(
+    r"(?P<key>\w+)=(?P<val>\w+)"
+).contains_entry({"key": "key"}).contains_entry({"val": "value"})
+```
 
 [Back to top](#table-of-contents)
 
