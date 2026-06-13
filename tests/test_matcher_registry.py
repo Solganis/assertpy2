@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from assertpy2 import assert_that, match, register_matcher, unregister_matcher
-from assertpy2.matchers import _custom_matchers
+from assertpy2 import assert_that, clear_custom_matchers, match, register_matcher, unregister_matcher
 
 
 class TestRegisterMatcher:
     def teardown_method(self):
-        _custom_matchers.clear()
+        clear_custom_matchers()
 
     def test_simple_matcher(self):
         @register_matcher("is_short")
@@ -113,7 +112,7 @@ class TestRegisterMatcher:
 
 class TestRegisterMatcherErrors:
     def teardown_method(self):
-        _custom_matchers.clear()
+        clear_custom_matchers()
 
     def test_name_not_string(self):
         with pytest.raises(TypeError, match="name must be a string"):
@@ -138,7 +137,7 @@ class TestRegisterMatcherErrors:
 
 class TestUnregisterMatcher:
     def teardown_method(self):
-        _custom_matchers.clear()
+        clear_custom_matchers()
 
     def test_unregister(self):
         @register_matcher("temp")
@@ -153,3 +152,19 @@ class TestUnregisterMatcher:
     def test_unregister_unknown_name(self):
         with pytest.raises(KeyError, match="no custom matcher registered"):
             unregister_matcher("nonexistent")
+
+    def test_clear_custom_matchers(self):
+        @register_matcher("a")
+        def a():
+            return match.is_positive()
+
+        @register_matcher("b")
+        def b():
+            return match.is_negative()
+
+        assert_that(1).satisfies(match.a())
+        clear_custom_matchers()
+        with pytest.raises(AttributeError):
+            match.a()
+        with pytest.raises(AttributeError):
+            match.b()

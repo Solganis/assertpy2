@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import threading
 import uuid as _uuid_mod
 from collections.abc import Callable
 from typing import Any, Protocol, runtime_checkable
@@ -117,7 +118,10 @@ class GreaterThanMatcher(BaseMatcher):
         self.boundary = boundary
 
     def matches(self, value: Any) -> bool:
-        return value > self.boundary
+        try:
+            return value > self.boundary
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value greater than <{self.boundary}>"
@@ -128,7 +132,10 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
         self.boundary = boundary
 
     def matches(self, value: Any) -> bool:
-        return value >= self.boundary
+        try:
+            return value >= self.boundary
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value greater than or equal to <{self.boundary}>"
@@ -139,7 +146,10 @@ class LessThanMatcher(BaseMatcher):
         self.boundary = boundary
 
     def matches(self, value: Any) -> bool:
-        return value < self.boundary
+        try:
+            return value < self.boundary
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value less than <{self.boundary}>"
@@ -150,7 +160,10 @@ class LessThanOrEqualToMatcher(BaseMatcher):
         self.boundary = boundary
 
     def matches(self, value: Any) -> bool:
-        return value <= self.boundary
+        try:
+            return value <= self.boundary
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value less than or equal to <{self.boundary}>"
@@ -162,7 +175,10 @@ class BetweenMatcher(BaseMatcher):
         self.high = high
 
     def matches(self, value: Any) -> bool:
-        return self.low <= value <= self.high
+        try:
+            return self.low <= value <= self.high
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value between <{self.low}> and <{self.high}>"
@@ -174,7 +190,10 @@ class CloseToMatcher(BaseMatcher):
         self.tolerance = tolerance
 
     def matches(self, value: Any) -> bool:
-        return abs(value - self.expected) <= self.tolerance
+        try:
+            return abs(value - self.expected) <= self.tolerance
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value within <{self.tolerance}> of <{self.expected}>"
@@ -502,7 +521,7 @@ class StructureMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         if not isinstance(value, dict):
             return False
-        return self._match_recursive(value, self._spec, "") is None
+        return self._match_recursive(value, self._spec, "", set()) is None
 
     def describe(self) -> str:
         return f"a dict matching structure {self._describe_spec(self._spec)}"
@@ -510,12 +529,16 @@ class StructureMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         if not isinstance(value, dict):
             return f"was not a dict: <{value}>"
-        error = self._match_recursive(value, self._spec, "")
+        error = self._match_recursive(value, self._spec, "", set())
         if error:
             return error
         return f"was <{value}>"
 
-    def _match_recursive(self, value: dict, spec: dict, path: str) -> str | None:
+    def _match_recursive(self, value: dict, spec: dict, path: str, seen: set[tuple[int, int]]) -> str | None:
+        pair_id = (id(value), id(spec))
+        if pair_id in seen:
+            return f"circular reference detected at <{path or 'root'}>"
+        seen.add(pair_id)
         for key, expected in spec.items():
             current_path = f"{path}.{key}" if path else str(key)
             if key not in value:
@@ -529,7 +552,7 @@ class StructureMatcher(BaseMatcher):
             elif isinstance(expected, dict):
                 if not isinstance(actual, dict):
                     return f"at <{current_path}>: expected a dict, but was <{actual}>"
-                error = self._match_recursive(actual, expected, current_path)
+                error = self._match_recursive(actual, expected, current_path, seen)
                 if error:
                     return error
             elif actual != expected:
@@ -551,6 +574,7 @@ class StructureMatcher(BaseMatcher):
 # --- Custom matcher registry ---
 
 _custom_matchers: dict[str, Callable[..., BaseMatcher]] = {}
+_custom_matchers_lock = threading.Lock()
 
 
 def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callable[..., BaseMatcher]]:
@@ -587,7 +611,8 @@ def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callab
     def decorator(func: Callable[..., BaseMatcher]) -> Callable[..., BaseMatcher]:
         if not callable(func):
             raise TypeError("func must be callable")
-        _custom_matchers[name] = func
+        with _custom_matchers_lock:
+            _custom_matchers[name] = func
         return func
 
     return decorator
@@ -602,9 +627,16 @@ def unregister_matcher(name: str) -> None:
     Raises:
         KeyError: if the name is not registered
     """
-    if name not in _custom_matchers:
-        raise KeyError(f"no custom matcher registered with name {name!r}")
-    del _custom_matchers[name]
+    with _custom_matchers_lock:
+        if name not in _custom_matchers:
+            raise KeyError(f"no custom matcher registered with name {name!r}")
+        del _custom_matchers[name]
+
+
+def clear_custom_matchers() -> None:
+    """Remove all registered custom matchers."""
+    with _custom_matchers_lock:
+        _custom_matchers.clear()
 
 
 # --- Namespace ---
@@ -766,10 +798,11 @@ class _MatchNamespace:
         return StructureMatcher(spec)
 
     def __getattr__(self, name: str) -> Callable[..., BaseMatcher]:
-        try:
-            factory = _custom_matchers[name]
-        except KeyError:
-            raise AttributeError(f"match has no matcher {name!r}") from None
+        with _custom_matchers_lock:
+            try:
+                factory = _custom_matchers[name]
+            except KeyError:
+                raise AttributeError(f"match has no matcher {name!r}") from None
         return factory
 
 

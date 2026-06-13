@@ -12,7 +12,7 @@ from .assertpy import (
 from .async_assertions import AsyncAssertionBuilder
 from .errors import AssertionFailure, DiffEntry, DiffResult
 from .file import contents_of
-from .matchers import Matcher, match, register_matcher, unregister_matcher
+from .matchers import Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
 
 __all__ = [
     "AssertionFailure",
@@ -25,6 +25,7 @@ __all__ = [
     "add_extension",
     "assert_that",
     "assert_warn",
+    "clear_custom_matchers",
     "contents_of",
     "fail",
     "match",

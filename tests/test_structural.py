@@ -218,6 +218,30 @@ class TestStructureMatcher:
         m = match.structure({"a": 1})
         assert_that(m.describe_mismatch({"a": 1})).is_equal_to("was <{'a': 1}>")
 
+    def test_circular_reference_detected(self):
+        d = {}
+        d["self"] = d
+        spec = {}
+        spec["self"] = spec
+        m = match.structure(spec)
+        assert_that(m.matches(d)).is_false()
+        assert_that(m.describe_mismatch(d)).contains("circular reference")
+
+    def test_deep_nesting(self):
+        value = {"a": 1}
+        spec = {"a": 1}
+        current_v = value
+        current_s = spec
+        for _i in range(20):
+            inner_v = {"a": 1}
+            inner_s = {"a": 1}
+            current_v["nested"] = inner_v
+            current_s["nested"] = inner_s
+            current_v = inner_v
+            current_s = inner_s
+        m = match.structure(spec)
+        assert_that(m.matches(value)).is_true()
+
 
 class TestMatchesStructureMethod:
     def test_basic(self):
