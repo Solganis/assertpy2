@@ -118,6 +118,43 @@ class TestCloseToMatcher:
         assert_that(match.close_to(10.0, 0.5).describe()).is_equal_to("a value within <0.5> of <10.0>")
 
 
+class TestOrderingMatchersIncompatibleTypes:
+    def test_greater_than_incompatible(self):
+        assert_that(match.greater_than(5).matches("hello")).is_false()
+
+    def test_greater_than_none(self):
+        assert_that(match.greater_than(5).matches(None)).is_false()
+
+    def test_greater_than_or_equal_to_incompatible(self):
+        assert_that(match.greater_than_or_equal_to(5).matches("hello")).is_false()
+
+    def test_less_than_incompatible(self):
+        assert_that(match.less_than(5).matches("hello")).is_false()
+
+    def test_less_than_none(self):
+        assert_that(match.less_than(5).matches(None)).is_false()
+
+    def test_less_than_or_equal_to_incompatible(self):
+        assert_that(match.less_than_or_equal_to(5).matches([1, 2])).is_false()
+
+    def test_between_incompatible(self):
+        assert_that(match.between(1, 10).matches("hello")).is_false()
+
+    def test_between_none(self):
+        assert_that(match.between(1, 10).matches(None)).is_false()
+
+    def test_close_to_incompatible(self):
+        assert_that(match.close_to(10.0, 0.5).matches("hello")).is_false()
+
+    def test_close_to_none(self):
+        assert_that(match.close_to(10.0, 0.5).matches(None)).is_false()
+
+    def test_composition_with_type_check(self):
+        m = match.is_instance_of(int) & match.greater_than(5)
+        assert_that(m.matches("hello")).is_false()
+        assert_that(m.matches(10)).is_true()
+
+
 class TestIsNoneMatcher:
     def test_matches(self):
         assert_that(match.is_none().matches(None)).is_true()
