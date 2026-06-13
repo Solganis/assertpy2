@@ -73,7 +73,7 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.3.2"
+__version__ = "2.3.3"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
