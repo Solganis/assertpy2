@@ -1,7 +1,7 @@
 [project]
 name = "assertpy2"
 version = "2.3.2"
-description = "Fluent assertion library for Python with full type safety and soft assertions"
+description = "Fluent assertion library for Python with composable matchers, structural matching, and full type safety"
 readme = "README.md"
 license = "BSD-3-Clause"
 requires-python = ">=3.10"
