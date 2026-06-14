@@ -1,6 +1,6 @@
 [project]
 name = "assertpy2"
-version = "2.3.6"
+version = "2.3.7"
 description = "Fluent assertion library for Python with composable matchers, structural matching, and full type safety"
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -9,7 +9,7 @@ authors = [
     { name = "Justin Shacklette", email = "justin@saturnboy.com" },
 ]
 maintainers = [
-    { name = "Solganis" },
+    { name = "Solganis", email = "solganis.dev@gmail.com" },
 ]
 keywords = ["test", "testing", "assert", "assertion", "assertthat", "assert_that", "pytest", "unittest"]
 classifiers = [
@@ -45,6 +45,7 @@ assertpy2 = "assertpy2.pytest_plugin"
 [project.optional-dependencies]
 allure = ["allure-pytest>=2.13"]
 behave = ["behave>=1.2.6"]
+json = ["jsonpath-ng>=1.8", "jsonschema>=4.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -52,7 +53,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1",
     "pytest-cov>=6.1",
     "ruff>=0.15.17",
     "ty>=0.0.49",

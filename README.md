@@ -8,7 +8,7 @@
 
 <p align="center">
   <b>Fluent assertion library for Python with composable matchers, structural matching, and full type safety.</b><br>
-  Maintained fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>.
+  A modern, batteries-included fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>.
 </p>
 
 <p align="center">
@@ -133,7 +133,8 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 - [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
 - **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
 - **Type safety**: `Self` return types, `py.typed` ([PEP 561](https://peps.python.org/pep-0561/)).
-- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`.
+- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`. Group errors with `sa.group()`, or use `assert_all()` for inline checks.
+- [**JSON assertions**](docs/api.md#json-path--schema-validation): JSONPath navigation (`at_json_path`, `has_json_path`) and JSON Schema validation (`matches_json_schema`).
 - [**Fluent chaining**](docs/api.md#chaining): write assertions as readable one-liners that chain naturally.
 - [**Dynamic assertions**](docs/api.md#objects): `has_<name>()` for any attribute, property, or zero-argument method on objects and dicts.
 - [**Dict comparison**](docs/api.md#dicts): `is_equal_to()` with `ignore` and `include` for selective key matching.
@@ -316,6 +317,36 @@ assert_that(items).filtered_on(match.is_positive()).mapped(str).contains("1")
 ```
 
 Available methods: `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
+
+### Grouped soft assertions
+
+```py
+with soft_assertions() as sa:
+    with sa.group("Headers"):
+        assert_that(headers["Content-Type"]).is_equal_to("application/json")
+    with sa.group("Body"):
+        assert_that(body["status"]).is_equal_to("ok")
+        assert_that(body["items"]).is_not_empty()
+
+# or inline with assert_all
+assert_all(
+    lambda: assert_that(x).is_positive(),
+    lambda: assert_that(y).is_not_none(),
+)
+```
+
+### JSON path and schema validation
+
+Requires `pip install assertpy2[json]`.
+
+```py
+data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
+
+assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
+assert_that(data).has_json_path("$.meta.total")
+assert_that(data).does_not_have_json_path("$.error")
+assert_that(data).matches_json_schema({"type": "object", "required": ["users"]})
+```
 
 ### Dict comparison with ignore/include
 

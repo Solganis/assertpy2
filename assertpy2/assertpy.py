@@ -40,11 +40,12 @@ from .exception import ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
 from .helpers import HelpersMixin
+from .json_mixin import JsonMixin
 from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.3.6"
+__version__ = "2.3.7"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -66,6 +67,7 @@ ASSERTPY_FILES = [
         "extracting.py",
         "file.py",
         "helpers.py",
+        "json_mixin.py",
         "matchers.py",
         "numeric.py",
         "pytest_plugin.py",
@@ -76,11 +78,52 @@ ASSERTPY_FILES = [
 
 # soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
-_soft_err: contextvars.ContextVar[list[str]] = contextvars.ContextVar("assertpy2_soft_err")
+_soft_err: contextvars.ContextVar[list[tuple[str | None, str]]] = contextvars.ContextVar("assertpy2_soft_err")
+_soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
+
+
+class SoftAssertionCollector:
+    """Collector returned by :func:`soft_assertions` for grouping errors hierarchically."""
+
+    @contextlib.contextmanager
+    def group(self, label: str) -> Iterator[None]:
+        """Group subsequent assertion failures under *label*.
+
+        Examples:
+            Usage::
+
+                with soft_assertions() as sa:
+                    with sa.group("Headers"):
+                        assert_that(headers).contains_key("Content-Type")
+                    with sa.group("Body"):
+                        assert_that(body["status"]).is_equal_to("ok")
+        """
+        token = _soft_group.set(label)
+        try:
+            yield
+        finally:
+            _soft_group.reset(token)
+
+
+def _format_soft_errors(errs: list[tuple[str | None, str]]) -> str:
+    has_groups = any(group is not None for group, _ in errs)
+    if not has_groups:
+        return "soft assertion failures:\n" + "\n".join(f"{i + 1}. {msg}" for i, (_, msg) in enumerate(errs))
+
+    lines = ["soft assertion failures:"]
+    current_group: str | None = object()  # ty: ignore[invalid-assignment]  # sentinel
+    for counter, (group, msg) in enumerate(errs, 1):
+        if group != current_group:
+            current_group = group
+            if group is not None:
+                lines.append(f"  [{group}]")
+        indent = "    " if group is not None else "  "
+        lines.append(f"{indent}{counter}. {msg}")
+    return "\n".join(lines)
 
 
 @contextlib.contextmanager
-def soft_assertions() -> Iterator[None]:
+def soft_assertions() -> Iterator[SoftAssertionCollector]:
     """Create a soft assertion context.
 
     Normally, any assertion failure will halt test execution immediately by raising an error.
@@ -112,6 +155,14 @@ def soft_assertions() -> Iterator[None]:
             4. Expected <foo> to contain only digits, but did not.
             5. Expected <123> to contain only alphabetic chars, but did not.
 
+        Group errors by section::
+
+            with soft_assertions() as sa:
+                with sa.group("Headers"):
+                    assert_that(headers["Content-Type"]).is_equal_to("application/json")
+                with sa.group("Body"):
+                    assert_that(body["status"]).is_equal_to("ok")
+
     Note:
         The soft assertion context only collects *assertion* failures, other errors such as
         ``TypeError`` or ``ValueError`` are always raised immediately.  Triggering an explicit test
@@ -125,15 +176,38 @@ def soft_assertions() -> Iterator[None]:
     _soft_ctx.set(ctx + 1)
 
     try:
-        yield
+        yield SoftAssertionCollector()
     finally:
         _soft_ctx.set(_soft_ctx.get() - 1)
 
     errs = _soft_err.get([])
     if errs and _soft_ctx.get() == 0:
-        out = "soft assertion failures:\n" + "\n".join(f"{i + 1}. {msg}" for i, msg in enumerate(errs))
+        out = _format_soft_errors(errs)
         _soft_err.set([])
         raise AssertionError(out)
+
+
+def assert_all(*callables: Callable[[], object]) -> None:
+    """Run all callables inside a soft assertion context.
+
+    A convenience wrapper around :func:`soft_assertions` for inline use.
+
+    Examples:
+        Usage::
+
+            from assertpy2 import assert_all, assert_that
+
+            assert_all(
+                lambda: assert_that(x).is_positive(),
+                lambda: assert_that(y).is_not_none(),
+            )
+
+    Raises:
+        AssertionError: if any of the callables produce assertion failures
+    """
+    with soft_assertions():
+        for fn in callables:
+            fn()
 
 
 # factory methods
@@ -303,7 +377,7 @@ def soft_fail(msg=""):
 
     """
     if _soft_ctx.get():
-        _soft_err.get().append(f"Fail: {msg}!" if msg else "Fail!")
+        _soft_err.get().append((_soft_group.get(), f"Fail: {msg}!" if msg else "Fail!"))
         return
     fail(msg)
 
@@ -449,7 +523,7 @@ class NegatedBuilder:
         if len(err_list) > before:
             del err_list[before:]
             return self._builder
-        err_list.append(self._make_msg(name))
+        err_list.append((_soft_group.get(), self._make_msg(name)))
         return self._builder
 
     def _negated_warn(
@@ -470,6 +544,7 @@ class AssertionBuilder(
     StringMixin,
     SnapshotMixin,
     NumericMixin,
+    JsonMixin,
     HelpersMixin,
     FileMixin,
     ExtractingMixin,
@@ -550,7 +625,7 @@ class AssertionBuilder(
             self.logger.warning(out)
             return self
         elif self.kind == "soft":
-            _soft_err.get().append(out)
+            _soft_err.get().append((_soft_group.get(), out))
             return self
         else:
             if expected is not None or diff is not None:
