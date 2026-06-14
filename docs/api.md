@@ -33,6 +33,8 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [Regex Group Extraction](#regex-group-extraction)
 - [Universal Negation](#universal-negation)
 - [Collection Pipeline](#collection-pipeline)
+- [Grouped Soft Assertions](#grouped-soft-assertions)
+- [JSON Path / Schema Validation](#json-path--schema-validation)
 - [Extension System](#extension-system---adding-custom-assertions)
 - [Chaining](#chaining)
 
@@ -1644,6 +1646,116 @@ Pipeline methods return a new builder, so they can be chained with each other an
 ```py
 assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().is_positive()
 assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
+```
+
+[Back to top](#table-of-contents)
+
+## Grouped Soft Assertions
+
+Use `soft_assertions() as sa` to get a collector, then `sa.group(label)` to group errors by section:
+
+```py
+from assertpy2 import assert_that, soft_assertions
+
+with soft_assertions() as sa:
+    with sa.group("Headers"):
+        assert_that(headers["Content-Type"]).is_equal_to("application/json")
+        assert_that(headers["Accept"]).contains("json")
+    with sa.group("Body"):
+        assert_that(body["status"]).is_equal_to("ok")
+        assert_that(body["items"]).is_not_empty()
+```
+
+Output with groups:
+
+```
+soft assertion failures:
+  [Headers]
+    1. Expected <text/html> to be equal to <application/json>, but was not.
+  [Body]
+    2. Expected <error> to be equal to <ok>, but was not.
+```
+
+Without `as sa` or without calling `sa.group()`, the behavior is unchanged (flat error list).
+
+### assert_all
+
+`assert_all()` is a convenience wrapper for inline soft assertions:
+
+```py
+from assertpy2 import assert_all, assert_that
+
+assert_all(
+    lambda: assert_that(x).is_positive(),
+    lambda: assert_that(y).is_not_none(),
+    lambda: assert_that(z).is_length(3),
+)
+```
+
+Equivalent to wrapping all calls in `with soft_assertions():`.
+
+[Back to top](#table-of-contents)
+
+## JSON Path / Schema Validation
+
+Navigate JSON structures with JSONPath and validate against JSON Schema.
+
+Requires optional dependencies:
+
+```bash
+pip install assertpy2[json]
+```
+
+### at_json_path
+
+Navigate to a JSONPath and continue asserting on the extracted value:
+
+```py
+data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
+
+assert_that(data).at_json_path("$.meta.total").is_equal_to(2)
+assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
+assert_that(data).at_json_path("$.users[*].name").is_equal_to(["Alice", "Bob"])
+```
+
+Raises `ValueError` if the path does not exist.
+
+### has_json_path / does_not_have_json_path
+
+Assert that a JSONPath exists or does not exist:
+
+```py
+assert_that(data).has_json_path("$.meta.total")
+assert_that(data).does_not_have_json_path("$.error")
+```
+
+### matches_json_schema
+
+Validate against a JSON Schema dict:
+
+```py
+schema = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name"],
+}
+
+assert_that({"name": "Alice", "age": 30}).matches_json_schema(schema)
+```
+
+### matches_json_schema_from_file
+
+Load the schema from a JSON file:
+
+```py
+assert_that(data).matches_json_schema_from_file("schemas/user.json")
+```
+
+All JSON assertions work with soft assertions and chaining:
+
+```py
+with soft_assertions():
+    assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()
 ```
 
 [Back to top](#table-of-contents)
