@@ -31,6 +31,8 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [Behave Step Matchers](#behave-step-matchers)
 - [Custom Matchers](#custom-matchers---registering-domain-matchers)
 - [Regex Group Extraction](#regex-group-extraction)
+- [Universal Negation](#universal-negation)
+- [Collection Pipeline](#collection-pipeline)
 - [Extension System](#extension-system---adding-custom-assertions)
 - [Chaining](#chaining)
 
@@ -1519,6 +1521,129 @@ assert_that("2024-01-15 ERROR").matches_with_groups(
 assert_that("key=value").matches_with_groups(
     r"(?P<key>\w+)=(?P<val>\w+)"
 ).contains_entry({"key": "key"}).contains_entry({"val": "value"})
+```
+
+[Back to top](#table-of-contents)
+
+## Universal Negation
+
+The `.not_` property inverts the next assertion in the chain. Instead of writing separate `is_not_*` methods, use `.not_` with any existing assertion:
+
+```py
+assert_that(5).not_.is_none()
+assert_that("abc123").not_.is_alpha()
+assert_that([3, 1, 2]).not_.is_sorted()
+assert_that(42).not_.is_in(1, 2, 3)
+assert_that("hello").not_.is_instance_of(int)
+```
+
+Chaining continues normally after a negated assertion:
+
+```py
+assert_that(5).not_.is_none().is_positive()
+assert_that("hello").not_.is_empty().is_length(5).is_alpha()
+```
+
+Works with `described_as()`, the description is included in the error message:
+
+```py
+assert_that(5).described_as("my check").not_.is_positive()
+# AssertionError: [my check] Expected <5> to NOT satisfy: is_positive()
+```
+
+Works with soft assertions, collecting errors instead of raising:
+
+```py
+with soft_assertions():
+    assert_that(5).not_.is_positive()    # collected, not raised
+    assert_that(None).not_.is_none()     # collected, not raised
+```
+
+Works with warn mode, logging instead of raising:
+
+```py
+assert_warn("hello").not_.is_alpha()  # logs warning
+```
+
+Works with matchers:
+
+```py
+assert_that(-5).not_.satisfies(match.is_positive())
+assert_that([1, -2, 3]).not_.each(match.is_positive())
+```
+
+[Back to top](#table-of-contents)
+
+## Collection Pipeline
+
+Pipeline methods transform the value before asserting. Each returns a new builder, so the original value is unchanged.
+
+### `filtered_on(predicate)`
+
+Filter elements by a callable or Matcher:
+
+```py
+assert_that([1, -2, 3, -4]).filtered_on(lambda x: x > 0).is_length(2)
+assert_that(items).filtered_on(match.is_positive()).is_not_empty()
+assert_that(users).filtered_on(match.has_property("active")).is_length(5)
+```
+
+### `mapped(func)`
+
+Transform each element:
+
+```py
+assert_that(["a", "b", "c"]).mapped(str.upper).contains("A", "B")
+assert_that(users).mapped(lambda u: u.name).contains("Alice", "Bob")
+```
+
+### `flat_mapped(func)`
+
+Transform and flatten:
+
+```py
+assert_that(["ab", "cd"]).flat_mapped(list).contains("a", "b", "c", "d")
+assert_that(users).flat_mapped(lambda u: u.tags).contains("admin", "user")
+```
+
+### `first()` / `last()`
+
+Navigate to first or last element:
+
+```py
+assert_that([10, 20, 30]).first().is_equal_to(10)
+assert_that([10, 20, 30]).last().is_equal_to(30)
+```
+
+Raises `ValueError` if the collection is empty.
+
+### `element(index)`
+
+Navigate to element at a specific index:
+
+```py
+assert_that([10, 20, 30]).element(1).is_equal_to(20)
+```
+
+Raises `IndexError` if the index is out of range.
+
+### `single()`
+
+Assert exactly one element and navigate to it:
+
+```py
+assert_that([42]).single().is_equal_to(42)
+```
+
+Raises `ValueError` if the collection is empty or has more than one element.
+
+### Chaining pipeline steps
+
+Pipeline methods return a new builder, so they can be chained with each other and with any assertion:
+
+```py
+assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().is_positive()
+assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
 ```
 
 [Back to top](#table-of-contents)

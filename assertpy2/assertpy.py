@@ -1,31 +1,3 @@
-# Copyright (c) 2015-2019, Activision Publishing, Inc.
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its contributors
-# may be used to endorse or promote products derived from this software without
-# specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 """Assertion library for python unit testing with a fluent API"""
 
 from __future__ import annotations
@@ -37,13 +9,12 @@ import logging
 import os
 import sys
 import types
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     import datetime
     import pathlib
-    from collections.abc import Callable
 
     from typing_extensions import Self
 
@@ -73,7 +44,7 @@ from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 
-__version__ = "2.3.5"
+__version__ = "2.3.6"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -436,6 +407,65 @@ _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
 
 
+class NegatedBuilder:
+    """Proxy that inverts the next assertion. Created by ``assert_that(val).not_``."""
+
+    def __init__(self, builder: AssertionBuilder) -> None:
+        self._builder = builder
+
+    def __getattr__(self, name: str) -> object:
+        attr = getattr(self._builder, name)
+        if not callable(attr):
+            return attr
+
+        def _negated(*args: object, **kwargs: object) -> AssertionBuilder:
+            if self._builder.kind == "soft":
+                return self._negated_soft(name, attr, *args, **kwargs)
+            if self._builder.kind == "warn":
+                return self._negated_warn(name, attr, *args, **kwargs)
+            return self._negated_strict(name, attr, *args, **kwargs)
+
+        return _negated
+
+    def _make_msg(self, name: str) -> str:
+        desc = f"[{self._builder.description}] " if self._builder.description else ""
+        return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}()"
+
+    def _negated_strict(
+        self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
+    ) -> AssertionBuilder:
+        try:
+            attr(*args, **kwargs)
+        except (AssertionError, AssertionFailure):
+            return self._builder
+        raise AssertionError(self._make_msg(name))
+
+    def _negated_soft(
+        self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
+    ) -> AssertionBuilder:
+        err_list = _soft_err.get()
+        before = len(err_list)
+        attr(*args, **kwargs)
+        if len(err_list) > before:
+            del err_list[before:]
+            return self._builder
+        err_list.append(self._make_msg(name))
+        return self._builder
+
+    def _negated_warn(
+        self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
+    ) -> AssertionBuilder:
+        self._builder.kind = None
+        try:
+            attr(*args, **kwargs)
+        except (AssertionError, AssertionFailure):
+            return self._builder
+        finally:
+            self._builder.kind = "warn"
+        self._builder.logger.warning(self._make_msg(name))
+        return self._builder
+
+
 class AssertionBuilder(
     StringMixin,
     SnapshotMixin,
@@ -473,6 +503,11 @@ class AssertionBuilder(
         self.expected = expected
         self.logger = logger if logger else _default_logger
         self._not_expected = False
+
+    @property
+    def not_(self) -> NegatedBuilder:
+        """Invert the next assertion in the chain."""
+        return NegatedBuilder(self)
 
     def builder(self, val, description="", kind=None, expected=None, logger=None):
         """Helper to build a new :class:`AssertionBuilder` instance. Use this only if not chaining to ``self``.
