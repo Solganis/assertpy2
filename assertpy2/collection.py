@@ -1,37 +1,11 @@
-# Copyright (c) 2015-2019, Activision Publishing, Inc.
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its contributors
-# may be used to endorse or promote products derived from this software without
-# specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 from __future__ import annotations
 
 import collections
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Iterable
+from typing import TYPE_CHECKING, Any
 
 from ._mixin_base import _MixinBase
+from .matchers import BaseMatcher
 
 if TYPE_CHECKING:
     from typing_extensions import Self
@@ -205,3 +179,151 @@ class CollectionMixin(_MixinBase):
             prev = x
 
         return self
+
+    def filtered_on(self, predicate: Callable[[Any], bool]) -> Self:
+        """Returns a new builder with elements matching the predicate.
+
+        Args:
+            predicate: callable or Matcher. If a Matcher, uses ``predicate.matches(item)``.
+
+        Examples:
+            Usage::
+
+                assert_that([1, -2, 3]).filtered_on(lambda x: x > 0).is_length(2)
+                assert_that(items).filtered_on(match.is_positive()).is_not_empty()
+
+        Returns:
+            AssertionBuilder: returns a new instance with the filtered list as val
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        if isinstance(predicate, BaseMatcher):
+            filtered = [item for item in self.val if predicate.matches(item)]
+        else:
+            filtered = [item for item in self.val if predicate(item)]
+        return self.builder(filtered, self.description, self.kind)
+
+    def mapped(self, func: Callable[[Any], Any]) -> Self:
+        """Returns a new builder with each element transformed by func.
+
+        Args:
+            func: callable applied to each element.
+
+        Examples:
+            Usage::
+
+                assert_that(["a", "b"]).mapped(str.upper).contains("A")
+
+        Returns:
+            AssertionBuilder: returns a new instance with the mapped list as val
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        return self.builder([func(item) for item in self.val], self.description, self.kind)
+
+    def flat_mapped(self, func: Callable[[Any], Iterable[Any]]) -> Self:
+        """Returns a new builder with each element expanded and flattened by func.
+
+        Args:
+            func: callable returning an iterable for each element.
+
+        Examples:
+            Usage::
+
+                assert_that(["ab", "cd"]).flat_mapped(list).contains("a", "c")
+
+        Returns:
+            AssertionBuilder: returns a new instance with the flattened list as val
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        return self.builder([x for item in self.val for x in func(item)], self.description, self.kind)
+
+    def first(self) -> Self:
+        """Returns a new builder with the first element of val.
+
+        Examples:
+            Usage::
+
+                assert_that([10, 20, 30]).first().is_equal_to(10)
+
+        Returns:
+            AssertionBuilder: returns a new instance with the first element as val
+
+        Raises:
+            ValueError: if val is empty
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if not items:
+            raise ValueError("Expected non-empty iterable, but was empty.")
+        return self.builder(items[0], self.description, self.kind)
+
+    def last(self) -> Self:
+        """Returns a new builder with the last element of val.
+
+        Examples:
+            Usage::
+
+                assert_that([10, 20, 30]).last().is_equal_to(30)
+
+        Returns:
+            AssertionBuilder: returns a new instance with the last element as val
+
+        Raises:
+            ValueError: if val is empty
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if not items:
+            raise ValueError("Expected non-empty iterable, but was empty.")
+        return self.builder(items[-1], self.description, self.kind)
+
+    def element(self, index: int) -> Self:
+        """Returns a new builder with the element at the given index.
+
+        Args:
+            index: zero-based index.
+
+        Examples:
+            Usage::
+
+                assert_that([10, 20, 30]).element(1).is_equal_to(20)
+
+        Returns:
+            AssertionBuilder: returns a new instance with the selected element as val
+
+        Raises:
+            IndexError: if index is out of range
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if index < 0 or index >= len(items):
+            raise IndexError(f"Expected index {index} to be in range [0, {len(items)}), but was out of range.")
+        return self.builder(items[index], self.description, self.kind)
+
+    def single(self) -> Self:
+        """Returns a new builder with the only element of val.
+
+        Examples:
+            Usage::
+
+                assert_that([42]).single().is_equal_to(42)
+
+        Returns:
+            AssertionBuilder: returns a new instance with the single element as val
+
+        Raises:
+            ValueError: if val is empty or has more than one element
+        """
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if not items:
+            raise ValueError("Expected iterable with single element, but was empty.")
+        if len(items) > 1:
+            raise ValueError(f"Expected iterable with single element, but had {len(items)} elements.")
+        return self.builder(items[0], self.description, self.kind)

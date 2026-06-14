@@ -127,6 +127,8 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 
 - [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
 - [**Structural matching**](docs/api.md#structural-matching): `matches_structure()` for declarative dict/API response validation.
+- [**Universal negation**](docs/api.md#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
+- [**Collection pipeline**](docs/api.md#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()` for transforming collections before assertions.
 - [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for async and eventual consistency testing.
 - [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
 - **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
@@ -282,6 +284,38 @@ DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
 
 
 ## More features
+
+### Universal negation
+
+Invert any assertion with `.not_`:
+
+```py
+assert_that(5).not_.is_none()
+assert_that("abc123").not_.is_alpha()
+assert_that([3, 1, 2]).not_.is_sorted()
+assert_that(value).described_as("check").not_.is_none().is_positive()
+```
+
+Works with soft assertions and warn mode.
+
+### Collection pipeline
+
+Transform collections before asserting:
+
+```py
+orders = [Order("DONE", 100), Order("FAILED", 50), Order("DONE", 200)]
+
+assert_that(orders).filtered_on(lambda o: o.status == "FAILED").is_length(1)
+assert_that(orders).mapped(lambda o: o.total).contains(100, 200)
+assert_that(orders).first().has_status("DONE")
+assert_that(orders).element(1).has_status("FAILED")
+assert_that([42]).single().is_equal_to(42)
+
+# chaining pipeline steps
+assert_that(items).filtered_on(match.is_positive()).mapped(str).contains("1")
+```
+
+Available methods: `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 
 ### Dict comparison with ignore/include
 
@@ -457,19 +491,3 @@ See the [comparison table](#comparison) above for feature differences with other
 Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 
-## License
-
-All files are licensed under the BSD 3-Clause License as follows:
-
-> Copyright (c) 2015-2019, Activision Publishing, Inc.
-> All rights reserved.
->
-> Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
->
-> 1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
->
-> 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
->
-> 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
->
-> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

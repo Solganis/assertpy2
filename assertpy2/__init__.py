@@ -1,4 +1,5 @@
 from .assertpy import (
+    NegatedBuilder,
     WarningLoggingAdapter,
     __version__,
     add_extension,
@@ -20,6 +21,7 @@ __all__ = [
     "DiffEntry",
     "DiffResult",
     "Matcher",
+    "NegatedBuilder",
     "WarningLoggingAdapter",
     "__version__",
     "add_extension",

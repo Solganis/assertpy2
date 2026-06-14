@@ -1,31 +1,3 @@
-# Copyright (c) 2015-2019, Activision Publishing, Inc.
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without modification,
-# are permitted provided that the following conditions are met:
-#
-# 1. Redistributions of source code must retain the above copyright notice, this
-# list of conditions and the following disclaimer.
-#
-# 2. Redistributions in binary form must reproduce the above copyright notice,
-# this list of conditions and the following disclaimer in the documentation
-# and/or other materials provided with the distribution.
-#
-# 3. Neither the name of the copyright holder nor the names of its contributors
-# may be used to endorse or promote products derived from this software without
-# specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-# (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-# ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-# SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 import logging
 from io import StringIO
 
@@ -68,16 +40,16 @@ def test_failures():
     out = capture.getvalue()
     capture.close()
 
-    assert_that(out).contains("[test_warn.py:56]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:57]: Expected <foo> to be empty string, but was not.")
-    assert_that(out).contains("[test_warn.py:58]: Expected <foo> to be <False>, but was not.")
-    assert_that(out).contains("[test_warn.py:59]: Expected <foo> to contain only digits, but did not.")
-    assert_that(out).contains("[test_warn.py:60]: Expected <123> to contain only alphabetic chars, but did not.")
-    assert_that(out).contains("[test_warn.py:61]: Expected <foo> to contain only uppercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:62]: Expected <FOO> to contain only lowercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:63]: Expected <foo> to be equal to <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:64]: Expected <foo> to be not equal to <foo>, but was.")
-    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+    assert_that(out).contains("[test_warn.py:28]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:29]: Expected <foo> to be empty string, but was not.")
+    assert_that(out).contains("[test_warn.py:30]: Expected <foo> to be <False>, but was not.")
+    assert_that(out).contains("[test_warn.py:31]: Expected <foo> to contain only digits, but did not.")
+    assert_that(out).contains("[test_warn.py:32]: Expected <123> to contain only alphabetic chars, but did not.")
+    assert_that(out).contains("[test_warn.py:33]: Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:34]: Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:35]: Expected <foo> to be equal to <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:36]: Expected <foo> to be not equal to <foo>, but was.")
+    assert_that(out).contains("[test_warn.py:37]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_chained_failure():
@@ -94,9 +66,9 @@ def test_chained_failure():
     out = capture2.getvalue()
     capture2.close()
 
-    assert_that(out).contains("[test_warn.py:91]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:91]: Expected <foo> to be in <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:91]: Expected <foo> to not contain duplicates, but did.")
+    assert_that(out).contains("[test_warn.py:63]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:63]: Expected <foo> to be in <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:63]: Expected <foo> to not contain duplicates, but did.")
 
 
 def test_failures_with_renamed_import():
@@ -124,13 +96,13 @@ def test_failures_with_renamed_import():
     out = capture3.getvalue()
     capture3.close()
 
-    assert_that(out).contains("[test_warn.py:112]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:113]: Expected <foo> to be empty string, but was not.")
-    assert_that(out).contains("[test_warn.py:114]: Expected <foo> to be <False>, but was not.")
-    assert_that(out).contains("[test_warn.py:115]: Expected <foo> to contain only digits, but did not.")
-    assert_that(out).contains("[test_warn.py:116]: Expected <123> to contain only alphabetic chars, but did not.")
-    assert_that(out).contains("[test_warn.py:117]: Expected <foo> to contain only uppercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:118]: Expected <FOO> to contain only lowercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:119]: Expected <foo> to be equal to <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:120]: Expected <foo> to be not equal to <foo>, but was.")
-    assert_that(out).contains("[test_warn.py:121]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+    assert_that(out).contains("[test_warn.py:84]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:85]: Expected <foo> to be empty string, but was not.")
+    assert_that(out).contains("[test_warn.py:86]: Expected <foo> to be <False>, but was not.")
+    assert_that(out).contains("[test_warn.py:87]: Expected <foo> to contain only digits, but did not.")
+    assert_that(out).contains("[test_warn.py:88]: Expected <123> to contain only alphabetic chars, but did not.")
+    assert_that(out).contains("[test_warn.py:89]: Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:90]: Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:91]: Expected <foo> to be equal to <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:92]: Expected <foo> to be not equal to <foo>, but was.")
+    assert_that(out).contains("[test_warn.py:93]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
