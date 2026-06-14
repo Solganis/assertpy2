@@ -28,7 +28,7 @@ jobs:
           allow-prereleases: true
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --extra json
 
       - name: Lint
         run: uv run ruff check .
@@ -57,7 +57,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --extra json
 
       - name: Ruff check
         run: uv run ruff check .
