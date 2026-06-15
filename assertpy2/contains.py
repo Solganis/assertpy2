@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from ._mixin_base import _MixinBase
+from .errors import DiffEntry, DiffResult
 from .matchers import Matcher
 
 if TYPE_CHECKING:
@@ -69,15 +71,21 @@ class ContainsMixin(_MixinBase):
                     missing.append(i)
             if missing:
                 missing_desc = [m.describe() if isinstance(m, Matcher) else m for m in missing]
+                diff = DiffResult(
+                    kind="contains",
+                    entries=[DiffEntry(path="missing", actual=None, expected=m) for m in missing_desc],
+                )
                 if self._check_dict_like(self.val, return_as_bool=True):
                     return self.error(
                         f"Expected <{self.val}> to contain keys {self._fmt_items(items)}, but did not contain"
-                        f" key{'' if len(missing) == 0 else 's'} {self._fmt_items(missing_desc)}."
+                        f" key{'' if len(missing) == 0 else 's'} {self._fmt_items(missing_desc)}.",
+                        diff=diff,
                     )
                 else:
                     return self.error(
                         f"Expected <{self.val}> to contain items {self._fmt_items(items)},"
-                        f" but did not contain {self._fmt_items(missing_desc)}."
+                        f" but did not contain {self._fmt_items(missing_desc)}.",
+                        diff=diff,
                     )
         return self
 
@@ -344,7 +352,18 @@ class ContainsMixin(_MixinBase):
         except TypeError:
             raise TypeError("val is not iterable") from None
         if val_list != list(items):
-            return self.error(f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.")
+            val_counts = Counter(val_list)
+            item_counts = Counter(items)
+            entries = []
+            for item in sorted((val_counts - item_counts).elements(), key=repr):
+                entries.append(DiffEntry(path="extra", actual=item, expected=None))
+            for item in sorted((item_counts - val_counts).elements(), key=repr):
+                entries.append(DiffEntry(path="missing", actual=None, expected=item))
+            diff = DiffResult(kind="contains", entries=entries) if entries else None
+            return self.error(
+                f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.",
+                diff=diff,
+            )
         return self
 
     def contains_in_order(self, *items) -> Self:
