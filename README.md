@@ -88,6 +88,19 @@ diff (dict):
     + 99
 ```
 
+## Type-aware autocomplete
+
+`assert_that()` uses `@overload` to return type-specific Protocols.
+Your IDE shows only methods relevant to the value you're testing, not all 100+:
+
+- `assert_that("hello").` &rarr; string methods: `starts_with`, `matches`, `is_alpha`, ...
+- `assert_that(42).` &rarr; numeric methods: `is_positive`, `is_between`, `is_close_to`, ...
+- `assert_that(Path("/tmp")).` &rarr; path methods: `exists`, `is_file`, `is_readable`, ...
+- `assert_that(my_dict).` &rarr; dict methods: `contains_key`, `contains_entry`, `has_json_path`, ...
+- `assert_that(b"\x89PNG").` &rarr; bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
+
+9 type-specific Protocols instead of one `Any`. Works in PyCharm, VS Code, and any LSP-compatible editor.
+
 ---
 
 ## Comparison
@@ -97,7 +110,7 @@ diff (dict):
 |  | pytest assert | PyHamcrest | assertpy | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|
 | **Type safety** | Partial (mypy plugin) | No | No | **py.typed, @overload, Self** |
-| **IDE autocomplete** | Generic | Generic | Generic | **Type-specific per value** |
+| **IDE autocomplete** | Generic | Generic | Generic | **[Filtered by type](#type-aware-autocomplete)** |
 | **Fluent chaining** | No | No | Yes | **Yes** |
 | **Composable matchers** | No | Yes (functions) | No | **Yes (`&` `\|` `~` operators)** |
 | **Structural matching** | No | Flat (has_entries) | No | **Recursive with matchers** |
@@ -160,7 +173,7 @@ assert_that(items).is_type_of(list).is_length(3).contains("admin")
 
 **Type safety**
 
-- **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
+- [**Type-aware autocomplete**](#type-aware-autocomplete): 9 Protocols, IDE shows only relevant methods per type.
 - **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
 
 **Extensibility**
