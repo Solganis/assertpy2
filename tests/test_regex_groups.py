@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import assert_that, soft_assertions
 
 
 class TestExtractingGroup:
@@ -58,8 +58,6 @@ class TestExtractingGroup:
         assert_that("2024-01-15").extracting_group(r"(\d{4})-(\d{2})-(\d{2})", 3).is_equal_to("15")
 
     def test_soft_assertions_mode(self):
-        from assertpy2 import soft_assertions
-
         with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
             assert_that("status=200").extracting_group(r"status=(\d+)", 1).is_equal_to("500")
             assert_that("code=404").extracting_group(r"code=(\d+)", 1).is_equal_to("200")
@@ -112,7 +110,5 @@ class TestMatchesWithGroups:
         assert_that("hello123").matches_with_groups(r"(\d+)").is_equal_to(("123",))
 
     def test_soft_assertions_mode(self):
-        from assertpy2 import soft_assertions
-
         with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
             assert_that("a=1").matches_with_groups(r"(?P<k>\w+)=(?P<v>\w+)").contains_entry({"k": "x"})
