@@ -26,6 +26,7 @@
   <a href="https://www.bestpractices.dev/projects/12990"><img src="https://www.bestpractices.dev/projects/12990/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
+---
 
 ## Quick start
 
@@ -62,7 +63,7 @@ assert_that(api_response).matches_structure({
 })
 ```
 
-Structured errors with rich data:
+Structured errors with rich diffs:
 
 ```py
 try:
@@ -80,8 +81,14 @@ FAILED test_example.py::test_comparison
 --- AssertionFailure ---
   actual:   {'a': 1, 'b': 2}
   expected: {'a': 1, 'b': 99}
+--- Structured Diff ---
+diff (dict):
+  b:
+    - 2
+    + 99
 ```
 
+---
 
 ## Comparison
 
@@ -97,7 +104,7 @@ FAILED test_example.py::test_comparison
 | **Async assertions** | No | No | No | **eventually() with polling** |
 | **Soft assertions** | No | No | Yes (not thread-safe) | **Yes (thread-safe, async-safe)** |
 | **Structured errors** | Rewrite only | Mismatch string | String only | **.actual .expected .diff** |
-| **Maintained** | N/A | Minimal | 2020 | **Active** |
+| **Maintained** | Built-in | Minimal | 2020 | **Active** |
 
 </div>
 
@@ -122,32 +129,52 @@ assert "admin" in items
 assert_that(items).is_type_of(list).is_length(3).contains("admin")
 ```
 
+---
 
 ## Features
+
+**Fluent API**
 
 - [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
 - [**Structural matching**](docs/api.md#structural-matching): `matches_structure()` for declarative dict/API response validation.
 - [**Universal negation**](docs/api.md#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
-- [**Collection pipeline**](docs/api.md#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()` for transforming collections before assertions.
-- [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for async and eventual consistency testing.
-- [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes, pytest plugin with rich diff output.
-- **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
-- **Type safety**: `Self` return types, `py.typed` ([PEP 561](https://peps.python.org/pep-0561/)).
-- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe and async-safe via `contextvars`, collect all failures with `soft_assertions()`. Group errors with `sa.group()`, or use `assert_all()` for inline checks.
-- [**JSON assertions**](docs/api.md#json-path--schema-validation): JSONPath navigation (`at_json_path`, `has_json_path`) and JSON Schema validation (`matches_json_schema`).
+- [**Collection pipeline**](docs/api.md#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 - [**Fluent chaining**](docs/api.md#chaining): write assertions as readable one-liners that chain naturally.
-- [**Dynamic assertions**](docs/api.md#objects): `has_<name>()` for any attribute, property, or zero-argument method on objects and dicts.
+
+**Built-in types**
+
+- [Strings](docs/api.md#strings), [numbers](docs/api.md#numbers), [lists](docs/api.md#lists), [tuples](docs/api.md#tuples), [sets](docs/api.md#sets), [dicts](docs/api.md#dicts), [dates](docs/api.md#dates), [booleans](docs/api.md#booleans), [objects](docs/api.md#objects), [bytes](docs/api.md#bytes--bytearray-assertions), [files](docs/api.md#files), [exceptions](docs/api.md#failure).
+- [**Bytes assertions**](docs/api.md#bytes--bytearray-assertions): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
+- [**JSON assertions**](docs/api.md#json-path--schema-validation): JSONPath navigation and JSON Schema validation. `pip install assertpy2[json]`.
+- [**Dynamic assertions**](docs/api.md#objects): `has_<name>()` for any attribute, property, or zero-argument method.
 - [**Dict comparison**](docs/api.md#dicts): `is_equal_to()` with `ignore` and `include` for selective key matching.
 - [**Extracting**](docs/api.md#objects): flatten collections on attributes with `filter` and `sort` support.
-- [**File assertions**](docs/api.md#files): `exists()`, `is_file()`, `is_readable()`, `is_writable()`, `is_executable()` with `pathlib.Path` support.
-- [**Snapshot testing**](docs/api.md#snapshot-testing): store and compare data structures in JSON format, inspired by Jest.
-- [**Allure integration**](docs/api.md#allure-integration): auto-attach structured diff and actual/expected data to Allure reports.
-- [**Behave step matchers**](docs/api.md#behave-step-matchers): ready-made parameter types (`PositiveInt`, `BoolLike`, etc.) for Behave step definitions.
-- [**Custom matchers**](docs/api.md#custom-matchers---registering-domain-matchers): register domain-specific matchers via `register_matcher()`, composable with `&`, `|`, `~`.
-- [**Regex group extraction**](docs/api.md#regex-group-extraction): `extracting_group()` and `matches_with_groups()` to assert on regex captures fluently.
-- [**Extensions**](docs/api.md#extension-system---adding-custom-assertions): add custom assertions via `add_extension()`.
-- [Strings](docs/api.md#strings), [numbers](docs/api.md#numbers), [lists](docs/api.md#lists), [tuples](docs/api.md#tuples), [sets](docs/api.md#sets), [dicts](docs/api.md#dicts), [dates](docs/api.md#dates), [booleans](docs/api.md#booleans), [objects](docs/api.md#objects), [exceptions](docs/api.md#failure).
 
+**Testing**
+
+- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
+- [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for eventual consistency.
+- [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
+- [**Rich pytest diffs**](docs/api.md#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples.
+- [**Snapshot testing**](docs/api.md#snapshot-testing): store and compare data structures in JSON format.
+
+**Type safety**
+
+- **Typed overloads**: `assert_that()` returns type-specific Protocols, IDE shows only relevant methods per type.
+- **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
+
+**Extensibility**
+
+- [**Custom matchers**](docs/api.md#custom-matchers---registering-domain-matchers): `register_matcher()` for domain-specific matchers, composable with `&`, `|`, `~`.
+- [**Regex group extraction**](docs/api.md#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
+- [**Extensions**](docs/api.md#extension-system---adding-custom-assertions): `add_extension()` for custom assertion methods.
+
+**Integrations**
+
+- [**Allure**](docs/api.md#allure-integration): auto-attach structured diff and actual/expected data to reports. `pip install assertpy2[allure]`.
+- [**Behave**](docs/api.md#behave-step-matchers): ready-made parameter types for step definitions. `pip install assertpy2[behave]`.
+
+---
 
 ## Composable matchers
 
@@ -203,88 +230,9 @@ assert_that(api_response).matches_structure({
 })
 ```
 
+---
 
-## Async assertions
-
-Poll a callable until the assertion passes or timeout is reached:
-
-```py
-from assertpy2 import assert_that
-
-async def test_eventual_consistency():
-    await assert_that(get_status).eventually().within(5).every(0.5).is_equal_to("ready")
-
-    # works with async callables
-    await assert_that(async_get_count).eventually().within(10).is_greater_than(100)
-```
-
-Any assertion method is available after `eventually()`. Only `AssertionError` is retried, other exceptions propagate immediately.
-
-
-## Soft assertions
-
-Collect all failures instead of stopping at the first one:
-
-```py
-from assertpy2 import assert_that, soft_assertions
-
-def test_user_profile():
-    with soft_assertions():
-        assert_that(user.name).is_equal_to("Alice")
-        assert_that(user.age).is_greater_than(0)
-        assert_that(user.email).contains("@")
-```
-
-All failures are reported at the end of the block:
-
-```
-AssertionError: soft assertion failures:
-1. Expected <Bob> to be equal to <Alice>, but was not.
-2. Expected <-1> to be greater than <0>, but was not.
-3. Expected <invalid> to contain <@>, but did not.
-```
-
-Use `soft_fail("message")` inside the block for non-halting explicit failures (unlike `fail()`, which stops immediately).
-
-Soft assertions are thread-safe and async-safe: each thread and each `asyncio` task gets independent state via `contextvars`.
-
-
-## Structured errors
-
-When assertions fail, `AssertionFailure` carries structured data alongside the human-readable message:
-
-```py
-try:
-    assert_that(1).is_equal_to(2)
-except AssertionError as e:
-    e.actual    # 1
-    e.expected  # 2
-```
-
-For dict comparisons, a `DiffResult` with per-key diff entries is available:
-
-```py
-try:
-    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
-except AssertionError as e:
-    e.diff  # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
-```
-
-`AssertionFailure` is a subclass of `AssertionError`, so all existing `except AssertionError` handlers work unchanged.
-
-The pytest plugin (auto-registered, no configuration needed) renders structured data as extra sections in failure reports:
-
-```
-FAILED test_example.py::test_comparison
---- AssertionFailure ---
-  actual:   {'a': 1, 'b': 2}
-  expected: {'a': 1, 'b': 99}
---- Structured Diff ---
-DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
-```
-
-
-## More features
+## Fluent API
 
 ### Universal negation
 
@@ -318,36 +266,6 @@ assert_that(items).filtered_on(match.is_positive()).mapped(str).contains("1")
 
 Available methods: `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 
-### Grouped soft assertions
-
-```py
-with soft_assertions() as sa:
-    with sa.group("Headers"):
-        assert_that(headers["Content-Type"]).is_equal_to("application/json")
-    with sa.group("Body"):
-        assert_that(body["status"]).is_equal_to("ok")
-        assert_that(body["items"]).is_not_empty()
-
-# or inline with assert_all
-assert_all(
-    lambda: assert_that(x).is_positive(),
-    lambda: assert_that(y).is_not_none(),
-)
-```
-
-### JSON path and schema validation
-
-Requires `pip install assertpy2[json]`.
-
-```py
-data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
-
-assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
-assert_that(data).has_json_path("$.meta.total")
-assert_that(data).does_not_have_json_path("$.error")
-assert_that(data).matches_json_schema({"type": "object", "required": ["users"]})
-```
-
 ### Dict comparison with ignore/include
 
 ```py
@@ -368,13 +286,6 @@ assert_that(users).extracting("user", filter="active").is_equal_to(["Fred", "Joh
 assert_that(users).extracting("user", sort="age").is_equal_to(["Johnny", "Fred", "Bob"])
 ```
 
-### Expected exceptions
-
-```py
-assert_that(some_func).raises(RuntimeError).when_called_with("bad_arg")\
-    .is_length(8).starts_with("some").is_equal_to("some err")
-```
-
 ### Dynamic assertions
 
 ```py
@@ -385,11 +296,168 @@ assert_that(fred).has_last_name("Smith")
 assert_that(fred).has_shoe_size(12)
 ```
 
+### Expected exceptions
+
+```py
+assert_that(some_func).raises(RuntimeError).when_called_with("bad_arg")\
+    .is_length(8).starts_with("some").is_equal_to("some err")
+```
+
+---
+
+## Built-in types
+
+### Bytes assertions
+
+Assert on `bytes` and `bytearray` values:
+
+```py
+data = b"\x89PNG\r\n\x1a\n"
+
+assert_that(data).starts_with_bytes(b"\x89PNG")
+assert_that(data).has_byte_at(0, 0x89)
+assert_that(data).is_hex_equal_to("89504e470d0a1a0a")
+assert_that(b"hello").is_valid_utf8()
+assert_that(b"hello").decoded_as("utf-8").starts_with("hel")
+```
+
+Available methods: `is_valid_utf8()`, `is_valid_encoding()`, `starts_with_bytes()`, `contains_bytes()`, `has_byte_at()`, `is_hex_equal_to()`, `decoded_as()`.
+
+### JSON path and schema validation
+
+Requires `pip install assertpy2[json]`.
+
+```py
+data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
+
+assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
+assert_that(data).has_json_path("$.meta.total")
+assert_that(data).does_not_have_json_path("$.error")
+assert_that(data).matches_json_schema({"type": "object", "required": ["users"]})
+```
+
 ### Snapshot testing
 
 ```py
 assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 ```
+
+---
+
+## Testing
+
+### Soft assertions
+
+Collect all failures instead of stopping at the first one:
+
+```py
+from assertpy2 import assert_that, soft_assertions
+
+def test_user_profile():
+    with soft_assertions():
+        assert_that(user.name).is_equal_to("Alice")
+        assert_that(user.age).is_greater_than(0)
+        assert_that(user.email).contains("@")
+```
+
+All failures are reported at the end of the block:
+
+```
+AssertionError: soft assertion failures:
+1. Expected <Bob> to be equal to <Alice>, but was not.
+2. Expected <-1> to be greater than <0>, but was not.
+3. Expected <invalid> to contain <@>, but did not.
+```
+
+Use `soft_fail("message")` inside the block for non-halting explicit failures (unlike `fail()`, which stops immediately).
+
+Soft assertions are thread-safe and async-safe: each thread and each `asyncio` task gets independent state via `contextvars`.
+
+### Grouped soft assertions
+
+```py
+with soft_assertions() as sa:
+    with sa.group("Headers"):
+        assert_that(headers["Content-Type"]).is_equal_to("application/json")
+    with sa.group("Body"):
+        assert_that(body["status"]).is_equal_to("ok")
+        assert_that(body["items"]).is_not_empty()
+
+# or inline with assert_all
+assert_all(
+    lambda: assert_that(x).is_positive(),
+    lambda: assert_that(y).is_not_none(),
+)
+```
+
+### Async assertions
+
+Poll a callable until the assertion passes or timeout is reached:
+
+```py
+from assertpy2 import assert_that
+
+async def test_eventual_consistency():
+    await assert_that(get_status).eventually().within(5).every(0.5).is_equal_to("ready")
+
+    # works with async callables
+    await assert_that(async_get_count).eventually().within(10).is_greater_than(100)
+```
+
+Any assertion method is available after `eventually()`. Only `AssertionError` is retried, other exceptions propagate immediately.
+
+### Structured errors
+
+When assertions fail, `AssertionFailure` carries structured data alongside the human-readable message:
+
+```py
+try:
+    assert_that(1).is_equal_to(2)
+except AssertionError as e:
+    e.actual    # 1
+    e.expected  # 2
+```
+
+For comparisons, a `DiffResult` with structural diff entries is available:
+
+```py
+try:
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
+except AssertionError as e:
+    e.diff  # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+```
+
+`AssertionFailure` is a subclass of `AssertionError`, so all existing `except AssertionError` handlers work unchanged.
+
+### Rich pytest diffs
+
+The pytest plugin (auto-registered, no configuration needed) renders structural diffs with recursive descent:
+
+```
+FAILED test_example.py::test_api
+--- AssertionFailure ---
+  actual:   [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
+  expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
+--- Structured Diff ---
+diff (sequence):
+  [1].name:
+    - 'Bob'
+    + 'Robert'
+```
+
+Supported types: list/tuple, set/frozenset, str, dict, dataclass, namedtuple. Nested structures are diffed recursively. Colored output when `--color=yes`.
+
+Configure via `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_diff = "off"              # disable diff sections
+assertpy2_diff_max_entries = "100"  # max entries shown (default 50, 0 = unlimited)
+```
+
+---
+
+## Extensibility
 
 ### Custom matchers
 
@@ -453,8 +521,11 @@ assert_that(5).is_5()
 
 See the [full API reference](docs/api.md) for all assertion methods, examples, and advanced features.
 
+---
 
-## Allure integration
+## Integrations
+
+### Allure
 
 When `allure-pytest` is installed, the pytest plugin auto-attaches structured failure data to Allure reports as JSON attachments.
 
@@ -476,8 +547,7 @@ Three modes controlled via `pytest.ini` (or `pyproject.toml`):
 assertpy2_allure = "full"
 ```
 
-
-## Behave step matchers
+### Behave
 
 Ready-made parameter types for Behave step definitions:
 
@@ -501,6 +571,7 @@ def step_impl(context, age):
 
 Available types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyString`, `BoolLike`.
 
+---
 
 ## Migration from assertpy
 
@@ -517,8 +588,8 @@ from assertpy2 import assert_that, soft_assertions
 See the [comparison table](#comparison) above for feature differences with other libraries.
 
 
-## Contributing
+---
 
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
-
+<p align="center">
+  <a href="https://github.com/Solganis/assertpy2/blob/main/LICENSE">BSD 3-Clause License</a>
+</p>

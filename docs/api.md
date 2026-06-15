@@ -4,6 +4,8 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 
 ## Table of contents
 
+**Built-in Types**
+
 - [Strings](#strings)
 - [Numbers](#numbers)
 - [Lists](#lists)
@@ -14,29 +16,47 @@ Full API reference for assertpy2. For a quick overview, see the [README](../READ
 - [None](#none)
 - [Dates](#dates)
 - [Files](#files)
-- [Objects](#objects)
-- [Extracting Attributes from Objects](#extracting-attributes-from-objects)
-- [Dynamic Assertions on Objects](#dynamic-assertions-on-objects)
-- [Failure](#failure)
-- [Expected Exceptions](#expected-exceptions)
-- [Custom Error Messages](#custom-error-messages)
-- [Warnings](#just-a-warning)
-- [Soft Assertions](#soft-assertions)
-- [Composable Matchers](#composable-matchers)
-- [Structural Matching](#structural-matching)
-- [Async Assertions](#async-assertions)
-- [Structured Errors](#structured-errors)
-- [Snapshot Testing](#snapshot-testing)
-- [Allure Integration](#allure-integration)
-- [Behave Step Matchers](#behave-step-matchers)
-- [Custom Matchers](#custom-matchers---registering-domain-matchers)
-- [Regex Group Extraction](#regex-group-extraction)
+- [Bytes / Bytearray](#bytes--bytearray-assertions)
+- [Objects](#objects), [Extracting](#extracting-attributes-from-objects), [Dynamic](#dynamic-assertions-on-objects)
+
+**Fluent API**
+
+- [Chaining](#chaining)
 - [Universal Negation](#universal-negation)
 - [Collection Pipeline](#collection-pipeline)
-- [Grouped Soft Assertions](#grouped-soft-assertions)
+
+**Matchers**
+
+- [Composable Matchers](#composable-matchers)
+- [Structural Matching](#structural-matching)
+- [Custom Matchers](#custom-matchers---registering-domain-matchers)
+
+**Data Navigation**
+
 - [JSON Path / Schema Validation](#json-path--schema-validation)
+- [Regex Group Extraction](#regex-group-extraction)
+
+**Testing**
+
+- [Soft Assertions](#soft-assertions)
+- [Grouped Soft Assertions](#grouped-soft-assertions)
+- [Async Assertions](#async-assertions)
+- [Structured Errors](#structured-errors)
+- [Rich Pytest Diffs](#rich-pytest-diffs)
+- [Snapshot Testing](#snapshot-testing)
+
+**Error Handling**
+
+- [Failure](#failure), [Expected Exceptions](#expected-exceptions), [Custom Error Messages](#custom-error-messages), [Warnings](#just-a-warning)
+
+**Extensibility**
+
 - [Extension System](#extension-system---adding-custom-assertions)
-- [Chaining](#chaining)
+
+**Integrations**
+
+- [Allure Integration](#allure-integration)
+- [Behave Step Matchers](#behave-step-matchers)
 
 
 [Back to top](#table-of-contents)
@@ -549,6 +569,89 @@ assert_that(contents).starts_with('foo').ends_with('bar').contains('oob')
 
 [Back to top](#table-of-contents)
 
+## Bytes / Bytearray Assertions
+
+Assertions for `bytes` and `bytearray` values. The `assert_that()` overload returns a type-specific protocol with these methods.
+
+### is_valid_utf8
+
+Assert that the value is valid UTF-8:
+
+```py
+assert_that(b"hello world").is_valid_utf8()
+assert_that(b"\xff\xfe").is_valid_utf8()  # fails
+```
+
+### is_valid_encoding
+
+Assert that the value is valid in the given encoding:
+
+```py
+assert_that(b"hello").is_valid_encoding("ascii")
+assert_that("привет".encode()).is_valid_encoding("utf-8")
+assert_that(b"\x80\x81").is_valid_encoding("ascii")  # fails
+```
+
+### starts_with_bytes
+
+Assert that the value starts with the given byte prefix:
+
+```py
+assert_that(b"\x89PNG\r\n\x1a\n...").starts_with_bytes(b"\x89PNG")
+```
+
+### contains_bytes
+
+Assert that the value contains the given byte subsequence:
+
+```py
+assert_that(b"hello world").contains_bytes(b"world")
+assert_that(b"\x00\x01\x02\x03").contains_bytes(b"\x01\x02")
+```
+
+### has_byte_at
+
+Assert that the byte at the given index equals the expected value:
+
+```py
+assert_that(b"\x89PNG").has_byte_at(0, 0x89)
+assert_that(b"\x89PNG").has_byte_at(1, ord("P"))
+```
+
+Raises `IndexError` if the index is out of range.
+
+### is_hex_equal_to
+
+Assert that the value equals the given hex string:
+
+```py
+assert_that(b"\xab\xcd\xef").is_hex_equal_to("abcdef")
+assert_that(b"\x00\x01").is_hex_equal_to("0001")
+```
+
+### decoded_as
+
+Decode the value and return a new builder with the decoded string, allowing string assertions to continue:
+
+```py
+assert_that(b"hello").decoded_as("utf-8").starts_with("hel").is_length(5)
+assert_that(b"hello").decoded_as().is_equal_to("hello")  # default encoding is utf-8
+```
+
+Raises `UnicodeDecodeError` if decoding fails.
+
+All bytes assertions work with soft assertions, warn mode, and `.not_` negation:
+
+```py
+with soft_assertions():
+    assert_that(data).is_valid_utf8()
+    assert_that(data).starts_with_bytes(b"\x89PNG")
+
+assert_that(b"\xff\xfe").not_.is_valid_utf8()
+```
+
+[Back to top](#table-of-contents)
+
 ## Objects
 
 Matching an object:
@@ -740,180 +843,151 @@ assert_that(fred).has_last_name('Smith')
 
 [Back to top](#table-of-contents)
 
-## Failure
+---
 
-The `assertpy2` library includes a `fail()` method to explicitly force a test failure.  It can be used like this:
+## Chaining
 
-```py
-from assertpy2 import assert_that,fail
+One of the nicest aspects of any fluent API is the ability to chain methods together.  In the case of `assertpy2`, chaining
+allows you to write assertions as a single statement that reads like a sentence and is easy to understand.
 
-def test_fail():
-    fail('forced failure')
-```
-
-A very useful test pattern that requires the `fail()` method is to verify the exact contents of an error message. For example:
+Here are just a few examples:
 
 ```py
-from assertpy2 import assert_that,fail
+assert_that('foo').is_length(3).starts_with('f').ends_with('oo')
 
-def test_error_msg():
-    try:
-        some_func('foo')
-        fail('should have raised error')
-    except RuntimeError as e:
-        assert_that(str(e)).is_equal_to('some err')
-```
+assert_that([1,2,3]).is_type_of(list).contains(1,2).does_not_contain(4,5)
 
-In the above code, we invoke `some_func()` with a bad argument which raises an exception.  The exception is then handled by the `try..except` block and the exact contents of the error message are verified.  Lastly, if an exception is *not* thrown by `some_func()` as expected, we fail the test via `fail()`.
+assert_that(fred).has_first_name('Fred').has_last_name('Smith').has_shoe_size(12)
 
-This pattern is only used when you need to verify the contents of the error message.  If you only wish to check for an expected exception (and don't need to verify the contents of the error message itself), you're better off using [pytest.raises](http://pytest.org/latest/assert.html#assertions-about-expected-exceptions).
-
-
-### Expected Exceptions
-
-We recommend using pytest's [pytest.raises](http://pytest.org/latest/assert.html#assertions-about-expected-exceptions) context manager for expected exceptions.  In the special case of invoking a function, `assertpy2` provides its own expected exception handling via a simple fluent API.
-
-Given a function `some_func()`:
-
-```py
-def some_func(arg):
-    raise RuntimeError('some err')
-```
-
-We can expect a `RuntimeError` with:
-
-```py
-assert_that(some_func).raises(RuntimeError).when_called_with('foo')
-```
-
-Additionally, the error message contents are chained, and can be further verified:
-
-```py
-assert_that(some_func).raises(RuntimeError).when_called_with('foo')\
-    .is_length(8).starts_with('some').is_equal_to('some err')
-```
-
-To verify that a function does **not** raise a specific exception:
-
-```py
-assert_that(safe_func).does_not_raise(ValueError).when_called_with('foo')
-```
-
-If `safe_func` raises `ValueError` (or a subclass), the assertion fails. Any other exception type propagates normally.
-
-
-### Custom Error Messages
-
-Sometimes you need a little more information in your failures.  For this case, `assertpy2` includes a `described_as()` helper that will add a custom message when a failure occurs.  For example, if we had these failing assertions:
-
-```py
-assert_that(1+2).is_equal_to(2)
-assert_that(1+2).described_as('adding stuff').is_equal_to(2)
-```
-
-When run (separately, of course), they would produce these errors:
-
-```
-Expected <3> to be equal to <2>, but was not.
-[adding stuff] Expected <3> to be equal to <2>, but was not.
-```
-
-The `described_as()` helper causes the custom message `adding stuff` to be prepended to the front of the second error.
-
-
-### Just A Warning
-
-There are times when you only want a warning message instead of a failing test. For example, if you are using `assertpy2`
-to write defensive assertions in the normal flow of your application (not in a test).  In this case, just replace
-`assert_that` with `assert_warn`.
-
-```py
-assert_warn('foo').is_length(4)
-assert_warn('foo').is_empty()
-assert_warn('foo').is_false()
-assert_warn('foo').is_digit()
-assert_warn('123').is_alpha()
-assert_warn('foo').is_upper()
-assert_warn('FOO').is_lower()
-assert_warn('foo').is_equal_to('bar')
-assert_warn('foo').is_not_equal_to('foo')
-assert_warn('foo').is_equal_to_ignoring_case('BAR')
-```
-
-Even though all of the above assertions fail, an `AssertionError` is never raised and execution is
-not halted.  Instead, the failed assertions merely log the following warning messages to `stdout`:
-
-```
-2019-10-27 20:00:35 WARNING [test_readme.py:423]: Expected <foo> to be of length <4>, but was <3>.
-2019-10-27 20:00:35 WARNING [test_readme.py:424]: Expected <foo> to be empty string, but was not.
-2019-10-27 20:00:35 WARNING [test_readme.py:425]: Expected <False>, but was not.
-2019-10-27 20:00:35 WARNING [test_readme.py:426]: Expected <foo> to contain only digits, but did not.
-2019-10-27 20:00:35 WARNING [test_readme.py:427]: Expected <123> to contain only alphabetic chars, but did not.
-2019-10-27 20:00:35 WARNING [test_readme.py:428]: Expected <foo> to contain only uppercase chars, but did not.
-2019-10-27 20:00:35 WARNING [test_readme.py:429]: Expected <FOO> to contain only lowercase chars, but did not.
-2019-10-27 20:00:35 WARNING [test_readme.py:430]: Expected <foo> to be equal to <bar>, but was not.
-2019-10-27 20:00:35 WARNING [test_readme.py:431]: Expected <foo> to be not equal to <foo>, but was.
-2019-10-27 20:00:35 WARNING [test_readme.py:432]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.
-```
-
-#### Custom Warning Logger
-
-By default, warnings are written to `stdout` with a formatter that includes timestamp, log level `WARNING`, and message,
-plus some stack frame magic to find the correct filename and line number where `assert_warn()` was called and failed.
-For more control or better log formatting, you can pass in your own customer logger when you call `assert_warn()`.
-
-```py
-assert_warn('foo', logger=my_logger).is_length(4)
-assert_warn('foo', logger=my_logger).is_equal_to_ignoring_case('BAR')
+assert_that(people).is_length(2).extracting('first_name').contains('Fred','Joe')
 ```
 
 [Back to top](#table-of-contents)
 
-## Soft Assertions
+## Universal Negation
 
-Normally, an assertion failure will halt test execution immediately by raising an error. Soft assertions are
-way to collect assertion failures together, to be raise all at once at the end, without halting your test.  To use
-soft assertions in `assertpy2`, just use the `with soft_assertions()` context manager, like this:
+The `.not_` property inverts the next assertion in the chain. Instead of writing separate `is_not_*` methods, use `.not_` with any existing assertion:
 
 ```py
-from assertpy2 import assert_that, soft_assertions
+assert_that(5).not_.is_none()
+assert_that("abc123").not_.is_alpha()
+assert_that([3, 1, 2]).not_.is_sorted()
+assert_that(42).not_.is_in(1, 2, 3)
+assert_that("hello").not_.is_instance_of(int)
+```
 
+Chaining continues normally after a negated assertion:
+
+```py
+assert_that(5).not_.is_none().is_positive()
+assert_that("hello").not_.is_empty().is_length(5).is_alpha()
+```
+
+Works with `described_as()`, the description is included in the error message:
+
+```py
+assert_that(5).described_as("my check").not_.is_positive()
+# AssertionError: [my check] Expected <5> to NOT satisfy: is_positive()
+```
+
+Works with soft assertions, collecting errors instead of raising:
+
+```py
 with soft_assertions():
-    assert_that('foo').is_length(4)
-    assert_that('foo').is_empty()
-    assert_that('foo').is_false()
-    assert_that('foo').is_digit()
-    assert_that('123').is_alpha()
-    assert_that('foo').is_upper()
-    assert_that('FOO').is_lower()
-    assert_that('foo').is_equal_to('bar')
-    assert_that('foo').is_not_equal_to('foo')
-    assert_that('foo').is_equal_to_ignoring_case('BAR')
+    assert_that(5).not_.is_positive()    # collected, not raised
+    assert_that(None).not_.is_none()     # collected, not raised
 ```
 
-At the end of the block, all assertion failures are collected together and a single `AssertionError` is raised:
+Works with warn mode, logging instead of raising:
 
-```
-AssertionError: soft assertion failures:
-1. Expected <foo> to be of length <4>, but was <3>.
-2. Expected <foo> to be empty string, but was not.
-3. Expected <False>, but was not.
-4. Expected <foo> to contain only digits, but did not.
-5. Expected <123> to contain only alphabetic chars, but did not.
-6. Expected <foo> to contain only uppercase chars, but did not.
-7. Expected <FOO> to contain only lowercase chars, but did not.
-8. Expected <foo> to be equal to <bar>, but was not.
-9. Expected <foo> to be not equal to <foo>, but was.
-10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.
+```py
+assert_warn("hello").not_.is_alpha()  # logs warning
 ```
 
-Also, note that *only* assertion failures are collected, errors such as `TypeError` or `ValueError` are raised immediately.
-Triggering an explicit test failure with `fail()` will similarly halt execution immediately.  If you need more
-forgiving behavior, you can use `soft_fail()` which is collected like any other failing assertion within a soft assertions block.
+Works with matchers:
 
-Soft assertions are thread-safe and async-safe. Each thread and each `asyncio.Task` gets its own independent failure state via `contextvars`, so concurrent tests never interfere with each other.
+```py
+assert_that(-5).not_.satisfies(match.is_positive())
+assert_that([1, -2, 3]).not_.each(match.is_positive())
+```
 
 [Back to top](#table-of-contents)
+
+## Collection Pipeline
+
+Pipeline methods transform the value before asserting. Each returns a new builder, so the original value is unchanged.
+
+### `filtered_on(predicate)`
+
+Filter elements by a callable or Matcher:
+
+```py
+assert_that([1, -2, 3, -4]).filtered_on(lambda x: x > 0).is_length(2)
+assert_that(items).filtered_on(match.is_positive()).is_not_empty()
+assert_that(users).filtered_on(match.has_property("active")).is_length(5)
+```
+
+### `mapped(func)`
+
+Transform each element:
+
+```py
+assert_that(["a", "b", "c"]).mapped(str.upper).contains("A", "B")
+assert_that(users).mapped(lambda u: u.name).contains("Alice", "Bob")
+```
+
+### `flat_mapped(func)`
+
+Transform and flatten:
+
+```py
+assert_that(["ab", "cd"]).flat_mapped(list).contains("a", "b", "c", "d")
+assert_that(users).flat_mapped(lambda u: u.tags).contains("admin", "user")
+```
+
+### `first()` / `last()`
+
+Navigate to first or last element:
+
+```py
+assert_that([10, 20, 30]).first().is_equal_to(10)
+assert_that([10, 20, 30]).last().is_equal_to(30)
+```
+
+Raises `ValueError` if the collection is empty.
+
+### `element(index)`
+
+Navigate to element at a specific index:
+
+```py
+assert_that([10, 20, 30]).element(1).is_equal_to(20)
+```
+
+Raises `IndexError` if the index is out of range.
+
+### `single()`
+
+Assert exactly one element and navigate to it:
+
+```py
+assert_that([42]).single().is_equal_to(42)
+```
+
+Raises `ValueError` if the collection is empty or has more than one element.
+
+### Chaining pipeline steps
+
+Pipeline methods return a new builder, so they can be chained with each other and with any assertion:
+
+```py
+assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().is_positive()
+assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
+```
+
+[Back to top](#table-of-contents)
+
+---
 
 ## Composable Matchers
 
@@ -1113,6 +1187,266 @@ assert_that({"tags": ["python", "testing"]}).matches_structure({
 
 [Back to top](#table-of-contents)
 
+## Custom Matchers - registering domain matchers
+
+The `register_matcher()` decorator lets you add custom matchers to the `match` namespace. Custom matchers support full composition with `&`, `|`, `~` and work everywhere matchers are accepted: `satisfies()`, `each()`, `matches_structure()`, `contains()`.
+
+### Simple (no-argument) matchers
+
+```py
+from assertpy2 import assert_that, match, register_matcher
+
+@register_matcher("is_valid_email")
+def is_valid_email():
+    return match.matches_regex(r"^[\w.-]+@[\w.-]+\.\w+$")
+
+assert_that("alice@example.com").satisfies(match.is_valid_email())
+assert_that(users).extracting("email").each(match.is_valid_email())
+```
+
+### Parametrised matchers
+
+```py
+@register_matcher("has_status")
+def has_status(expected: str):
+    return match.has_property("status", match.equal_to(expected))
+
+assert_that(order).satisfies(match.has_status("active"))
+```
+
+### Composition
+
+Custom matchers compose with built-in matchers using `&`, `|`, `~`:
+
+```py
+assert_that(email).satisfies(
+    match.is_valid_email() & match.contains_string("@company.com")
+)
+assert_that(value).satisfies(~match.is_valid_email())
+```
+
+### In structural matching
+
+```py
+assert_that(response).matches_structure({
+    "email": match.is_valid_email(),
+    "status": match.has_status("active"),
+    "name": match.is_non_empty_string(),
+})
+```
+
+### Removing a custom matcher
+
+```py
+from assertpy2 import unregister_matcher
+
+unregister_matcher("is_valid_email")
+```
+
+[Back to top](#table-of-contents)
+
+---
+
+## JSON Path / Schema Validation
+
+Navigate JSON structures with JSONPath and validate against JSON Schema.
+
+Requires optional dependencies:
+
+```bash
+pip install assertpy2[json]
+```
+
+### at_json_path
+
+Navigate to a JSONPath and continue asserting on the extracted value:
+
+```py
+data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
+
+assert_that(data).at_json_path("$.meta.total").is_equal_to(2)
+assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
+assert_that(data).at_json_path("$.users[*].name").is_equal_to(["Alice", "Bob"])
+```
+
+Raises `ValueError` if the path does not exist.
+
+### has_json_path / does_not_have_json_path
+
+Assert that a JSONPath exists or does not exist:
+
+```py
+assert_that(data).has_json_path("$.meta.total")
+assert_that(data).does_not_have_json_path("$.error")
+```
+
+### matches_json_schema
+
+Validate against a JSON Schema dict:
+
+```py
+schema = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+    "required": ["name"],
+}
+
+assert_that({"name": "Alice", "age": 30}).matches_json_schema(schema)
+```
+
+### matches_json_schema_from_file
+
+Load the schema from a JSON file:
+
+```py
+assert_that(data).matches_json_schema_from_file("schemas/user.json")
+```
+
+All JSON assertions work with soft assertions and chaining:
+
+```py
+with soft_assertions():
+    assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()
+```
+
+[Back to top](#table-of-contents)
+
+## Regex Group Extraction
+
+Extract regex capture groups from strings and continue asserting on the extracted value.
+
+### extracting_group()
+
+Search val for a regex pattern and return a new builder whose val is the captured group:
+
+```py
+log = "2024-01-15 ERROR status=500 path=/api/users"
+
+# extract by positional group index
+assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")
+
+# extract by named group
+assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")
+
+# default group=0 extracts the entire match
+assert_that("abc123").extracting_group(r"\d+").is_equal_to("123")
+
+# chain further assertions on the extracted value
+assert_that("count=42").extracting_group(r"count=(\d+)", 1).is_digit().is_length(2)
+```
+
+### matches_with_groups()
+
+Search val for a pattern and return a new builder whose val is the tuple of all groups (or a dict for named groups):
+
+```py
+# positional groups return a tuple
+assert_that("2024-01-15 ERROR").matches_with_groups(
+    r"(\d{4}-\d{2}-\d{2}) (\w+)"
+).is_equal_to(("2024-01-15", "ERROR"))
+
+# named groups return a dict
+assert_that("key=value").matches_with_groups(
+    r"(?P<key>\w+)=(?P<val>\w+)"
+).contains_entry({"key": "key"}).contains_entry({"val": "value"})
+```
+
+[Back to top](#table-of-contents)
+
+---
+
+## Soft Assertions
+
+Normally, an assertion failure will halt test execution immediately by raising an error. Soft assertions are
+way to collect assertion failures together, to be raise all at once at the end, without halting your test.  To use
+soft assertions in `assertpy2`, just use the `with soft_assertions()` context manager, like this:
+
+```py
+from assertpy2 import assert_that, soft_assertions
+
+with soft_assertions():
+    assert_that('foo').is_length(4)
+    assert_that('foo').is_empty()
+    assert_that('foo').is_false()
+    assert_that('foo').is_digit()
+    assert_that('123').is_alpha()
+    assert_that('foo').is_upper()
+    assert_that('FOO').is_lower()
+    assert_that('foo').is_equal_to('bar')
+    assert_that('foo').is_not_equal_to('foo')
+    assert_that('foo').is_equal_to_ignoring_case('BAR')
+```
+
+At the end of the block, all assertion failures are collected together and a single `AssertionError` is raised:
+
+```
+AssertionError: soft assertion failures:
+1. Expected <foo> to be of length <4>, but was <3>.
+2. Expected <foo> to be empty string, but was not.
+3. Expected <False>, but was not.
+4. Expected <foo> to contain only digits, but did not.
+5. Expected <123> to contain only alphabetic chars, but did not.
+6. Expected <foo> to contain only uppercase chars, but did not.
+7. Expected <FOO> to contain only lowercase chars, but did not.
+8. Expected <foo> to be equal to <bar>, but was not.
+9. Expected <foo> to be not equal to <foo>, but was.
+10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.
+```
+
+Also, note that *only* assertion failures are collected, errors such as `TypeError` or `ValueError` are raised immediately.
+Triggering an explicit test failure with `fail()` will similarly halt execution immediately.  If you need more
+forgiving behavior, you can use `soft_fail()` which is collected like any other failing assertion within a soft assertions block.
+
+Soft assertions are thread-safe and async-safe. Each thread and each `asyncio.Task` gets its own independent failure state via `contextvars`, so concurrent tests never interfere with each other.
+
+[Back to top](#table-of-contents)
+
+## Grouped Soft Assertions
+
+Use `soft_assertions() as sa` to get a collector, then `sa.group(label)` to group errors by section:
+
+```py
+from assertpy2 import assert_that, soft_assertions
+
+with soft_assertions() as sa:
+    with sa.group("Headers"):
+        assert_that(headers["Content-Type"]).is_equal_to("application/json")
+        assert_that(headers["Accept"]).contains("json")
+    with sa.group("Body"):
+        assert_that(body["status"]).is_equal_to("ok")
+        assert_that(body["items"]).is_not_empty()
+```
+
+Output with groups:
+
+```
+soft assertion failures:
+  [Headers]
+    1. Expected <text/html> to be equal to <application/json>, but was not.
+  [Body]
+    2. Expected <error> to be equal to <ok>, but was not.
+```
+
+Without `as sa` or without calling `sa.group()`, the behavior is unchanged (flat error list).
+
+### assert_all
+
+`assert_all()` is a convenience wrapper for inline soft assertions:
+
+```py
+from assertpy2 import assert_all, assert_that
+
+assert_all(
+    lambda: assert_that(x).is_positive(),
+    lambda: assert_that(y).is_not_none(),
+    lambda: assert_that(z).is_length(3),
+)
+```
+
+Equivalent to wrapping all calls in `with soft_assertions():`.
+
+[Back to top](#table-of-contents)
+
 ## Async Assertions
 
 The `eventually()` method creates a polling assertion that retries until the condition is met or a timeout is reached. Useful for testing async operations, eventual consistency, and reactive systems:
@@ -1189,7 +1523,7 @@ except AssertionError as e:
     print(e.expected)   # 2
 ```
 
-For dict comparisons, a `DiffResult` with per-key entries is available:
+For comparisons, a `DiffResult` with structural diff entries is available:
 
 ```py
 try:
@@ -1211,10 +1545,90 @@ FAILED test_example.py::test_comparison
   actual:   {'a': 1, 'b': 2}
   expected: {'a': 1, 'b': 99}
 --- Structured Diff ---
-DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+diff (dict):
+  b:
+    - 2
+    + 99
 ```
 
-The plugin is auto-registered via the `pytest11` entry point. No configuration needed.
+The plugin is auto-registered via the `pytest11` entry point. No configuration needed. See [Rich Pytest Diffs](#rich-pytest-diffs) for details on supported types and configuration.
+
+[Back to top](#table-of-contents)
+
+## Rich Pytest Diffs
+
+When `is_equal_to()` or `contains()`/`contains_exactly()` fail, the `AssertionFailure` exception carries a `DiffResult` with structured diff data. The pytest plugin renders this as colored diff sections in failure reports.
+
+### Supported types
+
+| Type | Diff kind | How it works |
+|---|---|---|
+| `list`, `tuple` | `sequence` | Element-by-element comparison with recursive descent into nested dicts/dataclasses |
+| `set`, `frozenset` | `set` | Extra and missing items |
+| `str` | `string` | Line-by-line comparison |
+| `dict` | `dict` | Key-by-key comparison (built-in from `is_equal_to` with dict) |
+| `dataclass` | `dataclass` | Field-by-field comparison, handles different dataclass types with overlapping fields |
+| `namedtuple` | `namedtuple` | Field-by-field comparison |
+| Other | `scalar` | Single entry with actual vs expected |
+| `contains`/`contains_exactly` | `contains` | Missing and extra items |
+
+### Example output
+
+```
+FAILED test_api.py::test_users
+--- AssertionFailure ---
+  actual:   [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
+  expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
+--- Structured Diff ---
+diff (sequence):
+  [1].name:
+    - 'Bob'
+    + 'Robert'
+```
+
+For sets:
+
+```
+--- Structured Diff ---
+diff (set):
+  extra:   {1}
+  missing: {3}
+```
+
+### Recursive descent
+
+Nested structures are diffed recursively. For example, a list of dicts shows the exact path to the differing value:
+
+```py
+actual = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}]
+expected = [{"id": 1, "name": "Alice"}, {"id": 2, "name": "Robert"}]
+assert_that(actual).is_equal_to(expected)
+# diff path: [1].name
+```
+
+This works with dicts, dataclasses, and namedtuples nested inside lists/tuples.
+
+### Configuration
+
+Configure via `pyproject.toml` or `pytest.ini`:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_diff = "off"              # disable structured diff sections entirely
+assertpy2_diff_max_entries = "100"  # max diff entries to show (default 50, 0 = unlimited)
+```
+
+When `--color=yes` is passed to pytest, diff output is colored: red for removals, green for additions, cyan for headers.
+
+### Truncation
+
+When a diff has more entries than `assertpy2_diff_max_entries`, excess entries are hidden with a summary line:
+
+```
+  ... and 47 more entries
+```
+
+Set `assertpy2_diff_max_entries = "0"` for unlimited output.
 
 [Back to top](#table-of-contents)
 
@@ -1280,6 +1694,233 @@ assert_that({'a':1,'b':2,'c':3}).snapshot(path='my-custom-folder')
 Functional testing (which snapshot testing falls under) is very much blackbox testing.  When something goes wrong, it's hard to pinpoint the issue, because functional tests provide little *isolation*.  On the plus side, snapshots can provide enormous *leverage* as a few well-placed snapshot tests can strongly verify an application is working that would otherwise require dozens if not hundreds of unit tests.
 
 [Back to top](#table-of-contents)
+
+---
+
+## Failure
+
+The `assertpy2` library includes a `fail()` method to explicitly force a test failure.  It can be used like this:
+
+```py
+from assertpy2 import assert_that,fail
+
+def test_fail():
+    fail('forced failure')
+```
+
+A very useful test pattern that requires the `fail()` method is to verify the exact contents of an error message. For example:
+
+```py
+from assertpy2 import assert_that,fail
+
+def test_error_msg():
+    try:
+        some_func('foo')
+        fail('should have raised error')
+    except RuntimeError as e:
+        assert_that(str(e)).is_equal_to('some err')
+```
+
+In the above code, we invoke `some_func()` with a bad argument which raises an exception.  The exception is then handled by the `try..except` block and the exact contents of the error message are verified.  Lastly, if an exception is *not* thrown by `some_func()` as expected, we fail the test via `fail()`.
+
+This pattern is only used when you need to verify the contents of the error message.  If you only wish to check for an expected exception (and don't need to verify the contents of the error message itself), you're better off using [pytest.raises](http://pytest.org/latest/assert.html#assertions-about-expected-exceptions).
+
+
+### Expected Exceptions
+
+We recommend using pytest's [pytest.raises](http://pytest.org/latest/assert.html#assertions-about-expected-exceptions) context manager for expected exceptions.  In the special case of invoking a function, `assertpy2` provides its own expected exception handling via a simple fluent API.
+
+Given a function `some_func()`:
+
+```py
+def some_func(arg):
+    raise RuntimeError('some err')
+```
+
+We can expect a `RuntimeError` with:
+
+```py
+assert_that(some_func).raises(RuntimeError).when_called_with('foo')
+```
+
+Additionally, the error message contents are chained, and can be further verified:
+
+```py
+assert_that(some_func).raises(RuntimeError).when_called_with('foo')\
+    .is_length(8).starts_with('some').is_equal_to('some err')
+```
+
+To verify that a function does **not** raise a specific exception:
+
+```py
+assert_that(safe_func).does_not_raise(ValueError).when_called_with('foo')
+```
+
+If `safe_func` raises `ValueError` (or a subclass), the assertion fails. Any other exception type propagates normally.
+
+
+### Custom Error Messages
+
+Sometimes you need a little more information in your failures.  For this case, `assertpy2` includes a `described_as()` helper that will add a custom message when a failure occurs.  For example, if we had these failing assertions:
+
+```py
+assert_that(1+2).is_equal_to(2)
+assert_that(1+2).described_as('adding stuff').is_equal_to(2)
+```
+
+When run (separately, of course), they would produce these errors:
+
+```
+Expected <3> to be equal to <2>, but was not.
+[adding stuff] Expected <3> to be equal to <2>, but was not.
+```
+
+The `described_as()` helper causes the custom message `adding stuff` to be prepended to the front of the second error.
+
+
+### Just A Warning
+
+There are times when you only want a warning message instead of a failing test. For example, if you are using `assertpy2`
+to write defensive assertions in the normal flow of your application (not in a test).  In this case, just replace
+`assert_that` with `assert_warn`.
+
+```py
+assert_warn('foo').is_length(4)
+assert_warn('foo').is_empty()
+assert_warn('foo').is_false()
+assert_warn('foo').is_digit()
+assert_warn('123').is_alpha()
+assert_warn('foo').is_upper()
+assert_warn('FOO').is_lower()
+assert_warn('foo').is_equal_to('bar')
+assert_warn('foo').is_not_equal_to('foo')
+assert_warn('foo').is_equal_to_ignoring_case('BAR')
+```
+
+Even though all of the above assertions fail, an `AssertionError` is never raised and execution is
+not halted.  Instead, the failed assertions merely log the following warning messages to `stdout`:
+
+```
+2019-10-27 20:00:35 WARNING [test_readme.py:423]: Expected <foo> to be of length <4>, but was <3>.
+2019-10-27 20:00:35 WARNING [test_readme.py:424]: Expected <foo> to be empty string, but was not.
+2019-10-27 20:00:35 WARNING [test_readme.py:425]: Expected <False>, but was not.
+2019-10-27 20:00:35 WARNING [test_readme.py:426]: Expected <foo> to contain only digits, but did not.
+2019-10-27 20:00:35 WARNING [test_readme.py:427]: Expected <123> to contain only alphabetic chars, but did not.
+2019-10-27 20:00:35 WARNING [test_readme.py:428]: Expected <foo> to contain only uppercase chars, but did not.
+2019-10-27 20:00:35 WARNING [test_readme.py:429]: Expected <FOO> to contain only lowercase chars, but did not.
+2019-10-27 20:00:35 WARNING [test_readme.py:430]: Expected <foo> to be equal to <bar>, but was not.
+2019-10-27 20:00:35 WARNING [test_readme.py:431]: Expected <foo> to be not equal to <foo>, but was.
+2019-10-27 20:00:35 WARNING [test_readme.py:432]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.
+```
+
+#### Custom Warning Logger
+
+By default, warnings are written to `stdout` with a formatter that includes timestamp, log level `WARNING`, and message,
+plus some stack frame magic to find the correct filename and line number where `assert_warn()` was called and failed.
+For more control or better log formatting, you can pass in your own customer logger when you call `assert_warn()`.
+
+```py
+assert_warn('foo', logger=my_logger).is_length(4)
+assert_warn('foo', logger=my_logger).is_equal_to_ignoring_case('BAR')
+```
+
+[Back to top](#table-of-contents)
+
+---
+
+## Extension System - adding custom assertions
+
+Sometimes you want to add your own custom assertions to `assertpy2`.  This can be done using the `add_extension()` helper.
+
+For example, we can write a custom `is_5()` assertion like this:
+
+```py
+from assertpy2 import add_extension
+
+def is_5(self):
+    if self.val != 5:
+        return self.error(f'{self.val} is NOT 5!')
+    return self
+
+add_extension(is_5)
+```
+
+Once registered with `assertpy2`, we can use our new assertion as expected:
+
+```py
+assert_that(5).is_5()
+assert_that(6).is_5()  # fails!
+```
+
+Of course, `is_5()` is only available in the test file where `add_extension()` is called.  If you want better control of scope of your custom extensions, such as writing extensions once and using them in any test file, you'll need to use the test setup functionality of your test runner.  With [pytest](http://pytest.org/latest/contents.html), you can just use a `conftest.py` file and a _fixture_.
+
+For example, if your `conftest.py` is:
+
+```py
+import pytest
+from assertpy2 import add_extension
+
+def is_5(self):
+    if self.val != 5:
+        return self.error(f'{self.val} is NOT 5!')
+    return self
+
+@pytest.fixture(scope='module')
+def my_extensions():
+    add_extension(is_5)
+```
+
+Then in any test method in any test file (like `test_foo.py` for example), you just pass in the fixture and all of your extensions are available, like this:
+
+```py
+from assertpy2 import assert_that
+
+def test_foo(my_extensions):
+    assert_that(5).is_5()
+    assert_that(6).is_5()  # fails!
+```
+
+where the `my_extensions` parameter must be the name of your fixture function in `conftest.py`.  See the [fixture docs](https://docs.pytest.org/en/latest/fixture.html) for details.
+
+### Writing custom assertions
+
+Here are some useful tips to help you write your own custom assertions:
+
+1. Use `self` as first param (as if your function was an instance method).
+2. Use `self.val` to get the _actual_ value to be tested.
+3. It's better to test the negative, and then fail if true.
+4. Fail by raising an `AssertionError` (the `self.error()` helper does this for you).
+5. Always use the `self.error()` helper to fail (and print your failure message).
+6. Always `return self` to allow for chaining.
+
+Putting it all together, here is another custom assertion example, but annotated with comments:
+
+```py
+def is_multiple_of(self, other):
+    # validate actual value - must be "integer" (aka int or long)
+    if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
+        # bad input is error, not an assertion fail, so raise error
+        raise TypeError('val must be a positive integer')
+
+    # validate expected value
+    if isinstance(other, numbers.Integral) is False or other <= 0:
+        raise TypeError('given arg must be a positive integer')
+
+    # calc remainder using divmod() built-in
+    _, rem = divmod(self.val, other)
+
+    # test the negative (is remainder non-zero?)
+    if rem > 0:
+        # non-zero remainder, so not multiple -> we fail!
+        return self.error(f'Expected <{self.val}> to be multiple of <{other}>, but was not.')
+
+    # success, and return self to allow chaining
+    return self
+```
+
+[Back to top](#table-of-contents)
+
+---
 
 ## Allure Integration
 
@@ -1427,446 +2068,8 @@ value = parse_int("42")  # 42
 
 [Back to top](#table-of-contents)
 
-## Custom Matchers - registering domain matchers
-
-The `register_matcher()` decorator lets you add custom matchers to the `match` namespace. Custom matchers support full composition with `&`, `|`, `~` and work everywhere matchers are accepted: `satisfies()`, `each()`, `matches_structure()`, `contains()`.
-
-### Simple (no-argument) matchers
-
-```py
-from assertpy2 import assert_that, match, register_matcher
-
-@register_matcher("is_valid_email")
-def is_valid_email():
-    return match.matches_regex(r"^[\w.-]+@[\w.-]+\.\w+$")
-
-assert_that("alice@example.com").satisfies(match.is_valid_email())
-assert_that(users).extracting("email").each(match.is_valid_email())
-```
-
-### Parametrised matchers
-
-```py
-@register_matcher("has_status")
-def has_status(expected: str):
-    return match.has_property("status", match.equal_to(expected))
-
-assert_that(order).satisfies(match.has_status("active"))
-```
-
-### Composition
-
-Custom matchers compose with built-in matchers using `&`, `|`, `~`:
-
-```py
-assert_that(email).satisfies(
-    match.is_valid_email() & match.contains_string("@company.com")
-)
-assert_that(value).satisfies(~match.is_valid_email())
-```
-
-### In structural matching
-
-```py
-assert_that(response).matches_structure({
-    "email": match.is_valid_email(),
-    "status": match.has_status("active"),
-    "name": match.is_non_empty_string(),
-})
-```
-
-### Removing a custom matcher
-
-```py
-from assertpy2 import unregister_matcher
-
-unregister_matcher("is_valid_email")
-```
-
-[Back to top](#table-of-contents)
-
-## Regex Group Extraction
-
-Extract regex capture groups from strings and continue asserting on the extracted value.
-
-### extracting_group()
-
-Search val for a regex pattern and return a new builder whose val is the captured group:
-
-```py
-log = "2024-01-15 ERROR status=500 path=/api/users"
-
-# extract by positional group index
-assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")
-
-# extract by named group
-assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")
-
-# default group=0 extracts the entire match
-assert_that("abc123").extracting_group(r"\d+").is_equal_to("123")
-
-# chain further assertions on the extracted value
-assert_that("count=42").extracting_group(r"count=(\d+)", 1).is_digit().is_length(2)
-```
-
-### matches_with_groups()
-
-Search val for a pattern and return a new builder whose val is the tuple of all groups (or a dict for named groups):
-
-```py
-# positional groups return a tuple
-assert_that("2024-01-15 ERROR").matches_with_groups(
-    r"(\d{4}-\d{2}-\d{2}) (\w+)"
-).is_equal_to(("2024-01-15", "ERROR"))
-
-# named groups return a dict
-assert_that("key=value").matches_with_groups(
-    r"(?P<key>\w+)=(?P<val>\w+)"
-).contains_entry({"key": "key"}).contains_entry({"val": "value"})
-```
-
-[Back to top](#table-of-contents)
-
-## Universal Negation
-
-The `.not_` property inverts the next assertion in the chain. Instead of writing separate `is_not_*` methods, use `.not_` with any existing assertion:
-
-```py
-assert_that(5).not_.is_none()
-assert_that("abc123").not_.is_alpha()
-assert_that([3, 1, 2]).not_.is_sorted()
-assert_that(42).not_.is_in(1, 2, 3)
-assert_that("hello").not_.is_instance_of(int)
-```
-
-Chaining continues normally after a negated assertion:
-
-```py
-assert_that(5).not_.is_none().is_positive()
-assert_that("hello").not_.is_empty().is_length(5).is_alpha()
-```
-
-Works with `described_as()`, the description is included in the error message:
-
-```py
-assert_that(5).described_as("my check").not_.is_positive()
-# AssertionError: [my check] Expected <5> to NOT satisfy: is_positive()
-```
-
-Works with soft assertions, collecting errors instead of raising:
-
-```py
-with soft_assertions():
-    assert_that(5).not_.is_positive()    # collected, not raised
-    assert_that(None).not_.is_none()     # collected, not raised
-```
-
-Works with warn mode, logging instead of raising:
-
-```py
-assert_warn("hello").not_.is_alpha()  # logs warning
-```
-
-Works with matchers:
-
-```py
-assert_that(-5).not_.satisfies(match.is_positive())
-assert_that([1, -2, 3]).not_.each(match.is_positive())
-```
-
-[Back to top](#table-of-contents)
-
-## Collection Pipeline
-
-Pipeline methods transform the value before asserting. Each returns a new builder, so the original value is unchanged.
-
-### `filtered_on(predicate)`
-
-Filter elements by a callable or Matcher:
-
-```py
-assert_that([1, -2, 3, -4]).filtered_on(lambda x: x > 0).is_length(2)
-assert_that(items).filtered_on(match.is_positive()).is_not_empty()
-assert_that(users).filtered_on(match.has_property("active")).is_length(5)
-```
-
-### `mapped(func)`
-
-Transform each element:
-
-```py
-assert_that(["a", "b", "c"]).mapped(str.upper).contains("A", "B")
-assert_that(users).mapped(lambda u: u.name).contains("Alice", "Bob")
-```
-
-### `flat_mapped(func)`
-
-Transform and flatten:
-
-```py
-assert_that(["ab", "cd"]).flat_mapped(list).contains("a", "b", "c", "d")
-assert_that(users).flat_mapped(lambda u: u.tags).contains("admin", "user")
-```
-
-### `first()` / `last()`
-
-Navigate to first or last element:
-
-```py
-assert_that([10, 20, 30]).first().is_equal_to(10)
-assert_that([10, 20, 30]).last().is_equal_to(30)
-```
-
-Raises `ValueError` if the collection is empty.
-
-### `element(index)`
-
-Navigate to element at a specific index:
-
-```py
-assert_that([10, 20, 30]).element(1).is_equal_to(20)
-```
-
-Raises `IndexError` if the index is out of range.
-
-### `single()`
-
-Assert exactly one element and navigate to it:
-
-```py
-assert_that([42]).single().is_equal_to(42)
-```
-
-Raises `ValueError` if the collection is empty or has more than one element.
-
-### Chaining pipeline steps
-
-Pipeline methods return a new builder, so they can be chained with each other and with any assertion:
-
-```py
-assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().is_positive()
-assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
-```
-
-[Back to top](#table-of-contents)
-
-## Grouped Soft Assertions
-
-Use `soft_assertions() as sa` to get a collector, then `sa.group(label)` to group errors by section:
-
-```py
-from assertpy2 import assert_that, soft_assertions
-
-with soft_assertions() as sa:
-    with sa.group("Headers"):
-        assert_that(headers["Content-Type"]).is_equal_to("application/json")
-        assert_that(headers["Accept"]).contains("json")
-    with sa.group("Body"):
-        assert_that(body["status"]).is_equal_to("ok")
-        assert_that(body["items"]).is_not_empty()
-```
-
-Output with groups:
-
-```
-soft assertion failures:
-  [Headers]
-    1. Expected <text/html> to be equal to <application/json>, but was not.
-  [Body]
-    2. Expected <error> to be equal to <ok>, but was not.
-```
-
-Without `as sa` or without calling `sa.group()`, the behavior is unchanged (flat error list).
-
-### assert_all
-
-`assert_all()` is a convenience wrapper for inline soft assertions:
-
-```py
-from assertpy2 import assert_all, assert_that
-
-assert_all(
-    lambda: assert_that(x).is_positive(),
-    lambda: assert_that(y).is_not_none(),
-    lambda: assert_that(z).is_length(3),
-)
-```
-
-Equivalent to wrapping all calls in `with soft_assertions():`.
-
-[Back to top](#table-of-contents)
-
-## JSON Path / Schema Validation
-
-Navigate JSON structures with JSONPath and validate against JSON Schema.
-
-Requires optional dependencies:
-
-```bash
-pip install assertpy2[json]
-```
-
-### at_json_path
-
-Navigate to a JSONPath and continue asserting on the extracted value:
-
-```py
-data = {"users": [{"name": "Alice"}, {"name": "Bob"}], "meta": {"total": 2}}
-
-assert_that(data).at_json_path("$.meta.total").is_equal_to(2)
-assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
-assert_that(data).at_json_path("$.users[*].name").is_equal_to(["Alice", "Bob"])
-```
-
-Raises `ValueError` if the path does not exist.
-
-### has_json_path / does_not_have_json_path
-
-Assert that a JSONPath exists or does not exist:
-
-```py
-assert_that(data).has_json_path("$.meta.total")
-assert_that(data).does_not_have_json_path("$.error")
-```
-
-### matches_json_schema
-
-Validate against a JSON Schema dict:
-
-```py
-schema = {
-    "type": "object",
-    "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
-    "required": ["name"],
-}
-
-assert_that({"name": "Alice", "age": 30}).matches_json_schema(schema)
-```
-
-### matches_json_schema_from_file
-
-Load the schema from a JSON file:
-
-```py
-assert_that(data).matches_json_schema_from_file("schemas/user.json")
-```
-
-All JSON assertions work with soft assertions and chaining:
-
-```py
-with soft_assertions():
-    assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()
-```
-
-[Back to top](#table-of-contents)
-
-## Extension System - adding custom assertions
-
-Sometimes you want to add your own custom assertions to `assertpy2`.  This can be done using the `add_extension()` helper.
-
-For example, we can write a custom `is_5()` assertion like this:
-
-```py
-from assertpy2 import add_extension
-
-def is_5(self):
-    if self.val != 5:
-        return self.error(f'{self.val} is NOT 5!')
-    return self
-
-add_extension(is_5)
-```
-
-Once registered with `assertpy2`, we can use our new assertion as expected:
-
-```py
-assert_that(5).is_5()
-assert_that(6).is_5()  # fails!
-```
-
-Of course, `is_5()` is only available in the test file where `add_extension()` is called.  If you want better control of scope of your custom extensions, such as writing extensions once and using them in any test file, you'll need to use the test setup functionality of your test runner.  With [pytest](http://pytest.org/latest/contents.html), you can just use a `conftest.py` file and a _fixture_.
-
-For example, if your `conftest.py` is:
-
-```py
-import pytest
-from assertpy2 import add_extension
-
-def is_5(self):
-    if self.val != 5:
-        return self.error(f'{self.val} is NOT 5!')
-    return self
-
-@pytest.fixture(scope='module')
-def my_extensions():
-    add_extension(is_5)
-```
-
-Then in any test method in any test file (like `test_foo.py` for example), you just pass in the fixture and all of your extensions are available, like this:
-
-```py
-from assertpy2 import assert_that
-
-def test_foo(my_extensions):
-    assert_that(5).is_5()
-    assert_that(6).is_5()  # fails!
-```
-
-where the `my_extensions` parameter must be the name of your fixture function in `conftest.py`.  See the [fixture docs](https://docs.pytest.org/en/latest/fixture.html) for details.
-
-### Writing custom assertions
-
-Here are some useful tips to help you write your own custom assertions:
-
-1. Use `self` as first param (as if your function was an instance method).
-2. Use `self.val` to get the _actual_ value to be tested.
-3. It's better to test the negative, and then fail if true.
-4. Fail by raising an `AssertionError` (the `self.error()` helper does this for you).
-5. Always use the `self.error()` helper to fail (and print your failure message).
-6. Always `return self` to allow for chaining.
-
-Putting it all together, here is another custom assertion example, but annotated with comments:
-
-```py
-def is_multiple_of(self, other):
-    # validate actual value - must be "integer" (aka int or long)
-    if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
-        # bad input is error, not an assertion fail, so raise error
-        raise TypeError('val must be a positive integer')
-
-    # validate expected value
-    if isinstance(other, numbers.Integral) is False or other <= 0:
-        raise TypeError('given arg must be a positive integer')
-
-    # calc remainder using divmod() built-in
-    _, rem = divmod(self.val, other)
-
-    # test the negative (is remainder non-zero?)
-    if rem > 0:
-        # non-zero remainder, so not multiple -> we fail!
-        return self.error(f'Expected <{self.val}> to be multiple of <{other}>, but was not.')
-
-    # success, and return self to allow chaining
-    return self
-```
-
-[Back to top](#table-of-contents)
-
-## Chaining
-
-One of the nicest aspects of any fluent API is the ability to chain methods together.  In the case of `assertpy2`, chaining
-allows you to write assertions as single statement -- that reads like a sentence, and is easy to understand.
-
-Here are just a few examples:
-
-```py
-assert_that('foo').is_length(3).starts_with('f').ends_with('oo')
-
-assert_that([1,2,3]).is_type_of(list).contains(1,2).does_not_contain(4,5)
-
-assert_that(fred).has_first_name('Fred').has_last_name('Smith').has_shoe_size(12)
-
-assert_that(people).is_length(2).extracting('first_name').contains('Fred','Joe')
-```
-
-[Back to top](#table-of-contents)
+---
+
+<p align="center">
+  <a href="https://github.com/Solganis/assertpy2/blob/main/LICENSE">BSD 3-Clause License</a>
+</p>
