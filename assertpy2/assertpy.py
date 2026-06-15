@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
     from ._typing import (
+        _BytesAssertion,
         _CallableAssertion,
         _DateAssertion,
         _DictAssertion,
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 
 from .async_assertions import AsyncAssertionBuilder
 from .base import BaseMixin
+from .bytes_mixin import BytesMixin
 from .collection import CollectionMixin
 from .contains import ContainsMixin
 from .date import DateMixin
@@ -57,6 +59,7 @@ ASSERTPY_FILES = [
         "assertpy.py",
         "async_assertions.py",
         "base.py",
+        "bytes_mixin.py",
         "collection.py",
         "contains.py",
         "date.py",
@@ -239,6 +242,10 @@ def assert_that(val: datetime.date, description: str = "") -> _DateAssertion: ..
 
 @overload
 def assert_that(val: pathlib.Path, description: str = "") -> _PathAssertion: ...
+
+
+@overload
+def assert_that(val: bytes | bytearray, description: str = "") -> _BytesAssertion: ...
 
 
 @overload
@@ -554,6 +561,7 @@ class AssertionBuilder(
     DateMixin,
     ContainsMixin,
     CollectionMixin,
+    BytesMixin,
     BaseMixin,
 ):
     """The main assertion class.  Never call the constructor directly, always use the

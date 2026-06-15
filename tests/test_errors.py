@@ -3,7 +3,7 @@ from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, soft
 
 class TestAssertionFailure:
     def test_is_subclass_of_assertion_error(self):
-        assert issubclass(AssertionFailure, AssertionError)
+        assert_that(issubclass(AssertionFailure, AssertionError)).is_true()
 
     def test_caught_by_except_assertion_error(self):
         try:
