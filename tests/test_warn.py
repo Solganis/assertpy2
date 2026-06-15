@@ -72,7 +72,7 @@ def test_chained_failure():
 
 
 def test_failures_with_renamed_import():
-    from assertpy2 import assert_warn as warn
+    from assertpy2 import assert_warn as warn  # inline: tests renamed import behavior
 
     # capture log
     capture3 = StringIO()

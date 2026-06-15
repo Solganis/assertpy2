@@ -105,9 +105,9 @@ class TestRegisterMatcher:
         def my_matcher():
             return match.is_positive()
 
-        assert callable(my_matcher)
+        assert_that(callable(my_matcher)).is_true()
         result = my_matcher()
-        assert result.matches(5)
+        assert_that(result.matches(5)).is_true()
 
 
 class TestRegisterMatcherErrors:

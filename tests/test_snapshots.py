@@ -168,12 +168,12 @@ def test_snapshot_does_not_import_arbitrary_modules(tmp_path):
         )
     )
 
-    assert "cve156_fake_module" not in sys.modules
+    assert_that(sys.modules).does_not_contain("cve156_fake_module")
 
     with contextlib.suppress(AssertionError):
         assert_that({"safe": True}).snapshot(id="cve156", path=str(snap_dir))
 
-    assert "cve156_fake_module" not in sys.modules
+    assert_that(sys.modules).does_not_contain("cve156_fake_module")
 
 
 def test_snapshot_returns_dict_for_unknown_module(tmp_path):
@@ -191,7 +191,7 @@ def test_snapshot_returns_dict_for_unknown_module(tmp_path):
     with contextlib.suppress(AssertionError):
         assert_that(payload).snapshot(id="fallback", path=str(snap_dir))
 
-    assert "nonexistent_module_xyz" not in sys.modules
+    assert_that(sys.modules).does_not_contain("nonexistent_module_xyz")
 
 
 def test_snapshot_returns_dict_for_missing_class(tmp_path):
