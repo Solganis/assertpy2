@@ -40,12 +40,12 @@ class NumericMixin(_MixinBase):
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
-        if isinstance(self.val, numbers.Number) is False:
+        if not isinstance(self.val, numbers.Number):
             raise TypeError("val is not numeric")
 
     def _validate_real(self):
         """Raise TypeError if val is not real number."""
-        if isinstance(self.val, numbers.Real) is False:
+        if not isinstance(self.val, numbers.Real):
             raise TypeError("val is not real number")
 
     def is_zero(self) -> Self:
@@ -423,7 +423,7 @@ class NumericMixin(_MixinBase):
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if self.val >= low and self.val <= high:
+        if low <= self.val <= high:
             if val_type is datetime.datetime:
                 return self.error(
                     f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to not be between"
@@ -577,7 +577,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if self.val >= (other - tolerance) and self.val <= (other + tolerance):
+        if (other - tolerance) <= self.val <= (other + tolerance):
             if type(self.val) is datetime.datetime:
                 tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
                 h, rem = divmod(tolerance_seconds, 3600)

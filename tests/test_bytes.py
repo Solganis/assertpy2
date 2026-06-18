@@ -20,6 +20,7 @@ class TestIsValidUtf8:
     def test_non_bytes_raises(self):
         with pytest.raises(TypeError, match="not bytes"):
             assert_that("string").is_valid_utf8()
+            assert_that(42)
 
 
 class TestIsValidEncoding:
