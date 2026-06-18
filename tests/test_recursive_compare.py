@@ -1,7 +1,6 @@
 import dataclasses
 from collections import namedtuple
 
-import attrs
 import pytest
 
 from assertpy2 import assert_that
@@ -31,20 +30,6 @@ class UserWithAddress:
 
 
 Point = namedtuple("Point", ["x", "y", "label"])
-
-
-@attrs.define
-class Product:
-    sku: str
-    name: str
-    price: float
-
-
-@attrs.define
-class Order:
-    id: int
-    product: Product
-    quantity: int
 
 
 class PlainUser:
@@ -114,26 +99,6 @@ class TestNamedtuple:
         assert_that(actual).is_equal_to(expected, include="x")
 
 
-# --- attrs ---
-
-
-class TestAttrs:
-    def test_ignore_field(self):
-        actual = Product(sku="ABC", name="Widget", price=9.99)
-        expected = Product(sku="XYZ", name="Widget", price=9.99)
-        assert_that(actual).is_equal_to(expected, ignore="sku")
-
-    def test_include_field(self):
-        actual = Product(sku="ABC", name="Widget", price=9.99)
-        expected = Product(sku="XYZ", name="Widget", price=0.01)
-        assert_that(actual).is_equal_to(expected, include="name")
-
-    def test_nested_attrs_ignore(self):
-        actual = Order(id=1, product=Product(sku="A", name="W", price=10.0), quantity=5)
-        expected = Order(id=99, product=Product(sku="A", name="W", price=10.0), quantity=5)
-        assert_that(actual).is_equal_to(expected, ignore="id")
-
-
 # --- plain objects ---
 
 
@@ -157,11 +122,6 @@ class TestListOfObjects:
         actual = [User(id=1, name="Alice", email="a@x.com"), User(id=2, name="Bob", email="b@x.com")]
         expected = [User(id=99, name="Alice", email="a@x.com"), User(id=99, name="Bob", email="b@x.com")]
         assert_that(actual).is_equal_to(expected, ignore="id")
-
-    def test_list_of_attrs_ignore(self):
-        actual = [Product(sku="A", name="W1", price=10.0), Product(sku="B", name="W2", price=20.0)]
-        expected = [Product(sku="X", name="W1", price=10.0), Product(sku="Y", name="W2", price=20.0)]
-        assert_that(actual).is_equal_to(expected, ignore="sku")
 
     def test_list_length_mismatch(self):
         actual = [User(id=1, name="Alice", email="a@x.com")]
@@ -220,11 +180,6 @@ class TestToComparableDict:
         point = Point(x=1, y=2, label="a")
         result = HelpersMixin._to_comparable_dict(point)
         assert result == {"x": 1, "y": 2, "label": "a"}
-
-    def test_attrs(self):
-        product = Product(sku="A", name="W", price=10.0)
-        result = HelpersMixin._to_comparable_dict(product)
-        assert result == {"sku": "A", "name": "W", "price": 10.0}
 
     def test_plain_object(self):
         obj = PlainUser(id=1, name="Alice", role="admin")

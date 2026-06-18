@@ -54,7 +54,6 @@ json = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "attrs" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -73,7 +72,6 @@ provides-extras = ["allure", "behave", "json"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "attrs", specifier = ">=25.1" },
     { name = "pytest", specifier = ">=9.1" },
     { name = "pytest-cov", specifier = ">=6.1" },
     { name = "ruff", specifier = ">=0.15.17" },
