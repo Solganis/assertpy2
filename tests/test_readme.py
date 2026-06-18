@@ -297,16 +297,15 @@ def test_dates():
     # note that the tolerance must be a datetime.timedelta object
     assert_that(yesterday).is_close_to(today, hours_24)
 
-    # 1980-01-02 03:04:05.000006
-    x = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
+    dt = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
 
-    assert_that(x).has_year(1980)
-    assert_that(x).has_month(1)
-    assert_that(x).has_day(2)
-    assert_that(x).has_hour(3)
-    assert_that(x).has_minute(4)
-    assert_that(x).has_second(5)
-    assert_that(x).has_microsecond(6)
+    assert_that(dt).has_year(1980)
+    assert_that(dt).has_month(1)
+    assert_that(dt).has_day(2)
+    assert_that(dt).has_hour(3)
+    assert_that(dt).has_minute(4)
+    assert_that(dt).has_second(5)
+    assert_that(dt).has_microsecond(6)
 
 
 def test_files():

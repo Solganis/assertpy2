@@ -174,34 +174,34 @@ class TestToComparableDict:
     def test_dataclass(self):
         user = User(id=1, name="Alice", email="a@x.com")
         result = HelpersMixin._to_comparable_dict(user)
-        assert result == {"id": 1, "name": "Alice", "email": "a@x.com"}
+        assert_that(result).is_equal_to({"id": 1, "name": "Alice", "email": "a@x.com"})
 
     def test_namedtuple(self):
         point = Point(x=1, y=2, label="a")
         result = HelpersMixin._to_comparable_dict(point)
-        assert result == {"x": 1, "y": 2, "label": "a"}
+        assert_that(result).is_equal_to({"x": 1, "y": 2, "label": "a"})
 
     def test_plain_object(self):
         obj = PlainUser(id=1, name="Alice", role="admin")
         result = HelpersMixin._to_comparable_dict(obj)
-        assert result == {"id": 1, "name": "Alice", "role": "admin"}
+        assert_that(result).is_equal_to({"id": 1, "name": "Alice", "role": "admin"})
 
     def test_returns_none_for_int(self):
-        assert HelpersMixin._to_comparable_dict(42) is None
+        assert_that(HelpersMixin._to_comparable_dict(42)).is_none()
 
     def test_returns_none_for_str(self):
-        assert HelpersMixin._to_comparable_dict("foo") is None
+        assert_that(HelpersMixin._to_comparable_dict("foo")).is_none()
 
     def test_returns_none_for_none(self):
-        assert HelpersMixin._to_comparable_dict(None) is None
+        assert_that(HelpersMixin._to_comparable_dict(None)).is_none()
 
     def test_returns_none_for_class_itself(self):
-        assert HelpersMixin._to_comparable_dict(User) is None
+        assert_that(HelpersMixin._to_comparable_dict(User)).is_none()
 
     def test_nested_dataclass_deep_conversion(self):
         obj = UserWithAddress(id=1, name="A", address=Address(city="NYC", zip_code="10001"))
         result = HelpersMixin._to_comparable_dict(obj)
-        assert result == {"id": 1, "name": "A", "address": {"city": "NYC", "zip_code": "10001"}}
+        assert_that(result).is_equal_to({"id": 1, "name": "A", "address": {"city": "NYC", "zip_code": "10001"}})
 
     def test_model_dump_duck_type(self):
         class FakeModel:
@@ -209,7 +209,7 @@ class TestToComparableDict:
                 return {"x": 1, "y": 2}
 
         result = HelpersMixin._to_comparable_dict(FakeModel())
-        assert result == {"x": 1, "y": 2}
+        assert_that(result).is_equal_to({"x": 1, "y": 2})
 
 
 # --- list with unconvertible elements ---

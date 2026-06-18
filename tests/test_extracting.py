@@ -305,16 +305,16 @@ def test_extracting_iterable_multi_extracting():
 
 
 def test_extracting_iterable_of_tuples():
-    t = [(1, 2, 3), (4, 5, 6), (7, 8, 9)]
-    assert_that(t).extracting(0).is_equal_to([1, 4, 7])
-    assert_that(t).extracting(0, 1).is_equal_to([(1, 2), (4, 5), (7, 8)])
-    assert_that(t).extracting(-1).is_equal_to([3, 6, 9])
+    tuples = [(1, 2, 3), (4, 5, 6), (7, 8, 9)]
+    assert_that(tuples).extracting(0).is_equal_to([1, 4, 7])
+    assert_that(tuples).extracting(0, 1).is_equal_to([(1, 2), (4, 5), (7, 8)])
+    assert_that(tuples).extracting(-1).is_equal_to([3, 6, 9])
 
 
 def test_extracting_iterable_of_strings():
-    s = ["foo", "bar", "baz"]
-    assert_that(s).extracting(0).is_equal_to(["f", "b", "b"])
-    assert_that(s).extracting(0, 2).is_equal_to([("f", "o"), ("b", "r"), ("b", "z")])
+    strings = ["foo", "bar", "baz"]
+    assert_that(strings).extracting(0).is_equal_to(["f", "b", "b"])
+    assert_that(strings).extracting(0, 2).is_equal_to([("f", "o"), ("b", "r"), ("b", "z")])
 
 
 def test_extracting_iterable_failure_set():
