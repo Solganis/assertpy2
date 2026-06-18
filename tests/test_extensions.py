@@ -1,6 +1,8 @@
 import numbers
 
-from assertpy2 import add_extension, assert_that, fail, remove_extension
+import pytest
+
+from assertpy2 import add_extension, assert_that, remove_extension
 
 
 def is_even(self):
@@ -50,27 +52,21 @@ def test_is_even_extension():
 
 
 def test_is_even_extension_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_even()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be even, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be even, but was not.")
 
 
 def test_is_even_extension_failure_not_callable():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         add_extension("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("func must be callable")
+    assert_that(str(exc_info.value)).is_equal_to("func must be callable")
 
 
 def test_is_even_extension_failure_not_integer():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(124.0).is_even()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val must be an integer")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer")
 
 
 def test_is_multiple_of_extension():
@@ -86,43 +82,33 @@ def test_is_multiple_of_extension():
 
 
 def test_is_multiple_of_extension_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(24).is_multiple_of(5)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <24> to be multiple of <5>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <24> to be multiple of <5>, but was not.")
 
 
 def test_is_multiple_of_extension_failure_bad_val():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(24.0).is_multiple_of(5)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val must be a positive integer")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a positive integer")
 
 
 def test_is_multiple_of_extension_failure_negative_val():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(-24).is_multiple_of(6)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val must be a positive integer")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a positive integer")
 
 
 def test_is_multiple_of_extension_failure_bad_arg():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(24).is_multiple_of("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a positive integer")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a positive integer")
 
 
 def test_is_multiple_of_extension_failure_negative_arg():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(24).is_multiple_of(-6)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a positive integer")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a positive integer")
 
 
 def test_is_factor_of_extension():
@@ -138,34 +124,28 @@ def test_is_factor_of_extension():
 
 
 def test_is_factor_of_extension_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(5).is_factor_of(24)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <5> to be factor of <24>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <5> to be factor of <24>, but was not.")
 
 
 def test_call_missing_extension():
     def is_missing():
         pass
 
-    try:
+    with pytest.raises(AttributeError) as exc_info:
         remove_extension(is_even)
         remove_extension(is_multiple_of)
         remove_extension(is_factor_of)
         remove_extension(is_missing)
         assert_that(24).is_multiple_of(6)
-        fail("should have raised error")
-    except AttributeError as ex:
-        assert_that(str(ex)).is_equal_to("assertpy has no assertion <is_multiple_of()>")
+    assert_that(str(exc_info.value)).is_equal_to("assertpy has no assertion <is_multiple_of()>")
 
 
 def test_remove_bad_extension():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         remove_extension("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("func must be callable")
+    assert_that(str(exc_info.value)).is_equal_to("func must be callable")
 
 
 def is_foo(self):
@@ -177,11 +157,9 @@ def is_foo(self):
 def dupe1():
     add_extension(is_foo)
     assert_that("foo").is_foo()
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("FOO").is_foo()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <FOO> to be foo, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <FOO> to be foo, but was not.")
 
 
 def dupe2():
@@ -192,11 +170,9 @@ def dupe2():
 
     add_extension(is_foo)
     assert_that("FOO").is_foo()
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_foo()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to be FOO, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to be FOO, but was not.")
 
 
 def test_dupe_extensions():

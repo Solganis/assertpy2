@@ -1,4 +1,6 @@
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_none():
@@ -6,11 +8,9 @@ def test_is_none():
 
 
 def test_is_none_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_none()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to be <None>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to be <None>, but was not.")
 
 
 def test_is_not_none():
@@ -22,8 +22,6 @@ def test_is_not_none():
 
 
 def test_is_not_none_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(None).is_not_none()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not <None>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not <None>, but was.")

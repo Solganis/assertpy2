@@ -1,6 +1,8 @@
 import collections
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 Foo = collections.namedtuple("Foo", ["bar", "baz"])
 foo = Foo(bar="abc", baz=123)
@@ -23,13 +25,11 @@ def test_namedtuple_equals():
 
 
 def test_namedtuple_equals_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(foo).is_equal_to(Foo(bar="abc", baz=124))
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <Foo(bar='abc', baz=123)> to be equal to <Foo(bar='abc', baz=124)>, but was not."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <Foo(bar='abc', baz=123)> to be equal to <Foo(bar='abc', baz=124)>, but was not."
+    )
 
 
 def test_namedtuple_has():
@@ -38,11 +38,9 @@ def test_namedtuple_has():
 
 
 def test_namedtuple_has_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(foo).has_missing("x")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected attribute <missing>, but val has no attribute <missing>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected attribute <missing>, but val has no attribute <missing>.")
 
 
 def test_namedtuple_extracting_by_index():
@@ -56,8 +54,6 @@ def test_namedtuple_extracting_by_name():
 
 
 def test_namedtuple_extracting_by_name_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(foos).extracting("missing").is_equal_to("x")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("item attributes ('bar', 'baz') did no contain attribute <missing>")
+    assert_that(str(exc_info.value)).is_equal_to("item attributes ('bar', 'baz') did no contain attribute <missing>")

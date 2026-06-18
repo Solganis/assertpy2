@@ -130,27 +130,21 @@ def test_snapshot_v3(count):
 
 
 def test_snapshot_not_serializable(tmp_path):
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(range(5)).snapshot(id="nonser", path=str(tmp_path))
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).ends_with("is not JSON serializable")
+    assert_that(str(exc_info.value)).ends_with("is not JSON serializable")
 
 
 def test_snapshot_custom_id_int():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("foo").snapshot(id=123)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).starts_with("failed to create snapshot filename")
+    assert_that(str(exc_info.value)).starts_with("failed to create snapshot filename")
 
 
 def test_snapshot_custom_path_none():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("foo").snapshot(path=None)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).starts_with("failed to create snapshot filename")
+    assert_that(str(exc_info.value)).starts_with("failed to create snapshot filename")
 
 
 def test_snapshot_does_not_import_arbitrary_modules(tmp_path):

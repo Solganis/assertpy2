@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import assert_that, fail
+from assertpy2 import assert_that
 
 
 def test_custom_dict():
@@ -107,48 +107,38 @@ def test_check_dict_like_bool():
 
 
 def test_check_dict_like_no_keys():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_dict_like(CustomDictNoKeys())
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("is not dict-like: missing keys()")
+    assert_that(str(exc_info.value)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_keys_callable():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_dict_like(CustomDictNoKeysCallable())
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("is not dict-like: missing keys()")
+    assert_that(str(exc_info.value)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_values():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_dict_like(CustomDictNoValues())
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("is not dict-like: missing values()")
+    assert_that(str(exc_info.value)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_values_callable():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_dict_like(CustomDictNoValuesCallable())
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("is not dict-like: missing values()")
+    assert_that(str(exc_info.value)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_getitem():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_dict_like(CustomDictNoGetitem())
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("is not dict-like: missing [] accessor")
+    assert_that(str(exc_info.value)).contains("is not dict-like: missing [] accessor")
 
 
 class CustomDictNoKeys:
