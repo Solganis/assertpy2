@@ -655,146 +655,214 @@ class _MatchNamespace:
 
     @staticmethod
     def equal_to(expected: object) -> EqualToMatcher:
+        """Matcher for a value equal to ``expected``."""
         return EqualToMatcher(expected)
 
     @staticmethod
     def greater_than(val: object) -> GreaterThanMatcher:
+        """Matcher for a value greater than ``val``."""
         return GreaterThanMatcher(val)
 
     @staticmethod
     def greater_than_or_equal_to(val: object) -> GreaterThanOrEqualToMatcher:
+        """Matcher for a value greater than or equal to ``val``."""
         return GreaterThanOrEqualToMatcher(val)
 
     @staticmethod
     def less_than(val: object) -> LessThanMatcher:
+        """Matcher for a value less than ``val``."""
         return LessThanMatcher(val)
 
     @staticmethod
     def less_than_or_equal_to(val: object) -> LessThanOrEqualToMatcher:
+        """Matcher for a value less than or equal to ``val``."""
         return LessThanOrEqualToMatcher(val)
 
     @staticmethod
     def between(low: object, high: object) -> BetweenMatcher:
+        """Matcher for a value in the inclusive range ``low`` to ``high``."""
         return BetweenMatcher(low, high)
 
     @staticmethod
     def close_to(expected: object, tolerance: object) -> CloseToMatcher:
+        """Matcher for a value within ``tolerance`` of ``expected`` (``abs(value - expected) <= tolerance``).
+
+        Args:
+            expected: the target value
+            tolerance: the maximum allowed absolute difference from ``expected``
+        """
         return CloseToMatcher(expected, tolerance)
 
     @staticmethod
     def is_none() -> IsNoneMatcher:
+        """Matcher for ``None``."""
         return IsNoneMatcher()
 
     @staticmethod
     def is_not_none() -> IsNotNoneMatcher:
+        """Matcher for any value that is not ``None``."""
         return IsNotNoneMatcher()
 
     @staticmethod
     def is_instance_of(expected_type: type) -> IsInstanceOfMatcher:
+        """Matcher for an instance of ``expected_type`` (via ``isinstance``)."""
         return IsInstanceOfMatcher(expected_type)
 
     @staticmethod
     def is_truthy() -> IsTruthyMatcher:
+        """Matcher for a truthy value."""
         return IsTruthyMatcher()
 
     @staticmethod
     def is_falsy() -> IsFalsyMatcher:
+        """Matcher for a falsy value."""
         return IsFalsyMatcher()
 
     @staticmethod
     def has_length(length: int) -> HasLengthMatcher:
+        """Matcher for a value whose ``len()`` equals ``length``."""
         return HasLengthMatcher(length)
 
     @staticmethod
     def is_empty() -> IsEmptyMatcher:
+        """Matcher for an empty value (``len() == 0``)."""
         return IsEmptyMatcher()
 
     @staticmethod
     def is_not_empty() -> IsNotEmptyMatcher:
+        """Matcher for a non-empty value (``len() > 0``)."""
         return IsNotEmptyMatcher()
 
     @staticmethod
     def is_positive() -> IsPositiveMatcher:
+        """Matcher for a value greater than zero."""
         return IsPositiveMatcher()
 
     @staticmethod
     def is_negative() -> IsNegativeMatcher:
+        """Matcher for a value less than zero."""
         return IsNegativeMatcher()
 
     @staticmethod
     def is_zero() -> IsZeroMatcher:
+        """Matcher for a value equal to zero."""
         return IsZeroMatcher()
 
     @staticmethod
     def is_even() -> IsEvenMatcher:
+        """Matcher for an even integer."""
         return IsEvenMatcher()
 
     @staticmethod
     def is_odd() -> IsOddMatcher:
+        """Matcher for an odd integer."""
         return IsOddMatcher()
 
     @staticmethod
     def is_divisible_by(divisor: int) -> IsDivisibleByMatcher:
+        """Matcher for an integer divisible by ``divisor``."""
         return IsDivisibleByMatcher(divisor)
 
     @staticmethod
     def is_callable() -> IsCallableMatcher:
+        """Matcher for a callable object."""
         return IsCallableMatcher()
 
     @staticmethod
     def is_in(*values: object) -> IsInMatcher:
+        """Matcher for a value present in ``values``.
+
+        Args:
+            *values: the candidate values; the matched value must equal one of them
+        """
         return IsInMatcher(*values)
 
     @staticmethod
     def has_property(name: str, matcher: Matcher | None = None) -> HasPropertyMatcher:
+        """Matcher for an object with attribute ``name``, optionally matching ``matcher``.
+
+        Args:
+            name: the attribute name the object must have
+            matcher: optional matcher the attribute value must satisfy; if ``None``,
+                only the presence of the attribute is checked
+        """
         return HasPropertyMatcher(name, matcher)
 
     @staticmethod
     def contains_string(substring: str) -> ContainsStringMatcher:
+        """Matcher for a string containing ``substring``."""
         return ContainsStringMatcher(substring)
 
     @staticmethod
     def matches_regex(pattern: str) -> MatchesRegexMatcher:
+        """Matcher for a string in which ``pattern`` is found (``re.search``)."""
         return MatchesRegexMatcher(pattern)
 
     @staticmethod
     def starts_with(prefix: str) -> StartsWithMatcher:
+        """Matcher for a string starting with ``prefix``."""
         return StartsWithMatcher(prefix)
 
     @staticmethod
     def ends_with(suffix: str) -> EndsWithMatcher:
+        """Matcher for a string ending with ``suffix``."""
         return EndsWithMatcher(suffix)
 
     @staticmethod
     def all_of(*matchers: Matcher) -> AllOfMatcher:
+        """Matcher that holds when every one of ``matchers`` matches (the ``&`` operator)."""
         return AllOfMatcher(*matchers)
 
     @staticmethod
     def any_of(*matchers: Matcher) -> AnyOfMatcher:
+        """Matcher that holds when at least one of ``matchers`` matches (the ``|`` operator)."""
         return AnyOfMatcher(*matchers)
 
     @staticmethod
     def not_(matcher: Matcher) -> NotMatcher:
+        """Matcher that inverts ``matcher`` (the ``~`` operator)."""
         return NotMatcher(matcher)
 
     @staticmethod
     def ignore() -> IgnoreMatcher:
+        """Matcher that accepts anything; useful as a placeholder in ``structure`` specs."""
         return IgnoreMatcher()
 
     @staticmethod
     def is_uuid() -> IsUuidMatcher:
+        """Matcher for a string parseable as a UUID."""
         return IsUuidMatcher()
 
     @staticmethod
     def is_non_empty_string() -> IsNonEmptyStringMatcher:
+        """Matcher for a non-empty string."""
         return IsNonEmptyStringMatcher()
 
     @staticmethod
     def each_item(matcher: Matcher) -> EachMatcher:
+        """Matcher for an iterable whose every item matches ``matcher``.
+
+        Args:
+            matcher: the matcher each item of the iterable must satisfy; a non-iterable
+                value never matches
+        """
         return EachMatcher(matcher)
 
     @staticmethod
     def structure(spec: dict) -> StructureMatcher:
+        """Matcher for a dict matching ``spec``.
+
+        Args:
+            spec: dict whose values are matchers, raw values (compared with ``==``),
+                or nested dict specs. Keys present in the value but absent from the spec are ignored.
+
+        Examples:
+            Usage::
+
+                assert_that(user).satisfies(
+                    match.structure({"id": match.is_instance_of(int), "name": "Alice"})
+                )
+        """
         return StructureMatcher(spec)
 
     def __getattr__(self, name: str) -> Callable[..., BaseMatcher]:
