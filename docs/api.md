@@ -2,6 +2,32 @@
 
 Full API reference for assertpy2. For a quick overview, see the [README](../README.md).
 
+## Migration from assertpy
+
+assertpy2 is a drop-in replacement for Python 3.10+. Change the import, everything else works:
+
+```py
+# before
+from assertpy import assert_that, soft_assertions
+
+# after
+from assertpy2 import assert_that, soft_assertions
+```
+
+## Comparison
+
+|  | pytest assert | PyHamcrest | assertpy | **assertpy2** |
+|---|:---:|:---:|:---:|:---:|
+| **Type safety** | Partial (mypy plugin) | No | No | **py.typed, @overload, Self** |
+| **IDE autocomplete** | Generic | Generic | Generic | **Filtered by type** |
+| **Fluent chaining** | No | No | Yes | **Yes** |
+| **Composable matchers** | No | Yes (functions) | No | **Yes (`&` `\|` `~` operators)** |
+| **Structural matching** | No | Flat (has_entries) | No | **Recursive with matchers** |
+| **Async assertions** | No | No | No | **eventually() with polling** |
+| **Soft assertions** | No | No | Yes (not thread-safe) | **Yes (thread-safe, async-safe)** |
+| **Structured errors** | Rewrite only | Mismatch string | String only | **.actual .expected .diff** |
+| **Maintained** | Built-in | Minimal | 2020 | **Active** |
+
 ## Table of contents
 
 **Built-in Types**
@@ -349,11 +375,11 @@ assert_that({'a':1,'b':2}).does_not_contain_entry({'a':2})
 assert_that({'a':1,'b':2}).does_not_contain_entry({'a':2},{'b':1})
 ```
 
-### Dict Comparison
+### Comparison with ignore/include
 
-Dict keys can optionally be ignored or included when using the `is_equal_to()` assertion.
+Keys or fields can optionally be ignored or included when using the `is_equal_to()` assertion. This works with dicts, dataclasses, namedtuples, Pydantic models, attrs, and plain objects. For sequences, each element is compared pairwise with the same filters applied.
 
-Ignore dict keys with the `ignore` keyword argument:
+Ignore keys or fields with the `ignore` keyword argument:
 
 ```py
 # ignore a single key
@@ -366,7 +392,7 @@ assert_that({'a':1,'b':2,'c':3}).is_equal_to({'a':1}, ignore=['b','c'])
 assert_that({'a':1,'b':{'c':2,'d':3}}).is_equal_to({'a':1,'b':{'c':2}}, ignore=('b','d'))
 ```
 
-Or include dict keys with the `include` keyword argument:
+Or include specific keys or fields with the `include` keyword argument:
 
 ```py
 # include a single key
@@ -387,6 +413,24 @@ assert_that({'a':1,'b':{'c':2,'d':3,'e':4,'f':5}}).is_equal_to(
     ignore=[('b','c'),('b','e')],
     include='b'
 )
+```
+
+Works with dataclasses, Pydantic models, and any object with introspectable fields:
+
+```py
+@dataclass
+class User:
+    id: int
+    name: str
+    email: str
+
+# ignore a field
+assert_that(User(1, "Alice", "a@x.com")).is_equal_to(User(99, "Alice", "a@x.com"), ignore="id")
+
+# compare lists of objects pairwise
+actual = [User(1, "Alice", "a@x.com"), User(2, "Bob", "b@x.com")]
+expected = [User(99, "Alice", "a@x.com"), User(99, "Bob", "b@x.com")]
+assert_that(actual).is_equal_to(expected, ignore="id")
 ```
 
 ### Dict Flattening
@@ -1563,12 +1607,13 @@ When `is_equal_to()` or `contains()`/`contains_exactly()` fail, the `AssertionFa
 
 | Type | Diff kind | How it works |
 |---|---|---|
-| `list`, `tuple` | `sequence` | Element-by-element comparison with recursive descent into nested dicts/dataclasses |
+| `list`, `tuple` | `sequence` | Element-by-element comparison with recursive descent into nested dicts/dataclasses/models |
 | `set`, `frozenset` | `set` | Extra and missing items |
 | `str` | `string` | Line-by-line comparison |
-| `dict` | `dict` | Key-by-key comparison (built-in from `is_equal_to` with dict) |
+| `dict` | `dict` | Key-by-key comparison with recursive descent into nested dicts and lists |
 | `dataclass` | `dataclass` | Field-by-field comparison, handles different dataclass types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
+| Pydantic model / `model_dump()` object | `model` | Field-by-field comparison via `model_dump()`, recursive descent into nested models |
 | Other | `scalar` | Single entry with actual vs expected |
 | `contains`/`contains_exactly` | `contains` | Missing and extra items |
 
@@ -1606,7 +1651,7 @@ assert_that(actual).is_equal_to(expected)
 # diff path: [1].name
 ```
 
-This works with dicts, dataclasses, and namedtuples nested inside lists/tuples.
+This works with dicts, dataclasses, namedtuples, and Pydantic models nested inside lists/tuples. Circular references are detected and shown as `<circular ref>` instead of causing infinite recursion.
 
 ### Configuration
 
