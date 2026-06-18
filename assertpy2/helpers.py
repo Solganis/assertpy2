@@ -1,4 +1,5 @@
 import collections
+import dataclasses
 import datetime
 import math
 import numbers
@@ -62,9 +63,9 @@ class HelpersMixin(_MixinBase):
             if high_type is not val_type:
                 raise TypeError(f"given high arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
         elif isinstance(self.val, numbers.Number):
-            if isinstance(low, numbers.Number) is False:
+            if not isinstance(low, numbers.Number):
                 raise TypeError(f"given low arg must be numeric, but was <{low_type.__name__}>")
-            if isinstance(high, numbers.Number) is False:
+            if not isinstance(high, numbers.Number):
                 raise TypeError(f"given high arg must be numeric, but was <{high_type.__name__}>")
         else:
             raise TypeError(f"ordering is not defined for type <{val_type.__name__}>")
@@ -77,7 +78,7 @@ class HelpersMixin(_MixinBase):
         if type(val) is complex or type(other) is complex or type(tolerance) is complex:
             raise TypeError("ordering is not defined for complex numbers")
 
-        if isinstance(val, numbers.Number) is False and type(val) is not datetime.datetime:
+        if not isinstance(val, numbers.Number) and type(val) is not datetime.datetime:
             raise TypeError("val is not numeric or datetime")
 
         if type(val) is datetime.datetime:
@@ -86,9 +87,9 @@ class HelpersMixin(_MixinBase):
             if type(tolerance) is not datetime.timedelta:
                 raise TypeError(f"given tolerance arg must be timedelta, but was <{type(tolerance).__name__}>")
         else:
-            if isinstance(other, numbers.Number) is False:
+            if not isinstance(other, numbers.Number):
                 raise TypeError("given arg must be numeric")
-            if isinstance(tolerance, numbers.Number) is False:
+            if not isinstance(tolerance, numbers.Number):
                 raise TypeError("given tolerance arg must be numeric")
             if math.isnan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
@@ -129,8 +130,15 @@ class HelpersMixin(_MixinBase):
         if check_getitem and not hasattr(val, "__getitem__"):
             raise TypeError(f"{name} <{type(val).__name__}> does not have [] accessor")
 
-    def _dict_not_equal(self, val, other, ignore=None, include=None):
+    def _dict_not_equal(self, val, other, ignore=None, include=None, _seen=None):
         """Helper to compare dicts."""
+        if _seen is None:
+            _seen = set()
+        pair = (id(val), id(other))
+        if pair in _seen:
+            return False
+        _seen = _seen | {pair}
+
         if ignore or include:
             ignores = self._dict_ignore(ignore)
             includes = self._dict_include(include)
@@ -180,6 +188,7 @@ class HelpersMixin(_MixinBase):
                             include=[i[1:] for i in self._dict_ignore(include) if type(i) is tuple and i[0] == k]
                             if include
                             else None,
+                            _seen=_seen,
                         )
                         if subdicts_not_equal:
                             return True
@@ -189,18 +198,25 @@ class HelpersMixin(_MixinBase):
         else:
             return val != other
 
-    def _dict_ignore(self, ignore):
+    @staticmethod
+    def _dict_ignore(ignore):
         """Helper to make list for given ignore kwarg values."""
         return [i[0] if type(i) is tuple and len(i) == 1 else i for i in (ignore if type(ignore) is list else [ignore])]
 
-    def _dict_include(self, include):
+    @staticmethod
+    def _dict_include(include):
         """Helper to make a list from given include kwarg values."""
         return [i[0] if type(i) is tuple else i for i in (include if type(include) is list else [include])]
 
     def _dict_err(self, val, other, ignore=None, include=None):
         """Helper to construct error message for dict comparison."""
 
-        def _dict_repr(d, other):
+        def _dict_repr(d, other, _seen=None):
+            if _seen is None:
+                _seen = set()
+            if id(d) in _seen:
+                return "{<circular ref>}"
+            _seen = _seen | {id(d)}
             parts = []
             ellip = False
             for k, v in sorted(d.items()):
@@ -208,7 +224,7 @@ class HelpersMixin(_MixinBase):
                     parts.append(f"{k!r}: {v!r}")
                 elif v != other[k]:
                     val_repr = (
-                        _dict_repr(v, other[k])
+                        _dict_repr(v, other[k], _seen)
                         if self._check_dict_like(v, check_values=False, return_as_bool=True)
                         and self._check_dict_like(other[k], check_values=False, return_as_bool=True)
                         else repr(v)
@@ -220,7 +236,14 @@ class HelpersMixin(_MixinBase):
             ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
             return f"{{{ellip_prefix}{out}}}"
 
-        def _build_diff(actual_dict, expected_dict, prefix=""):
+        def _build_diff(actual_dict, expected_dict, prefix="", _seen=None):
+            if _seen is None:
+                _seen = set()
+            pair = (id(actual_dict), id(expected_dict))
+            if pair in _seen:
+                return [DiffEntry(path=prefix or ".", actual="<circular ref>", expected="<circular ref>")]
+            _seen = _seen | {pair}
+
             entries = []
             all_keys = sorted(set(actual_dict) | set(expected_dict))
             for k in all_keys:
@@ -230,12 +253,38 @@ class HelpersMixin(_MixinBase):
                 elif k not in actual_dict:
                     entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
                 elif actual_dict[k] != expected_dict[k]:
-                    if self._check_dict_like(
-                        actual_dict[k], check_values=False, return_as_bool=True
-                    ) and self._check_dict_like(expected_dict[k], check_values=False, return_as_bool=True):
-                        entries.extend(_build_diff(actual_dict[k], expected_dict[k], prefix=path))
+                    a_val = actual_dict[k]
+                    e_val = expected_dict[k]
+                    if self._check_dict_like(a_val, check_values=False, return_as_bool=True) and self._check_dict_like(
+                        e_val, check_values=False, return_as_bool=True
+                    ):
+                        entries.extend(_build_diff(a_val, e_val, prefix=path, _seen=_seen))
+                    elif isinstance(a_val, (list, tuple)) and isinstance(e_val, (list, tuple)):
+                        entries.extend(_build_list_diff(a_val, e_val, prefix=path, _seen=_seen))
                     else:
-                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
+                        entries.append(DiffEntry(path=path, actual=a_val, expected=e_val))
+            return entries
+
+        def _build_list_diff(actual_list, expected_list, prefix="", _seen=None):
+            if _seen is None:  # pragma: no cover - only called from _build_diff which always passes _seen
+                _seen = set()
+            entries = []
+            max_len = max(len(actual_list), len(expected_list))
+            for i in range(max_len):
+                path = f"{prefix}[{i}]"
+                if i >= len(actual_list):
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_list[i]))
+                elif i >= len(expected_list):
+                    entries.append(DiffEntry(path=path, actual=actual_list[i], expected=None))
+                elif actual_list[i] != expected_list[i]:
+                    a_item = actual_list[i]
+                    e_item = expected_list[i]
+                    if self._check_dict_like(a_item, check_values=False, return_as_bool=True) and self._check_dict_like(
+                        e_item, check_values=False, return_as_bool=True
+                    ):
+                        entries.extend(_build_diff(a_item, e_item, prefix=path, _seen=_seen))
+                    else:
+                        entries.append(DiffEntry(path=path, actual=a_item, expected=e_item))
             return entries
 
         if ignore:
@@ -260,3 +309,21 @@ class HelpersMixin(_MixinBase):
             expected=other,
             diff=diff,
         )
+
+    @staticmethod
+    def _to_comparable_dict(obj):
+        """Convert an object with introspectable fields to a dict for comparison.
+
+        Returns None if the object cannot be converted.
+        """
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return dataclasses.asdict(obj)
+        if isinstance(obj, tuple) and hasattr(obj, "_fields"):
+            return dict(obj._asdict())
+        if hasattr(obj, "model_dump") and callable(obj.model_dump):
+            return obj.model_dump()
+        if hasattr(obj, "__attrs_attrs__"):
+            return {a.name: getattr(obj, a.name) for a in obj.__attrs_attrs__}
+        if hasattr(obj, "__dict__") and not isinstance(obj, type):
+            return dict(vars(obj))
+        return None

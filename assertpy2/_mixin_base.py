@@ -74,6 +74,9 @@ class _MixinBase:
             include: object = ...,
         ) -> None: ...
 
+        @staticmethod
+        def _to_comparable_dict(obj: object) -> dict[str, object] | None: ...
+
         # NumericMixin class attrs used by HelpersMixin._validate_between_args
         _NUMERIC_COMPAREABLE: frozenset[type]
         _NUMERIC_NON_COMPAREABLE: frozenset[type]
