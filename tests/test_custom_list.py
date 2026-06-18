@@ -27,11 +27,11 @@ def test_custom_list():
 
 
 def test_check_iterable():
-    l = CustomList("foobar")
+    custom_list = CustomList("foobar")
     ab = assert_that(None)
-    ab._check_iterable(l)
-    ab._check_iterable(l, check_getitem=True)
-    ab._check_iterable(l, check_getitem=False)
+    ab._check_iterable(custom_list)
+    ab._check_iterable(custom_list, check_getitem=True)
+    ab._check_iterable(custom_list, check_getitem=False)
 
 
 def test_check_iterable_not_iterable():
@@ -46,7 +46,7 @@ def test_check_iterable_not_iterable():
 def test_check_iterable_no_getitem():
     try:
         ab = assert_that(None)
-        ab._check_iterable(set([1]), name="my-set")
+        ab._check_iterable({1}, name="my-set")
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("my-set <set> does not have [] accessor")

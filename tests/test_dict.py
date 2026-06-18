@@ -66,7 +66,7 @@ def test_contains_multi_item_single_failure():
 
 def test_contains_only():
     assert_that({"a": 1, "b": 2, "c": 3}).contains_only("a", "b", "c")
-    assert_that(set(["a", "b", "c"])).contains_only("a", "b", "c")
+    assert_that({"a", "b", "c"}).contains_only("a", "b", "c")
 
 
 def test_contains_only_failure():
@@ -173,7 +173,7 @@ def test_is_empty_failure():
 
 def test_is_not_empty():
     assert_that({"a": 1, "b": 2}).is_not_empty()
-    assert_that(set(["a", "b"])).is_not_empty()
+    assert_that({"a", "b"}).is_not_empty()
 
 
 def test_is_not_empty_failure():

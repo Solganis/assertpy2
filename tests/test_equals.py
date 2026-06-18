@@ -9,7 +9,7 @@ def test_is_equal():
     assert_that((1, 2, 3)).is_equal_to((1, 2, 3))
     assert_that(1 == 1).is_equal_to(True)
     assert_that(1 == 2).is_equal_to(False)
-    assert_that(set(["a", "b"])).is_equal_to(set(["b", "a"]))
+    assert_that({"a", "b"}).is_equal_to({"b", "a"})
     assert_that({"a": 1, "b": 2}).is_equal_to({"b": 2, "a": 1})
 
 
@@ -47,7 +47,7 @@ def test_is_not_equal():
     assert_that((1, 2, 3)).is_not_equal_to((1, 2))
     assert_that(1 == 1).is_not_equal_to(False)
     assert_that(1 == 2).is_not_equal_to(True)
-    assert_that(set(["a", "b"])).is_not_equal_to(set(["a"]))
+    assert_that({"a", "b"}).is_not_equal_to({"a"})
     assert_that({"a": 1, "b": 2}).is_not_equal_to({"a": 1, "b": 3})
     assert_that({"a": 1, "b": 2}).is_not_equal_to({"a": 1, "c": 2})
 

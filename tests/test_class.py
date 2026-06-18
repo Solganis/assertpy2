@@ -21,13 +21,9 @@ class Developer(Person):
         return f"{self.first_name} writes code."
 
 
-class AbstractAutomobile:
-    __metaclass__ = abc.ABCMeta
-
-    def __init__(self):
-        pass
-
-    @abc.abstractproperty
+class AbstractAutomobile(abc.ABC):
+    @property
+    @abc.abstractmethod
     def classification(self):
         raise NotImplementedError("This method must be overridden")
 

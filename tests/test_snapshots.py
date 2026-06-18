@@ -42,7 +42,7 @@ def test_snapshot_v3(count):
 
     assert_that([[1, 2, 3], ["a", "b", "c"]]).snapshot()
 
-    assert_that(set(["a", "b", "c", "a"])).snapshot()
+    assert_that({"a", "b", "c"}).snapshot()
 
     assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 
@@ -50,7 +50,7 @@ def test_snapshot_v3(count):
 
     assert_that({"a": [1, 2], "b": [3, 4], "c": [5, 6]}).snapshot()
 
-    assert_that({"a": set([1, 2]), "b": set([3, 4]), "c": set([5, 6])}).snapshot()
+    assert_that({"a": {1, 2}, "b": {3, 4}, "c": {5, 6}}).snapshot()
 
     assert_that({"a": {"b": {"c": {"x": {"y": {"z": 1}}}}}}).snapshot()
 
@@ -74,7 +74,7 @@ def test_snapshot_v3(count):
             "a": 1,
             "b": [1, 2, 3],
             "c": {"x": 1, "y": 2, "z": 3},
-            "d": set([-1, 2, -3]),
+            "d": {-1, 2, -3},
             "e": datetime.datetime(2000, 11, 22, 3, 44, 55),
             "f": -1 - 2j,
         }
@@ -116,8 +116,8 @@ def test_snapshot_v3(count):
             "str": "foo",
             "list": [1, 2, 3],
             "liststr": ["a", "b", "c"],
-            "listmix": [1, "a", [2, 4, 6], set([1, 2, 3]), 3 + 6j],
-            "set": set([1, 2, 3]),
+            "listmix": [1, "a", [2, 4, 6], {1, 2, 3}, 3 + 6j],
+            "set": {1, 2, 3},
             "dict": {"a": 1, "b": 2, "c": 3},
             "time": datetime.datetime(2000, 11, 22, 3, 44, 55),
             "complex": 1 + 2j,

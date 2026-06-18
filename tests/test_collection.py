@@ -45,8 +45,8 @@ def test_is_subset_of():
     assert_that((1, 2, 3)).is_subset_of(1, 2, 3)
     assert_that((1, 2, 1)).is_subset_of(1, 1, 2)
     assert_that("foo").is_subset_of("abcdefghijklmnopqrstuvwxyz")
-    assert_that("foo").is_subset_of("abcdef", set(["m", "n", "o"]), ["x", "y"])
-    assert_that(set([1, 2, 3])).is_subset_of(set([1, 2, 3, 4]))
+    assert_that("foo").is_subset_of("abcdef", {"m", "n", "o"}, ["x", "y"])
+    assert_that({1, 2, 3}).is_subset_of({1, 2, 3, 4})
     assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1, "b": 2, "c": 3})
     assert_that({"a": 1, "b": 2}).is_subset_of({"a": 3}, {"b": 2}, {"a": 1})
 
@@ -55,7 +55,7 @@ def test_is_subset_of_single_item_superset():
     assert_that(["a"]).is_subset_of(["a"])
     assert_that((1,)).is_subset_of((1,))
     assert_that("ab").is_subset_of("ab")
-    assert_that(set([1])).is_subset_of(set([1]))
+    assert_that({1}).is_subset_of({1})
     assert_that({"a": 1}).is_subset_of({"a": 1})
 
 
@@ -86,7 +86,7 @@ def test_is_subset_of_failure_array():
 
 def test_is_subset_of_failure_set():
     try:
-        assert_that(set([1, 2, 3])).is_subset_of(set([1, 2]))
+        assert_that({1, 2, 3}).is_subset_of({1, 2})
         fail("should have raised error")
     except AssertionError as ex:
         assert_that(str(ex)).contains("but <3> was missing.")

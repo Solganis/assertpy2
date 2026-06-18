@@ -291,17 +291,17 @@ def test_extracting_sort_bad_values():
 
 
 def test_extracting_iterable_of_lists():
-    l = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-    assert_that(l).extracting(0).is_equal_to([1, 4, 7])
-    assert_that(l).extracting(0, 1).is_equal_to([(1, 2), (4, 5), (7, 8)])
-    assert_that(l).extracting(-1).is_equal_to([3, 6, 9])
-    assert_that(l).extracting(-1, -2).extracting(0).is_equal_to([3, 6, 9])
+    matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    assert_that(matrix).extracting(0).is_equal_to([1, 4, 7])
+    assert_that(matrix).extracting(0, 1).is_equal_to([(1, 2), (4, 5), (7, 8)])
+    assert_that(matrix).extracting(-1).is_equal_to([3, 6, 9])
+    assert_that(matrix).extracting(-1, -2).extracting(0).is_equal_to([3, 6, 9])
 
 
 def test_extracting_iterable_multi_extracting():
-    l = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-    assert_that(l).extracting(-1, 2).is_equal_to([(3, 3), (6, 6), (9, 9)])
-    assert_that(l).extracting(-1, 1).extracting(1, 0).is_equal_to([(2, 3), (5, 6), (8, 9)])
+    matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    assert_that(matrix).extracting(-1, 2).is_equal_to([(3, 3), (6, 6), (9, 9)])
+    assert_that(matrix).extracting(-1, 1).extracting(1, 0).is_equal_to([(2, 3), (5, 6), (8, 9)])
 
 
 def test_extracting_iterable_of_tuples():
@@ -319,7 +319,7 @@ def test_extracting_iterable_of_strings():
 
 def test_extracting_iterable_failure_set():
     try:
-        assert_that([set([1])]).extracting(0).contains(1, 4, 7)
+        assert_that([{1}]).extracting(0).contains(1, 4, 7)
         fail("should have raised error")
     except TypeError as ex:
         assert_that(str(ex)).is_equal_to("item <set> does not have [] accessor")

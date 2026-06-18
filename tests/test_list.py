@@ -7,7 +7,7 @@ def test_is_length():
     assert_that(["a", "b", "c"]).is_length(3)
     assert_that((1, 2, 3, 4)).is_length(4)
     assert_that({"a": 1, "b": 2}).is_length(2)
-    assert_that(set(["a", "b"])).is_length(2)
+    assert_that({"a", "b"}).is_length(2)
 
 
 def test_is_length_failure():
@@ -41,8 +41,8 @@ def test_contains():
     assert_that((1, 2, 3, 4)).contains(4)
     assert_that({"a": 1, "b": 2, "c": 3}).contains("a")
     assert_that({"a": 1, "b": 2, "c": 3}).contains("a", "b")
-    assert_that(set(["a", "b", "c"])).contains("a")
-    assert_that(set(["a", "b", "c"])).contains("c", "b")
+    assert_that({"a", "b", "c"}).contains("a")
+    assert_that({"a", "b", "c"}).contains("c", "b")
 
     fred = Person("fred")
     joe = Person("joe")
@@ -85,8 +85,8 @@ def test_does_not_contain():
     assert_that((1, 2, 3, 4)).does_not_contain(5, 6)
     assert_that({"a": 1, "b": 2, "c": 3}).does_not_contain("x")
     assert_that({"a": 1, "b": 2, "c": 3}).does_not_contain("x", "y")
-    assert_that(set(["a", "b", "c"])).does_not_contain("x")
-    assert_that(set(["a", "b", "c"])).does_not_contain("x", "y")
+    assert_that({"a", "b", "c"}).does_not_contain("x")
+    assert_that({"a", "b", "c"}).does_not_contain("x", "y")
 
     fred = Person("fred")
     joe = Person("joe")
@@ -297,10 +297,10 @@ def test_contains_duplicates_bad_val_failure():
 def test_does_not_contain_duplicates():
     assert_that(["a", "b", "c"]).does_not_contain_duplicates()
     assert_that(("a", "b", "c")).does_not_contain_duplicates()
-    assert_that(set(["a", "b", "c"])).does_not_contain_duplicates()
+    assert_that({"a", "b", "c"}).does_not_contain_duplicates()
     assert_that([1, 2, 3]).does_not_contain_duplicates()
     assert_that((1, 2, 3)).does_not_contain_duplicates()
-    assert_that(set([1, 2, 3])).does_not_contain_duplicates()
+    assert_that({1, 2, 3}).does_not_contain_duplicates()
     assert_that("fobar").does_not_contain_duplicates()
 
     fred = Person("fred")
@@ -342,7 +342,7 @@ def test_is_not_empty():
     assert_that(["a", "b"]).is_not_empty()
     assert_that((1, 2)).is_not_empty()
     assert_that({"a": 1, "b": 2}).is_not_empty()
-    assert_that(set(["a", "b"])).is_not_empty()
+    assert_that({"a", "b"}).is_not_empty()
 
 
 def test_is_not_empty_failure():
@@ -427,41 +427,41 @@ def test_chaining():
 
 
 def test_list_of_lists():
-    l = [[1, 2, 3], ["a", "b", "c"], (4, 5, 6)]
-    assert_that(l).is_length(3)
-    assert_that(l).is_equal_to([[1, 2, 3], ["a", "b", "c"], (4, 5, 6)])
+    nested = [[1, 2, 3], ["a", "b", "c"], (4, 5, 6)]
+    assert_that(nested).is_length(3)
+    assert_that(nested).is_equal_to([[1, 2, 3], ["a", "b", "c"], (4, 5, 6)])
 
-    assert_that(l).contains([1, 2, 3])
-    assert_that(l).contains(["a", "b", "c"])
-    assert_that(l).contains((4, 5, 6))
+    assert_that(nested).contains([1, 2, 3])
+    assert_that(nested).contains(["a", "b", "c"])
+    assert_that(nested).contains((4, 5, 6))
 
-    assert_that(l).starts_with([1, 2, 3])
-    assert_that(l).ends_with((4, 5, 6))
+    assert_that(nested).starts_with([1, 2, 3])
+    assert_that(nested).ends_with((4, 5, 6))
 
-    assert_that(l[0]).is_equal_to([1, 2, 3])
-    assert_that(l[2]).is_equal_to((4, 5, 6))
+    assert_that(nested[0]).is_equal_to([1, 2, 3])
+    assert_that(nested[2]).is_equal_to((4, 5, 6))
 
-    assert_that(l[0][0]).is_equal_to(1)
-    assert_that(l[2][2]).is_equal_to(6)
+    assert_that(nested[0][0]).is_equal_to(1)
+    assert_that(nested[2][2]).is_equal_to(6)
 
 
 def test_list_of_dicts():
-    l = [{"a": 1}, {"b": 2}, {"c": 3}]
-    assert_that(l).is_length(3)
-    assert_that(l).is_equal_to([{"a": 1}, {"b": 2}, {"c": 3}])
+    dicts = [{"a": 1}, {"b": 2}, {"c": 3}]
+    assert_that(dicts).is_length(3)
+    assert_that(dicts).is_equal_to([{"a": 1}, {"b": 2}, {"c": 3}])
 
-    assert_that(l).contains({"a": 1})
-    assert_that(l).contains({"b": 2})
-    assert_that(l).contains({"c": 3})
+    assert_that(dicts).contains({"a": 1})
+    assert_that(dicts).contains({"b": 2})
+    assert_that(dicts).contains({"c": 3})
 
-    assert_that(l).starts_with({"a": 1})
-    assert_that(l).ends_with({"c": 3})
+    assert_that(dicts).starts_with({"a": 1})
+    assert_that(dicts).ends_with({"c": 3})
 
-    assert_that(l[0]).is_equal_to({"a": 1})
-    assert_that(l[2]).is_equal_to({"c": 3})
+    assert_that(dicts[0]).is_equal_to({"a": 1})
+    assert_that(dicts[2]).is_equal_to({"c": 3})
 
-    assert_that(l[0]["a"]).is_equal_to(1)
-    assert_that(l[2]["c"]).is_equal_to(3)
+    assert_that(dicts[0]["a"]).is_equal_to(1)
+    assert_that(dicts[2]["c"]).is_equal_to(3)
 
 
 class Person:

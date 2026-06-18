@@ -4,7 +4,7 @@ from assertpy2 import add_extension, assert_that, fail, remove_extension
 
 
 def is_even(self):
-    if isinstance(self.val, numbers.Integral) is False:
+    if not isinstance(self.val, numbers.Integral):
         raise TypeError("val must be an integer")
     if self.val % 2 != 0:
         return self.error(f"Expected <{self.val}> to be even, but was not.")
@@ -12,10 +12,10 @@ def is_even(self):
 
 
 def is_multiple_of(self, other):
-    if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
+    if not isinstance(self.val, numbers.Integral) or self.val <= 0:
         raise TypeError("val must be a positive integer")
 
-    if isinstance(other, numbers.Integral) is False or other <= 0:
+    if not isinstance(other, numbers.Integral) or other <= 0:
         raise TypeError("given arg must be a positive integer")
 
     _, rem = divmod(self.val, other)
@@ -26,10 +26,10 @@ def is_multiple_of(self, other):
 
 
 def is_factor_of(self, other):
-    if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
+    if not isinstance(self.val, numbers.Integral) or self.val <= 0:
         raise TypeError("val must be a positive integer")
 
-    if isinstance(other, numbers.Integral) is False or other <= 0:
+    if not isinstance(other, numbers.Integral) or other <= 0:
         raise TypeError("given arg must be a positive integer")
 
     _, rem = divmod(other, self.val)

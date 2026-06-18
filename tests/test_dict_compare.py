@@ -20,15 +20,15 @@ def test_ignore_list_of_keys():
 
 
 def test_ignore_deep_key():
-    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1}, ignore=("b"))
+    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1}, ignore="b")
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1}, ignore=[("b",)])
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1, "b": {"x": 2}}, ignore=("b", "y"))
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1, "b": {"x": 2}}, ignore=[("b", "y")])
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to(
         {"a": 1, "b": {"x": 2}}, ignore=[("b", "y"), ("b", "x", "j")]
     )
-    assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to({}, ignore=[("a"), ("b")])
-    assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to({"a": 1}, ignore=("b"))
+    assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to({}, ignore=["a", "b"])
+    assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to({"a": 1}, ignore="b")
     assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to(
         {"a": 1, "b": {"c": 2}}, ignore=("b", "d")
     )
@@ -253,10 +253,10 @@ def test_include_list_of_keys():
 
 
 def test_include_deep_key():
-    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2, "y": 3}}, include=("b"))
+    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2, "y": 3}}, include="b")
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2}}, include=("b", "x"))
     assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to(
-        {"b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}, include=("b")
+        {"b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}, include="b"
     )
     assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to(
         {"b": {"c": 2}}, include=("b", "c")
@@ -357,10 +357,10 @@ def test_ignore_and_include_list_of_keys():
 
 
 def test_ignore_and_include_deep_key():
-    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2, "y": 3}}, ignore=("a"), include=("b"))
+    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2, "y": 3}}, ignore="a", include="b")
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"b": {"x": 2}}, ignore=("b", "y"), include=("b", "x"))
     assert_that({"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 5}}}}).is_equal_to(
-        {"b": {"c": 2, "d": {"e": 3}}}, ignore=("b", "d", "f"), include=("b")
+        {"b": {"c": 2, "d": {"e": 3}}}, ignore=("b", "d", "f"), include="b"
     )
 
 
