@@ -1,4 +1,6 @@
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 class CustomList:
@@ -35,18 +37,14 @@ def test_check_iterable():
 
 
 def test_check_iterable_not_iterable():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_iterable(123, name="my-int")
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("my-int <int> is not iterable")
+    assert_that(str(exc_info.value)).contains("my-int <int> is not iterable")
 
 
 def test_check_iterable_no_getitem():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_iterable({1}, name="my-set")
-        fail("should have raised error")
-    except TypeError as e:
-        assert_that(str(e)).contains("my-set <set> does not have [] accessor")
+    assert_that(str(exc_info.value)).contains("my-set <set> does not have [] accessor")

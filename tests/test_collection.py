@@ -1,6 +1,8 @@
 import collections
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_iterable():
@@ -13,11 +15,9 @@ def test_is_iterable():
 
 
 def test_is_iterable_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_iterable()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected iterable, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected iterable, but was not.")
 
 
 def test_is_not_iterable():
@@ -26,11 +26,9 @@ def test_is_not_iterable():
 
 
 def test_is_not_iterable_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_not_iterable()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not iterable, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not iterable, but was.")
 
 
 def test_is_subset_of():
@@ -60,92 +58,70 @@ def test_is_subset_of_single_item_superset():
 
 
 def test_is_subset_of_failure_empty_superset():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_subset_of([])
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be subset of <>")
+    assert_that(str(exc_info.value)).contains("to be subset of <>")
 
 
 def test_is_subset_of_failure_single_item_superset():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_subset_of(["x"])
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be subset of <{'x'}>")
-        assert_that(str(ex)).contains("but <'a', 'b', 'c'> were missing.")
+    assert_that(str(exc_info.value)).contains("to be subset of <{'x'}>")
+    assert_that(str(exc_info.value)).contains("but <'a', 'b', 'c'> were missing.")
 
 
 def test_is_subset_of_failure_array():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_subset_of(["a", "b"])
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but <c> was missing.")
+    assert_that(str(exc_info.value)).contains("but <c> was missing.")
 
 
 def test_is_subset_of_failure_set():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that({1, 2, 3}).is_subset_of({1, 2})
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but <3> was missing.")
+    assert_that(str(exc_info.value)).contains("but <3> was missing.")
 
 
 def test_is_subset_of_failure_string():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("abc").is_subset_of("abx")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but <c> was missing.")
+    assert_that(str(exc_info.value)).contains("but <c> was missing.")
 
 
 def test_is_subset_of_failure_dict_key():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1, "c": 3})
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but <{'b': 2}> was missing")
+    assert_that(str(exc_info.value)).contains("but <{'b': 2}> was missing")
 
 
 def test_is_subset_of_failure_dict_value():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1, "b": 22})
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but <{'b': 2}> was missing.")
+    assert_that(str(exc_info.value)).contains("but <{'b': 2}> was missing.")
 
 
 def test_is_subset_of_failure_bad_dict_arg1():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("arg #1").contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("arg #1").contains("is not dict-like")
 
 
 def test_is_subset_of_failure_bad_dict_arg2():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1}, "foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("arg #2").contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("arg #2").contains("is not dict-like")
 
 
 def test_is_subset_of_bad_val_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_subset_of(1234)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_is_subset_of_bad_arg_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(["a", "b", "c"]).is_subset_of()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more superset args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more superset args must be given")
 
 
 def test_is_sorted():
@@ -170,31 +146,25 @@ def test_is_sorted():
 
 
 def test_is_sorted_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3, 4, 5, 6, -1, 7, 8, 9]).is_sorted()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <[1, 2, 3, 4, 5, 6, -1, 7, 8, 9]> to be sorted, but subset <6, -1> at index 5 is not."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3, 4, 5, 6, -1, 7, 8, 9]> to be sorted, but subset <6, -1> at index 5 is not."
+    )
 
 
 def test_is_sorted_reverse_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).is_sorted(reverse=True)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <[1, 2, 3]> to be sorted reverse, but subset <1, 2> at index 0 is not."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3]> to be sorted reverse, but subset <1, 2> at index 0 is not."
+    )
 
 
 def test_is_sorted_failure_bad_val():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_sorted()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_chaining():

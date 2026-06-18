@@ -1,4 +1,6 @@
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_in():
@@ -9,19 +11,15 @@ def test_is_in():
 
 
 def test_is_in_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(4).is_in(1, 2, 3)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <4> to be in <1, 2, 3>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <4> to be in <1, 2, 3>, but was not.")
 
 
 def test_is_in_missing_arg_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(1).is_in()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_is_not_in():
@@ -32,16 +30,12 @@ def test_is_not_in():
 
 
 def test_is_not_in_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(1).is_not_in(1, 2, 3)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <1> to not be in <1, 2, 3>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <1> to not be in <1, 2, 3>, but was.")
 
 
 def test_is_not_in_missing_arg_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(1).is_not_in()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")

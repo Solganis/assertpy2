@@ -1,4 +1,6 @@
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_length():
@@ -6,11 +8,9 @@ def test_is_length():
 
 
 def test_is_length_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_length(4)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to be of length <4>, but was <3>.")
 
 
 def test_contains():
@@ -22,29 +22,25 @@ def test_contains():
 
 
 def test_contains_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").contains("x")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to contain item <x>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to contain item <x>, but did not.")
 
 
 def test_contains_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").contains("f", "x", "z")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <foo> to contain items <'f', 'x', 'z'>, but did not contain <'x', 'z'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo> to contain items <'f', 'x', 'z'>, but did not contain <'x', 'z'>."
+    )
 
 
 def test_contains_multi_item_single_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").contains("f", "o", "x")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to contain items <'f', 'o', 'x'>, but did not contain <x>.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo> to contain items <'f', 'o', 'x'>, but did not contain <x>."
+    )
 
 
 def test_contains_ignoring_case():
@@ -55,53 +51,41 @@ def test_contains_ignoring_case():
 
 
 def test_contains_ignoring_case_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_ignoring_case("f")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
 
 
 def test_contains_ignoring_case_missinge_item_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("foo").contains_ignoring_case()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_ignoring_case_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").contains_ignoring_case("X")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to case-insensitive contain item <X>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to case-insensitive contain item <X>, but did not.")
 
 
 def test_contains_ignoring_case_single_item_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_ignoring_case(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
 
 
 def test_contains_ignoring_case_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").contains_ignoring_case("F", "X", "Z")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <foo> to case-insensitive contain items <'F', 'X', 'Z'>, but did not contain <'X', 'Z'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo> to case-insensitive contain items <'F', 'X', 'Z'>, but did not contain <'X', 'Z'>."
+    )
 
 
 def test_contains_ignoring_case_multi_item_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_ignoring_case("F", 12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
 
 
 def test_contains_ignoring_case_list():
@@ -112,63 +96,49 @@ def test_contains_ignoring_case_list():
 
 
 def test_contains_ignoring_case_list_elem_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that([123]).contains_ignoring_case("f")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val items must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("val items must all be strings")
 
 
 def test_contains_ignoring_case_list_multi_elem_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["foo", 123]).contains_ignoring_case("f")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val items must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("val items must all be strings")
 
 
 def test_contains_ignoring_case_list_missinge_item_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(["foo"]).contains_ignoring_case()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_ignoring_case_list_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["foo"]).contains_ignoring_case("X")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['foo']> to case-insensitive contain items <X>, but did not contain <X>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['foo']> to case-insensitive contain items <X>, but did not contain <X>."
+    )
 
 
 def test_contains_ignoring_case_list_single_item_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["foo"]).contains_ignoring_case(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
 
 
 def test_contains_ignoring_case_list_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["foo", "bar"]).contains_ignoring_case("Foo", "X", "Y")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['foo', 'bar']> to case-insensitive contain items <'Foo', 'X', 'Y'>, but did not contain <'X', 'Y'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['foo', 'bar']> to case-insensitive contain items <'Foo', 'X', 'Y'>, but did not contain <'X', 'Y'>."
+    )
 
 
 def test_contains_ignoring_case_list_multi_item_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["foo", "bar"]).contains_ignoring_case("F", 12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
 
 
 def test_does_not_contain():
@@ -177,29 +147,25 @@ def test_does_not_contain():
 
 
 def test_does_not_contain_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").does_not_contain("f")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to not contain item <f>, but did.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to not contain item <f>, but did.")
 
 
 def test_does_not_contain_list_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").does_not_contain("x", "y", "f")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to not contain items <'x', 'y', 'f'>, but did contain <f>.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo> to not contain items <'x', 'y', 'f'>, but did contain <f>."
+    )
 
 
 def test_does_not_contain_list_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").does_not_contain("x", "f", "o")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <foo> to not contain items <'x', 'f', 'o'>, but did contain <'f', 'o'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo> to not contain items <'x', 'f', 'o'>, but did contain <'f', 'o'>."
+    )
 
 
 def test_is_empty():
@@ -207,11 +173,9 @@ def test_is_empty():
 
 
 def test_is_empty_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_empty()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to be empty string, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to be empty string, but was not.")
 
 
 def test_is_not_empty():
@@ -219,11 +183,9 @@ def test_is_not_empty():
 
 
 def test_is_not_empty_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("").is_not_empty()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not empty string, but was empty.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not empty string, but was empty.")
 
 
 def test_is_equal_ignoring_case():
@@ -233,27 +195,21 @@ def test_is_equal_ignoring_case():
 
 
 def test_is_equal_ignoring_case_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_equal_to_ignoring_case("bar")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to be case-insensitive equal to <bar>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to be case-insensitive equal to <bar>, but was not.")
 
 
 def test_is_equal_ignoring_case_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_case(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_equal_ignoring_case_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").is_equal_to_ignoring_case(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
 
 
 def test_starts_with():
@@ -263,43 +219,33 @@ def test_starts_with():
 
 
 def test_starts_with_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("fred").starts_with("bar")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <fred> to start with <bar>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <fred> to start with <bar>, but did not.")
 
 
 def test_starts_with_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).starts_with(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
 
 
 def test_starts_with_bad_arg_none_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").starts_with(None)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given prefix arg must not be none")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must not be none")
 
 
 def test_starts_with_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").starts_with(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given prefix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string")
 
 
 def test_starts_with_bad_arg_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("fred").starts_with("")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given prefix arg must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must not be empty")
 
 
 def test_ends_with():
@@ -309,43 +255,33 @@ def test_ends_with():
 
 
 def test_ends_with_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("fred").ends_with("bar")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <fred> to end with <bar>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <fred> to end with <bar>, but did not.")
 
 
 def test_ends_with_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).ends_with(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
 
 
 def test_ends_with_bad_arg_none_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").ends_with(None)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given suffix arg must not be none")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must not be none")
 
 
 def test_ends_with_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").ends_with(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given suffix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string")
 
 
 def test_ends_with_bad_arg_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("fred").ends_with("")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given suffix arg must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must not be empty")
 
 
 def test_matches():
@@ -358,35 +294,27 @@ def test_matches():
 
 
 def test_matches_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("fred").matches(r"\d+")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <fred> to match pattern <\\d+>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <fred> to match pattern <\\d+>, but did not.")
 
 
 def test_matches_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).matches(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_matches_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").matches(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given pattern arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string")
 
 
 def test_matches_bad_arg_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("fred").matches("")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given pattern arg must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must not be empty")
 
 
 def test_does_not_match():
@@ -396,35 +324,27 @@ def test_does_not_match():
 
 
 def test_does_not_match_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("fred").does_not_match(r"\w+")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <fred> to not match pattern <\\w+>, but did.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <fred> to not match pattern <\\w+>, but did.")
 
 
 def test_does_not_match_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_match(12)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_does_not_match_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("fred").does_not_match(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given pattern arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string")
 
 
 def test_does_not_match_bad_arg_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("fred").does_not_match("")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given pattern arg must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must not be empty")
 
 
 def test_is_alpha():
@@ -432,43 +352,33 @@ def test_is_alpha():
 
 
 def test_is_alpha_digit_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo123").is_alpha()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo123> to contain only alphabetic chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo123> to contain only alphabetic chars, but did not.")
 
 
 def test_is_alpha_space_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo bar").is_alpha()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo bar> to contain only alphabetic chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo bar> to contain only alphabetic chars, but did not.")
 
 
 def test_is_alpha_punctuation_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo,bar").is_alpha()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo,bar> to contain only alphabetic chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo,bar> to contain only alphabetic chars, but did not.")
 
 
 def test_is_alpha_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_alpha()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_alpha_empty_value_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_alpha()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_is_digit():
@@ -476,43 +386,33 @@ def test_is_digit():
 
 
 def test_is_digit_alpha_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo123").is_digit()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo123> to contain only digits, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo123> to contain only digits, but did not.")
 
 
 def test_is_digit_space_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("1 000 000").is_digit()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <1 000 000> to contain only digits, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <1 000 000> to contain only digits, but did not.")
 
 
 def test_is_digit_punctuation_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("-123").is_digit()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <-123> to contain only digits, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <-123> to contain only digits, but did not.")
 
 
 def test_is_digit_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_digit()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_digit_empty_value_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_digit()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_is_lower():
@@ -522,27 +422,21 @@ def test_is_lower():
 
 
 def test_is_lower_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("FOO").is_lower()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <FOO> to contain only lowercase chars, but did not.")
 
 
 def test_is_lower_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_lower()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_lower_empty_value_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_lower()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_is_upper():
@@ -552,27 +446,21 @@ def test_is_upper():
 
 
 def test_is_upper_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_upper()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to contain only uppercase chars, but did not.")
 
 
 def test_is_upper_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_upper()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_upper_empty_value_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_upper()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_is_unicode():
@@ -581,11 +469,9 @@ def test_is_unicode():
 
 
 def test_is_unicode_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_unicode()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be unicode, but was <int>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be unicode, but was <int>.")
 
 
 def test_is_alphanumeric():
@@ -595,35 +481,27 @@ def test_is_alphanumeric():
 
 
 def test_is_alphanumeric_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("abc 123").is_alphanumeric()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <abc 123> to contain only alphanumeric chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <abc 123> to contain only alphanumeric chars, but did not.")
 
 
 def test_is_alphanumeric_special_chars_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("hello!").is_alphanumeric()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <hello!> to contain only alphanumeric chars, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <hello!> to contain only alphanumeric chars, but did not.")
 
 
 def test_is_alphanumeric_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_alphanumeric()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_alphanumeric_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_alphanumeric()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_is_whitespace():
@@ -635,35 +513,27 @@ def test_is_whitespace():
 
 
 def test_is_whitespace_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_whitespace()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foo> to contain only whitespace, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foo> to contain only whitespace, but did not.")
 
 
 def test_is_whitespace_mixed_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(" foo ").is_whitespace()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected < foo > to contain only whitespace, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected < foo > to contain only whitespace, but did not.")
 
 
 def test_is_whitespace_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_whitespace()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_is_whitespace_empty_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("").is_whitespace()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val is empty")
+    assert_that(str(exc_info.value)).is_equal_to("val is empty")
 
 
 def test_contains_any_of():
@@ -674,11 +544,9 @@ def test_contains_any_of():
 
 
 def test_contains_any_of_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_any_of("xxx", "yyy")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain any of <'xxx', 'yyy'>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain any of <'xxx', 'yyy'>, but did not.")
 
 
 def test_contains_any_of_single():
@@ -686,35 +554,27 @@ def test_contains_any_of_single():
 
 
 def test_contains_any_of_single_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_any_of("xxx")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain any of <xxx>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain any of <xxx>, but did not.")
 
 
 def test_contains_any_of_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_any_of("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_contains_any_of_empty_args_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("foo").contains_any_of()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_any_of_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_any_of(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
 
 
 def test_contains_none_of():
@@ -723,45 +583,37 @@ def test_contains_none_of():
 
 
 def test_contains_none_of_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_none_of("foo", "xxx")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain none of <'foo', 'xxx'>, but did contain <foo>.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foobar> to contain none of <'foo', 'xxx'>, but did contain <foo>."
+    )
 
 
 def test_contains_none_of_multiple_found_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_none_of("foo", "bar")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <foobar> to contain none of <'foo', 'bar'>, but did contain <'foo', 'bar'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foobar> to contain none of <'foo', 'bar'>, but did contain <'foo', 'bar'>."
+    )
 
 
 def test_contains_none_of_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_none_of("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
 
 
 def test_contains_none_of_empty_args_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that("foo").contains_none_of()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_none_of_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_none_of(123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
 
 
 def test_chaining():

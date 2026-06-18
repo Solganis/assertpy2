@@ -2,7 +2,9 @@ import datetime
 import os
 import sys
 
-from assertpy2 import assert_that, assert_warn, contents_of, fail, soft_assertions
+import pytest
+
+from assertpy2 import assert_that, assert_warn, contents_of, soft_assertions
 
 
 def setup_module():
@@ -66,11 +68,8 @@ def test_strings():
     assert_that("foo").matches(r"^\w{3}$")
 
     # fails
-    try:
+    with pytest.raises(AssertionError):
         assert_that("foo").matches(r"^\w{2}$")
-        fail("should have raised error")
-    except AssertionError:
-        pass
 
 
 def test_ints():
@@ -377,11 +376,9 @@ def test_dyn():
 
 
 def test_failure():
-    try:
+    with pytest.raises(RuntimeError) as exc_info:
         some_func("foo")
-        fail("should have raised error")
-    except RuntimeError as e:
-        assert_that(str(e)).is_equal_to("some err")
+    assert_that(str(exc_info.value)).is_equal_to("some err")
 
 
 def test_expected_exceptions():
@@ -392,17 +389,13 @@ def test_expected_exceptions():
 
 
 def test_custom_error_message():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(1 + 2).is_equal_to(2)
-        fail("should have raised error")
-    except AssertionError as e:
-        assert_that(str(e)).is_equal_to("Expected <3> to be equal to <2>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <3> to be equal to <2>, but was not.")
 
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(1 + 2).described_as("adding stuff").is_equal_to(2)
-        fail("should have raised error")
-    except AssertionError as e:
-        assert_that(str(e)).is_equal_to("[adding stuff] Expected <3> to be equal to <2>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("[adding stuff] Expected <3> to be equal to <2>, but was not.")
 
 
 def test_assert_warn():
@@ -419,30 +412,27 @@ def test_assert_warn():
 
 
 def test_soft_assertions():
-    try:
-        with soft_assertions():
-            assert_that("foo").is_length(4)
-            assert_that("foo").is_empty()
-            assert_that("foo").is_false()
-            assert_that("foo").is_digit()
-            assert_that("123").is_alpha()
-            assert_that("foo").is_upper()
-            assert_that("FOO").is_lower()
-            assert_that("foo").is_equal_to("bar")
-            assert_that("foo").is_not_equal_to("foo")
-            assert_that("foo").is_equal_to_ignoring_case("BAR")
-        fail("should have raised error")
-    except AssertionError as e:
-        assert_that(str(e)).contains("1. Expected <foo> to be of length <4>, but was <3>.")
-        assert_that(str(e)).contains("2. Expected <foo> to be empty string, but was not.")
-        assert_that(str(e)).contains("3. Expected <foo> to be <False>, but was not.")
-        assert_that(str(e)).contains("4. Expected <foo> to contain only digits, but did not.")
-        assert_that(str(e)).contains("5. Expected <123> to contain only alphabetic chars, but did not.")
-        assert_that(str(e)).contains("6. Expected <foo> to contain only uppercase chars, but did not.")
-        assert_that(str(e)).contains("7. Expected <FOO> to contain only lowercase chars, but did not.")
-        assert_that(str(e)).contains("8. Expected <foo> to be equal to <bar>, but was not.")
-        assert_that(str(e)).contains("9. Expected <foo> to be not equal to <foo>, but was.")
-        assert_that(str(e)).contains("10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+    with pytest.raises(AssertionError) as exc_info, soft_assertions():
+        assert_that("foo").is_length(4)
+        assert_that("foo").is_empty()
+        assert_that("foo").is_false()
+        assert_that("foo").is_digit()
+        assert_that("123").is_alpha()
+        assert_that("foo").is_upper()
+        assert_that("FOO").is_lower()
+        assert_that("foo").is_equal_to("bar")
+        assert_that("foo").is_not_equal_to("foo")
+        assert_that("foo").is_equal_to_ignoring_case("BAR")
+    assert_that(str(exc_info.value)).contains("1. Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(str(exc_info.value)).contains("2. Expected <foo> to be empty string, but was not.")
+    assert_that(str(exc_info.value)).contains("3. Expected <foo> to be <False>, but was not.")
+    assert_that(str(exc_info.value)).contains("4. Expected <foo> to contain only digits, but did not.")
+    assert_that(str(exc_info.value)).contains("5. Expected <123> to contain only alphabetic chars, but did not.")
+    assert_that(str(exc_info.value)).contains("6. Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(str(exc_info.value)).contains("7. Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(str(exc_info.value)).contains("8. Expected <foo> to be equal to <bar>, but was not.")
+    assert_that(str(exc_info.value)).contains("9. Expected <foo> to be not equal to <foo>, but was.")
+    assert_that(str(exc_info.value)).contains("10. Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_chaining():

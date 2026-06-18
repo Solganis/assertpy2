@@ -1,7 +1,9 @@
 import logging
 from io import StringIO
 
-from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, fail
+import pytest
+
+from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn
 
 
 def test_expected_exception():
@@ -30,83 +32,69 @@ def test_expected_exception_chaining():
 
 
 def test_expected_exception_no_arg_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <func_noop> to raise <RuntimeError> when called with ().")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <func_noop> to raise <RuntimeError> when called with ().")
 
 
 def test_expected_exception_no_arg_bad_func_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).raises(int).when_called_with()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("val must be callable")
+    assert_that(str(exc_info.value)).contains("val must be callable")
 
 
 def test_expected_exception_no_arg_bad_exception_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(func_noop).raises(int).when_called_with()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("given arg must be exception")
+    assert_that(str(exc_info.value)).contains("given arg must be exception")
 
 
 def test_expected_exception_no_arg_wrong_exception_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_no_arg).raises(TypeError).when_called_with()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains(
-            "Expected <func_no_arg> to raise <TypeError> when called with (), but raised <RuntimeError>."
-        )
+    assert_that(str(exc_info.value)).contains(
+        "Expected <func_no_arg> to raise <TypeError> when called with (), but raised <RuntimeError>."
+    )
 
 
 def test_expected_exception_no_arg_missing_raises_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(func_noop).when_called_with()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("expected exception not set, raises() or does_not_raise() must be called first")
+    assert_that(str(exc_info.value)).contains(
+        "expected exception not set, raises() or does_not_raise() must be called first"
+    )
 
 
 def test_expected_exception_one_arg_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with("foo")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <func_noop> to raise <RuntimeError> when called with ('foo').")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <func_noop> to raise <RuntimeError> when called with ('foo')."
+    )
 
 
 def test_expected_exception_multi_args_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with("foo", "bar", "baz")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <func_noop> to raise <RuntimeError> when called with ('foo', 'bar', 'baz')."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <func_noop> to raise <RuntimeError> when called with ('foo', 'bar', 'baz')."
+    )
 
 
 def test_expected_exception_kwargs_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with(foo=1, bar=2, baz=3)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <func_noop> to raise <RuntimeError> when called with ('bar': 2, 'baz': 3, 'foo': 1)."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <func_noop> to raise <RuntimeError> when called with ('bar': 2, 'baz': 3, 'foo': 1)."
+    )
 
 
 def test_expected_exception_all_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with("a", "b", 3, 4, foo=1, bar=2, baz="dog")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <func_noop> to raise <RuntimeError> when called with ('a', 'b', 3, 4, 'bar': 2, 'baz': 'dog', 'foo': 1)."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <func_noop> to raise <RuntimeError> when called with ('a', 'b', 3, 4, 'bar': 2, 'baz': 'dog', 'foo': 1)."
+    )
 
 
 def test_expected_exception_arg_passing():

@@ -1,6 +1,8 @@
 import sys
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_same_as():
@@ -9,13 +11,11 @@ def test_is_same_as():
 
 
 def test_is_same_as_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         obj = object()
         other = object()
         assert_that(obj).is_same_as(other)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).matches("Expected <.+> to be identical to <.+>, but was not.")
+    assert_that(str(exc_info.value)).matches("Expected <.+> to be identical to <.+>, but was not.")
 
 
 def test_is_not_same_as():
@@ -37,8 +37,6 @@ def test_is_not_same_as():
 
 def test_is_not_same_as_failure():
     for obj in [object(), 1, "foo", True, None, 123.456]:
-        try:
+        with pytest.raises(AssertionError) as exc_info:
             assert_that(obj).is_not_same_as(obj)
-            fail("should have raised error")
-        except AssertionError as ex:
-            assert_that(str(ex)).matches("Expected <.+> to be not identical to <.+>, but was.")
+        assert_that(str(exc_info.value)).matches("Expected <.+> to be not identical to <.+>, but was.")

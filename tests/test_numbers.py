@@ -1,4 +1,6 @@
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_zero():
@@ -8,19 +10,15 @@ def test_is_zero():
 
 
 def test_is_zero_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(1).is_zero()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <1> to be equal to <0>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <1> to be equal to <0>, but was not.")
 
 
 def test_is_zero_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_zero()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_not_zero():
@@ -30,19 +28,15 @@ def test_is_not_zero():
 
 
 def test_is_not_zero_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_not_zero()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be not equal to <0>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be not equal to <0>, but was.")
 
 
 def test_is_not_zero_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_zero()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_nan():
@@ -51,27 +45,21 @@ def test_is_nan():
 
 
 def test_is_nan_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_nan()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be <NaN>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be <NaN>, but was not.")
 
 
 def test_is_nan_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_nan()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_nan_bad_type_failure_complex():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_nan()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
 
 
 def test_is_not_nan():
@@ -80,27 +68,21 @@ def test_is_not_nan():
 
 
 def test_is_not_nan_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(float("NaN")).is_not_nan()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not <NaN>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not <NaN>, but was.")
 
 
 def test_is_not_nan_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_nan()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_not_nan_bad_type_failure_complex():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_nan()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
 
 
 def test_is_inf():
@@ -109,27 +91,21 @@ def test_is_inf():
 
 
 def test_is_inf_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_inf()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be <Inf>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be <Inf>, but was not.")
 
 
 def test_is_inf_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_inf()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_inf_bad_type_failure_complex():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_inf()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
 
 
 def test_is_not_inf():
@@ -138,27 +114,21 @@ def test_is_not_inf():
 
 
 def test_is_not_inf_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(float("Inf")).is_not_inf()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not <Inf>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not <Inf>, but was.")
 
 
 def test_is_not_inf_bad_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_inf()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
 
 
 def test_is_not_inf_bad_type_failure_complex():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_inf()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
 
 
 def test_is_greater_than():
@@ -169,35 +139,27 @@ def test_is_greater_than():
 
 
 def test_is_greater_than_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_greater_than(123)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be greater than <123>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be greater than <123>, but was not.")
 
 
 def test_is_greater_than_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_greater_than(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_greater_than_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_greater_than(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_greater_than_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_greater_than("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
 
 
 def test_is_greater_than_or_equal_to():
@@ -209,35 +171,27 @@ def test_is_greater_than_or_equal_to():
 
 
 def test_is_greater_than_or_equal_to_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_greater_than_or_equal_to(1000)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be greater than or equal to <1000>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be greater than or equal to <1000>, but was not.")
 
 
 def test_is_greater_than_or_equal_to_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_greater_than_or_equal_to(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_greater_than_or_equal_to_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_greater_than_or_equal_to(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_greater_than_or_equal_to_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_greater_than_or_equal_to("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
 
 
 def test_is_less_than():
@@ -248,35 +202,27 @@ def test_is_less_than():
 
 
 def test_is_less_than_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_less_than(123)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be less than <123>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be less than <123>, but was not.")
 
 
 def test_is_less_than_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_less_than(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_less_than_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_less_than(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_less_than_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_less_than("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
 
 
 def test_is_less_than_or_equal_to():
@@ -288,35 +234,27 @@ def test_is_less_than_or_equal_to():
 
 
 def test_is_less_than_or_equal_to_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_less_than_or_equal_to(100)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be less than or equal to <100>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be less than or equal to <100>, but was not.")
 
 
 def test_is_less_than_or_equal_to_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_less_than_or_equal_to(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_less_than_or_equal_to_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_less_than_or_equal_to(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_less_than_or_equal_to_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_less_than_or_equal_to("foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
 
 
 def test_is_positive():
@@ -324,11 +262,9 @@ def test_is_positive():
 
 
 def test_is_positive_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_positive()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be greater than <0>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be greater than <0>, but was not.")
 
 
 def test_is_negative():
@@ -336,11 +272,9 @@ def test_is_negative():
 
 
 def test_is_negative_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_negative()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be less than <0>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be less than <0>, but was not.")
 
 
 def test_is_between():
@@ -351,51 +285,39 @@ def test_is_between():
 
 
 def test_is_between_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_between(0, 1)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to be between <0> and <1>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be between <0> and <1>, but was not.")
 
 
 def test_is_between_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_between(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_between_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_between(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_between_low_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_between("foo", 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given low arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be numeric, but was <str>")
 
 
 def test_is_between_high_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_between(0, "foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given high arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be numeric, but was <str>")
 
 
 def test_is_between_bad_arg_delta_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(123).is_between(1, 0)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given low arg must be less than given high arg")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be less than given high arg")
 
 
 def test_is_not_between():
@@ -406,51 +328,39 @@ def test_is_not_between():
 
 
 def test_is_not_between_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_not_between(0, 1000)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123> to not be between <0> and <1000>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to not be between <0> and <1000>, but was.")
 
 
 def test_is_not_between_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_between(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
 
 
 def test_is_not_between_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_between(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
 
 
 def test_is_not_between_low_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_not_between("foo", 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given low arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be numeric, but was <str>")
 
 
 def test_is_not_between_high_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_not_between(0, "foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given high arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be numeric, but was <str>")
 
 
 def test_is_not_between_bad_arg_delta_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(123).is_not_between(1, 0)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given low arg must be less than given high arg")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be less than given high arg")
 
 
 def test_is_close_to():
@@ -460,75 +370,59 @@ def test_is_close_to():
 
 
 def test_is_close_to_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123.01).is_close_to(100, 1)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123.01> to be close to <100> within tolerance <1>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <123.01> to be close to <100> within tolerance <1>, but was not."
+    )
 
 
 def test_is_close_to_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_close_to(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for complex numbers")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for complex numbers")
 
 
 def test_is_close_to_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_close_to(123, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric or datetime")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric or datetime")
 
 
 def test_is_close_to_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_close_to("foo", 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be numeric")
 
 
 def test_is_close_to_bad_tolerance_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_close_to(0, "foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given tolerance arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be numeric")
 
 
 def test_is_close_to_negative_tolerance_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_close_to(123, -1)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given tolerance arg must be positive")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be positive")
 
 
 def test_is_close_to_nan_val_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(float("nan")).is_close_to(123, 0.1)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be close to")
+    assert_that(str(exc_info.value)).contains("to be close to")
 
 
 def test_is_close_to_nan_other_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123).is_close_to(float("nan"), 0.1)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be close to")
+    assert_that(str(exc_info.value)).contains("to be close to")
 
 
 def test_is_close_to_nan_tolerance_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(123).is_close_to(123, float("nan"))
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given tolerance arg must not be NaN")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must not be NaN")
 
 
 def test_is_not_close_to_nan():
@@ -542,51 +436,41 @@ def test_is_not_close_to():
 
 
 def test_is_not_close_to_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(123.01).is_not_close_to(123, 1)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <123.01> to not be close to <123> within tolerance <1>, but was.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <123.01> to not be close to <123> within tolerance <1>, but was."
+    )
 
 
 def test_is_not_close_to_complex_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_close_to(0, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for complex numbers")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for complex numbers")
 
 
 def test_is_not_close_to_bad_value_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_close_to(123, 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not numeric or datetime")
+    assert_that(str(exc_info.value)).is_equal_to("val is not numeric or datetime")
 
 
 def test_is_not_close_to_bad_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_not_close_to("foo", 1)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be numeric")
 
 
 def test_is_not_close_to_bad_tolerance_arg_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_not_close_to(0, "foo")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given tolerance arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be numeric")
 
 
 def test_is_not_close_to_negative_tolerance_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_not_close_to(123, -1)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given tolerance arg must be positive")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be positive")
 
 
 def test_comparable_duck_typing():
@@ -629,22 +513,18 @@ def test_comparable_duck_typing_custom_class():
 
 
 def test_comparable_duck_typing_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("a").is_greater_than("b")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <a> to be greater than <b>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <a> to be greater than <b>, but was not.")
 
 
 def test_comparable_no_ordering_failure():
     class NoOrder:
         pass
 
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(NoOrder()).is_greater_than(NoOrder())
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("ordering is not defined for type <NoOrder>")
+    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <NoOrder>")
 
 
 def test_is_even():
@@ -655,43 +535,33 @@ def test_is_even():
 
 
 def test_is_even_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(1).is_even()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <1> to be even, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <1> to be even, but was not.")
 
 
 def test_is_even_negative_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(-3).is_even()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <-3> to be even, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <-3> to be even, but was not.")
 
 
 def test_is_even_bad_type_float_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(2.0).is_even()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
 
 
 def test_is_even_bad_type_str_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_even()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got str")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got str")
 
 
 def test_is_even_bad_type_bool_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(True).is_even()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got bool")
 
 
 def test_is_odd():
@@ -702,35 +572,27 @@ def test_is_odd():
 
 
 def test_is_odd_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(0).is_odd()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <0> to be odd, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <0> to be odd, but was not.")
 
 
 def test_is_odd_negative_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(-4).is_odd()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <-4> to be odd, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <-4> to be odd, but was not.")
 
 
 def test_is_odd_bad_type_float_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(1.0).is_odd()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
 
 
 def test_is_odd_bad_type_bool_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(False).is_odd()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got bool")
 
 
 def test_is_divisible_by():
@@ -743,43 +605,33 @@ def test_is_divisible_by():
 
 
 def test_is_divisible_by_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(10).is_divisible_by(3)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <10> to be divisible by <3>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <10> to be divisible by <3>, but was not.")
 
 
 def test_is_divisible_by_bad_type_float_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(10.0).is_divisible_by(5)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
 
 
 def test_is_divisible_by_bad_divisor_type_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(10).is_divisible_by(2.5)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given divisor arg must be an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, got float")
 
 
 def test_is_divisible_by_bad_divisor_bool_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(10).is_divisible_by(True)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given divisor arg must be an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, got bool")
 
 
 def test_is_divisible_by_zero_divisor_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(10).is_divisible_by(0)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given divisor arg must not be zero")
+    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must not be zero")
 
 
 def test_chaining():

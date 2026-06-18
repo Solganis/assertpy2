@@ -1,17 +1,15 @@
+import pytest
+
 from assertpy2 import assert_that, fail
 
 
 def test_fail():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         fail()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Fail!")
+    assert_that(str(exc_info.value)).is_equal_to("Fail!")
 
 
 def test_fail_msg():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         fail("some msg")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Fail: some msg!")
+    assert_that(str(exc_info.value)).is_equal_to("Fail: some msg!")

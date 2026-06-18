@@ -1,6 +1,8 @@
 import collections
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 def test_is_length():
@@ -11,27 +13,21 @@ def test_is_length():
 
 
 def test_is_length_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_length(4)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <['a', 'b', 'c']> to be of length <4>, but was <3>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b', 'c']> to be of length <4>, but was <3>.")
 
 
 def test_is_length_bad_arg_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b", "c"]).is_length("bar")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be an int")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be an int")
 
 
 def test_is_length_negative_arg_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(["a", "b", "c"]).is_length(-1)
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("given arg must be a positive int")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a positive int")
 
 
 def test_contains():
@@ -51,31 +47,25 @@ def test_contains():
 
 
 def test_contains_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).contains("x")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <['a', 'b', 'c']> to contain item <x>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b', 'c']> to contain item <x>, but did not.")
 
 
 def test_contains_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).contains("a", "x", "z")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['a', 'b', 'c']> to contain items <'a', 'x', 'z'>, but did not contain <'x', 'z'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['a', 'b', 'c']> to contain items <'a', 'x', 'z'>, but did not contain <'x', 'z'>."
+    )
 
 
 def test_contains_multi_item_single_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).contains("a", "b", "z")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['a', 'b', 'c']> to contain items <'a', 'b', 'z'>, but did not contain <z>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['a', 'b', 'c']> to contain items <'a', 'b', 'z'>, but did not contain <z>."
+    )
 
 
 def test_does_not_contain():
@@ -95,31 +85,25 @@ def test_does_not_contain():
 
 
 def test_does_not_contain_single_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).does_not_contain("a")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <['a', 'b', 'c']> to not contain item <a>, but did.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b', 'c']> to not contain item <a>, but did.")
 
 
 def test_does_not_contain_list_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).does_not_contain("x", "y", "a")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['a', 'b', 'c']> to not contain items <'x', 'y', 'a'>, but did contain <a>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['a', 'b', 'c']> to not contain items <'x', 'y', 'a'>, but did contain <a>."
+    )
 
 
 def test_does_not_contain_list_multi_item_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).does_not_contain("x", "a", "b")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "Expected <['a', 'b', 'c']> to not contain items <'x', 'a', 'b'>, but did contain <'a', 'b'>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['a', 'b', 'c']> to not contain items <'x', 'a', 'b'>, but did contain <'a', 'b'>."
+    )
 
 
 def test_contains_only():
@@ -135,51 +119,41 @@ def test_contains_only():
 
 
 def test_contains_only_no_args_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that([1, 2, 3]).contains_only()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_only_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_only(1, 2)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 2>, but did contain <3>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 2>, but did contain <3>.")
 
 
 def test_contains_only_multi_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_only(1, 4)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 4>, but did contain <2, 3>.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 4>, but did contain <2, 3>.")
 
 
 def test_contains_only_superlist_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_only(1, 2, 3, 4)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 2, 3, 4>, but did not contain <4>.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3]> to contain only <1, 2, 3, 4>, but did not contain <4>."
+    )
 
 
 def test_contains_only_tuple_items_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([("a",)]).contains_only("a")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but did contain <('a',)>")
+    assert_that(str(exc_info.value)).contains("but did contain <('a',)>")
 
 
 def test_contains_only_multi_tuple_items_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([("a",), ("b",)]).contains_only("x")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("but did contain <('a',), ('b',)>")
+    assert_that(str(exc_info.value)).contains("but did contain <('a',), ('b',)>")
 
 
 def test_contains_sequence():
@@ -208,27 +182,21 @@ def test_contains_sequence():
 
 
 def test_contains_sequence_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(4, 5)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <4, 5>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <4, 5>, but did not.")
 
 
 def test_contains_sequence_bad_val_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_sequence(1, 2)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_contains_sequence_no_args_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
 
 
 def test_contains_sequence_string_substrings():
@@ -243,27 +211,21 @@ def test_contains_sequence_string_substrings():
 
 
 def test_contains_sequence_string_substrings_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_sequence("bar", "foo")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain sequence <'bar', 'foo'>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain sequence <'bar', 'foo'>, but did not.")
 
 
 def test_contains_sequence_string_substrings_not_found():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_sequence("foo", "xyz")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <foobar> to contain sequence <'foo', 'xyz'>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain sequence <'foo', 'xyz'>, but did not.")
 
 
 def test_contains_sequence_string_bad_arg_type():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foobar").contains_sequence("foo", 123)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("given args must be strings when val is a string")
+    assert_that(str(exc_info.value)).is_equal_to("given args must be strings when val is a string")
 
 
 def test_contains_duplicates():
@@ -279,19 +241,15 @@ def test_contains_duplicates():
 
 
 def test_contains_duplicates_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_duplicates()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3]> to contain duplicates, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain duplicates, but did not.")
 
 
 def test_contains_duplicates_bad_val_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_duplicates()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_does_not_contain_duplicates():
@@ -309,19 +267,15 @@ def test_does_not_contain_duplicates():
 
 
 def test_does_not_contain_duplicates_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3, 3]).does_not_contain_duplicates()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <[1, 2, 3, 3]> to not contain duplicates, but did.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3, 3]> to not contain duplicates, but did.")
 
 
 def test_does_not_contain_duplicates_bad_val_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_contain_duplicates()
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_is_empty():
@@ -331,11 +285,9 @@ def test_is_empty():
 
 
 def test_is_empty_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b"]).is_empty()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected <['a', 'b']> to be empty, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b']> to be empty, but was not.")
 
 
 def test_is_not_empty():
@@ -346,11 +298,9 @@ def test_is_not_empty():
 
 
 def test_is_not_empty_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that([]).is_not_empty()
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected not empty, but was empty.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected not empty, but was empty.")
 
 
 def test_starts_with():
@@ -364,27 +314,21 @@ def test_starts_with():
 
 
 def test_starts_with_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).starts_with("d")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected ['a', 'b', 'c'] to start with <d>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected ['a', 'b', 'c'] to start with <d>, but did not.")
 
 
 def test_starts_with_bad_val_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that([]).starts_with("a")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("val must not be empty")
 
 
 def test_starts_with_bad_prefix_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b", "c"]).starts_with("a", "b")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("starts_with() takes 2 positional arguments but 3 were given")
+    assert_that(str(exc_info.value)).contains("starts_with() takes 2 positional arguments but 3 were given")
 
 
 def test_ends_with():
@@ -398,27 +342,21 @@ def test_ends_with():
 
 
 def test_ends_with_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).ends_with("d")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to("Expected ['a', 'b', 'c'] to end with <d>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected ['a', 'b', 'c'] to end with <d>, but did not.")
 
 
 def test_ends_with_bad_val_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that([]).ends_with("a")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("val must not be empty")
+    assert_that(str(exc_info.value)).is_equal_to("val must not be empty")
 
 
 def test_ends_with_bad_prefix_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b", "c"]).ends_with("b", "c")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("ends_with() takes 2 positional arguments but 3 were given")
+    assert_that(str(exc_info.value)).contains("ends_with() takes 2 positional arguments but 3 were given")
 
 
 def test_chaining():

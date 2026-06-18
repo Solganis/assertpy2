@@ -1,6 +1,8 @@
 import abc
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 class Person:
@@ -59,11 +61,9 @@ def test_is_type_of_class():
 
 
 def test_is_type_of_class_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(fred.__class__).is_type_of(Person)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be of type <Person>, but was not")
+    assert_that(str(exc_info.value)).contains("to be of type <Person>, but was not")
 
 
 def test_is_instance_of():
@@ -88,11 +88,9 @@ def test_is_instance_of_class():
 
 
 def test_is_instance_of_class_failure():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(fred.__class__).is_instance_of(Person)
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).contains("to be instance of class <Person>, but was not")
+    assert_that(str(exc_info.value)).contains("to be instance of class <Person>, but was not")
 
 
 def test_extract_attribute():

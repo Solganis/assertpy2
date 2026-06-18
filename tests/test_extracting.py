@@ -1,6 +1,8 @@
 import sys
 
-from assertpy2 import assert_that, fail
+import pytest
+
+from assertpy2 import assert_that
 
 
 class Person:
@@ -46,74 +48,58 @@ def test_extracting_dict():
 
 
 def test_extracting_bad_val_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(123).extracting("bar")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
 def test_extracting_bad_val_str_failure():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that("foo").extracting("bar")
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("val must not be string")
+    assert_that(str(exc_info.value)).is_equal_to("val must not be string")
 
 
 def test_extracting_empty_args_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting()
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("one or more name args must be given")
+    assert_that(str(exc_info.value)).is_equal_to("one or more name args must be given")
 
 
 def test_extracting_bad_property_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting("foo")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("item does not have property or zero-arg method <foo>")
+    assert_that(str(exc_info.value)).is_equal_to("item does not have property or zero-arg method <foo>")
 
 
 def test_extracting_too_many_args_method_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting("say_hello")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).is_equal_to("item method <say_hello()> exists, but is not zero-arg method")
+    assert_that(str(exc_info.value)).is_equal_to("item method <say_hello()> exists, but is not zero-arg method")
 
 
 def test_extracting_dict_missing_key_failure():
     people_as_dicts = [{"first_name": p.first_name, "last_name": p.last_name} for p in people]
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(people_as_dicts).extracting("foo")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).matches(r"item keys \[.*\] did not contain key <foo>")
+    assert_that(str(exc_info.value)).matches(r"item keys \[.*\] did not contain key <foo>")
 
 
 def test_described_as_with_extracting():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(people).described_as("extra msg").extracting("first_name").contains("Fred", "Bob")
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "[extra msg] Expected <['Fred', 'John']> to contain items <'Fred', 'Bob'>, but did not contain <Bob>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "[extra msg] Expected <['Fred', 'John']> to contain items <'Fred', 'Bob'>, but did not contain <Bob>."
+    )
 
 
 def test_described_as_with_double_extracting():
-    try:
+    with pytest.raises(AssertionError) as exc_info:
         assert_that(people).described_as("extra msg").extracting("first_name").described_as("other msg").contains(
             "Fred", "Bob"
         )
-        fail("should have raised error")
-    except AssertionError as ex:
-        assert_that(str(ex)).is_equal_to(
-            "[other msg] Expected <['Fred', 'John']> to contain items <'Fred', 'Bob'>, but did not contain <Bob>."
-        )
+    assert_that(str(exc_info.value)).is_equal_to(
+        "[other msg] Expected <['Fred', 'John']> to contain items <'Fred', 'Bob'>, but did not contain <Bob>."
+    )
 
 
 users = [
@@ -151,58 +137,46 @@ def test_extracting_filter_custom_func():
 
 
 def test_extracting_filter_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", filter="foo")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_filter_dict_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", filter={"foo": "bar"})
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_filter_multi_item_dict_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", filter={"age": 36, "active": True, "foo": "bar"})
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_filter_lambda_failure():
-    try:
+    with pytest.raises(KeyError) as exc_info:
         assert_that(users).extracting("user", filter=lambda x: x["foo"] > 0)
-        fail("should have raised error")
-    except KeyError as ex:
-        assert_that(str(ex)).is_equal_to("'foo'")
+    assert_that(str(exc_info.value)).is_equal_to("'foo'")
 
 
 def test_extracting_filter_custom_func_failure():
     def _f(x):
         raise RuntimeError("foobar!")
 
-    try:
+    with pytest.raises(RuntimeError) as exc_info:
         assert_that(users).extracting("user", filter=_f)
-        fail("should have raised error")
-    except RuntimeError as ex:
-        assert_that(str(ex)).is_equal_to("foobar!")
+    assert_that(str(exc_info.value)).is_equal_to("foobar!")
 
 
 def test_extracting_filter_bad_values():
     bad = [{"user": "Fred", "age": 36}, {"user": "Bob", "age": "bad"}, {"user": "Johnny", "age": 13}]
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(bad).extracting("user", filter=lambda x: x["age"] > 20)
-        fail("should have raised error")
-    except TypeError as ex:
-        if sys.version_info[1] <= 5:
-            assert_that(str(ex)).contains("unorderable types")
-        else:
-            assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
+    if sys.version_info[1] <= 5:
+        assert_that(str(exc_info.value)).contains("unorderable types")
+    else:
+        assert_that(str(exc_info.value)).contains("not supported between instances of 'str' and 'int'")
 
 
 def test_extracting_sort():
@@ -236,58 +210,46 @@ def test_extracting_sort_custom_func():
 
 
 def test_extracting_sort_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", sort="foo")
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_sort_list_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", sort=["foo"])
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_sort_multi_item_dict_failure():
-    try:
+    with pytest.raises(ValueError) as exc_info:
         assert_that(users).extracting("user", sort=["active", "age", "foo"])
-        fail("should have raised error")
-    except ValueError as ex:
-        assert_that(str(ex)).ends_with("'] did not contain key <foo>")
+    assert_that(str(exc_info.value)).ends_with("'] did not contain key <foo>")
 
 
 def test_extracting_sort_lambda_failure():
-    try:
+    with pytest.raises(KeyError) as exc_info:
         assert_that(users).extracting("user", sort=lambda x: x["foo"] > 0)
-        fail("should have raised error")
-    except KeyError as ex:
-        assert_that(str(ex)).is_equal_to("'foo'")
+    assert_that(str(exc_info.value)).is_equal_to("'foo'")
 
 
 def test_extracting_sort_custom_func_failure():
     def _f(x):
         raise RuntimeError("foobar!")
 
-    try:
+    with pytest.raises(RuntimeError) as exc_info:
         assert_that(users).extracting("user", sort=_f)
-        fail("should have raised error")
-    except RuntimeError as ex:
-        assert_that(str(ex)).is_equal_to("foobar!")
+    assert_that(str(exc_info.value)).is_equal_to("foobar!")
 
 
 def test_extracting_sort_bad_values():
     bad = [{"user": "Fred", "age": 36}, {"user": "Bob", "age": "bad"}, {"user": "Johnny", "age": 13}]
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that(bad).extracting("user", sort="age")
-        fail("should have raised error")
-    except TypeError as ex:
-        if sys.version_info[1] <= 5:
-            assert_that(str(ex)).contains("unorderable types")
-        else:
-            assert_that(str(ex)).contains("not supported between instances of 'str' and 'int'")
+    if sys.version_info[1] <= 5:
+        assert_that(str(exc_info.value)).contains("unorderable types")
+    else:
+        assert_that(str(exc_info.value)).contains("not supported between instances of 'str' and 'int'")
 
 
 def test_extracting_iterable_of_lists():
@@ -318,24 +280,18 @@ def test_extracting_iterable_of_strings():
 
 
 def test_extracting_iterable_failure_set():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that([{1}]).extracting(0).contains(1, 4, 7)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).is_equal_to("item <set> does not have [] accessor")
+    assert_that(str(exc_info.value)).is_equal_to("item <set> does not have [] accessor")
 
 
 def test_extracting_iterable_failure_out_of_range():
-    try:
+    with pytest.raises(IndexError) as exc_info:
         assert_that([[1], [2], [3]]).extracting(4).is_equal_to(0)
-        fail("should have raised error")
-    except IndexError as ex:
-        assert_that(str(ex)).is_equal_to("list index out of range")
+    assert_that(str(exc_info.value)).is_equal_to("list index out of range")
 
 
 def test_extracting_iterable_failure_index_is_not_int():
-    try:
+    with pytest.raises(TypeError) as exc_info:
         assert_that([[1], [2], [3]]).extracting("1").is_equal_to(0)
-        fail("should have raised error")
-    except TypeError as ex:
-        assert_that(str(ex)).contains("list indices must be integers")
+    assert_that(str(exc_info.value)).contains("list indices must be integers")
