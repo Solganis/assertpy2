@@ -12,12 +12,12 @@ from assertpy2.matchers import (
 
 class TestIgnoreMatcher:
     def test_matches_anything(self):
-        m = match.ignore()
-        assert_that(m.matches(None)).is_true()
-        assert_that(m.matches(42)).is_true()
-        assert_that(m.matches("hello")).is_true()
-        assert_that(m.matches([1, 2, 3])).is_true()
-        assert_that(m.matches({})).is_true()
+        matcher = match.ignore()
+        assert_that(matcher.matches(None)).is_true()
+        assert_that(matcher.matches(42)).is_true()
+        assert_that(matcher.matches("hello")).is_true()
+        assert_that(matcher.matches([1, 2, 3])).is_true()
+        assert_that(matcher.matches({})).is_true()
 
     def test_describe(self):
         assert_that(match.ignore().describe()).is_equal_to("anything (ignored)")
@@ -72,160 +72,160 @@ class TestIsNonEmptyStringMatcher:
 
 class TestEachMatcher:
     def test_all_match(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.matches([1, 2, 3])).is_true()
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.matches([1, 2, 3])).is_true()
 
     def test_some_do_not_match(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.matches([1, -2, 3])).is_false()
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.matches([1, -2, 3])).is_false()
 
     def test_empty_iterable(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.matches([])).is_true()
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.matches([])).is_true()
 
     def test_non_iterable(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.matches(42)).is_false()
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.matches(42)).is_false()
 
     def test_describe(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.describe()).is_equal_to("each item matching a positive value")
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.describe()).is_equal_to("each item matching a positive value")
 
     def test_describe_mismatch_with_failing_item(self):
-        m = match.each_item(match.is_positive())
-        result = m.describe_mismatch([1, -2, 3])
+        matcher = match.each_item(match.is_positive())
+        result = matcher.describe_mismatch([1, -2, 3])
         assert_that(result).contains("index 1")
         assert_that(result).contains("-2")
 
     def test_describe_mismatch_non_iterable(self):
-        m = match.each_item(match.is_positive())
-        result = m.describe_mismatch(42)
+        matcher = match.each_item(match.is_positive())
+        result = matcher.describe_mismatch(42)
         assert_that(result).contains("not iterable")
 
     def test_is_instance(self):
         assert_that(match.each_item(match.is_positive())).is_instance_of(EachMatcher)
 
     def test_composition(self):
-        m = match.each_item(match.between(1, 10) & match.is_instance_of(int))
-        assert_that(m.matches([1, 5, 10])).is_true()
-        assert_that(m.matches([1, 5, 11])).is_false()
+        matcher = match.each_item(match.between(1, 10) & match.is_instance_of(int))
+        assert_that(matcher.matches([1, 5, 10])).is_true()
+        assert_that(matcher.matches([1, 5, 11])).is_false()
 
     def test_describe_mismatch_all_match(self):
-        m = match.each_item(match.is_positive())
-        assert_that(m.describe_mismatch([1, 2, 3])).is_equal_to("was <[1, 2, 3]>")
+        matcher = match.each_item(match.is_positive())
+        assert_that(matcher.describe_mismatch([1, 2, 3])).is_equal_to("was <[1, 2, 3]>")
 
 
 class TestStructureMatcher:
     def test_basic_match(self):
-        m = match.structure({"name": match.is_non_empty_string(), "age": match.is_positive()})
-        assert_that(m.matches({"name": "Alice", "age": 30})).is_true()
+        matcher = match.structure({"name": match.is_non_empty_string(), "age": match.is_positive()})
+        assert_that(matcher.matches({"name": "Alice", "age": 30})).is_true()
 
     def test_missing_key(self):
-        m = match.structure({"name": match.is_non_empty_string(), "age": match.is_positive()})
-        assert_that(m.matches({"name": "Alice"})).is_false()
+        matcher = match.structure({"name": match.is_non_empty_string(), "age": match.is_positive()})
+        assert_that(matcher.matches({"name": "Alice"})).is_false()
 
     def test_value_mismatch(self):
-        m = match.structure({"age": match.is_positive()})
-        assert_that(m.matches({"age": -1})).is_false()
+        matcher = match.structure({"age": match.is_positive()})
+        assert_that(matcher.matches({"age": -1})).is_false()
 
     def test_extra_keys_allowed(self):
-        m = match.structure({"name": match.is_non_empty_string()})
-        assert_that(m.matches({"name": "Alice", "extra": "field"})).is_true()
+        matcher = match.structure({"name": match.is_non_empty_string()})
+        assert_that(matcher.matches({"name": "Alice", "extra": "field"})).is_true()
 
     def test_raw_value_equality(self):
-        m = match.structure({"status": "active", "count": 5})
-        assert_that(m.matches({"status": "active", "count": 5})).is_true()
-        assert_that(m.matches({"status": "inactive", "count": 5})).is_false()
+        matcher = match.structure({"status": "active", "count": 5})
+        assert_that(matcher.matches({"status": "active", "count": 5})).is_true()
+        assert_that(matcher.matches({"status": "inactive", "count": 5})).is_false()
 
     def test_nested_dict(self):
-        m = match.structure({"user": {"name": match.is_non_empty_string(), "role": "admin"}})
-        assert_that(m.matches({"user": {"name": "Alice", "role": "admin"}})).is_true()
-        assert_that(m.matches({"user": {"name": "Alice", "role": "user"}})).is_false()
+        matcher = match.structure({"user": {"name": match.is_non_empty_string(), "role": "admin"}})
+        assert_that(matcher.matches({"user": {"name": "Alice", "role": "admin"}})).is_true()
+        assert_that(matcher.matches({"user": {"name": "Alice", "role": "user"}})).is_false()
 
     def test_nested_not_dict(self):
-        m = match.structure({"user": {"name": match.is_non_empty_string()}})
-        assert_that(m.matches({"user": "not a dict"})).is_false()
+        matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
+        assert_that(matcher.matches({"user": "not a dict"})).is_false()
 
     def test_non_dict_value(self):
-        m = match.structure({"a": 1})
-        assert_that(m.matches("not a dict")).is_false()
-        assert_that(m.matches(42)).is_false()
-        assert_that(m.matches(None)).is_false()
+        matcher = match.structure({"a": 1})
+        assert_that(matcher.matches("not a dict")).is_false()
+        assert_that(matcher.matches(42)).is_false()
+        assert_that(matcher.matches(None)).is_false()
 
     def test_describe(self):
-        m = match.structure({"name": match.is_non_empty_string(), "age": 30})
-        desc = m.describe()
+        matcher = match.structure({"name": match.is_non_empty_string(), "age": 30})
+        desc = matcher.describe()
         assert_that(desc).contains("name: a non-empty string")
         assert_that(desc).contains("age: <30>")
 
     def test_describe_nested(self):
-        m = match.structure({"user": {"name": match.is_non_empty_string()}})
-        desc = m.describe()
+        matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
+        desc = matcher.describe()
         assert_that(desc).contains("user: {name: a non-empty string}")
 
     def test_describe_mismatch_missing_key(self):
-        m = match.structure({"name": match.is_non_empty_string()})
-        result = m.describe_mismatch({"age": 30})
+        matcher = match.structure({"name": match.is_non_empty_string()})
+        result = matcher.describe_mismatch({"age": 30})
         assert_that(result).contains("missing key <name>")
 
     def test_describe_mismatch_value_fail(self):
-        m = match.structure({"age": match.is_positive()})
-        result = m.describe_mismatch({"age": -1})
+        matcher = match.structure({"age": match.is_positive()})
+        result = matcher.describe_mismatch({"age": -1})
         assert_that(result).contains("at <age>")
         assert_that(result).contains("a positive value")
 
     def test_describe_mismatch_non_dict(self):
-        m = match.structure({"a": 1})
-        result = m.describe_mismatch("not a dict")
+        matcher = match.structure({"a": 1})
+        result = matcher.describe_mismatch("not a dict")
         assert_that(result).contains("was not a dict")
 
     def test_describe_mismatch_nested_path(self):
-        m = match.structure({"user": {"name": match.is_non_empty_string()}})
-        result = m.describe_mismatch({"user": {"name": ""}})
+        matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
+        result = matcher.describe_mismatch({"user": {"name": ""}})
         assert_that(result).contains("user.name")
 
     def test_is_instance(self):
         assert_that(match.structure({"a": 1})).is_instance_of(StructureMatcher)
 
     def test_with_ignore(self):
-        m = match.structure({"id": match.ignore(), "name": match.is_non_empty_string()})
-        assert_that(m.matches({"id": 12345, "name": "Alice"})).is_true()
-        assert_that(m.matches({"id": None, "name": "Bob"})).is_true()
+        matcher = match.structure({"id": match.ignore(), "name": match.is_non_empty_string()})
+        assert_that(matcher.matches({"id": 12345, "name": "Alice"})).is_true()
+        assert_that(matcher.matches({"id": None, "name": "Bob"})).is_true()
 
     def test_with_uuid(self):
-        m = match.structure({"id": match.is_uuid()})
-        assert_that(m.matches({"id": "550e8400-e29b-41d4-a716-446655440000"})).is_true()
-        assert_that(m.matches({"id": "not-uuid"})).is_false()
+        matcher = match.structure({"id": match.is_uuid()})
+        assert_that(matcher.matches({"id": "550e8400-e29b-41d4-a716-446655440000"})).is_true()
+        assert_that(matcher.matches({"id": "not-uuid"})).is_false()
 
     def test_with_each_item(self):
-        m = match.structure({"scores": match.each_item(match.between(0, 100))})
-        assert_that(m.matches({"scores": [85, 90, 78]})).is_true()
-        assert_that(m.matches({"scores": [85, 101, 78]})).is_false()
+        matcher = match.structure({"scores": match.each_item(match.between(0, 100))})
+        assert_that(matcher.matches({"scores": [85, 90, 78]})).is_true()
+        assert_that(matcher.matches({"scores": [85, 101, 78]})).is_false()
 
     def test_deeply_nested(self):
-        m = match.structure({"a": {"b": {"c": match.equal_to(42)}}})
-        assert_that(m.matches({"a": {"b": {"c": 42}}})).is_true()
-        assert_that(m.matches({"a": {"b": {"c": 99}}})).is_false()
+        matcher = match.structure({"a": {"b": {"c": match.equal_to(42)}}})
+        assert_that(matcher.matches({"a": {"b": {"c": 42}}})).is_true()
+        assert_that(matcher.matches({"a": {"b": {"c": 99}}})).is_false()
 
     def test_describe_mismatch_raw_value(self):
-        m = match.structure({"status": "active"})
-        result = m.describe_mismatch({"status": "inactive"})
+        matcher = match.structure({"status": "active"})
+        result = matcher.describe_mismatch({"status": "inactive"})
         assert_that(result).contains("at <status>")
         assert_that(result).contains("expected <active>")
         assert_that(result).contains("was <inactive>")
 
     def test_describe_mismatch_all_match(self):
-        m = match.structure({"a": 1})
-        assert_that(m.describe_mismatch({"a": 1})).is_equal_to("was <{'a': 1}>")
+        matcher = match.structure({"a": 1})
+        assert_that(matcher.describe_mismatch({"a": 1})).is_equal_to("was <{'a': 1}>")
 
     def test_circular_reference_detected(self):
-        d = {}
-        d["self"] = d
+        circular = {}
+        circular["self"] = circular
         spec = {}
         spec["self"] = spec
-        m = match.structure(spec)
-        assert_that(m.matches(d)).is_false()
-        assert_that(m.describe_mismatch(d)).contains("circular reference")
+        matcher = match.structure(spec)
+        assert_that(matcher.matches(circular)).is_false()
+        assert_that(matcher.describe_mismatch(circular)).contains("circular reference")
 
     def test_deep_nesting(self):
         value = {"a": 1}
@@ -239,8 +239,8 @@ class TestStructureMatcher:
             current_s["nested"] = inner_s
             current_v = inner_v
             current_s = inner_s
-        m = match.structure(spec)
-        assert_that(m.matches(value)).is_true()
+        matcher = match.structure(spec)
+        assert_that(matcher.matches(value)).is_true()
 
 
 class TestMatchesStructureMethod:

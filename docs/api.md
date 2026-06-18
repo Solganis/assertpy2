@@ -862,7 +862,7 @@ assert_that(fred.name).is_equal_to('Fred Smith')
 assert_that(fred.say_hello()).is_equal_to('Hello, Fred!')
 ```
 
-So, `assertpy2` takes advantage of the awesome dyanmism in the Python runtime to provide dynamic assertions in the form of `has_<name>()` where `<name>` is the name of any attribute, property, or zero-argument method on the given object.
+So, `assertpy2` takes advantage of the awesome dynamism in the Python runtime to provide dynamic assertions in the form of `has_<name>()` where `<name>` is the name of any attribute, property, or zero-argument method on the given object.
 
 Using dynamic assertions, we can rewrite the above assertions in a more compact and readable way like this:
 
@@ -1714,7 +1714,7 @@ assert_that(someobj).snapshot()
 
 Snapshot artifacts (typically found in the `__snapshots` folder), should be committed to source control alongside any code changes.
 
-On the first run (when the snapshot file doesn't yet exist), the snapshot is created, stored to disk, and the test is passed.  On all subsequent runs, the given data is compared to the on-disk snapshot, and the test fails if they don't match.  Failure means that some change occured, so either a bug or a known implementation changed.
+On the first run (when the snapshot file doesn't yet exist), the snapshot is created, stored to disk, and the test is passed.  On all subsequent runs, the given data is compared to the on-disk snapshot, and the test fails if they don't match.  Failure means that some change occurred, so either a bug or a known implementation changed.
 
 ### Updating Snapshots
 

@@ -3,7 +3,6 @@ from assertpy2 import assert_that, fail
 
 def test_is_zero():
     assert_that(0).is_zero()
-    # assert_that(0L).is_zero()
     assert_that(0.0).is_zero()
     assert_that(0 + 0j).is_zero()
 
@@ -26,7 +25,6 @@ def test_is_zero_bad_type_failure():
 
 def test_is_not_zero():
     assert_that(1).is_not_zero()
-    # assert_that(1L).is_not_zero()
     assert_that(0.001).is_not_zero()
     assert_that(0 + 1j).is_not_zero()
 

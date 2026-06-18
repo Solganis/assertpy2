@@ -4,7 +4,7 @@ from assertpy2 import assert_that, fail
 
 
 def test_custom_dict():
-    d = CustomDict(
+    headers = CustomDict(
         {
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
@@ -13,21 +13,21 @@ def test_custom_dict():
         }
     )
 
-    assert_that(d).is_not_none()
+    assert_that(headers).is_not_none()
 
-    assert_that(d.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
-    assert_that(d).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(headers.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(headers).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
 
-    assert_that(d.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
-    assert_that(d).contains_value("application/json")
+    assert_that(headers.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
+    assert_that(headers).contains_value("application/json")
 
-    assert_that(d["Accept"]).is_equal_to("application/json")
-    assert_that(d).contains_entry({"Accept": "application/json"})
+    assert_that(headers["Accept"]).is_equal_to("application/json")
+    assert_that(headers).contains_entry({"Accept": "application/json"})
 
 
 def test_requests():
     requests = pytest.importorskip("requests")
-    d = requests.structures.CaseInsensitiveDict(
+    headers = requests.structures.CaseInsensitiveDict(
         {
             "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
@@ -36,16 +36,16 @@ def test_requests():
         }
     )
 
-    assert_that(d).is_not_none()
+    assert_that(headers).is_not_none()
 
-    assert_that(d.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
-    assert_that(d).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(headers.keys()).contains("Accept-Encoding", "Connection", "Accept", "User-Agent")
+    assert_that(headers).contains_key("Accept-Encoding", "Connection", "Accept", "User-Agent")
 
-    assert_that(d.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
-    assert_that(d).contains_value("application/json")
+    assert_that(headers.values()).contains("gzip, deflate", "keep-alive", "application/json", "python-requests/2.9.1")
+    assert_that(headers).contains_value("application/json")
 
-    assert_that(d["Accept"]).is_equal_to("application/json")
-    assert_that(d).contains_entry({"Accept": "application/json"})
+    assert_that(headers["Accept"]).is_equal_to("application/json")
+    assert_that(headers).contains_entry({"Accept": "application/json"})
 
 
 class CustomDict:
@@ -78,38 +78,38 @@ class CustomDict:
 
 
 def test_check_dict_like():
-    d = CustomDict({"a": 1})
-    ab = assert_that(None)
-    ab._check_dict_like(d)
-    ab._check_dict_like(d, True, True, True)
-    ab._check_dict_like(d, True, True, False)
-    ab._check_dict_like(d, True, False, True)
-    ab._check_dict_like(d, False, True, True)
-    ab._check_dict_like(d, True, False, False)
-    ab._check_dict_like(d, False, False, True)
-    ab._check_dict_like(d, False, True, False)
-    ab._check_dict_like(d, False, False, False)
+    custom_dict = CustomDict({"a": 1})
+    builder = assert_that(None)
+    builder._check_dict_like(custom_dict)
+    builder._check_dict_like(custom_dict, True, True, True)
+    builder._check_dict_like(custom_dict, True, True, False)
+    builder._check_dict_like(custom_dict, True, False, True)
+    builder._check_dict_like(custom_dict, False, True, True)
+    builder._check_dict_like(custom_dict, True, False, False)
+    builder._check_dict_like(custom_dict, False, False, True)
+    builder._check_dict_like(custom_dict, False, True, False)
+    builder._check_dict_like(custom_dict, False, False, False)
 
-    ab._check_dict_like(CustomDictNoKeys(), check_keys=False, check_values=False, check_getitem=False)
-    ab._check_dict_like(CustomDictNoKeysCallable(), check_keys=False, check_values=False, check_getitem=False)
-    ab._check_dict_like(CustomDictNoValues(), check_values=False, check_getitem=False)
-    ab._check_dict_like(CustomDictNoValuesCallable(), check_values=False, check_getitem=False)
-    ab._check_dict_like(CustomDictNoGetitem(), check_getitem=False)
+    builder._check_dict_like(CustomDictNoKeys(), check_keys=False, check_values=False, check_getitem=False)
+    builder._check_dict_like(CustomDictNoKeysCallable(), check_keys=False, check_values=False, check_getitem=False)
+    builder._check_dict_like(CustomDictNoValues(), check_values=False, check_getitem=False)
+    builder._check_dict_like(CustomDictNoValuesCallable(), check_values=False, check_getitem=False)
+    builder._check_dict_like(CustomDictNoGetitem(), check_getitem=False)
 
 
 def test_check_dict_like_bool():
-    ab = assert_that(None)
-    assert_that(ab._check_dict_like(CustomDictNoKeys(), return_as_bool=True)).is_false()
-    assert_that(ab._check_dict_like(CustomDictNoKeysCallable(), return_as_bool=True)).is_false()
-    assert_that(ab._check_dict_like(CustomDictNoValues(), return_as_bool=True)).is_false()
-    assert_that(ab._check_dict_like(CustomDictNoValuesCallable(), return_as_bool=True)).is_false()
-    assert_that(ab._check_dict_like(CustomDictNoGetitem(), return_as_bool=True)).is_false()
+    builder = assert_that(None)
+    assert_that(builder._check_dict_like(CustomDictNoKeys(), return_as_bool=True)).is_false()
+    assert_that(builder._check_dict_like(CustomDictNoKeysCallable(), return_as_bool=True)).is_false()
+    assert_that(builder._check_dict_like(CustomDictNoValues(), return_as_bool=True)).is_false()
+    assert_that(builder._check_dict_like(CustomDictNoValuesCallable(), return_as_bool=True)).is_false()
+    assert_that(builder._check_dict_like(CustomDictNoGetitem(), return_as_bool=True)).is_false()
 
 
 def test_check_dict_like_no_keys():
     try:
-        ab = assert_that(None)
-        ab._check_dict_like(CustomDictNoKeys())
+        builder = assert_that(None)
+        builder._check_dict_like(CustomDictNoKeys())
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("is not dict-like: missing keys()")
@@ -117,8 +117,8 @@ def test_check_dict_like_no_keys():
 
 def test_check_dict_like_no_keys_callable():
     try:
-        ab = assert_that(None)
-        ab._check_dict_like(CustomDictNoKeysCallable())
+        builder = assert_that(None)
+        builder._check_dict_like(CustomDictNoKeysCallable())
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("is not dict-like: missing keys()")
@@ -126,8 +126,8 @@ def test_check_dict_like_no_keys_callable():
 
 def test_check_dict_like_no_values():
     try:
-        ab = assert_that(None)
-        ab._check_dict_like(CustomDictNoValues())
+        builder = assert_that(None)
+        builder._check_dict_like(CustomDictNoValues())
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("is not dict-like: missing values()")
@@ -135,8 +135,8 @@ def test_check_dict_like_no_values():
 
 def test_check_dict_like_no_values_callable():
     try:
-        ab = assert_that(None)
-        ab._check_dict_like(CustomDictNoValuesCallable())
+        builder = assert_that(None)
+        builder._check_dict_like(CustomDictNoValuesCallable())
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("is not dict-like: missing values()")
@@ -144,8 +144,8 @@ def test_check_dict_like_no_values_callable():
 
 def test_check_dict_like_no_getitem():
     try:
-        ab = assert_that(None)
-        ab._check_dict_like(CustomDictNoGetitem())
+        builder = assert_that(None)
+        builder._check_dict_like(CustomDictNoGetitem())
         fail("should have raised error")
     except TypeError as e:
         assert_that(str(e)).contains("is not dict-like: missing [] accessor")

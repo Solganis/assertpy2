@@ -150,9 +150,9 @@ class TestOrderingMatchersIncompatibleTypes:
         assert_that(match.close_to(10.0, 0.5).matches(None)).is_false()
 
     def test_composition_with_type_check(self):
-        m = match.is_instance_of(int) & match.greater_than(5)
-        assert_that(m.matches("hello")).is_false()
-        assert_that(m.matches(10)).is_true()
+        matcher = match.is_instance_of(int) & match.greater_than(5)
+        assert_that(matcher.matches("hello")).is_false()
+        assert_that(matcher.matches(10)).is_true()
 
 
 class TestIsNoneMatcher:
@@ -324,114 +324,114 @@ class TestEndsWithMatcher:
 
 class TestAllOfMatcher:
     def test_matches(self):
-        m = match.greater_than(0) & match.less_than(10)
-        assert_that(m.matches(5)).is_true()
+        matcher = match.greater_than(0) & match.less_than(10)
+        assert_that(matcher.matches(5)).is_true()
 
     def test_does_not_match_first(self):
-        m = match.greater_than(0) & match.less_than(10)
-        assert_that(m.matches(-1)).is_false()
+        matcher = match.greater_than(0) & match.less_than(10)
+        assert_that(matcher.matches(-1)).is_false()
 
     def test_does_not_match_second(self):
-        m = match.greater_than(0) & match.less_than(10)
-        assert_that(m.matches(15)).is_false()
+        matcher = match.greater_than(0) & match.less_than(10)
+        assert_that(matcher.matches(15)).is_false()
 
     def test_describe(self):
-        m = match.greater_than(0) & match.less_than(10)
-        assert_that(m.describe()).contains("and")
+        matcher = match.greater_than(0) & match.less_than(10)
+        assert_that(matcher.describe()).contains("and")
 
     def test_describe_mismatch(self):
-        m = match.greater_than(0) & match.less_than(10)
-        result = m.describe_mismatch(15)
+        matcher = match.greater_than(0) & match.less_than(10)
+        result = matcher.describe_mismatch(15)
         assert_that(result).contains("15")
         assert_that(result).contains("did not satisfy")
 
     def test_triple_chain(self):
-        m = match.greater_than(0) & match.less_than(10) & match.is_instance_of(int)
-        assert_that(m.matches(5)).is_true()
-        assert_that(m.matches(5.5)).is_false()
+        matcher = match.greater_than(0) & match.less_than(10) & match.is_instance_of(int)
+        assert_that(matcher.matches(5)).is_true()
+        assert_that(matcher.matches(5.5)).is_false()
 
     def test_all_of_factory(self):
-        m = match.all_of(match.greater_than(0), match.less_than(10))
-        assert_that(m.matches(5)).is_true()
-        assert_that(m.matches(15)).is_false()
+        matcher = match.all_of(match.greater_than(0), match.less_than(10))
+        assert_that(matcher.matches(5)).is_true()
+        assert_that(matcher.matches(15)).is_false()
 
 
 class TestAnyOfMatcher:
     def test_matches_first(self):
-        m = match.equal_to(1) | match.equal_to(2)
-        assert_that(m.matches(1)).is_true()
+        matcher = match.equal_to(1) | match.equal_to(2)
+        assert_that(matcher.matches(1)).is_true()
 
     def test_matches_second(self):
-        m = match.equal_to(1) | match.equal_to(2)
-        assert_that(m.matches(2)).is_true()
+        matcher = match.equal_to(1) | match.equal_to(2)
+        assert_that(matcher.matches(2)).is_true()
 
     def test_does_not_match(self):
-        m = match.equal_to(1) | match.equal_to(2)
-        assert_that(m.matches(3)).is_false()
+        matcher = match.equal_to(1) | match.equal_to(2)
+        assert_that(matcher.matches(3)).is_false()
 
     def test_describe(self):
-        m = match.equal_to(1) | match.equal_to(2)
-        assert_that(m.describe()).contains("or")
+        matcher = match.equal_to(1) | match.equal_to(2)
+        assert_that(matcher.describe()).contains("or")
 
     def test_describe_mismatch(self):
-        m = match.equal_to(1) | match.equal_to(2)
-        result = m.describe_mismatch(3)
+        matcher = match.equal_to(1) | match.equal_to(2)
+        result = matcher.describe_mismatch(3)
         assert_that(result).contains("3")
         assert_that(result).contains("satisfied none of")
 
     def test_triple_chain(self):
-        m = match.equal_to(1) | match.equal_to(2) | match.equal_to(3)
-        assert_that(m.matches(3)).is_true()
-        assert_that(m.matches(4)).is_false()
+        matcher = match.equal_to(1) | match.equal_to(2) | match.equal_to(3)
+        assert_that(matcher.matches(3)).is_true()
+        assert_that(matcher.matches(4)).is_false()
 
     def test_any_of_factory(self):
-        m = match.any_of(match.equal_to(1), match.equal_to(2))
-        assert_that(m.matches(1)).is_true()
-        assert_that(m.matches(3)).is_false()
+        matcher = match.any_of(match.equal_to(1), match.equal_to(2))
+        assert_that(matcher.matches(1)).is_true()
+        assert_that(matcher.matches(3)).is_false()
 
 
 class TestNotMatcher:
     def test_matches(self):
-        m = ~match.equal_to(1)
-        assert_that(m.matches(2)).is_true()
+        matcher = ~match.equal_to(1)
+        assert_that(matcher.matches(2)).is_true()
 
     def test_does_not_match(self):
-        m = ~match.equal_to(1)
-        assert_that(m.matches(1)).is_false()
+        matcher = ~match.equal_to(1)
+        assert_that(matcher.matches(1)).is_false()
 
     def test_describe(self):
-        m = ~match.equal_to(1)
-        assert_that(m.describe()).starts_with("not ")
+        matcher = ~match.equal_to(1)
+        assert_that(matcher.describe()).starts_with("not ")
 
     def test_describe_mismatch(self):
-        m = ~match.equal_to(1)
-        result = m.describe_mismatch(1)
+        matcher = ~match.equal_to(1)
+        result = matcher.describe_mismatch(1)
         assert_that(result).contains("unexpectedly matched")
 
     def test_not_factory(self):
-        m = match.not_(match.equal_to(1))
-        assert_that(m.matches(2)).is_true()
-        assert_that(m.matches(1)).is_false()
+        matcher = match.not_(match.equal_to(1))
+        assert_that(matcher.matches(2)).is_true()
+        assert_that(matcher.matches(1)).is_false()
 
 
 class TestComposedMatchers:
     def test_and_or(self):
-        m = (match.greater_than(0) & match.less_than(10)) | match.equal_to(-1)
-        assert_that(m.matches(5)).is_true()
-        assert_that(m.matches(-1)).is_true()
-        assert_that(m.matches(15)).is_false()
+        matcher = (match.greater_than(0) & match.less_than(10)) | match.equal_to(-1)
+        assert_that(matcher.matches(5)).is_true()
+        assert_that(matcher.matches(-1)).is_true()
+        assert_that(matcher.matches(15)).is_false()
 
     def test_not_and(self):
-        m = ~(match.greater_than(0) & match.less_than(10))
-        assert_that(m.matches(15)).is_true()
-        assert_that(m.matches(-1)).is_true()
-        assert_that(m.matches(5)).is_false()
+        matcher = ~(match.greater_than(0) & match.less_than(10))
+        assert_that(matcher.matches(15)).is_true()
+        assert_that(matcher.matches(-1)).is_true()
+        assert_that(matcher.matches(5)).is_false()
 
     def test_or_and(self):
-        m = (match.equal_to(1) | match.equal_to(2)) & match.is_instance_of(int)
-        assert_that(m.matches(1)).is_true()
-        assert_that(m.matches(2)).is_true()
-        assert_that(m.matches(3)).is_false()
+        matcher = (match.equal_to(1) | match.equal_to(2)) & match.is_instance_of(int)
+        assert_that(matcher.matches(1)).is_true()
+        assert_that(matcher.matches(2)).is_true()
+        assert_that(matcher.matches(3)).is_false()
 
 
 class TestSatisfies:
@@ -611,13 +611,13 @@ class TestMatcherEqProtocol:
     def test_hash_unique_instances(self):
         m1 = match.is_positive()
         m2 = match.is_positive()
-        s = {m1, m2}
-        assert_that(s).is_length(2)
+        matcher_set = {m1, m2}
+        assert_that(matcher_set).is_length(2)
 
     def test_hash_same_instance(self):
-        m = match.is_positive()
-        s = {m, m}
-        assert_that(s).is_length(1)
+        matcher = match.is_positive()
+        matcher_set = {matcher, matcher}
+        assert_that(matcher_set).is_length(1)
 
     def test_repr_unchanged(self):
         assert_that(repr(match.is_positive())).is_equal_to("a positive value")

@@ -1,7 +1,5 @@
 from assertpy2 import assert_that, fail
 
-unicode = str
-
 
 def test_is_length():
     assert_that("foo").is_length(3)
@@ -578,9 +576,8 @@ def test_is_upper_empty_value_failure():
 
 
 def test_is_unicode():
-    assert_that(unicode("unicorn")).is_unicode()
-    assert_that(unicode("unicorn 123")).is_unicode()
-    assert_that(unicode("unicorn")).is_unicode()
+    assert_that("unicorn").is_unicode()
+    assert_that("unicorn 123").is_unicode()
 
 
 def test_is_unicode_failure():

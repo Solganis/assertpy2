@@ -50,4 +50,4 @@ class TestAttrsToComparableDict:
     def test_attrs(self):
         product = Product(sku="A", name="W", price=10.0)
         result = HelpersMixin._to_comparable_dict(product)
-        assert result == {"sku": "A", "name": "W", "price": 10.0}
+        assert_that(result).is_equal_to({"sku": "A", "name": "W", "price": 10.0})
