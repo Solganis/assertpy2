@@ -16,6 +16,10 @@ __tracebackhide__ = True
 _SENTINEL = object()
 
 
+def _is_model_dump_object(obj: object) -> bool:
+    return hasattr(obj, "model_dump") and callable(obj.model_dump)
+
+
 class BaseMixin(_MixinBase):
     """Base mixin."""
 
@@ -43,16 +47,17 @@ class BaseMixin(_MixinBase):
     def is_equal_to(self, other, **kwargs) -> Self:
         """Asserts that val is equal to other.
 
-        Checks actual is equal to expected using the ``==`` operator. When val is *dict-like*,
-        optionally ignore or include keys when checking equality.
+        Checks actual is equal to expected using the ``==`` operator. When val is *dict-like*
+        or has introspectable fields (dataclass, namedtuple, attrs, Pydantic model),
+        optionally ignore or include keys/fields when checking equality.
 
         Args:
             other: the expected value
             **kwargs: see below
 
         Keyword Args:
-            ignore: the dict key (or list of keys) to ignore
-            include: the dict key (of list of keys) to include
+            ignore: the key/field (or list of keys/fields) to ignore
+            include: the key/field (or list of keys/fields) to include
 
         Examples:
             Usage::
@@ -85,6 +90,21 @@ class BaseMixin(_MixinBase):
                 # include multiple keys
                 assert_that({'a': 1, 'b': 2, 'c': 3}).is_equal_to({'a': 1, 'b': 2}, include=['a', 'b'])
 
+            Works with dataclasses, namedtuples, attrs, and Pydantic models::
+
+                @dataclass
+                class User:
+                    id: int
+                    name: str
+
+                assert_that(User(id=1, name="Alice")).is_equal_to(User(id=99, name="Alice"), ignore="id")
+
+            Compares lists of objects pairwise::
+
+                actual = [User(id=1, name="Alice"), User(id=2, name="Bob")]
+                expected = [User(id=99, name="Alice"), User(id=99, name="Bob")]
+                assert_that(actual).is_equal_to(expected, ignore="id")
+
             Failure produces a nice error message::
 
                 assert_that(1).is_equal_to(2)  # fails
@@ -104,11 +124,26 @@ class BaseMixin(_MixinBase):
         See Also:
             :meth:`~assertpy.string.StringMixin.is_equal_to_ignoring_case` - for case-insensitive string equality
         """
+        ignore = kwargs.get("ignore")
+        include = kwargs.get("include")
+
         if self._check_dict_like(self.val, check_values=False, return_as_bool=True) and self._check_dict_like(
             other, check_values=False, return_as_bool=True
         ):
-            if self._dict_not_equal(self.val, other, ignore=kwargs.get("ignore"), include=kwargs.get("include")):
-                self._dict_err(self.val, other, ignore=kwargs.get("ignore"), include=kwargs.get("include"))
+            if self._dict_not_equal(self.val, other, ignore=ignore, include=include):
+                self._dict_err(self.val, other, ignore=ignore, include=include)
+        elif ignore or include:
+            val_is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, "_fields")
+            other_is_namedtuple = isinstance(other, tuple) and hasattr(other, "_fields")
+            if (
+                isinstance(self.val, (list, tuple))
+                and isinstance(other, (list, tuple))
+                and not val_is_namedtuple
+                and not other_is_namedtuple
+            ):
+                self._seq_equal_with_filter(self.val, other, ignore=ignore, include=include)
+            else:
+                self._obj_equal_with_filter(self.val, other, ignore=ignore, include=include)
         else:
             if self.val != other:
                 diff = self._build_equality_diff(self.val, other)
@@ -120,25 +155,77 @@ class BaseMixin(_MixinBase):
                 )
         return self
 
+    def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None):
+        """Compare two objects by converting to dicts and applying ignore/include filters."""
+        actual_dict = self._to_comparable_dict(actual)
+        expected_dict = self._to_comparable_dict(expected)
+        if actual_dict is None or expected_dict is None:
+            raise TypeError(
+                "ignore/include requires dict-like objects or objects with introspectable fields"
+                " (dataclass, namedtuple, attrs, Pydantic model, or object with __dict__)"
+            )
+        if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include):
+            self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include)
+
+    def _seq_equal_with_filter(self, actual, expected, *, ignore=None, include=None):
+        """Compare two sequences pairwise, converting elements to dicts for ignore/include."""
+        if len(actual) != len(expected):
+            return self.error(
+                f"Expected collection length <{len(expected)}>, but was <{len(actual)}>.",
+                actual=actual,
+                expected=expected,
+            )
+        for i, (a, b) in enumerate(zip(actual, expected, strict=True)):
+            a_dict = self._to_comparable_dict(a)
+            b_dict = self._to_comparable_dict(b)
+            if a_dict is not None and b_dict is not None:
+                if self._dict_not_equal(a_dict, b_dict, ignore=ignore, include=include):
+                    self._dict_err(a_dict, b_dict, ignore=ignore, include=include)
+            elif a != b:
+                return self.error(
+                    f"Expected item at index <{i}> to be equal to <{b}>, but was <{a}>.",
+                    actual=a,
+                    expected=b,
+                )
+
     @staticmethod
-    def _build_equality_diff(actual: object, expected: object) -> DiffResult:
+    def _build_equality_diff(
+        actual: object, expected: object, *, _prefix: str = "", _seen: set[int] | None = None
+    ) -> DiffResult:
+        if _seen is None:
+            _seen = set()
+        pair_key = (id(actual), id(expected))
+        if pair_key[0] in _seen or pair_key[1] in _seen:
+            return DiffResult(
+                kind="scalar",
+                entries=[DiffEntry(path=_prefix or ".", actual="<circular ref>", expected="<circular ref>")],
+            )
+        _seen = _seen | {pair_key[0], pair_key[1]}
+
+        def _field_entries(a_val: object, e_val: object, path: str) -> list[DiffEntry]:
+            sub = BaseMixin._sub_diff_entries(a_val, e_val, path, _seen=_seen)
+            if sub is not None:
+                return sub
+            return [DiffEntry(path=path, actual=a_val, expected=e_val)]
+
         if (
             hasattr(actual, "_fields")
             and isinstance(actual, tuple)
             and hasattr(expected, "_fields")
             and isinstance(expected, tuple)
         ):
-            entries = []
+            entries: list[DiffEntry] = []
             for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
                 a_val = getattr(actual, field)
                 e_val = getattr(expected, field, _SENTINEL)
+                path = f"{_prefix}.{field}"
                 if e_val is _SENTINEL:
-                    entries.append(DiffEntry(path=f".{field}", actual=a_val, expected=None))
+                    entries.append(DiffEntry(path=path, actual=a_val, expected=None))
                 elif a_val != e_val:
-                    entries.append(DiffEntry(path=f".{field}", actual=a_val, expected=e_val))
+                    entries.extend(_field_entries(a_val, e_val, path))
             for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
                 if not hasattr(actual, field):
-                    entries.append(DiffEntry(path=f".{field}", actual=None, expected=getattr(expected, field)))
+                    entries.append(DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field)))
             return DiffResult(kind="namedtuple", entries=entries)
         if (
             dataclasses.is_dataclass(actual)
@@ -150,30 +237,49 @@ class BaseMixin(_MixinBase):
             actual_names = {f.name for f in dataclasses.fields(actual)}
             expected_names = {f.name for f in dataclasses.fields(expected)}
             for field in sorted(actual_names | expected_names):
+                path = f"{_prefix}.{field}"
                 if field not in expected_names:
-                    entries.append(DiffEntry(path=f".{field}", actual=getattr(actual, field), expected=None))
+                    entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None))
                 elif field not in actual_names:
-                    entries.append(DiffEntry(path=f".{field}", actual=None, expected=getattr(expected, field)))
+                    entries.append(DiffEntry(path=path, actual=None, expected=getattr(expected, field)))
                 else:
                     a_val = getattr(actual, field)
                     e_val = getattr(expected, field)
                     if a_val != e_val:
-                        entries.append(DiffEntry(path=f".{field}", actual=a_val, expected=e_val))
+                        entries.extend(_field_entries(a_val, e_val, path))
             return DiffResult(kind="dataclass", entries=entries)
+        if _is_model_dump_object(actual) and _is_model_dump_object(expected):
+            actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+            expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+            entries = []
+            for k in sorted(set(actual_dict) | set(expected_dict)):
+                path = f"{_prefix}.{k}" if _prefix else f".{k}"
+                if k not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
+                elif k not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
+                elif actual_dict[k] != expected_dict[k]:
+                    sub = BaseMixin._sub_diff_entries(actual_dict[k], expected_dict[k], path, _seen=_seen)
+                    if sub is not None:
+                        entries.extend(sub)
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
+            return DiffResult(kind="model", entries=entries)
         if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
             entries = []
             max_len = max(len(actual), len(expected))
             for i in range(max_len):
+                path = f"{_prefix}[{i}]" if _prefix else f"[{i}]"
                 if i >= len(actual):
-                    entries.append(DiffEntry(path=f"[{i}]", actual=None, expected=expected[i]))
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected[i]))
                 elif i >= len(expected):
-                    entries.append(DiffEntry(path=f"[{i}]", actual=actual[i], expected=None))
+                    entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
                 elif actual[i] != expected[i]:
-                    sub = BaseMixin._sub_diff_entries(actual[i], expected[i], f"[{i}]")
+                    sub = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=_seen)
                     if sub:
                         entries.extend(sub)
                     else:
-                        entries.append(DiffEntry(path=f"[{i}]", actual=actual[i], expected=expected[i]))
+                        entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
             return DiffResult(kind="sequence", entries=entries)
         if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
             entries = []
@@ -197,12 +303,20 @@ class BaseMixin(_MixinBase):
             if not entries:
                 entries.append(DiffEntry(path=".", actual=actual, expected=expected))
             return DiffResult(kind="string", entries=entries)
-        return DiffResult(kind="scalar", entries=[DiffEntry(path=".", actual=actual, expected=expected)])
+        return DiffResult(kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)])
 
     @staticmethod
-    def _sub_diff_entries(actual: object, expected: object, prefix: str) -> list[DiffEntry] | None:
+    def _sub_diff_entries(
+        actual: object, expected: object, prefix: str, *, _seen: set[int] | None = None
+    ) -> list[DiffEntry] | None:
+        if _seen is None:
+            _seen = set()
+        if id(actual) in _seen or id(expected) in _seen:
+            return [DiffEntry(path=prefix, actual="<circular ref>", expected="<circular ref>")]
+
         if isinstance(actual, dict) and isinstance(expected, dict):
-            entries = []
+            child_seen = _seen | {id(actual), id(expected)}
+            entries: list[DiffEntry] = []
             for k in sorted(set(actual) | set(expected), key=repr):
                 path = f"{prefix}.{k}"
                 if k not in expected:
@@ -210,8 +324,11 @@ class BaseMixin(_MixinBase):
                 elif k not in actual:
                     entries.append(DiffEntry(path=path, actual=None, expected=expected[k]))  # ty: ignore[invalid-argument-type]
                 elif actual[k] != expected[k]:  # ty: ignore[invalid-argument-type]
-                    diff_entry = DiffEntry(path=path, actual=actual[k], expected=expected[k])  # ty: ignore[invalid-argument-type]
-                    entries.append(diff_entry)
+                    sub = BaseMixin._sub_diff_entries(actual[k], expected[k], path, _seen=child_seen)  # ty: ignore[invalid-argument-type]
+                    if sub is not None:
+                        entries.extend(sub)
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual[k], expected=expected[k]))  # ty: ignore[invalid-argument-type]
             return entries or None
         if (
             dataclasses.is_dataclass(actual)
@@ -219,16 +336,60 @@ class BaseMixin(_MixinBase):
             and dataclasses.is_dataclass(expected)
             and not isinstance(expected, type)
         ):
+            child_seen = _seen | {id(actual), id(expected)}
             entries = []
             for f in dataclasses.fields(actual):
                 a_val = getattr(actual, f.name)
                 e_val = getattr(expected, f.name, _SENTINEL)
-                if e_val is _SENTINEL or a_val != e_val:
-                    entries.append(
-                        DiffEntry(
-                            path=f"{prefix}.{f.name}", actual=a_val, expected=None if e_val is _SENTINEL else e_val
-                        )
-                    )
+                if e_val is _SENTINEL:
+                    entries.append(DiffEntry(path=f"{prefix}.{f.name}", actual=a_val, expected=None))
+                elif a_val != e_val:
+                    sub = BaseMixin._sub_diff_entries(a_val, e_val, f"{prefix}.{f.name}", _seen=child_seen)
+                    if sub is not None:
+                        entries.extend(sub)
+                    else:
+                        entries.append(DiffEntry(path=f"{prefix}.{f.name}", actual=a_val, expected=e_val))
+            return entries or None
+        if (
+            hasattr(actual, "_fields")
+            and isinstance(actual, tuple)
+            and hasattr(expected, "_fields")
+            and isinstance(expected, tuple)
+        ):
+            child_seen = _seen | {id(actual), id(expected)}
+            entries = []
+            for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
+                a_val = getattr(actual, field)
+                e_val = getattr(expected, field, _SENTINEL)
+                if e_val is _SENTINEL:
+                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=a_val, expected=None))
+                elif a_val != e_val:
+                    sub = BaseMixin._sub_diff_entries(a_val, e_val, f"{prefix}.{field}", _seen=child_seen)
+                    if sub is not None:
+                        entries.extend(sub)
+                    else:
+                        entries.append(DiffEntry(path=f"{prefix}.{field}", actual=a_val, expected=e_val))
+            for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
+                if not hasattr(actual, field):
+                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=None, expected=getattr(expected, field)))
+            return entries or None
+        if _is_model_dump_object(actual) and _is_model_dump_object(expected):
+            child_seen = _seen | {id(actual), id(expected)}
+            actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+            expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+            entries = []
+            for k in sorted(set(actual_dict) | set(expected_dict)):
+                path = f"{prefix}.{k}"
+                if k not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
+                elif k not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
+                elif actual_dict[k] != expected_dict[k]:
+                    sub = BaseMixin._sub_diff_entries(actual_dict[k], expected_dict[k], path, _seen=child_seen)
+                    if sub is not None:
+                        entries.extend(sub)
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
             return entries or None
         return None
 
@@ -681,7 +842,8 @@ class BaseMixin(_MixinBase):
             return self.error("Expected not <None>, but was.")
         return self
 
-    def _type(self, val):
+    @staticmethod
+    def _type(val):
         if hasattr(val, "__name__"):
             return val.__name__
         return val.__class__.__name__

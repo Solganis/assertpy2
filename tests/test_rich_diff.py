@@ -7,6 +7,7 @@ import pytest
 from assertpy2 import assert_that, match
 from assertpy2.base import BaseMixin
 from assertpy2.errors import DiffEntry, DiffResult
+from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
 
 
@@ -425,3 +426,554 @@ class TestFormatDiffTruncation:
         output = _format_diff(diff, max_entries=0)
         assert_that(output).does_not_contain("more entries")
         assert_that(output).contains("[99]")
+
+
+class TestNestedDataclassDiff:
+    def test_nested_dataclass_fields_expanded(self):
+        @dataclass
+        class Address:
+            city: str
+            zip_code: str
+
+        @dataclass
+        class User:
+            name: str
+            address: Address
+
+        actual = User("Alice", Address("NYC", "10001"))
+        expected = User("Alice", Address("LA", "90210"))
+        result = BaseMixin._build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("dataclass")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".address.city")
+        assert_that(paths).contains(".address.zip_code")
+        assert_that(paths).does_not_contain(".address")
+
+    def test_nested_dataclass_mixed_fields(self):
+        @dataclass
+        class Inner:
+            x: int
+            y: int
+
+        @dataclass
+        class Outer:
+            name: str
+            inner: Inner
+
+        actual = Outer("a", Inner(1, 2))
+        expected = Outer("b", Inner(1, 3))
+        result = BaseMixin._build_equality_diff(actual, expected)
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".name")
+        assert_that(paths).contains(".inner.y")
+        assert_that(paths).does_not_contain(".inner.x")
+
+    def test_deeply_nested_dataclass(self):
+        @dataclass
+        class Level3:
+            value: int
+
+        @dataclass
+        class Level2:
+            child: Level3
+
+        @dataclass
+        class Level1:
+            child: Level2
+
+        actual = Level1(Level2(Level3(1)))
+        expected = Level1(Level2(Level3(99)))
+        result = BaseMixin._build_equality_diff(actual, expected)
+        paths = [e.path for e in result.entries]
+        assert_that(paths).is_equal_to([".child.child.value"])
+        assert_that(result.entries[0].actual).is_equal_to(1)
+        assert_that(result.entries[0].expected).is_equal_to(99)
+
+    def test_nested_namedtuple_fields_expanded(self):
+        Inner = namedtuple("Inner", ["a", "b"])
+        Outer = namedtuple("Outer", ["name", "inner"])
+        actual = Outer("same", Inner(1, 2))
+        expected = Outer("same", Inner(1, 99))
+        result = BaseMixin._build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("namedtuple")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".inner.b")
+        assert_that(paths).does_not_contain(".inner")
+
+    def test_nested_dict_inside_dataclass_expanded(self):
+        @dataclass
+        class Config:
+            name: str
+            settings: dict
+
+        actual = Config("app", {"debug": True, "port": 8080})
+        expected = Config("app", {"debug": False, "port": 8080})
+        result = BaseMixin._build_equality_diff(actual, expected)
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".settings.debug")
+
+    def test_list_of_nested_dataclasses(self):
+        @dataclass
+        class Inner:
+            value: int
+
+        @dataclass
+        class Wrapper:
+            inner: Inner
+
+        actual = [Wrapper(Inner(1)), Wrapper(Inner(2))]
+        expected = [Wrapper(Inner(1)), Wrapper(Inner(99))]
+        result = BaseMixin._build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("sequence")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains("[1].inner.value")
+
+
+class TestPydanticDiff:
+    def test_pydantic_model_field_diff(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class UserModel(BaseModel):
+            name: str
+            age: int
+
+        result = BaseMixin._build_equality_diff(UserModel(name="Alice", age=30), UserModel(name="Bob", age=30))
+        assert_that(result.kind).is_equal_to("model")
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to(".name")
+        assert_that(result.entries[0].actual).is_equal_to("Alice")
+        assert_that(result.entries[0].expected).is_equal_to("Bob")
+
+    def test_nested_pydantic_model_diff(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class AddressModel(BaseModel):
+            city: str
+            zip_code: str
+
+        class UserModel(BaseModel):
+            name: str
+            address: AddressModel
+
+        actual = UserModel(name="Alice", address=AddressModel(city="NYC", zip_code="10001"))
+        expected = UserModel(name="Alice", address=AddressModel(city="LA", zip_code="90210"))
+        result = BaseMixin._build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("model")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".address.city")
+        assert_that(paths).contains(".address.zip_code")
+
+    def test_pydantic_is_equal_to_without_filter(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Item(BaseModel):
+            sku: str
+            price: float
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Item(sku="A", price=10.0)).is_equal_to(Item(sku="A", price=20.0))
+        exc = exc_info.value
+        assert_that(getattr(exc, "diff", None)).is_not_none()
+        assert_that(exc.diff.kind).is_equal_to("model")
+        assert_that(exc.diff.entries[0].path).is_equal_to(".price")
+
+    def test_pydantic_in_list_diff(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Item(BaseModel):
+            name: str
+            qty: int
+
+        actual = [Item(name="A", qty=1), Item(name="B", qty=2)]
+        expected = [Item(name="A", qty=1), Item(name="B", qty=99)]
+        result = BaseMixin._build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("sequence")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains("[1].qty")
+
+    def test_pydantic_format_diff_renders(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Simple(BaseModel):
+            x: int
+
+        result = BaseMixin._build_equality_diff(Simple(x=1), Simple(x=2))
+        output = _format_diff(result)
+        assert_that(output).contains("diff (model):")
+        assert_that(output).contains(".x:")
+
+
+class TestModelDumpDiff:
+    """Tests for model_dump() duck-type diff (covers Pydantic path without pydantic dep)."""
+
+    def test_model_dump_field_diff(self):
+        class FakeModel:
+            def __init__(self, x, y):
+                self._x = x
+                self._y = y
+
+            def model_dump(self):
+                return {"x": self._x, "y": self._y}
+
+            def __eq__(self, other):
+                return isinstance(other, FakeModel) and self.model_dump() == other.model_dump()
+
+        result = BaseMixin._build_equality_diff(FakeModel(1, 2), FakeModel(1, 99))
+        assert_that(result.kind).is_equal_to("model")
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to(".y")
+
+    def test_model_dump_extra_key(self):
+        class ModelA:
+            def model_dump(self):
+                return {"x": 1, "y": 2}
+
+            def __eq__(self, other):
+                return False
+
+        class ModelB:
+            def model_dump(self):
+                return {"x": 1}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._build_equality_diff(ModelA(), ModelB())
+        assert_that(result.kind).is_equal_to("model")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".y")
+        entry = next(e for e in result.entries if e.path == ".y")
+        assert_that(entry.expected).is_none()
+        assert_that(entry.actual).is_equal_to(2)
+
+    def test_model_dump_missing_key(self):
+        class ModelA:
+            def model_dump(self):
+                return {"x": 1}
+
+            def __eq__(self, other):
+                return False
+
+        class ModelB:
+            def model_dump(self):
+                return {"x": 1, "z": 3}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._build_equality_diff(ModelA(), ModelB())
+        entry = next(e for e in result.entries if e.path == ".z")
+        assert_that(entry.actual).is_none()
+        assert_that(entry.expected).is_equal_to(3)
+
+    def test_model_dump_nested_dict_in_sub_diff(self):
+        class Outer:
+            def model_dump(self):
+                return {"nested": {"a": 1, "b": 2}}
+
+            def __eq__(self, other):
+                return False
+
+        class Outer2:
+            def model_dump(self):
+                return {"nested": {"a": 1, "b": 99}}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._build_equality_diff(Outer(), Outer2())
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains(".nested.b")
+
+    def test_model_dump_scalar_field_in_sub_diff(self):
+        class Outer:
+            def model_dump(self):
+                return {"val": 10}
+
+            def __eq__(self, other):
+                return False
+
+        class Outer2:
+            def model_dump(self):
+                return {"val": 20}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._sub_diff_entries(Outer(), Outer2(), "root")
+        assert_that(result).is_not_none()
+        assert_that(result[0].path).is_equal_to("root.val")
+
+    def test_model_dump_in_sub_diff_extra_key(self):
+        class ModelA:
+            def model_dump(self):
+                return {"x": 1, "y": 2}
+
+            def __eq__(self, other):
+                return False
+
+        class ModelB:
+            def model_dump(self):
+                return {"x": 1}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._sub_diff_entries(ModelA(), ModelB(), "item")
+        assert_that(result).is_not_none()
+        entry = next(e for e in result if e.path == "item.y")
+        assert_that(entry.expected).is_none()
+
+    def test_model_dump_in_sub_diff_missing_key(self):
+        class ModelA:
+            def model_dump(self):
+                return {"x": 1}
+
+            def __eq__(self, other):
+                return False
+
+        class ModelB:
+            def model_dump(self):
+                return {"x": 1, "z": 3}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._sub_diff_entries(ModelA(), ModelB(), "item")
+        entry = next(e for e in result if e.path == "item.z")
+        assert_that(entry.actual).is_none()
+        assert_that(entry.expected).is_equal_to(3)
+
+    def test_model_dump_in_sub_diff_nested_recurse(self):
+        class Inner:
+            def model_dump(self):
+                return {"val": 42}
+
+            def __eq__(self, other):
+                return False
+
+        class Outer:
+            def model_dump(self):
+                return {"child": {"val": 42}}
+
+            def __eq__(self, other):
+                return False
+
+        class Outer2:
+            def model_dump(self):
+                return {"child": {"val": 99}}
+
+            def __eq__(self, other):
+                return False
+
+        result = BaseMixin._sub_diff_entries(Outer(), Outer2(), "root")
+        assert_that(result).is_not_none()
+        paths = [e.path for e in result]
+        assert_that(paths).contains("root.child.val")
+
+
+class TestSubDiffNamedtupleCoverage:
+    def test_namedtuple_in_sub_diff_extra_field(self):
+        A = namedtuple("A", ["x", "y"])
+        B = namedtuple("B", ["x"])
+        result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "item")
+        assert_that(result).is_not_none()
+        entry = next(e for e in result if e.path == "item.y")
+        assert_that(entry.expected).is_none()
+
+    def test_namedtuple_in_sub_diff_missing_field(self):
+        A = namedtuple("A", ["x"])
+        B = namedtuple("B", ["x", "z"])
+        result = BaseMixin._sub_diff_entries(A(1), B(1, 3), "item")
+        assert_that(result).is_not_none()
+        entry = next(e for e in result if e.path == "item.z")
+        assert_that(entry.actual).is_none()
+        assert_that(entry.expected).is_equal_to(3)
+
+    def test_namedtuple_missing_field_sentinel(self):
+        A = namedtuple("A", ["x", "y"])
+        B = namedtuple("B", ["x"])
+        result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "root")
+        assert_that(result).is_not_none()
+        has_y = any(e.path == "root.y" and e.expected is None for e in result)
+        assert_that(has_y).is_true()
+
+    def test_namedtuple_nested_recurse_in_sub_diff(self):
+        Inner = namedtuple("Inner", ["a", "b"])
+        Outer = namedtuple("Outer", ["name", "inner"])
+        actual = Outer("same", Inner(1, 2))
+        expected = Outer("same", Inner(1, 99))
+        result = BaseMixin._sub_diff_entries(actual, expected, "root")
+        assert_that(result).is_not_none()
+        paths = [e.path for e in result]
+        assert_that(paths).contains("root.inner.b")
+
+    def test_namedtuple_scalar_diff_in_sub_diff(self):
+        Point = namedtuple("Point", ["x", "y"])
+        result = BaseMixin._sub_diff_entries(Point(1, 2), Point(1, 99), "item")
+        assert_that(result).is_not_none()
+        assert_that(result[0].path).is_equal_to("item.y")
+        assert_that(result[0].actual).is_equal_to(2)
+        assert_that(result[0].expected).is_equal_to(99)
+
+
+class TestBuildEqualityDiffCircularRef:
+    def test_circular_ref_in_build_equality_diff(self):
+        a = {"x": 1}
+        result = BaseMixin._build_equality_diff(a, a, _seen={id(a)})
+        assert_that(result.kind).is_equal_to("scalar")
+        assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
+
+    def test_seen_passed_through(self):
+        result = BaseMixin._build_equality_diff([1, 2], [1, 3], _seen=set())
+        assert_that(result.kind).is_equal_to("sequence")
+        assert_that(result.entries).is_length(1)
+
+
+class TestSubDiffDataclassMissingField:
+    def test_dataclass_missing_field_in_sub_diff(self):
+        @dataclass
+        class A:
+            x: int
+            y: int
+
+        @dataclass
+        class B:
+            x: int
+
+        result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "root")
+        assert_that(result).is_not_none()
+        entry = next(e for e in result if e.path == "root.y")
+        assert_that(entry.expected).is_none()
+
+    def test_dataclass_nested_recurse_in_sub_diff(self):
+        @dataclass
+        class Inner:
+            val: int
+
+        @dataclass
+        class Outer:
+            inner: Inner
+
+        result = BaseMixin._sub_diff_entries(Outer(Inner(1)), Outer(Inner(99)), "root")
+        assert_that(result).is_not_none()
+        paths = [e.path for e in result]
+        assert_that(paths).contains("root.inner.val")
+
+
+class TestCircularRefProtection:
+    def test_circular_dict_does_not_recurse_infinitely(self):
+        a = {"x": 1}
+        a["self"] = a
+        b = {"x": 2, "self": "nope"}
+        with pytest.raises(AssertionError):
+            assert_that(a).is_equal_to(b)
+
+    def test_circular_dict_in_sub_diff(self):
+        inner_a = {"val": 1}
+        inner_a["loop"] = inner_a
+        inner_b = {"val": 2}
+        inner_b["loop"] = inner_b
+        result = BaseMixin._sub_diff_entries(inner_a, inner_b, "root")
+        assert_that(result).is_not_none()
+        paths = [e.path for e in result]
+        assert_that(paths).contains("root.val")
+        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in result)
+        assert_that(has_circular).is_true()
+
+    def test_circular_list_item_in_diff(self):
+        inner_a = {"val": 1}
+        inner_a["self"] = inner_a
+        inner_b = {"val": 2}
+        inner_b["self"] = inner_b
+        result = BaseMixin._build_equality_diff([inner_a], [inner_b])
+        assert_that(result.kind).is_equal_to("sequence")
+        paths = [e.path for e in result.entries]
+        assert_that(paths).contains("[0].val")
+        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in result.entries)
+        assert_that(has_circular).is_true()
+
+    def test_circular_in_dict_err(self):
+        actual = {"a": 1}
+        actual["self"] = actual
+        expected = {"a": 2}
+        expected["self"] = expected
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = getattr(exc_info.value, "diff", None)
+        assert_that(diff).is_not_none()
+        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in diff.entries)
+        assert_that(has_circular).is_true()
+
+    def test_mutual_circular_ref(self):
+        a = {"key": "a_val"}
+        b = {"key": "b_val"}
+        a["ref"] = b
+        b["ref"] = a
+        with pytest.raises(AssertionError):
+            assert_that(a).is_equal_to({"key": "other", "ref": {"key": "other2", "ref": "x"}})
+
+
+class TestDictListValueDiff:
+    def test_list_values_in_dict_are_expanded(self):
+        actual = {"items": [{"sku": "A", "qty": 2}, {"sku": "B", "qty": 1}]}
+        expected = {"items": [{"sku": "A", "qty": 2}, {"sku": "B", "qty": 3}]}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = exc_info.value.diff
+        assert_that(diff).is_not_none()
+        paths = [e.path for e in diff.entries]
+        assert_that(paths).contains("items[1].qty")
+
+    def test_list_of_scalars_in_dict(self):
+        actual = {"tags": [1, 2, 3]}
+        expected = {"tags": [1, 2, 99]}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = exc_info.value.diff
+        paths = [e.path for e in diff.entries]
+        assert_that(paths).contains("tags[2]")
+
+    def test_nested_dict_with_list_of_dicts(self):
+        actual = {"config": {"rules": [{"name": "r1", "active": True}, {"name": "r2", "active": False}]}}
+        expected = {"config": {"rules": [{"name": "r1", "active": True}, {"name": "r2", "active": True}]}}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = exc_info.value.diff
+        paths = [e.path for e in diff.entries]
+        assert_that(paths).contains("config.rules[1].active")
+
+    def test_list_length_mismatch_in_dict(self):
+        actual = {"items": [1, 2]}
+        expected = {"items": [1, 2, 3]}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = exc_info.value.diff
+        paths = [e.path for e in diff.entries]
+        assert_that(paths).contains("items[2]")
+
+    def test_actual_list_longer_in_dict(self):
+        actual = {"items": [1, 2, 3]}
+        expected = {"items": [1, 2]}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        diff = exc_info.value.diff
+        paths = [e.path for e in diff.entries]
+        assert_that(paths).contains("items[2]")
+        entry = next(e for e in diff.entries if e.path == "items[2]")
+        assert_that(entry.actual).is_equal_to(3)
+        assert_that(entry.expected).is_none()
+
+
+class TestDictCircularRefNotEqual:
+    def test_circular_dict_not_equal_returns_false(self):
+        a = {"x": 1}
+        a["self"] = a
+        mixin = type("M", (HelpersMixin,), {"val": None, "description": "", "kind": None, "expected": None})()
+        result = mixin._dict_not_equal(a, a, _seen={(id(a), id(a))})
+        assert_that(result).is_false()

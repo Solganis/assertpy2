@@ -91,22 +91,16 @@ def pytest_runtest_makereport(item, call):
             _attach_allure(actual, expected, diff, mode=mode)
 
 
-_RED = "\033[31m"
-_GREEN = "\033[32m"
-_CYAN = "\033[36m"
-_RESET = "\033[0m"
-
-
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
     entries = getattr(diff, "entries", None)
     if not entries:
         return str(diff)
     kind = getattr(diff, "kind", "unknown")
 
-    red = _RED if color else ""
-    green = _GREEN if color else ""
-    cyan = _CYAN if color else ""
-    reset = _RESET if color else ""
+    red = "\033[31m" if color else ""
+    green = "\033[32m" if color else ""
+    cyan = "\033[36m" if color else ""
+    reset = "\033[0m" if color else ""
 
     truncated = 0
     visible = entries
@@ -116,7 +110,7 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
 
     lines = [f"{cyan}diff ({kind}):{reset}"]
 
-    if kind in {"sequence", "string", "dict", "dataclass", "namedtuple"}:
+    if kind in {"sequence", "string", "dict", "dataclass", "namedtuple", "model"}:
         for entry in visible:
             path = entry.path
             if entry.expected is None:
