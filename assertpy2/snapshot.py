@@ -53,7 +53,7 @@ class SnapshotMixin(_MixinBase):
         Snapshots require Python 3.x
     """
 
-    def snapshot(self, id=None, path="__snapshots") -> Self:
+    def snapshot(self, id=None, path="__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,
