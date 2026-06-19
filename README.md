@@ -18,7 +18,7 @@
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/pyversions/assertpy2" alt="Python"></a>
   <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <br>
-  <a href="https://github.com/Solganis/assertpy2/blob/main/docs/api.md"><img src="https://img.shields.io/badge/Docs-Read%20The%20Docs-black" alt="Documentation"></a>
+  <a href="https://solganis.github.io/assertpy2/"><img src="https://img.shields.io/badge/Docs-online-black" alt="Documentation"></a>
   <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
   <a href="https://github.com/astral-sh/ty"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty"></a>
@@ -85,28 +85,28 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 **Fluent API**
 
-- [**Composable matchers**](docs/api.md#composable-matchers): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
-- [**Structural matching**](docs/api.md#structural-matching): `matches_structure()` for declarative dict/API response validation.
-- [**Universal negation**](docs/api.md#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
-- [**Collection pipeline**](docs/api.md#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
-- [**Fluent chaining**](docs/api.md#chaining): write assertions as readable one-liners that chain naturally.
+- [**Composable matchers**](https://solganis.github.io/assertpy2/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
+- [**Structural matching**](https://solganis.github.io/assertpy2/matchers/#structural-matching): `matches_structure()` for declarative dict/API response validation.
+- [**Universal negation**](https://solganis.github.io/assertpy2/fluent/#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
+- [**Collection pipeline**](https://solganis.github.io/assertpy2/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
+- [**Fluent chaining**](https://solganis.github.io/assertpy2/fluent/#chaining): write assertions as readable one-liners that chain naturally.
 
 **Built-in types**
 
-- [Strings](docs/api.md#strings), [numbers](docs/api.md#numbers), [lists](docs/api.md#lists), [tuples](docs/api.md#tuples), [sets](docs/api.md#sets), [dicts](docs/api.md#dicts), [dates](docs/api.md#dates), [booleans](docs/api.md#booleans), [objects](docs/api.md#objects), [bytes](docs/api.md#bytes--bytearray-assertions), [files](docs/api.md#files), [exceptions](docs/api.md#failure).
-- [**Bytes assertions**](docs/api.md#bytes--bytearray-assertions): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
-- [**JSON assertions**](docs/api.md#json-path--schema-validation): JSONPath navigation and JSON Schema validation. `pip install assertpy2[json]`.
-- [**Dynamic assertions**](docs/api.md#objects): `has_<name>()` for any attribute, property, or zero-argument method.
-- [**Dict comparison**](docs/api.md#dicts): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects).
-- [**Extracting**](docs/api.md#objects): flatten collections on attributes with `filter` and `sort` support.
+- [Strings](https://solganis.github.io/assertpy2/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/errors/#expected-exceptions).
+- [**Bytes assertions**](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
+- [**JSON assertions**](https://solganis.github.io/assertpy2/data/#json-path--schema): JSONPath navigation and JSON Schema validation. `pip install assertpy2[json]`.
+- [**Dynamic assertions**](https://solganis.github.io/assertpy2/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
+- [**Dict comparison**](https://solganis.github.io/assertpy2/assertions/#selective-comparison-ignore--include): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects).
+- [**Extracting**](https://solganis.github.io/assertpy2/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
 
 **Testing**
 
-- [**Soft assertions**](docs/api.md#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
-- [**Async assertions**](docs/api.md#async-assertions): `eventually()` with polling/retry for eventual consistency.
-- [**Structured errors**](docs/api.md#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
-- [**Rich pytest diffs**](docs/api.md#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models. Circular reference protection.
-- [**Snapshot testing**](docs/api.md#snapshot-testing): store and compare data structures in JSON format.
+- [**Soft assertions**](https://solganis.github.io/assertpy2/testing/#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
+- [**Async assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` with polling/retry for eventual consistency.
+- [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
+- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models. Circular reference protection.
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format.
 
 **Type safety**
 
@@ -115,16 +115,16 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 **Extensibility**
 
-- [**Custom matchers**](docs/api.md#custom-matchers---registering-domain-matchers): `register_matcher()` for domain-specific matchers, composable with `&`, `|`, `~`.
-- [**Regex group extraction**](docs/api.md#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
-- [**Extensions**](docs/api.md#extension-system---adding-custom-assertions): `add_extension()` for custom assertion methods.
+- [**Custom matchers**](https://solganis.github.io/assertpy2/matchers/#custom-matchers): `register_matcher()` for domain-specific matchers, composable with `&`, `|`, `~`.
+- [**Regex group extraction**](https://solganis.github.io/assertpy2/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
+- [**Extensions**](https://solganis.github.io/assertpy2/extending/): `add_extension()` for custom assertion methods.
 
 **Integrations**
 
-- [**Allure**](docs/api.md#allure-integration): auto-attach structured diff and actual/expected data to reports. `pip install assertpy2[allure]`.
-- [**Behave**](docs/api.md#behave-step-matchers): ready-made parameter types for step definitions. `pip install assertpy2[behave]`.
+- [**Allure**](https://solganis.github.io/assertpy2/integrations/#allure): auto-attach structured diff and actual/expected data to reports. `pip install assertpy2[allure]`.
+- [**Behave**](https://solganis.github.io/assertpy2/integrations/#behave): ready-made parameter types for step definitions. `pip install assertpy2[behave]`.
 
-See the [full API reference](docs/api.md) for all assertion methods, examples, and advanced features.
+See the [full documentation](https://solganis.github.io/assertpy2/) for all assertion methods, examples, and advanced features.
 
 ---
 
