@@ -16,8 +16,7 @@ if TYPE_CHECKING:
     import datetime
     import pathlib
 
-    from typing_extensions import Self
-
+    from ._compat import Self
     from ._typing import (
         _BytesAssertion,
         _CallableAssertion,
