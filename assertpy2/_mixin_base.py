@@ -4,8 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
-
+    from ._compat import Self
     from .errors import DiffResult
 
 

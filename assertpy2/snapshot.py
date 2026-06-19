@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from ._compat import Self
 
 __tracebackhide__ = True
 

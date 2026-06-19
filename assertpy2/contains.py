@@ -8,7 +8,7 @@ from .errors import DiffEntry, DiffResult
 from .matchers import Matcher
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from ._compat import Self
 
 __tracebackhide__ = True
 

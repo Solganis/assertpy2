@@ -7,8 +7,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any, Protocol
 
-    from typing_extensions import Self
-
+    from ._compat import Self
     from .assertpy import NegatedBuilder
     from .async_assertions import AsyncAssertionBuilder
     from .matchers import Matcher
