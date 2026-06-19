@@ -1,0 +1,81 @@
+site_name: assertpy2
+site_description: Fluent assertion library for Python with composable matchers, structural matching, and full type safety
+site_url: https://solganis.github.io/assertpy2/
+repo_url: https://github.com/Solganis/assertpy2
+repo_name: Solganis/assertpy2
+edit_uri: edit/main/docs/
+copyright: Copyright &copy; 2026 Solganis and assertpy2 contributors
+
+theme:
+  name: material
+  logo: logo-dark.svg
+  favicon: logo.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.tracking
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Migrating from assertpy: migration.md
+  - Comparison: comparison.md
+  - Type Assertions: assertions.md
+  - Fluent API: fluent.md
+  - Matchers: matchers.md
+  - Data Navigation: data.md
+  - Testing: testing.md
+  - Errors & Reporting: errors.md
+  - Extending: extending.md
+  - Integrations: integrations.md

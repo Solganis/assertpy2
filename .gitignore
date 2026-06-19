@@ -30,3 +30,4 @@ dist
 # docs output
 docs/build
 docs/out
+/site/
