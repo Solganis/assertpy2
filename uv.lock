@@ -34,7 +34,7 @@ wheels = [
 
 [[package]]
 name = "assertpy2"
-version = "2.5.0"
+version = "2.5.1"
 source = { editable = "." }
 dependencies = [
     { name = "typing-extensions", marker = "python_full_version < '3.11'" },
