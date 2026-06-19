@@ -31,7 +31,7 @@ class DiffResult:
         return "\n".join(lines)
 
 
-class AssertionFailure(AssertionError):
+class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; kept for backward compatibility
     """Structured assertion failure with optional diff data.
 
     Subclasses AssertionError for full backward compatibility:
