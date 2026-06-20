@@ -122,7 +122,7 @@ class TestStructuredErrorFromAssertions:
             assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "c": 3})
         except AssertionFailure as ex:
             assert_that(ex.diff).is_not_none()
-            paths = [e.path for e in ex.diff.entries]
+            paths = [entry.path for entry in ex.diff.entries]
             assert_that(paths).contains("b")
             assert_that(paths).contains("c")
 

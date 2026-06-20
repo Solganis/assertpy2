@@ -11,8 +11,8 @@ from assertpy2 import assert_that, contents_of
 def tmpfile(tmpdir):
     tmp = tmpdir.join("test.txt")
     tmp.write(b"foobar")
-    with tmp.open("rb") as f:
-        yield f
+    with tmp.open("rb") as handle:
+        yield handle
 
 
 def test_contents_of_path(tmpfile):

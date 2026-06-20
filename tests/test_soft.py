@@ -178,8 +178,8 @@ def test_recursive_nesting():
 
     try:
         recurs(10)
-    except AssertionError as e:
-        out = str(e)
+    except AssertionError as exc:
+        out = str(exc)
         assert_that(out).contains("1. Expected <1> to be equal to <7>, but was not.")
         assert_that(out).contains("2. Expected <2> to be equal to <7>, but was not.")
         assert_that(out).contains("3. Expected <3> to be equal to <7>, but was not.")

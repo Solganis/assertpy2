@@ -69,7 +69,7 @@ class TestPluginLoaded:
         parser = MagicMock()
         pytest_addoption(parser)
         assert_that(parser.addini.call_count).is_equal_to(3)
-        names = [c[0][0] for c in parser.addini.call_args_list]
+        names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
         assert_that(names).contains("assertpy2_diff_max_entries")
@@ -386,7 +386,7 @@ class TestAllureFullMode:
         exc = AssertionFailure("fail", actual={"x": 1}, expected={"x": 2}, diff=diff)
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         assert_that(mock.attach.call_count).is_equal_to(2)
-        names = [c.kwargs["name"] for c in mock.attach.call_args_list]
+        names = [call.kwargs["name"] for call in mock.attach.call_args_list]
         assert_that(names).contains("AssertionFailure")
         assert_that(names).contains("Structured Diff")
 
