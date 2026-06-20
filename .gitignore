@@ -10,6 +10,7 @@ __pycache__
 cover
 .coverage
 htmlcov
+.hypothesis
 __snapshots
 mycustompath
 
