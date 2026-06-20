@@ -37,7 +37,7 @@ from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
 from .errors import AssertionFailure
-from .exception import ExceptionMixin
+from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
 from .helpers import HelpersMixin
@@ -589,6 +589,7 @@ class AssertionBuilder(
         self.logger = logger if logger else _default_logger
         self._not_expected = False
         self._expected_warning = None
+        self._return_value = _UNSET
 
     @property
     def not_(self) -> NegatedBuilder:
