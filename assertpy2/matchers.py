@@ -63,14 +63,14 @@ class AllOfMatcher(BaseMatcher):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
-        return all(m.matches(value) for m in self.matchers)
+        return all(matcher.matches(value) for matcher in self.matchers)
 
     def describe(self) -> str:
-        return f"({' and '.join(m.describe() for m in self.matchers)})"
+        return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
 
     def describe_mismatch(self, value: Any) -> str:
-        failed = [m for m in self.matchers if not m.matches(value)]
-        return f"<{value}> did not satisfy: {', '.join(m.describe() for m in failed)}"
+        failed = [matcher for matcher in self.matchers if not matcher.matches(value)]
+        return f"<{value}> did not satisfy: {', '.join(matcher.describe() for matcher in failed)}"
 
 
 class AnyOfMatcher(BaseMatcher):
@@ -80,13 +80,13 @@ class AnyOfMatcher(BaseMatcher):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
-        return any(m.matches(value) for m in self.matchers)
+        return any(matcher.matches(value) for matcher in self.matchers)
 
     def describe(self) -> str:
-        return f"({' or '.join(m.describe() for m in self.matchers)})"
+        return f"({' or '.join(matcher.describe() for matcher in self.matchers)})"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"<{value}> satisfied none of: {', '.join(m.describe() for m in self.matchers)}"
+        return f"<{value}> satisfied none of: {', '.join(matcher.describe() for matcher in self.matchers)}"
 
 
 class NotMatcher(BaseMatcher):

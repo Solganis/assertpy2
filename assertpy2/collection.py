@@ -93,36 +93,36 @@ class CollectionMixin(_MixinBase):
         missing = []
         if hasattr(self.val, "keys") and callable(self.val.keys) and hasattr(self.val, "__getitem__"):
             superdict = {}
-            for idx, j in enumerate(supersets):
-                self._check_dict_like(j, check_values=False, name=f"arg #{idx + 1}")
-                for k in j:
-                    superdict.update({k: j[k]})
+            for superset_index, superset in enumerate(supersets):
+                self._check_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
+                for key in superset:
+                    superdict.update({key: superset[key]})
 
-            for i in self.val:
-                if i not in superdict:
-                    missing.append({i: self.val[i]})  # bad key
-                elif self.val[i] != superdict[i]:
-                    missing.append({i: self.val[i]})  # bad val
+            for key in self.val:
+                if key not in superdict:
+                    missing.append({key: self.val[key]})  # bad key
+                elif self.val[key] != superdict[key]:
+                    missing.append({key: self.val[key]})  # bad val
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to be subset of {self._fmt_items(superdict)}, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
                 )
         else:
-            superset = set()
-            for j in supersets:
+            superset_values = set()
+            for superset in supersets:
                 try:
-                    for k in j:
-                        superset.add(k)
+                    for key in superset:
+                        superset_values.add(key)
                 except TypeError:
-                    superset.add(j)
+                    superset_values.add(superset)
 
-            for i in self.val:
-                if i not in superset:
-                    missing.append(i)
+            for item in self.val:
+                if item not in superset_values:
+                    missing.append(item)
             if missing:
                 return self.error(
-                    f"Expected <{self.val}> to be subset of {self._fmt_items(superset)}, "
+                    f"Expected <{self.val}> to be subset of {self._fmt_items(superset_values)}, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
                 )
 
@@ -161,22 +161,22 @@ class CollectionMixin(_MixinBase):
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
 
-        prev = None
-        for i, x in enumerate(self.val):
-            if i > 0:
+        previous = None
+        for index, current in enumerate(self.val):
+            if index > 0:
                 if reverse:
-                    if key(x) > key(prev):
+                    if key(current) > key(previous):
                         return self.error(
                             f"Expected <{self.val}> to be sorted reverse, "
-                            f"but subset {self._fmt_items([prev, x])} at index {i - 1} is not."
+                            f"but subset {self._fmt_items([previous, current])} at index {index - 1} is not."
                         )
                 else:
-                    if key(x) < key(prev):
+                    if key(current) < key(previous):
                         return self.error(
                             f"Expected <{self.val}> to be sorted, "
-                            f"but subset {self._fmt_items([prev, x])} at index {i - 1} is not."
+                            f"but subset {self._fmt_items([previous, current])} at index {index - 1} is not."
                         )
-            prev = x
+            previous = current
 
         return self
 
@@ -237,7 +237,7 @@ class CollectionMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        return self.builder([x for item in self.val for x in func(item)], self.description, self.kind)
+        return self.builder([inner for item in self.val for inner in func(item)], self.description, self.kind)
 
     def first(self) -> Self:
         """Returns a new builder with the first element of val.

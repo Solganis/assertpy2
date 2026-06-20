@@ -143,22 +143,22 @@ class ExtractingMixin(_MixinBase):
         if len(names) == 0:
             raise ValueError("one or more name args must be given")
 
-        def _extract(x, name):
-            if self._check_dict_like(x, check_values=False, return_as_bool=True):
-                if name in x:
-                    return x[name]
+        def _extract(item, name):
+            if self._check_dict_like(item, check_values=False, return_as_bool=True):
+                if name in item:
+                    return item[name]
                 else:
-                    raise ValueError(f"item keys {list(x.keys())} did not contain key <{name}>")
-            elif isinstance(x, tuple) and hasattr(x, "_fields") and type(name) is str:
-                if name in x._fields:
-                    return getattr(x, name)
+                    raise ValueError(f"item keys {list(item.keys())} did not contain key <{name}>")
+            elif isinstance(item, tuple) and hasattr(item, "_fields") and type(name) is str:
+                if name in item._fields:
+                    return getattr(item, name)
                 else:  # val has no attribute <foo>
-                    raise ValueError(f"item attributes {x._fields} did no contain attribute <{name}>")
-            elif isinstance(x, collections.abc.Iterable):
-                self._check_iterable(x, name="item")
-                return x[name]
-            elif hasattr(x, name):
-                attr = getattr(x, name)
+                    raise ValueError(f"item attributes {item._fields} did no contain attribute <{name}>")
+            elif isinstance(item, collections.abc.Iterable):
+                self._check_iterable(item, name="item")
+                return item[name]
+            elif hasattr(item, name):
+                attr = getattr(item, name)
                 if callable(attr):
                     try:
                         return attr()
@@ -169,39 +169,39 @@ class ExtractingMixin(_MixinBase):
             else:
                 raise ValueError(f"item does not have property or zero-arg method <{name}>")
 
-        def _filter(x):
+        def _filter(item):
             if "filter" in kwargs:
                 if isinstance(kwargs["filter"], str):
-                    return bool(_extract(x, kwargs["filter"]))
+                    return bool(_extract(item, kwargs["filter"]))
                 elif self._check_dict_like(kwargs["filter"], check_values=False, return_as_bool=True):
-                    for k in kwargs["filter"]:
-                        if isinstance(k, str) and _extract(x, k) != kwargs["filter"][k]:
+                    for key in kwargs["filter"]:
+                        if isinstance(key, str) and _extract(item, key) != kwargs["filter"][key]:
                             return False
                     return True
                 elif callable(kwargs["filter"]):
-                    return kwargs["filter"](x)
+                    return kwargs["filter"](item)
                 return kwargs["filter"] is None
             return True
 
-        def _sort(x):
+        def _sort(item):
             if "sort" in kwargs:
                 if isinstance(kwargs["sort"], str):
-                    return _extract(x, kwargs["sort"])
+                    return _extract(item, kwargs["sort"])
                 elif isinstance(kwargs["sort"], collections.abc.Iterable):
-                    items = []
-                    for k in kwargs["sort"]:
-                        if isinstance(k, str):
-                            items.append(_extract(x, k))
-                    return tuple(items)
+                    sort_keys = []
+                    for key in kwargs["sort"]:
+                        if isinstance(key, str):
+                            sort_keys.append(_extract(item, key))
+                    return tuple(sort_keys)
                 elif callable(kwargs["sort"]):
-                    return kwargs["sort"](x)
+                    return kwargs["sort"](item)
             return 0
 
         extracted = []
-        for i in sorted(self.val, key=lambda x: _sort(x)):
-            if _filter(i):
-                items = [_extract(i, name) for name in names]
-                extracted.append(tuple(items) if len(items) > 1 else items[0])
+        for item in sorted(self.val, key=lambda value: _sort(value)):
+            if _filter(item):
+                extracted_values = [_extract(item, name) for name in names]
+                extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
         # chain on with _extracted_ list (don't chain to self!)
         return self.builder(extracted, self.description, self.kind)

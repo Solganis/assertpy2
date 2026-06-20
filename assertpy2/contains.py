@@ -52,7 +52,7 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         elif len(items) == 1:
             if isinstance(items[0], Matcher):
-                if not any(items[0].matches(v) for v in self.val):
+                if not any(items[0].matches(value) for value in self.val):
                     return self.error(
                         f"Expected <{self.val}> to contain item matching {items[0].describe()}, but did not."
                     )
@@ -63,17 +63,22 @@ class ContainsMixin(_MixinBase):
                     return self.error(f"Expected <{self.val}> to contain item <{items[0]}>, but did not.")
         else:
             missing = []
-            for i in items:
-                if isinstance(i, Matcher):
-                    if not any(i.matches(v) for v in self.val):
-                        missing.append(i)
-                elif i not in self.val:
-                    missing.append(i)
+            for item in items:
+                if isinstance(item, Matcher):
+                    if not any(item.matches(value) for value in self.val):
+                        missing.append(item)
+                elif item not in self.val:
+                    missing.append(item)
             if missing:
-                missing_desc = [m.describe() if isinstance(m, Matcher) else m for m in missing]
+                missing_desc = [
+                    missing_item.describe() if isinstance(missing_item, Matcher) else missing_item
+                    for missing_item in missing
+                ]
                 diff = DiffResult(
                     kind="contains",
-                    entries=[DiffEntry(path="missing", actual=None, expected=m) for m in missing_desc],
+                    entries=[
+                        DiffEntry(path="missing", actual=None, expected=missing_item) for missing_item in missing_desc
+                    ],
                 )
                 if self._check_dict_like(self.val, return_as_bool=True):
                     return self.error(
@@ -124,9 +129,9 @@ class ContainsMixin(_MixinBase):
                 return self.error(f"Expected <{self.val}> to not contain item <{items[0]}>, but did.")
         else:
             found = []
-            for i in items:
-                if i in self.val:
-                    found.append(i)
+            for item in items:
+                if item in self.val:
+                    found.append(item)
             if found:
                 return self.error(
                     f"Expected <{self.val}> to not contain items {self._fmt_items(items)},"
@@ -161,9 +166,9 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         else:
             extra = []
-            for i in self.val:
-                if i not in items:
-                    extra.append(i)
+            for item in self.val:
+                if item not in items:
+                    extra.append(item)
             if extra:
                 return self.error(
                     f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
@@ -171,9 +176,9 @@ class ContainsMixin(_MixinBase):
                 )
 
             missing = []
-            for i in items:
-                if i not in self.val:
-                    missing.append(i)
+            for item in items:
+                if item not in self.val:
+                    missing.append(item)
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
@@ -206,16 +211,16 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         if isinstance(self.val, str):
-            pos = 0
+            search_start = 0
             for item in items:
                 if not isinstance(item, str):
                     raise TypeError("given args must be strings when val is a string")
-                idx = self.val.find(item, pos)
-                if idx == -1:
+                found_index = self.val.find(item, search_start)
+                if found_index == -1:
                     return self.error(
                         f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not."
                     )
-                pos = idx + len(item)
+                search_start = found_index + len(item)
             return self
         try:
             for i in range(len(self.val) - len(items) + 1):
@@ -393,11 +398,11 @@ class ContainsMixin(_MixinBase):
             val_list = list(self.val)
         except TypeError:
             raise TypeError("val is not iterable") from None
-        item_idx = 0
+        item_index = 0
         for element in val_list:
-            if item_idx < len(items) and element == items[item_idx]:
-                item_idx += 1
-        if item_idx != len(items):
+            if item_index < len(items) and element == items[item_index]:
+                item_index += 1
+        if item_index != len(items):
             return self.error(f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but did not.")
         return self
 
@@ -422,8 +427,8 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         else:
-            for i in items:
-                if self.val == i:
+            for item in items:
+                if self.val == item:
                     return self
         return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.")
 
@@ -448,7 +453,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         else:
-            for i in items:
-                if self.val == i:
+            for item in items:
+                if self.val == item:
                     return self.error(f"Expected <{self.val}> to not be in {self._fmt_items(items)}, but was.")
         return self

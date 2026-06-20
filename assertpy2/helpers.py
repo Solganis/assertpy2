@@ -14,19 +14,19 @@ __tracebackhide__ = True
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
-    def _fmt_items(self, i):
+    def _fmt_items(self, items):
         """Helper to format the given items."""
-        if len(i) == 0:
+        if len(items) == 0:
             return "<>"
-        elif len(i) == 1 and hasattr(i, "__getitem__"):
-            return f"<{i[0]}>"
+        elif len(items) == 1 and hasattr(items, "__getitem__"):
+            return f"<{items[0]}>"
         else:
-            s = str(i)
-            if s[0] in "([":
-                s = s[1:]
-            if s[-1] in ")]":
-                s = s[:-1]
-            return f"<{s}>"
+            formatted = str(items)
+            if formatted[0] in "([":
+                formatted = formatted[1:]
+            if formatted[-1] in ")]":
+                formatted = formatted[:-1]
+            return f"<{formatted}>"
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""
@@ -35,8 +35,8 @@ class HelpersMixin(_MixinBase):
         if some_kwargs:
             out_kwargs = ", ".join(
                 [
-                    str(i).lstrip("(").rstrip(")").replace(", ", ": ")
-                    for i in [(k, some_kwargs[k]) for k in sorted(some_kwargs.keys())]
+                    str(pair).lstrip("(").rstrip(")").replace(", ", ": ")
+                    for pair in [(key, some_kwargs[key]) for key in sorted(some_kwargs.keys())]
                 ]
             )
 
@@ -145,14 +145,19 @@ class HelpersMixin(_MixinBase):
 
             if include:
                 missing = []
-                for i in includes:
-                    if i not in val:
-                        missing.append(i)
+                for include_key in includes:
+                    if include_key not in val:
+                        missing.append(include_key)
                 if missing:
                     keys_suffix = "" if len(includes) == 1 else "s"
                     missing_suffix = "" if len(missing) == 1 else "s"
                     includes_fmt = self._fmt_items(
-                        [".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes]
+                        [
+                            ".".join([str(segment) for segment in include_key])
+                            if type(include_key) is tuple
+                            else include_key
+                            for include_key in includes
+                        ]
                     )
                     missing_fmt = self._fmt_items(missing)
                     return self.error(
@@ -161,38 +166,44 @@ class HelpersMixin(_MixinBase):
                     )
 
             if ignore and include:
-                k1 = {k for k in val if k not in ignores and k in includes}
+                keys_in_val = {key for key in val if key not in ignores and key in includes}
             elif ignore:
-                k1 = {k for k in val if k not in ignores}
+                keys_in_val = {key for key in val if key not in ignores}
             else:  # include
-                k1 = {k for k in val if k in includes}
+                keys_in_val = {key for key in val if key in includes}
 
             if ignore and include:
-                k2 = {k for k in other if k not in ignores and k in includes}
+                keys_in_other = {key for key in other if key not in ignores and key in includes}
             elif ignore:
-                k2 = {k for k in other if k not in ignores}
+                keys_in_other = {key for key in other if key not in ignores}
             else:  # include
-                k2 = {k for k in other if k in includes}
+                keys_in_other = {key for key in other if key in includes}
 
-            if k1 != k2:
+            if keys_in_val != keys_in_other:
                 return True
             else:
-                for k in k1:
-                    if self._check_dict_like(val[k], check_values=False, return_as_bool=True) and self._check_dict_like(
-                        other[k], check_values=False, return_as_bool=True
-                    ):
+                for key in keys_in_val:
+                    if self._check_dict_like(
+                        val[key], check_values=False, return_as_bool=True
+                    ) and self._check_dict_like(other[key], check_values=False, return_as_bool=True):
                         subdicts_not_equal = self._dict_not_equal(
-                            val[k],
-                            other[k],
-                            ignore=[i[1:] for i in ignores if type(i) is tuple and i[0] == k] if ignore else None,
-                            include=[i[1:] for i in self._dict_ignore(include) if type(i) is tuple and i[0] == k]
+                            val[key],
+                            other[key],
+                            ignore=[entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key]
+                            if ignore
+                            else None,
+                            include=[
+                                entry[1:]
+                                for entry in self._dict_ignore(include)
+                                if type(entry) is tuple and entry[0] == key
+                            ]
                             if include
                             else None,
                             _seen=_seen,
                         )
                         if subdicts_not_equal:
                             return True
-                    elif val[k] != other[k]:
+                    elif val[key] != other[key]:
                         return True
             return False
         else:
@@ -201,12 +212,17 @@ class HelpersMixin(_MixinBase):
     @staticmethod
     def _dict_ignore(ignore):
         """Helper to make list for given ignore kwarg values."""
-        return [i[0] if type(i) is tuple and len(i) == 1 else i for i in (ignore if type(ignore) is list else [ignore])]
+        return [
+            entry[0] if type(entry) is tuple and len(entry) == 1 else entry
+            for entry in (ignore if type(ignore) is list else [ignore])
+        ]
 
     @staticmethod
     def _dict_include(include):
         """Helper to make a list from given include kwarg values."""
-        return [i[0] if type(i) is tuple else i for i in (include if type(include) is list else [include])]
+        return [
+            entry[0] if type(entry) is tuple else entry for entry in (include if type(include) is list else [include])
+        ]
 
     def _dict_err(self, val, other, ignore=None, include=None):
         """Helper to construct error message for dict comparison."""
@@ -219,17 +235,17 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(d)}
             parts = []
             ellip = False
-            for k, v in sorted(d.items()):
-                if k not in other:
-                    parts.append(f"{k!r}: {v!r}")
-                elif v != other[k]:
+            for key, value in sorted(d.items()):
+                if key not in other:
+                    parts.append(f"{key!r}: {value!r}")
+                elif value != other[key]:
                     val_repr = (
-                        _dict_repr(v, other[k], _seen)
-                        if self._check_dict_like(v, check_values=False, return_as_bool=True)
-                        and self._check_dict_like(other[k], check_values=False, return_as_bool=True)
-                        else repr(v)
+                        _dict_repr(value, other[key], _seen)
+                        if self._check_dict_like(value, check_values=False, return_as_bool=True)
+                        and self._check_dict_like(other[key], check_values=False, return_as_bool=True)
+                        else repr(value)
                     )
-                    parts.append(f"{k!r}: {val_repr}")
+                    parts.append(f"{key!r}: {val_repr}")
                 else:
                     ellip = True
             out = ", ".join(parts)
@@ -246,23 +262,23 @@ class HelpersMixin(_MixinBase):
 
             entries = []
             all_keys = sorted(set(actual_dict) | set(expected_dict))
-            for k in all_keys:
-                path = f"{prefix}.{k}" if prefix else str(k)
-                if k not in expected_dict:
-                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
-                elif k not in actual_dict:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
-                elif actual_dict[k] != expected_dict[k]:
-                    a_val = actual_dict[k]
-                    e_val = expected_dict[k]
-                    if self._check_dict_like(a_val, check_values=False, return_as_bool=True) and self._check_dict_like(
-                        e_val, check_values=False, return_as_bool=True
-                    ):
-                        entries.extend(_build_diff(a_val, e_val, prefix=path, _seen=_seen))
-                    elif isinstance(a_val, (list, tuple)) and isinstance(e_val, (list, tuple)):
-                        entries.extend(_build_list_diff(a_val, e_val, prefix=path, _seen=_seen))
+            for key in all_keys:
+                path = f"{prefix}.{key}" if prefix else str(key)
+                if key not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
+                elif key not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
+                elif actual_dict[key] != expected_dict[key]:
+                    actual_value = actual_dict[key]
+                    expected_value = expected_dict[key]
+                    if self._check_dict_like(
+                        actual_value, check_values=False, return_as_bool=True
+                    ) and self._check_dict_like(expected_value, check_values=False, return_as_bool=True):
+                        entries.extend(_build_diff(actual_value, expected_value, prefix=path, _seen=_seen))
+                    elif isinstance(actual_value, (list, tuple)) and isinstance(expected_value, (list, tuple)):
+                        entries.extend(_build_list_diff(actual_value, expected_value, prefix=path, _seen=_seen))
                     else:
-                        entries.append(DiffEntry(path=path, actual=a_val, expected=e_val))
+                        entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
             return entries
 
         def _build_list_diff(actual_list, expected_list, prefix="", _seen=None):
@@ -277,23 +293,27 @@ class HelpersMixin(_MixinBase):
                 elif i >= len(expected_list):
                     entries.append(DiffEntry(path=path, actual=actual_list[i], expected=None))
                 elif actual_list[i] != expected_list[i]:
-                    a_item = actual_list[i]
-                    e_item = expected_list[i]
-                    if self._check_dict_like(a_item, check_values=False, return_as_bool=True) and self._check_dict_like(
-                        e_item, check_values=False, return_as_bool=True
-                    ):
-                        entries.extend(_build_diff(a_item, e_item, prefix=path, _seen=_seen))
+                    actual_item = actual_list[i]
+                    expected_item = expected_list[i]
+                    if self._check_dict_like(
+                        actual_item, check_values=False, return_as_bool=True
+                    ) and self._check_dict_like(expected_item, check_values=False, return_as_bool=True):
+                        entries.extend(_build_diff(actual_item, expected_item, prefix=path, _seen=_seen))
                     else:
-                        entries.append(DiffEntry(path=path, actual=a_item, expected=e_item))
+                        entries.append(DiffEntry(path=path, actual=actual_item, expected=expected_item))
             return entries
 
         if ignore:
             ignores = self._dict_ignore(ignore)
-            ignore_fmt = self._fmt_items([".".join([str(s) for s in i]) if type(i) is tuple else i for i in ignores])
+            ignore_fmt = self._fmt_items(
+                [".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry for entry in ignores]
+            )
             ignore_err = f" ignoring keys {ignore_fmt}"
         if include:
             includes = self._dict_ignore(include)
-            include_fmt = self._fmt_items([".".join([str(s) for s in i]) if type(i) is tuple else i for i in includes])
+            include_fmt = self._fmt_items(
+                [".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry for entry in includes]
+            )
             include_err = f" including keys {include_fmt}"
 
         diff_entries = _build_diff(val, other)
@@ -323,7 +343,7 @@ class HelpersMixin(_MixinBase):
         if hasattr(obj, "model_dump") and callable(obj.model_dump):
             return obj.model_dump()
         if hasattr(obj, "__attrs_attrs__"):
-            return {a.name: getattr(obj, a.name) for a in obj.__attrs_attrs__}
+            return {attr.name: getattr(obj, attr.name) for attr in obj.__attrs_attrs__}
         if hasattr(obj, "__dict__") and not isinstance(obj, type):
             return dict(vars(obj))
         return None
