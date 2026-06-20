@@ -45,6 +45,7 @@ from .json_mixin import JsonMixin
 from .numeric import NumericMixin
 from .snapshot import SnapshotMixin
 from .string import StringMixin
+from .warning import WarningMixin
 
 __version__ = "2.5.1"
 
@@ -75,6 +76,7 @@ ASSERTPY_FILES = [
         "pytest_plugin.py",
         "snapshot.py",
         "string.py",
+        "warning.py",
     ]
 ]
 
@@ -555,6 +557,7 @@ class AssertionBuilder(
     FileMixin,
     ExtractingMixin,
     ExceptionMixin,
+    WarningMixin,
     DynamicMixin,
     DictMixin,
     DateMixin,
@@ -585,6 +588,7 @@ class AssertionBuilder(
         self.expected = expected
         self.logger = logger if logger else _default_logger
         self._not_expected = False
+        self._expected_warning = None
 
     @property
     def not_(self) -> NegatedBuilder:

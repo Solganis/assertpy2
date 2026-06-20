@@ -103,6 +103,28 @@ assert_that(safe_func).does_not_raise(ValueError).when_called_with("foo")
     For the common "did it raise?" case without inspecting the message, prefer pytest's
     `pytest.raises` context manager.
 
+### Expected warnings
+
+For a called function, assert it emits a warning and chain assertions on the warning message:
+
+```python
+assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
+assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").matches("since 2.6")
+```
+
+The category defaults to `Warning` (matches any warning) and matches subclasses. Or assert it does
+**not** emit a given category:
+
+```python
+assert_that(safe_func).does_not_warn(DeprecationWarning).when_called_with("foo")
+```
+
+!!! warning "Not thread-safe"
+    `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global
+    state. They are safe within a single thread (including multiple `asyncio` tasks on one event
+    loop), but concurrent use across OS threads can interfere - the same limitation as
+    `pytest.warns` and `unittest.assertWarns`.
+
 ### Custom error messages
 
 `described_as()` prepends a custom label to the failure message:
@@ -120,6 +142,12 @@ warning instead of raising:
 ```python
 assert_warn("foo").is_length(4)   # logs a warning, does not raise
 ```
+
+!!! note "`assert_warn()` vs `warns()`"
+    These are unrelated despite the similar names. `assert_warn(...)` is a *soft* entry point: the
+    assertion still checks your value, but logs a warning instead of raising on failure.
+    `assert_that(func).warns(...)` is the opposite direction - it asserts that calling `func`
+    *emits* a Python warning.
 
 ??? note "Warning output and custom logger"
     ```

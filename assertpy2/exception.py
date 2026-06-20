@@ -48,10 +48,12 @@ class ExceptionMixin(_MixinBase):
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
     def when_called_with(self, *some_args, **some_kwargs) -> Self:
-        """Asserts that val, when invoked with the given args and kwargs, raises the expected exception.
+        """Asserts that val, when invoked with the given args and kwargs, meets the set expectation.
 
-        Invokes ``val()`` with the given args and kwargs.  You must first set the expected
-        exception with :meth:`~raises` or :meth:`~does_not_raise`.
+        Invokes ``val()`` with the given args and kwargs.  You must first set an expectation with
+        :meth:`~raises` or :meth:`~does_not_raise` (expected exception), or with
+        :meth:`~assertpy2.warning.WarningMixin.warns` or
+        :meth:`~assertpy2.warning.WarningMixin.does_not_warn` (expected warning).
 
         Args:
             *some_args: the args to call ``val()``
@@ -66,14 +68,20 @@ class ExceptionMixin(_MixinBase):
                 assert_that(some_func).raises(RuntimeError).when_called_with('foo')
 
         Returns:
-            AssertionBuilder: returns a new instance (now with the captured exception error message as the val) to chain to the next assertion
+            AssertionBuilder: returns a new instance (now with the captured exception or warning
+                message as the val) to chain to the next assertion
 
         Raises:
-            AssertionError: if val does **not** raise the expected exception
-            TypeError: if expected exception not set via :meth:`raises` or :meth:`does_not_raise`
+            AssertionError: if val does **not** meet the set expectation
+            TypeError: if no expectation set first
         """
+        if self._expected_warning is not None:
+            if self._not_expected:
+                return self._when_called_with_not_warning(self._expected_warning, *some_args, **some_kwargs)
+            return self._when_called_with_warning(self._expected_warning, *some_args, **some_kwargs)
+
         if not self.expected:
-            raise TypeError("expected exception not set, raises() or does_not_raise() must be called first")
+            raise TypeError("no expectation set; call raises(), warns() or a does_not_* method first")
 
         if getattr(self, "_not_expected", False):
             return self._when_called_with_not_expected(*some_args, **some_kwargs)

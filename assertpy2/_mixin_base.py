@@ -16,6 +16,7 @@ class _MixinBase:
         expected: type[BaseException] | None
         logger: logging.LoggerAdapter
         _not_expected: bool
+        _expected_warning: type[Warning] | None
 
         def error(
             self,
@@ -33,6 +34,16 @@ class _MixinBase:
             kind: str | None = ...,
             expected: BaseException | None = ...,
             logger: logging.LoggerAdapter | None = ...,
+        ) -> Self: ...
+
+        # WarningMixin (terminals dispatched from ExceptionMixin.when_called_with)
+
+        def _when_called_with_warning(
+            self, expected: type[Warning], *some_args: object, **some_kwargs: object
+        ) -> Self: ...
+
+        def _when_called_with_not_warning(
+            self, expected: type[Warning], *some_args: object, **some_kwargs: object
         ) -> Self: ...
 
         # HelpersMixin
