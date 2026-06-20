@@ -121,6 +121,11 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
                 lines.append(f"  {path}:")
                 lines.append(f"    {red}- {entry.actual!r}{reset}")
                 lines.append(f"    {green}+ {entry.expected!r}{reset}")
+    elif kind == "match":
+        for entry in visible:
+            lines.append(
+                f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
+            )
     elif kind in {"set", "contains"}:
         extra = [e for e in visible if e.path == "extra"]
         missing = [e for e in visible if e.path == "missing"]

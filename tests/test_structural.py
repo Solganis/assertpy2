@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import assert_that, match
+from assertpy2 import AssertionFailure, assert_that, match
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -243,6 +243,60 @@ class TestStructureMatcher:
         assert_that(matcher.matches(value)).is_true()
 
 
+class TestCollectMismatches:
+    def test_collects_all_failing_fields(self):
+        matcher = match.structure({"a": match.is_positive(), "b": match.is_positive(), "c": match.is_positive()})
+        result = matcher.collect_mismatches({"a": -1, "b": 5, "c": -3})
+        assert_that([entry[0] for entry in result]).is_equal_to(["a", "c"])
+
+    def test_empty_when_all_match(self):
+        matcher = match.structure({"a": match.is_positive(), "status": "active"})
+        assert_that(matcher.collect_mismatches({"a": 5, "status": "active"})).is_empty()
+
+    def test_nested_structure_matcher_joins_path(self):
+        matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
+        result = matcher.collect_mismatches({"address": {"city": "LA"}})
+        assert_that(result[0][0]).is_equal_to("address.city")
+
+    def test_missing_key_recorded(self):
+        matcher = match.structure({"name": match.is_non_empty_string()})
+        path, actual, description = matcher.collect_mismatches({})[0]
+        assert_that(path).is_equal_to("name")
+        assert_that(repr(actual)).is_equal_to("<missing>")
+        assert_that(description).is_equal_to("a non-empty string")
+
+    def test_nested_structure_matcher_against_non_dict(self):
+        matcher = match.structure({"user": match.structure({"name": match.is_non_empty_string()})})
+        result = matcher.collect_mismatches({"user": "not a dict"})
+        assert_that(result[0][0]).is_equal_to("user")
+
+    def test_plain_nested_dict_against_non_dict(self):
+        matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
+        path, _actual, description = matcher.collect_mismatches({"user": "not a dict"})[0]
+        assert_that(path).is_equal_to("user")
+        assert_that(description).is_equal_to("a dict")
+
+    def test_plain_nested_dict_recurses(self):
+        matcher = match.structure({"user": {"role": "admin"}})
+        result = matcher.collect_mismatches({"user": {"role": "guest"}})
+        assert_that(result[0][0]).is_equal_to("user.role")
+
+    def test_raw_value_mismatch(self):
+        matcher = match.structure({"status": "active"})
+        path, actual, description = matcher.collect_mismatches({"status": "inactive"})[0]
+        assert_that(path).is_equal_to("status")
+        assert_that(actual).is_equal_to("inactive")
+        assert_that(description).is_equal_to("<active>")
+
+    def test_circular_reference(self):
+        circular = {}
+        circular["self"] = circular
+        spec = {}
+        spec["self"] = spec
+        result = match.structure(spec).collect_mismatches(circular)
+        assert_that(result[0][1]).is_equal_to("<circular ref>")
+
+
 class TestMatchesStructureMethod:
     def test_basic(self):
         user = {"name": "Alice", "age": 30}
@@ -293,3 +347,17 @@ class TestMatchesStructureMethod:
     def test_error_message_contains_structure_description(self):
         with pytest.raises(AssertionError, match="to match structure"):
             assert_that({"x": 1}).matches_structure({"x": match.is_non_empty_string()})
+
+    def test_failure_attaches_structured_diff(self):
+        value = {"role": "guest", "address": {"city": "LA"}}
+        try:
+            assert_that(value).matches_structure(
+                {"role": match.is_in("admin", "user"), "address": match.structure({"city": match.equal_to("NYC")})}
+            )
+        except AssertionFailure as exc:
+            assert_that(exc.diff.kind).is_equal_to("match")
+            assert_that([entry.path for entry in exc.diff.entries]).contains("role", "address.city")
+            assert_that(exc.actual).is_equal_to(value)
+            assert_that(exc.expected).is_not_none()
+        else:
+            raise AssertionError("expected AssertionFailure") from None

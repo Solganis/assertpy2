@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import Matcher, assert_that, match
+from assertpy2 import AssertionFailure, Matcher, assert_that, match
 from assertpy2.matchers import BaseMatcher
 
 
@@ -459,6 +459,16 @@ class TestSatisfies:
     def test_chaining(self):
         assert_that(7).satisfies(match.greater_than(5)).is_less_than(10)
 
+    def test_failure_attaches_match_diff(self):
+        try:
+            assert_that(5).satisfies(match.greater_than(10))
+        except AssertionFailure as exc:
+            assert_that(exc.diff.kind).is_equal_to("match")
+            assert_that(exc.diff.entries[0].path).is_equal_to(".")
+            assert_that(exc.diff.entries[0].actual).is_equal_to(5)
+        else:
+            raise AssertionError("expected AssertionFailure") from None
+
 
 class TestEach:
     def test_with_matcher(self):
@@ -499,6 +509,16 @@ class TestEach:
     def test_with_extracting(self):
         users = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]
         assert_that(users).extracting("age").each(match.between(18, 120))
+
+    def test_failure_attaches_match_diff(self):
+        try:
+            assert_that([1, 2, -3]).each(match.is_positive())
+        except AssertionFailure as exc:
+            assert_that(exc.diff.kind).is_equal_to("match")
+            assert_that(exc.diff.entries[0].path).is_equal_to("[2]")
+            assert_that(exc.diff.entries[0].actual).is_equal_to(-3)
+        else:
+            raise AssertionError("expected AssertionFailure") from None
 
 
 class TestContainsWithMatcher:

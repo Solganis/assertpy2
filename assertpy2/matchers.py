@@ -512,6 +512,26 @@ class EachMatcher(BaseMatcher):
         return f"was <{value}>"
 
 
+class _MissingSentinel:
+    """Placeholder recorded for a spec key absent from the value during structural matching."""
+
+    def __repr__(self) -> str:
+        return "<missing>"
+
+
+_MISSING = _MissingSentinel()
+
+
+def _describe_spec_value(value: object) -> str:
+    """Describe a single structure-spec value (matcher, nested dict spec, or raw value)."""
+    if isinstance(value, Matcher):
+        return value.describe()
+    if isinstance(value, dict):
+        parts = [f"{key}: {_describe_spec_value(sub_value)}" for key, sub_value in value.items()]
+        return f"{{{', '.join(parts)}}}"
+    return f"<{value}>"
+
+
 class StructureMatcher(BaseMatcher):
     """Matches dicts against a structure spec where values are matchers, raw values, or nested dicts."""
 
@@ -559,16 +579,42 @@ class StructureMatcher(BaseMatcher):
                 return f"at <{current_path}>: expected <{expected}>, but was <{actual}>"
         return None
 
+    def collect_mismatches(self, value: dict) -> list[tuple[str, object, str]]:
+        """Collect every structural mismatch as ``(path, actual, expected_description)``.
+
+        Unlike :meth:`describe_mismatch`, this does not stop at the first failure and joins nested
+        paths, so callers can build a path-level :class:`~assertpy2.errors.DiffResult`.
+        """
+        return self._collect(value, self._spec, "", set())
+
+    def _collect(self, value: dict, spec: dict, path: str, seen: set[tuple[int, int]]) -> list[tuple[str, object, str]]:
+        pair_id = (id(value), id(spec))
+        if pair_id in seen:
+            return [(path or "root", "<circular ref>", "<circular ref>")]
+        seen = seen | {pair_id}
+        mismatches: list[tuple[str, object, str]] = []
+        for key, expected in spec.items():
+            current_path = f"{path}.{key}" if path else str(key)
+            if key not in value:
+                mismatches.append((current_path, _MISSING, _describe_spec_value(expected)))
+                continue
+            actual = value[key]
+            if isinstance(expected, StructureMatcher) and isinstance(actual, dict):
+                mismatches.extend(self._collect(actual, expected._spec, current_path, seen))
+            elif isinstance(expected, Matcher):
+                if not expected.matches(actual):
+                    mismatches.append((current_path, actual, expected.describe()))
+            elif isinstance(expected, dict):
+                if isinstance(actual, dict):
+                    mismatches.extend(self._collect(actual, expected, current_path, seen))
+                else:
+                    mismatches.append((current_path, actual, "a dict"))
+            elif actual != expected:
+                mismatches.append((current_path, actual, f"<{expected}>"))
+        return mismatches
+
     def _describe_spec(self, spec: dict) -> str:
-        parts = []
-        for key, value in spec.items():
-            if isinstance(value, Matcher):
-                parts.append(f"{key}: {value.describe()}")
-            elif isinstance(value, dict):
-                parts.append(f"{key}: {self._describe_spec(value)}")
-            else:
-                parts.append(f"{key}: <{value}>")
-        return f"{{{', '.join(parts)}}}"
+        return _describe_spec_value(spec)
 
 
 # --- Custom matcher registry ---
