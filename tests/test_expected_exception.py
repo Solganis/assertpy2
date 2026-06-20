@@ -161,3 +161,17 @@ def test_expected_exception_warn_wrong_type_preserves_logger():
 class Foo:
     def bar(self):
         raise RuntimeError("method err")
+
+
+def safe_add(value):
+    return value + 1
+
+
+def test_does_not_raise_returned_pivots_to_return_value():
+    assert_that(safe_add).does_not_raise(ValueError).when_called_with(41).returned().is_equal_to(42)
+
+
+def test_returned_without_return_value_fails():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(func_no_arg).raises(RuntimeError).when_called_with().returned()
+    assert_that(str(exc_info.value)).contains("no return value captured")

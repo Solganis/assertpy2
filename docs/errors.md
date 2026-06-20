@@ -119,6 +119,17 @@ The category defaults to `Warning` (matches any warning) and matches subclasses.
 assert_that(safe_func).does_not_warn(DeprecationWarning).when_called_with("foo")
 ```
 
+To also assert on the value the call returned (alongside the warning, or after `does_not_warn` /
+`does_not_raise`), pivot with `returned()`:
+
+```python
+assert_that(make_client).warns(DeprecationWarning).when_called_with().returned().is_instance_of(Client)
+assert_that(adder).does_not_raise(TypeError).when_called_with(1, 2).returned().is_equal_to(3)
+```
+
+`returned()` exposes the type-agnostic core assertions (`is_equal_to`, `is_instance_of`, `satisfies`,
+...); it raises `TypeError` if the call raised (there is no return value to inspect).
+
 !!! warning "Not thread-safe"
     `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global
     state. They are safe within a single thread (including multiple `asyncio` tasks on one event

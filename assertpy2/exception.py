@@ -9,6 +9,8 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
+_UNSET = object()  # sentinel: no return value captured yet
+
 
 class _InertBuilder:
     """No-op builder returned after a failed raises/when_called_with in soft mode.
@@ -105,10 +107,34 @@ class ExceptionMixin(_MixinBase):
         )
         return cast("Self", _InertBuilder())
 
+    def returned(self) -> Self:
+        """Pivots the chain to the value ``val()`` returned during :meth:`when_called_with`.
+
+        Use after a call that completed normally (:meth:`~assertpy2.warning.WarningMixin.warns`,
+        :meth:`~assertpy2.warning.WarningMixin.does_not_warn`, or :meth:`does_not_raise`) to assert
+        on the return value in the same chain.
+
+        Examples:
+            Usage::
+
+                assert_that(make_client).warns(DeprecationWarning).when_called_with().returned().is_instance_of(Client)
+                assert_that(adder).does_not_raise(TypeError).when_called_with(1, 2).returned().is_equal_to(3)
+
+        Returns:
+            AssertionBuilder: a new instance wrapping the captured return value
+
+        Raises:
+            TypeError: if no return value was captured (the call raised, or :meth:`when_called_with`
+                was not invoked first)
+        """
+        if self._return_value is _UNSET:
+            raise TypeError("no return value captured; returned() is only valid after a call that completed normally")
+        return self.builder(self._return_value, self.description, self.kind, logger=self.logger)
+
     def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
         assert self.expected is not None
         try:
-            self.val(*some_args, **some_kwargs)
+            result = self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), self.expected):
                 self.error(
@@ -117,6 +143,8 @@ class ExceptionMixin(_MixinBase):
                     f" but did raise <{type(e).__name__}>."
                 )
                 return cast("Self", _InertBuilder())
+            return self
+        self._return_value = result
         return self
 
     def does_not_raise(self, ex) -> Self:

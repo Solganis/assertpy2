@@ -17,6 +17,7 @@ class _MixinBase:
         logger: logging.LoggerAdapter
         _not_expected: bool
         _expected_warning: type[Warning] | None
+        _return_value: object
 
         def error(
             self,
@@ -32,7 +33,7 @@ class _MixinBase:
             val: object,
             description: str = ...,
             kind: str | None = ...,
-            expected: BaseException | None = ...,
+            expected: type[BaseException] | None = ...,
             logger: logging.LoggerAdapter | None = ...,
         ) -> Self: ...
 

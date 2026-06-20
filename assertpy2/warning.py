@@ -89,10 +89,12 @@ class WarningMixin(_MixinBase):
     def _when_called_with_warning(self, expected: type[Warning], *some_args, **some_kwargs) -> Self:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
-            self.val(*some_args, **some_kwargs)
+            result = self.val(*some_args, **some_kwargs)
         matched = [w for w in caught if issubclass(w.category, expected)]
         if matched:
-            return self.builder(str(matched[0].message), self.description, self.kind, logger=self.logger)
+            captured = self.builder(str(matched[0].message), self.description, self.kind, logger=self.logger)
+            captured._return_value = result
+            return captured
         if caught:
             seen = ", ".join(sorted({w.category.__name__ for w in caught}))
             self.error(
@@ -110,7 +112,7 @@ class WarningMixin(_MixinBase):
     def _when_called_with_not_warning(self, expected: type[Warning], *some_args, **some_kwargs) -> Self:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
-            self.val(*some_args, **some_kwargs)
+            result = self.val(*some_args, **some_kwargs)
         matched = [w for w in caught if issubclass(w.category, expected)]
         if matched:
             seen = ", ".join(sorted({w.category.__name__ for w in matched}))
@@ -120,4 +122,5 @@ class WarningMixin(_MixinBase):
                 f" but did warn <{seen}>."
             )
             return cast("Self", _InertBuilder())
+        self._return_value = result
         return self

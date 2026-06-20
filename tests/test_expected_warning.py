@@ -175,3 +175,29 @@ def test_does_not_warn_failure_in_warn_mode_logs():
     assert_that(out).contains(
         "Expected <warn_user> to not warn <UserWarning> when called with (), but did warn <UserWarning>."
     )
+
+
+# returned() pivot to the callable's return value
+
+
+def warn_and_return_list(*args, **kwargs):
+    warnings.warn("dep since 2.7", DeprecationWarning, stacklevel=2)
+    return [1, 2, 3]
+
+
+def quiet_return_ok(*args, **kwargs):
+    return "ok"
+
+
+def test_warns_returned_pivots_to_return_value():
+    assert_that(warn_and_return_list).warns(DeprecationWarning).when_called_with().returned().is_equal_to([1, 2, 3])
+
+
+def test_warns_returned_after_message_assertion():
+    assert_that(warn_and_return_list).warns(DeprecationWarning).when_called_with().matches(
+        "since 2.7"
+    ).returned().is_equal_to([1, 2, 3])
+
+
+def test_does_not_warn_returned_pivots_to_return_value():
+    assert_that(quiet_return_ok).does_not_warn(DeprecationWarning).when_called_with().returned().is_equal_to("ok")
