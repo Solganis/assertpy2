@@ -406,6 +406,36 @@ class TestPytestPluginDiffRendering:
         )
         assert_that(result.stdout).does_not_contain("Structured Diff")
 
+    def test_matches_structure_diff_in_report(self, tmp_path):
+        test_file = tmp_path / "test_sample.py"
+        test_file.write_text(
+            "from assertpy2 import assert_that, match\n"
+            "def test_structure():\n"
+            "    assert_that({'role': 'guest', 'address': {'city': 'LA'}}).matches_structure({\n"
+            "        'role': match.is_in('admin', 'user'),\n"
+            "        'address': match.structure({'city': match.equal_to('NYC')}),\n"
+            "    })\n",
+        )
+        result = subprocess.run(
+            ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert_that(result.stdout).contains("diff (match)")
+        assert_that(result.stdout).contains("address.city")
+
+
+class TestFormatDiffMatchKind:
+    def test_renders_predicate_and_actual(self):
+        diff = DiffResult(
+            kind="match",
+            entries=[DiffEntry(path="role", actual="guest", expected="a value in <('admin', 'user')>")],
+        )
+        output = _format_diff(diff)
+        assert_that(output).contains("diff (match):")
+        assert_that(output).contains("role: expected a value in <('admin', 'user')>, but was 'guest'")
+
 
 class TestFormatDiffTruncation:
     def test_truncation_when_over_max(self):

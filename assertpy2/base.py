@@ -430,7 +430,13 @@ class BaseMixin(_MixinBase):
         """
         if isinstance(matcher, Matcher):
             if not matcher.matches(self.val):
-                return self.error(f"Expected {matcher.describe()}, but {matcher.describe_mismatch(self.val)}.")
+                description = matcher.describe()
+                return self.error(
+                    f"Expected {description}, but {matcher.describe_mismatch(self.val)}.",
+                    actual=self.val,
+                    expected=description,
+                    diff=DiffResult(kind="match", entries=[DiffEntry(path=".", actual=self.val, expected=description)]),
+                )
         elif callable(matcher):
             if not matcher(self.val):
                 return self.error(f"Expected <{self.val}> to satisfy <{matcher}>, but did not.")
@@ -466,11 +472,17 @@ class BaseMixin(_MixinBase):
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if isinstance(matcher, Matcher):
+            description = matcher.describe()
             for i, item in enumerate(self.val):
                 if not matcher.matches(item):
                     return self.error(
-                        f"Expected all items to satisfy {matcher.describe()}, but item at index {i} <{item}> did not:"
-                        f" {matcher.describe_mismatch(item)}."
+                        f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
+                        f" {matcher.describe_mismatch(item)}.",
+                        actual=item,
+                        expected=description,
+                        diff=DiffResult(
+                            kind="match", entries=[DiffEntry(path=f"[{i}]", actual=item, expected=description)]
+                        ),
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
@@ -515,10 +527,17 @@ class BaseMixin(_MixinBase):
         if not isinstance(spec, dict):
             raise TypeError("given arg must be a dict")
         matcher = StructureMatcher(spec)
-        if not matcher.matches(self.val):
+        mismatches = matcher.collect_mismatches(self.val)
+        if mismatches:
+            entries = [
+                DiffEntry(path=path, actual=actual, expected=description) for path, actual, description in mismatches
+            ]
             return self.error(
                 f"Expected <{self.val}> to match structure {matcher.describe()}, but"
-                f" {matcher.describe_mismatch(self.val)}."
+                f" {matcher.describe_mismatch(self.val)}.",
+                actual=self.val,
+                expected=spec,
+                diff=DiffResult(kind="match", entries=entries),
             )
         return self
 
