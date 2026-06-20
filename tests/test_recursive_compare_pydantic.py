@@ -2,6 +2,8 @@ import pytest
 
 pytest.importorskip("pydantic", reason="pydantic not installed")
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from pydantic import BaseModel
 
 from assertpy2 import assert_that
@@ -53,3 +55,29 @@ class TestPydanticListOfObjects:
         actual = [UserDto(id=1, name="Alice"), UserDto(id=2, name="Bob")]
         expected = [UserDto(id=99, name="Alice"), UserDto(id=99, name="Bob")]
         assert_that(actual).is_equal_to(expected, ignore="id")
+
+
+_addresses = st.builds(AddressDto, city=st.text(max_size=5), zip_code=st.text(max_size=5))
+_users = st.builds(UserDtoWithAddress, id=st.integers(), name=st.text(max_size=5), address=_addresses)
+
+
+class TestPydanticProperties:
+    @settings(deadline=None)
+    @given(left=_users, right=_users)
+    def test_is_equal_to_consistent_with_eq(self, left, right):
+        if left == right:
+            assert_that(left).is_equal_to(right)
+        else:
+            with pytest.raises(AssertionError):
+                assert_that(left).is_equal_to(right)
+
+    @settings(deadline=None)
+    @given(value=_users)
+    def test_is_equal_to_reflexive(self, value):
+        assert_that(value).is_equal_to(value.model_copy(deep=True))
+
+    @settings(deadline=None)
+    @given(value=st.builds(UserDto, id=st.integers(), name=st.text(max_size=5)), new_id=st.integers())
+    def test_ignore_removes_field_difference(self, value, new_id):
+        other = value.model_copy(update={"id": new_id})
+        assert_that(value).is_equal_to(other, ignore="id")

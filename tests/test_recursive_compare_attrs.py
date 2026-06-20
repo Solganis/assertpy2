@@ -3,6 +3,8 @@ import pytest
 pytest.importorskip("attrs", reason="attrs not installed")
 
 import attrs
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from assertpy2 import assert_that
 from assertpy2.helpers import HelpersMixin
@@ -51,3 +53,29 @@ class TestAttrsToComparableDict:
         product = Product(sku="A", name="W", price=10.0)
         result = HelpersMixin._to_comparable_dict(product)
         assert_that(result).is_equal_to({"sku": "A", "name": "W", "price": 10.0})
+
+
+_products = st.builds(Product, sku=st.text(max_size=5), name=st.text(max_size=5), price=st.floats(allow_nan=False))
+_orders = st.builds(Order, id=st.integers(), product=_products, quantity=st.integers())
+
+
+class TestAttrsProperties:
+    @settings(deadline=None)
+    @given(left=_orders, right=_orders)
+    def test_is_equal_to_consistent_with_eq(self, left, right):
+        if left == right:
+            assert_that(left).is_equal_to(right)
+        else:
+            with pytest.raises(AssertionError):
+                assert_that(left).is_equal_to(right)
+
+    @settings(deadline=None)
+    @given(value=_orders)
+    def test_is_equal_to_reflexive(self, value):
+        assert_that(value).is_equal_to(attrs.evolve(value))
+
+    @settings(deadline=None)
+    @given(value=_products, new_sku=st.text(max_size=5))
+    def test_ignore_removes_field_difference(self, value, new_sku):
+        other = attrs.evolve(value, sku=new_sku)
+        assert_that(value).is_equal_to(other, ignore="sku")
