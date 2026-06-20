@@ -82,6 +82,41 @@ The same check - `id` is a positive integer and `name` is a non-empty string - i
 
 Only assertpy2 offers both the typed structural form and the `==` form from a single import.
 
+## When it fails
+
+A nested response, after `role` comes back as `"superadmin"`. What each library prints on failure:
+
+=== "assertpy2"
+
+    ```text
+    assert_that(response).matches_structure({...})
+    --- Structured Diff ---
+    diff (match):
+      user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
+    ```
+
+=== "pytest assert"
+
+    ```text
+    assert response == expected
+    E   Differing items:
+    E   {'user': {'name': 'Alice', 'role': 'superadmin', 'age': 30}} !=
+    E   {'user': {'name': 'Alice', 'role': 'admin', 'age': 30}}
+    ```
+
+=== "dirty-equals"
+
+    ```text
+    assert response == {"user": {"role": IsOneOf("admin", "user"), ...}}
+    E   Differing items:
+    E   {'user': {'name': 'Alice', 'role': 'superadmin', 'age': 30}} !=
+    E   {'user': {'name': IsStr, 'role': IsOneOf('admin', 'user'), 'age': IsInt}}
+    ```
+
+Only assertpy2 prints the path (`user.role`) and the exact predicate that failed. dirty-equals and the
+assertpy2 `==` form both hand rendering to pytest, which dumps the whole differing container for you to
+scan. The fluent form trades the zero-import convenience of `==` for a path-level diff.
+
 ## Style and typing
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
@@ -126,7 +161,7 @@ Only assertpy2 offers both the typed structural form and the `==` form from a si
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.5.0** |
+| Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.8.0** |
 | Runtime dependencies | none | none | none | none | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
 

@@ -35,6 +35,21 @@ assert_that(5).is_greater_than(10)
 # AssertionError: Expected <5> to be greater than <10>, but was not.
 ```
 
+For dicts, dataclasses, and other structures, the pytest plugin renders a path-level diff that points
+straight at the differing field instead of dumping the whole value:
+
+```text
+assert_that(actual).is_equal_to(expected)
+--- Structured Diff ---
+diff (dict):
+  user.role:
+    - 'superadmin'
+    + 'admin'
+```
+
+The same path-level diff backs `matches_structure()`, `satisfies()`, and `each()`. See
+[Errors & Reporting](errors.md) for the full diff format and configuration.
+
 ## Collect multiple failures
 
 Use soft assertions to report every failure at once instead of stopping at the first:

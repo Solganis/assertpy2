@@ -12,7 +12,7 @@ rich structural diffs on failure.
   accurate autocomplete and type checkers catch misuse. This is the core advantage over `assertpy` and
   most alternatives.
 - **Composable matchers.** `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`.
-- **Structural matching.** Declarative validation of dicts and API responses.
+- **Structural matching.** Declarative validation of dicts and API responses, with the exact path to each mismatch on failure.
 - **Soft and async assertions.** Collect multiple failures; poll for eventual consistency with `eventually()`.
 - **Structured failures.** `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin
   renders recursive diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
@@ -35,6 +35,15 @@ assert_that([1, 2, 3]).contains(1).is_subset_of([1, 2, 3, 4])
 assert_that({"id": 1, "name": "Alice"}).matches_structure(
     {"id": match.is_instance_of(int), "name": match.is_non_empty_string()}
 )
+```
+
+When a check fails, the pytest plugin points at the exact field instead of dumping both structures:
+
+```text
+assert_that(response).matches_structure({...})
+--- Structured Diff ---
+diff (match):
+  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
 ```
 
 See [Getting Started](getting-started.md) to dive in, or browse [Type Assertions](assertions.md),
