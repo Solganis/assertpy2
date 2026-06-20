@@ -48,23 +48,48 @@ def test_user():
 
 ## Why fluent assertions?
 
+A fluent chain reads as one intent and replaces several bare asserts - and your IDE
+offers only the methods that fit the value's type:
+
 ```py
-# bare assert - passes, but failure message is useless
-assert user["age"] >= 18
-# AssertionError
-
-# assertpy2 - same check, clear failure message
-assert_that(user["age"]).is_greater_than_or_equal_to(18)
-# AssertionError: Expected <16> to be greater than or equal to <18>, but was not.
-
-# bare assert - three separate statements
+# bare - three statements, no autocomplete help
 assert isinstance(items, list)
 assert len(items) == 3
 assert "admin" in items
 
-# assertpy2 - one fluent chain
+# assertpy2 - one chain, type-aware autocomplete
 assert_that(items).is_type_of(list).is_length(3).contains("admin")
 ```
+
+The real difference shows up when a test fails. Here a nested response has two wrong
+fields. Plain `assert` dumps both structures and leaves you to find them:
+
+```text
+assert response == expected
+E   AssertionError: assert {'id': 1, ...} == {'id': 1, ...}
+E     Omitting 1 identical items, use -vv to show
+E     Differing items:
+E     {'user': {'name': 'Alice', 'role': 'superadmin'}} != {'user': {'name': 'Alice', 'role': 'admin'}}
+E     {'status': 'active'} != {'status': 'disabled'}
+```
+
+assertpy2 reports the exact path to every difference:
+
+```text
+assert_that(response).is_equal_to(expected)
+--- Structured Diff ---
+diff (dict):
+  status:
+    - 'active'
+    + 'disabled'
+  user.role:
+    - 'superadmin'
+    + 'admin'
+```
+
+Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
+For responses with dynamic fields (IDs, timestamps), validate a subset with
+`matches_structure()` instead of exact equality.
 
 ## Type-aware autocomplete
 
@@ -86,7 +111,7 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 **Fluent API**
 
 - [**Composable matchers**](https://solganis.github.io/assertpy2/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
-- [**Structural matching**](https://solganis.github.io/assertpy2/matchers/#structural-matching): `matches_structure()` for declarative dict/API response validation.
+- [**Structural matching**](https://solganis.github.io/assertpy2/matchers/#structural-matching): `matches_structure()` for declarative dict/API response validation, reporting the exact path to each mismatch on failure.
 - [**Universal negation**](https://solganis.github.io/assertpy2/fluent/#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 - [**Fluent chaining**](https://solganis.github.io/assertpy2/fluent/#chaining): write assertions as readable one-liners that chain naturally.
@@ -105,7 +130,7 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 - [**Soft assertions**](https://solganis.github.io/assertpy2/testing/#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
 - [**Async assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` with polling/retry for eventual consistency.
 - [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
-- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models. Circular reference protection.
+- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models, and matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`). Circular reference protection.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format.
 
 **Type safety**

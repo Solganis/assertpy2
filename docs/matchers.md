@@ -80,6 +80,10 @@ assert 42 == (match.is_positive() & match.less_than(100))
     AssertionError: assert -5 == a positive value
     ```
 
+    The `==` form hands rendering to pytest, so you get pytest's own message without a path-level
+    diff. For the rich `match` diff, use the fluent form (`satisfies()`, `matches_structure()`) -
+    see [Errors & Reporting](errors.md#rich-pytest-diffs).
+
 !!! tip
     This makes matchers a drop-in addition to an existing suite: add one import, use `match.*` in any
     `==` comparison, no rewrite required.
@@ -170,6 +174,21 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
 !!! note
     Keys present in the value but absent from the spec are ignored, so a structure spec validates a
     subset of fields rather than requiring an exact match.
+
+### What you see on failure
+
+When fields do not match, the pytest plugin prints the exact path and the predicate that failed - every
+mismatch, not just the first:
+
+```text
+diff (match):
+  user.name: expected a non-empty string, but was ''
+  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
+  user.age: expected a value between <18> and <120>, but was 15
+```
+
+The same `match` diff is produced by [`satisfies()`](#satisfies) and [`each()`](#each) whenever a
+matcher fails inside an assertion.
 
 ## Custom matchers
 

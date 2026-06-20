@@ -25,6 +25,9 @@ except AssertionError as e:
     # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
 ```
 
+Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
+`kind='match'`, where each entry's `expected` holds the failed predicate's description.
+
 When the pytest plugin is active (auto-registered via the `pytest11` entry point, no configuration
 needed), this data is rendered as extra report sections. See [Rich pytest diffs](#rich-pytest-diffs)
 for supported types and configuration.
@@ -45,6 +48,7 @@ rendered by the plugin as colored diff sections.
 | Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
 | other | `scalar` | Single actual-vs-expected entry |
 | `contains` family | `contains` | Missing and extra items |
+| matcher mismatch | `match` | `matches_structure()` / `satisfies()` / `each()`: path + failed predicate |
 
 ```
 --- AssertionFailure ---
@@ -60,6 +64,20 @@ diff (sequence):
 Nested structures are diffed recursively and report the exact path to the differing value (for example
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing
 forever.
+
+Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) emit a `match` diff that
+shows the path and the predicate that failed, for every field, not just the first:
+
+```text
+diff (match):
+  user.name: expected a non-empty string, but was ''
+  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
+  user.age: expected a value between <18> and <120>, but was 15
+```
+
+The rich `match`/`dict` diff comes from the fluent form. The `==` drop-in for matchers (for example
+`assert response == {"id": match.is_positive()}`) hands rendering to pytest instead, which prints its
+own dict comparison without the path.
 
 ### Configuration
 
