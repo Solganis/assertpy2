@@ -3,14 +3,22 @@
 ## Supported Versions
 
 | Version | Supported |
-|---|---|
-| 2.x | Yes |
-| < 2.0 | No |
+|---------|-----------|
+| 2.x     | Yes       |
+| < 2.0   | No        |
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities by emailing solganis.dev@gmail.com.
+If you discover a security vulnerability, please report it responsibly:
 
-Do not open a public issue for security vulnerabilities.
+1. **Email**: [solganis.dev@gmail.com](mailto:solganis.dev@gmail.com)
+2. **Subject**: `[assertpy2] Security: <brief description>`
+3. Include steps to reproduce, affected versions, and potential impact
 
-You should receive a response within 48 hours. If the vulnerability is confirmed, a fix will be released as soon as possible.
+Please do **not** open a public GitHub issue for security vulnerabilities.
+
+## Response Timeline
+
+- Acknowledgement: within 48 hours
+- Initial assessment: within 7 days
+- Fix or mitigation: depends on severity, typically within 30 days
