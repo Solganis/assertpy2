@@ -15,7 +15,7 @@ class DiffEntry:
         return f"  at {self.path}: actual=<{self.actual}>, expected=<{self.expected}>"
 
 
-@dataclass
+@dataclass(slots=True)
 class DiffResult:
     """Structured diff between two values."""
 
