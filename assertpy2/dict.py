@@ -83,9 +83,9 @@ class DictMixin(_MixinBase):
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
         missing = []
-        for v in values:
-            if v not in self.val.values():
-                missing.append(v)
+        for value in values:
+            if value not in self.val.values():
+                missing.append(value)
         if missing:
             return self.error(
                 f"Expected <{self.val}> to contain values {self._fmt_items(values)},"
@@ -118,9 +118,9 @@ class DictMixin(_MixinBase):
             raise ValueError("one or more value args must be given")
         else:
             found = []
-            for v in values:
-                if v in self.val.values():
-                    found.append(v)
+            for value in values:
+                if value in self.val.values():
+                    found.append(value)
             if found:
                 return self.error(
                     f"Expected <{self.val}> to not contain values {self._fmt_items(values)},"
@@ -161,20 +161,20 @@ class DictMixin(_MixinBase):
             AssertionError: if val does **not** contain the entry or entries
         """
         self._check_dict_like(self.val, check_values=False)
-        entries = list(args) + [{k: v} for k, v in kwargs.items()]
+        entries = list(args) + [{key: value} for key, value in kwargs.items()]
         if len(entries) == 0:
             raise ValueError("one or more entry args must be given")
         missing = []
-        for e in entries:
-            if type(e) is not dict:
+        for entry in entries:
+            if type(entry) is not dict:
                 raise TypeError("given entry arg must be a dict")
-            if len(e) != 1:
+            if len(entry) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
-            k = next(iter(e))
-            if k not in self.val:
-                missing.append(e)  # bad key
-            elif self.val[k] != e[k]:
-                missing.append(e)  # bad val
+            entry_key = next(iter(entry))
+            if entry_key not in self.val:
+                missing.append(entry)  # bad key
+            elif self.val[entry_key] != entry[entry_key]:
+                missing.append(entry)  # bad val
         if missing:
             return self.error(
                 f"Expected <{self.val}> to contain entries {self._fmt_items(entries)},"
@@ -209,18 +209,18 @@ class DictMixin(_MixinBase):
             AssertionError: if val **does** contain the entry or entries
         """
         self._check_dict_like(self.val, check_values=False)
-        entries = list(args) + [{k: v} for k, v in kwargs.items()]
+        entries = list(args) + [{key: value} for key, value in kwargs.items()]
         if len(entries) == 0:
             raise ValueError("one or more entry args must be given")
         found = []
-        for e in entries:
-            if type(e) is not dict:
+        for entry in entries:
+            if type(entry) is not dict:
                 raise TypeError("given entry arg must be a dict")
-            if len(e) != 1:
+            if len(entry) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
-            k = next(iter(e))
-            if k in self.val and e[k] == self.val[k]:
-                found.append(e)
+            entry_key = next(iter(entry))
+            if entry_key in self.val and entry[entry_key] == self.val[entry_key]:
+                found.append(entry)
         if found:
             return self.error(
                 f"Expected <{self.val}> to not contain entries {self._fmt_items(entries)},"

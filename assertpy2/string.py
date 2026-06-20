@@ -78,11 +78,11 @@ class StringMixin(_MixinBase):
                     )
             else:
                 missing = []
-                for i in items:
-                    if not isinstance(i, str):
+                for item in items:
+                    if not isinstance(item, str):
                         raise TypeError("given args must all be strings")
-                    if i.lower() not in self.val.lower():
-                        missing.append(i)
+                    if item.lower() not in self.val.lower():
+                        missing.append(item)
                 if missing:
                     return self.error(
                         f"Expected <{self.val}> to case-insensitive contain items"
@@ -90,18 +90,18 @@ class StringMixin(_MixinBase):
                     )
         elif isinstance(self.val, collections.abc.Iterable):
             missing = []
-            for i in items:
-                if not isinstance(i, str):
+            for item in items:
+                if not isinstance(item, str):
                     raise TypeError("given args must all be strings")
                 found = False
-                for v in self.val:
-                    if not isinstance(v, str):
+                for value in self.val:
+                    if not isinstance(value, str):
                         raise TypeError("val items must all be strings")
-                    if i.lower() == v.lower():
+                    if item.lower() == value.lower():
                         found = True
                         break
                 if not found:
-                    missing.append(i)
+                    missing.append(item)
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to case-insensitive contain items"
@@ -525,11 +525,11 @@ class StringMixin(_MixinBase):
             raise TypeError("given pattern arg must be a string")
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
-        m = re.search(pattern, self.val)
-        if m is None:
+        match_obj = re.search(pattern, self.val)
+        if match_obj is None:
             return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
         try:
-            extracted = m.group(group)
+            extracted = match_obj.group(group)
         except IndexError:
             return self.error(f"Expected pattern <{pattern}> to have group <{group}>, but it does not.")
         if extracted is None:
@@ -575,9 +575,9 @@ class StringMixin(_MixinBase):
             raise TypeError("given pattern arg must be a string")
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
-        m = re.search(pattern, self.val)
-        if m is None:
+        match_obj = re.search(pattern, self.val)
+        if match_obj is None:
             return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
-        groupdict = m.groupdict()
-        result = groupdict if groupdict else m.groups()
+        groupdict = match_obj.groupdict()
+        result = groupdict if groupdict else match_obj.groups()
         return self.builder(result, self.description, self.kind)

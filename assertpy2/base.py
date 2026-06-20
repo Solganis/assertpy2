@@ -175,17 +175,17 @@ class BaseMixin(_MixinBase):
                 actual=actual,
                 expected=expected,
             )
-        for i, (a, b) in enumerate(zip(actual, expected, strict=True)):
-            a_dict = self._to_comparable_dict(a)
-            b_dict = self._to_comparable_dict(b)
-            if a_dict is not None and b_dict is not None:
-                if self._dict_not_equal(a_dict, b_dict, ignore=ignore, include=include):
-                    self._dict_err(a_dict, b_dict, ignore=ignore, include=include)
-            elif a != b:
+        for index, (actual_item, expected_item) in enumerate(zip(actual, expected, strict=True)):
+            actual_dict = self._to_comparable_dict(actual_item)
+            expected_dict = self._to_comparable_dict(expected_item)
+            if actual_dict is not None and expected_dict is not None:
+                if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include):
+                    self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include)
+            elif actual_item != expected_item:
                 return self.error(
-                    f"Expected item at index <{i}> to be equal to <{b}>, but was <{a}>.",
-                    actual=a,
-                    expected=b,
+                    f"Expected item at index <{index}> to be equal to <{expected_item}>, but was <{actual_item}>.",
+                    actual=actual_item,
+                    expected=expected_item,
                 )
 
     @staticmethod
@@ -202,11 +202,11 @@ class BaseMixin(_MixinBase):
             )
         _seen = _seen | {pair_key[0], pair_key[1]}
 
-        def _field_entries(a_val: object, e_val: object, path: str) -> list[DiffEntry]:
-            sub = BaseMixin._sub_diff_entries(a_val, e_val, path, _seen=_seen)
-            if sub is not None:
-                return sub
-            return [DiffEntry(path=path, actual=a_val, expected=e_val)]
+        def _field_entries(actual_value: object, expected_value: object, path: str) -> list[DiffEntry]:
+            sub_entries = BaseMixin._sub_diff_entries(actual_value, expected_value, path, _seen=_seen)
+            if sub_entries is not None:
+                return sub_entries
+            return [DiffEntry(path=path, actual=actual_value, expected=expected_value)]
 
         if (
             hasattr(actual, "_fields")
@@ -216,13 +216,13 @@ class BaseMixin(_MixinBase):
         ):
             entries: list[DiffEntry] = []
             for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
-                a_val = getattr(actual, field)
-                e_val = getattr(expected, field, _SENTINEL)
+                actual_value = getattr(actual, field)
+                expected_value = getattr(expected, field, _SENTINEL)
                 path = f"{_prefix}.{field}"
-                if e_val is _SENTINEL:
-                    entries.append(DiffEntry(path=path, actual=a_val, expected=None))
-                elif a_val != e_val:
-                    entries.extend(_field_entries(a_val, e_val, path))
+                if expected_value is _SENTINEL:
+                    entries.append(DiffEntry(path=path, actual=actual_value, expected=None))
+                elif actual_value != expected_value:
+                    entries.extend(_field_entries(actual_value, expected_value, path))
             for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
                 if not hasattr(actual, field):
                     entries.append(DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field)))
@@ -234,8 +234,8 @@ class BaseMixin(_MixinBase):
             and not isinstance(expected, type)
         ):
             entries = []
-            actual_names = {f.name for f in dataclasses.fields(actual)}
-            expected_names = {f.name for f in dataclasses.fields(expected)}
+            actual_names = {field.name for field in dataclasses.fields(actual)}
+            expected_names = {field.name for field in dataclasses.fields(expected)}
             for field in sorted(actual_names | expected_names):
                 path = f"{_prefix}.{field}"
                 if field not in expected_names:
@@ -243,27 +243,27 @@ class BaseMixin(_MixinBase):
                 elif field not in actual_names:
                     entries.append(DiffEntry(path=path, actual=None, expected=getattr(expected, field)))
                 else:
-                    a_val = getattr(actual, field)
-                    e_val = getattr(expected, field)
-                    if a_val != e_val:
-                        entries.extend(_field_entries(a_val, e_val, path))
+                    actual_value = getattr(actual, field)
+                    expected_value = getattr(expected, field)
+                    if actual_value != expected_value:
+                        entries.extend(_field_entries(actual_value, expected_value, path))
             return DiffResult(kind="dataclass", entries=entries)
         if _is_model_dump_object(actual) and _is_model_dump_object(expected):
             actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
             expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
             entries = []
-            for k in sorted(set(actual_dict) | set(expected_dict)):
-                path = f"{_prefix}.{k}" if _prefix else f".{k}"
-                if k not in expected_dict:
-                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
-                elif k not in actual_dict:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
-                elif actual_dict[k] != expected_dict[k]:
-                    sub = BaseMixin._sub_diff_entries(actual_dict[k], expected_dict[k], path, _seen=_seen)
-                    if sub is not None:
-                        entries.extend(sub)
+            for key in sorted(set(actual_dict) | set(expected_dict)):
+                path = f"{_prefix}.{key}" if _prefix else f".{key}"
+                if key not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
+                elif key not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
+                elif actual_dict[key] != expected_dict[key]:
+                    sub_entries = BaseMixin._sub_diff_entries(actual_dict[key], expected_dict[key], path, _seen=_seen)
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
+                        entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
             return DiffResult(kind="model", entries=entries)
         if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
             entries = []
@@ -275,9 +275,9 @@ class BaseMixin(_MixinBase):
                 elif i >= len(expected):
                     entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
                 elif actual[i] != expected[i]:
-                    sub = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=_seen)
-                    if sub:
-                        entries.extend(sub)
+                    sub_entries = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=_seen)
+                    if sub_entries:
+                        entries.extend(sub_entries)
                     else:
                         entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
             return DiffResult(kind="sequence", entries=entries)
@@ -317,18 +317,18 @@ class BaseMixin(_MixinBase):
         if isinstance(actual, dict) and isinstance(expected, dict):
             child_seen = _seen | {id(actual), id(expected)}
             entries: list[DiffEntry] = []
-            for k in sorted(set(actual) | set(expected), key=repr):
-                path = f"{prefix}.{k}"
-                if k not in expected:
-                    entries.append(DiffEntry(path=path, actual=actual[k], expected=None))  # ty: ignore[invalid-argument-type]
-                elif k not in actual:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected[k]))  # ty: ignore[invalid-argument-type]
-                elif actual[k] != expected[k]:  # ty: ignore[invalid-argument-type]
-                    sub = BaseMixin._sub_diff_entries(actual[k], expected[k], path, _seen=child_seen)  # ty: ignore[invalid-argument-type]
-                    if sub is not None:
-                        entries.extend(sub)
+            for key in sorted(set(actual) | set(expected), key=repr):
+                path = f"{prefix}.{key}"
+                if key not in expected:
+                    entries.append(DiffEntry(path=path, actual=actual[key], expected=None))  # ty: ignore[invalid-argument-type]
+                elif key not in actual:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected[key]))  # ty: ignore[invalid-argument-type]
+                elif actual[key] != expected[key]:  # ty: ignore[invalid-argument-type]
+                    sub_entries = BaseMixin._sub_diff_entries(actual[key], expected[key], path, _seen=child_seen)  # ty: ignore[invalid-argument-type]
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=path, actual=actual[k], expected=expected[k]))  # ty: ignore[invalid-argument-type]
+                        entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))  # ty: ignore[invalid-argument-type]
             return entries or None
         if (
             dataclasses.is_dataclass(actual)
@@ -338,17 +338,21 @@ class BaseMixin(_MixinBase):
         ):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
-            for f in dataclasses.fields(actual):
-                a_val = getattr(actual, f.name)
-                e_val = getattr(expected, f.name, _SENTINEL)
-                if e_val is _SENTINEL:
-                    entries.append(DiffEntry(path=f"{prefix}.{f.name}", actual=a_val, expected=None))
-                elif a_val != e_val:
-                    sub = BaseMixin._sub_diff_entries(a_val, e_val, f"{prefix}.{f.name}", _seen=child_seen)
-                    if sub is not None:
-                        entries.extend(sub)
+            for field in dataclasses.fields(actual):
+                actual_value = getattr(actual, field.name)
+                expected_value = getattr(expected, field.name, _SENTINEL)
+                if expected_value is _SENTINEL:
+                    entries.append(DiffEntry(path=f"{prefix}.{field.name}", actual=actual_value, expected=None))
+                elif actual_value != expected_value:
+                    sub_entries = BaseMixin._sub_diff_entries(
+                        actual_value, expected_value, f"{prefix}.{field.name}", _seen=child_seen
+                    )
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=f"{prefix}.{f.name}", actual=a_val, expected=e_val))
+                        entries.append(
+                            DiffEntry(path=f"{prefix}.{field.name}", actual=actual_value, expected=expected_value)
+                        )
             return entries or None
         if (
             hasattr(actual, "_fields")
@@ -359,16 +363,20 @@ class BaseMixin(_MixinBase):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
             for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
-                a_val = getattr(actual, field)
-                e_val = getattr(expected, field, _SENTINEL)
-                if e_val is _SENTINEL:
-                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=a_val, expected=None))
-                elif a_val != e_val:
-                    sub = BaseMixin._sub_diff_entries(a_val, e_val, f"{prefix}.{field}", _seen=child_seen)
-                    if sub is not None:
-                        entries.extend(sub)
+                actual_value = getattr(actual, field)
+                expected_value = getattr(expected, field, _SENTINEL)
+                if expected_value is _SENTINEL:
+                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=actual_value, expected=None))
+                elif actual_value != expected_value:
+                    sub_entries = BaseMixin._sub_diff_entries(
+                        actual_value, expected_value, f"{prefix}.{field}", _seen=child_seen
+                    )
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=f"{prefix}.{field}", actual=a_val, expected=e_val))
+                        entries.append(
+                            DiffEntry(path=f"{prefix}.{field}", actual=actual_value, expected=expected_value)
+                        )
             for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
                 if not hasattr(actual, field):
                     entries.append(DiffEntry(path=f"{prefix}.{field}", actual=None, expected=getattr(expected, field)))
@@ -378,18 +386,20 @@ class BaseMixin(_MixinBase):
             actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
             expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
             entries = []
-            for k in sorted(set(actual_dict) | set(expected_dict)):
-                path = f"{prefix}.{k}"
-                if k not in expected_dict:
-                    entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=None))
-                elif k not in actual_dict:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[k]))
-                elif actual_dict[k] != expected_dict[k]:
-                    sub = BaseMixin._sub_diff_entries(actual_dict[k], expected_dict[k], path, _seen=child_seen)
-                    if sub is not None:
-                        entries.extend(sub)
+            for key in sorted(set(actual_dict) | set(expected_dict)):
+                path = f"{prefix}.{key}"
+                if key not in expected_dict:
+                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
+                elif key not in actual_dict:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
+                elif actual_dict[key] != expected_dict[key]:
+                    sub_entries = BaseMixin._sub_diff_entries(
+                        actual_dict[key], expected_dict[key], path, _seen=child_seen
+                    )
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=path, actual=actual_dict[k], expected=expected_dict[k]))
+                        entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
             return entries or None
         return None
 
@@ -875,8 +885,8 @@ class BaseMixin(_MixinBase):
         if type(some_type) is not type and not issubclass(type(some_type), type):
             raise TypeError("given arg must be a type")
         if type(self.val) is not some_type:
-            t = self._type(self.val)
-            return self.error(f"Expected <{self.val}:{t}> to be of type <{some_type.__name__}>, but was not.")
+            type_name = self._type(self.val)
+            return self.error(f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.")
         return self
 
     def is_instance_of(self, some_class) -> Self:
@@ -912,9 +922,9 @@ class BaseMixin(_MixinBase):
         """
         try:
             if not isinstance(self.val, some_class):
-                t = self._type(self.val)
+                type_name = self._type(self.val)
                 return self.error(
-                    f"Expected <{self.val}:{t}> to be instance of class <{some_class.__name__}>, but was not."
+                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class.__name__}>, but was not."
                 )
         except TypeError:
             raise TypeError("given arg must be a class") from None
