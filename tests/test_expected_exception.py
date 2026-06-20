@@ -60,9 +60,7 @@ def test_expected_exception_no_arg_wrong_exception_failure():
 def test_expected_exception_no_arg_missing_raises_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(func_noop).when_called_with()
-    assert_that(str(exc_info.value)).contains(
-        "expected exception not set, raises() or does_not_raise() must be called first"
-    )
+    assert_that(str(exc_info.value)).contains("no expectation set")
 
 
 def test_expected_exception_one_arg_failure():
