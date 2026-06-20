@@ -19,7 +19,9 @@ def test_traceback():
 
         # walk_tb added in 3.5
         if sys.version_info[0] == 3 and sys.version_info[1] >= 5:
-            frames = [(f.f_code.co_filename, f.f_code.co_name, lineno) for f, lineno in traceback.walk_tb(tb)]
+            frames = [
+                (frame.f_code.co_filename, frame.f_code.co_name, lineno) for frame, lineno in traceback.walk_tb(tb)
+            ]
 
             assert_that(frames).is_length(3)
 

@@ -42,7 +42,7 @@ def test_extracting_property_and_method():
 
 
 def test_extracting_dict():
-    people_as_dicts = [{"first_name": p.first_name, "last_name": p.last_name} for p in people]
+    people_as_dicts = [{"first_name": person.first_name, "last_name": person.last_name} for person in people]
     assert_that(people_as_dicts).extracting("first_name").contains("Fred", "John")
     assert_that(people_as_dicts).extracting("last_name").contains("Smith", "Jones")
 
@@ -78,7 +78,7 @@ def test_extracting_too_many_args_method_failure():
 
 
 def test_extracting_dict_missing_key_failure():
-    people_as_dicts = [{"first_name": p.first_name, "last_name": p.last_name} for p in people]
+    people_as_dicts = [{"first_name": person.first_name, "last_name": person.last_name} for person in people]
     with pytest.raises(ValueError) as exc_info:
         assert_that(people_as_dicts).extracting("foo")
     assert_that(str(exc_info.value)).matches(r"item keys \[.*\] did not contain key <foo>")

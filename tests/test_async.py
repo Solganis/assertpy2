@@ -101,10 +101,10 @@ class TestContextVarsIsolation:
                 errors_from_threads[thread_id] = str(exc)
 
         threads = [threading.Thread(target=thread_func, args=(i,)) for i in range(3)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
         assert_that(errors_from_threads).is_length(3)
         for thread_id, error_msg in errors_from_threads.items():
@@ -140,10 +140,10 @@ class TestContextVarsIsolation:
                 errors_from_threads.append((thread_id, str(exc)))
 
         threads = [threading.Thread(target=thread_func, args=(i,)) for i in range(2)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
         assert_that(errors_from_threads).is_length(2)
         for thread_id, error_msg in errors_from_threads:

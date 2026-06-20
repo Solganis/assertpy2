@@ -59,22 +59,22 @@ class TestBuildEqualityDiffSet:
     def test_extra_items(self):
         result = BaseMixin._build_equality_diff({1, 2, 3}, {1})
         assert_that(result.kind).is_equal_to("set")
-        extra = [e for e in result.entries if e.path == "extra"]
+        extra = [entry for entry in result.entries if entry.path == "extra"]
         assert_that(extra).is_length(2)
-        assert_that([e.expected for e in extra]).each(match.is_none())
+        assert_that([entry.expected for entry in extra]).each(match.is_none())
 
     def test_missing_items(self):
         result = BaseMixin._build_equality_diff({1}, {1, 2, 3})
         assert_that(result.kind).is_equal_to("set")
-        missing = [e for e in result.entries if e.path == "missing"]
+        missing = [entry for entry in result.entries if entry.path == "missing"]
         assert_that(missing).is_length(2)
-        assert_that([e.actual for e in missing]).each(match.is_none())
+        assert_that([entry.actual for entry in missing]).each(match.is_none())
 
     def test_both_extra_and_missing(self):
         result = BaseMixin._build_equality_diff({1, 2}, {2, 3})
         assert_that(result.kind).is_equal_to("set")
-        extra = [e for e in result.entries if e.path == "extra"]
-        missing = [e for e in result.entries if e.path == "missing"]
+        extra = [entry for entry in result.entries if entry.path == "extra"]
+        missing = [entry for entry in result.entries if entry.path == "missing"]
         assert_that(extra).is_length(1)
         assert_that(extra[0].actual).is_equal_to(1)
         assert_that(missing).is_length(1)
@@ -118,11 +118,11 @@ class TestBuildEqualityDiffString:
         assert_that(result.entries[0].expected).is_equal_to("b")
 
     def test_identical_content_different_object(self):
-        a = "hello"
-        b = "".join(["h", "e", "l", "l", "o"])
-        result = BaseMixin._build_equality_diff(a, b)
+        left = "hello"
+        right = "".join(["h", "e", "l", "l", "o"])
+        result = BaseMixin._build_equality_diff(left, right)
         assert_that(result.kind).is_equal_to("string")
-        assert_that([e.path for e in result.entries]).is_in([], ["."])
+        assert_that([entry.path for entry in result.entries]).is_in([], ["."])
 
 
 class TestBuildEqualityDiffScalar:
@@ -194,11 +194,11 @@ class TestBuildEqualityDiffDataclass:
 
         result = BaseMixin._build_equality_diff(A(1, 2), B(1, 99))
         assert_that(result.kind).is_equal_to("dataclass")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".y")
         assert_that(paths).contains(".z")
-        y_entry = next(e for e in result.entries if e.path == ".y")
-        z_entry = next(e for e in result.entries if e.path == ".z")
+        y_entry = next(entry for entry in result.entries if entry.path == ".y")
+        z_entry = next(entry for entry in result.entries if entry.path == ".z")
         assert_that(y_entry.expected).is_none()
         assert_that(z_entry.actual).is_none()
 
@@ -224,7 +224,7 @@ class TestBuildEqualityDiffNamedtuple:
         B = namedtuple("B", ["x", "z"])
         result = BaseMixin._build_equality_diff(A(1, 2), B(1, 99))
         assert_that(result.kind).is_equal_to("namedtuple")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".y")
         assert_that(paths).contains(".z")
 
@@ -275,7 +275,7 @@ class TestBuildEqualityDiffRecursive:
         actual = [{"a": 1, "b": 2}]
         expected = [{"a": 1}]
         result = BaseMixin._build_equality_diff(actual, expected)
-        assert_that([e.path for e in result.entries]).contains("[0].b")
+        assert_that([entry.path for entry in result.entries]).contains("[0].b")
 
 
 class TestContainsDiff:
@@ -285,7 +285,7 @@ class TestContainsDiff:
         exc = exc_info.value
         assert_that(getattr(exc, "diff", None)).is_not_none()
         assert_that(exc.diff.kind).is_equal_to("contains")
-        missing = [e for e in exc.diff.entries if e.path == "missing"]
+        missing = [entry for entry in exc.diff.entries if entry.path == "missing"]
         assert_that(missing).is_length(2)
 
     def test_contains_single_item_no_diff(self):
@@ -298,8 +298,8 @@ class TestContainsDiff:
             assert_that(["a", "b", "c"]).contains_exactly("a", "c", "d")
         exc = exc_info.value
         assert_that(exc.diff.kind).is_equal_to("contains")
-        extra = [e for e in exc.diff.entries if e.path == "extra"]
-        missing = [e for e in exc.diff.entries if e.path == "missing"]
+        extra = [entry for entry in exc.diff.entries if entry.path == "extra"]
+        missing = [entry for entry in exc.diff.entries if entry.path == "missing"]
         assert_that(extra).is_length(1)
         assert_that(extra[0].actual).is_equal_to("b")
         assert_that(missing).is_length(1)
@@ -444,7 +444,7 @@ class TestNestedDataclassDiff:
         expected = User("Alice", Address("LA", "90210"))
         result = BaseMixin._build_equality_diff(actual, expected)
         assert_that(result.kind).is_equal_to("dataclass")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".address.city")
         assert_that(paths).contains(".address.zip_code")
         assert_that(paths).does_not_contain(".address")
@@ -463,7 +463,7 @@ class TestNestedDataclassDiff:
         actual = Outer("a", Inner(1, 2))
         expected = Outer("b", Inner(1, 3))
         result = BaseMixin._build_equality_diff(actual, expected)
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".name")
         assert_that(paths).contains(".inner.y")
         assert_that(paths).does_not_contain(".inner.x")
@@ -484,7 +484,7 @@ class TestNestedDataclassDiff:
         actual = Level1(Level2(Level3(1)))
         expected = Level1(Level2(Level3(99)))
         result = BaseMixin._build_equality_diff(actual, expected)
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).is_equal_to([".child.child.value"])
         assert_that(result.entries[0].actual).is_equal_to(1)
         assert_that(result.entries[0].expected).is_equal_to(99)
@@ -496,7 +496,7 @@ class TestNestedDataclassDiff:
         expected = Outer("same", Inner(1, 99))
         result = BaseMixin._build_equality_diff(actual, expected)
         assert_that(result.kind).is_equal_to("namedtuple")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".inner.b")
         assert_that(paths).does_not_contain(".inner")
 
@@ -509,7 +509,7 @@ class TestNestedDataclassDiff:
         actual = Config("app", {"debug": True, "port": 8080})
         expected = Config("app", {"debug": False, "port": 8080})
         result = BaseMixin._build_equality_diff(actual, expected)
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".settings.debug")
 
     def test_list_of_nested_dataclasses(self):
@@ -525,7 +525,7 @@ class TestNestedDataclassDiff:
         expected = [Wrapper(Inner(1)), Wrapper(Inner(99))]
         result = BaseMixin._build_equality_diff(actual, expected)
         assert_that(result.kind).is_equal_to("sequence")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains("[1].inner.value")
 
 
@@ -561,7 +561,7 @@ class TestPydanticDiff:
         expected = UserModel(name="Alice", address=AddressModel(city="LA", zip_code="90210"))
         result = BaseMixin._build_equality_diff(actual, expected)
         assert_that(result.kind).is_equal_to("model")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".address.city")
         assert_that(paths).contains(".address.zip_code")
 
@@ -592,7 +592,7 @@ class TestPydanticDiff:
         expected = [Item(name="A", qty=1), Item(name="B", qty=99)]
         result = BaseMixin._build_equality_diff(actual, expected)
         assert_that(result.kind).is_equal_to("sequence")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains("[1].qty")
 
     def test_pydantic_format_diff_renders(self):
@@ -645,9 +645,9 @@ class TestModelDumpDiff:
 
         result = BaseMixin._build_equality_diff(ModelA(), ModelB())
         assert_that(result.kind).is_equal_to("model")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".y")
-        entry = next(e for e in result.entries if e.path == ".y")
+        entry = next(entry for entry in result.entries if entry.path == ".y")
         assert_that(entry.expected).is_none()
         assert_that(entry.actual).is_equal_to(2)
 
@@ -667,7 +667,7 @@ class TestModelDumpDiff:
                 return False
 
         result = BaseMixin._build_equality_diff(ModelA(), ModelB())
-        entry = next(e for e in result.entries if e.path == ".z")
+        entry = next(entry for entry in result.entries if entry.path == ".z")
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_equal_to(3)
 
@@ -687,7 +687,7 @@ class TestModelDumpDiff:
                 return False
 
         result = BaseMixin._build_equality_diff(Outer(), Outer2())
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains(".nested.b")
 
     def test_model_dump_scalar_field_in_sub_diff(self):
@@ -726,7 +726,7 @@ class TestModelDumpDiff:
 
         result = BaseMixin._sub_diff_entries(ModelA(), ModelB(), "item")
         assert_that(result).is_not_none()
-        entry = next(e for e in result if e.path == "item.y")
+        entry = next(entry for entry in result if entry.path == "item.y")
         assert_that(entry.expected).is_none()
 
     def test_model_dump_in_sub_diff_missing_key(self):
@@ -745,7 +745,7 @@ class TestModelDumpDiff:
                 return False
 
         result = BaseMixin._sub_diff_entries(ModelA(), ModelB(), "item")
-        entry = next(e for e in result if e.path == "item.z")
+        entry = next(entry for entry in result if entry.path == "item.z")
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_equal_to(3)
 
@@ -773,7 +773,7 @@ class TestModelDumpDiff:
 
         result = BaseMixin._sub_diff_entries(Outer(), Outer2(), "root")
         assert_that(result).is_not_none()
-        paths = [e.path for e in result]
+        paths = [entry.path for entry in result]
         assert_that(paths).contains("root.child.val")
 
 
@@ -783,7 +783,7 @@ class TestSubDiffNamedtupleCoverage:
         B = namedtuple("B", ["x"])
         result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "item")
         assert_that(result).is_not_none()
-        entry = next(e for e in result if e.path == "item.y")
+        entry = next(entry for entry in result if entry.path == "item.y")
         assert_that(entry.expected).is_none()
 
     def test_namedtuple_in_sub_diff_missing_field(self):
@@ -791,7 +791,7 @@ class TestSubDiffNamedtupleCoverage:
         B = namedtuple("B", ["x", "z"])
         result = BaseMixin._sub_diff_entries(A(1), B(1, 3), "item")
         assert_that(result).is_not_none()
-        entry = next(e for e in result if e.path == "item.z")
+        entry = next(entry for entry in result if entry.path == "item.z")
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_equal_to(3)
 
@@ -800,7 +800,7 @@ class TestSubDiffNamedtupleCoverage:
         B = namedtuple("B", ["x"])
         result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "root")
         assert_that(result).is_not_none()
-        has_y = any(e.path == "root.y" and e.expected is None for e in result)
+        has_y = any(entry.path == "root.y" and entry.expected is None for entry in result)
         assert_that(has_y).is_true()
 
     def test_namedtuple_nested_recurse_in_sub_diff(self):
@@ -810,7 +810,7 @@ class TestSubDiffNamedtupleCoverage:
         expected = Outer("same", Inner(1, 99))
         result = BaseMixin._sub_diff_entries(actual, expected, "root")
         assert_that(result).is_not_none()
-        paths = [e.path for e in result]
+        paths = [entry.path for entry in result]
         assert_that(paths).contains("root.inner.b")
 
     def test_namedtuple_scalar_diff_in_sub_diff(self):
@@ -824,8 +824,8 @@ class TestSubDiffNamedtupleCoverage:
 
 class TestBuildEqualityDiffCircularRef:
     def test_circular_ref_in_build_equality_diff(self):
-        a = {"x": 1}
-        result = BaseMixin._build_equality_diff(a, a, _seen={id(a)})
+        mapping = {"x": 1}
+        result = BaseMixin._build_equality_diff(mapping, mapping, _seen={id(mapping)})
         assert_that(result.kind).is_equal_to("scalar")
         assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
 
@@ -848,7 +848,7 @@ class TestSubDiffDataclassMissingField:
 
         result = BaseMixin._sub_diff_entries(A(1, 2), B(1), "root")
         assert_that(result).is_not_none()
-        entry = next(e for e in result if e.path == "root.y")
+        entry = next(entry for entry in result if entry.path == "root.y")
         assert_that(entry.expected).is_none()
 
     def test_dataclass_nested_recurse_in_sub_diff(self):
@@ -862,17 +862,17 @@ class TestSubDiffDataclassMissingField:
 
         result = BaseMixin._sub_diff_entries(Outer(Inner(1)), Outer(Inner(99)), "root")
         assert_that(result).is_not_none()
-        paths = [e.path for e in result]
+        paths = [entry.path for entry in result]
         assert_that(paths).contains("root.inner.val")
 
 
 class TestCircularRefProtection:
     def test_circular_dict_does_not_recurse_infinitely(self):
-        a = {"x": 1}
-        a["self"] = a
-        b = {"x": 2, "self": "nope"}
+        left = {"x": 1}
+        left["self"] = left
+        right = {"x": 2, "self": "nope"}
         with pytest.raises(AssertionError):
-            assert_that(a).is_equal_to(b)
+            assert_that(left).is_equal_to(right)
 
     def test_circular_dict_in_sub_diff(self):
         inner_a = {"val": 1}
@@ -881,9 +881,9 @@ class TestCircularRefProtection:
         inner_b["loop"] = inner_b
         result = BaseMixin._sub_diff_entries(inner_a, inner_b, "root")
         assert_that(result).is_not_none()
-        paths = [e.path for e in result]
+        paths = [entry.path for entry in result]
         assert_that(paths).contains("root.val")
-        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in result)
+        has_circular = any("circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in result)
         assert_that(has_circular).is_true()
 
     def test_circular_list_item_in_diff(self):
@@ -893,9 +893,11 @@ class TestCircularRefProtection:
         inner_b["self"] = inner_b
         result = BaseMixin._build_equality_diff([inner_a], [inner_b])
         assert_that(result.kind).is_equal_to("sequence")
-        paths = [e.path for e in result.entries]
+        paths = [entry.path for entry in result.entries]
         assert_that(paths).contains("[0].val")
-        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in result.entries)
+        has_circular = any(
+            "circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in result.entries
+        )
         assert_that(has_circular).is_true()
 
     def test_circular_in_dict_err(self):
@@ -907,16 +909,18 @@ class TestCircularRefProtection:
             assert_that(actual).is_equal_to(expected)
         diff = getattr(exc_info.value, "diff", None)
         assert_that(diff).is_not_none()
-        has_circular = any("circular" in str(e.actual) or "circular" in str(e.expected) for e in diff.entries)
+        has_circular = any(
+            "circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in diff.entries
+        )
         assert_that(has_circular).is_true()
 
     def test_mutual_circular_ref(self):
-        a = {"key": "a_val"}
-        b = {"key": "b_val"}
-        a["ref"] = b
-        b["ref"] = a
+        left = {"key": "a_val"}
+        right = {"key": "b_val"}
+        left["ref"] = right
+        right["ref"] = left
         with pytest.raises(AssertionError):
-            assert_that(a).is_equal_to({"key": "other", "ref": {"key": "other2", "ref": "x"}})
+            assert_that(left).is_equal_to({"key": "other", "ref": {"key": "other2", "ref": "x"}})
 
 
 class TestDictListValueDiff:
@@ -927,7 +931,7 @@ class TestDictListValueDiff:
             assert_that(actual).is_equal_to(expected)
         diff = exc_info.value.diff
         assert_that(diff).is_not_none()
-        paths = [e.path for e in diff.entries]
+        paths = [entry.path for entry in diff.entries]
         assert_that(paths).contains("items[1].qty")
 
     def test_list_of_scalars_in_dict(self):
@@ -936,7 +940,7 @@ class TestDictListValueDiff:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         diff = exc_info.value.diff
-        paths = [e.path for e in diff.entries]
+        paths = [entry.path for entry in diff.entries]
         assert_that(paths).contains("tags[2]")
 
     def test_nested_dict_with_list_of_dicts(self):
@@ -945,7 +949,7 @@ class TestDictListValueDiff:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         diff = exc_info.value.diff
-        paths = [e.path for e in diff.entries]
+        paths = [entry.path for entry in diff.entries]
         assert_that(paths).contains("config.rules[1].active")
 
     def test_list_length_mismatch_in_dict(self):
@@ -954,7 +958,7 @@ class TestDictListValueDiff:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         diff = exc_info.value.diff
-        paths = [e.path for e in diff.entries]
+        paths = [entry.path for entry in diff.entries]
         assert_that(paths).contains("items[2]")
 
     def test_actual_list_longer_in_dict(self):
@@ -963,17 +967,17 @@ class TestDictListValueDiff:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         diff = exc_info.value.diff
-        paths = [e.path for e in diff.entries]
+        paths = [entry.path for entry in diff.entries]
         assert_that(paths).contains("items[2]")
-        entry = next(e for e in diff.entries if e.path == "items[2]")
+        entry = next(entry for entry in diff.entries if entry.path == "items[2]")
         assert_that(entry.actual).is_equal_to(3)
         assert_that(entry.expected).is_none()
 
 
 class TestDictCircularRefNotEqual:
     def test_circular_dict_not_equal_returns_false(self):
-        a = {"x": 1}
-        a["self"] = a
+        mapping = {"x": 1}
+        mapping["self"] = mapping
         mixin = type("M", (HelpersMixin,), {"val": None, "description": "", "kind": None, "expected": None})()
-        result = mixin._dict_not_equal(a, a, _seen={(id(a), id(a))})
+        result = mixin._dict_not_equal(mapping, mapping, _seen={(id(mapping), id(mapping))})
         assert_that(result).is_false()
