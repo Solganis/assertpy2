@@ -1,20 +1,20 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
-    directory: "/"
+  - package-ecosystem: pip
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: weekly
     cooldown:
       default-days: 7
       semver-major-days: 7
     commit-message:
-      prefix: "chore"
+      prefix: "chore(deps)"
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: weekly
     cooldown:
       default-days: 7
     commit-message:
-      prefix: "ci"
+      prefix: "ci(deps)"
