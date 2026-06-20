@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class DiffEntry:
     """Single difference between actual and expected values at a specific path."""
 
