@@ -73,19 +73,13 @@ E     {'user': {'name': 'Alice', 'role': 'superadmin'}} != {'user': {'name': 'Al
 E     {'status': 'active'} != {'status': 'disabled'}
 ```
 
-assertpy2 reports the exact path to every difference:
+assertpy2 reports the exact path to every difference, in color:
 
-```text
+```python
 assert_that(response).is_equal_to(expected)
---- Structured Diff ---
-diff (dict):
-  status:
-    - 'active'
-    + 'disabled'
-  user.role:
-    - 'superadmin'
-    + 'admin'
 ```
+
+<img src="docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: status and user.role shown with their paths, removals in red and additions in green">
 
 Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
@@ -132,6 +126,7 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 - [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models, and matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`). Circular reference protection.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format.
+- **Property-based tested**: comparison, selective-diff, matcher algebra, and collection logic are checked with [Hypothesis](https://hypothesis.readthedocs.io) against reference semantics, on top of 100% branch coverage.
 
 **Type safety**
 

@@ -39,12 +39,17 @@ assert_that({"id": 1, "name": "Alice"}).matches_structure(
 
 When a check fails, the pytest plugin points at the exact field instead of dumping both structures:
 
-```text
-assert_that(response).matches_structure({...})
---- Structured Diff ---
-diff (match):
-  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
+```python
+assert_that(response).matches_structure({
+    "user": match.structure({
+        "name": match.is_non_empty_string(),
+        "role": match.is_in("admin", "user"),
+        "age": match.between(18, 120),
+    }),
+})
 ```
+
+![Structured diff in the terminal: every failing field with its path and the predicate that failed, in color](assets/diff-match.svg)
 
 See [Getting Started](getting-started.md) to dive in, or browse [Type Assertions](assertions.md),
 [Matchers](matchers.md), and the rest of the navigation for the full set of assertions and integrations.

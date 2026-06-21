@@ -180,12 +180,7 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
 When fields do not match, the pytest plugin prints the exact path and the predicate that failed - every
 mismatch, not just the first:
 
-```text
-diff (match):
-  user.name: expected a non-empty string, but was ''
-  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
-  user.age: expected a value between <18> and <120>, but was 15
-```
+![Colored match diff: user.name, user.role and user.age each shown with their path and the predicate that failed](assets/diff-match.svg)
 
 The same `match` diff is produced by [`satisfies()`](#satisfies) and [`each()`](#each) whenever a
 matcher fails inside an assertion.
