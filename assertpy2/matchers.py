@@ -544,7 +544,7 @@ class StructureMatcher(BaseMatcher):
         return self._match_recursive(value, self._spec, "", set()) is None
 
     def describe(self) -> str:
-        return f"a dict matching structure {self._describe_spec(self._spec)}"
+        return f"a dict matching structure {_describe_spec_value(self._spec)}"
 
     def describe_mismatch(self, value: Any) -> str:
         if not isinstance(value, dict):
@@ -612,9 +612,6 @@ class StructureMatcher(BaseMatcher):
             elif actual != expected:
                 mismatches.append((current_path, actual, f"<{expected}>"))
         return mismatches
-
-    def _describe_spec(self, spec: dict) -> str:
-        return _describe_spec_value(spec)
 
 
 # --- Custom matcher registry ---
