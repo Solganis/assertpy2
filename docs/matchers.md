@@ -102,6 +102,8 @@ assert 42 == (match.is_positive() & match.less_than(100))
 | `match.is_none()` | `None` |
 | `match.is_not_none()` | a non-`None` value |
 | `match.is_instance_of(type)` | an instance of `type` |
+| `match.is_truthy()` | a truthy value |
+| `match.is_falsy()` | a falsy value |
 | `match.has_length(n)` | a value whose `len()` equals `n` |
 | `match.is_empty()` | an empty collection or string |
 | `match.is_not_empty()` | a non-empty collection or string |
@@ -116,11 +118,19 @@ assert 42 == (match.is_positive() & match.less_than(100))
 | `match.has_property(name, matcher?)` | an object with attribute `name`, optionally matching a nested matcher |
 | `match.contains_string(sub)` | a string containing `sub` |
 | `match.matches_regex(pattern)` | a string where `pattern` is found (`re.search`) |
+| `match.starts_with(prefix)` | a string starting with `prefix` |
+| `match.ends_with(suffix)` | a string ending with `suffix` |
 | `match.is_uuid()` | a string parseable as a UUID |
 | `match.is_non_empty_string()` | a non-empty string |
 | `match.ignore()` | anything (placeholder for structural matching) |
 | `match.each_item(matcher)` | an iterable whose every item matches `matcher` |
 | `match.structure(spec)` | a dict matching a nested `spec` |
+| `match.all_of(*matchers)` | a value matching all of `matchers` |
+| `match.any_of(*matchers)` | a value matching any of `matchers` |
+| `match.not_(matcher)` | a value not matching `matcher` |
+
+`all_of()`, `any_of()`, and `not_()` are named function equivalents of the `&`, `|`, and `~`
+operators from [Composition](#composition); use whichever reads better.
 
 ## Structural matching
 
@@ -226,3 +236,7 @@ assert_that(response).matches_structure({
 
     unregister_matcher("is_valid_email")
     ```
+
+    `unregister_matcher(name)` removes one matcher by name (and raises `KeyError` if it is not
+    registered); `clear_custom_matchers()` removes every custom matcher at once, handy for test
+    teardown.
