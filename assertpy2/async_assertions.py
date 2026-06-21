@@ -69,7 +69,7 @@ class AsyncAssertionBuilder:
                         method = getattr(builder, name)
                         method(*args, **kwargs)
                         return builder
-                    except AssertionError as exc:
+                    except AssertionError as exc:  # noqa: PERF203  # retry-on-failure needs the try/except per poll iteration
                         last_error = exc
                         if loop.time() >= deadline:
                             raise AssertionError(

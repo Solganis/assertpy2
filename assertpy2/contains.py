@@ -128,10 +128,7 @@ class ContainsMixin(_MixinBase):
             if items[0] in self.val:
                 return self.error(f"Expected <{self.val}> to not contain item <{items[0]}>, but did.")
         else:
-            found = []
-            for item in items:
-                if item in self.val:
-                    found.append(item)
+            found = [item for item in items if item in self.val]
             if found:
                 return self.error(
                     f"Expected <{self.val}> to not contain items {self._fmt_items(items)},"
@@ -165,20 +162,14 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         else:
-            extra = []
-            for item in self.val:
-                if item not in items:
-                    extra.append(item)
+            extra = [item for item in self.val if item not in items]
             if extra:
                 return self.error(
                     f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
                     f" but did contain {self._fmt_items(extra)}."
                 )
 
-            missing = []
-            for item in items:
-                if item not in self.val:
-                    missing.append(item)
+            missing = [item for item in items if item not in self.val]
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
@@ -359,11 +350,14 @@ class ContainsMixin(_MixinBase):
         if val_list != list(items):
             val_counts = Counter(val_list)
             item_counts = Counter(items)
-            entries = []
-            for item in sorted((val_counts - item_counts).elements(), key=repr):
-                entries.append(DiffEntry(path="extra", actual=item, expected=None))
-            for item in sorted((item_counts - val_counts).elements(), key=repr):
-                entries.append(DiffEntry(path="missing", actual=None, expected=item))
+            entries = [
+                DiffEntry(path="extra", actual=item, expected=None)
+                for item in sorted((val_counts - item_counts).elements(), key=repr)
+            ]
+            entries.extend(
+                DiffEntry(path="missing", actual=None, expected=item)
+                for item in sorted((item_counts - val_counts).elements(), key=repr)
+            )
             diff = DiffResult(kind="contains", entries=entries) if entries else None
             return self.error(
                 f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.",

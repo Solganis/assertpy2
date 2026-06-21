@@ -223,9 +223,11 @@ class BaseMixin(_MixinBase):
                     entries.append(DiffEntry(path=path, actual=actual_value, expected=None))
                 elif actual_value != expected_value:
                     entries.extend(_field_entries(actual_value, expected_value, path))
-            for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
-                if not hasattr(actual, field):
-                    entries.append(DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field)))
+            entries.extend(
+                DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
+                for field in expected._fields  # ty: ignore[not-iterable]  # guarded by hasattr check above
+                if not hasattr(actual, field)
+            )
             return DiffResult(kind="namedtuple", entries=entries)
         if (
             dataclasses.is_dataclass(actual)

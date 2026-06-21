@@ -188,10 +188,7 @@ class ExtractingMixin(_MixinBase):
                 if isinstance(kwargs["sort"], str):
                     return _extract(item, kwargs["sort"])
                 elif isinstance(kwargs["sort"], collections.abc.Iterable):
-                    sort_keys = []
-                    for key in kwargs["sort"]:
-                        if isinstance(key, str):
-                            sort_keys.append(_extract(item, key))
+                    sort_keys = [_extract(item, key) for key in kwargs["sort"] if isinstance(key, str)]
                     return tuple(sort_keys)
                 elif callable(kwargs["sort"]):
                     return kwargs["sort"](item)
