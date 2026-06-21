@@ -98,6 +98,8 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 9 type-specific Protocols instead of one `Any`. Works in PyCharm, VS Code, and any LSP-compatible editor.
 
+See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) guide for the full walkthrough.
+
 ---
 
 ## Features

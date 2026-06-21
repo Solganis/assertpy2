@@ -77,7 +77,7 @@ You get these the moment you switch, without touching any test code:
   auto-registered pytest plugin renders recursive diffs for lists, dicts, dataclasses, namedtuples, and
   Pydantic models. Set `assertpy2_diff = "off"` if you prefer the plain message.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
-  value's type, and a type checker flags misuse before the tests run.
+  value's type, and a type checker flags misuse before the tests run - see [Type Safety](type-safety.md).
 
 ## What you can now adopt
 

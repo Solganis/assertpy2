@@ -123,8 +123,8 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
 |---|:---:|:---:|:---:|:---:|:---:|
 | Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#one-library-no-compromise)** |
 | Mix styles in one suite | No | No | No | No | **[Yes](#one-library-no-compromise)** |
-| Static typing (`py.typed`, overloads) | n/a | No | No | Typed | **Yes** |
-| Autocomplete filtered by value type | No | No | No | No | **Yes** |
+| Static typing (`py.typed`, overloads) | n/a | No | No | Typed | **[Yes](type-safety.md)** |
+| Autocomplete filtered by value type | No | No | No | No | **[Yes](type-safety.md#type-aware-autocomplete)** |
 | Fluent chaining | No | No | Yes | No | **[Yes](fluent.md#chaining)** |
 | Composable matchers | No | Yes | No | Yes | **[Yes](matchers.md)** |
 | Works inside plain `==` | n/a | No | No | Yes | **[Yes](matchers.md)** |
