@@ -18,6 +18,15 @@ assert_that(5).is_5()
 assert_that(6).is_5()  # fails!
 ```
 
+`remove_extension()` takes the same function and unregisters it, so a temporary assertion does not
+leak into other tests:
+
+```python
+from assertpy2 import remove_extension
+
+remove_extension(is_5)
+```
+
 ## Project-wide reuse
 
 `is_5()` is only available in the file where `add_extension()` is called. To share extensions across

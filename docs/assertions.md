@@ -217,7 +217,7 @@ assert_that(False).is_false()
 assert_that(True).is_type_of(bool)
 ```
 
-## None
+### None
 
 ```python
 assert_that(None).is_none()
@@ -375,3 +375,17 @@ Dynamic assertions also work on dicts, keyed by entry name:
 ```python
 assert_that({"first_name": "Fred", "last_name": "Smith"}).has_first_name("Fred").has_last_name("Smith")
 ```
+
+## Exceptions
+
+Exception and warning assertions wrap a *callable* rather than a value: you assert on what calling the
+function does, then chain assertions on the resulting message.
+
+```python
+assert_that(some_func).raises(RuntimeError).when_called_with("foo")
+assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
+```
+
+See [Errors & Reporting](errors.md) for the full set, including
+[expected exceptions](errors.md#expected-exceptions), [expected warnings](errors.md#expected-warnings),
+and inspecting the call's return value with `returned()`.
