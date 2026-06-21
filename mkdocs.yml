@@ -69,6 +69,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Type Safety: type-safety.md
   - Migrating from assertpy: migration.md
   - Comparison: comparison.md
   - Type Assertions: assertions.md

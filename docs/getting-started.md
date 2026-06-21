@@ -24,7 +24,8 @@ assert_that([1, 2, 3]).contains(1).does_not_contain(9).is_subset_of([1, 2, 3, 4]
 ```
 
 Because every assertion is statically typed, your editor only suggests methods valid for the value's
-type, and a type checker flags misuse before the test runs.
+type, and a type checker flags misuse before the test runs. See [Type Safety](type-safety.md) for how the
+overloads work.
 
 ## When an assertion fails
 
