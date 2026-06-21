@@ -118,9 +118,9 @@ class SnapshotMixin(_MixinBase):
 
         class _Decoder(json.JSONDecoder):
             def __init__(self):
-                json.JSONDecoder.__init__(self, object_hook=self.object_hook)
+                json.JSONDecoder.__init__(self, object_hook=self._object_hook)
 
-            def object_hook(self, d):
+            def _object_hook(self, d):
                 if "__type__" in d and "__data__" in d:
                     if d["__type__"] == "set":
                         return set(d["__data__"])
@@ -155,6 +155,7 @@ class SnapshotMixin(_MixinBase):
             except (TypeError, AttributeError):
                 raise ValueError("failed to create snapshot filename, either bad path or bad name") from None
 
+        lineno = ""
         if id:
             # custom id
             snapname = _name(path, id)

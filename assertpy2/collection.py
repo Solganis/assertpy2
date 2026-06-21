@@ -3,6 +3,7 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING, Any
 
+from ._introspection import is_mapping_like
 from ._mixin_base import _MixinBase
 from .matchers import BaseMatcher
 
@@ -92,7 +93,7 @@ class CollectionMixin(_MixinBase):
             raise ValueError("one or more superset args must be given")
 
         missing = []
-        if hasattr(self.val, "keys") and callable(self.val.keys) and hasattr(self.val, "__getitem__"):
+        if is_mapping_like(self.val):
             superdict = {}
             for superset_index, superset in enumerate(supersets):
                 self._check_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
