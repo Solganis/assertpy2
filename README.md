@@ -28,7 +28,7 @@
 
 ---
 
-## Quick start
+## [Quick start](https://solganis.github.io/assertpy2/getting-started/)
 
 ```bash
 pip install assertpy2  # drop-in replacement for assertpy, just change the import
@@ -46,10 +46,12 @@ def test_user():
     assert_that(user).has_name("Alice")
 ```
 
-## Why fluent assertions?
+Browse the [full documentation](https://solganis.github.io/assertpy2/) for every assertion, matcher, and integration.
+
+## [Why fluent assertions?](https://solganis.github.io/assertpy2/comparison/)
 
 A fluent chain reads as one intent and replaces several bare asserts - and your IDE
-offers only the methods that fit the value's type:
+offers only the [methods that fit the value's type](https://solganis.github.io/assertpy2/type-safety/):
 
 ```py
 # bare - three statements, no autocomplete help
@@ -73,7 +75,7 @@ E     {'user': {'name': 'Alice', 'role': 'superadmin'}} != {'user': {'name': 'Al
 E     {'status': 'active'} != {'status': 'disabled'}
 ```
 
-assertpy2 reports the exact path to every difference, in color:
+assertpy2 reports the [exact path to every difference](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs), in color:
 
 ```python
 assert_that(response).is_equal_to(expected)
@@ -83,9 +85,9 @@ assert_that(response).is_equal_to(expected)
 
 Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
-`matches_structure()` instead of exact equality.
+[`matches_structure()`](https://solganis.github.io/assertpy2/matchers/#structural-matching) instead of exact equality.
 
-## Type-aware autocomplete
+## [Type-aware autocomplete](https://solganis.github.io/assertpy2/type-safety/)
 
 `assert_that()` uses `@overload` to return type-specific Protocols.
 Your IDE shows only methods relevant to the value you're testing, not all 100+:
@@ -150,7 +152,7 @@ See the [full documentation](https://solganis.github.io/assertpy2/) for all asse
 
 ---
 
-## Integrations
+## [Integrations](https://solganis.github.io/assertpy2/integrations/)
 
 ### Allure
 
@@ -197,6 +199,8 @@ def step_impl(context, age):
 ```
 
 Available types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyString`, `BoolLike`.
+
+See the [Integrations guide](https://solganis.github.io/assertpy2/integrations/) for attachment modes, configuration, and full examples.
 
 ---
 
