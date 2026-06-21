@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import assert_that, match
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 from assertpy2.pytest_plugin import (
     _diff_to_json,
@@ -345,6 +345,24 @@ class TestAllureDiffMode:
         exc = AssertionFailure("fail", diff=diff)
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock)
         mock.attach.assert_not_called()
+
+    def test_match_diff_from_real_failure_attaches_json(self):
+        mock = _mock_allure()
+        try:
+            assert_that({"role": "superadmin"}).matches_structure(
+                {"role": match.is_in("admin", "user"), "email": match.is_non_empty_string()}
+            )
+        except AssertionFailure as exc:
+            _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock)
+        else:
+            raise AssertionError("expected AssertionFailure") from None
+        assert_that(mock.attach.call_count).is_equal_to(1)
+        body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
+        assert_that(body["kind"]).is_equal_to("match")
+        actuals = {entry["path"]: entry["actual"] for entry in body["entries"]}
+        assert_that(actuals).contains_key("role", "email")
+        assert_that(actuals["role"]).is_equal_to("'superadmin'")
+        assert_that(actuals["email"]).is_equal_to("<missing>")
 
 
 class TestAllureFullMode:
