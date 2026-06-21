@@ -4,6 +4,7 @@ import collections.abc
 import dataclasses
 from typing import TYPE_CHECKING
 
+from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import Matcher, StructureMatcher
@@ -14,10 +15,6 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _SENTINEL = object()
-
-
-def _is_model_dump_object(obj: object) -> bool:
-    return hasattr(obj, "model_dump") and callable(obj.model_dump)
 
 
 class BaseMixin(_MixinBase):
@@ -133,8 +130,8 @@ class BaseMixin(_MixinBase):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include):
                 self._dict_err(self.val, other, ignore=ignore, include=include)
         elif ignore or include:
-            val_is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, "_fields")
-            other_is_namedtuple = isinstance(other, tuple) and hasattr(other, "_fields")
+            val_is_namedtuple = is_namedtuple(self.val)
+            other_is_namedtuple = is_namedtuple(other)
             if (
                 isinstance(self.val, (list, tuple))
                 and isinstance(other, (list, tuple))
@@ -208,14 +205,9 @@ class BaseMixin(_MixinBase):
                 return sub_entries
             return [DiffEntry(path=path, actual=actual_value, expected=expected_value)]
 
-        if (
-            hasattr(actual, "_fields")
-            and isinstance(actual, tuple)
-            and hasattr(expected, "_fields")
-            and isinstance(expected, tuple)
-        ):
+        if is_namedtuple(actual) and is_namedtuple(expected):
             entries: list[DiffEntry] = []
-            for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
+            for field in actual._fields:
                 actual_value = getattr(actual, field)
                 expected_value = getattr(expected, field, _SENTINEL)
                 path = f"{_prefix}.{field}"
@@ -225,7 +217,7 @@ class BaseMixin(_MixinBase):
                     entries.extend(_field_entries(actual_value, expected_value, path))
             entries.extend(
                 DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
-                for field in expected._fields  # ty: ignore[not-iterable]  # guarded by hasattr check above
+                for field in expected._fields
                 if not hasattr(actual, field)
             )
             return DiffResult(kind="namedtuple", entries=entries)
@@ -250,9 +242,9 @@ class BaseMixin(_MixinBase):
                     if actual_value != expected_value:
                         entries.extend(_field_entries(actual_value, expected_value, path))
             return DiffResult(kind="dataclass", entries=entries)
-        if _is_model_dump_object(actual) and _is_model_dump_object(expected):
-            actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
-            expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+        if is_model_dump_object(actual) and is_model_dump_object(expected):
+            actual_dict = actual.model_dump()
+            expected_dict = expected.model_dump()
             entries = []
             for key in sorted(set(actual_dict) | set(expected_dict)):
                 path = f"{_prefix}.{key}" if _prefix else f".{key}"
@@ -356,15 +348,10 @@ class BaseMixin(_MixinBase):
                             DiffEntry(path=f"{prefix}.{field.name}", actual=actual_value, expected=expected_value)
                         )
             return entries or None
-        if (
-            hasattr(actual, "_fields")
-            and isinstance(actual, tuple)
-            and hasattr(expected, "_fields")
-            and isinstance(expected, tuple)
-        ):
+        if is_namedtuple(actual) and is_namedtuple(expected):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
-            for field in actual._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
+            for field in actual._fields:
                 actual_value = getattr(actual, field)
                 expected_value = getattr(expected, field, _SENTINEL)
                 if expected_value is _SENTINEL:
@@ -379,14 +366,14 @@ class BaseMixin(_MixinBase):
                         entries.append(
                             DiffEntry(path=f"{prefix}.{field}", actual=actual_value, expected=expected_value)
                         )
-            for field in expected._fields:  # ty: ignore[not-iterable]  # guarded by hasattr check above
+            for field in expected._fields:
                 if not hasattr(actual, field):
                     entries.append(DiffEntry(path=f"{prefix}.{field}", actual=None, expected=getattr(expected, field)))
             return entries or None
-        if _is_model_dump_object(actual) and _is_model_dump_object(expected):
+        if is_model_dump_object(actual) and is_model_dump_object(expected):
             child_seen = _seen | {id(actual), id(expected)}
-            actual_dict = actual.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
-            expected_dict = expected.model_dump()  # ty: ignore[unresolved-attribute]  # guarded by _is_model_dump_object check above
+            actual_dict = actual.model_dump()
+            expected_dict = expected.model_dump()
             entries = []
             for key in sorted(set(actual_dict) | set(expected_dict)):
                 path = f"{prefix}.{key}"

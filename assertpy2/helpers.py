@@ -6,6 +6,7 @@ import numbers
 
 from assertpy2.errors import DiffEntry, DiffResult
 
+from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 
 __tracebackhide__ = True
@@ -30,6 +31,7 @@ class HelpersMixin(_MixinBase):
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""
+        out_args = out_kwargs = ""
         if some_args:
             out_args = str(some_args).lstrip("(").rstrip(",)")
         if some_kwargs:
@@ -105,12 +107,12 @@ class HelpersMixin(_MixinBase):
                 return False
             else:
                 raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: not iterable")
-        if check_keys and (not hasattr(d, "keys") or not callable(d.keys)):
+        if check_keys and not callable(getattr(d, "keys", None)):
             if return_as_bool:
                 return False
             else:
                 raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing keys()")
-        if check_values and (not hasattr(d, "values") or not callable(d.values)):
+        if check_values and not callable(getattr(d, "values", None)):
             if return_as_bool:
                 return False
             else:
@@ -221,7 +223,7 @@ class HelpersMixin(_MixinBase):
             entry[0] if type(entry) is tuple else entry for entry in (include if type(include) is list else [include])
         ]
 
-    def _dict_err(self, val, other, ignore=None, include=None):
+    def _dict_err(self, val: object, other: object, ignore: object = None, include: object = None) -> None:
         """Helper to construct error message for dict comparison."""
 
         def _dict_repr(d, other, _seen=None):
@@ -300,6 +302,7 @@ class HelpersMixin(_MixinBase):
                         entries.append(DiffEntry(path=path, actual=actual_item, expected=expected_item))
             return entries
 
+        ignore_err = include_err = ""
         if ignore:
             ignores = self._dict_ignore(ignore)
             ignore_fmt = self._fmt_items(
@@ -320,7 +323,7 @@ class HelpersMixin(_MixinBase):
         other_repr = _dict_repr(other, val)
         ignore_part = ignore_err if ignore else ""
         include_part = include_err if include else ""
-        return self.error(
+        self.error(
             f"Expected <{val_repr}> to be equal to <{other_repr}>{ignore_part}{include_part}, but was not.",
             actual=val,
             expected=other,
@@ -335,11 +338,11 @@ class HelpersMixin(_MixinBase):
         """
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
             return dataclasses.asdict(obj)
-        if isinstance(obj, tuple) and hasattr(obj, "_fields"):
+        if is_namedtuple(obj):
             return dict(obj._asdict())
-        if hasattr(obj, "model_dump") and callable(obj.model_dump):
+        if is_model_dump_object(obj):
             return obj.model_dump()
-        if hasattr(obj, "__attrs_attrs__"):
+        if is_attrs_instance(obj):
             return {attr.name: getattr(obj, attr.name) for attr in obj.__attrs_attrs__}
         if hasattr(obj, "__dict__") and not isinstance(obj, type):
             return dict(vars(obj))

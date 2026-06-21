@@ -3,6 +3,7 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
+from ._introspection import is_namedtuple
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
@@ -149,7 +150,7 @@ class ExtractingMixin(_MixinBase):
                     return item[name]
                 else:
                     raise ValueError(f"item keys {list(item.keys())} did not contain key <{name}>")
-            elif isinstance(item, tuple) and hasattr(item, "_fields") and type(name) is str:
+            elif is_namedtuple(item) and type(name) is str:
                 if name in item._fields:
                     return getattr(item, name)
                 else:  # val has no attribute <foo>
