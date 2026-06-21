@@ -1,0 +1,51 @@
+<svg class="rich-terminal" width="933" height="120" viewBox="0 0 933 119.6" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    .terminal-4172749894-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .terminal-4172749894-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .terminal-4172749894-r1 { fill: #68a0b3 }
+.terminal-4172749894-r2 { fill: #c5c8c6 }
+.terminal-4172749894-r3 { fill: #cc555a }
+    </style>
+
+    <defs>
+    <clipPath id="terminal-4172749894-clip-terminal">
+      <rect x="0" y="0" width="914.0" height="96.6" />
+    </clipPath>
+    <clipPath id="terminal-4172749894-line-0">
+    <rect x="0" y="1.5" width="915" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-4172749894-line-1">
+    <rect x="0" y="25.9" width="915" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-4172749894-line-2">
+    <rect x="0" y="50.3" width="915" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="931" height="117.6" rx="8"/>
+            
+        
+    <g transform="translate(9, 13)" clip-path="url(#terminal-4172749894-clip-terminal)">
+    
+    <g class="terminal-4172749894-matrix">
+    <text class="terminal-4172749894-r1" x="0" y="20" textLength="158.6" clip-path="url(#terminal-4172749894-line-0)">diff&#160;(match):</text><text class="terminal-4172749894-r2" x="915" y="20" textLength="12.2" clip-path="url(#terminal-4172749894-line-0)">
+</text><text class="terminal-4172749894-r1" x="24.4" y="44.4" textLength="109.8" clip-path="url(#terminal-4172749894-line-1)">user.name</text><text class="terminal-4172749894-r2" x="134.2" y="44.4" textLength="475.8" clip-path="url(#terminal-4172749894-line-1)">:&#160;expected&#160;a&#160;non-empty&#160;string,&#160;but&#160;was&#160;</text><text class="terminal-4172749894-r3" x="610" y="44.4" textLength="24.4" clip-path="url(#terminal-4172749894-line-1)">&#x27;&#x27;</text><text class="terminal-4172749894-r2" x="915" y="44.4" textLength="12.2" clip-path="url(#terminal-4172749894-line-1)">
+</text><text class="terminal-4172749894-r1" x="24.4" y="68.8" textLength="109.8" clip-path="url(#terminal-4172749894-line-2)">user.role</text><text class="terminal-4172749894-r2" x="134.2" y="68.8" textLength="622.2" clip-path="url(#terminal-4172749894-line-2)">:&#160;expected&#160;a&#160;value&#160;in&#160;&lt;(&#x27;admin&#x27;,&#160;&#x27;user&#x27;)&gt;,&#160;but&#160;was&#160;</text><text class="terminal-4172749894-r3" x="756.4" y="68.8" textLength="146.4" clip-path="url(#terminal-4172749894-line-2)">&#x27;superadmin&#x27;</text><text class="terminal-4172749894-r2" x="915" y="68.8" textLength="12.2" clip-path="url(#terminal-4172749894-line-2)">
+</text><text class="terminal-4172749894-r1" x="24.4" y="93.2" textLength="97.6" clip-path="url(#terminal-4172749894-line-3)">user.age</text><text class="terminal-4172749894-r2" x="122" y="93.2" textLength="622.2" clip-path="url(#terminal-4172749894-line-3)">:&#160;expected&#160;a&#160;value&#160;between&#160;&lt;18&gt;&#160;and&#160;&lt;120&gt;,&#160;but&#160;was&#160;</text><text class="terminal-4172749894-r3" x="744.2" y="93.2" textLength="24.4" clip-path="url(#terminal-4172749894-line-3)">15</text><text class="terminal-4172749894-r2" x="915" y="93.2" textLength="12.2" clip-path="url(#terminal-4172749894-line-3)">
+</text>
+    </g>
+    </g>
+</svg>

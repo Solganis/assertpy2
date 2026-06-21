@@ -1,0 +1,48 @@
+<svg class="rich-terminal" width="275" height="95" viewBox="0 0 275 95.19999999999999" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    .terminal-3363794957-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .terminal-3363794957-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .terminal-3363794957-r1 { fill: #68a0b3 }
+.terminal-3363794957-r2 { fill: #c5c8c6 }
+.terminal-3363794957-r3 { fill: #cc555a }
+.terminal-3363794957-r4 { fill: #98a84b }
+    </style>
+
+    <defs>
+    <clipPath id="terminal-3363794957-clip-terminal">
+      <rect x="0" y="0" width="255.2" height="72.19999999999999" />
+    </clipPath>
+    <clipPath id="terminal-3363794957-line-0">
+    <rect x="0" y="1.5" width="256.2" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3363794957-line-1">
+    <rect x="0" y="25.9" width="256.2" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="273" height="93.2" rx="8"/>
+            
+        
+    <g transform="translate(9, 13)" clip-path="url(#terminal-3363794957-clip-terminal)">
+    
+    <g class="terminal-3363794957-matrix">
+    <text class="terminal-3363794957-r1" x="0" y="20" textLength="134.2" clip-path="url(#terminal-3363794957-line-0)">diff&#160;(set):</text><text class="terminal-3363794957-r2" x="256.2" y="20" textLength="12.2" clip-path="url(#terminal-3363794957-line-0)">
+</text><text class="terminal-3363794957-r3" x="24.4" y="44.4" textLength="219.6" clip-path="url(#terminal-3363794957-line-1)">extra:&#160;&#160;&#160;{&#x27;admin&#x27;}</text><text class="terminal-3363794957-r2" x="256.2" y="44.4" textLength="12.2" clip-path="url(#terminal-3363794957-line-1)">
+</text><text class="terminal-3363794957-r4" x="24.4" y="68.8" textLength="219.6" clip-path="url(#terminal-3363794957-line-2)">missing:&#160;{&#x27;owner&#x27;}</text><text class="terminal-3363794957-r2" x="256.2" y="68.8" textLength="12.2" clip-path="url(#terminal-3363794957-line-2)">
+</text>
+    </g>
+    </g>
+</svg>

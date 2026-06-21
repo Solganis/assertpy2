@@ -38,14 +38,11 @@ assert_that(5).is_greater_than(10)
 For dicts, dataclasses, and other structures, the pytest plugin renders a path-level diff that points
 straight at the differing field instead of dumping the whole value:
 
-```text
+```python
 assert_that(actual).is_equal_to(expected)
---- Structured Diff ---
-diff (dict):
-  user.role:
-    - 'superadmin'
-    + 'admin'
 ```
+
+![Colored dict diff: status and user.role shown with their paths, removals in red and additions in green](assets/diff-equal.svg)
 
 The same path-level diff backs `matches_structure()`, `satisfies()`, and `each()`. See
 [Errors & Reporting](errors.md) for the full diff format and configuration.

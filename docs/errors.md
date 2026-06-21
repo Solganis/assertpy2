@@ -50,32 +50,35 @@ rendered by the plugin as colored diff sections.
 | `contains` family | `contains` | Missing and extra items |
 | matcher mismatch | `match` | `matches_structure()` / `satisfies()` / `each()`: path + failed predicate |
 
-```
+```text
 --- AssertionFailure ---
   actual:   [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
   expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
---- Structured Diff ---
-diff (sequence):
-  [1].name:
-    - 'Bob'
-    + 'Robert'
 ```
+
+The diff for that failure - and the other diff shapes - renders like this.
+
+### What each diff kind looks like
+
+**Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, Pydantic `model`, `string`, `scalar`)
+show the path with the removal in red and the addition in green - this is the diff for the example above:
+
+![Colored sequence diff: [1].name with the removal in red and the addition in green](assets/diff-sequence.svg)
+
+**Set and contains** show extra items in red and missing items in green:
+
+![Colored set diff: extra items in red, missing items in green](assets/diff-set.svg)
+
+**Match** (`matches_structure()`, `satisfies()`, `each()`) shows each field's path and the predicate that
+failed, with the actual value in red - every mismatch, not just the first (no green: a predicate has no
+"addition"):
+
+![Colored match diff: each field's path, the failed predicate, and the actual value in red](assets/diff-match.svg)
 
 Nested structures are diffed recursively and report the exact path to the differing value (for example
-`[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing
-forever.
+`[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
 
-Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) emit a `match` diff that
-shows the path and the predicate that failed, for every field, not just the first:
-
-```text
-diff (match):
-  user.name: expected a non-empty string, but was ''
-  user.role: expected a value in <('admin', 'user')>, but was 'superadmin'
-  user.age: expected a value between <18> and <120>, but was 15
-```
-
-The rich `match`/`dict` diff comes from the fluent form. The `==` drop-in for matchers (for example
+The rich diff comes from the fluent form. The `==` drop-in for matchers (for example
 `assert response == {"id": match.is_positive()}`) hands rendering to pytest instead, which prints its
 own dict comparison without the path.
 

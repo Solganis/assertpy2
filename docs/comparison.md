@@ -162,8 +162,14 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.8.0** |
+| Property-based tests | n/a | No | No | No | **Yes** |
 | Runtime dependencies | none | none | none | none | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
+
+!!! note
+    The property-based-tests row reflects each project's published test dependencies as of June 2026.
+    assertpy2 ships a [Hypothesis](https://hypothesis.readthedocs.io) suite covering its comparison,
+    diff, and matcher logic, on top of 100% branch coverage.
 
 ## One library, no compromise
 
