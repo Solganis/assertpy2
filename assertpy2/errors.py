@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DiffEntry:
     """Single difference between actual and expected values at a specific path."""
 
@@ -15,7 +15,7 @@ class DiffEntry:
         return f"  at {self.path}: actual=<{self.actual}>, expected=<{self.expected}>"
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class DiffResult:
     """Structured diff between two values."""
 

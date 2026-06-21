@@ -38,7 +38,7 @@ class DateMixin(_MixinBase):
 
         See Also:
             :meth:`~assertpy.string.NumericMixin.is_less_than` - numeric assertion, but also works with datetime BR
-            :meth:`~assertpy.string.NumericMixin.is_less_than_or_equal_to` - numeric assertion, but also works with datetime
+            :meth:`~assertpy.string.NumericMixin.is_less_than_or_equal_to` - also works with datetime
         """
         if type(self.val) is not datetime.datetime:
             raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
@@ -75,7 +75,7 @@ class DateMixin(_MixinBase):
 
         See Also:
             :meth:`~assertpy.string.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime BR
-            :meth:`~assertpy.string.NumericMixin.is_greater_than_or_equal_to` - numeric assertion, but also works with datetime
+            :meth:`~assertpy.string.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
         """
         if type(self.val) is not datetime.datetime:
             raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")

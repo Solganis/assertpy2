@@ -1,7 +1,10 @@
 from __future__ import annotations
 
-_BOOL_TRUE = frozenset({"true", "yes", "1", "on"})
-_BOOL_FALSE = frozenset({"false", "no", "0", "off"})
+from types import MappingProxyType
+from typing import Final
+
+_BOOL_TRUE: Final = frozenset({"true", "yes", "1", "on"})
+_BOOL_FALSE: Final = frozenset({"false", "no", "0", "off"})
 
 
 def _with_pattern(pattern):
@@ -51,13 +54,15 @@ def _bool_like(text):
     raise ValueError(f"expected boolean-like value, got {text!r}")
 
 
-ASSERTPY_TYPES = {
-    "PositiveInt": _positive_int,
-    "NonNegativeInt": _non_negative_int,
-    "PositiveFloat": _positive_float,
-    "NonEmptyString": _non_empty_string,
-    "BoolLike": _bool_like,
-}
+ASSERTPY_TYPES: Final = MappingProxyType(
+    {
+        "PositiveInt": _positive_int,
+        "NonNegativeInt": _non_negative_int,
+        "PositiveFloat": _positive_float,
+        "NonEmptyString": _non_empty_string,
+        "BoolLike": _bool_like,
+    }
+)
 
 
 def register_assertpy_types() -> None:

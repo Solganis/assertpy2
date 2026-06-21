@@ -91,7 +91,8 @@ def test_expected_exception_all_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(func_noop).raises(RuntimeError).when_called_with("a", "b", 3, 4, foo=1, bar=2, baz="dog")
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <func_noop> to raise <RuntimeError> when called with ('a', 'b', 3, 4, 'bar': 2, 'baz': 'dog', 'foo': 1)."
+        "Expected <func_noop> to raise <RuntimeError> when called with "
+        "('a', 'b', 3, 4, 'bar': 2, 'baz': 'dog', 'foo': 1)."
     )
 
 
@@ -124,7 +125,8 @@ def func_kwargs(**kwargs):
 
 def func_all(arg1, arg2, *args, **kwargs):
     raise RuntimeError(
-        f"all err: arg1={arg1}, arg2={arg2}, args={args}, kwargs={[(key, kwargs[key]) for key in sorted(kwargs.keys())]}"
+        f"all err: arg1={arg1}, arg2={arg2}, args={args}, "
+        f"kwargs={[(key, kwargs[key]) for key in sorted(kwargs.keys())]}"
     )
 
 

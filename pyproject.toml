@@ -83,7 +83,7 @@ target-version = "py310"
 preview = true
 explicit-preview-rules = true
 select = ["E", "E301", "F", "W", "N", "I", "UP", "B", "A", "SIM", "RUF", "ERA", "PERF", "TC"]
-ignore = ["E501"]
+ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E741", "SIM102", "SIM300", "A002", "ERA001"]

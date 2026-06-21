@@ -16,7 +16,7 @@ def contents_of(file, encoding="utf-8"):
 
     Args:
         file: a *path-like object* (aka a file name) or a *file-like object* (aka a file)
-        encoding (str): the target encoding.  Defaults to ``utf-8``, other useful encodings are ``ascii`` and ``latin-1``.
+        encoding (str): the target encoding. Defaults to ``utf-8`` (others: ``ascii``, ``latin-1``).
 
     Examples:
         Usage::
@@ -176,7 +176,7 @@ class FileMixin(_MixinBase):
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
-            AssertionError: if val does **not** exist, or is **not** a file, or is **not** a child of the given directory
+            AssertionError: if val does **not** exist, is **not** a file, or is **not** a child of given directory
         """
         self.is_file()
         if not isinstance(parent, (str, os.PathLike)):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
-_SENTINEL = object()
+_SENTINEL: Final = object()
 
 
 class BaseMixin(_MixinBase):
@@ -77,7 +77,9 @@ class BaseMixin(_MixinBase):
                 assert_that({'a': 1, 'b': 2, 'c': 3}).is_equal_to({'a': 1}, ignore=['b', 'c'])
 
                 # ignore nested keys
-                assert_that({'a': {'b': 2, 'c': 3, 'd': 4}}).is_equal_to({'a': {'d': 4}}, ignore=[('a', 'b'), ('a', 'c')])
+                assert_that({'a': {'b': 2, 'c': 3, 'd': 4}}).is_equal_to(
+                    {'a': {'d': 4}}, ignore=[('a', 'b'), ('a', 'c')]
+                )
 
             When the val is *dict-like*, only certain keys can be *included* when checking equality::
 

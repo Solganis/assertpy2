@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from ._mixin_base import _MixinBase
 
@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
-_UNSET = object()  # sentinel: no return value captured yet
+_UNSET: Final = object()  # sentinel: no return value captured yet
 
 
 class _InertBuilder:
@@ -40,7 +40,7 @@ class ExceptionMixin(_MixinBase):
                 assert_that(some_func).raises(RuntimeError).when_called_with('foo')
 
         Returns:
-            AssertionBuilder: returns a new instance (now with the given expected exception) to chain to the next assertion
+            AssertionBuilder: returns a new instance (with the expected exception) to chain the next assertion
         """
         if not callable(self.val):
             raise TypeError("val must be callable")
