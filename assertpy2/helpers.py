@@ -1,4 +1,4 @@
-import collections
+import collections.abc
 import dataclasses
 import datetime
 import math
@@ -144,10 +144,7 @@ class HelpersMixin(_MixinBase):
             includes = self._dict_include(include)
 
             if include:
-                missing = []
-                for include_key in includes:
-                    if include_key not in val:
-                        missing.append(include_key)
+                missing = [include_key for include_key in includes if include_key not in val]
                 if missing:
                     keys_suffix = "" if len(includes) == 1 else "s"
                     missing_suffix = "" if len(missing) == 1 else "s"

@@ -82,10 +82,7 @@ class DictMixin(_MixinBase):
         self._check_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
-        missing = []
-        for value in values:
-            if value not in self.val.values():
-                missing.append(value)
+        missing = [value for value in values if value not in self.val.values()]
         if missing:
             return self.error(
                 f"Expected <{self.val}> to contain values {self._fmt_items(values)},"
@@ -117,10 +114,7 @@ class DictMixin(_MixinBase):
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
         else:
-            found = []
-            for value in values:
-                if value in self.val.values():
-                    found.append(value)
+            found = [value for value in values if value in self.val.values()]
             if found:
                 return self.error(
                     f"Expected <{self.val}> to not contain values {self._fmt_items(values)},"

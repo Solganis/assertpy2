@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import collections
-from collections.abc import Callable, Iterable
+import collections.abc
 from typing import TYPE_CHECKING, Any
 
 from ._mixin_base import _MixinBase
 from .matchers import BaseMatcher
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from ._compat import Self
 
 __tracebackhide__ = True
@@ -114,12 +115,10 @@ class CollectionMixin(_MixinBase):
                 try:
                     for key in superset:
                         superset_values.add(key)
-                except TypeError:
+                except TypeError:  # noqa: PERF203  # per-item fallback: a non-iterable superset is treated as a single value
                     superset_values.add(superset)
 
-            for item in self.val:
-                if item not in superset_values:
-                    missing.append(item)
+            missing.extend(item for item in self.val if item not in superset_values)
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to be subset of {self._fmt_items(superset_values)}, "

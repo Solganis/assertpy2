@@ -9,12 +9,12 @@ import logging
 import os
 import sys
 import types
-from collections.abc import Callable, Iterator
 from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
     import datetime
     import pathlib
+    from collections.abc import Callable, Iterator
 
     from ._compat import Self
     from ._typing import (

@@ -26,8 +26,7 @@ class DiffResult:
         if not self.entries:
             return ""
         lines = [f"diff ({self.kind}):"]
-        for entry in self.entries:
-            lines.append(str(entry))
+        lines.extend(str(entry) for entry in self.entries)
         return "\n".join(lines)
 
 

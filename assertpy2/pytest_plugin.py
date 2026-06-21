@@ -122,10 +122,10 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
                 lines.append(f"    {red}- {entry.actual!r}{reset}")
                 lines.append(f"    {green}+ {entry.expected!r}{reset}")
     elif kind == "match":
-        for entry in visible:
-            lines.append(
-                f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
-            )
+        lines.extend(
+            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
+            for entry in visible
+        )
     elif kind in {"set", "contains"}:
         extra = [e for e in visible if e.path == "extra"]
         missing = [e for e in visible if e.path == "missing"]
@@ -153,15 +153,14 @@ def _diff_to_json(diff):
     if not entries:
         return None
     kind = getattr(diff, "kind", "unknown")
-    items = []
-    for entry in entries:
-        items.append(
-            {
-                "path": str(getattr(entry, "path", "")),
-                "actual": repr(getattr(entry, "actual", None)),
-                "expected": repr(getattr(entry, "expected", None)),
-            }
-        )
+    items = [
+        {
+            "path": str(getattr(entry, "path", "")),
+            "actual": repr(getattr(entry, "actual", None)),
+            "expected": repr(getattr(entry, "expected", None)),
+        }
+        for entry in entries
+    ]
     return json.dumps({"kind": kind, "entries": items}, ensure_ascii=False, indent=2)
 
 

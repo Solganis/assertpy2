@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import logging
+
     from ._compat import Self
     from .errors import DiffResult
 

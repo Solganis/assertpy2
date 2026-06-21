@@ -3,8 +3,10 @@ from __future__ import annotations
 import re
 import threading
 import uuid as _uuid_mod
-from collections.abc import Callable
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @runtime_checkable

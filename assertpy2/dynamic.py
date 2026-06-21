@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import collections
+import collections.abc
 
 from ._mixin_base import _MixinBase
 
