@@ -135,7 +135,7 @@ class ExtractingMixin(_MixinBase):
                 assert_that(users).extracting('user', sort='age').is_equal_to(['Charlie', 'Alice', 'Bob'])
 
         Returns:
-            AssertionBuilder: returns a new instance (now with the extracted list as the val) to chain to the next assertion
+            AssertionBuilder: returns a new instance (extracted list as val) to chain the next assertion
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")

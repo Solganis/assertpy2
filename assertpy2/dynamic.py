@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 
+from ._introspection import is_namedtuple
 from ._mixin_base import _MixinBase
 
 __tracebackhide__ = True
@@ -49,11 +50,11 @@ class DynamicMixin(_MixinBase):
 
         attr_name = attr[4:]
         err_msg = False
-        is_namedtuple = isinstance(self.val, tuple) and hasattr(self.val, "_fields")
+        val_is_namedtuple = is_namedtuple(self.val)
         is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
 
         if not hasattr(self.val, attr_name):
-            if is_dict and not is_namedtuple:
+            if is_dict and not val_is_namedtuple:
                 if attr_name not in self.val:
                     err_msg = f"Expected key <{attr_name}>, but val has no key <{attr_name}>."
             else:
@@ -66,7 +67,7 @@ class DynamicMixin(_MixinBase):
                 if len(args) != 1:
                     raise TypeError(f"assertion <{attr}()> takes exactly 1 argument ({len(args)} given)")
 
-                val_attr = self.val[attr_name] if is_dict and not is_namedtuple else getattr(self.val, attr_name)
+                val_attr = self.val[attr_name] if is_dict and not val_is_namedtuple else getattr(self.val, attr_name)
 
                 if callable(val_attr):
                     try:

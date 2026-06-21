@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import threading
 import uuid as _uuid_mod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -521,7 +521,7 @@ class _MissingSentinel:
         return "<missing>"
 
 
-_MISSING = _MissingSentinel()
+_MISSING: Final = _MissingSentinel()
 
 
 def _describe_spec_value(value: object) -> str:

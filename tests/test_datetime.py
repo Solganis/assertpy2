@@ -17,7 +17,8 @@ def test_is_before_failure():
         d2 = datetime.datetime.today()
         assert_that(d2).is_before(d1)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be before <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be before "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -43,7 +44,8 @@ def test_is_after_failure():
         d2 = datetime.datetime.today()
         assert_that(d1).is_after(d2)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be after <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be after "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -68,7 +70,8 @@ def test_is_equal_to_ignoring_milliseconds_failure():
         d2 = datetime.datetime.today() + datetime.timedelta(days=1)
         assert_that(d1).is_equal_to_ignoring_milliseconds(d2)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be equal to <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be equal to "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -144,7 +147,8 @@ def test_is_greater_than_failure():
         d2 = datetime.datetime.today()
         assert_that(d1).is_greater_than(d2)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -163,7 +167,8 @@ def test_is_greater_than_or_equal_to_failure():
         d2 = datetime.datetime.today()
         assert_that(d1).is_greater_than_or_equal_to(d2)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than or equal to <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than or equal to "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -183,7 +188,8 @@ def test_is_less_than_failure():
         d2 = datetime.datetime.today()
         assert_that(d2).is_less_than(d1)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -202,7 +208,8 @@ def test_is_less_than_or_equal_to_failure():
         d2 = datetime.datetime.today()
         assert_that(d2).is_less_than_or_equal_to(d1)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than or equal to <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than or equal to "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
     )
 
 
@@ -310,7 +317,8 @@ def test_is_not_close_to_failure():
         d2 = datetime.datetime.today()
         assert_that(d1).is_not_close_to(d2, datetime.timedelta(minutes=5))
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to not be close to <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> within tolerance <\d+:\d+:\d+>, but was."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to not be close to "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> within tolerance <\d+:\d+:\d+>, but was."
     )
 
 

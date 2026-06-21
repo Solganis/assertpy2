@@ -83,12 +83,14 @@ class SnapshotMixin(_MixinBase):
                 assert_that(1 + 2j).snapshot()
                 assert_that(someobj).snapshot()
 
-            By default, snapshots are identified by test filename plus line number.  Alternately, you can specify a custom identifier using the ``id`` arg::
+            By default, snapshots are identified by test filename plus line number.
+            Alternately, you can specify a custom identifier using the ``id`` arg::
 
                 assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot(id='foo-id')
 
 
-            By default, snapshots are stored in the ``__snapshots`` directory.  Alternately, you can specify a custom path using the ``path`` arg::
+            By default, snapshots are stored in the ``__snapshots`` directory.
+            Alternately, you can specify a custom path using the ``path`` arg::
 
                 assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot(path='my-custom-folder')
 

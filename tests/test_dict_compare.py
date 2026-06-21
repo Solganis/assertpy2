@@ -98,7 +98,8 @@ def test_failure_very_deep_dict():
             {"a": 1, "b": {"c": 2, "d": {"e": 3, "f": {"x": 4, "y": 6}}}}
         )
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'b': {.., 'd': {.., 'f': {.., 'y': 5}}}}> to be equal to <{.., 'b': {.., 'd': {.., 'f': {.., 'y': 6}}}}>, but was not."
+        "Expected <{.., 'b': {.., 'd': {.., 'f': {.., 'y': 5}}}}> to be equal to "
+        "<{.., 'b': {.., 'd': {.., 'f': {.., 'y': 6}}}}>, but was not."
     )
 
 
@@ -178,7 +179,8 @@ def test_failure_deep_tuple_keys_ignore():
             {(1, 2): "a", (3, 4): {(5, 6): "b", (7, 8): "d"}}, ignore=((3, 4), (5, 6))
         )
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., (3, 4): {.., (7, 8): 'c'}}> to be equal to <{.., (3, 4): {.., (7, 8): 'd'}}> ignoring keys <(3, 4).(5, 6)>, but was not."
+        "Expected <{.., (3, 4): {.., (7, 8): 'c'}}> to be equal to "
+        "<{.., (3, 4): {.., (7, 8): 'd'}}> ignoring keys <(3, 4).(5, 6)>, but was not."
     )
 
 
@@ -334,7 +336,8 @@ def test_failure_deep_mismatch_when_ignoring_nested_deep_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(d1).is_equal_to(d2, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'b': {'c': 2, 'd': {'e': 3}}}> to be equal to <{.., 'b': {'c': 3, 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
+        "Expected <{.., 'b': {'c': 2, 'd': {'e': 3}}}> to be equal to "
+        "<{.., 'b': {'c': 3, 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
     )
 
 
@@ -354,7 +357,8 @@ def test_failure_top_mismatch_when_ignoring_single_nested_sibling_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(d1).is_equal_to(d2, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{'a': 1, 'b': {.., 'd': {'e': 3}}}> to be equal to <{'a': 2, 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
+        "Expected <{'a': 1, 'b': {.., 'd': {'e': 3}}}> to be equal to "
+        "<{'a': 2, 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
     )
 
 
@@ -364,7 +368,8 @@ def test_failure_deep_mismatch_when_ignoring_double_nested_sibling_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(d1).is_equal_to(d2, ignore=("b", "f", "g"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'b': {.., 'd': {'e': 3}}}> to be equal to <{.., 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.f.g>, but was not."
+        "Expected <{.., 'b': {.., 'd': {'e': 3}}}> to be equal to "
+        "<{.., 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.f.g>, but was not."
     )
 
 

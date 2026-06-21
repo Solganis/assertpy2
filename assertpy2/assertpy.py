@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 import types
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Final, overload
 
 if TYPE_CHECKING:
     import datetime
@@ -53,7 +53,7 @@ __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
 
 # assertpy files
-ASSERTPY_FILES = [
+ASSERTPY_FILES: Final = [
     os.path.join("assertpy2", file)
     for file in [
         "assertpy.py",

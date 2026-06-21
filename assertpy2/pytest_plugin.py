@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import warnings
+from typing import Final
 
 import pytest
 
@@ -13,7 +14,7 @@ try:
 except ImportError:
     _HAS_ALLURE = False
 
-_ALLURE_MODES = {"off", "diff", "full"}
+_ALLURE_MODES: Final = frozenset({"off", "diff", "full"})
 
 
 def pytest_addoption(parser):
@@ -38,7 +39,8 @@ def pytest_configure(config):
     mode = config.getini("assertpy2_allure")
     if mode not in _ALLURE_MODES:
         warnings.warn(
-            f"assertpy2_allure={mode!r} is not a valid mode ({', '.join(sorted(_ALLURE_MODES))}), falling back to 'diff'",
+            f"assertpy2_allure={mode!r} is not a valid mode "
+            f"({', '.join(sorted(_ALLURE_MODES))}), falling back to 'diff'",
             stacklevel=1,
         )
         config._assertpy2_allure_mode = "diff"
