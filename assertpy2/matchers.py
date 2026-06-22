@@ -115,7 +115,7 @@ class EqualToMatcher(BaseMatcher):
         self.expected = expected
 
     def matches(self, value: Any) -> bool:
-        return value == self.expected
+        return bool(value == self.expected)
 
     def describe(self) -> str:
         return f"a value equal to <{self.expected}>"
@@ -127,7 +127,7 @@ class GreaterThanMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return value > self.boundary
+            return bool(value > self.boundary)
         except TypeError:
             return False
 
@@ -141,7 +141,7 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return value >= self.boundary
+            return bool(value >= self.boundary)
         except TypeError:
             return False
 
@@ -155,7 +155,7 @@ class LessThanMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return value < self.boundary
+            return bool(value < self.boundary)
         except TypeError:
             return False
 
@@ -169,7 +169,7 @@ class LessThanOrEqualToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return value <= self.boundary
+            return bool(value <= self.boundary)
         except TypeError:
             return False
 
@@ -184,7 +184,7 @@ class BetweenMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return self.low <= value <= self.high
+            return bool(self.low <= value <= self.high)
         except TypeError:
             return False
 
@@ -199,7 +199,7 @@ class CloseToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return abs(value - self.expected) <= self.tolerance
+            return bool(abs(value - self.expected) <= self.tolerance)
         except TypeError:
             return False
 
@@ -294,7 +294,7 @@ class IsNotEmptyMatcher(BaseMatcher):
 
 class IsPositiveMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return value > 0
+        return bool(value > 0)
 
     def describe(self) -> str:
         return "a positive value"
@@ -302,7 +302,7 @@ class IsPositiveMatcher(BaseMatcher):
 
 class IsNegativeMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return value < 0
+        return bool(value < 0)
 
     def describe(self) -> str:
         return "a negative value"
@@ -310,7 +310,7 @@ class IsNegativeMatcher(BaseMatcher):
 
 class IsZeroMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return value == 0
+        return bool(value == 0)
 
     def describe(self) -> str:
         return "zero"
@@ -537,7 +537,7 @@ def _describe_spec_value(value: object) -> str:
 class StructureMatcher(BaseMatcher):
     """Matches dicts against a structure spec where values are matchers, raw values, or nested dicts."""
 
-    def __init__(self, spec: dict):
+    def __init__(self, spec: dict[Any, Any]):
         self._spec = spec
 
     def matches(self, value: Any) -> bool:
@@ -556,7 +556,9 @@ class StructureMatcher(BaseMatcher):
             return error
         return f"was <{value}>"
 
-    def _match_recursive(self, value: dict, spec: dict, path: str, seen: set[tuple[int, int]]) -> str | None:
+    def _match_recursive(
+        self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
+    ) -> str | None:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
             return f"circular reference detected at <{path or 'root'}>"
@@ -581,7 +583,7 @@ class StructureMatcher(BaseMatcher):
                 return f"at <{current_path}>: expected <{expected}>, but was <{actual}>"
         return None
 
-    def collect_mismatches(self, value: dict) -> list[tuple[str, object, str]]:
+    def collect_mismatches(self, value: dict[Any, Any]) -> list[tuple[str, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
 
         Unlike :meth:`describe_mismatch`, this does not stop at the first failure and joins nested
@@ -589,7 +591,9 @@ class StructureMatcher(BaseMatcher):
         """
         return self._collect(value, self._spec, "", set())
 
-    def _collect(self, value: dict, spec: dict, path: str, seen: set[tuple[int, int]]) -> list[tuple[str, object, str]]:
+    def _collect(
+        self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
+    ) -> list[tuple[str, object, str]]:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
             return [(path or "root", "<circular ref>", "<circular ref>")]
@@ -894,7 +898,7 @@ class _MatchNamespace:
         return EachMatcher(matcher)
 
     @staticmethod
-    def structure(spec: dict) -> StructureMatcher:
+    def structure(spec: dict[Any, Any]) -> StructureMatcher:
         """Matcher for a dict matching ``spec``.
 
         Args:
