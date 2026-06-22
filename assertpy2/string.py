@@ -141,9 +141,11 @@ class StringMixin(_MixinBase):
             if not self.val.startswith(prefix):
                 return self.error(f"Expected <{self.val}> to start with <{prefix}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
-            if len(self.val) == 0:
-                raise ValueError("val must not be empty")
-            first = next(iter(self.val))
+            iterator = iter(self.val)
+            try:
+                first = next(iterator)
+            except StopIteration:
+                raise ValueError("val must not be empty") from None
             if first != prefix:
                 return self.error(f"Expected {self.val} to start with <{prefix}>, but did not.")
         else:
@@ -180,9 +182,9 @@ class StringMixin(_MixinBase):
             if not self.val.endswith(suffix):
                 return self.error(f"Expected <{self.val}> to end with <{suffix}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
-            if len(self.val) == 0:
-                raise ValueError("val must not be empty")
             items = list(self.val)
+            if not items:
+                raise ValueError("val must not be empty")
             if items[-1] != suffix:
                 return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.")
         else:
