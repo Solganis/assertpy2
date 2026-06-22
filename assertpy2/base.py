@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 import dataclasses
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
@@ -353,24 +353,26 @@ class BaseMixin(_MixinBase):
         if is_namedtuple(actual) and is_namedtuple(expected):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
-            for field in actual._fields:
-                actual_value = getattr(actual, field)
-                expected_value = getattr(expected, field, _SENTINEL)
+            for field_name in actual._fields:
+                actual_value = getattr(actual, field_name)
+                expected_value = getattr(expected, field_name, _SENTINEL)
                 if expected_value is _SENTINEL:
-                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=actual_value, expected=None))
+                    entries.append(DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None))
                 elif actual_value != expected_value:
                     sub_entries = BaseMixin._sub_diff_entries(
-                        actual_value, expected_value, f"{prefix}.{field}", _seen=child_seen
+                        actual_value, expected_value, f"{prefix}.{field_name}", _seen=child_seen
                     )
                     if sub_entries is not None:
                         entries.extend(sub_entries)
                     else:
                         entries.append(
-                            DiffEntry(path=f"{prefix}.{field}", actual=actual_value, expected=expected_value)
+                            DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
                         )
-            for field in expected._fields:
-                if not hasattr(actual, field):
-                    entries.append(DiffEntry(path=f"{prefix}.{field}", actual=None, expected=getattr(expected, field)))
+            for field_name in expected._fields:
+                if not hasattr(actual, field_name):
+                    entries.append(
+                        DiffEntry(path=f"{prefix}.{field_name}", actual=None, expected=getattr(expected, field_name))
+                    )
             return entries or None
         if is_model_dump_object(actual) and is_model_dump_object(expected):
             child_seen = _seen | {id(actual), id(expected)}
@@ -485,7 +487,7 @@ class BaseMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def matches_structure(self, spec: dict) -> Self:
+    def matches_structure(self, spec: dict[Any, Any]) -> Self:
         """Asserts that val is a dict matching the given structure specification.
 
         Each key in ``spec`` maps to either a :class:`~assertpy2.matchers.Matcher`, a raw value
