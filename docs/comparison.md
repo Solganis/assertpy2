@@ -2,14 +2,14 @@
 
 assertpy2 is the only library compared here that gives you the fluent, matcher, and `==` styles in a
 single import, then goes further with static typing, thread- and async-safe soft assertions, async
-polling, and structured failures. The tables below are an honest, side-by-side look at how it relates
-to the common alternatives.
+polling, and structured failures. The tables below are a side-by-side comparison with the
+common alternatives.
 
 !!! success "In short"
     assertpy2 unifies the fluent, matcher, and `==` styles in one typed package,
     then adds thread- and async-safe soft assertions, async polling, structured failures, and rich
     pytest diffs. It ships **36 composable matchers** and **over 100 assertion methods** across **12 value types**,
-    with no runtime dependencies on Python 3.11+. One library, no compromise.
+    with no runtime dependencies on Python 3.11+. One import, all three styles.
 
 ## The approaches
 
@@ -121,40 +121,40 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#one-library-no-compromise)** |
-| Mix styles in one suite | No | No | No | No | **[Yes](#one-library-no-compromise)** |
-| Static typing (`py.typed`, overloads) | n/a | No | No | Typed | **[Yes](type-safety.md)** |
+| Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#all-three-styles-one-import)** |
+| Mix styles in one suite | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
+| Static typing (`py.typed`, overloads) | n/a | No | No | **Typed** | **[Yes](type-safety.md)** |
 | Autocomplete filtered by value type | No | No | No | No | **[Yes](type-safety.md#type-aware-autocomplete)** |
-| Fluent chaining | No | No | Yes | No | **[Yes](fluent.md#chaining)** |
-| Composable matchers | No | Yes | No | Yes | **[Yes](matchers.md)** |
-| Works inside plain `==` | n/a | No | No | Yes | **[Yes](matchers.md)** |
+| Fluent chaining | No | No | **Yes** | No | **[Yes](fluent.md#chaining)** |
+| Composable matchers | No | **Yes** | No | **Yes** | **[Yes](matchers.md)** |
+| Works inside plain `==` | n/a | No | No | **Yes** | **[Yes](matchers.md)** |
 
 ## Assertions and matchers
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Structural matching (nested) | manual | partial | No | Yes | **[Yes](matchers.md#structural-matching)** |
-| Collection / ordering assertions | manual | Yes | Yes | Yes | **[Yes](assertions.md#lists)** |
+| Structural matching (nested) | manual | partial | No | **Yes** | **[Yes](matchers.md#structural-matching)** |
+| Collection / ordering assertions | manual | **Yes** | **Yes** | **Yes** | **[Yes](assertions.md#lists)** |
 | Negation of any assertion (`.not_`) | manual | partial | No | partial | **[Yes](fluent.md#universal-negation)** |
 | Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](fluent.md#collection-pipeline)** |
-| Dynamic attribute assertions (`has_<name>()`) | No | No | Yes | No | **[Yes](assertions.md#dynamic-assertions-on-objects)** |
+| Dynamic attribute assertions (`has_<name>()`) | No | No | **Yes** | No | **[Yes](assertions.md#dynamic-assertions-on-objects)** |
 | Regex group extraction | manual | No | No | No | **[Yes](data.md#regex-group-extraction)** |
 | JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](data.md)** |
 | File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](assertions.md#files)** |
-| Custom assertions or matchers | functions | Yes | Yes | Yes | **[Yes (both)](extending.md)** |
+| Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](extending.md)** |
 
 ## Reporting, safety and tooling
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Soft assertions | plugin | No | Yes | No | **[Yes](testing.md#soft-assertions)** |
+| Soft assertions | plugin | No | **Yes** | No | **[Yes](testing.md#soft-assertions)** |
 | Soft assertions thread-safe **and** async-safe | n/a | n/a | No | n/a | **[Yes](testing.md#soft-assertions)** |
 | Grouped soft assertions (`sa.group`) | No | No | No | No | **[Yes](testing.md#grouped-soft-assertions)** |
 | Async / eventual polling (`eventually()`) | No | No | No | No | **[Yes](testing.md#async-assertions)** |
 | Structured failure data (`.actual` / `.expected` / `.diff`) | No | No | No | No | **[Yes](errors.md#structured-errors)** |
 | Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](errors.md#rich-pytest-diffs)** |
-| Snapshot testing | plugin | No | Yes | No | **[Yes](testing.md#snapshot-testing)** |
-| Warn mode (non-failing assertions) | No | No | Yes | No | **[Yes](errors.md#warnings-instead-of-failures)** |
+| Snapshot testing | plugin | No | **Yes** | No | **[Yes](testing.md#snapshot-testing)** |
+| Warn mode (non-failing assertions) | No | No | **Yes** | No | **[Yes](errors.md#warnings-instead-of-failures)** |
 | Allure / Behave integrations | No | No | No | No | **[Yes](integrations.md)** |
 
 ## Project health
@@ -163,7 +163,7 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
 |---|:---:|:---:|:---:|:---:|:---:|
 | Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.8.0** |
 | Property-based tests | n/a | No | No | No | **Yes** |
-| Runtime dependencies | none | none | none | none | **none on 3.11+** |
+| Runtime dependencies | **none** | **none** | **none** | **none** | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
 
 !!! note
@@ -171,7 +171,7 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
     assertpy2 ships a [Hypothesis](https://hypothesis.readthedocs.io) suite covering its comparison,
     diff, and matcher logic, on top of 100% branch coverage.
 
-## One library, no compromise
+## All three styles, one import
 
 The styles above are not mutually exclusive in assertpy2. A single import and no runtime dependencies
 on Python 3.11+ give you all of them at once, and you can mix them freely in the same test suite:
@@ -194,7 +194,7 @@ assert_that(value).satisfies(match.greater_than(0) & match.less_than(100))
 Across the columns above, assertpy2 is the only option that:
 
 - covers the fluent, matcher, and `==` styles in a single import, mixable in one suite, so there is no
-  juggling of libraries and no compromise;
+  juggling of libraries;
 - is statically typed: `@overload` protocols and `py.typed` give autocomplete filtered by the value's
   type and usage verified by a type checker before the test runs;
 - has soft assertions that are both **thread-safe and async-safe** (independent state per thread and per
