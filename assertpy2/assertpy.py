@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ._typing import (
         _BytesAssertion,
         _CallableAssertion,
+        _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
         _IterableAssertion,
@@ -253,11 +254,16 @@ def assert_that(val: bytes | bytearray, description: str = "") -> _BytesAssertio
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
+# Fallback returns the concrete AssertionBuilder so object- and union-typed values keep the full API.
+# The specific protocols are not assignable to AssertionBuilder, so mypy --strict reports overload-overlap
+# for each specific overload and pyright one reportOverlappingOverload; ty (the gate) does not flag it. Kept
+# intentionally - returning _CoreAssertion here would strip type-specific assertions from object/union values.
 @overload
 def assert_that(val: object, description: str = "") -> AssertionBuilder: ...
 
 
-def assert_that(val, description=""):
+# Return the common base protocol so each overload stays consistent with the impl (no reportInconsistentOverload).
+def assert_that(val, description="") -> _CoreAssertion:
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
     This is a factory method for the :class:`AssertionBuilder`, and the single most important
