@@ -49,7 +49,7 @@ class DynamicMixin(_MixinBase):
             raise AttributeError(f"assertpy has no assertion <{attr}()>")
 
         attr_name = attr[4:]
-        err_msg = False
+        err_msg: str | None = None
         val_is_namedtuple = is_namedtuple(self.val)
         is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
 
