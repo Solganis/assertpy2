@@ -264,18 +264,27 @@ class HasLengthMatcher(BaseMatcher):
         self.expected_length = expected_length
 
     def matches(self, value: Any) -> bool:
-        return len(value) == self.expected_length
+        try:
+            return len(value) == self.expected_length
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return f"a value of length <{self.expected_length}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value}> with length <{len(value)}>"
+        try:
+            return f"was <{value}> with length <{len(value)}>"
+        except TypeError:
+            return f"was <{value!r}>, which has no length"
 
 
 class IsEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return len(value) == 0
+        try:
+            return len(value) == 0
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return "an empty value"
@@ -283,7 +292,10 @@ class IsEmptyMatcher(BaseMatcher):
 
 class IsNotEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return len(value) > 0
+        try:
+            return len(value) > 0
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return "a non-empty value"
