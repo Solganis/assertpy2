@@ -582,7 +582,13 @@ class StructureMatcher(BaseMatcher):
             if key not in value:
                 return f"missing key <{current_path}>"
             actual = value[key]
-            if isinstance(expected, Matcher):
+            if isinstance(expected, StructureMatcher):
+                if not isinstance(actual, dict):
+                    return f"at <{current_path}>: expected a dict, but was <{actual}>"
+                error = self._match_recursive(actual, expected._spec, current_path, seen)
+                if error:
+                    return error
+            elif isinstance(expected, Matcher):
                 if not expected.matches(actual):
                     return (
                         f"at <{current_path}>: expected {expected.describe()}, but {expected.describe_mismatch(actual)}"
