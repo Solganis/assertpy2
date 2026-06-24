@@ -39,3 +39,14 @@ def test_is_not_in_missing_arg_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(1).is_not_in()
     assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
+
+
+def test_is_in_uses_equality_not_ordering():
+    # val < every item, but equal to none: membership must fail (not match by `<=`)
+    with pytest.raises(AssertionError):
+        assert_that(0).is_in(1, 2, 3)
+
+
+def test_is_not_in_uses_equality_not_ordering():
+    # val < every item, but equal to none: it is genuinely not in the items
+    assert_that(0).is_not_in(1, 2, 3)
