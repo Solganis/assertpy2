@@ -68,7 +68,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --extra json
+        run: uv sync --extra json --group typecheck
 
       - name: Ruff check
         run: uv run ruff check .
@@ -76,5 +76,11 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check .
 
-      - name: Type check
-        run: uv run ty check assertpy2/
+      - name: Type check (ty)
+        run: uv run ty check assertpy2/ tests/test_typing.py
+
+      - name: Type check (mypy --strict, public typing surface)
+        run: uv run mypy --strict --follow-imports=silent tests/test_typing.py
+
+      - name: Type check (pyright, public typing surface)
+        run: uv run pyright tests/test_typing.py
