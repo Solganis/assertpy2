@@ -42,8 +42,9 @@ assert_that("foo").is_positive()        # type error: is_positive is not a strin
 assert_that(42).is_instance_of("int")   # type error: expected `type`, got `str`
 ```
 
-[ty](https://github.com/astral-sh/ty), Pyright, and Mypy all report these in the editor and in CI, turning
-a class of test bugs into errors you see while typing.
+[ty](https://github.com/astral-sh/ty), [Pyright](https://github.com/microsoft/pyright), and
+[Mypy](https://github.com/python/mypy) all report these in the editor and in CI, turning a class of test
+bugs into errors you see while typing.
 
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
