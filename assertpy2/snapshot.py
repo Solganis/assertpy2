@@ -172,8 +172,7 @@ class SnapshotMixin(_MixinBase):
             lineno = str(caller.f_lineno)
             snapname = _name(path, fname)
 
-        if not os.path.exists(path):
-            os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
 
         if os.path.isfile(snapname):
             # snap exists, so load
