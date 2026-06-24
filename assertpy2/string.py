@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ._compat import Self
 
 __tracebackhide__ = True
@@ -14,6 +16,20 @@ __tracebackhide__ = True
 
 class StringMixin(_MixinBase):
     """String assertions mixin."""
+
+    def _assert_string_chars(self, is_valid: Callable[[str], bool], description: str) -> Self:
+        """Shared shape for the character-class string assertions.
+
+        Validates that val is a non-empty string, then emits a "contain only ``description``" error if
+        ``is_valid(self.val)`` is falsy.
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if len(self.val) == 0:
+            raise ValueError("val is empty")
+        if not is_valid(self.val):
+            return self.error(f"Expected <{self.val}> to contain only {description}, but did not.")
+        return self
 
     def is_equal_to_ignoring_case(self, other) -> Self:
         """Asserts that val is a string and is case-insensitive equal to other.
@@ -295,13 +311,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** alphabetic
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if not self.val.isalpha():
-            return self.error(f"Expected <{self.val}> to contain only alphabetic chars, but did not.")
-        return self
+        return self._assert_string_chars(str.isalpha, "alphabetic chars")
 
     def is_digit(self) -> Self:
         """Asserts that val is non-empty string and all characters are digits (using ``str.isdigit()``).
@@ -317,13 +327,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** digits
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if not self.val.isdigit():
-            return self.error(f"Expected <{self.val}> to contain only digits, but did not.")
-        return self
+        return self._assert_string_chars(str.isdigit, "digits")
 
     def is_lower(self) -> Self:
         """Asserts that val is non-empty string and all characters are lowercase (using ``str.lower()``).
@@ -339,13 +343,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** lowercase
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if self.val != self.val.lower():
-            return self.error(f"Expected <{self.val}> to contain only lowercase chars, but did not.")
-        return self
+        return self._assert_string_chars(lambda value: value == value.lower(), "lowercase chars")
 
     def is_upper(self) -> Self:
         """Asserts that val is non-empty string and all characters are uppercase (using ``str.upper()``).
@@ -361,13 +359,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** uppercase
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if self.val != self.val.upper():
-            return self.error(f"Expected <{self.val}> to contain only uppercase chars, but did not.")
-        return self
+        return self._assert_string_chars(lambda value: value == value.upper(), "uppercase chars")
 
     def is_alphanumeric(self) -> Self:
         """Asserts that val is non-empty string and all characters are alphanumeric (using ``str.isalnum()``).
@@ -383,13 +375,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** alphanumeric
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if not self.val.isalnum():
-            return self.error(f"Expected <{self.val}> to contain only alphanumeric chars, but did not.")
-        return self
+        return self._assert_string_chars(str.isalnum, "alphanumeric chars")
 
     def is_whitespace(self) -> Self:
         """Asserts that val is non-empty string and all characters are whitespace (using ``str.isspace()``).
@@ -406,13 +392,7 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** whitespace
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
-            raise ValueError("val is empty")
-        if not self.val.isspace():
-            return self.error(f"Expected <{self.val}> to contain only whitespace, but did not.")
-        return self
+        return self._assert_string_chars(str.isspace, "whitespace")
 
     def contains_any_of(self, *items) -> Self:
         """Asserts that val is a string and contains at least one of the given items.
