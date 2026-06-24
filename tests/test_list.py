@@ -181,6 +181,13 @@ def test_contains_sequence():
     assert_that([fred, joe, bob]).contains_sequence(fred, joe)
 
 
+def test_contains_sequence_string_advances_past_match():
+    # a single "X" cannot satisfy a two-"X" sequence: the search must advance past the first
+    # match, so index arithmetic that re-finds the same "X" must not produce a false pass.
+    with pytest.raises(AssertionError):
+        assert_that("aX").contains_sequence("X", "X")
+
+
 def test_contains_sequence_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(4, 5)
