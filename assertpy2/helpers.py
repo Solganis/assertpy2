@@ -80,13 +80,13 @@ class HelpersMixin(_MixinBase):
         if type(val) is complex or type(other) is complex or type(tolerance) is complex:
             raise TypeError("ordering is not defined for complex numbers")
 
-        if not isinstance(val, numbers.Number) and type(val) is not datetime.datetime:
+        if not isinstance(val, numbers.Number) and not isinstance(val, datetime.datetime):
             raise TypeError("val is not numeric or datetime")
 
-        if type(val) is datetime.datetime:
-            if type(other) is not datetime.datetime:
+        if isinstance(val, datetime.datetime):
+            if not isinstance(other, datetime.datetime):
                 raise TypeError(f"given arg must be datetime, but was <{type(other).__name__}>")
-            if type(tolerance) is not datetime.timedelta:
+            if not isinstance(tolerance, datetime.timedelta):
                 raise TypeError(f"given tolerance arg must be timedelta, but was <{type(tolerance).__name__}>")
         else:
             if not isinstance(other, numbers.Number):

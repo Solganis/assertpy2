@@ -15,7 +15,7 @@ __tracebackhide__ = True
 
 def _fmt_operand(value):
     """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else verbatim."""
-    if type(value) is datetime.datetime:
+    if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
     return value
 
@@ -530,12 +530,12 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if type(self.val) is not datetime.datetime and (math.isnan(self.val) or math.isnan(other)):
+        if not isinstance(self.val, datetime.datetime) and (math.isnan(self.val) or math.isnan(other)):
             return self.error(
                 f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
             )
         if self.val < (other - tolerance) or self.val > (other + tolerance):
-            if type(self.val) is datetime.datetime:
+            if isinstance(self.val, datetime.datetime):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
                     f" <{_fmt_operand(other)}> within tolerance"
@@ -569,7 +569,7 @@ class NumericMixin(_MixinBase):
         self._validate_close_to_args(self.val, other, tolerance)
 
         if (other - tolerance) <= self.val <= (other + tolerance):
-            if type(self.val) is datetime.datetime:
+            if isinstance(self.val, datetime.datetime):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"
                     f" <{_fmt_operand(other)}> within tolerance"
