@@ -154,7 +154,7 @@ class ExtractingMixin(_MixinBase):
                 if name in item._fields:
                     return getattr(item, name)
                 else:  # val has no attribute <foo>
-                    raise ValueError(f"item attributes {item._fields} did no contain attribute <{name}>")
+                    raise ValueError(f"item attributes {item._fields} did not contain attribute <{name}>")
             elif isinstance(item, collections.abc.Iterable):
                 self._check_iterable(item, name="item")
                 return item[name]
