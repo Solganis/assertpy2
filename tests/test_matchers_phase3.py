@@ -119,6 +119,9 @@ class TestIsDivisibleByMatcher:
         assert_that(div_by_6.matches(9)).is_false()
         assert_that(div_by_6.matches(4)).is_false()
 
+    def test_zero_divisor_rejected(self):
+        assert_that(match.is_divisible_by).raises(ValueError).when_called_with(0).contains("must not be zero")
+
 
 class TestIsCallableMatcher:
     def test_matches_function(self):
