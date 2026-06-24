@@ -184,6 +184,20 @@ class TestStructureMatcher:
         result = matcher.describe_mismatch({"user": {"name": ""}})
         assert_that(result).contains("user.name")
 
+    def test_nested_structure_matcher_matches(self):
+        matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
+        assert_that(matcher.matches({"address": {"city": "NYC"}})).is_true()
+
+    def test_nested_structure_matcher_joined_path(self):
+        matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
+        result = matcher.describe_mismatch({"address": {"city": "LA"}})
+        assert_that(result).contains("address.city")
+
+    def test_nested_structure_matcher_non_dict(self):
+        matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
+        result = matcher.describe_mismatch({"address": "not a dict"})
+        assert_that(result).contains("at <address>")
+
     def test_is_instance(self):
         assert_that(match.structure({"a": 1})).is_instance_of(StructureMatcher)
 
