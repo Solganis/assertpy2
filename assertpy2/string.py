@@ -456,19 +456,21 @@ class StringMixin(_MixinBase):
         return self
 
     def is_unicode(self) -> Self:
-        """Asserts that val is a unicode string.
+        """Asserts that val is a ``str``.
+
+        Retained for ``assertpy`` compatibility: every ``str`` is unicode on Python 3, so this is
+        effectively an ``isinstance(val, str)`` check.
 
         Examples:
             Usage::
 
-                assert_that(u'foo').is_unicode()  # python 2
-                assert_that('foo').is_unicode()   # python 3
+                assert_that('foo').is_unicode()
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
-            AssertionError: if val is **not** a unicode string
+            AssertionError: if val is **not** a ``str``
         """
         if not isinstance(self.val, str):
             return self.error(f"Expected <{self.val}> to be unicode, but was <{type(self.val).__name__}>.")
