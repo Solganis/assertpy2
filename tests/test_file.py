@@ -158,6 +158,15 @@ def test_is_child_of_failure(tmpfile):
     assert_that(str(exc_info.value)).matches(r"Expected file <.*> to be a child of <.*[\\/]foo_dir>, but was not.")
 
 
+def test_is_child_of_rejects_sibling_with_prefix_name(tmp_path):
+    parent = tmp_path / "my"
+    parent.mkdir()
+    sibling = tmp_path / "myfile.txt"
+    sibling.write_text("x")
+    with pytest.raises(AssertionError):
+        assert_that(str(sibling)).is_child_of(str(parent))
+
+
 def test_is_child_of_bad_arg_type_failure(tmpfile):
     with pytest.raises(TypeError) as exc_info:
         assert_that(tmpfile.name).is_child_of(123)

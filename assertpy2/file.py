@@ -168,9 +168,9 @@ class FileMixin(_MixinBase):
         Examples:
             Usage::
 
-                assert_that('/path/to/mydir/myfile.txt').is_child_of('mydir')
-                assert_that('/path/to/mydir/myfile.txt').is_child_of('to')
-                assert_that('/path/to/mydir/myfile.txt').is_child_of('path')
+                assert_that('/path/to/mydir/myfile.txt').is_child_of('/path/to/mydir')
+                assert_that('/path/to/mydir/myfile.txt').is_child_of('/path/to')
+                assert_that('/path/to/mydir/myfile.txt').is_child_of('/path')
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
@@ -183,7 +183,11 @@ class FileMixin(_MixinBase):
             raise TypeError("given parent directory arg must be a path")
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent)
-        if not val_abspath.startswith(parent_abspath):
+        try:
+            is_child = os.path.commonpath([val_abspath, parent_abspath]) == parent_abspath
+        except ValueError:  # pragma: no cover - Windows-only: paths on different drives share no common path
+            is_child = False
+        if not is_child:
             return self.error(f"Expected file <{val_abspath}> to be a child of <{parent_abspath}>, but was not.")
         return self
 
