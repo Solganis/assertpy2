@@ -61,10 +61,9 @@ class AsyncAssertionBuilder:
                 last_error: AssertionError | None = None
                 while True:
                     try:
-                        if inspect.iscoroutinefunction(self._func):
-                            val = await self._func()
-                        else:
-                            val = self._func()
+                        val = self._func()
+                        if inspect.isawaitable(val):
+                            val = await val
                         builder = self._builder_func(val, self._description)
                         method = getattr(builder, name)
                         method(*args, **kwargs)

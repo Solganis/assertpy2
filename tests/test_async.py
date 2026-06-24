@@ -51,6 +51,13 @@ class TestEventuallyWithAsyncCallable:
         with pytest.raises(AssertionError, match="not met after"):
             asyncio.run(assert_that(always_zero).eventually(timeout=0.15, interval=0.05).is_equal_to(1))
 
+    def test_sync_callable_returning_awaitable(self):
+        async def compute():
+            return 42
+
+        # a sync callable that returns a coroutine must still be awaited before asserting
+        asyncio.run(assert_that(lambda: compute()).eventually(timeout=1, interval=0.05).is_equal_to(42))
+
 
 class TestEventuallyChaining:
     def test_within(self):
