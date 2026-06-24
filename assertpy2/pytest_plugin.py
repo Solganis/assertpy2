@@ -89,8 +89,9 @@ def pytest_runtest_makereport(item, call):
 
     if _HAS_ALLURE:
         mode = getattr(item.config, "_assertpy2_allure_mode", "diff")
+        allure_max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
         with contextlib.suppress(Exception):
-            _attach_allure(actual, expected, diff, mode=mode)
+            _attach_allure(actual, expected, diff, mode=mode, max_entries=allure_max_entries)
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
@@ -150,23 +151,28 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
     return "\n".join(lines)
 
 
-def _diff_to_json(diff):
+def _diff_to_json(diff, max_entries=50):
     entries = getattr(diff, "entries", None)
     if not entries:
         return None
     kind = getattr(diff, "kind", "unknown")
+    visible = entries[:max_entries] if max_entries > 0 and len(entries) > max_entries else entries
+    truncated = len(entries) - len(visible)
     items = [
         {
             "path": str(getattr(entry, "path", "")),
             "actual": repr(getattr(entry, "actual", None)),
             "expected": repr(getattr(entry, "expected", None)),
         }
-        for entry in entries
+        for entry in visible
     ]
-    return json.dumps({"kind": kind, "entries": items}, ensure_ascii=False, indent=2)
+    payload = {"kind": kind, "entries": items}
+    if truncated:
+        payload["truncated"] = truncated
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def _attach_allure(actual, expected, diff, *, mode="diff"):
+def _attach_allure(actual, expected, diff, *, mode="diff", max_entries=50):
     if mode == "off":
         return
     if mode == "full" and (actual is not None or expected is not None):
@@ -181,7 +187,7 @@ def _attach_allure(actual, expected, diff, *, mode="diff"):
             attachment_type=allure.attachment_type.JSON,
         )
     if diff is not None:
-        diff_json = _diff_to_json(diff)
+        diff_json = _diff_to_json(diff, max_entries=max_entries)
         if diff_json is not None:
             allure.attach(
                 body=diff_json,

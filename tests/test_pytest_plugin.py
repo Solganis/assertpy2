@@ -296,6 +296,15 @@ class TestDiffToJson:
         assert_that(result["entries"][0]["path"]).is_equal_to("x")
         assert_that(result["entries"][1]["path"]).is_equal_to("y")
 
+    def test_truncates_to_max_entries(self):
+        diff = DiffResult(
+            kind="dict",
+            entries=[DiffEntry(path=f"k{i}", actual=i, expected=i + 1) for i in range(5)],
+        )
+        result = json.loads(_diff_to_json(diff, max_entries=2))
+        assert_that(result["entries"]).is_length(2)
+        assert_that(result["truncated"]).is_equal_to(3)
+
 
 def _mock_allure():
     mock = MagicMock()
