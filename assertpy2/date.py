@@ -11,6 +11,12 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
+def _require_datetime(value: object, label: str) -> None:
+    """Raise ``TypeError`` unless *value* is exactly a :class:`datetime.datetime`."""
+    if type(value) is not datetime.datetime:
+        raise TypeError(f"{label} must be datetime, but was type <{type(value).__name__}>")
+
+
 class DateMixin(_MixinBase):
     """Date and time assertions mixin."""
 
@@ -37,13 +43,11 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** before the given date
 
         See Also:
-            :meth:`~assertpy.string.NumericMixin.is_less_than` - numeric assertion, but also works with datetime BR
-            :meth:`~assertpy.string.NumericMixin.is_less_than_or_equal_to` - also works with datetime
+            :meth:`~assertpy.numeric.NumericMixin.is_less_than` - numeric assertion, but also works with datetime
+            :meth:`~assertpy.numeric.NumericMixin.is_less_than_or_equal_to` - also works with datetime
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val >= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before"
@@ -74,13 +78,11 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** after the given date
 
         See Also:
-            :meth:`~assertpy.string.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime BR
-            :meth:`~assertpy.string.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
+            :meth:`~assertpy.numeric.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime
+            :meth:`~assertpy.numeric.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val <= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after"
@@ -111,10 +113,8 @@ class DateMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** before or equal to the given date
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val > other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before or equal to"
@@ -145,10 +145,8 @@ class DateMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** after or equal to the given date
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val < other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after or equal to"
@@ -178,10 +176,8 @@ class DateMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** equal to the given date to the second
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if (
             self.val.date() != other.date()
             or self.val.hour != other.hour
@@ -216,10 +212,8 @@ class DateMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** equal to the given date to the minute
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
@@ -249,10 +243,8 @@ class DateMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** equal to the given date ignoring time
         """
-        if type(self.val) is not datetime.datetime:
-            raise TypeError(f"val must be datetime, but was type <{type(self.val).__name__}>")
-        if type(other) is not datetime.datetime:
-            raise TypeError(f"given arg must be datetime, but was type <{type(other).__name__}>")
+        _require_datetime(self.val, "val")
+        _require_datetime(other, "given arg")
         if self.val.date() != other.date():
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
