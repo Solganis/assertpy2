@@ -122,7 +122,8 @@ def test_extracting_filter_none():
 
 
 def test_extracting_filter_bad_type():
-    assert_that(users).extracting("user", filter=123).is_equal_to([])
+    with pytest.raises(TypeError, match="must be a str, dict, or callable"):
+        assert_that(users).extracting("user", filter=123)
 
 
 def test_extracting_filter_ignore_bad_key_types():

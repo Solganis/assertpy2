@@ -181,7 +181,11 @@ class ExtractingMixin(_MixinBase):
                     return True
                 elif callable(kwargs["filter"]):
                     return kwargs["filter"](item)
-                return kwargs["filter"] is None
+                elif kwargs["filter"] is None:
+                    return True
+                raise TypeError(
+                    f"given filter arg must be a str, dict, or callable, but was <{type(kwargs['filter']).__name__}>"
+                )
             return True
 
         def _sort(item):
