@@ -344,6 +344,8 @@ class IsOddMatcher(BaseMatcher):
 
 class IsDivisibleByMatcher(BaseMatcher):
     def __init__(self, divisor: int):
+        if divisor == 0:
+            raise ValueError("given divisor arg must not be zero")
         self.divisor = divisor
 
     def matches(self, value: Any) -> bool:
