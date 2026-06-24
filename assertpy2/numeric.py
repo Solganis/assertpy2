@@ -13,14 +13,14 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-def _fmt_operand(value):
+def _fmt_operand(value: object) -> object:
     """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else verbatim."""
     if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
     return value
 
 
-def _fmt_tolerance(tolerance):
+def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
     """Format a timedelta tolerance as ``h:mm:ss``."""
     tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
     h, rem = divmod(tolerance_seconds, 3600)
