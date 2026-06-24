@@ -63,6 +63,10 @@ dev = [
 docs = [
     "mkdocs-material>=9.7.6",
 ]
+typecheck = [
+    "mypy>=2.1.0",
+    "pyright>=1.1.410",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
