@@ -203,18 +203,38 @@ class HelpersMixin(_MixinBase):
             return val != other
 
     @staticmethod
+    def _normalize_key_specs(specs, param):
+        """Normalize an ``ignore``/``include`` kwarg into a flat list of key-specs.
+
+        A ``list``, ``set`` or ``frozenset`` is treated as a collection of key-specs and
+        expanded.  A ``str``/``bytes``/``tuple`` (a single key or a nested-path key) or any
+        non-iterable hashable key is wrapped as a single key-spec.  Any other iterable
+        (generator, iterator, ``dict_keys``, ...) is rejected, since it is one-shot or
+        ambiguous and would otherwise be silently mishandled as one opaque key.
+        """
+        if isinstance(specs, (list, set, frozenset)):
+            return list(specs)
+        if isinstance(specs, (str, bytes, tuple)) or not isinstance(specs, collections.abc.Iterable):
+            return [specs]
+        raise TypeError(
+            f"{param} must be a key, a nested-path tuple, or a list/set/frozenset of them,"
+            f" but was <{type(specs).__name__}>"
+        )
+
+    @staticmethod
     def _dict_ignore(ignore):
         """Helper to make list for given ignore kwarg values."""
         return [
             entry[0] if type(entry) is tuple and len(entry) == 1 else entry
-            for entry in (ignore if type(ignore) is list else [ignore])
+            for entry in HelpersMixin._normalize_key_specs(ignore, "ignore")
         ]
 
     @staticmethod
     def _dict_include(include):
         """Helper to make a list from given include kwarg values."""
         return [
-            entry[0] if type(entry) is tuple else entry for entry in (include if type(include) is list else [include])
+            entry[0] if type(entry) is tuple else entry
+            for entry in HelpersMixin._normalize_key_specs(include, "include")
         ]
 
     def _dict_err(self, val: object, other: object, ignore: object = None, include: object = None) -> None:

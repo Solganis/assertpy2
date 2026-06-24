@@ -53,8 +53,8 @@ class BaseMixin(_MixinBase):
             **kwargs: see below
 
         Keyword Args:
-            ignore: the key/field (or list of keys/fields) to ignore
-            include: the key/field (or list of keys/fields) to include
+            ignore: the key/field (or list/set/frozenset of keys/fields) to ignore
+            include: the key/field (or list/set/frozenset of keys/fields) to include
 
         Examples:
             Usage::

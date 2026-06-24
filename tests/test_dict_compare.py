@@ -21,6 +21,25 @@ def test_ignore_list_of_keys():
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"b": 2}, ignore=["c", "d", "e", "a"])
 
 
+def test_ignore_set_of_keys():
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, ignore={"b", "c"})
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({}, ignore=frozenset({"a", "b", "c"}))
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 2, "c": 3}, ignore=set())
+    # a set may carry nested-path tuples, same as a list
+    assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1, "b": {"x": 2}}, ignore={("b", "y")})
+
+
+def test_ignore_bytes_key():
+    assert_that({b"a": 1, b"b": 2}).is_equal_to({b"a": 1}, ignore=b"b")
+
+
+def test_ignore_rejects_one_shot_iterable():
+    with pytest.raises(TypeError, match="ignore must be a key"):
+        assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore=(key for key in ("b",)))
+    with pytest.raises(TypeError, match="ignore must be a key"):
+        assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore={"a": 1}.keys())
+
+
 def test_ignore_deep_key():
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1}, ignore="b")
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1}, ignore=[("b",)])
@@ -216,6 +235,16 @@ def test_include_list_of_keys():
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, include=["a"])
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"b": 2}, include=["b"])
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"c": 3}, include=["c"])
+
+
+def test_include_set_of_keys():
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 2}, include={"a", "b"})
+    assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, include=frozenset({"a"}))
+
+
+def test_include_rejects_one_shot_iterable():
+    with pytest.raises(TypeError, match="include must be a key"):
+        assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, include=(key for key in ("a",)))
 
 
 def test_include_deep_key():

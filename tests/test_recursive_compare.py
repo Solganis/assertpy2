@@ -53,6 +53,11 @@ class TestDataclassIgnore:
         expected = User(id=99, name="Alice", email="different@x.com")
         assert_that(actual).is_equal_to(expected, ignore=["id", "email"])
 
+    def test_ignore_set_of_fields(self):
+        actual = User(id=1, name="Alice", email="a@x.com")
+        expected = User(id=99, name="Alice", email="different@x.com")
+        assert_that(actual).is_equal_to(expected, ignore={"id", "email"})
+
     def test_ignore_nested_field(self):
         actual = UserWithAddress(id=1, name="Alice", address=Address(city="NYC", zip_code="10001"))
         expected = UserWithAddress(id=1, name="Alice", address=Address(city="NYC", zip_code="99999"))
