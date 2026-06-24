@@ -51,7 +51,7 @@ def test_contains_multi_item_failure():
 def test_contains_multi_item_single_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": 1, "b": 2, "c": 3}).contains("a", "b", "z")
-    assert_that(str(exc_info.value)).contains("to contain keys <'a', 'b', 'z'>, but did not contain keys <z>.")
+    assert_that(str(exc_info.value)).contains("to contain keys <'a', 'b', 'z'>, but did not contain key <z>.")
 
 
 def test_contains_only():

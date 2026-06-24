@@ -83,7 +83,7 @@ class ContainsMixin(_MixinBase):
                 if self._is_dict_like(self.val):
                     return self.error(
                         f"Expected <{self.val}> to contain keys {self._fmt_items(items)}, but did not contain"
-                        f" key{'' if len(missing) == 0 else 's'} {self._fmt_items(missing_desc)}.",
+                        f" key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}.",
                         diff=diff,
                     )
                 else:
