@@ -465,3 +465,12 @@ def test_datetime_subclass_still_fails_real_mismatch():
     later = _DatetimeSubclass(2026, 1, 2, 12, 0, 0)
     with pytest.raises(AssertionError):
         assert_that(later).is_before(earlier)
+
+
+def test_is_close_to_tolerance_format():
+    base = datetime.datetime(2026, 1, 1, 0, 0, 0)
+    other = datetime.datetime(2026, 1, 3, 0, 0, 0)
+    tolerance = datetime.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=500000)
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(base).is_close_to(other, tolerance)
+    assert_that(str(exc_info.value)).contains("within tolerance <26:03:04>")
