@@ -114,6 +114,8 @@ class BaseMixin(_MixinBase):
 
         Raises:
             AssertionError: if actual is **not** equal to expected
+            TypeError: if ``ignore``/``include`` is a one-shot or otherwise unsupported iterable, or is
+                used on a value that is neither dict-like nor has introspectable fields
 
         Tip:
             Using :meth:`is_equal_to` with a ``float`` val is just asking for trouble. Instead, you'll
