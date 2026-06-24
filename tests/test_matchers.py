@@ -232,6 +232,10 @@ class TestHasLengthMatcher:
     def test_describe_mismatch(self):
         assert_that(match.has_length(3).describe_mismatch("ab")).is_equal_to("was <ab> with length <2>")
 
+    def test_non_sized_does_not_match(self):
+        assert_that(match.has_length(3).matches(5)).is_false()
+        assert_that(match.has_length(3).describe_mismatch(5)).contains("no length")
+
 
 class TestIsEmptyMatcher:
     def test_matches(self):
@@ -241,6 +245,9 @@ class TestIsEmptyMatcher:
     def test_does_not_match(self):
         assert_that(match.is_empty().matches("x")).is_false()
 
+    def test_non_sized_does_not_match(self):
+        assert_that(match.is_empty().matches(5)).is_false()
+
 
 class TestIsNotEmptyMatcher:
     def test_matches(self):
@@ -248,6 +255,9 @@ class TestIsNotEmptyMatcher:
 
     def test_does_not_match(self):
         assert_that(match.is_not_empty().matches("")).is_false()
+
+    def test_non_sized_does_not_match(self):
+        assert_that(match.is_not_empty().matches(5)).is_false()
 
 
 class TestIsPositiveMatcher:
