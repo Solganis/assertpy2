@@ -117,11 +117,11 @@ class BaseMixin(_MixinBase):
 
         Tip:
             Using :meth:`is_equal_to` with a ``float`` val is just asking for trouble. Instead, you'll
-            always want to use *fuzzy* numeric assertions like :meth:`~assertpy.numeric.NumericMixin.is_close_to`
-            or :meth:`~assertpy.numeric.NumericMixin.is_between`.
+            always want to use *fuzzy* numeric assertions like :meth:`~assertpy2.numeric.NumericMixin.is_close_to`
+            or :meth:`~assertpy2.numeric.NumericMixin.is_between`.
 
         See Also:
-            :meth:`~assertpy.string.StringMixin.is_equal_to_ignoring_case` - for case-insensitive string equality
+            :meth:`~assertpy2.string.StringMixin.is_equal_to_ignoring_case` - for case-insensitive string equality
         """
         ignore = kwargs.get("ignore")
         include = kwargs.get("include")

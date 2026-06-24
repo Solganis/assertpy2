@@ -196,7 +196,7 @@ class NumericMixin(_MixinBase):
                 assert_that(1).is_greater_than(0)
                 assert_that(123.4).is_greater_than(111.1)
 
-            For dates, behavior is identical to :meth:`~assertpy.date.DateMixin.is_after`::
+            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_after`::
 
                 import datetime
 
@@ -231,7 +231,7 @@ class NumericMixin(_MixinBase):
                 assert_that(1).is_greater_than_or_equal_to(1)
                 assert_that(123.4).is_greater_than_or_equal_to(111.1)
 
-            For dates, behavior is identical to :meth:`~assertpy.date.DateMixin.is_after` *except* when equal::
+            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_after` *except* when equal::
 
                 import datetime
 
@@ -267,7 +267,7 @@ class NumericMixin(_MixinBase):
                 assert_that(0).is_less_than(1)
                 assert_that(123.4).is_less_than(555.5)
 
-            For dates, behavior is identical to :meth:`~assertpy.date.DateMixin.is_before`::
+            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_before`::
 
                 import datetime
 
@@ -302,7 +302,7 @@ class NumericMixin(_MixinBase):
                 assert_that(1).is_less_than_or_equal_to(1)
                 assert_that(123.4).is_less_than_or_equal_to(100.0)
 
-            For dates, behavior is identical to :meth:`~assertpy.date.DateMixin.is_before` *except* when equal::
+            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_before` *except* when equal::
 
                 import datetime
 

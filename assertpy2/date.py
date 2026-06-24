@@ -43,8 +43,8 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** before the given date
 
         See Also:
-            :meth:`~assertpy.numeric.NumericMixin.is_less_than` - numeric assertion, but also works with datetime
-            :meth:`~assertpy.numeric.NumericMixin.is_less_than_or_equal_to` - also works with datetime
+            :meth:`~assertpy2.numeric.NumericMixin.is_less_than` - numeric assertion, but also works with datetime
+            :meth:`~assertpy2.numeric.NumericMixin.is_less_than_or_equal_to` - also works with datetime
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
@@ -78,8 +78,8 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** after the given date
 
         See Also:
-            :meth:`~assertpy.numeric.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime
-            :meth:`~assertpy.numeric.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
+            :meth:`~assertpy2.numeric.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime
+            :meth:`~assertpy2.numeric.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")

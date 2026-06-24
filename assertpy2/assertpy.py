@@ -597,7 +597,7 @@ class AssertionBuilder(
     def error(self, msg, *, actual=None, expected=None, diff=None) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
-        If an error description is set by :meth:`~assertpy.base.BaseMixin.described_as`, then that
+        If an error description is set by :meth:`~assertpy2.base.BaseMixin.described_as`, then that
         description is prepended to the error message.
 
         When structured data (``actual``, ``expected``, or ``diff``) is provided, raises
