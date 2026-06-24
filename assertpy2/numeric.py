@@ -13,6 +13,21 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
+def _fmt_operand(value):
+    """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else verbatim."""
+    if type(value) is datetime.datetime:
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return value
+
+
+def _fmt_tolerance(tolerance):
+    """Format a timedelta tolerance as ``h:mm:ss``."""
+    tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
+    h, rem = divmod(tolerance_seconds, 3600)
+    m, s = divmod(rem, 60)
+    return f"{int(h)}:{int(m):02d}:{int(s):02d}"
+
+
 class NumericMixin(_MixinBase):
     """Numeric assertions mixin."""
 
@@ -198,13 +213,9 @@ class NumericMixin(_MixinBase):
         """
         self._validate_compareable(other)
         if self.val <= other:
-            if type(self.val) is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be greater than"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to be greater than <{other}>, but was not.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not."
+            )
         return self
 
     def is_greater_than_or_equal_to(self, other) -> Self:
@@ -238,13 +249,10 @@ class NumericMixin(_MixinBase):
         """
         self._validate_compareable(other)
         if self.val < other:
-            if type(self.val) is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be greater than or equal to"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to be greater than or equal to <{other}>, but was not.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to be greater than or equal to"
+                f" <{_fmt_operand(other)}>, but was not."
+            )
         return self
 
     def is_less_than(self, other) -> Self:
@@ -276,13 +284,9 @@ class NumericMixin(_MixinBase):
         """
         self._validate_compareable(other)
         if self.val >= other:
-            if type(self.val) is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be less than"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to be less than <{other}>, but was not.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not."
+            )
         return self
 
     def is_less_than_or_equal_to(self, other) -> Self:
@@ -316,13 +320,9 @@ class NumericMixin(_MixinBase):
         """
         self._validate_compareable(other)
         if self.val > other:
-            if type(self.val) is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be less than or equal to"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to be less than or equal to <{other}>, but was not.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to be less than or equal to <{_fmt_operand(other)}>, but was not."
+            )
         return self
 
     def is_positive(self) -> Self:
@@ -392,13 +392,10 @@ class NumericMixin(_MixinBase):
         self._validate_between_args(val_type, low, high)
 
         if self.val < low or self.val > high:
-            if val_type is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be between"
-                    f" <{low.strftime('%Y-%m-%d %H:%M:%S')}> and <{high.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to be between <{low}> and <{high}>, but was not.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to be between"
+                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not."
+            )
         return self
 
     def is_not_between(self, low, high) -> Self:
@@ -424,13 +421,10 @@ class NumericMixin(_MixinBase):
         self._validate_between_args(val_type, low, high)
 
         if low <= self.val <= high:
-            if val_type is datetime.datetime:
-                return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to not be between"
-                    f" <{low.strftime('%Y-%m-%d %H:%M:%S')}> and <{high.strftime('%Y-%m-%d %H:%M:%S')}>, but was."
-                )
-            else:
-                return self.error(f"Expected <{self.val}> to not be between <{low}> and <{high}>, but was.")
+            return self.error(
+                f"Expected <{_fmt_operand(self.val)}> to not be between"
+                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was."
+            )
         return self
 
     def _validate_int(self):
@@ -542,13 +536,10 @@ class NumericMixin(_MixinBase):
             )
         if self.val < (other - tolerance) or self.val > (other + tolerance):
             if type(self.val) is datetime.datetime:
-                tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
-                h, rem = divmod(tolerance_seconds, 3600)
-                m, s = divmod(rem, 60)
                 return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be close to"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}> within tolerance"
-                    f" <{int(h)}:{int(m):02d}:{int(s):02d}>, but was not."
+                    f"Expected <{_fmt_operand(self.val)}> to be close to"
+                    f" <{_fmt_operand(other)}> within tolerance"
+                    f" <{_fmt_tolerance(tolerance)}>, but was not."
                 )
             else:
                 return self.error(
@@ -579,13 +570,10 @@ class NumericMixin(_MixinBase):
 
         if (other - tolerance) <= self.val <= (other + tolerance):
             if type(self.val) is datetime.datetime:
-                tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
-                h, rem = divmod(tolerance_seconds, 3600)
-                m, s = divmod(rem, 60)
                 return self.error(
-                    f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to not be close to"
-                    f" <{other.strftime('%Y-%m-%d %H:%M:%S')}> within tolerance"
-                    f" <{int(h)}:{int(m):02d}:{int(s):02d}>, but was."
+                    f"Expected <{_fmt_operand(self.val)}> to not be close to"
+                    f" <{_fmt_operand(other)}> within tolerance"
+                    f" <{_fmt_tolerance(tolerance)}>, but was."
                 )
             else:
                 return self.error(
