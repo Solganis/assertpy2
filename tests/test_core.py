@@ -58,25 +58,25 @@ def test_fmt_args_kwargs_multiple_both():
 
 def test_check_dict_like_empty_dict():
     builder = assert_that(None)
-    assert_that(builder._check_dict_like({}))
+    assert_that(builder._require_dict_like({}))
 
 
 def test_check_dict_like_not_iterable():
     builder = assert_that(None)
-    assert_that(builder._check_dict_like).raises(TypeError).when_called_with(123).is_equal_to(
+    assert_that(builder._require_dict_like).raises(TypeError).when_called_with(123).is_equal_to(
         "val <int> is not dict-like: not iterable"
     )
 
 
 def test_check_dict_like_missing_keys():
     builder = assert_that(None)
-    assert_that(builder._check_dict_like).raises(TypeError).when_called_with("foo").is_equal_to(
+    assert_that(builder._require_dict_like).raises(TypeError).when_called_with("foo").is_equal_to(
         "val <str> is not dict-like: missing keys()"
     )
 
 
 def test_check_dict_like_bool():
     builder = assert_that(None)
-    assert_that(builder._check_dict_like({}, return_as_bool=True)).is_true()
-    assert_that(builder._check_dict_like(123, return_as_bool=True)).is_false()
-    assert_that(builder._check_dict_like("foo", return_as_bool=True)).is_false()
+    assert_that(builder._is_dict_like({})).is_true()
+    assert_that(builder._is_dict_like(123)).is_false()
+    assert_that(builder._is_dict_like("foo")).is_false()

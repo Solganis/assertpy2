@@ -126,9 +126,7 @@ class BaseMixin(_MixinBase):
         ignore = kwargs.get("ignore")
         include = kwargs.get("include")
 
-        if self._check_dict_like(self.val, check_values=False, return_as_bool=True) and self._check_dict_like(
-            other, check_values=False, return_as_bool=True
-        ):
+        if self._is_dict_like(self.val, check_values=False) and self._is_dict_like(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include):
                 self._dict_err(self.val, other, ignore=ignore, include=include)
         elif ignore or include:
