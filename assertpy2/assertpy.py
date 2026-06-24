@@ -53,32 +53,10 @@ __version__ = "2.8.1"
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
 
-# assertpy files
+# assertpy2 source files, used to strip internal frames when locating the caller for warn-mode messages.
+# Derived from the package directory so new modules are covered automatically (no hand-maintained list).
 ASSERTPY_FILES: Final = [
-    os.path.join("assertpy2", file)
-    for file in [
-        "assertpy.py",
-        "async_assertions.py",
-        "base.py",
-        "bytes_mixin.py",
-        "collection.py",
-        "contains.py",
-        "date.py",
-        "dict.py",
-        "dynamic.py",
-        "errors.py",
-        "exception.py",
-        "extracting.py",
-        "file.py",
-        "helpers.py",
-        "json_mixin.py",
-        "matchers.py",
-        "numeric.py",
-        "pytest_plugin.py",
-        "snapshot.py",
-        "string.py",
-        "warning.py",
-    ]
+    os.path.join("assertpy2", name) for name in os.listdir(os.path.dirname(__file__)) if name.endswith(".py")
 ]
 
 # soft assertions (contextvars for thread/async safety)
