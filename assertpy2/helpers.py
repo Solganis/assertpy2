@@ -63,7 +63,7 @@ class HelpersMixin(_MixinBase):
             if low_type is not val_type:
                 raise TypeError(f"given low arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
             if high_type is not val_type:
-                raise TypeError(f"given high arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
+                raise TypeError(f"given high arg must be <{val_type.__name__}>, but was <{high_type.__name__}>")
         elif isinstance(self.val, numbers.Number):
             if not isinstance(low, numbers.Number):
                 raise TypeError(f"given low arg must be numeric, but was <{low_type.__name__}>")
