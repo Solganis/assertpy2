@@ -18,6 +18,12 @@ __tracebackhide__ = True
 class CollectionMixin(_MixinBase):
     """Collection assertions mixin."""
 
+    def _as_list(self) -> list[Any]:
+        """Returns val as a list, raising TypeError if val is not iterable."""
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        return list(self.val)
+
     def is_iterable(self) -> Self:
         """Asserts that val is iterable.
 
@@ -253,9 +259,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             ValueError: if val is empty
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
-        items = list(self.val)
+        items = self._as_list()
         if not items:
             raise ValueError("Expected non-empty iterable, but was empty.")
         return self.builder(items[0], self.description, self.kind)
@@ -274,9 +278,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             ValueError: if val is empty
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
-        items = list(self.val)
+        items = self._as_list()
         if not items:
             raise ValueError("Expected non-empty iterable, but was empty.")
         return self.builder(items[-1], self.description, self.kind)
@@ -298,9 +300,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             IndexError: if index is out of range
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
-        items = list(self.val)
+        items = self._as_list()
         if index < 0 or index >= len(items):
             raise IndexError(f"Expected index {index} to be in range [0, {len(items)}), but was out of range.")
         return self.builder(items[index], self.description, self.kind)
@@ -319,9 +319,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             ValueError: if val is empty or has more than one element
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
-        items = list(self.val)
+        items = self._as_list()
         if not items:
             raise ValueError("Expected iterable with single element, but was empty.")
         if len(items) > 1:
