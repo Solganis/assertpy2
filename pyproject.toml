@@ -67,6 +67,9 @@ typecheck = [
     "mypy>=2.1.0",
     "pyright>=1.1.410",
 ]
+mutation = [
+    "cosmic-ray>=8.4.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

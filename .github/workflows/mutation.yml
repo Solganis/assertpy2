@@ -1,0 +1,63 @@
+name: Mutation
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [base, numeric, string, contains, collection, dict, date, matchers, helpers]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra json --group mutation
+
+      - name: Run mutation testing
+        env:
+          MODULE: ${{ matrix.module }}
+        run: |
+          cat > cosmic-ray.toml <<EOF
+          [cosmic-ray]
+          module-path = "assertpy2/${MODULE}.py"
+          timeout = 30.0
+          excluded-modules = []
+          test-command = ".venv/bin/python -m pytest tests/ -x -q -p no:cacheprovider"
+
+          [cosmic-ray.distributor]
+          name = "local"
+          EOF
+          uv run cosmic-ray baseline cosmic-ray.toml
+          uv run cosmic-ray init cosmic-ray.toml session.sqlite
+          uv run cosmic-ray exec cosmic-ray.toml session.sqlite
+          {
+            echo "### Mutation: ${MODULE}.py"
+            echo ""
+            echo "Surviving mutants: $(uv run cr-rate session.sqlite)%"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::group::Surviving mutants (${MODULE}.py)"
+          uv run cr-report session.sqlite
+          echo "::endgroup::"
