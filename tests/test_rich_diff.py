@@ -288,10 +288,15 @@ class TestContainsDiff:
         missing = [entry for entry in exc.diff.entries if entry.path == "missing"]
         assert_that(missing).is_length(2)
 
-    def test_contains_single_item_no_diff(self):
+    def test_contains_single_item_diff(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2]).contains(9)
-        assert_that(getattr(exc_info.value, "diff", None)).is_none()
+        exc = exc_info.value
+        assert_that(getattr(exc, "diff", None)).is_not_none()
+        assert_that(exc.diff.kind).is_equal_to("contains")
+        missing = [entry for entry in exc.diff.entries if entry.path == "missing"]
+        assert_that(missing).is_length(1)
+        assert_that(missing[0].expected).is_equal_to(9)
 
     def test_contains_exactly_missing_and_extra(self):
         with pytest.raises(AssertionError) as exc_info:

@@ -51,16 +51,22 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         elif len(items) == 1:
-            if isinstance(items[0], Matcher):
-                if not any(items[0].matches(value) for value in self.val):
-                    return self.error(
-                        f"Expected <{self.val}> to contain item matching {items[0].describe()}, but did not."
+            item = items[0]
+            if isinstance(item, Matcher):
+                if not any(item.matches(value) for value in self.val):
+                    diff = DiffResult(
+                        kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item.describe())]
                     )
-            elif items[0] not in self.val:
+                    return self.error(
+                        f"Expected <{self.val}> to contain item matching {item.describe()}, but did not.",
+                        diff=diff,
+                    )
+            elif item not in self.val:
+                diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
                 if self._is_dict_like(self.val):
-                    return self.error(f"Expected <{self.val}> to contain key <{items[0]}>, but did not.")
+                    return self.error(f"Expected <{self.val}> to contain key <{item}>, but did not.", diff=diff)
                 else:
-                    return self.error(f"Expected <{self.val}> to contain item <{items[0]}>, but did not.")
+                    return self.error(f"Expected <{self.val}> to contain item <{item}>, but did not.", diff=diff)
         else:
             missing = []
             for item in items:
