@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Hashable
     from pathlib import Path
     from typing import Any, Protocol
 
@@ -12,12 +12,17 @@ if TYPE_CHECKING:
     from .async_assertions import AsyncAssertionBuilder
     from .matchers import Matcher
 
+    # ``ignore``/``include`` accept a single key, a nested-path tuple, or a list/set/frozenset of them.
+    _KeySpecs = Hashable | list[Hashable] | set[Hashable] | frozenset[Hashable]
+
     class _CoreAssertion(Protocol):
         """Base protocol with assertions available for all types."""
 
         # BaseMixin
         def described_as(self, description: str) -> Self: ...
-        def is_equal_to(self, other: object, **kwargs: object) -> Self: ...
+        def is_equal_to(
+            self, other: object, *, ignore: _KeySpecs | None = ..., include: _KeySpecs | None = ...
+        ) -> Self: ...
         def is_not_equal_to(self, other: object) -> Self: ...
         def is_same_as(self, other: object) -> Self: ...
         def is_not_same_as(self, other: object) -> Self: ...
