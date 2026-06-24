@@ -246,7 +246,7 @@ def test_is_between_bad_arg2_type_failure():
     with pytest.raises(TypeError) as exc_info:
         d2 = datetime.datetime.today()
         assert_that(d1).is_between(d2, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <datetime>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <int>")
 
 
 def test_is_not_between():
@@ -276,7 +276,7 @@ def test_is_not_between_bad_arg2_type_failure():
     with pytest.raises(TypeError) as exc_info:
         d2 = datetime.datetime.today()
         assert_that(d1).is_not_between(d2, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <datetime>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <int>")
 
 
 def test_is_close_to():
