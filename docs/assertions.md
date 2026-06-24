@@ -158,11 +158,13 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 
 `is_equal_to()` can ignore or include specific keys or fields. This works with dicts, dataclasses,
 namedtuples, Pydantic models, attrs, and plain objects; for sequences each element is compared pairwise
-with the same filters.
+with the same filters. A single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those is
+accepted; any other iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
 
 ```python
-# ignore keys (single, list, or nested tuple)
+# ignore keys (single, list/set/frozenset, or nested tuple)
 assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore="b")
+assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, ignore={"b", "c"})
 assert_that({"a": 1, "b": {"c": 2, "d": 3}}).is_equal_to({"a": 1, "b": {"c": 2}}, ignore=("b", "d"))
 
 # include only specific keys
