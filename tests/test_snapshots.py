@@ -5,10 +5,13 @@ import json
 import os
 import shutil
 import sys
+import threading
+import time
 
 import pytest
 
 from assertpy2 import assert_that, fail
+from assertpy2.snapshot import _file_lock
 
 
 @pytest.mark.parametrize("count", [1, 2])
@@ -218,3 +221,34 @@ class Foo:
 class Bar(Foo):
     def __eq__(self, other):
         return NotImplemented
+
+
+def test_file_lock_times_out_when_held(tmp_path):
+    target = str(tmp_path / "data")
+    with _file_lock(target), pytest.raises(TimeoutError), _file_lock(target, timeout=0.1, poll=0.02):
+        pass
+
+
+def test_file_lock_serializes_concurrent_writes(tmp_path):
+    target = str(tmp_path / "shared.json")
+    with open(target, "w") as fp:
+        json.dump({}, fp)
+
+    def worker(index):
+        with _file_lock(target):
+            with open(target) as fp:
+                data = json.load(fp)
+            data[str(index)] = index
+            time.sleep(0.005)  # widen the read-modify-write window to force contention
+            with open(target, "w") as fp:
+                json.dump(data, fp)
+
+    threads = [threading.Thread(target=worker, args=(index,)) for index in range(15)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    with open(target) as fp:
+        final = json.load(fp)
+    assert_that(final).is_length(15)  # every writer's entry survived - no lost updates
