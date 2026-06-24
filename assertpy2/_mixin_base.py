@@ -58,15 +58,22 @@ class _MixinBase:
 
         def _validate_close_to_args(self, val: object, other: object, tolerance: object) -> None: ...
 
-        def _check_dict_like(
+        def _is_dict_like(
+            self,
+            d: object,
+            check_keys: bool = ...,
+            check_values: bool = ...,
+            check_getitem: bool = ...,
+        ) -> bool: ...
+
+        def _require_dict_like(
             self,
             d: object,
             check_keys: bool = ...,
             check_values: bool = ...,
             check_getitem: bool = ...,
             name: str = ...,
-            return_as_bool: bool = ...,
-        ) -> bool | None: ...
+        ) -> None: ...
 
         def _check_iterable(self, val: object, check_getitem: bool = ..., name: str = ...) -> None: ...
 

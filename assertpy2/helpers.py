@@ -98,32 +98,26 @@ class HelpersMixin(_MixinBase):
             if tolerance < 0:
                 raise ValueError("given tolerance arg must be positive")
 
-    def _check_dict_like(
-        self, d, check_keys=True, check_values=True, check_getitem=True, name="val", return_as_bool=False
-    ):
-        """Helper to check if given val has various dict-like attributes."""
+    def _is_dict_like(self, d, check_keys=True, check_values=True, check_getitem=True):
+        """Return whether *d* has the requested dict-like attributes."""
         if not isinstance(d, collections.abc.Iterable):
-            if return_as_bool:
-                return False
-            else:
-                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: not iterable")
+            return False
         if check_keys and not callable(getattr(d, "keys", None)):
-            if return_as_bool:
-                return False
-            else:
-                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing keys()")
+            return False
         if check_values and not callable(getattr(d, "values", None)):
-            if return_as_bool:
-                return False
-            else:
-                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing values()")
+            return False
+        return not (check_getitem and not hasattr(d, "__getitem__"))
+
+    def _require_dict_like(self, d, check_keys=True, check_values=True, check_getitem=True, name="val"):
+        """Raise ``TypeError`` unless *d* has the requested dict-like attributes."""
+        if not isinstance(d, collections.abc.Iterable):
+            raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: not iterable")
+        if check_keys and not callable(getattr(d, "keys", None)):
+            raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing keys()")
+        if check_values and not callable(getattr(d, "values", None)):
+            raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing values()")
         if check_getitem and not hasattr(d, "__getitem__"):
-            if return_as_bool:
-                return False
-            else:
-                raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing [] accessor")
-        if return_as_bool:
-            return True
+            raise TypeError(f"{name} <{type(d).__name__}> is not dict-like: missing [] accessor")
 
     def _check_iterable(self, val, check_getitem=True, name="val"):
         """Helper to check if given val is iterable with optional item access."""
@@ -182,9 +176,9 @@ class HelpersMixin(_MixinBase):
                 return True
             else:
                 for key in keys_in_val:
-                    if self._check_dict_like(
-                        val[key], check_values=False, return_as_bool=True
-                    ) and self._check_dict_like(other[key], check_values=False, return_as_bool=True):
+                    if self._is_dict_like(val[key], check_values=False) and self._is_dict_like(
+                        other[key], check_values=False
+                    ):
                         subdicts_not_equal = self._dict_not_equal(
                             val[key],
                             other[key],
@@ -240,8 +234,8 @@ class HelpersMixin(_MixinBase):
                 elif value != other[key]:
                     val_repr = (
                         _dict_repr(value, other[key], _seen)
-                        if self._check_dict_like(value, check_values=False, return_as_bool=True)
-                        and self._check_dict_like(other[key], check_values=False, return_as_bool=True)
+                        if self._is_dict_like(value, check_values=False)
+                        and self._is_dict_like(other[key], check_values=False)
                         else repr(value)
                     )
                     parts.append(f"{key!r}: {val_repr}")
@@ -270,9 +264,9 @@ class HelpersMixin(_MixinBase):
                 elif actual_dict[key] != expected_dict[key]:
                     actual_value = actual_dict[key]
                     expected_value = expected_dict[key]
-                    if self._check_dict_like(
-                        actual_value, check_values=False, return_as_bool=True
-                    ) and self._check_dict_like(expected_value, check_values=False, return_as_bool=True):
+                    if self._is_dict_like(actual_value, check_values=False) and self._is_dict_like(
+                        expected_value, check_values=False
+                    ):
                         entries.extend(_build_diff(actual_value, expected_value, prefix=path, _seen=_seen))
                     elif isinstance(actual_value, (list, tuple)) and isinstance(expected_value, (list, tuple)):
                         entries.extend(_build_list_diff(actual_value, expected_value, prefix=path, _seen=_seen))
@@ -294,9 +288,9 @@ class HelpersMixin(_MixinBase):
                 elif actual_list[i] != expected_list[i]:
                     actual_item = actual_list[i]
                     expected_item = expected_list[i]
-                    if self._check_dict_like(
-                        actual_item, check_values=False, return_as_bool=True
-                    ) and self._check_dict_like(expected_item, check_values=False, return_as_bool=True):
+                    if self._is_dict_like(actual_item, check_values=False) and self._is_dict_like(
+                        expected_item, check_values=False
+                    ):
                         entries.extend(_build_diff(actual_item, expected_item, prefix=path, _seen=_seen))
                     else:
                         entries.append(DiffEntry(path=path, actual=actual_item, expected=expected_item))

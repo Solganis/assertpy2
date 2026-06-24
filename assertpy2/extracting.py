@@ -145,7 +145,7 @@ class ExtractingMixin(_MixinBase):
             raise ValueError("one or more name args must be given")
 
         def _extract(item, name):
-            if self._check_dict_like(item, check_values=False, return_as_bool=True):
+            if self._is_dict_like(item, check_values=False):
                 if name in item:
                     return item[name]
                 else:
@@ -174,7 +174,7 @@ class ExtractingMixin(_MixinBase):
             if "filter" in kwargs:
                 if isinstance(kwargs["filter"], str):
                     return bool(_extract(item, kwargs["filter"]))
-                elif self._check_dict_like(kwargs["filter"], check_values=False, return_as_bool=True):
+                elif self._is_dict_like(kwargs["filter"], check_values=False):
                     for key in kwargs["filter"]:
                         if isinstance(key, str) and _extract(item, key) != kwargs["filter"][key]:
                             return False

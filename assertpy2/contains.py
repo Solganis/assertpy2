@@ -57,7 +57,7 @@ class ContainsMixin(_MixinBase):
                         f"Expected <{self.val}> to contain item matching {items[0].describe()}, but did not."
                     )
             elif items[0] not in self.val:
-                if self._check_dict_like(self.val, return_as_bool=True):
+                if self._is_dict_like(self.val):
                     return self.error(f"Expected <{self.val}> to contain key <{items[0]}>, but did not.")
                 else:
                     return self.error(f"Expected <{self.val}> to contain item <{items[0]}>, but did not.")
@@ -80,7 +80,7 @@ class ContainsMixin(_MixinBase):
                         DiffEntry(path="missing", actual=None, expected=missing_item) for missing_item in missing_desc
                     ],
                 )
-                if self._check_dict_like(self.val, return_as_bool=True):
+                if self._is_dict_like(self.val):
                     return self.error(
                         f"Expected <{self.val}> to contain keys {self._fmt_items(items)}, but did not contain"
                         f" key{'' if len(missing) == 0 else 's'} {self._fmt_items(missing_desc)}.",

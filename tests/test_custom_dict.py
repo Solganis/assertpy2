@@ -80,64 +80,64 @@ class CustomDict:
 def test_check_dict_like():
     custom_dict = CustomDict({"a": 1})
     builder = assert_that(None)
-    builder._check_dict_like(custom_dict)
-    builder._check_dict_like(custom_dict, True, True, True)
-    builder._check_dict_like(custom_dict, True, True, False)
-    builder._check_dict_like(custom_dict, True, False, True)
-    builder._check_dict_like(custom_dict, False, True, True)
-    builder._check_dict_like(custom_dict, True, False, False)
-    builder._check_dict_like(custom_dict, False, False, True)
-    builder._check_dict_like(custom_dict, False, True, False)
-    builder._check_dict_like(custom_dict, False, False, False)
+    builder._require_dict_like(custom_dict)
+    builder._require_dict_like(custom_dict, True, True, True)
+    builder._require_dict_like(custom_dict, True, True, False)
+    builder._require_dict_like(custom_dict, True, False, True)
+    builder._require_dict_like(custom_dict, False, True, True)
+    builder._require_dict_like(custom_dict, True, False, False)
+    builder._require_dict_like(custom_dict, False, False, True)
+    builder._require_dict_like(custom_dict, False, True, False)
+    builder._require_dict_like(custom_dict, False, False, False)
 
-    builder._check_dict_like(CustomDictNoKeys(), check_keys=False, check_values=False, check_getitem=False)
-    builder._check_dict_like(CustomDictNoKeysCallable(), check_keys=False, check_values=False, check_getitem=False)
-    builder._check_dict_like(CustomDictNoValues(), check_values=False, check_getitem=False)
-    builder._check_dict_like(CustomDictNoValuesCallable(), check_values=False, check_getitem=False)
-    builder._check_dict_like(CustomDictNoGetitem(), check_getitem=False)
+    builder._require_dict_like(CustomDictNoKeys(), check_keys=False, check_values=False, check_getitem=False)
+    builder._require_dict_like(CustomDictNoKeysCallable(), check_keys=False, check_values=False, check_getitem=False)
+    builder._require_dict_like(CustomDictNoValues(), check_values=False, check_getitem=False)
+    builder._require_dict_like(CustomDictNoValuesCallable(), check_values=False, check_getitem=False)
+    builder._require_dict_like(CustomDictNoGetitem(), check_getitem=False)
 
 
 def test_check_dict_like_bool():
     builder = assert_that(None)
-    assert_that(builder._check_dict_like(CustomDictNoKeys(), return_as_bool=True)).is_false()
-    assert_that(builder._check_dict_like(CustomDictNoKeysCallable(), return_as_bool=True)).is_false()
-    assert_that(builder._check_dict_like(CustomDictNoValues(), return_as_bool=True)).is_false()
-    assert_that(builder._check_dict_like(CustomDictNoValuesCallable(), return_as_bool=True)).is_false()
-    assert_that(builder._check_dict_like(CustomDictNoGetitem(), return_as_bool=True)).is_false()
+    assert_that(builder._is_dict_like(CustomDictNoKeys())).is_false()
+    assert_that(builder._is_dict_like(CustomDictNoKeysCallable())).is_false()
+    assert_that(builder._is_dict_like(CustomDictNoValues())).is_false()
+    assert_that(builder._is_dict_like(CustomDictNoValuesCallable())).is_false()
+    assert_that(builder._is_dict_like(CustomDictNoGetitem())).is_false()
 
 
 def test_check_dict_like_no_keys():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
-        builder._check_dict_like(CustomDictNoKeys())
+        builder._require_dict_like(CustomDictNoKeys())
     assert_that(str(exc_info.value)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_keys_callable():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
-        builder._check_dict_like(CustomDictNoKeysCallable())
+        builder._require_dict_like(CustomDictNoKeysCallable())
     assert_that(str(exc_info.value)).contains("is not dict-like: missing keys()")
 
 
 def test_check_dict_like_no_values():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
-        builder._check_dict_like(CustomDictNoValues())
+        builder._require_dict_like(CustomDictNoValues())
     assert_that(str(exc_info.value)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_values_callable():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
-        builder._check_dict_like(CustomDictNoValuesCallable())
+        builder._require_dict_like(CustomDictNoValuesCallable())
     assert_that(str(exc_info.value)).contains("is not dict-like: missing values()")
 
 
 def test_check_dict_like_no_getitem():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
-        builder._check_dict_like(CustomDictNoGetitem())
+        builder._require_dict_like(CustomDictNoGetitem())
     assert_that(str(exc_info.value)).contains("is not dict-like: missing [] accessor")
 
 

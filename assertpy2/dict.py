@@ -35,7 +35,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** contain the key or keys
         """
-        self._check_dict_like(self.val, check_values=False, check_getitem=False)
+        self._require_dict_like(self.val, check_values=False, check_getitem=False)
         return self.contains(*keys)
 
     def does_not_contain_key(self, *keys) -> Self:
@@ -60,7 +60,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** contain the key or keys
         """
-        self._check_dict_like(self.val, check_values=False, check_getitem=False)
+        self._require_dict_like(self.val, check_values=False, check_getitem=False)
         return self.does_not_contain(*keys)
 
     def contains_value(self, *values) -> Self:
@@ -83,7 +83,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** contain the value or values
         """
-        self._check_dict_like(self.val, check_getitem=False)
+        self._require_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
         missing = [value for value in values if value not in self.val.values()]
@@ -114,7 +114,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** contain the value or values
         """
-        self._check_dict_like(self.val, check_getitem=False)
+        self._require_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
         else:
@@ -158,7 +158,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** contain the entry or entries
         """
-        self._check_dict_like(self.val, check_values=False)
+        self._require_dict_like(self.val, check_values=False)
         entries = list(args) + [{key: value} for key, value in kwargs.items()]
         if len(entries) == 0:
             raise ValueError("one or more entry args must be given")
@@ -206,7 +206,7 @@ class DictMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** contain the entry or entries
         """
-        self._check_dict_like(self.val, check_values=False)
+        self._require_dict_like(self.val, check_values=False)
         entries = list(args) + [{key: value} for key, value in kwargs.items()]
         if len(entries) == 0:
             raise ValueError("one or more entry args must be given")

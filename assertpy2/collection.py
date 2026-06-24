@@ -96,7 +96,7 @@ class CollectionMixin(_MixinBase):
         if is_mapping_like(self.val):
             superdict = {}
             for superset_index, superset in enumerate(supersets):
-                self._check_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
+                self._require_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
                 for key in superset:
                     superdict.update({key: superset[key]})
 
