@@ -641,3 +641,33 @@ def test_chaining():
 def test_chaining_even_odd():
     assert_that(4).is_even().is_positive().is_divisible_by(2)
     assert_that(3).is_odd().is_positive()
+
+
+def test_is_between_boundary_inclusive():
+    assert_that(5).is_between(5, 10)
+    assert_that(10).is_between(5, 10)
+
+
+def test_is_not_between_boundary_fails():
+    with pytest.raises(AssertionError):
+        assert_that(5).is_not_between(5, 10)
+    with pytest.raises(AssertionError):
+        assert_that(10).is_not_between(5, 10)
+
+
+def test_is_close_to_boundary_inclusive():
+    assert_that(10).is_close_to(8, 2)
+    assert_that(6).is_close_to(8, 2)
+
+
+def test_is_not_close_to_boundary_fails():
+    with pytest.raises(AssertionError):
+        assert_that(10).is_not_close_to(8, 2)
+    with pytest.raises(AssertionError):
+        assert_that(6).is_not_close_to(8, 2)
+
+
+def test_is_divisible_by_negative_divisor():
+    assert_that(9).is_divisible_by(-3)
+    with pytest.raises(AssertionError):
+        assert_that(10).is_divisible_by(-3)
