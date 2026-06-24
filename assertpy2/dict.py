@@ -16,7 +16,7 @@ class DictMixin(_MixinBase):
     def contains_key(self, *keys) -> Self:
         """Asserts the val is a dict and contains the given key or keys.
 
-        Alias for :meth:`~assertpy.contains.ContainsMixin.contains`.
+        Alias for :meth:`~assertpy2.contains.ContainsMixin.contains`.
 
         Checks if the dict contains the given key or keys using ``in`` operator.
 
@@ -41,7 +41,7 @@ class DictMixin(_MixinBase):
     def does_not_contain_key(self, *keys) -> Self:
         """Asserts the val is a dict and does not contain the given key or keys.
 
-        Alias for :meth:`~assertpy.contains.ContainsMixin.does_not_contain`.
+        Alias for :meth:`~assertpy2.contains.ContainsMixin.does_not_contain`.
 
         Checks if the dict excludes the given key or keys using ``in`` operator.
 

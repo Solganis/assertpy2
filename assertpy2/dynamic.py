@@ -12,7 +12,7 @@ class DynamicMixin(_MixinBase):
     """Dynamic assertions mixin.
 
     When testing attributes of an object (or the contents of a dict), the
-    :meth:`~assertpy.base.BaseMixin.is_equal_to` assertion can be a bit verbose::
+    :meth:`~assertpy2.base.BaseMixin.is_equal_to` assertion can be a bit verbose::
 
         fred = Person('Fred', 'Smith')
 

@@ -42,11 +42,11 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val does **not** contain the item or items
 
         Tip:
-            Use the :meth:`~assertpy.dict.DictMixin.contains_key` alias when working with
+            Use the :meth:`~assertpy2.dict.DictMixin.contains_key` alias when working with
             *dict-like* objects to be self-documenting.
 
         See Also:
-            :meth:`~assertpy.string.StringMixin.contains_ignoring_case` - for case-insensitive string contains
+            :meth:`~assertpy2.string.StringMixin.contains_ignoring_case` - for case-insensitive string contains
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
@@ -125,7 +125,7 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val **does** contain the item or items
 
         Tip:
-            Use the :meth:`~assertpy.dict.DictMixin.does_not_contain_key` alias when working with
+            Use the :meth:`~assertpy2.dict.DictMixin.does_not_contain_key` alias when working with
             *dict-like* objects to be self-documenting.
         """
         if len(items) == 0:
