@@ -141,9 +141,6 @@ class SnapshotMixin(_MixinBase):
     **Updating**
 
     It's easy to update your snapshots...just delete them all and re-run the test suite to regenerate all snapshots.
-
-    Note:
-        Snapshots require Python 3.x
     """
 
     def snapshot(self, id=None, path="__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
@@ -159,8 +156,8 @@ class SnapshotMixin(_MixinBase):
         Snapshots are identified by test filename plus line number by default.
 
         Args:
-            id: the item or items expected to be contained
-            path: the item or items expected to be contained
+            id: a custom snapshot identifier (defaults to test filename plus line number)
+            path: the directory where snapshots are stored (defaults to ``__snapshots``)
 
         Examples:
             Usage::

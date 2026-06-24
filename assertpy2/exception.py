@@ -28,7 +28,7 @@ class ExceptionMixin(_MixinBase):
     def raises(self, ex) -> Self:
         """Asserts that val is callable and set the expected exception.
 
-        Just sets the expected exception, but never calls val, and therefore never failes. You must
+        Just sets the expected exception, but never calls val, and therefore never fails. You must
         chain to :meth:`~when_called_with` to invoke ``val()``.
 
         Args:
