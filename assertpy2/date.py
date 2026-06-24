@@ -13,7 +13,7 @@ __tracebackhide__ = True
 
 def _require_datetime(value: object, label: str) -> None:
     """Raise ``TypeError`` unless *value* is exactly a :class:`datetime.datetime`."""
-    if type(value) is not datetime.datetime:
+    if not isinstance(value, datetime.datetime):
         raise TypeError(f"{label} must be datetime, but was type <{type(value).__name__}>")
 
 

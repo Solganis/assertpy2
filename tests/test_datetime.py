@@ -446,3 +446,22 @@ def test_is_not_between_timedelta_failure():
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{1,2}:\d{2}:\d{2}> to not be between <\d{1,2}:\d{2}:\d{2}> and <\d{1,2}:\d{2}:\d{2}>, but was."
     )
+
+
+class _DatetimeSubclass(datetime.datetime):
+    pass
+
+
+def test_datetime_subclass_is_accepted():
+    earlier = _DatetimeSubclass(2026, 1, 1, 12, 0, 0)
+    later = _DatetimeSubclass(2026, 1, 2, 12, 0, 0)
+    assert_that(earlier).is_before(later)
+    assert_that(later).is_after(earlier)
+    assert_that(earlier).is_close_to(later, datetime.timedelta(days=2))
+
+
+def test_datetime_subclass_still_fails_real_mismatch():
+    earlier = _DatetimeSubclass(2026, 1, 1, 12, 0, 0)
+    later = _DatetimeSubclass(2026, 1, 2, 12, 0, 0)
+    with pytest.raises(AssertionError):
+        assert_that(later).is_before(earlier)
