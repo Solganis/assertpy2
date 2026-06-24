@@ -1,18 +1,48 @@
 from __future__ import annotations
 
+import contextlib
 import datetime
 import inspect
 import json
 import os
 import sys
-from typing import TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Final
 
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ._compat import Self
 
 __tracebackhide__ = True
+
+_UNSET: Final = object()
+
+
+@contextlib.contextmanager
+def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Iterator[None]:
+    """Serialize snapshot read-modify-write across processes via an ``O_EXCL`` lock file.
+
+    Not crash-safe: a process that dies while holding the lock leaves a stale lock file and other
+    writers time out.  Accepted for now - snapshots are dev-time artifacts and crashes mid-write are rare.
+    """
+    lockpath = f"{target}.lock"
+    deadline = time.monotonic() + timeout
+    fd = None
+    while fd is None:
+        try:
+            fd = os.open(lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:  # noqa: PERF203  # retry the O_EXCL acquire each poll until the lock frees
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"could not acquire snapshot lock <{lockpath}> within {timeout}s") from None
+            time.sleep(poll)
+    try:
+        yield
+    finally:
+        os.close(fd)
+        os.unlink(lockpath)
 
 
 class SnapshotMixin(_MixinBase):
@@ -144,8 +174,10 @@ class SnapshotMixin(_MixinBase):
                 return d
 
         def _save(name, val):
-            with open(name, "w") as fp:
+            tmp = f"{name}.{os.getpid()}.tmp"
+            with open(tmp, "w") as fp:
                 json.dump(val, fp, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
+            os.replace(tmp, name)
 
         def _load(name):
             with open(name) as fp:
@@ -174,23 +206,26 @@ class SnapshotMixin(_MixinBase):
 
         os.makedirs(path, exist_ok=True)
 
-        if os.path.isfile(snapname):
-            # snap exists, so load
-            snap = _load(snapname)
-
-            if id:
-                # custom id, so test
-                return self.is_equal_to(snap)
-            else:
-                if lineno in snap:
+        # Serialize read-modify-write so parallel workers (pytest-xdist) sharing a snap file don't lose
+        # each other's entries.  The comparison runs after the lock is released.
+        snapshot_value = _UNSET
+        with _file_lock(snapname):
+            if os.path.isfile(snapname):
+                snap = _load(snapname)
+                if id:
+                    # custom id, so test against the whole file
+                    snapshot_value = snap
+                elif lineno in snap:
                     # found sub-snap, so test
-                    return self.is_equal_to(snap[lineno])
+                    snapshot_value = snap[lineno]
                 else:
                     # lineno not in snap, so create sub-snap and pass
                     snap[lineno] = self.val
                     _save(snapname, snap)
-        else:
-            # no snap, so create and pass
-            _save(snapname, self.val if id else {lineno: self.val})
+            else:
+                # no snap, so create and pass
+                _save(snapname, self.val if id else {lineno: self.val})
 
+        if snapshot_value is not _UNSET:
+            return self.is_equal_to(snapshot_value)
         return self
