@@ -506,3 +506,74 @@ def test_is_equal_to_ignoring_seconds_each_component_mismatch():
     ):
         with pytest.raises(AssertionError):
             assert_that(base).is_equal_to_ignoring_seconds(other)
+
+
+class TestIsBeforeOrEqualTo:
+    def test_before(self):
+        d1 = datetime.datetime(2020, 1, 1)
+        d2 = datetime.datetime(2020, 1, 2)
+        assert_that(d1).is_before_or_equal_to(d2)
+
+    def test_equal(self):
+        d1 = datetime.datetime(2020, 1, 1, 12, 0, 0)
+        assert_that(d1).is_before_or_equal_to(d1)
+
+    def test_failure(self):
+        d1 = datetime.datetime(2020, 1, 2)
+        d2 = datetime.datetime(2020, 1, 1)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(d1).is_before_or_equal_to(d2)
+        assert_that(str(exc_info.value)).contains("to be before or equal to")
+
+    def test_bad_val_type(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that("foo").is_before_or_equal_to(datetime.datetime.now())
+        assert_that(str(exc_info.value)).contains("val must be datetime")
+
+    def test_bad_arg_type(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(datetime.datetime.now()).is_before_or_equal_to("foo")
+        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+
+    def test_date_not_datetime_val(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(datetime.date(2020, 1, 1)).is_before_or_equal_to(datetime.datetime.now())
+        assert_that(str(exc_info.value)).contains("val must be datetime")
+
+    def test_date_not_datetime_arg(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(datetime.datetime.now()).is_before_or_equal_to(datetime.date(2020, 1, 1))
+        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+
+
+class TestIsAfterOrEqualTo:
+    def test_after(self):
+        d1 = datetime.datetime(2020, 1, 2)
+        d2 = datetime.datetime(2020, 1, 1)
+        assert_that(d1).is_after_or_equal_to(d2)
+
+    def test_equal(self):
+        d1 = datetime.datetime(2020, 1, 1, 12, 0, 0)
+        assert_that(d1).is_after_or_equal_to(d1)
+
+    def test_failure(self):
+        d1 = datetime.datetime(2020, 1, 1)
+        d2 = datetime.datetime(2020, 1, 2)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(d1).is_after_or_equal_to(d2)
+        assert_that(str(exc_info.value)).contains("to be after or equal to")
+
+    def test_bad_val_type(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that("foo").is_after_or_equal_to(datetime.datetime.now())
+        assert_that(str(exc_info.value)).contains("val must be datetime")
+
+    def test_bad_arg_type(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(datetime.datetime.now()).is_after_or_equal_to("foo")
+        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+
+    def test_date_not_datetime_val(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(datetime.date(2020, 1, 1)).is_after_or_equal_to(datetime.datetime.now())
+        assert_that(str(exc_info.value)).contains("val must be datetime")

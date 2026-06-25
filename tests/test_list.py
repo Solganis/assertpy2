@@ -412,3 +412,73 @@ def test_list_of_dicts():
 class Person:
     def __init__(self, name):
         self.name = name
+
+
+class TestContainsExactly:
+    def test_list(self):
+        assert_that([1, 2, 3]).contains_exactly(1, 2, 3)
+
+    def test_tuple(self):
+        assert_that((1, 2, 3)).contains_exactly(1, 2, 3)
+
+    def test_string_chars(self):
+        assert_that("abc").contains_exactly("a", "b", "c")
+
+    def test_wrong_order_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_exactly(1, 3, 2)
+        assert_that(str(exc_info.value)).contains("to contain exactly")
+
+    def test_missing_items_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_exactly(1, 2)
+        assert_that(str(exc_info.value)).contains("to contain exactly")
+
+    def test_extra_items_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2]).contains_exactly(1, 2, 3)
+        assert_that(str(exc_info.value)).contains("to contain exactly")
+
+    def test_empty_args_failure(self):
+        with pytest.raises(ValueError) as exc_info:
+            assert_that([1]).contains_exactly()
+        assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
+
+    def test_not_iterable_failure(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(42).contains_exactly(1)
+        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+
+
+class TestContainsInOrder:
+    def test_all_present(self):
+        assert_that([1, 5, 2, 8, 3]).contains_in_order(1, 2, 3)
+
+    def test_contiguous(self):
+        assert_that([1, 2, 3]).contains_in_order(1, 2, 3)
+
+    def test_strings(self):
+        assert_that(["a", "x", "b", "y", "c"]).contains_in_order("a", "b", "c")
+
+    def test_single_item(self):
+        assert_that([1, 2, 3]).contains_in_order(2)
+
+    def test_wrong_order_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_in_order(3, 1)
+        assert_that(str(exc_info.value)).contains("in order, but did not")
+
+    def test_missing_item_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_in_order(1, 4)
+        assert_that(str(exc_info.value)).contains("in order, but did not")
+
+    def test_empty_args_failure(self):
+        with pytest.raises(ValueError) as exc_info:
+            assert_that([1]).contains_in_order()
+        assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
+
+    def test_not_iterable_failure(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(42).contains_in_order(1)
+        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
