@@ -3,7 +3,7 @@ from io import StringIO
 
 import pytest
 
-from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn
+from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_assertions
 
 
 def test_expected_exception():
@@ -177,3 +177,52 @@ def test_returned_without_return_value_fails():
     with pytest.raises(TypeError) as exc_info:
         assert_that(func_no_arg).raises(RuntimeError).when_called_with().returned()
     assert_that(str(exc_info.value)).contains("no return value captured")
+
+
+class TestDoesNotRaise:
+    def test_no_exception(self):
+        def safe_func(x):
+            return x + 1
+
+        assert_that(safe_func).does_not_raise(ValueError).when_called_with(1)
+
+    def test_different_exception(self):
+        def raises_type_error():
+            raise TypeError("oops")
+
+        assert_that(raises_type_error).does_not_raise(ValueError).when_called_with()
+
+    def test_raises_expected_failure(self):
+        def raises_value_error():
+            raise ValueError("bad value")
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raises_value_error).does_not_raise(ValueError).when_called_with()
+        assert_that(str(exc_info.value)).contains("to not raise <ValueError>")
+        assert_that(str(exc_info.value)).contains("but did raise")
+
+    def test_raises_subclass_failure(self):
+        def raises_file_not_found():
+            raise FileNotFoundError("missing")
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raises_file_not_found).does_not_raise(OSError).when_called_with()
+        assert_that(str(exc_info.value)).contains("to not raise <OSError>")
+
+    def test_not_callable_failure(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(42).does_not_raise(ValueError)
+        assert_that(str(exc_info.value)).is_equal_to("val must be callable")
+
+    def test_not_exception_failure(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(lambda: None).does_not_raise(str)
+        assert_that(str(exc_info.value)).is_equal_to("given arg must be exception")
+
+    def test_raises_expected_soft_mode(self):
+        def raises_value_error():
+            raise ValueError("bad value")
+
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(raises_value_error).does_not_raise(ValueError).when_called_with()
+        assert_that(str(exc_info.value)).contains("to not raise <ValueError>")
