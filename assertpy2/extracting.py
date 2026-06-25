@@ -3,7 +3,7 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
-from ._introspection import is_namedtuple
+from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
@@ -155,7 +155,7 @@ class ExtractingMixin(_MixinBase):
                     return getattr(item, name)
                 else:  # val has no attribute <foo>
                     raise ValueError(f"item attributes {item._fields} did not contain attribute <{name}>")
-            elif isinstance(item, collections.abc.Iterable):
+            elif isinstance(item, collections.abc.Iterable) and not is_model_dump_object(item):
                 self._check_iterable(item, name="item")
                 return item[name]
             elif hasattr(item, name):

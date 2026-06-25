@@ -261,6 +261,55 @@ def test_extracting_iterable_of_lists():
     assert_that(matrix).extracting(-1, -2).extracting(0).is_equal_to([3, 6, 9])
 
 
+class _DuckModel:
+    """Duck-types a pydantic v2 model for the dependency-free path: iterable over (field, value)
+    pairs and NOT subscriptable, with fields exposed as attributes and a model_dump() method.
+
+    This is the exact shape that regressed extracting(): the object is iterable, so without the
+    model-dump guard it fell into the index branch and item[name] raised (no [] accessor).  It must
+    stay iterable and non-subscriptable to keep exercising that guard.
+    """
+
+    def __init__(self, **fields):
+        self.__dict__.update(fields)
+
+    def model_dump(self):
+        return dict(self.__dict__)
+
+    def __iter__(self):
+        return iter(self.__dict__.items())
+
+
+_duck_users = [_DuckModel(user="Fred", age=36), _DuckModel(user="Bob", age=40)]
+
+
+def test_extracting_model_dump_object_single_field():
+    assert_that(_duck_users).extracting("user").contains("Fred", "Bob")
+
+
+def test_extracting_model_dump_object_multiple_fields():
+    assert_that(_duck_users).extracting("user", "age").contains(("Fred", 36), ("Bob", 40))
+
+
+def test_extracting_model_dump_object_missing_field_failure():
+    with pytest.raises(ValueError) as exc_info:
+        assert_that(_duck_users).extracting("foo")
+    assert_that(str(exc_info.value)).is_equal_to("item does not have property or zero-arg method <foo>")
+
+
+def test_extracting_real_pydantic_model():
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class User(BaseModel):
+        user: str
+        age: int
+
+    models = [User(user="Fred", age=36), User(user="Bob", age=40)]
+    assert_that(models).extracting("user").contains("Fred", "Bob")
+    assert_that(models).extracting("user", "age").contains(("Fred", 36), ("Bob", 40))
+
+
 def test_extracting_iterable_multi_extracting():
     matrix = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     assert_that(matrix).extracting(-1, 2).is_equal_to([(3, 3), (6, 6), (9, 9)])
