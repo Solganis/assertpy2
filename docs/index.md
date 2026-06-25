@@ -12,7 +12,7 @@ rich structural diffs on failure.
   ones, and a type checker rejects `assert_that("foo").is_positive()` before the test runs. The core
   advantage over `assertpy` and most alternatives - [see how it works](type-safety.md).
 - **Composable matchers.** `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`.
-- **Structural matching.** Declarative validation of dicts and API responses, with the exact path to each mismatch on failure.
+- **Structural matching.** Declarative validation of dicts, Pydantic models, and API responses, with the exact path to each mismatch on failure.
 - **Soft and async assertions.** Collect multiple failures; poll for eventual consistency with `eventually()`.
 - **Structured failures.** `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin
   renders recursive diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
