@@ -256,6 +256,16 @@ class TestStructureMatcher:
         matcher = match.structure(spec)
         assert_that(matcher.matches(value)).is_true()
 
+    def test_shared_subobject_across_keys_is_not_a_cycle(self):
+        # the same spec and value instances reused under sibling keys form a DAG, not a cycle;
+        # matches() must scope its visited-set per path, like collect_mismatches does
+        frag_spec = {"n": match.is_positive()}
+        spec = {"a": frag_spec, "b": frag_spec}
+        frag_val = {"n": 5}
+        value = {"a": frag_val, "b": frag_val}
+        assert_that(match.structure(spec).matches(value)).is_true()
+        assert_that(value).satisfies(match.structure(spec))
+
 
 class TestCollectMismatches:
     def test_collects_all_failing_fields(self):
