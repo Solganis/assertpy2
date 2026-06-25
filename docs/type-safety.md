@@ -42,9 +42,14 @@ assert_that("foo").is_positive()        # type error: is_positive is not a strin
 assert_that(42).is_instance_of("int")   # type error: expected `type`, got `str`
 ```
 
-[ty](https://github.com/astral-sh/ty), [Pyright](https://github.com/microsoft/pyright), and
-[Mypy](https://github.com/python/mypy) all report these in the editor and in CI, turning a class of test
-bugs into errors you see while typing.
+[ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy), and
+[Pyright](https://github.com/microsoft/pyright) all report these in the editor and in CI, turning a class
+of test bugs into errors you see while typing.
+
+Every public `assert_that` overload is pinned by an `assert_type` check in
+[`tests/test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py); CI runs all
+three checkers against that file on every push, with **zero suppressions**, so a regression that broadens or
+changes a return type fails the build. `ty` additionally type-checks the whole package.
 
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
