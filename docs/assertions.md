@@ -335,7 +335,7 @@ assert_that(people).extracting("name").contains("Fred Smith", "Bob Barr")       
 assert_that(people).extracting("say_hello").contains("Hello, Fred!", "Hello, Bob!")  # method
 ```
 
-It also works on collections of dicts (extracting by key) and across subclasses in a mixed collection.
+It also works on collections of dicts (extracting by key), Pydantic models, and across subclasses in a mixed collection.
 
 #### Filtering
 
