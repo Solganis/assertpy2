@@ -474,3 +474,35 @@ def test_is_close_to_tolerance_format():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(base).is_close_to(other, tolerance)
     assert_that(str(exc_info.value)).contains("within tolerance <26:03:04>")
+
+
+def test_is_before_after_reject_equal():
+    moment = datetime.datetime(2026, 1, 1, 12, 0, 0)
+    same = datetime.datetime(2026, 1, 1, 12, 0, 0)
+    with pytest.raises(AssertionError):
+        assert_that(moment).is_before(same)
+    with pytest.raises(AssertionError):
+        assert_that(moment).is_after(same)
+
+
+def test_is_equal_to_ignoring_milliseconds_each_component_mismatch():
+    base = datetime.datetime(2020, 1, 2, 3, 4, 5, 123)
+    for other in (
+        datetime.datetime(2020, 1, 3, 3, 4, 5),  # date differs
+        datetime.datetime(2020, 1, 2, 9, 4, 5),  # hour differs
+        datetime.datetime(2020, 1, 2, 3, 9, 5),  # minute differs
+        datetime.datetime(2020, 1, 2, 3, 4, 9),  # second differs
+    ):
+        with pytest.raises(AssertionError):
+            assert_that(base).is_equal_to_ignoring_milliseconds(other)
+
+
+def test_is_equal_to_ignoring_seconds_each_component_mismatch():
+    base = datetime.datetime(2020, 1, 2, 3, 4, 5)
+    for other in (
+        datetime.datetime(2020, 1, 3, 3, 4, 5),  # date differs
+        datetime.datetime(2020, 1, 2, 9, 4, 5),  # hour differs
+        datetime.datetime(2020, 1, 2, 3, 9, 5),  # minute differs
+    ):
+        with pytest.raises(AssertionError):
+            assert_that(base).is_equal_to_ignoring_seconds(other)
