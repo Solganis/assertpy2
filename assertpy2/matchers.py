@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import threading
 import uuid as _uuid_mod
-from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -548,6 +548,20 @@ def _describe_spec_value(value: object) -> str:
     return f"<{value}>"
 
 
+class _SpecMismatch(NamedTuple):
+    """One structural mismatch produced by a single spec walk.
+
+    ``expected_desc`` is the public "expected" half (as exposed by ``collect_mismatches``); ``detail``
+    carries a matcher's ``describe_mismatch(actual)`` so fail-fast failure text keeps its per-value
+    detail without a second traversal.
+    """
+
+    path: str
+    actual: object
+    expected_desc: str
+    detail: str | None
+
+
 class StructureMatcher(BaseMatcher):
     """Matches dicts against a structure spec where values are matchers, raw values, or nested dicts."""
 
@@ -557,7 +571,7 @@ class StructureMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         if not isinstance(value, dict):
             return False
-        return self._match_recursive(value, self._spec, "", set()) is None
+        return not self._walk(value, self._spec, "", set())
 
     def describe(self) -> str:
         return f"a dict matching structure {_describe_spec_value(self._spec)}"
@@ -565,43 +579,17 @@ class StructureMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         if not isinstance(value, dict):
             return f"was not a dict: <{value}>"
-        error = self._match_recursive(value, self._spec, "", set())
-        if error:
-            return error
-        return f"was <{value}>"
-
-    def _match_recursive(
-        self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
-    ) -> str | None:
-        pair_id = (id(value), id(spec))
-        if pair_id in seen:
-            return f"circular reference detected at <{path or 'root'}>"
-        seen = seen | {pair_id}  # path-scoped copy: a shared sub-object under sibling keys is a DAG, not a cycle
-        for key, expected in spec.items():
-            current_path = f"{path}.{key}" if path else str(key)
-            if key not in value:
-                return f"missing key <{current_path}>"
-            actual = value[key]
-            if isinstance(expected, StructureMatcher):
-                if not isinstance(actual, dict):
-                    return f"at <{current_path}>: expected a dict, but was <{actual}>"
-                error = self._match_recursive(actual, expected._spec, current_path, seen)
-                if error:
-                    return error
-            elif isinstance(expected, Matcher):
-                if not expected.matches(actual):
-                    return (
-                        f"at <{current_path}>: expected {expected.describe()}, but {expected.describe_mismatch(actual)}"
-                    )
-            elif isinstance(expected, dict):
-                if not isinstance(actual, dict):
-                    return f"at <{current_path}>: expected a dict, but was <{actual}>"
-                error = self._match_recursive(actual, expected, current_path, seen)
-                if error:
-                    return error
-            elif actual != expected:
-                return f"at <{current_path}>: expected <{expected}>, but was <{actual}>"
-        return None
+        mismatches = self._walk(value, self._spec, "", set())
+        if not mismatches:
+            return f"was <{value}>"
+        first = mismatches[0]
+        if first.actual is _MISSING:
+            return f"missing key <{first.path}>"
+        if first.expected_desc == "<circular ref>":  # cycle sentinel emitted by _walk
+            return f"circular reference detected at <{first.path}>"
+        if first.detail is not None:
+            return f"at <{first.path}>: expected {first.expected_desc}, but {first.detail}"
+        return f"at <{first.path}>: expected {first.expected_desc}, but was <{first.actual}>"
 
     def collect_mismatches(self, value: dict[Any, Any]) -> list[tuple[str, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
@@ -609,34 +597,36 @@ class StructureMatcher(BaseMatcher):
         Unlike :meth:`describe_mismatch`, this does not stop at the first failure and joins nested
         paths, so callers can build a path-level :class:`~assertpy2.errors.DiffResult`.
         """
-        return self._collect(value, self._spec, "", set())
+        return [(m.path, m.actual, m.expected_desc) for m in self._walk(value, self._spec, "", set())]
 
-    def _collect(
+    def _walk(
         self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
-    ) -> list[tuple[str, object, str]]:
+    ) -> list[_SpecMismatch]:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
-            return [(path or "root", "<circular ref>", "<circular ref>")]
+            return [_SpecMismatch(path or "root", "<circular ref>", "<circular ref>", None)]
         seen = seen | {pair_id}
-        mismatches: list[tuple[str, object, str]] = []
+        mismatches: list[_SpecMismatch] = []
         for key, expected in spec.items():
             current_path = f"{path}.{key}" if path else str(key)
             if key not in value:
-                mismatches.append((current_path, _MISSING, _describe_spec_value(expected)))
+                mismatches.append(_SpecMismatch(current_path, _MISSING, _describe_spec_value(expected), None))
                 continue
             actual = value[key]
             if isinstance(expected, StructureMatcher) and isinstance(actual, dict):
-                mismatches.extend(self._collect(actual, expected._spec, current_path, seen))
+                mismatches.extend(self._walk(actual, expected._spec, current_path, seen))
             elif isinstance(expected, Matcher):
                 if not expected.matches(actual):
-                    mismatches.append((current_path, actual, expected.describe()))
+                    mismatches.append(
+                        _SpecMismatch(current_path, actual, expected.describe(), expected.describe_mismatch(actual))
+                    )
             elif isinstance(expected, dict):
                 if isinstance(actual, dict):
-                    mismatches.extend(self._collect(actual, expected, current_path, seen))
+                    mismatches.extend(self._walk(actual, expected, current_path, seen))
                 else:
-                    mismatches.append((current_path, actual, "a dict"))
+                    mismatches.append(_SpecMismatch(current_path, actual, "a dict", None))
             elif actual != expected:
-                mismatches.append((current_path, actual, f"<{expected}>"))
+                mismatches.append(_SpecMismatch(current_path, actual, f"<{expected}>", None))
         return mismatches
 
 
