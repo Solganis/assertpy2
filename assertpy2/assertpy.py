@@ -48,7 +48,7 @@ from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
 
-__version__ = "2.8.1"
+__version__ = "2.9.0"
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch

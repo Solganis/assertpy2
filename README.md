@@ -81,7 +81,7 @@ assertpy2 reports the [exact path to every difference](https://solganis.github.i
 assert_that(response).is_equal_to(expected)
 ```
 
-<img src="docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: status and user.role shown with their paths, removals in red and additions in green">
+<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: status and user.role shown with their paths, removals in red and additions in green">
 
 Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
