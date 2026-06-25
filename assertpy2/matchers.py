@@ -5,6 +5,8 @@ import threading
 import uuid as _uuid_mod
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
+from ._introspection import is_model_dump_object
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -563,12 +565,20 @@ class _SpecMismatch(NamedTuple):
 
 
 class StructureMatcher(BaseMatcher):
-    """Matches dicts against a structure spec where values are matchers, raw values, or nested dicts."""
+    """Matches dicts (or pydantic-style models via ``model_dump()``) against a structure spec whose
+    values are matchers, raw values, or nested dicts."""
 
     def __init__(self, spec: dict[Any, Any]):
         self._spec = spec
 
+    @staticmethod
+    def _as_mapping(value: Any) -> Any:
+        """Normalize a pydantic-style model (anything exposing ``model_dump()``) to its dict, so a
+        model can be matched structurally just like a plain dict; pass other values through."""
+        return value.model_dump() if is_model_dump_object(value) else value
+
     def matches(self, value: Any) -> bool:
+        value = self._as_mapping(value)
         if not isinstance(value, dict):
             return False
         return not self._walk(value, self._spec, "", set())
@@ -577,6 +587,7 @@ class StructureMatcher(BaseMatcher):
         return f"a dict matching structure {_describe_spec_value(self._spec)}"
 
     def describe_mismatch(self, value: Any) -> str:
+        value = self._as_mapping(value)
         if not isinstance(value, dict):
             return f"was not a dict: <{value}>"
         mismatches = self._walk(value, self._spec, "", set())
@@ -591,12 +602,13 @@ class StructureMatcher(BaseMatcher):
             return f"at <{first.path}>: expected {first.expected_desc}, but {first.detail}"
         return f"at <{first.path}>: expected {first.expected_desc}, but was <{first.actual}>"
 
-    def collect_mismatches(self, value: dict[Any, Any]) -> list[tuple[str, object, str]]:
+    def collect_mismatches(self, value: Any) -> list[tuple[str, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
 
         Unlike :meth:`describe_mismatch`, this does not stop at the first failure and joins nested
         paths, so callers can build a path-level :class:`~assertpy2.errors.DiffResult`.
         """
+        value = self._as_mapping(value)
         return [(m.path, m.actual, m.expected_desc) for m in self._walk(value, self._spec, "", set())]
 
     def _walk(

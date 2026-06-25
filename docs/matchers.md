@@ -124,7 +124,7 @@ assert 42 == (match.is_positive() & match.less_than(100))
 | `match.is_non_empty_string()` | a non-empty string |
 | `match.ignore()` | anything (placeholder for structural matching) |
 | `match.each_item(matcher)` | an iterable whose every item matches `matcher` |
-| `match.structure(spec)` | a dict matching a nested `spec` |
+| `match.structure(spec)` | a dict or model matching a nested `spec` |
 | `match.all_of(*matchers)` | a value matching all of `matchers` |
 | `match.any_of(*matchers)` | a value matching any of `matchers` |
 | `match.not_(matcher)` | a value not matching `matcher` |
@@ -152,6 +152,30 @@ assert_that(response).matches_structure({
     "active": match.equal_to(True),
 })
 ```
+
+The value under test can be a plain dict or a Pydantic model (anything exposing `model_dump()`); a
+model is normalized to its dict before matching, so the same spec works either way, including inside
+`satisfies()` and the `==` form:
+
+```python
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: str
+    name: str
+
+user = User(id="550e8400-e29b-41d4-a716-446655440000", name="Alice")
+
+assert_that(user).matches_structure({"id": match.is_uuid(), "name": match.equal_to("Alice")})
+assert_that(user).satisfies(match.structure({"id": match.is_uuid()}))
+assert user == match.structure({"id": match.is_uuid()})
+```
+
+!!! note
+    A model is matched in its `model_dump()` form: nested models become dicts, `@field_serializer` and
+    `@computed_field` outputs are applied, and spec keys are the model's field names (not aliases). The
+    spec is matched against this serialized shape, not the live attributes. This is a runtime structural
+    check; the spec keys and values are not type-checked against the model's schema.
 
 ### Nested structures
 

@@ -488,11 +488,12 @@ class BaseMixin(_MixinBase):
         return self
 
     def matches_structure(self, spec: dict[Any, Any]) -> Self:
-        """Asserts that val is a dict matching the given structure specification.
+        """Asserts that val matches the given structure specification.
 
-        Each key in ``spec`` maps to either a :class:`~assertpy2.matchers.Matcher`, a raw value
-        (checked via ``==``), or a nested ``dict`` for recursive matching.  Extra keys in val
-        that are absent from the spec are allowed.
+        ``val`` may be a dict or a pydantic-style model (anything exposing ``model_dump()``), which is
+        normalized to its dict before matching.  Each key in ``spec`` maps to either a
+        :class:`~assertpy2.matchers.Matcher`, a raw value (checked via ``==``), or a nested ``dict``
+        for recursive matching.  Extra keys in val that are absent from the spec are allowed.
 
         Args:
             spec: a dict where values can be Matcher instances, raw values, or nested dicts
@@ -515,7 +516,7 @@ class BaseMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** match the structure spec
         """
-        if not isinstance(self.val, dict):
+        if not isinstance(self.val, dict) and not is_model_dump_object(self.val):
             raise TypeError("val must be a dict")
         if not isinstance(spec, dict):
             raise TypeError("given arg must be a dict")

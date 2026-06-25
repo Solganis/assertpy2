@@ -117,6 +117,19 @@ Only assertpy2 prints the path (`user.role`) and the exact predicate that failed
 assertpy2 `==` form both hand rendering to pytest, which dumps the whole differing container for you to
 scan. The fluent form trades the zero-import convenience of `==` for a path-level diff.
 
+### With a Pydantic model
+
+When the value is a Pydantic model, `matches_structure()` accepts it directly, with no `.model_dump()`
+step, and prints a path-level diff just like the one above:
+
+```python
+assert_that(user).matches_structure({"role": match.is_in("admin", "user")})
+```
+
+dirty-equals cannot compare a model against a spec dict, because Pydantic's `__eq__` only matches another
+model. You dump it first (`assert user.model_dump() == {"role": IsOneOf("admin", "user")}`), and pytest
+again dumps the whole differing container. assertpy2 keeps a path-level diff on a model.
+
 ## Style and typing
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |

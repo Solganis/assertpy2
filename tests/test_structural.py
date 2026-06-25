@@ -385,3 +385,84 @@ class TestMatchesStructureMethod:
             assert_that(exc.expected).is_not_none()
         else:
             raise AssertionError("expected AssertionFailure") from None
+
+
+class _SpecModel:
+    """Duck-types a pydantic v2 model (exposes a recursive model_dump()) for the dependency-free
+    structural-matching tests.  __eq__ is left at the object default on purpose, so
+    ``model == match.structure(...)`` falls back to the matcher's reflected __eq__, exactly as real
+    pydantic, whose __eq__ returns NotImplemented for non-model operands.
+    """
+
+    def __init__(self, **fields):
+        self.__dict__.update(fields)
+
+    def model_dump(self):
+        return {
+            key: value.model_dump() if isinstance(value, _SpecModel) else value for key, value in self.__dict__.items()
+        }
+
+
+class TestStructureMatcherOnModel:
+    """Structural matching accepts pydantic-style models (model_dump()), via duck-type without the dep."""
+
+    def test_matches_structure_on_model(self):
+        user = _SpecModel(id=1, name="Alice")
+        assert_that(user).matches_structure({"id": match.is_positive(), "name": match.is_non_empty_string()})
+
+    def test_matches_structure_on_model_failure(self):
+        user = _SpecModel(id=-1, name="Alice")
+        with pytest.raises(AssertionError, match="at <id>"):
+            assert_that(user).matches_structure({"id": match.is_positive()})
+
+    def test_matches_structure_on_nested_model(self):
+        user = _SpecModel(id=1, address=_SpecModel(city="NYC"))
+        assert_that(user).matches_structure({"id": match.is_positive(), "address": {"city": match.equal_to("NYC")}})
+
+    def test_satisfies_structure_on_model(self):
+        user = _SpecModel(id=1, name="Alice")
+        assert_that(user).satisfies(match.structure({"id": match.is_positive()}))
+
+    def test_each_structure_over_models(self):
+        users = [_SpecModel(id=1), _SpecModel(id=2)]
+        assert_that(users).each(match.structure({"id": match.is_positive()}))
+
+    def test_model_equals_structure_matcher(self):
+        user = _SpecModel(id=1, name="Alice")
+        spec = match.structure({"id": match.is_positive(), "name": match.is_non_empty_string()})
+        assert_that(user == spec).is_true()
+
+    def test_model_not_equals_structure_matcher_on_mismatch(self):
+        user = _SpecModel(id=-1)
+        assert_that(user == match.structure({"id": match.is_positive()})).is_false()
+
+    def test_matcher_matches_model_directly(self):
+        matcher = match.structure({"id": match.is_positive()})
+        assert_that(matcher.matches(_SpecModel(id=5))).is_true()
+
+    def test_describe_mismatch_on_model(self):
+        matcher = match.structure({"id": match.is_positive()})
+        assert_that(matcher.describe_mismatch(_SpecModel(id=-1))).contains("at <id>")
+
+    def test_real_pydantic_model(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Address(BaseModel):
+            city: str
+
+        class User(BaseModel):
+            id: int
+            name: str
+            address: Address
+
+        user = User(id=1, name="Alice", address=Address(city="NYC"))
+        assert_that(user).matches_structure(
+            {"id": match.is_positive(), "name": match.is_non_empty_string(), "address": {"city": match.equal_to("NYC")}}
+        )
+        assert_that(user).satisfies(match.structure({"id": match.is_positive()}))
+        assert_that(user == match.structure({"id": match.is_positive()})).is_true()
+        with pytest.raises(AssertionError, match="at <id>"):
+            assert_that(User(id=-1, name="Bob", address=Address(city="LA"))).matches_structure(
+                {"id": match.is_positive()}
+            )
