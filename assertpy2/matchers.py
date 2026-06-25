@@ -576,7 +576,7 @@ class StructureMatcher(BaseMatcher):
         pair_id = (id(value), id(spec))
         if pair_id in seen:
             return f"circular reference detected at <{path or 'root'}>"
-        seen.add(pair_id)
+        seen = seen | {pair_id}  # path-scoped copy: a shared sub-object under sibling keys is a DAG, not a cycle
         for key, expected in spec.items():
             current_path = f"{path}.{key}" if path else str(key)
             if key not in value:
