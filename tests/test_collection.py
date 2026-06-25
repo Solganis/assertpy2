@@ -100,6 +100,13 @@ def test_is_subset_of_failure_dict_value():
     assert_that(str(exc_info.value)).contains("but <{'b': 2}> was missing.")
 
 
+def test_is_subset_of_failure_single_key_dict_value():
+    # a single-key superset dict previously crashed with KeyError while formatting the message
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that({"a": 5}).is_subset_of({"a": 3})
+    assert_that(str(exc_info.value)).contains("to be subset of <{'a': 3}>").contains("missing")
+
+
 def test_is_subset_of_failure_bad_dict_arg1():
     with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of("foo")

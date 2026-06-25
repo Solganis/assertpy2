@@ -113,7 +113,7 @@ class CollectionMixin(_MixinBase):
                     missing.append({key: self.val[key]})  # bad val
             if missing:
                 return self.error(
-                    f"Expected <{self.val}> to be subset of {self._fmt_items(superdict)}, "
+                    f"Expected <{self.val}> to be subset of <{superdict}>, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
                 )
         else:
