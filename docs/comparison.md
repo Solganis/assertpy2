@@ -161,7 +161,7 @@ scan. The fluent form trades the zero-import convenience of `==` for a path-leve
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.9.0** |
+| Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.9.1** |
 | Property-based tests | n/a | No | No | No | **Yes** |
 | Runtime dependencies | **none** | **none** | **none** | **none** | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
