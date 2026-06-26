@@ -39,7 +39,7 @@ rendered by the plugin as colored diff sections.
 
 | Type | Diff kind | How it works |
 |---|---|---|
-| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts/dataclasses/models |
+| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, and models |
 | `set`, `frozenset` | `set` | Extra and missing items |
 | `str` | `string` | Line-by-line comparison |
 | `dict` | `dict` | Key-by-key, recursive into nested dicts and lists |
