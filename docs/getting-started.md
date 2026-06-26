@@ -43,7 +43,7 @@ straight at the differing field instead of dumping the whole value:
 assert_that(actual).is_equal_to(expected)
 ```
 
-![Colored dict diff: status and user.role shown with their paths, removals in red and additions in green](assets/diff-equal.svg)
+![Colored dict diff: user.role shown with its path, removal in red and addition in green](assets/diff-equal.svg)
 
 The same path-level diff backs `matches_structure()`, `satisfies()`, and `each()`. See
 [Errors & Reporting](errors.md) for the full diff format and configuration.
