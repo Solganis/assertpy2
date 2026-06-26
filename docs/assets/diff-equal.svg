@@ -1,63 +1,50 @@
-<svg class="rich-terminal" width="250" height="193" viewBox="0 0 250 192.79999999999998" xmlns="http://www.w3.org/2000/svg">
-    <!-- Generated with Rich https://www.textualize.io -->
+<svg width="250" height="120" viewBox="0 0 250 119.6" xmlns="http://www.w3.org/2000/svg">
     <style>
 
-    .terminal-2796409561-matrix {
+    .terminal-346716669-matrix {
         font-family: Fira Code, monospace;
         font-size: 20px;
         line-height: 24.4px;
         font-variant-east-asian: full-width;
     }
 
-    .terminal-2796409561-title {
+    .terminal-346716669-title {
         font-size: 18px;
         font-weight: bold;
         font-family: arial;
     }
 
-    .terminal-2796409561-r1 { fill: #68a0b3 }
-.terminal-2796409561-r2 { fill: #c5c8c6 }
-.terminal-2796409561-r3 { fill: #cc555a }
-.terminal-2796409561-r4 { fill: #98a84b }
+    .terminal-346716669-r1 { fill: #68a0b3 }
+.terminal-346716669-r2 { fill: #c5c8c6 }
+.terminal-346716669-r3 { fill: #cc555a }
+.terminal-346716669-r4 { fill: #98a84b }
     </style>
 
     <defs>
-    <clipPath id="terminal-2796409561-clip-terminal">
-      <rect x="0" y="0" width="230.79999999999998" height="169.79999999999998" />
+    <clipPath id="terminal-346716669-clip-terminal">
+      <rect x="0" y="0" width="230.79999999999998" height="96.6" />
     </clipPath>
-    <clipPath id="terminal-2796409561-line-0">
+    <clipPath id="terminal-346716669-line-0">
     <rect x="0" y="1.5" width="231.8" height="24.65"/>
             </clipPath>
-<clipPath id="terminal-2796409561-line-1">
+<clipPath id="terminal-346716669-line-1">
     <rect x="0" y="25.9" width="231.8" height="24.65"/>
             </clipPath>
-<clipPath id="terminal-2796409561-line-2">
+<clipPath id="terminal-346716669-line-2">
     <rect x="0" y="50.3" width="231.8" height="24.65"/>
-            </clipPath>
-<clipPath id="terminal-2796409561-line-3">
-    <rect x="0" y="74.7" width="231.8" height="24.65"/>
-            </clipPath>
-<clipPath id="terminal-2796409561-line-4">
-    <rect x="0" y="99.1" width="231.8" height="24.65"/>
-            </clipPath>
-<clipPath id="terminal-2796409561-line-5">
-    <rect x="0" y="123.5" width="231.8" height="24.65"/>
             </clipPath>
     </defs>
 
-    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="248" height="190.8" rx="8"/>
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="248" height="117.6" rx="8"/>
             
         
-    <g transform="translate(9, 13)" clip-path="url(#terminal-2796409561-clip-terminal)">
+    <g transform="translate(9, 13)" clip-path="url(#terminal-346716669-clip-terminal)">
     
-    <g class="terminal-2796409561-matrix">
-    <text class="terminal-2796409561-r1" x="0" y="20" textLength="146.4" clip-path="url(#terminal-2796409561-line-0)">diff&#160;(dict):</text><text class="terminal-2796409561-r2" x="231.8" y="20" textLength="12.2" clip-path="url(#terminal-2796409561-line-0)">
-</text><text class="terminal-2796409561-r2" x="0" y="44.4" textLength="109.8" clip-path="url(#terminal-2796409561-line-1)">&#160;&#160;status:</text><text class="terminal-2796409561-r2" x="231.8" y="44.4" textLength="12.2" clip-path="url(#terminal-2796409561-line-1)">
-</text><text class="terminal-2796409561-r3" x="48.8" y="68.8" textLength="122" clip-path="url(#terminal-2796409561-line-2)">-&#160;&#x27;active&#x27;</text><text class="terminal-2796409561-r2" x="231.8" y="68.8" textLength="12.2" clip-path="url(#terminal-2796409561-line-2)">
-</text><text class="terminal-2796409561-r4" x="48.8" y="93.2" textLength="146.4" clip-path="url(#terminal-2796409561-line-3)">+&#160;&#x27;disabled&#x27;</text><text class="terminal-2796409561-r2" x="231.8" y="93.2" textLength="12.2" clip-path="url(#terminal-2796409561-line-3)">
-</text><text class="terminal-2796409561-r2" x="0" y="117.6" textLength="146.4" clip-path="url(#terminal-2796409561-line-4)">&#160;&#160;user.role:</text><text class="terminal-2796409561-r2" x="231.8" y="117.6" textLength="12.2" clip-path="url(#terminal-2796409561-line-4)">
-</text><text class="terminal-2796409561-r3" x="48.8" y="142" textLength="170.8" clip-path="url(#terminal-2796409561-line-5)">-&#160;&#x27;superadmin&#x27;</text><text class="terminal-2796409561-r2" x="231.8" y="142" textLength="12.2" clip-path="url(#terminal-2796409561-line-5)">
-</text><text class="terminal-2796409561-r4" x="48.8" y="166.4" textLength="109.8" clip-path="url(#terminal-2796409561-line-6)">+&#160;&#x27;admin&#x27;</text><text class="terminal-2796409561-r2" x="231.8" y="166.4" textLength="12.2" clip-path="url(#terminal-2796409561-line-6)">
+    <g class="terminal-346716669-matrix">
+    <text class="terminal-346716669-r1" x="0" y="20" textLength="146.4" clip-path="url(#terminal-346716669-line-0)">diff&#160;(dict):</text><text class="terminal-346716669-r2" x="231.8" y="20" textLength="12.2" clip-path="url(#terminal-346716669-line-0)">
+</text><text class="terminal-346716669-r2" x="0" y="44.4" textLength="146.4" clip-path="url(#terminal-346716669-line-1)">&#160;&#160;user.role:</text><text class="terminal-346716669-r2" x="231.8" y="44.4" textLength="12.2" clip-path="url(#terminal-346716669-line-1)">
+</text><text class="terminal-346716669-r3" x="48.8" y="68.8" textLength="170.8" clip-path="url(#terminal-346716669-line-2)">-&#160;&#x27;superadmin&#x27;</text><text class="terminal-346716669-r2" x="231.8" y="68.8" textLength="12.2" clip-path="url(#terminal-346716669-line-2)">
+</text><text class="terminal-346716669-r4" x="48.8" y="93.2" textLength="109.8" clip-path="url(#terminal-346716669-line-3)">+&#160;&#x27;admin&#x27;</text><text class="terminal-346716669-r2" x="231.8" y="93.2" textLength="12.2" clip-path="url(#terminal-346716669-line-3)">
 </text>
     </g>
     </g>

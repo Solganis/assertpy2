@@ -83,11 +83,15 @@ assertpy2 reports the [exact path to every difference](https://solganis.github.i
 assert_that(response).is_equal_to(expected)
 ```
 
-<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: status and user.role shown with their paths, removals in red and additions in green">
+<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
 
 Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
 [`matches_structure()`](https://solganis.github.io/assertpy2/matchers/#structural-matching) instead of exact equality.
+
+The same path-level treatment for dicts, lists, sets, and matcher predicates:
+
+<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
 
 ## [Type-aware autocomplete](https://solganis.github.io/assertpy2/type-safety/)
 
