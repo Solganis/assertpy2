@@ -1018,6 +1018,94 @@ class TestDictCircularRefNotEqual:
         assert_that(result).is_false()
 
 
+class TestDiffOrderingMutants:
+    """Guards the rich-diff `!=` field/element guards against ordering mutants (`<`/`<=`/`==`).
+
+    Each case has a differing slot where actual > expected, so a `<`/`<=`/`==` mutant of the `!=`
+    guard would skip the entry and the assertion fails. The symmetric actual < expected direction
+    (which guards `>`/`>=`) is already covered by the existing diff tests above.
+    """
+
+    def test_build_namedtuple_actual_greater(self):
+        Point = namedtuple("Point", ["x", "y"])
+        result = BaseMixin._build_equality_diff(Point(1, 9), Point(1, 2))
+        entry = next(entry for entry in result.entries if entry.path == ".y")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_build_dataclass_actual_greater(self):
+        @dataclass
+        class Dc:
+            a: int
+            b: int
+
+        result = BaseMixin._build_equality_diff(Dc(1, 9), Dc(1, 2))
+        entry = next(entry for entry in result.entries if entry.path == ".b")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_build_model_actual_greater(self):
+        class FakeModel:
+            def __init__(self, **fields):
+                self.__dict__.update(fields)
+
+            def model_dump(self):
+                return dict(self.__dict__)
+
+        result = BaseMixin._build_equality_diff(FakeModel(a=1, b=9), FakeModel(a=1, b=2))
+        entry = next(entry for entry in result.entries if entry.path == ".b")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_build_sequence_actual_greater(self):
+        result = BaseMixin._build_equality_diff([1, 9, 3], [1, 2, 3])
+        entry = next(entry for entry in result.entries if entry.path == "[1]")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_build_string_actual_greater_line(self):
+        result = BaseMixin._build_equality_diff("a\nz\nc", "a\nb\nc")
+        entry = next(entry for entry in result.entries if entry.path == "line 2")
+        assert_that(entry.actual).is_equal_to("z")
+        assert_that(entry.expected).is_equal_to("b")
+
+    def test_sub_dict_actual_greater(self):
+        result = BaseMixin._sub_diff_entries({"k": 9}, {"k": 2}, "root")
+        entry = next(entry for entry in result if entry.path == "root.k")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_sub_dataclass_actual_greater(self):
+        @dataclass
+        class Dc:
+            a: int
+
+        result = BaseMixin._sub_diff_entries(Dc(9), Dc(2), "root")
+        entry = next(entry for entry in result if entry.path == "root.a")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_sub_namedtuple_actual_greater(self):
+        Pair = namedtuple("Pair", ["x"])
+        result = BaseMixin._sub_diff_entries(Pair(9), Pair(2), "root")
+        entry = next(entry for entry in result if entry.path == "root.x")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_sub_model_actual_greater(self):
+        class FakeModel:
+            def __init__(self, **fields):
+                self.__dict__.update(fields)
+
+            def model_dump(self):
+                return dict(self.__dict__)
+
+        result = BaseMixin._sub_diff_entries(FakeModel(a=9), FakeModel(a=2), "root")
+        entry = next(entry for entry in result if entry.path == "root.a")
+        assert_that(entry.actual).is_equal_to(9)
+        assert_that(entry.expected).is_equal_to(2)
+
+
 class TestNestedSubDiffDecomposition:
     """Nested diffs (_sub_diff_entries) decompose sequences and report dataclass fields fully, matching
     the top-level _build_equality_diff. The nested-completeness feature; sets/strings stay leaves."""

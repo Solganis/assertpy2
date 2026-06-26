@@ -141,6 +141,15 @@ def test_is_named_failure(tmpfile):
     assert_that(str(exc_info.value)).matches("Expected filename <.*> to be equal to <foo.txt>, but was not.")
 
 
+def test_is_named_failure_name_sorts_after_basename(tmpfile):
+    # Guards the `!=` filename check against a `>` mutant: when the expected name sorts AFTER the actual
+    # basename, `>` would wrongly report a match. Appending a char makes the expected name a strict
+    # superstring of the basename, so it is guaranteed larger and unequal regardless of the basename.
+    larger_name = os.path.basename(tmpfile.name) + "x"
+    with pytest.raises(AssertionError):
+        assert_that(tmpfile.name).is_named(larger_name)
+
+
 def test_is_named_bad_arg_type_failure(tmpfile):
     with pytest.raises(TypeError) as exc_info:
         assert_that(tmpfile.name).is_named(123)
