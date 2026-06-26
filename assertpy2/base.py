@@ -188,6 +188,58 @@ class BaseMixin(_MixinBase):
                 )
 
     @staticmethod
+    def _sequence_diff_entries(actual, expected, prefix, seen) -> list[DiffEntry]:
+        """Diff two sequences element-by-element, recursing into nested containers.
+
+        ``seen`` must already include the ids of ``actual``/``expected`` so a self-referential element
+        is caught.  Shared by the top-level (:meth:`_build_equality_diff`) and nested
+        (:meth:`_sub_diff_entries`) paths so both decompose sequences identically.
+        """
+        entries: list[DiffEntry] = []
+        max_len = max(len(actual), len(expected))
+        for i in range(max_len):
+            path = f"{prefix}[{i}]" if prefix else f"[{i}]"
+            if i >= len(actual):
+                entries.append(DiffEntry(path=path, actual=None, expected=expected[i]))
+            elif i >= len(expected):
+                entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
+            elif actual[i] != expected[i]:
+                sub_entries = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=seen)
+                if sub_entries:
+                    entries.extend(sub_entries)
+                else:
+                    entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
+        return entries
+
+    @staticmethod
+    def _dataclass_diff_entries(actual, expected, prefix, seen) -> list[DiffEntry]:
+        """Diff two dataclasses over the sorted union of field names, both directions, recursing.
+
+        Reports fields present on only one side, and recurses into nested containers.  ``seen`` must
+        already include the ids of ``actual``/``expected``.  Shared by the top-level and nested paths
+        so both report dataclass fields identically.
+        """
+        entries: list[DiffEntry] = []
+        actual_names = {field.name for field in dataclasses.fields(actual)}
+        expected_names = {field.name for field in dataclasses.fields(expected)}
+        for field in sorted(actual_names | expected_names):
+            path = f"{prefix}.{field}"
+            if field not in expected_names:
+                entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None))
+            elif field not in actual_names:
+                entries.append(DiffEntry(path=path, actual=None, expected=getattr(expected, field)))
+            else:
+                actual_value = getattr(actual, field)
+                expected_value = getattr(expected, field)
+                if actual_value != expected_value:
+                    sub_entries = BaseMixin._sub_diff_entries(actual_value, expected_value, path, _seen=seen)
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+        return entries
+
+    @staticmethod
     def _build_equality_diff(
         actual: object, expected: object, *, _prefix: str = "", _seen: set[int] | None = None
     ) -> DiffResult:
@@ -229,21 +281,10 @@ class BaseMixin(_MixinBase):
             and dataclasses.is_dataclass(expected)
             and not isinstance(expected, type)
         ):
-            entries = []
-            actual_names = {field.name for field in dataclasses.fields(actual)}
-            expected_names = {field.name for field in dataclasses.fields(expected)}
-            for field in sorted(actual_names | expected_names):
-                path = f"{_prefix}.{field}"
-                if field not in expected_names:
-                    entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None))
-                elif field not in actual_names:
-                    entries.append(DiffEntry(path=path, actual=None, expected=getattr(expected, field)))
-                else:
-                    actual_value = getattr(actual, field)
-                    expected_value = getattr(expected, field)
-                    if actual_value != expected_value:
-                        entries.extend(_field_entries(actual_value, expected_value, path))
-            return DiffResult(kind="dataclass", entries=entries)
+            return DiffResult(
+                kind="dataclass",
+                entries=BaseMixin._dataclass_diff_entries(actual, expected, _prefix, _seen),
+            )
         if is_model_dump_object(actual) and is_model_dump_object(expected):
             actual_dict = actual.model_dump()
             expected_dict = expected.model_dump()
@@ -262,21 +303,10 @@ class BaseMixin(_MixinBase):
                         entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
             return DiffResult(kind="model", entries=entries)
         if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
-            entries = []
-            max_len = max(len(actual), len(expected))
-            for i in range(max_len):
-                path = f"{_prefix}[{i}]" if _prefix else f"[{i}]"
-                if i >= len(actual):
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected[i]))
-                elif i >= len(expected):
-                    entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
-                elif actual[i] != expected[i]:
-                    sub_entries = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=_seen)
-                    if sub_entries:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
-            return DiffResult(kind="sequence", entries=entries)
+            return DiffResult(
+                kind="sequence",
+                entries=BaseMixin._sequence_diff_entries(actual, expected, _prefix, _seen),
+            )
         if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
             entries = []
             for item in sorted(actual - expected, key=repr):
@@ -333,23 +363,7 @@ class BaseMixin(_MixinBase):
             and not isinstance(expected, type)
         ):
             child_seen = _seen | {id(actual), id(expected)}
-            entries = []
-            for field in dataclasses.fields(actual):
-                actual_value = getattr(actual, field.name)
-                expected_value = getattr(expected, field.name, _SENTINEL)
-                if expected_value is _SENTINEL:
-                    entries.append(DiffEntry(path=f"{prefix}.{field.name}", actual=actual_value, expected=None))
-                elif actual_value != expected_value:
-                    sub_entries = BaseMixin._sub_diff_entries(
-                        actual_value, expected_value, f"{prefix}.{field.name}", _seen=child_seen
-                    )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(
-                            DiffEntry(path=f"{prefix}.{field.name}", actual=actual_value, expected=expected_value)
-                        )
-            return entries or None
+            return BaseMixin._dataclass_diff_entries(actual, expected, prefix, child_seen) or None
         if is_namedtuple(actual) and is_namedtuple(expected):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
@@ -394,6 +408,9 @@ class BaseMixin(_MixinBase):
                     else:
                         entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
             return entries or None
+        if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
+            child_seen = _seen | {id(actual), id(expected)}
+            return BaseMixin._sequence_diff_entries(actual, expected, prefix, child_seen) or None
         return None
 
     def satisfies(self, matcher) -> Self:

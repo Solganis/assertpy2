@@ -1016,3 +1016,87 @@ class TestDictCircularRefNotEqual:
         mixin = type("M", (HelpersMixin,), {"val": None, "description": "", "kind": None, "expected": None})()
         result = mixin._dict_not_equal(mapping, mapping, _seen={(id(mapping), id(mapping))})
         assert_that(result).is_false()
+
+
+class TestNestedSubDiffDecomposition:
+    """Nested diffs (_sub_diff_entries) decompose sequences and report dataclass fields fully, matching
+    the top-level _build_equality_diff. The nested-completeness feature; sets/strings stay leaves."""
+
+    def test_nested_list_in_dataclass_decomposes(self):
+        @dataclass
+        class Box:
+            items: list
+
+        result = BaseMixin._build_equality_diff(Box([1, 2, 3]), Box([1, 9, 3]))
+        entry = next(entry for entry in result.entries if entry.path == ".items[1]")
+        assert_that(entry.actual).is_equal_to(2)
+        assert_that(entry.expected).is_equal_to(9)
+
+    def test_nested_list_in_model_decomposes(self):
+        class FakeModel:
+            def __init__(self, **fields):
+                self.__dict__.update(fields)
+
+            def model_dump(self):
+                return dict(self.__dict__)
+
+        result = BaseMixin._build_equality_diff(FakeModel(items=[1, 2]), FakeModel(items=[1, 9]))
+        entry = next(entry for entry in result.entries if entry.path == ".items[1]")
+        assert_that(entry.actual).is_equal_to(2)
+        assert_that(entry.expected).is_equal_to(9)
+
+    def test_sub_sequence_decomposes(self):
+        result = BaseMixin._sub_diff_entries([1, 2, 3], [1, 9, 3], "root")
+        assert_that(result).is_not_none()
+        entry = next(entry for entry in result if entry.path == "root[1]")
+        assert_that(entry.actual).is_equal_to(2)
+        assert_that(entry.expected).is_equal_to(9)
+
+    def test_sub_dataclass_reports_expected_only_field(self):
+        @dataclass
+        class One:
+            x: int
+
+        @dataclass
+        class Two:
+            x: int
+            y: int
+
+        result = BaseMixin._sub_diff_entries(One(1), Two(1, 2), "root")
+        assert_that(result).is_not_none()
+        entry = next(entry for entry in result if entry.path == "root.y")
+        assert_that(entry.actual).is_none()
+        assert_that(entry.expected).is_equal_to(2)
+
+    def test_sub_dataclass_sorted_field_order(self):
+        @dataclass
+        class NonAlpha:
+            z: int
+            a: int
+
+        result = BaseMixin._sub_diff_entries(NonAlpha(1, 1), NonAlpha(9, 9), "root")
+        assert_that([entry.path for entry in result]).is_equal_to(["root.a", "root.z"])
+
+    def test_nested_list_of_dataclass_in_dataclass_recurses(self):
+        @dataclass
+        class Inner:
+            v: int
+
+        @dataclass
+        class Outer:
+            items: list
+
+        result = BaseMixin._build_equality_diff(Outer([Inner(1)]), Outer([Inner(9)]))
+        entry = next(entry for entry in result.entries if entry.path == ".items[0].v")
+        assert_that(entry.actual).is_equal_to(1)
+        assert_that(entry.expected).is_equal_to(9)
+
+    def test_nested_set_in_dataclass_stays_leaf(self):
+        @dataclass
+        class Box:
+            tags: set
+
+        result = BaseMixin._build_equality_diff(Box({1, 2}), Box({1, 9}))
+        entry = next(entry for entry in result.entries if entry.path == ".tags")
+        assert_that(entry.actual).is_equal_to({1, 2})
+        assert_that(entry.expected).is_equal_to({1, 9})
