@@ -174,7 +174,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Latest release | built-in | 2.1.0 | 1.1 (2020) | 0.9.0 | **2.9.1** |
+| Maintained | built-in | Yes | No (since 2020) | Yes | **Yes** |
 | Property-based tests | n/a | No | No | No | **Yes** |
 | Runtime dependencies | **none** | **none** | **none** | **none** | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
