@@ -1,5 +1,6 @@
 import subprocess
 from collections import namedtuple
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import pytest
@@ -921,6 +922,19 @@ class TestCircularRefProtection:
         has_circular = any("circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in result)
         assert_that(has_circular).is_true()
 
+    def test_asymmetric_circular_ref_in_sub_diff(self):
+        # Only the actual side loops; the expected side is a fresh, non-circular dict at the same key.
+        # At that recursion only actual's id is in `seen`, so the cycle guard must fire on EITHER side
+        # being seen (its `or`), not both - otherwise it recurses past the cycle and decomposes it.
+        actual = {"name": "x"}
+        actual["ref"] = actual
+        expected = {"name": "y", "ref": {"name": "z"}}
+        result = BaseMixin._sub_diff_entries(actual, expected, "root")
+        paths = [entry.path for entry in result]
+        assert_that(paths).contains("root.ref")
+        entry = next(entry for entry in result if entry.path == "root.ref")
+        assert_that(entry.actual).is_equal_to("<circular ref>")
+
     def test_circular_list_item_in_diff(self):
         inner_a = {"val": 1}
         inner_a["self"] = inner_a
@@ -1007,6 +1021,113 @@ class TestDictListValueDiff:
         entry = next(entry for entry in diff.entries if entry.path == "items[2]")
         assert_that(entry.actual).is_equal_to(3)
         assert_that(entry.expected).is_none()
+
+
+class _ReadOnlyMapping(Mapping):
+    """A dict-like that is not a ``dict`` subclass, to exercise the duck mapping-like diff path."""
+
+    def __init__(self, data):
+        self._data = dict(data)
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __eq__(self, other):
+        return isinstance(other, _ReadOnlyMapping) and self._data == other._data
+
+    def __hash__(self):
+        return id(self)
+
+    def __repr__(self):
+        return f"_ReadOnlyMapping({self._data!r})"
+
+
+class TestDiffEngineHarmonization:
+    """The dict path and the base path share one nested diff engine (``_sub_diff_entries``).
+
+    A nested non-dict structure (dataclass, model, namedtuple, list-of-lists, mapping) is therefore
+    decomposed to its differing path inside a dict exactly as it already was inside a list, and the
+    key ordering is repr-stable on both sides so mixed-type keys no longer raise.
+    """
+
+    @staticmethod
+    def _diff_of(actual, expected, **kwargs):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected, **kwargs)
+        return exc_info.value.diff
+
+    def _paths(self, actual, expected, **kwargs):
+        return [entry.path for entry in self._diff_of(actual, expected, **kwargs).entries]
+
+    def test_dict_with_dataclass_value_decomposes(self):
+        @dataclass
+        class Point:
+            x: int
+            y: int
+
+        assert_that(self._paths({"p": Point(1, 2)}, {"p": Point(1, 3)})).contains("p.y")
+
+    def test_dict_with_model_value_decomposes(self):
+        class FakeModel:
+            def __init__(self, **fields):
+                self.__dict__.update(fields)
+
+            def model_dump(self):
+                return dict(self.__dict__)
+
+            def __eq__(self, other):
+                return isinstance(other, FakeModel) and self.model_dump() == other.model_dump()
+
+        assert_that(self._paths({"u": FakeModel(a=1, b=2)}, {"u": FakeModel(a=1, b=3)})).contains("u.b")
+
+    def test_dict_with_namedtuple_value_uses_field_name(self):
+        Pair = namedtuple("Pair", ["a", "b"])
+        paths = self._paths({"p": Pair(1, 2)}, {"p": Pair(1, 3)})
+        assert_that(paths).contains("p.b")
+        assert_that(paths).does_not_contain("p[1]")
+
+    def test_dict_with_list_of_lists_decomposes(self):
+        assert_that(self._paths({"m": [[1, 2]]}, {"m": [[1, 9]]})).contains("m[0][1]")
+
+    def test_list_with_mapping_value_decomposes(self):
+        paths = self._paths([_ReadOnlyMapping({"a": 1})], [_ReadOnlyMapping({"a": 2})])
+        assert_that(paths).contains("[0].a")
+
+    def test_deep_crossover_dict_list_dict_dataclass(self):
+        @dataclass
+        class Point:
+            x: int
+            y: int
+
+        actual = {"users": [{"profile": Point(1, 2)}]}
+        expected = {"users": [{"profile": Point(1, 3)}]}
+        assert_that(self._paths(actual, expected)).contains("users[0].profile.y")
+
+    def test_mixed_type_keys_do_not_raise(self):
+        diff = self._diff_of({1: "a", "b": 2}, {1: "z", "b": 2})
+        assert_that([entry.path for entry in diff.entries]).contains("1")
+        entry = next(entry for entry in diff.entries if entry.path == "1")
+        assert_that(entry.actual).is_equal_to("a")
+        assert_that(entry.expected).is_equal_to("z")
+
+    def test_int_keys_sorted_by_repr(self):
+        paths = self._paths({1: "a", 2: "b", 10: "c"}, {1: "z", 2: "y", 10: "x"})
+        assert_that(paths).is_equal_to(["1", "10", "2"])
+
+    def test_top_level_mapping_still_decomposes(self):
+        paths = self._paths(_ReadOnlyMapping({"a": 1, "b": 2}), _ReadOnlyMapping({"a": 1, "b": 9}))
+        assert_that(paths).is_equal_to(["b"])
+
+    def test_mapping_value_in_dict_still_decomposes(self):
+        actual = {"u": _ReadOnlyMapping({"a": 1, "b": 2})}
+        expected = {"u": _ReadOnlyMapping({"a": 1, "b": 9})}
+        assert_that(self._paths(actual, expected)).contains("u.b")
 
 
 class TestDictCircularRefNotEqual:

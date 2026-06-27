@@ -4,7 +4,7 @@ import collections.abc
 import dataclasses
 from typing import TYPE_CHECKING, Any, Final
 
-from ._introspection import is_model_dump_object, is_namedtuple
+from ._introspection import is_mapping_like, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import Matcher, StructureMatcher
@@ -335,26 +335,36 @@ class BaseMixin(_MixinBase):
     def _sub_diff_entries(
         actual: object, expected: object, prefix: str, *, _seen: set[int] | None = None
     ) -> list[DiffEntry] | None:
+        """Canonical recursive diff for a value, returning path-level entries (or ``None`` for a leaf).
+
+        Recurses into mappings, dataclasses, namedtuples, model-dump objects and sequences; returns
+        ``None`` for anything else so the caller renders a single leaf entry.  This is the single nested
+        engine shared by the top-level paths: :meth:`_build_equality_diff` (lists, dataclasses, ...) and
+        the dict path (:meth:`HelpersMixin._dict_err`), which calls it with an empty ``prefix`` so the
+        top-level dict keys render bare (``b``) and nested keys render dotted (``u.b``).
+        """
         if _seen is None:
             _seen = set()
         if id(actual) in _seen or id(expected) in _seen:
             return [DiffEntry(path=prefix, actual="<circular ref>", expected="<circular ref>")]
 
-        if isinstance(actual, dict) and isinstance(expected, dict):
+        if is_mapping_like(actual) and is_mapping_like(expected):
             child_seen = _seen | {id(actual), id(expected)}
             entries: list[DiffEntry] = []
-            for key in sorted(set(actual) | set(expected), key=repr):
-                path = f"{prefix}.{key}"
-                if key not in expected:
-                    entries.append(DiffEntry(path=path, actual=actual[key], expected=None))  # ty: ignore[invalid-argument-type]
-                elif key not in actual:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected[key]))  # ty: ignore[invalid-argument-type]
-                elif actual[key] != expected[key]:  # ty: ignore[invalid-argument-type]
-                    sub_entries = BaseMixin._sub_diff_entries(actual[key], expected[key], path, _seen=child_seen)  # ty: ignore[invalid-argument-type]
+            actual_keys = set(actual)
+            expected_keys = set(expected)
+            for key in sorted(actual_keys | expected_keys, key=repr):
+                path = f"{prefix}.{key}" if prefix else str(key)
+                if key not in expected_keys:
+                    entries.append(DiffEntry(path=path, actual=actual[key], expected=None))
+                elif key not in actual_keys:
+                    entries.append(DiffEntry(path=path, actual=None, expected=expected[key]))
+                elif actual[key] != expected[key]:
+                    sub_entries = BaseMixin._sub_diff_entries(actual[key], expected[key], path, _seen=child_seen)
                     if sub_entries is not None:
                         entries.extend(sub_entries)
                     else:
-                        entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))  # ty: ignore[invalid-argument-type]
+                        entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
             return entries or None
         if (
             dataclasses.is_dataclass(actual)

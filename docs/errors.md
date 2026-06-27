@@ -39,10 +39,10 @@ rendered by the plugin as colored diff sections.
 
 | Type | Diff kind | How it works |
 |---|---|---|
-| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, and models |
+| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, namedtuples, and models |
 | `set`, `frozenset` | `set` | Extra and missing items |
 | `str` | `string` | Line-by-line comparison |
-| `dict` | `dict` | Key-by-key, recursive into nested dicts and lists |
+| `dict` | `dict` | Key-by-key, recursive into nested dicts, lists, dataclasses, namedtuples, and models |
 | `dataclass` | `dataclass` | Field-by-field, handles differing types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
 | Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
