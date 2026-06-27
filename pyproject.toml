@@ -61,7 +61,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=6.1",
     "ruff>=0.15.19",
-    "ty>=0.0.54",
+    "ty>=0.0.55",
     "typing_extensions>=4.0",
 ]
 docs = [
