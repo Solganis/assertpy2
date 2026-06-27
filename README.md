@@ -112,8 +112,6 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) guide for the full walkthrough.
 
----
-
 <h2 align="center">Features</h2>
 
 **Fluent API**
@@ -153,8 +151,6 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [**Extensions**](https://solganis.github.io/assertpy2/extending/): `add_extension()` for custom assertion methods.
 
 See the [full documentation](https://solganis.github.io/assertpy2/) for all assertion methods, examples, and advanced features.
-
----
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/integrations/">Integrations</a></h2>
 
