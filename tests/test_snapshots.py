@@ -15,7 +15,7 @@ from assertpy2.snapshot import _file_lock
 
 
 @pytest.mark.parametrize("count", [1, 2])
-def test_snapshot_v3(count):
+def test_snapshot_roundtrip_all_types(count):
     # test runs twice
     if count == 1:
         # on first pass, delete old snapshots...so they are re-created and saved
