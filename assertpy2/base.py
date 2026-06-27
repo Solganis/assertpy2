@@ -17,6 +17,34 @@ __tracebackhide__ = True
 _SENTINEL: Final = object()
 
 
+def _ambiguous_array_operand(value: object, other: object) -> object | None:
+    """Return the array/frame-like operand whose ``==`` has no single truth value, else ``None``.
+
+    numpy/pandas/polars containers expose ``__array__`` and compare element-wise, so ``bool(a == b)``
+    raises rather than yielding one bool (and a ``DataFrame`` also quacks dict-like, which would otherwise
+    mis-dispatch the comparison).  The ``__array__`` gate keeps the extra comparison off the hot path; the
+    truth test is actually attempted, so 0-d / scalar array values (which *are* truth-testable) pass
+    through unchanged.
+    """
+    for candidate, counterpart in ((value, other), (other, value)):
+        if hasattr(candidate, "__array__"):
+            try:
+                bool(candidate == counterpart)
+            except (ValueError, TypeError):
+                return candidate
+    return None
+
+
+def _array_equality_error(method: str, operand: object) -> TypeError:
+    """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
+    return TypeError(
+        f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
+        " no single truth value. Compare the value's own equality (e.g."
+        " assert_that(actual.equals(expected)).is_true()), assert on extracted scalars (columns, shape,"
+        " length), or use satisfies(...) with an explicit predicate."
+    )
+
+
 class BaseMixin(_MixinBase):
     """Base mixin."""
 
@@ -115,7 +143,9 @@ class BaseMixin(_MixinBase):
         Raises:
             AssertionError: if actual is **not** equal to expected
             TypeError: if ``ignore``/``include`` is a one-shot or otherwise unsupported iterable, or is
-                used on a value that is neither dict-like nor has introspectable fields
+                used on a value that is neither dict-like nor has introspectable fields; or if val or
+                other is an element-wise array/frame-like (numpy/pandas/polars) whose ``==`` has no single
+                truth value (compare the value's own equality, e.g. ``actual.equals(expected)``, instead)
 
         Tip:
             Using :meth:`is_equal_to` with a ``float`` val is just asking for trouble. Instead, you'll
@@ -127,6 +157,10 @@ class BaseMixin(_MixinBase):
         """
         ignore = kwargs.get("ignore")
         include = kwargs.get("include")
+
+        operand = _ambiguous_array_operand(self.val, other)
+        if operand is not None:
+            raise _array_equality_error("is_equal_to", operand)
 
         if self._is_dict_like(self.val, check_values=False) and self._is_dict_like(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include):
@@ -725,7 +759,13 @@ class BaseMixin(_MixinBase):
 
         Raises:
             AssertionError: if actual **is** equal to expected
+            TypeError: if val or other is an element-wise array/frame-like (numpy/pandas/polars) whose
+                ``==`` has no single truth value; compare the value's own equality instead
         """
+        operand = _ambiguous_array_operand(self.val, other)
+        if operand is not None:
+            raise _array_equality_error("is_not_equal_to", operand)
+
         if self.val == other:
             return self.error(f"Expected <{self.val}> to be not equal to <{other}>, but was.")
         return self
