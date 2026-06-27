@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import logging
 
     from ._compat import Self
-    from .errors import DiffResult
+    from .errors import DiffEntry, DiffResult
 
 
 class _MixinBase:
@@ -95,6 +95,11 @@ class _MixinBase:
 
         @staticmethod
         def _to_comparable_dict(obj: object) -> dict[str, object] | None: ...
+
+        @staticmethod
+        def _sub_diff_entries(
+            actual: object, expected: object, prefix: str, *, _seen: set[int] | None = ...
+        ) -> list[DiffEntry] | None: ...
 
         # NumericMixin class attrs used by HelpersMixin._validate_between_args
         _NUMERIC_COMPAREABLE: frozenset[type]

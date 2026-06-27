@@ -4,7 +4,7 @@ import datetime
 import math
 import numbers
 
-from assertpy2.errors import DiffEntry, DiffResult
+from assertpy2.errors import DiffResult
 
 from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
@@ -248,7 +248,7 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(d)}
             parts = []
             ellip = False
-            for key, value in sorted(d.items()):
+            for key, value in sorted(d.items(), key=lambda item: repr(item[0])):
                 if key not in other:
                     parts.append(f"{key!r}: {value!r}")
                 elif value != other[key]:
@@ -265,57 +265,6 @@ class HelpersMixin(_MixinBase):
             ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
             return f"{{{ellip_prefix}{out}}}"
 
-        def _build_diff(actual_dict, expected_dict, prefix="", _seen=None):
-            if _seen is None:
-                _seen = set()
-            pair = (id(actual_dict), id(expected_dict))
-            if pair in _seen:
-                return [DiffEntry(path=prefix or ".", actual="<circular ref>", expected="<circular ref>")]
-            _seen = _seen | {pair}
-
-            entries = []
-            all_keys = sorted(set(actual_dict) | set(expected_dict))
-            for key in all_keys:
-                path = f"{prefix}.{key}" if prefix else str(key)
-                if key not in expected_dict:
-                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
-                elif key not in actual_dict:
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
-                elif actual_dict[key] != expected_dict[key]:
-                    actual_value = actual_dict[key]
-                    expected_value = expected_dict[key]
-                    if self._is_dict_like(actual_value, check_values=False) and self._is_dict_like(
-                        expected_value, check_values=False
-                    ):
-                        entries.extend(_build_diff(actual_value, expected_value, prefix=path, _seen=_seen))
-                    elif isinstance(actual_value, (list, tuple)) and isinstance(expected_value, (list, tuple)):
-                        entries.extend(_build_list_diff(actual_value, expected_value, prefix=path, _seen=_seen))
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
-            return entries
-
-        def _build_list_diff(actual_list, expected_list, prefix="", _seen=None):
-            if _seen is None:  # pragma: no cover - only called from _build_diff which always passes _seen
-                _seen = set()
-            entries = []
-            max_len = max(len(actual_list), len(expected_list))
-            for i in range(max_len):
-                path = f"{prefix}[{i}]"
-                if i >= len(actual_list):
-                    entries.append(DiffEntry(path=path, actual=None, expected=expected_list[i]))
-                elif i >= len(expected_list):
-                    entries.append(DiffEntry(path=path, actual=actual_list[i], expected=None))
-                elif actual_list[i] != expected_list[i]:
-                    actual_item = actual_list[i]
-                    expected_item = expected_list[i]
-                    if self._is_dict_like(actual_item, check_values=False) and self._is_dict_like(
-                        expected_item, check_values=False
-                    ):
-                        entries.extend(_build_diff(actual_item, expected_item, prefix=path, _seen=_seen))
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual_item, expected=expected_item))
-            return entries
-
         ignore_err = include_err = ""
         if ignore:
             ignores = self._dict_ignore(ignore)
@@ -330,7 +279,7 @@ class HelpersMixin(_MixinBase):
             )
             include_err = f" including keys {include_fmt}"
 
-        diff_entries = _build_diff(val, other)
+        diff_entries = self._sub_diff_entries(val, other, "") or []
         diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
 
         val_repr = _dict_repr(val, other)
