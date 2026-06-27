@@ -34,6 +34,7 @@ from .base import BaseMixin
 from .bytes_mixin import BytesMixin
 from .collection import CollectionMixin
 from .contains import ContainsMixin
+from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
@@ -548,6 +549,7 @@ class AssertionBuilder(
     ContainsMixin,
     CollectionMixin,
     BytesMixin,
+    DataFrameMixin,
     BaseMixin,
 ):
     """The main assertion class.  Never call the constructor directly, always use the
