@@ -30,7 +30,7 @@
 
 ---
 
-## [Quick start](https://solganis.github.io/assertpy2/getting-started/)
+<h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/">Quick start</a></h2>
 
 ```bash
 pip install assertpy2  # drop-in replacement for assertpy, just change the import
@@ -50,7 +50,7 @@ def test_user():
 
 Browse the [full documentation](https://solganis.github.io/assertpy2/) for every assertion, matcher, and integration.
 
-## [Why fluent assertions?](https://solganis.github.io/assertpy2/comparison/)
+<h2 align="center"><a href="https://solganis.github.io/assertpy2/comparison/">Why fluent assertions?</a></h2>
 
 A fluent chain reads as one intent and replaces several bare asserts - and your IDE
 offers only the [methods that fit the value's type](https://solganis.github.io/assertpy2/type-safety/):
@@ -83,7 +83,9 @@ assertpy2 reports the [exact path to every difference](https://solganis.github.i
 assert_that(response).is_equal_to(expected)
 ```
 
-<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
+</p>
 
 Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
@@ -91,9 +93,11 @@ For responses with dynamic fields (IDs, timestamps), validate a subset with
 
 The same path-level treatment for dicts, lists, sets, and matcher predicates:
 
-<img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
+</p>
 
-## [Type-aware autocomplete](https://solganis.github.io/assertpy2/type-safety/)
+<h2 align="center"><a href="https://solganis.github.io/assertpy2/type-safety/">Type-aware autocomplete</a></h2>
 
 `assert_that()` uses `@overload` to return type-specific Protocols.
 Your IDE shows only methods relevant to the value you're testing, not all 100+:
@@ -110,7 +114,7 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 
 ---
 
-## Features
+<h2 align="center">Features</h2>
 
 **Fluent API**
 
@@ -124,7 +128,6 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 
 - [Strings](https://solganis.github.io/assertpy2/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/errors/#expected-exceptions).
 - [**Bytes assertions**](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
-- [**JSON assertions**](https://solganis.github.io/assertpy2/data/#json-path--schema): JSONPath navigation and JSON Schema validation. `pip install assertpy2[json]`.
 - [**Dynamic assertions**](https://solganis.github.io/assertpy2/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
 - [**Dict comparison**](https://solganis.github.io/assertpy2/assertions/#selective-comparison-ignore--include): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects).
 - [**Extracting**](https://solganis.github.io/assertpy2/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
@@ -140,7 +143,7 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 
 **Type safety**
 
-- [**Type-aware autocomplete**](#type-aware-autocomplete): 9 Protocols, IDE shows only relevant methods per type.
+- [**Type-aware autocomplete**](https://solganis.github.io/assertpy2/type-safety/): 9 Protocols, IDE shows only relevant methods per type.
 - **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
 
 **Extensibility**
@@ -149,64 +152,19 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [**Regex group extraction**](https://solganis.github.io/assertpy2/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
 - [**Extensions**](https://solganis.github.io/assertpy2/extending/): `add_extension()` for custom assertion methods.
 
-**Integrations**
-
-- [**Allure**](https://solganis.github.io/assertpy2/integrations/#allure): auto-attach structured diff and actual/expected data to reports. `pip install assertpy2[allure]`.
-- [**Behave**](https://solganis.github.io/assertpy2/integrations/#behave): ready-made parameter types for step definitions. `pip install assertpy2[behave]`.
-
 See the [full documentation](https://solganis.github.io/assertpy2/) for all assertion methods, examples, and advanced features.
 
 ---
 
-## [Integrations](https://solganis.github.io/assertpy2/integrations/)
+<h2 align="center"><a href="https://solganis.github.io/assertpy2/integrations/">Integrations</a></h2>
 
-### Allure
+Optional adapters, each its own extra; full configuration and examples are in the
+[Integrations guide](https://solganis.github.io/assertpy2/integrations/).
 
-When `allure-pytest` is installed, the pytest plugin auto-attaches structured failure data to Allure reports as JSON attachments.
-
-```bash
-pip install assertpy2[allure]
-```
-
-Three modes controlled via `pytest.ini` (or `pyproject.toml`):
-
-| Mode | What is attached |
-|---|---|
-| `diff` (default) | Structured Diff JSON (path-level breakdown) |
-| `full` | Structured Diff + actual/expected JSON |
-| `off` | Nothing |
-
-```toml
-# pyproject.toml
-[tool.pytest.ini_options]
-assertpy2_allure = "full"
-```
-
-### Behave
-
-Ready-made parameter types for Behave step definitions:
-
-```bash
-pip install assertpy2[behave]
-```
-
-```py
-# in environment.py or steps/conftest.py
-from assertpy2.behave_matchers import register_assertpy_types
-register_assertpy_types()
-```
-
-Then use in step definitions:
-
-```py
-@given('a user aged {age:PositiveInt}')
-def step_impl(context, age):
-    context.age = age  # already validated as int > 0
-```
-
-Available types: `PositiveInt`, `NonNegativeInt`, `PositiveFloat`, `NonEmptyString`, `BoolLike`.
-
-See the [Integrations guide](https://solganis.github.io/assertpy2/integrations/) for attachment modes, configuration, and full examples.
+- [**Allure**](https://solganis.github.io/assertpy2/integrations/#allure) (`pip install assertpy2[allure]`): the pytest plugin auto-attaches structured diff and actual/expected data to Allure reports, in three configurable modes.
+- [**Behave**](https://solganis.github.io/assertpy2/integrations/#behave) (`pip install assertpy2[behave]`): ready-made parameter types (`PositiveInt`, `NonEmptyString`, ...) for step definitions like `{age:PositiveInt}`.
+- [**JSON**](https://solganis.github.io/assertpy2/data/#json-path--schema) (`pip install assertpy2[json]`): JSONPath navigation (`at_json_path()`, `has_json_path()`) and JSON Schema validation (`matches_json_schema()`).
+- [**Data frames**](https://solganis.github.io/assertpy2/integrations/#data-frames-and-arrays) (`pip install assertpy2[pandas]` / `[polars]` / `[numpy]`): fluent equality for pandas/polars frames and numpy arrays, carrying each library's own diff.
 
 ---
 

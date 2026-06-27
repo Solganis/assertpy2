@@ -154,6 +154,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Regex group extraction | manual | No | No | No | **[Yes](data.md#regex-group-extraction)** |
 | JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](data.md)** |
 | File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](assertions.md#files)** |
+| Data frame / array equality (pandas/polars/numpy) | manual | No | No | No | **[Yes](integrations.md#data-frames-and-arrays)** |
 | Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](extending.md)** |
 
 ## Reporting, safety and tooling
