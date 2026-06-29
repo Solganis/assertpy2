@@ -84,3 +84,11 @@ jobs:
 
       - name: Type check (pyright, public typing surface)
         run: uv run pyright tests/test_typing.py
+
+  ci-ok:
+    needs: [test, lint]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required jobs succeeded
+        run: '[ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.lint.result }}" = "success" ]'
