@@ -1,0 +1,13 @@
+/* Dark-mode readability overrides.
+   Material's slate scheme ships low-contrast, slightly desaturated grey body
+   text; these variables lift it to near-white and give links a vivid violet
+   accent so the dark theme reads as cleanly as the light one. */
+[data-md-color-scheme="slate"] {
+  --md-typeset-color:             hsla(0, 0%, 100%, 0.90);
+  --md-default-fg-color:          hsla(0, 0%, 100%, 0.95);
+  --md-default-fg-color--light:   hsla(0, 0%, 100%, 0.72);
+  --md-default-fg-color--lighter: hsla(0, 0%, 100%, 0.45);
+
+  --md-typeset-a-color:           #b388ff;  /* links */
+  --md-accent-fg-color:           #cbb2ff;  /* link hover / interactive accent */
+}
