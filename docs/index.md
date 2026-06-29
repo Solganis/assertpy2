@@ -8,14 +8,61 @@ rich structural diffs on failure.
 
 ## Why assertpy2
 
-- **Typed overloads.** `assert_that("hello").` offers only string methods, `assert_that(42).` only numeric
-  ones, and a type checker rejects `assert_that("foo").is_positive()` before the test runs. The core
-  advantage over `assertpy` and most alternatives - [see how it works](type-safety.md).
-- **Composable matchers.** `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`.
-- **Structural matching.** Declarative validation of dicts, Pydantic models, and API responses, with the exact path to each mismatch on failure.
-- **Soft and async assertions.** Collect multiple failures; poll for eventual consistency with `eventually()`.
-- **Structured failures.** `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin
-  renders recursive diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
+<div class="grid cards" markdown>
+
+-   :material-shield-check:{ .lg .middle } __Typed overloads__
+
+    ---
+
+    `assert_that("hello").` offers only string methods, `assert_that(42).` only numeric ones, and a type
+    checker rejects `assert_that("foo").is_positive()` before the test runs. The core advantage over
+    `assertpy` and most alternatives.
+
+    [:octicons-arrow-right-24: Type safety](type-safety.md)
+
+-   :material-puzzle:{ .lg .middle } __Composable matchers__
+
+    ---
+
+    `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`, reusable across assertions.
+
+    [:octicons-arrow-right-24: Matchers](matchers.md)
+
+-   :material-file-tree:{ .lg .middle } __Structural matching__
+
+    ---
+
+    Declarative validation of dicts, Pydantic models, and API responses, with the exact path to each
+    mismatch on failure.
+
+    [:octicons-arrow-right-24: Structural matching](matchers.md#structural-matching)
+
+-   :material-timer-sand:{ .lg .middle } __Soft & async assertions__
+
+    ---
+
+    Collect multiple failures in one run; poll for eventual consistency with `eventually()`.
+
+    [:octicons-arrow-right-24: Testing](testing.md)
+
+-   :material-format-list-checks:{ .lg .middle } __Structured failures__
+
+    ---
+
+    `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin renders recursive
+    diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
+
+    [:octicons-arrow-right-24: Errors & reporting](errors.md)
+
+-   :material-table:{ .lg .middle } __Data frames & arrays__
+
+    ---
+
+    pandas / polars / numpy data-frame and array assertions, alongside Allure and Behave integrations.
+
+    [:octicons-arrow-right-24: Integrations](integrations.md)
+
+</div>
 
 ## Install
 
@@ -23,7 +70,8 @@ rich structural diffs on failure.
 pip install assertpy2
 ```
 
-Optional extras: `assertpy2[json]` (JSONPath / JSON Schema), `assertpy2[allure]`, `assertpy2[behave]`.
+Optional extras: `assertpy2[json]` (JSONPath / JSON Schema), `assertpy2[data]` (pandas / polars / numpy),
+`assertpy2[allure]`, `assertpy2[behave]`.
 
 ## Quick example
 
@@ -51,5 +99,5 @@ assert_that(response).matches_structure({
 
 ![Structured diff in the terminal: every failing field with its path and the predicate that failed, in color](assets/diff-match.svg)
 
-See [Getting Started](getting-started.md) to dive in, or browse [Type Assertions](assertions.md),
+See [Quickstart](getting-started.md) to dive in, or browse [Type assertions](assertions.md),
 [Matchers](matchers.md), and the rest of the navigation for the full set of assertions and integrations.
