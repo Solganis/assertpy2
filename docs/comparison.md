@@ -19,7 +19,7 @@ common alternatives.
 - **PyHamcrest** is a matcher framework: `assert_that(value, is_(greater_than(5)))`. assertpy2 provides
   the same composable-matcher model (`&`, `|`, `~`, custom matchers) inside a typed fluent API.
 - **assertpy** (the original) introduced the fluent `assert_that(x).is_...()` chaining this project is
-  built on. It has been inactive since 2020 (last release `1.1`) and has no static typing. assertpy2 is
+  built on. It is no longer actively maintained (last release `1.1`) and has no static typing. assertpy2 is
   its successor and substantially expands the assertion set - adding the entire bytes
   family, more string and collection assertions, structural matching, the collection pipeline, JSON
   Path/Schema, regex group extraction, async polling, universal negation, and composable matchers on top
@@ -176,15 +176,18 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Maintained | built-in | Yes | No (since 2020) | Yes | **Yes** |
+| Maintained | built-in | Yes | No | Yes | **Yes** |
 | Property-based tests | n/a | No | No | No | **Yes** |
+| Mutation testing | n/a | No | No | No | **Yes** |
 | Runtime dependencies | **none** | **none** | **none** | **none** | **none on 3.11+** |
 | License | MIT | BSD | BSD | MIT | BSD-3 |
 
 !!! note
-    The property-based-tests row reflects each project's published test dependencies as of June 2026.
-    assertpy2 ships a [Hypothesis](https://hypothesis.readthedocs.io) suite covering its comparison,
-    diff, and matcher logic, on top of 100% branch coverage.
+    The property-based-tests and mutation-testing rows reflect each project's published CI and test
+    configuration. assertpy2 ships a [Hypothesis](https://hypothesis.readthedocs.io) suite covering its
+    comparison, diff, and matcher logic, plus a
+    [cosmic-ray](https://github.com/sixty-north/cosmic-ray) mutation-testing suite, on top of 100% branch
+    coverage.
 
 ## All three styles, one import
 

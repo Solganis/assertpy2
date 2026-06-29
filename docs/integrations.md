@@ -56,7 +56,9 @@ Regardless of Allure mode, the plugin always adds human-readable sections to the
   expected: {'name': 'Alice', 'age': 25}
 --- Structured Diff ---
 diff (dict):
-  at age: actual=<30>, expected=<25>
+  age:
+    - 30
+    + 25
 ```
 
 !!! note

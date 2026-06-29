@@ -21,7 +21,7 @@ For comparisons, a `DiffResult` with path-level entries is attached:
 try:
     assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
 except AssertionError as e:
-    print(e.diff)
+    print(repr(e.diff))
     # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
 ```
 

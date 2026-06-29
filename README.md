@@ -87,7 +87,7 @@ assert_that(response).is_equal_to(expected)
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
 </p>
 
-Recursive diffs work for dicts, dataclasses, namedtuples, attrs, and Pydantic models.
+Recursive diffs work for dicts, dataclasses, namedtuples, and Pydantic models.
 For responses with dynamic fields (IDs, timestamps), validate a subset with
 [`matches_structure()`](https://solganis.github.io/assertpy2/matchers/#structural-matching) instead of exact equality.
 
@@ -118,8 +118,10 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 
 - [**Composable matchers**](https://solganis.github.io/assertpy2/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
 - [**Structural matching**](https://solganis.github.io/assertpy2/matchers/#structural-matching): `matches_structure()` for declarative dict/API response validation, reporting the exact path to each mismatch on failure.
+- [**Recursive field assertions**](https://solganis.github.io/assertpy2/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph, reporting the exact path.
 - [**Universal negation**](https://solganis.github.io/assertpy2/fluent/#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
+- [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`.
 - [**Fluent chaining**](https://solganis.github.io/assertpy2/fluent/#chaining): write assertions as readable one-liners that chain naturally.
 
 **Built-in types**
@@ -127,7 +129,8 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [Strings](https://solganis.github.io/assertpy2/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/errors/#expected-exceptions).
 - [**Bytes assertions**](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
 - [**Dynamic assertions**](https://solganis.github.io/assertpy2/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
-- [**Dict comparison**](https://solganis.github.io/assertpy2/assertions/#selective-comparison-ignore--include): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects).
+- [**Dict comparison**](https://solganis.github.io/assertpy2/assertions/#selective-comparison-ignore--include): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects), including by regex or type.
+- [**Recursive comparison**](https://solganis.github.io/assertpy2/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance` (absolute float tolerance at any depth) or `comparators` (per-type / per-field predicates) for nested structures.
 - [**Extracting**](https://solganis.github.io/assertpy2/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
 
 **Testing**
