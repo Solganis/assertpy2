@@ -149,7 +149,7 @@ class BaseMixin(_MixinBase):
 
                 # by type, or by field name (field name wins over type)
                 assert_that(actual).is_equal_to(expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)})
-                assert_that(actual).is_equal_to(expected, comparators={"created_at": lambda a, e: True})
+                assert_that(actual).is_equal_to(expected, comparators={"name": lambda a, e: a.lower() == e.lower()})
 
             Ignore fields by regex or by type:
 

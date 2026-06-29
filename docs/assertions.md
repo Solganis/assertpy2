@@ -213,8 +213,12 @@ assert_that({"point": {"x": 1.0001, "y": 2.0}}).is_equal_to({"point": {"x": 1.0,
 
 # comparator by type, or by field name
 assert_that(order).is_equal_to(expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)})
-assert_that(order).is_equal_to(expected, comparators={"created_at": lambda a, e: True})  # ignore a timestamp
+assert_that(order).is_equal_to(expected, comparators={"name": lambda a, e: a.lower() == e.lower()})  # case-insensitive
 ```
+
+Use `comparators` to change *how* a field or type is compared; to drop a field from the comparison
+entirely, use `ignore` (above) rather than an always-true comparator (`ignore` also handles fields missing
+on one side or with incomparable types).
 
 Sequence elements have no field name, so a `comparators` field-name key does not apply to them (use a type
 key or `tolerance`); sets compare by standard equality.
