@@ -629,11 +629,14 @@ class StructureMatcher(BaseMatcher):
     def collect_mismatches(self, value: Any) -> list[tuple[str, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
 
-        Unlike :meth:`describe_mismatch`, this does not stop at the first failure and joins nested
-        paths, so callers can build a path-level :class:`~assertpy2.errors.DiffResult`.
+        Unlike `describe_mismatch()`, this does not stop at the first failure and joins nested
+        paths, so callers can build a path-level [`DiffResult`][assertpy2.errors.DiffResult].
         """
         value = self._as_mapping(value)
-        return [(m.path, m.actual, m.expected_desc) for m in self._walk(value, self._spec, "", set())]
+        return [
+            (mismatch.path, mismatch.actual, mismatch.expected_desc)
+            for mismatch in self._walk(value, self._spec, "", set())
+        ]
 
     def _walk(
         self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
@@ -682,7 +685,7 @@ def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callab
         A decorator that registers the wrapped function and returns it unchanged.
 
     Examples:
-        Register a simple matcher::
+        Register a simple matcher:
 
             @register_matcher("is_valid_email")
             def is_valid_email():
@@ -690,7 +693,7 @@ def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callab
 
             assert_that(email).satisfies(match.is_valid_email())
 
-        Register a parametrised matcher::
+        Register a parametrised matcher:
 
             @register_matcher("has_status")
             def has_status(expected: str):
@@ -740,7 +743,7 @@ def clear_custom_matchers() -> None:
 class _MatchNamespace:
     """Factory namespace for creating matcher instances.
 
-    Usage::
+    Usage:
 
         from assertpy2 import match
 
@@ -952,7 +955,7 @@ class _MatchNamespace:
                 or nested dict specs. Keys present in the value but absent from the spec are ignored.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(user).satisfies(
                     match.structure({"id": match.is_instance_of(int), "name": "Alice"})

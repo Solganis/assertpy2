@@ -35,6 +35,7 @@ theme:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.tracking
+    - navigation.sections
     - navigation.top
     - navigation.footer
     - content.code.copy
@@ -62,21 +63,79 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            filters: ["!^_"]
+            heading_level: 2
+            members_order: source
+            merge_init_into_class: true
+            overloads_only: true
+            separate_signature: true
+            show_bases: false
+            show_root_heading: false
+            show_root_full_path: false
+            show_root_toc_entry: false
+            show_signature_annotations: true
+            show_source: true
+            show_symbol_type_heading: false
+            show_symbol_type_toc: false
+            signature_crossrefs: false
+
+extra_css:
+  - stylesheets/extra.css
+
+# Rebuild the live `mkdocs serve` site when docstrings in the package change,
+# not just when files under docs/ change.
+watch:
+  - assertpy2
 
 nav:
-  - Home: index.md
-  - Getting Started: getting-started.md
-  - Type Safety: type-safety.md
-  - Migrating from assertpy: migration.md
-  - Comparison: comparison.md
-  - Type Assertions: assertions.md
-  - Fluent API: fluent.md
-  - Matchers: matchers.md
-  - Data Navigation: data.md
-  - Testing: testing.md
-  - Errors & Reporting: errors.md
-  - Extending: extending.md
-  - Integrations: integrations.md
+  - Introduction: index.md
+  - Getting started:
+      - Quickstart: getting-started.md
+      - Migrating from assertpy: migration.md
+      - Comparison: comparison.md
+  - Guides:
+      - Type assertions: assertions.md
+      - Fluent API: fluent.md
+      - Matchers: matchers.md
+      - Data navigation: data.md
+      - Testing: testing.md
+      - Errors & reporting: errors.md
+  - Concepts:
+      - Type safety: type-safety.md
+  - Extending:
+      - Custom assertions: extending.md
+      - Integrations: integrations.md
+  - Reference:
+      - Overview: reference/overview.md
+      - Entry points: reference/entry-points.md
+      - Core & objects: reference/core.md
+      - Matchers: reference/matchers.md
+      - String assertions: reference/strings.md
+      - Numeric assertions: reference/numbers.md
+      - Collection assertions: reference/collections.md
+      - Containment assertions: reference/containment.md
+      - Dict assertions: reference/dicts.md
+      - Date & time assertions: reference/dates.md
+      - File & path assertions: reference/files.md
+      - Bytes assertions: reference/bytes.md
+      - Dynamic assertions: reference/dynamic.md
+      - Exception & callable assertions: reference/exceptions.md
+      - Warning assertions: reference/warnings.md
+      - Async & eventual assertions: reference/async.md
+      - Extracting: reference/extracting.md
+      - JSON assertions: reference/json.md
+      - Data frame & array assertions: reference/dataframes.md
+      - Snapshot assertions: reference/snapshots.md
+      - Structured failures: reference/errors.md

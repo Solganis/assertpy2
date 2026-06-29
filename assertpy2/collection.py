@@ -28,7 +28,7 @@ class CollectionMixin(_MixinBase):
         """Asserts that val is iterable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_iterable()
                 assert_that(['a', 'b']).is_iterable()
@@ -48,7 +48,7 @@ class CollectionMixin(_MixinBase):
         """Asserts that val is not iterable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_not_iterable()
                 assert_that(123.4).is_not_iterable()
@@ -69,10 +69,10 @@ class CollectionMixin(_MixinBase):
         """Asserts that val is iterable and a subset of the given superset (or supersets).
 
         Args:
-            *supersets: the expected superset (or supersets)
+            *supersets (object): the expected superset (or supersets)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_subset_of('abcdefghijklmnopqrstuvwxyz')
                 assert_that(['a', 'b']).is_subset_of(['a', 'b', 'c'])
@@ -134,7 +134,7 @@ class CollectionMixin(_MixinBase):
 
         return self
 
-    def is_sorted(self, key=lambda x: x, reverse=False) -> Self:
+    def is_sorted(self, key=lambda item: item, reverse=False) -> Self:
         """Asserts that val is iterable and is sorted.
 
         Args:
@@ -143,7 +143,7 @@ class CollectionMixin(_MixinBase):
             reverse (bool): if ``True``, then comparison key is reversed.  Defaults to ``False``.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(['a', 'b', 'c']).is_sorted()
                 assert_that((1, 2, 3)).is_sorted()
@@ -224,7 +224,7 @@ class CollectionMixin(_MixinBase):
             predicate: callable or Matcher. If a Matcher, uses ``predicate.matches(item)``.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([1, -2, 3]).filtered_on(lambda x: x > 0).is_length(2)
                 assert_that(items).filtered_on(match.is_positive()).is_not_empty()
@@ -247,7 +247,7 @@ class CollectionMixin(_MixinBase):
             func: callable applied to each element.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(["a", "b"]).mapped(str.upper).contains("A")
 
@@ -265,7 +265,7 @@ class CollectionMixin(_MixinBase):
             func: callable returning an iterable for each element.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(["ab", "cd"]).flat_mapped(list).contains("a", "c")
 
@@ -280,7 +280,7 @@ class CollectionMixin(_MixinBase):
         """Returns a new builder with the first element of val.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([10, 20, 30]).first().is_equal_to(10)
 
@@ -299,7 +299,7 @@ class CollectionMixin(_MixinBase):
         """Returns a new builder with the last element of val.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([10, 20, 30]).last().is_equal_to(30)
 
@@ -321,7 +321,7 @@ class CollectionMixin(_MixinBase):
             index: zero-based index.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([10, 20, 30]).element(1).is_equal_to(20)
 
@@ -340,7 +340,7 @@ class CollectionMixin(_MixinBase):
         """Returns a new builder with the only element of val.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([42]).single().is_equal_to(42)
 

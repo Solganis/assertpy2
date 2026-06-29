@@ -85,6 +85,7 @@ if TYPE_CHECKING:
         def has_same_size_as(self, other: object) -> Self: ...
         def is_empty(self) -> Self: ...
         def is_not_empty(self) -> Self: ...
+        def is_subset_of(self, *supersets: object) -> Self: ...
         # StringMixin - regex
         def extracting_group(self, pattern: str, group: int | str = ...) -> Self: ...
         def matches_with_groups(self, pattern: str) -> Self: ...
@@ -239,8 +240,9 @@ if TYPE_CHECKING:
     class _InvokedAssertion(_StringAssertion, Protocol):
         """Assertions available after ``when_called_with()`` captured an exception/warning message.
 
-        The captured message is a ``str`` (hence the string assertions); :meth:`returned` pivots to
-        the value the callable returned.  Its static type is unknown, so ``returned()`` exposes the
+        The captured message is a ``str`` (hence the string assertions);
+        [`returned()`][assertpy2.exception.ExceptionMixin.returned] pivots to the value the callable
+        returned.  Its static type is unknown, so ``returned()`` exposes the
         type-agnostic core assertions (``is_equal_to``, ``is_instance_of``, ``satisfies``, ...) -
         type-safe by construction, never advertising methods that may not apply.
         """

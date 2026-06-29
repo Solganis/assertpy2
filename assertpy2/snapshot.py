@@ -30,10 +30,10 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
     """
     lockpath = f"{target}.lock"
     deadline = time.monotonic() + timeout
-    fd = None
-    while fd is None:
+    lock_fd = None
+    while lock_fd is None:
         try:
-            fd = os.open(lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            lock_fd = os.open(lockpath, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:  # noqa: PERF203  # retry the O_EXCL acquire each poll until the lock frees
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"could not acquire snapshot lock <{lockpath}> within {timeout}s") from None
@@ -41,7 +41,7 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
     try:
         yield
     finally:
-        os.close(fd)
+        os.close(lock_fd)
         os.unlink(lockpath)
 
 
@@ -67,38 +67,38 @@ class _Decoder(json.JSONDecoder):
     def __init__(self):
         json.JSONDecoder.__init__(self, object_hook=self._object_hook)
 
-    def _object_hook(self, d):
-        if "__type__" in d and "__data__" in d:
-            if d["__type__"] == "set":
-                return set(d["__data__"])
-            elif d["__type__"] == "complex":
-                return complex(d["__data__"][0], d["__data__"][1])
-            elif d["__type__"] == "datetime":
-                return datetime.datetime.strptime(d["__data__"], "%Y-%m-%d %H:%M:%S")
-            elif d["__type__"] == "instance":
-                module_name = d["__module__"]
+    def _object_hook(self, decoded):
+        if "__type__" in decoded and "__data__" in decoded:
+            if decoded["__type__"] == "set":
+                return set(decoded["__data__"])
+            elif decoded["__type__"] == "complex":
+                return complex(decoded["__data__"][0], decoded["__data__"][1])
+            elif decoded["__type__"] == "datetime":
+                return datetime.datetime.strptime(decoded["__data__"], "%Y-%m-%d %H:%M:%S")
+            elif decoded["__type__"] == "instance":
+                module_name = decoded["__module__"]
                 if module_name not in sys.modules:
-                    return d
-                mod = sys.modules[module_name]
-                klass = getattr(mod, d["__class__"], None)
-                if klass is None:
-                    return d
-                inst = klass.__new__(klass)
-                inst.__dict__ = d["__data__"]
-                return inst
-        return d
+                    return decoded
+                module = sys.modules[module_name]
+                target_class = getattr(module, decoded["__class__"], None)
+                if target_class is None:
+                    return decoded
+                instance = target_class.__new__(target_class)
+                instance.__dict__ = decoded["__data__"]
+                return instance
+        return decoded
 
 
 def _save(name, val):
     tmp = f"{name}.{os.getpid()}.tmp"
-    with open(tmp, "w") as fp:
-        json.dump(val, fp, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
+    with open(tmp, "w") as file_handle:
+        json.dump(val, file_handle, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
     os.replace(tmp, name)
 
 
 def _load(name):
-    with open(name) as fp:
-        return json.load(fp, cls=_Decoder)
+    with open(name) as file_handle:
+        return json.load(file_handle, cls=_Decoder)
 
 
 def _name(path, name):
@@ -123,11 +123,11 @@ class SnapshotMixin(_MixinBase):
 
     **On-disk Format**
 
-    Snapshots are stored in a readable JSON format.  For example::
+    Snapshots are stored in a readable JSON format.  For example:
 
         assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot()
 
-    Would be stored as::
+    Would be stored as:
 
         {
             "a": 1,
@@ -143,7 +143,7 @@ class SnapshotMixin(_MixinBase):
     It's easy to update your snapshots...just delete them all and re-run the test suite to regenerate all snapshots.
     """
 
-    def snapshot(self, id=None, path="__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
+    def snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,
@@ -160,7 +160,7 @@ class SnapshotMixin(_MixinBase):
             path: the directory where snapshots are stored (defaults to ``__snapshots``)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(None).snapshot()
                 assert_that(True).snapshot()
@@ -174,13 +174,13 @@ class SnapshotMixin(_MixinBase):
                 assert_that(someobj).snapshot()
 
             By default, snapshots are identified by test filename plus line number.
-            Alternately, you can specify a custom identifier using the ``id`` arg::
+            Alternately, you can specify a custom identifier using the ``id`` arg:
 
                 assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot(id='foo-id')
 
 
             By default, snapshots are stored in the ``__snapshots`` directory.
-            Alternately, you can specify a custom path using the ``path`` arg::
+            Alternately, you can specify a custom path using the ``path`` arg:
 
                 assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot(path='my-custom-folder')
 
@@ -196,14 +196,14 @@ class SnapshotMixin(_MixinBase):
             snapname = _name(path, id)
         else:
             # make id from filename and line number
-            f = inspect.currentframe()
-            caller = f.f_back if f is not None else None
+            frame = inspect.currentframe()
+            caller = frame.f_back if frame is not None else None
             if caller is None:  # pragma: no cover - frame introspection always available in CPython
                 raise RuntimeError("cannot determine caller frame")
-            fpath = os.path.basename(caller.f_code.co_filename)
-            fname = os.path.splitext(fpath)[0]
+            file_path = os.path.basename(caller.f_code.co_filename)
+            file_name = os.path.splitext(file_path)[0]
             lineno = str(caller.f_lineno)
-            snapname = _name(path, fname)
+            snapname = _name(path, file_name)
 
         os.makedirs(path, exist_ok=True)
 

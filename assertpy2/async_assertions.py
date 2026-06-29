@@ -15,7 +15,7 @@ __tracebackhide__ = True
 class AsyncAssertionBuilder:
     """Async assertion builder that polls a callable until an assertion passes or timeout expires.
 
-    Do not instantiate directly; use :meth:`~assertpy2.assertpy.AssertionBuilder.eventually` instead.
+    Do not instantiate directly; use [`eventually()`][assertpy2.assertpy.AssertionBuilder.eventually] instead.
 
     Args:
         func: a sync or async callable that produces the value to test

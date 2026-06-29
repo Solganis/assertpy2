@@ -348,22 +348,22 @@ def test_ignore_and_include_deep_key():
 
 
 def test_ignore_deep_sibling_key():
-    d1 = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
-    d2 = {"a": 1, "b": {"c": 3, "d": {"e": 3}}}
-    assert_that(d1).is_equal_to(d2, ignore=("b", "c"))
+    actual = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+    expected = {"a": 1, "b": {"c": 3, "d": {"e": 3}}}
+    assert_that(actual).is_equal_to(expected, ignore=("b", "c"))
 
 
 def test_ignore_nested_deep_sibling_key():
-    d1 = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
-    d2 = {"a": 1, "b": {"c": 2, "d": {"e": 4}}}
-    assert_that(d1).is_equal_to(d2, ignore=("b", "d"))
+    actual = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+    expected = {"a": 1, "b": {"c": 2, "d": {"e": 4}}}
+    assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
 
 
 def test_failure_deep_mismatch_when_ignoring_nested_deep_key():
-    d1 = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
-    d2 = {"a": 1, "b": {"c": 3, "d": {"e": 4}}}
+    actual = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+    expected = {"a": 1, "b": {"c": 3, "d": {"e": 4}}}
     with pytest.raises(AssertionError) as exc_info:
-        assert_that(d1).is_equal_to(d2, ignore=("b", "d"))
+        assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{.., 'b': {'c': 2, 'd': {'e': 3}}}> to be equal to "
         "<{.., 'b': {'c': 3, 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
@@ -371,20 +371,20 @@ def test_failure_deep_mismatch_when_ignoring_nested_deep_key():
 
 
 def test_failure_top_mismatch_when_ignoring_single_nested_key():
-    d1 = {"a": 1, "b": {"c": 2}}
-    d2 = {"a": 2, "b": {"c": 3}}
+    actual = {"a": 1, "b": {"c": 2}}
+    expected = {"a": 2, "b": {"c": 3}}
     with pytest.raises(AssertionError) as exc_info:
-        assert_that(d1).is_equal_to(d2, ignore=("b", "c"))
+        assert_that(actual).is_equal_to(expected, ignore=("b", "c"))
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{'a': 1, 'b': {'c': 2}}> to be equal to <{'a': 2, 'b': {'c': 3}}> ignoring keys <b.c>, but was not."
     )
 
 
 def test_failure_top_mismatch_when_ignoring_single_nested_sibling_key():
-    d1 = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
-    d2 = {"a": 2, "b": {"c": 2, "d": {"e": 4}}}
+    actual = {"a": 1, "b": {"c": 2, "d": {"e": 3}}}
+    expected = {"a": 2, "b": {"c": 2, "d": {"e": 4}}}
     with pytest.raises(AssertionError) as exc_info:
-        assert_that(d1).is_equal_to(d2, ignore=("b", "d"))
+        assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{'a': 1, 'b': {.., 'd': {'e': 3}}}> to be equal to "
         "<{'a': 2, 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
@@ -392,10 +392,10 @@ def test_failure_top_mismatch_when_ignoring_single_nested_sibling_key():
 
 
 def test_failure_deep_mismatch_when_ignoring_double_nested_sibling_key():
-    d1 = {"a": 1, "b": {"c": 2, "d": {"e": 3}, "f": {"g": 5}}}
-    d2 = {"a": 1, "b": {"c": 2, "d": {"e": 4}, "f": {"g": 5}}}
+    actual = {"a": 1, "b": {"c": 2, "d": {"e": 3}, "f": {"g": 5}}}
+    expected = {"a": 1, "b": {"c": 2, "d": {"e": 4}, "f": {"g": 5}}}
     with pytest.raises(AssertionError) as exc_info:
-        assert_that(d1).is_equal_to(d2, ignore=("b", "f", "g"))
+        assert_that(actual).is_equal_to(expected, ignore=("b", "f", "g"))
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{.., 'b': {.., 'd': {'e': 3}}}> to be equal to "
         "<{.., 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.f.g>, but was not."

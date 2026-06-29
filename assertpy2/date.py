@@ -12,7 +12,7 @@ __tracebackhide__ = True
 
 
 def _require_datetime(value: object, label: str) -> None:
-    """Raise ``TypeError`` unless *value* is exactly a :class:`datetime.datetime`."""
+    """Raise ``TypeError`` unless *value* is exactly a `datetime.datetime`."""
     if not isinstance(value, datetime.datetime):
         raise TypeError(f"{label} must be datetime, but was type <{type(value).__name__}>")
 
@@ -24,10 +24,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is before other date.
 
         Args:
-            other: the other date, expected to be after val
+            other (object): the other date, expected to be after val
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -43,8 +43,10 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** before the given date
 
         See Also:
-            :meth:`~assertpy2.numeric.NumericMixin.is_less_than` - numeric assertion, but also works with datetime
-            :meth:`~assertpy2.numeric.NumericMixin.is_less_than_or_equal_to` - also works with datetime
+            [`is_less_than()`][assertpy2.numeric.NumericMixin.is_less_than] - numeric assertion, but
+                also works with datetime
+            [`is_less_than_or_equal_to()`][assertpy2.numeric.NumericMixin.is_less_than_or_equal_to] -
+                also works with datetime
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
@@ -59,10 +61,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is after other date.
 
         Args:
-            other: the other date, expected to be before val
+            other (object): the other date, expected to be before val
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -78,8 +80,10 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** after the given date
 
         See Also:
-            :meth:`~assertpy2.numeric.NumericMixin.is_greater_than` - numeric assertion, but also works with datetime
-            :meth:`~assertpy2.numeric.NumericMixin.is_greater_than_or_equal_to` - also works with datetime
+            [`is_greater_than()`][assertpy2.numeric.NumericMixin.is_greater_than] - numeric assertion,
+                but also works with datetime
+            [`is_greater_than_or_equal_to()`][assertpy2.numeric.NumericMixin.is_greater_than_or_equal_to] -
+                also works with datetime
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
@@ -94,10 +98,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is before or equal to other date.
 
         Args:
-            other: the other date, expected to be after or equal to val
+            other (object): the other date, expected to be after or equal to val
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -126,10 +130,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is after or equal to other date.
 
         Args:
-            other: the other date, expected to be before or equal to val
+            other (object): the other date, expected to be before or equal to val
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -158,10 +162,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is equal to other date to the second.
 
         Args:
-            other: the other date, expected to be equal to the second
+            other (object): the other date, expected to be equal to the second
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -194,10 +198,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is equal to other date to the minute.
 
         Args:
-            other: the other date, expected to be equal to the minute
+            other (object): the other date, expected to be equal to the minute
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 
@@ -225,10 +229,10 @@ class DateMixin(_MixinBase):
         """Asserts that val is a date and is equal to other date ignoring time.
 
         Args:
-            other: the other date, expected to be equal ignoring time
+            other (object): the other date, expected to be equal ignoring time
 
         Examples:
-            Usage::
+            Usage:
 
                 import datetime
 

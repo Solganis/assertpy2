@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import logging
 
+    from ._compare import _CompareConfig
     from ._compat import Self
     from .errors import DiffEntry, DiffResult
 
@@ -60,7 +61,7 @@ class _MixinBase:
 
         def _is_dict_like(
             self,
-            d: object,
+            candidate: object,
             check_keys: bool = ...,
             check_values: bool = ...,
             check_getitem: bool = ...,
@@ -68,7 +69,7 @@ class _MixinBase:
 
         def _require_dict_like(
             self,
-            d: object,
+            candidate: object,
             check_keys: bool = ...,
             check_values: bool = ...,
             check_getitem: bool = ...,
@@ -83,6 +84,7 @@ class _MixinBase:
             other: object,
             ignore: object = ...,
             include: object = ...,
+            config: _CompareConfig | None = ...,
         ) -> bool: ...
 
         def _dict_err(
@@ -91,6 +93,7 @@ class _MixinBase:
             other: object,
             ignore: object = ...,
             include: object = ...,
+            config: _CompareConfig | None = ...,
         ) -> None: ...
 
         @staticmethod
@@ -98,7 +101,12 @@ class _MixinBase:
 
         @staticmethod
         def _sub_diff_entries(
-            actual: object, expected: object, prefix: str, *, _seen: set[int] | None = ...
+            actual: object,
+            expected: object,
+            prefix: str,
+            *,
+            _seen: set[int] | None = ...,
+            config: _CompareConfig | None = ...,
         ) -> list[DiffEntry] | None: ...
 
         # NumericMixin class attrs used by HelpersMixin._validate_between_args

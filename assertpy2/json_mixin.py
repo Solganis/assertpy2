@@ -46,7 +46,7 @@ class JsonMixin(_MixinBase):
             path: JSONPath expression.
 
         Examples:
-            Usage::
+            Usage:
 
                 data = {"users": [{"name": "Alice"}, {"name": "Bob"}]}
                 assert_that(data).at_json_path("$.users[0].name").is_equal_to("Alice")
@@ -65,7 +65,7 @@ class JsonMixin(_MixinBase):
             raise ValueError(f"Expected JSON path <{path}> to exist, but it did not.")
         if len(matches) == 1:
             return self.builder(matches[0].value, self.description, self.kind)
-        return self.builder([m.value for m in matches], self.description, self.kind)
+        return self.builder([match.value for match in matches], self.description, self.kind)
 
     def has_json_path(self, path: str) -> Self:
         """Assert that the given JSON path exists in val.
@@ -74,7 +74,7 @@ class JsonMixin(_MixinBase):
             path: JSONPath expression.
 
         Examples:
-            Usage::
+            Usage:
 
                 data = {"meta": {"total": 5}}
                 assert_that(data).has_json_path("$.meta.total")
@@ -99,7 +99,7 @@ class JsonMixin(_MixinBase):
             path: JSONPath expression.
 
         Examples:
-            Usage::
+            Usage:
 
                 data = {"status": "ok"}
                 assert_that(data).does_not_have_json_path("$.error")
@@ -124,7 +124,7 @@ class JsonMixin(_MixinBase):
             schema: a JSON Schema as a dict.
 
         Examples:
-            Usage::
+            Usage:
 
                 schema = {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
                 assert_that({"name": "Alice"}).matches_json_schema(schema)
@@ -149,7 +149,7 @@ class JsonMixin(_MixinBase):
             path: path to a JSON file containing the schema.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(data).matches_json_schema_from_file("schemas/order.json")
 

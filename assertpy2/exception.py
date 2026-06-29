@@ -25,17 +25,17 @@ class _InertBuilder:
 class ExceptionMixin(_MixinBase):
     """Expected exception mixin."""
 
-    def raises(self, ex) -> Self:
+    def raises(self, ex: type) -> Self:
         """Asserts that val is callable and set the expected exception.
 
         Just sets the expected exception, but never calls val, and therefore never fails. You must
-        chain to :meth:`~when_called_with` to invoke ``val()``.
+        chain to [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()``.
 
         Args:
             ex: the expected exception
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(some_func).raises(RuntimeError).when_called_with('foo')
 
@@ -49,20 +49,22 @@ class ExceptionMixin(_MixinBase):
 
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
-    def when_called_with(self, *some_args, **some_kwargs) -> Self:
+    def when_called_with(self, *some_args: object, **some_kwargs: object) -> Self:
         """Asserts that val, when invoked with the given args and kwargs, meets the set expectation.
 
         Invokes ``val()`` with the given args and kwargs.  You must first set an expectation with
-        :meth:`~raises` or :meth:`~does_not_raise` (expected exception), or with
-        :meth:`~assertpy2.warning.WarningMixin.warns` or
-        :meth:`~assertpy2.warning.WarningMixin.does_not_warn` (expected warning).
+        [`raises()`][assertpy2.exception.ExceptionMixin.raises] or
+        [`does_not_raise()`][assertpy2.exception.ExceptionMixin.does_not_raise] (expected exception),
+        or with
+        [`warns()`][assertpy2.warning.WarningMixin.warns] or
+        [`does_not_warn()`][assertpy2.warning.WarningMixin.does_not_warn] (expected warning).
 
         Args:
             *some_args: the args to call ``val()``
             **some_kwargs: the kwargs to call ``val()``
 
         Examples:
-            Usage::
+            Usage:
 
                 def some_func(a):
                     raise RuntimeError('some error!')
@@ -108,14 +110,16 @@ class ExceptionMixin(_MixinBase):
         return cast("Self", _InertBuilder())
 
     def returned(self) -> Self:
-        """Pivots the chain to the value ``val()`` returned during :meth:`when_called_with`.
+        """Pivots the chain to the value ``val()`` returned during
+        [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with].
 
-        Use after a call that completed normally (:meth:`~assertpy2.warning.WarningMixin.warns`,
-        :meth:`~assertpy2.warning.WarningMixin.does_not_warn`, or :meth:`does_not_raise`) to assert
+        Use after a call that completed normally ([`warns()`][assertpy2.warning.WarningMixin.warns],
+        [`does_not_warn()`][assertpy2.warning.WarningMixin.does_not_warn], or
+        [`does_not_raise()`][assertpy2.exception.ExceptionMixin.does_not_raise]) to assert
         on the return value in the same chain.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(make_client).warns(DeprecationWarning).when_called_with().returned().is_instance_of(Client)
                 assert_that(adder).does_not_raise(TypeError).when_called_with(1, 2).returned().is_equal_to(3)
@@ -124,7 +128,8 @@ class ExceptionMixin(_MixinBase):
             AssertionBuilder: a new instance wrapping the captured return value
 
         Raises:
-            TypeError: if no return value was captured (the call raised, or :meth:`when_called_with`
+            TypeError: if no return value was captured (the call raised, or
+                [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with]
                 was not invoked first)
         """
         if self._return_value is _UNSET:
@@ -147,17 +152,17 @@ class ExceptionMixin(_MixinBase):
         self._return_value = result
         return self
 
-    def does_not_raise(self, ex) -> Self:
+    def does_not_raise(self, ex: type) -> Self:
         """Asserts that val is callable and sets the not-expected exception.
 
         Just sets the not-expected exception, but never calls val. You must
-        chain to :meth:`~when_called_with` to invoke ``val()``.
+        chain to [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()``.
 
         Args:
             ex: the exception that should **not** be raised
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(some_func).does_not_raise(RuntimeError).when_called_with('foo')
 

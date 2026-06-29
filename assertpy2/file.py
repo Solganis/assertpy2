@@ -11,15 +11,15 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-def contents_of(file, encoding="utf-8"):
+def contents_of(file, encoding="utf-8") -> str:
     """Helper to read the contents of the given file or path into a string with the given encoding.
 
     Args:
-        file: a *path-like object* (aka a file name) or a *file-like object* (aka a file)
+        file (str | os.PathLike | IO): a *path-like object* (aka a file name) or a *file-like object* (aka a file)
         encoding (str): the target encoding. Defaults to ``utf-8`` (others: ``ascii``, ``latin-1``).
 
     Examples:
-        Usage::
+        Usage:
 
             from assertpy2 import assert_that, contents_of
 
@@ -37,8 +37,8 @@ def contents_of(file, encoding="utf-8"):
         contents = file.read()
     except AttributeError:
         try:
-            with open(file) as fp:
-                contents = fp.read()
+            with open(file) as file_handle:
+                contents = file_handle.read()
         except TypeError:
             raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
         except OSError:
@@ -58,7 +58,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is a path and that it exists.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('myfile.txt').exists()
                 assert_that('mydir').exists()
@@ -79,7 +79,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is a path and that it does *not* exist.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('missing.txt').does_not_exist()
                 assert_that('missing_dir').does_not_exist()
@@ -100,7 +100,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is a *file* and that it exists.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('myfile.txt').is_file()
 
@@ -119,7 +119,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is a *directory* and that it exists.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('mydir').is_directory()
 
@@ -134,14 +134,14 @@ class FileMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be a directory, but was not.")
         return self
 
-    def is_named(self, filename) -> Self:
+    def is_named(self, filename: str) -> Self:
         """Asserts that val is an existing path to a file and that file is named filename.
 
         Args:
             filename: the expected filename
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('/path/to/mydir/myfile.txt').is_named('myfile.txt')
 
@@ -159,14 +159,14 @@ class FileMixin(_MixinBase):
             return self.error(f"Expected filename <{val_filename}> to be equal to <{filename}>, but was not.")
         return self
 
-    def is_child_of(self, parent) -> Self:
+    def is_child_of(self, parent: object) -> Self:
         """Asserts that val is an existing path to a file and that file is a child of parent.
 
         Args:
             parent: the expected parent directory
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('/path/to/mydir/myfile.txt').is_child_of('/path/to/mydir')
                 assert_that('/path/to/mydir/myfile.txt').is_child_of('/path/to')
@@ -195,7 +195,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is an existing path and is readable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('/path/to/file.txt').is_readable()
 
@@ -214,7 +214,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is an existing path and is writable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('/path/to/file.txt').is_writable()
 
@@ -233,7 +233,7 @@ class FileMixin(_MixinBase):
         """Asserts that val is an existing path and is executable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('/path/to/script.sh').is_executable()
 

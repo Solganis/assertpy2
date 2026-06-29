@@ -67,14 +67,15 @@ _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assert
 
 
 class SoftAssertionCollector:
-    """Collector returned by :func:`soft_assertions` for grouping errors hierarchically."""
+    """Collector returned by [`soft_assertions()`][assertpy2.assertpy.soft_assertions] for grouping
+    errors hierarchically."""
 
     @contextlib.contextmanager
     def group(self, label: str) -> Iterator[None]:
         """Group subsequent assertion failures under *label*.
 
         Examples:
-            Usage::
+            Usage:
 
                 with soft_assertions() as sa:
                     with sa.group("Headers"):
@@ -114,11 +115,11 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
     Soft assertions are way to collect assertion failures (and failure messages) together, to be
     raised all at once at the end, without halting your test.
 
-    Uses :mod:`contextvars` internally, so each thread and each ``asyncio`` task gets its own
+    Uses `contextvars` internally, so each thread and each ``asyncio`` task gets its own
     independent soft-assertion state.
 
     Examples:
-        Create a soft assertion context, and some failing tests::
+        Create a soft assertion context, and some failing tests:
 
             from assertpy2 import assert_that, soft_assertions
 
@@ -130,7 +131,7 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
                 assert_that('123').is_alpha()
 
         When the context ends, any assertion failures are collected together and a single
-        ``AssertionError`` is raised::
+        ``AssertionError`` is raised:
 
             AssertionError: soft assertion failures:
             1. Expected <foo> to be of length <4>, but was <3>.
@@ -139,7 +140,7 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
             4. Expected <foo> to contain only digits, but did not.
             5. Expected <123> to contain only alphabetic chars, but did not.
 
-        Group errors by section::
+        Group errors by section:
 
             with soft_assertions() as sa:
                 with sa.group("Headers"):
@@ -150,9 +151,9 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
     Note:
         The soft assertion context only collects *assertion* failures, other errors such as
         ``TypeError`` or ``ValueError`` are always raised immediately.  Triggering an explicit test
-        failure with :meth:`fail` will similarly halt execution immediately.  If you need more
-        forgiving behavior, use :meth:`soft_fail` to add a failure message without halting test
-        execution.
+        failure with [`fail()`][assertpy2.assertpy.fail] will similarly halt execution immediately.
+        If you need more forgiving behavior, use [`soft_fail()`][assertpy2.assertpy.soft_fail] to add
+        a failure message without halting test execution.
     """
     ctx = _soft_ctx.get()
     if ctx == 0:
@@ -174,10 +175,10 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
 def assert_all(*callables: Callable[[], object]) -> None:
     """Run all callables inside a soft assertion context.
 
-    A convenience wrapper around :func:`soft_assertions` for inline use.
+    A convenience wrapper around [`soft_assertions()`][assertpy2.assertpy.soft_assertions] for inline use.
 
     Examples:
-        Usage::
+        Usage:
 
             from assertpy2 import assert_all, assert_that
 
@@ -242,10 +243,10 @@ def assert_that(val: object, description: str = "") -> AssertionBuilder: ...
 
 
 # Return the common base protocol so each overload stays consistent with the impl (no reportInconsistentOverload).
-def assert_that(val, description="") -> _CoreAssertion:
+def assert_that(val: object, description="") -> _CoreAssertion:
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
-    This is a factory method for the :class:`AssertionBuilder`, and the single most important
+    This is a factory method for the `AssertionBuilder`, and the single most important
     method in all of assertpy.
 
     Args:
@@ -254,7 +255,7 @@ def assert_that(val, description="") -> _CoreAssertion:
             (aka empty string)
 
     Examples:
-        Just import it once at the top of your test file, and away you go...::
+        Just import it once at the top of your test file, and away you go...
 
             from assertpy2 import assert_that
 
@@ -268,11 +269,11 @@ def assert_that(val, description="") -> _CoreAssertion:
     return _builder(val, description)
 
 
-def assert_warn(val, description="", logger=None):
+def assert_warn(val: object, description="", logger=None):
     """Set the value to be tested, and optional description and logger, and allow assertions to be
     called, but never fail, only log warnings.
 
-    This is a factory method for the :class:`AssertionBuilder`, but unlike :meth:`assert_that` an
+    This is a factory method for the `AssertionBuilder`, but unlike [`assert_that()`][assertpy2.assertpy.assert_that] an
     `AssertionError` is never raised, and execution is never halted.  Instead, any assertion failures
     results in a warning message being logged. Uses the given logger, or defaults to a simple logger
     that prints warnings to ``stdout``.
@@ -286,7 +287,7 @@ def assert_warn(val, description="", logger=None):
             (aka use the default simple logger that prints warnings to ``stdout``)
 
     Examples:
-        Usage::
+        Usage:
 
             from assertpy2 import assert_warn
 
@@ -298,7 +299,7 @@ def assert_warn(val, description="", logger=None):
 
         Even though all of the above assertions fail, ``AssertionError`` is never raised and
         test execution is never halted.  Instead, the failed assertions merely log the following
-        warning messages to ``stdout``::
+        warning messages to ``stdout``:
 
             2019-10-27 20:00:35 WARNING [test_foo.py:23]: Expected <foo> to be of length <4>, but was <3>.
             2019-10-27 20:00:35 WARNING [test_foo.py:24]: Expected <foo> to be empty string, but was not.
@@ -307,7 +308,7 @@ def assert_warn(val, description="", logger=None):
             2019-10-27 20:00:35 WARNING [test_foo.py:27]: Expected <123> to contain only alphabetic chars, but did not.
 
     Tip:
-        Use :meth:`assert_warn` if and only if you have a *really* good reason to log assertion
+        Use `assert_warn()` if and only if you have a *really* good reason to log assertion
         failures instead of failing.
     """
     return _builder(val, description, "warn", logger=logger)
@@ -320,14 +321,14 @@ def fail(msg=""):
         msg (str, optional): the failure message.  Defaults to ``''``
 
     Examples:
-        Fail a test::
+        Fail a test:
 
             from assertpy2 import assert_that, fail
 
             def test_fail():
                 fail('forced fail!')
 
-        If you wanted to test for a known failure, here is a useful pattern::
+        If you wanted to test for a known failure, here is a useful pattern:
 
             import operator
 
@@ -342,17 +343,17 @@ def fail(msg=""):
 
 
 def soft_fail(msg=""):
-    """Within a :meth:`soft_assertions` context, append the failure message to the soft error list,
-    but do not halt test execution.
+    """Within a [`soft_assertions()`][assertpy2.assertpy.soft_assertions] context, append the failure
+    message to the soft error list, but do not halt test execution.
 
-    Otherwise, outside the context, acts identical to :meth:`fail` and forces immediate test
+    Otherwise, outside the context, acts identical to [`fail()`][assertpy2.assertpy.fail] and forces immediate test
     failure with the given message.
 
     Args:
         msg (str, optional): the failure message.  Defaults to ``''``
 
     Examples:
-        Failing soft assertions::
+        Failing soft assertions:
 
             from assertpy2 import assert_that, soft_assertions, soft_fail
 
@@ -361,7 +362,7 @@ def soft_fail(msg=""):
                 soft_fail('my message')
                 assert_that('foo').is_equal_to('bar')
 
-        Fails, and outputs the following soft error list::
+        Fails, and outputs the following soft error list:
 
             AssertionError: soft assertion failures:
             1. Expected <1> to be equal to <2>, but was not.
@@ -383,13 +384,13 @@ def add_extension(func):
     """Add a new user-defined custom assertion to assertpy.
 
     Once the assertion is registered with assertpy, use it like any other assertion.  Pass val to
-    :meth:`assert_that`, and then call it.
+    [`assert_that()`][assertpy2.assertpy.assert_that], and then call it.
 
     Args:
-        func: the assertion function (to be added)
+        func (Callable): the assertion function (to be added)
 
     Examples:
-        Usage::
+        Usage:
 
             from assertpy2 import add_extension
 
@@ -416,10 +417,10 @@ def remove_extension(func):
     """Remove a user-defined custom assertion.
 
     Args:
-        func: the assertion function (to be removed)
+        func (Callable): the assertion function (to be removed)
 
     Examples:
-        Usage::
+        Usage:
 
             from assertpy2 import remove_extension
 
@@ -432,7 +433,7 @@ def remove_extension(func):
 
 
 def _builder(val, description="", kind=None, expected=None, logger=None):
-    """Internal helper to build a new :class:`AssertionBuilder` instance and glue on any extension methods."""
+    """Internal helper to build a new `AssertionBuilder` instance and glue on any extension methods."""
     ab = AssertionBuilder(val, description, kind, expected, logger)
     if _extensions:
         for name, func in _extensions.items():
@@ -452,14 +453,14 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
                 frames.append((frame.f_code.co_filename, frame.f_lineno))
                 frame = frame.f_back
 
-            prev = None
+            previous_frame = None
             for frame in reversed(
                 frames
             ):  # pragma: no branch - loop always finds an assertpy frame when called from error()
-                for f in ASSERTPY_FILES:
-                    if frame[0].endswith(f):
-                        return prev
-                prev = frame
+                for assertpy_filename in ASSERTPY_FILES:
+                    if frame[0].endswith(assertpy_filename):
+                        return previous_frame
+                previous_frame = frame
 
         filename, lineno = _unwind(inspect.currentframe())
         return f"[{os.path.basename(filename)}:{lineno}]: {msg}", kwargs
@@ -553,8 +554,8 @@ class AssertionBuilder(
     BaseMixin,
 ):
     """The main assertion class.  Never call the constructor directly, always use the
-    :meth:`assert_that` helper instead.  Or if you just want warning messages, use the
-    :meth:`assert_warn` helper.
+    [`assert_that()`][assertpy2.assertpy.assert_that] helper instead.  Or if you just want warning messages, use the
+    `assert_warn()` helper.
 
     Args:
         val: the value to be tested (aka the actual value)
@@ -583,7 +584,7 @@ class AssertionBuilder(
         return NegatedBuilder(self)
 
     def builder(self, val, description="", kind=None, expected=None, logger=None):
-        """Helper to build a new :class:`AssertionBuilder` instance. Use this only if not chaining to ``self``.
+        """Helper to build a new `AssertionBuilder` instance. Use this only if not chaining to ``self``.
 
         Args:
             val: the value to be tested (aka the actual value)
@@ -599,17 +600,17 @@ class AssertionBuilder(
     def error(self, msg, *, actual=None, expected=None, diff=None) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
-        If an error description is set by :meth:`~assertpy2.base.BaseMixin.described_as`, then that
+        If an error description is set by [`described_as()`][assertpy2.base.BaseMixin.described_as], then that
         description is prepended to the error message.
 
         When structured data (``actual``, ``expected``, or ``diff``) is provided, raises
-        :class:`~assertpy2.errors.AssertionFailure` instead of plain ``AssertionError``.
+        [`AssertionFailure`][assertpy2.errors.AssertionFailure] instead of plain ``AssertionError``.
 
         Args:
             msg: the error message
             actual: the actual value (for structured error reporting)
             expected: the expected value (for structured error reporting)
-            diff: a :class:`~assertpy2.errors.DiffResult` instance (for structured error reporting)
+            diff: a [`DiffResult`][assertpy2.errors.DiffResult] instance (for structured error reporting)
 
         Raises:
             AssertionError: always raised unless ``kind`` is ``warn`` or ``soft``.
@@ -634,7 +635,7 @@ class AssertionBuilder(
         """Switch to async polling mode for eventual-consistency assertions.
 
         The current ``val`` must be a callable (sync or async).  Returns an
-        :class:`~assertpy2.async_assertions.AsyncAssertionBuilder` whose assertion
+        `AsyncAssertionBuilder` whose assertion
         methods are coroutines that poll ``val()`` until the assertion passes or
         ``timeout`` expires.
 
@@ -643,7 +644,7 @@ class AssertionBuilder(
             interval: seconds between retries (default ``0.5``)
 
         Examples:
-            Usage::
+            Usage:
 
                 import asyncio
                 from assertpy2 import assert_that
