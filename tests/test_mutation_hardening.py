@@ -5,9 +5,12 @@ negative case) that allowed an equivalent-looking mutant to survive. Grouped her
 for review; can be redistributed into the per-feature test files later.
 """
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._compare import _CompareConfig
 
 # --- matchers ---
 
@@ -104,3 +107,32 @@ def test_is_equal_to_ignoring_case_lexicographically_less():
 def test_is_length_actual_longer_than_expected():
     with pytest.raises(AssertionError):
         assert_that([1, 2, 3]).is_length(2)  # `!=` -> `<` would pass when actual is longer
+
+
+# --- recursive comparison config (_compare.py) ---
+
+
+def test_zero_tolerance_is_valid_for_exact_equality():
+    assert_that(1.5).is_equal_to(1.5, tolerance=0)  # `tolerance < 0` -> `<= 0` would reject tolerance=0
+
+
+def test_tolerance_at_exact_boundary_passes():
+    assert_that(100).is_equal_to(102, tolerance=2)  # abs == tol; `<= tolerance` -> `<` would fail it
+
+
+def test_tolerance_just_beyond_boundary_fails():
+    with pytest.raises(AssertionError):
+        assert_that(100).is_equal_to(103, tolerance=2)  # abs > tol; guards the other direction of `<=`
+
+
+def test_ignore_spec_matches_by_equality_not_identity():
+    key = 10**6  # large int, not interned, so `==` differs from `is`
+    assert_that({key: 1, "k": 2}).is_equal_to(
+        {key: 9, "k": 2}, ignore=int(str(key))
+    )  # `spec == key` -> `spec is key` would not ignore the differing key
+
+
+def test_compare_config_is_frozen():
+    config = _CompareConfig(tolerance=0.1)
+    with pytest.raises(FrozenInstanceError):
+        config.tolerance = 0.2  # `frozen=True` -> `False` would allow mutating a shared config
