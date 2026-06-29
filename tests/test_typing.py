@@ -48,3 +48,21 @@ if TYPE_CHECKING:
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion)
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder)
+
+    # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
+    assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion)
+    assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion)
+    assert_type(assert_that([1, 2]).contains_only_once(1), _IterableAssertion)
+    assert_type(assert_that([1, 2]).has_same_size_as((3, 4)), _IterableAssertion)
+    assert_type(assert_that("ab").contains_only_once("a"), _StringAssertion)
+    assert_type(assert_that("ab").has_same_size_as("cd"), _StringAssertion)
+    assert_type(assert_that({"k": 1}).has_same_size_as({"j": 2}), _DictAssertion)
+    assert_type(assert_that(b"ab").has_same_size_as(b"cd"), _BytesAssertion)
+
+    # The recursive leaf assertions live on the core protocol, so they keep each value's own type.
+    assert_type(assert_that({"k": 1}).all_fields_satisfy(lambda x: x > 0), _DictAssertion)
+    assert_type(assert_that(42).has_no_none_fields(), _NumericAssertion)
+
+    # is_equal_to keeps its protocol with the recursive-comparison kwargs.
+    assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion)
+    assert_type(assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion)

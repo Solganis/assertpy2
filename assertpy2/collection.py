@@ -186,6 +186,37 @@ class CollectionMixin(_MixinBase):
 
         return self
 
+    def has_same_size_as(self, other) -> Self:
+        """Asserts that val has the same length as other.
+
+        Args:
+            other (object): a sized object whose ``len()`` is compared with val's
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).has_same_size_as((4, 5, 6))
+                assert_that('foo').has_same_size_as([1, 2, 3])
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val and other do **not** have the same length
+            TypeError: if other is not a sized object
+        """
+        try:
+            other_len = len(other)
+        except TypeError:
+            raise TypeError(f"given arg <{type(other).__name__}> is not a sized object") from None
+        actual_len = len(self.val)
+        if actual_len != other_len:
+            return self.error(
+                f"Expected <{self.val}> to have same size as <{other}> of length <{other_len}>,"
+                f" but was length <{actual_len}>."
+            )
+        return self
+
     def filtered_on(self, predicate: Callable[[Any], bool]) -> Self:
         """Returns a new builder with elements matching the predicate.
 

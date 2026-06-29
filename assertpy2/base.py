@@ -930,7 +930,115 @@ class BaseMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def is_not_equal_to(self, other) -> Self:
+    def satisfies_exactly(self, *matchers: Matcher | Callable[..., bool]) -> Self:
+        """Asserts that val has exactly one item per matcher, each satisfying the matcher at its position.
+
+        Unlike [`each()`][assertpy2.base.BaseMixin.each] (one matcher applied to every item), this
+        pairs the i-th item with the
+        i-th matcher and additionally requires the lengths to match.  Every positional mismatch is
+        reported, not just the first.
+
+        Args:
+            *matchers: one `Matcher` or callable predicate per expected item,
+                applied in order
+
+        Examples:
+            Usage:
+
+                from assertpy2 import match
+
+                assert_that([1, "foo", 3.0]).satisfies_exactly(
+                    match.is_odd(), match.is_instance_of(str), match.is_positive()
+                )
+                assert_that([2, 4]).satisfies_exactly(lambda x: x == 2, lambda x: x == 4)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if the length differs, or any item does **not** satisfy its matcher
+            TypeError: if val is not iterable, or a given arg is neither a Matcher nor callable
+            ValueError: if no matchers are given
+        """
+        if len(matchers) == 0:
+            raise ValueError("one or more args must be given")
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if len(items) != len(matchers):
+            return self.error(
+                f"Expected collection length <{len(matchers)}>, but was <{len(items)}>.",
+                actual=self.val,
+                expected=[_describe_matcher(matcher) for matcher in matchers],
+            )
+        entries = [
+            DiffEntry(path=f"[{index}]", actual=item, expected=_describe_matcher(matcher))
+            for index, (item, matcher) in enumerate(zip(items, matchers, strict=True))
+            if not _apply_matcher(matcher, item)
+        ]
+        if entries:
+            failed = "item" if len(entries) == 1 else "items"
+            return self.error(
+                f"Expected items to satisfy the given matchers in order, but {len(entries)} {failed} did not.",
+                actual=self.val,
+                expected=[_describe_matcher(matcher) for matcher in matchers],
+                diff=DiffResult(kind="match", entries=entries),
+            )
+        return self
+
+    def zip_satisfies(self, other: Iterable[object], predicate: Callable[..., bool]) -> Self:
+        """Asserts that each pair from zipping val with other satisfies the two-arg predicate.
+
+        Pairs the i-th item of val with the i-th item of ``other`` and checks ``predicate(a, b)``.
+        The two iterables must have equal length.  Every failing pair is reported.
+
+        Args:
+            other: the iterable to zip with val
+            predicate: a two-arg callable returning a bool, applied to each ``(val_item, other_item)`` pair
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).zip_satisfies([2, 4, 6], lambda a, b: b == a * 2)
+                assert_that(["a", "bb"]).zip_satisfies([1, 2], lambda s, n: len(s) == n)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if the lengths differ, or any pair does **not** satisfy the predicate
+            TypeError: if val or other is not iterable, or predicate is not callable
+        """
+        if not callable(predicate):
+            raise TypeError("given predicate must be callable")
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        if not isinstance(other, collections.abc.Iterable):
+            raise TypeError("given arg must be iterable")
+        val_items = list(self.val)
+        other_items = list(other)
+        if len(val_items) != len(other_items):
+            return self.error(
+                f"Expected collection length <{len(other_items)}>, but was <{len(val_items)}>.",
+                actual=self.val,
+                expected=other,
+            )
+        entries = [
+            DiffEntry(path=f"[{index}]", actual=val_item, expected=other_item)
+            for index, (val_item, other_item) in enumerate(zip(val_items, other_items, strict=True))
+            if not predicate(val_item, other_item)
+        ]
+        if entries:
+            failed = "pair" if len(entries) == 1 else "pairs"
+            return self.error(
+                f"Expected paired items to satisfy <{predicate}>, but {len(entries)} {failed} did not.",
+                actual=self.val,
+                expected=other,
+                diff=DiffResult(kind="match", entries=entries),
+            )
+        return self
+
+    def is_not_equal_to(self, other: object) -> Self:
         """Asserts that val is not equal to other.
 
         Checks actual is not equal to expected using the ``!=`` operator.
