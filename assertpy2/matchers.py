@@ -57,6 +57,30 @@ class BaseMatcher:
         return self.describe()
 
 
+# --- Matcher application helpers ---
+
+
+def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> bool:
+    """Evaluate a ``Matcher`` or one-arg callable against ``value``.
+
+    Shared resolution for every assertion that accepts either a `Matcher` or a callable
+    predicate, mirroring the dispatch in ``satisfies``/``each``: a `Matcher` is checked via
+    ``matches``, a callable via its return value, and anything else raises ``TypeError``.
+    """
+    if isinstance(matcher, Matcher):
+        return matcher.matches(value)
+    if callable(matcher):
+        return bool(matcher(value))
+    raise TypeError("given arg must be a Matcher or callable")
+
+
+def _describe_matcher(matcher: Matcher | Callable[..., object]) -> str:
+    """Describe a ``Matcher`` or callable for the "expected" half of an error or diff entry."""
+    if isinstance(matcher, Matcher):
+        return matcher.describe()
+    return f"<{matcher}>"
+
+
 # --- Combinators ---
 
 

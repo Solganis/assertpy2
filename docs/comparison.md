@@ -147,6 +147,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Structural matching (nested) | manual | partial | No | **Yes** | **[Yes](matchers.md#structural-matching)** |
+| Recursive comparison (tolerance / comparators) | `approx` | No | No | partial | **[Yes](assertions.md#recursive-comparison-tolerance--custom-comparators)** |
 | Collection / ordering assertions | manual | **Yes** | **Yes** | **Yes** | **[Yes](assertions.md#lists)** |
 | Negation of any assertion (`.not_`) | manual | partial | No | partial | **[Yes](fluent.md#universal-negation)** |
 | Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](fluent.md#collection-pipeline)** |

@@ -4,12 +4,15 @@ import collections.abc
 import dataclasses
 from typing import TYPE_CHECKING, Any, Final
 
+from ._compare import _build_compare_config, _node_decision
 from ._introspection import is_mapping_like, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
-from .matchers import Matcher, StructureMatcher
+from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from ._compat import Self
 
 __tracebackhide__ = True
@@ -81,11 +84,19 @@ class BaseMixin(_MixinBase):
             **kwargs: see below
 
         Keyword Args:
-            ignore: the key/field (or list/set/frozenset of keys/fields) to ignore
-            include: the key/field (or list/set/frozenset of keys/fields) to include
+            ignore (Hashable | list | set | frozenset | None): the key/field (or list/set/frozenset of
+                keys/fields) to ignore.  Besides exact keys and nested-path tuples, a ``re.Pattern`` matches
+                field names by regex and a ``type`` matches fields by value type.
+            include (Hashable | list | set | frozenset | None): the key/field (or list/set/frozenset of
+                keys/fields) to include.  Accepts the same ``re.Pattern`` / ``type`` specs as ``ignore``.
+            tolerance (float | None): an absolute tolerance applied to every real-number leaf anywhere in
+                the structure, so close floats compare equal (``abs(actual - expected) <= tolerance``).
+            comparators (dict | None): a dict mapping a ``type`` or a field name to an
+                ``(actual, expected) -> bool`` predicate that owns matching leaves; a field-name key wins
+                over a type key.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1 + 2).is_equal_to(3)
                 assert_that('foo').is_equal_to('foo')
@@ -126,13 +137,28 @@ class BaseMixin(_MixinBase):
 
                 assert_that(User(id=1, name="Alice")).is_equal_to(User(id=99, name="Alice"), ignore="id")
 
-            Compares lists of objects pairwise::
+            Compares lists of objects pairwise:
 
                 actual = [User(id=1, name="Alice"), User(id=2, name="Bob")]
                 expected = [User(id=99, name="Alice"), User(id=99, name="Bob")]
                 assert_that(actual).is_equal_to(expected, ignore="id")
 
-            Failure produces a nice error message::
+            Compare nested floats with an absolute tolerance, or supply custom comparators:
+
+                assert_that({"price": 1.0001}).is_equal_to({"price": 1.0}, tolerance=0.001)
+
+                # by type, or by field name (field name wins over type)
+                assert_that(actual).is_equal_to(expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)})
+                assert_that(actual).is_equal_to(expected, comparators={"created_at": lambda a, e: True})
+
+            Ignore fields by regex or by type:
+
+                import re
+
+                assert_that(payload).is_equal_to(expected, ignore=re.compile(r"^_"))  # ignore private-ish keys
+                assert_that(payload).is_equal_to(expected, ignore=float)               # ignore all float fields
+
+            Failure produces a nice error message:
 
                 assert_that(1).is_equal_to(2)  # fails
                 # Expected <1> to be equal to <2>, but was not.
@@ -143,28 +169,34 @@ class BaseMixin(_MixinBase):
         Raises:
             AssertionError: if actual is **not** equal to expected
             TypeError: if ``ignore``/``include`` is a one-shot or otherwise unsupported iterable, or is
-                used on a value that is neither dict-like nor has introspectable fields; or if val or
-                other is an element-wise array/frame-like (numpy/pandas/polars) whose ``==`` has no single
-                truth value (compare the value's own equality, e.g. ``actual.equals(expected)``, instead)
+                used on a value that is neither dict-like nor has introspectable fields; if ``tolerance`` is
+                not a real number or ``comparators`` is not a dict of callables; or if val or other is an
+                element-wise array/frame-like (numpy/pandas/polars) whose ``==`` has no single truth value
+                (compare the value's own equality, e.g. ``actual.equals(expected)``, instead)
+            ValueError: if ``tolerance`` is ``NaN`` or negative
 
         Tip:
-            Using :meth:`is_equal_to` with a ``float`` val is just asking for trouble. Instead, you'll
-            always want to use *fuzzy* numeric assertions like :meth:`~assertpy2.numeric.NumericMixin.is_close_to`
-            or :meth:`~assertpy2.numeric.NumericMixin.is_between`.
+            Using [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to] with a ``float`` val is just
+            asking for trouble. Instead, you'll
+            always want to use *fuzzy* numeric assertions
+            like [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to]
+            or [`is_between()`][assertpy2.numeric.NumericMixin.is_between].
 
         See Also:
-            :meth:`~assertpy2.string.StringMixin.is_equal_to_ignoring_case` - for case-insensitive string equality
+            [`is_equal_to_ignoring_case()`][assertpy2.string.StringMixin.is_equal_to_ignoring_case] -
+                for case-insensitive string equality
         """
         ignore = kwargs.get("ignore")
         include = kwargs.get("include")
+        config = _build_compare_config(kwargs.get("tolerance"), kwargs.get("comparators"))
 
         operand = _ambiguous_array_operand(self.val, other)
         if operand is not None:
             raise _array_equality_error("is_equal_to", operand)
 
         if self._is_dict_like(self.val, check_values=False) and self._is_dict_like(other, check_values=False):
-            if self._dict_not_equal(self.val, other, ignore=ignore, include=include):
-                self._dict_err(self.val, other, ignore=ignore, include=include)
+            if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
+                self._dict_err(self.val, other, ignore=ignore, include=include, config=config)
         elif ignore or include:
             val_is_namedtuple = is_namedtuple(self.val)
             other_is_namedtuple = is_namedtuple(other)
@@ -174,9 +206,18 @@ class BaseMixin(_MixinBase):
                 and not val_is_namedtuple
                 and not other_is_namedtuple
             ):
-                self._seq_equal_with_filter(self.val, other, ignore=ignore, include=include)
+                self._seq_equal_with_filter(self.val, other, ignore=ignore, include=include, config=config)
             else:
-                self._obj_equal_with_filter(self.val, other, ignore=ignore, include=include)
+                self._obj_equal_with_filter(self.val, other, ignore=ignore, include=include, config=config)
+        elif config is not None:
+            diff = self._build_equality_diff(self.val, other, config=config)
+            if diff.entries:
+                return self.error(
+                    f"Expected <{self.val}> to be equal to <{other}>, but was not.",
+                    actual=self.val,
+                    expected=other,
+                    diff=diff,
+                )
         else:
             if self.val != other:
                 diff = self._build_equality_diff(self.val, other)
@@ -212,9 +253,9 @@ class BaseMixin(_MixinBase):
             actual_dict = self._to_comparable_dict(actual_item)
             expected_dict = self._to_comparable_dict(expected_item)
             if actual_dict is not None and expected_dict is not None:
-                if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include):
-                    self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include)
-            elif actual_item != expected_item:
+                if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
+                    self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
+            elif _node_decision(actual_item, expected_item, config) != "equal":
                 return self.error(
                     f"Expected item at index <{index}> to be equal to <{expected_item}>, but was <{actual_item}>.",
                     actual=actual_item,
@@ -222,12 +263,13 @@ class BaseMixin(_MixinBase):
                 )
 
     @staticmethod
-    def _sequence_diff_entries(actual, expected, prefix, seen) -> list[DiffEntry]:
+    def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
         """Diff two sequences element-by-element, recursing into nested containers.
 
         ``seen`` must already include the ids of ``actual``/``expected`` so a self-referential element
-        is caught.  Shared by the top-level (:meth:`_build_equality_diff`) and nested
-        (:meth:`_sub_diff_entries`) paths so both decompose sequences identically.
+        is caught.  Shared by the top-level (`_build_equality_diff()`) and nested
+        (`_sub_diff_entries()`) paths so both decompose sequences identically.  Elements have no field
+        name, so a ``config`` applies only type comparators and tolerance to them.
         """
         entries: list[DiffEntry] = []
         max_len = max(len(actual), len(expected))
@@ -237,16 +279,20 @@ class BaseMixin(_MixinBase):
                 entries.append(DiffEntry(path=path, actual=None, expected=expected[i]))
             elif i >= len(expected):
                 entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
-            elif actual[i] != expected[i]:
-                sub_entries = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=seen)
-                if sub_entries:
-                    entries.extend(sub_entries)
-                else:
+            else:
+                decision = _node_decision(actual[i], expected[i], config)
+                if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
+                elif decision == "recurse":
+                    sub_entries = BaseMixin._sub_diff_entries(actual[i], expected[i], path, _seen=seen, config=config)
+                    if sub_entries is not None:
+                        entries.extend(sub_entries)
+                    else:
+                        entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
         return entries
 
     @staticmethod
-    def _dataclass_diff_entries(actual, expected, prefix, seen) -> list[DiffEntry]:
+    def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
         """Diff two dataclasses over the sorted union of field names, both directions, recursing.
 
         Reports fields present on only one side, and recurses into nested containers.  ``seen`` must
@@ -265,8 +311,13 @@ class BaseMixin(_MixinBase):
             else:
                 actual_value = getattr(actual, field)
                 expected_value = getattr(expected, field)
-                if actual_value != expected_value:
-                    sub_entries = BaseMixin._sub_diff_entries(actual_value, expected_value, path, _seen=seen)
+                decision = _node_decision(actual_value, expected_value, config, field=field)
+                if decision == "leaf":
+                    entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+                elif decision == "recurse":
+                    sub_entries = BaseMixin._sub_diff_entries(
+                        actual_value, expected_value, path, _seen=seen, config=config
+                    )
                     if sub_entries is not None:
                         entries.extend(sub_entries)
                     else:
@@ -287,11 +338,20 @@ class BaseMixin(_MixinBase):
             )
         _seen = _seen | {pair_key[0], pair_key[1]}
 
-        def _field_entries(actual_value: object, expected_value: object, path: str) -> list[DiffEntry]:
-            sub_entries = BaseMixin._sub_diff_entries(actual_value, expected_value, path, _seen=_seen)
-            if sub_entries is not None:
-                return sub_entries
-            return [DiffEntry(path=path, actual=actual_value, expected=expected_value)]
+        if config is not None:
+            decision = _node_decision(actual, expected, config)
+            if decision == "equal":
+                return DiffResult(kind="scalar", entries=[])
+            if decision == "leaf":
+                return DiffResult(
+                    kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)]
+                )
+
+        def _field_entries(field_actual: object, field_expected: object, field_path: str) -> list[DiffEntry]:
+            nested = BaseMixin._sub_diff_entries(field_actual, field_expected, field_path, _seen=_seen, config=config)
+            if nested is not None:
+                return nested
+            return [DiffEntry(path=field_path, actual=field_actual, expected=field_expected)]
 
         if is_namedtuple(actual) and is_namedtuple(expected):
             entries: list[DiffEntry] = []
@@ -301,8 +361,12 @@ class BaseMixin(_MixinBase):
                 path = f"{_prefix}.{field}"
                 if expected_value is _SENTINEL:
                     entries.append(DiffEntry(path=path, actual=actual_value, expected=None))
-                elif actual_value != expected_value:
-                    entries.extend(_field_entries(actual_value, expected_value, path))
+                else:
+                    decision = _node_decision(actual_value, expected_value, config, field=field)
+                    if decision == "leaf":
+                        entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+                    elif decision == "recurse":
+                        entries.extend(_field_entries(actual_value, expected_value, path))
             entries.extend(
                 DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
                 for field in expected._fields
@@ -329,17 +393,23 @@ class BaseMixin(_MixinBase):
                     entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
                 elif key not in actual_dict:
                     entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
-                elif actual_dict[key] != expected_dict[key]:
-                    sub_entries = BaseMixin._sub_diff_entries(actual_dict[key], expected_dict[key], path, _seen=_seen)
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
+                else:
+                    decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                    if decision == "leaf":
                         entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
+                    elif decision == "recurse":
+                        sub_entries = BaseMixin._sub_diff_entries(
+                            actual_dict[key], expected_dict[key], path, _seen=_seen, config=config
+                        )
+                        if sub_entries is not None:
+                            entries.extend(sub_entries)
+                        else:
+                            entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
             return DiffResult(kind="model", entries=entries)
         if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
             return DiffResult(
                 kind="sequence",
-                entries=BaseMixin._sequence_diff_entries(actual, expected, _prefix, _seen),
+                entries=BaseMixin._sequence_diff_entries(actual, expected, _prefix, _seen, config),
             )
         if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
             entries = []
@@ -367,15 +437,18 @@ class BaseMixin(_MixinBase):
 
     @staticmethod
     def _sub_diff_entries(
-        actual: object, expected: object, prefix: str, *, _seen: set[int] | None = None
+        actual: object, expected: object, prefix: str, *, _seen: set[int] | None = None, config=None
     ) -> list[DiffEntry] | None:
         """Canonical recursive diff for a value, returning path-level entries (or ``None`` for a leaf).
 
-        Recurses into mappings, dataclasses, namedtuples, model-dump objects and sequences; returns
-        ``None`` for anything else so the caller renders a single leaf entry.  This is the single nested
-        engine shared by the top-level paths: :meth:`_build_equality_diff` (lists, dataclasses, ...) and
-        the dict path (:meth:`HelpersMixin._dict_err`), which calls it with an empty ``prefix`` so the
-        top-level dict keys render bare (``b``) and nested keys render dotted (``u.b``).
+        Recurses into mappings, dataclasses, namedtuples, model-dump objects and sequences, returning a
+        (possibly empty) list for those; anything else returns ``None`` so the caller renders a single
+        leaf entry.  The empty-list-vs-``None`` distinction lets a caller tell a recursable value whose
+        children are all ``config``-tolerated (empty list, no entry) from a genuinely differing leaf
+        (``None``, one entry).  This is the single nested engine shared by the top-level paths:
+        `_build_equality_diff()` (lists, dataclasses, ...) and the dict path
+        (`HelpersMixin._dict_err()`), which calls it with an empty ``prefix`` so the top-level dict
+        keys render bare (``b``) and nested keys render dotted (``u.b``).
         """
         if _seen is None:
             _seen = set()
@@ -393,13 +466,19 @@ class BaseMixin(_MixinBase):
                     entries.append(DiffEntry(path=path, actual=actual[key], expected=None))
                 elif key not in actual_keys:
                     entries.append(DiffEntry(path=path, actual=None, expected=expected[key]))
-                elif actual[key] != expected[key]:
-                    sub_entries = BaseMixin._sub_diff_entries(actual[key], expected[key], path, _seen=child_seen)
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
+                else:
+                    decision = _node_decision(actual[key], expected[key], config, field=key)
+                    if decision == "leaf":
                         entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
-            return entries or None
+                    elif decision == "recurse":
+                        sub_entries = BaseMixin._sub_diff_entries(
+                            actual[key], expected[key], path, _seen=child_seen, config=config
+                        )
+                        if sub_entries is not None:
+                            entries.extend(sub_entries)
+                        else:
+                            entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
+            return entries
         if (
             dataclasses.is_dataclass(actual)
             and not isinstance(actual, type)
@@ -416,22 +495,28 @@ class BaseMixin(_MixinBase):
                 expected_value = getattr(expected, field_name, _SENTINEL)
                 if expected_value is _SENTINEL:
                     entries.append(DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None))
-                elif actual_value != expected_value:
-                    sub_entries = BaseMixin._sub_diff_entries(
-                        actual_value, expected_value, f"{prefix}.{field_name}", _seen=child_seen
-                    )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
+                else:
+                    decision = _node_decision(actual_value, expected_value, config, field=field_name)
+                    if decision == "leaf":
                         entries.append(
                             DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
                         )
+                    elif decision == "recurse":
+                        sub_entries = BaseMixin._sub_diff_entries(
+                            actual_value, expected_value, f"{prefix}.{field_name}", _seen=child_seen, config=config
+                        )
+                        if sub_entries is not None:
+                            entries.extend(sub_entries)
+                        else:
+                            entries.append(
+                                DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
+                            )
             for field_name in expected._fields:
                 if not hasattr(actual, field_name):
                     entries.append(
                         DiffEntry(path=f"{prefix}.{field_name}", actual=None, expected=getattr(expected, field_name))
                     )
-            return entries or None
+            return entries
         if is_model_dump_object(actual) and is_model_dump_object(expected):
             child_seen = _seen | {id(actual), id(expected)}
             actual_dict = actual.model_dump()
@@ -443,18 +528,22 @@ class BaseMixin(_MixinBase):
                     entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
                 elif key not in actual_dict:
                     entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
-                elif actual_dict[key] != expected_dict[key]:
-                    sub_entries = BaseMixin._sub_diff_entries(
-                        actual_dict[key], expected_dict[key], path, _seen=child_seen
-                    )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
+                else:
+                    decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                    if decision == "leaf":
                         entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
-            return entries or None
+                    elif decision == "recurse":
+                        sub_entries = BaseMixin._sub_diff_entries(
+                            actual_dict[key], expected_dict[key], path, _seen=child_seen, config=config
+                        )
+                        if sub_entries is not None:
+                            entries.extend(sub_entries)
+                        else:
+                            entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
+            return entries
         if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
             child_seen = _seen | {id(actual), id(expected)}
-            return BaseMixin._sequence_diff_entries(actual, expected, prefix, child_seen) or None
+            return BaseMixin._sequence_diff_entries(actual, expected, prefix, child_seen, config)
         return None
 
     def satisfies(self, matcher) -> Self:

@@ -180,6 +180,36 @@ class User:
 assert_that(User(1, "Alice", "a@x.com")).is_equal_to(User(99, "Alice", "a@x.com"), ignore="id")
 ```
 
+`ignore` and `include` also accept a `re.Pattern` (matched against field names) or a `type` (matched
+against field values):
+
+```python
+import re
+
+assert_that(payload).is_equal_to(expected, ignore=re.compile(r"^_"))  # ignore private-ish keys
+assert_that(payload).is_equal_to(expected, ignore=float)               # ignore all float fields
+```
+
+### Recursive comparison (tolerance / custom comparators)
+
+`is_equal_to()` can compare two concrete nested structures with a numeric tolerance or with custom
+comparators, anywhere in the graph. `tolerance` is an absolute tolerance applied to every real-number
+leaf (`abs(actual - expected) <= tolerance`); `comparators` maps a `type` or a field name to an
+`(actual, expected) -> bool` predicate (a field-name key wins over a type key). Tolerated or
+comparator-equal leaves are reported in neither the message nor the diff.
+
+```python
+# absolute float tolerance, at any depth
+assert_that({"point": {"x": 1.0001, "y": 2.0}}).is_equal_to({"point": {"x": 1.0, "y": 2.0}}, tolerance=0.001)
+
+# comparator by type, or by field name
+assert_that(order).is_equal_to(expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)})
+assert_that(order).is_equal_to(expected, comparators={"created_at": lambda a, e: True})  # ignore a timestamp
+```
+
+Sequence elements have no field name, so a `comparators` field-name key does not apply to them (use a type
+key or `tolerance`); sets compare by standard equality.
+
 ### Dict flattening
 
 Lists of dicts can be flattened on a key with `extracting` (see
