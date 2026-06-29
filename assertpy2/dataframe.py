@@ -56,7 +56,7 @@ class DataFrameMixin(_MixinBase):
                 ``assert_series_equal`` (e.g. ``check_dtype=False``, ``check_exact=False``, ``rtol=1e-3``)
 
         Examples:
-            Usage::
+            Usage:
 
                 import pandas as pd
 
@@ -98,7 +98,7 @@ class DataFrameMixin(_MixinBase):
             expected: the expected array-like
 
         Examples:
-            Usage::
+            Usage:
 
                 import numpy as np
 
@@ -123,7 +123,8 @@ class DataFrameMixin(_MixinBase):
     ) -> Self:
         """Asserts that val is element-wise close to *expected*, via numpy's ``assert_allclose``.
 
-        The float-tolerant counterpart to :meth:`is_array_equal`, for comparing computed arrays.
+        The float-tolerant counterpart to [`is_array_equal()`][assertpy2.dataframe.DataFrameMixin.is_array_equal],
+        for comparing computed arrays.
 
         Args:
             expected: the expected array-like
@@ -132,7 +133,7 @@ class DataFrameMixin(_MixinBase):
             equal_nan: whether ``NaN`` in the same position compares equal
 
         Examples:
-            Usage::
+            Usage:
 
                 import numpy as np
 

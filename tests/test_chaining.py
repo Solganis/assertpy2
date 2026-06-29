@@ -17,6 +17,6 @@ class TestChaining:
         assert_that([1, 2, 3]).contains_in_order(1, 3).is_not_empty()
 
     def test_datetime_chain(self):
-        d1 = datetime.datetime(2020, 1, 1)
-        d2 = datetime.datetime(2020, 12, 31)
-        assert_that(d1).is_before_or_equal_to(d2).is_after_or_equal_to(d1)
+        earlier = datetime.datetime(2020, 1, 1)
+        later = datetime.datetime(2020, 12, 31)
+        assert_that(earlier).is_before_or_equal_to(later).is_after_or_equal_to(earlier)

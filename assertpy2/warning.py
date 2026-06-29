@@ -15,9 +15,11 @@ __tracebackhide__ = True
 class WarningMixin(_MixinBase):
     """Expected warning mixin (a ``pytest.warns``-style assertion).
 
-    The front verbs (:meth:`warns` / :meth:`does_not_warn`) only record the expected warning
+    The front verbs ([`warns()`][assertpy2.warning.WarningMixin.warns] /
+    [`does_not_warn()`][assertpy2.warning.WarningMixin.does_not_warn]) only record the expected
+    warning
     category; the actual invocation happens in
-    :meth:`~assertpy2.exception.ExceptionMixin.when_called_with`, which dispatches to the private
+    [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with], which dispatches to the private
     handlers below.
     """
 
@@ -25,25 +27,25 @@ class WarningMixin(_MixinBase):
         """Asserts that val is callable and sets the expected warning category.
 
         Just records the expectation, but never calls val.  You must chain to
-        :meth:`~assertpy2.exception.ExceptionMixin.when_called_with` to invoke ``val()`` inside a
+        [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()`` inside a
         warning-capturing context.  On success, the matched warning's message becomes the new val so
         you can chain further assertions on it.
 
-        Subclasses of the given category match, and the category defaults to the base :class:`Warning`
+        Subclasses of the given category match, and the category defaults to the base `Warning`
         (which matches any warning).
 
         Args:
-            warning: the expected warning category (a :class:`Warning` subclass)
+            warning: the expected warning category (a `Warning` subclass)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
                 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").matches("since 2.6")
 
         Returns:
             AssertionBuilder: returns a new instance (now with the expected warning) to chain to
-                :meth:`~assertpy2.exception.ExceptionMixin.when_called_with`
+                [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with]
 
         Note:
             Capturing warnings mutates process-global state, so this is **not** thread-safe across OS
@@ -56,21 +58,21 @@ class WarningMixin(_MixinBase):
         """Asserts that val is callable and sets the not-expected warning category.
 
         Just records the expectation, but never calls val.  You must chain to
-        :meth:`~assertpy2.exception.ExceptionMixin.when_called_with` to invoke ``val()`` and assert
+        [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] to invoke ``val()`` and assert
         that no warning of the given category is emitted.  The category defaults to the base
-        :class:`Warning` (which forbids any warning).
+        `Warning` (which forbids any warning).
 
         Args:
-            warning: the warning category that should **not** be emitted (a :class:`Warning` subclass)
+            warning: the warning category that should **not** be emitted (a `Warning` subclass)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(safe_func).does_not_warn(DeprecationWarning).when_called_with("foo")
 
         Returns:
             AssertionBuilder: returns a new instance to chain to
-                :meth:`~assertpy2.exception.ExceptionMixin.when_called_with`
+                [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with]
         """
         new_builder = self._warning_builder(warning)
         new_builder._not_expected = True
@@ -90,13 +92,13 @@ class WarningMixin(_MixinBase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
-        matched = [w for w in caught if issubclass(w.category, expected)]
+        matched = [warning for warning in caught if issubclass(warning.category, expected)]
         if matched:
             captured = self.builder(str(matched[0].message), self.description, self.kind, logger=self.logger)
             captured._return_value = result
             return captured
         if caught:
-            seen = ", ".join(sorted({w.category.__name__ for w in caught}))
+            seen = ", ".join(sorted({warning.category.__name__ for warning in caught}))
             self.error(
                 f"Expected <{self.val.__name__}> to warn <{expected.__name__}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
@@ -113,9 +115,9 @@ class WarningMixin(_MixinBase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
-        matched = [w for w in caught if issubclass(w.category, expected)]
+        matched = [warning for warning in caught if issubclass(warning.category, expected)]
         if matched:
-            seen = ", ".join(sorted({w.category.__name__ for w in matched}))
+            seen = ", ".join(sorted({warning.category.__name__ for warning in matched}))
             self.error(
                 f"Expected <{self.val.__name__}> to not warn <{expected.__name__}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"

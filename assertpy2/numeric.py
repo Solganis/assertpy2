@@ -23,9 +23,9 @@ def _fmt_operand(value: object) -> object:
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
     """Format a timedelta tolerance as ``h:mm:ss``."""
     tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
-    h, rem = divmod(tolerance_seconds, 3600)
-    m, s = divmod(rem, 60)
-    return f"{int(h)}:{int(m):02d}:{int(s):02d}"
+    hours, remainder = divmod(tolerance_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
 
 
 class NumericMixin(_MixinBase):
@@ -67,7 +67,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is zero.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_zero()
 
@@ -84,7 +84,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is *not* zero.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_not_zero()
                 assert_that(123.4).is_not_zero()
@@ -102,7 +102,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is real number and is ``NaN`` (not a number).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(float('nan')).is_nan()
                 assert_that(float('inf') * 0).is_nan()
@@ -123,7 +123,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is real number and is *not* ``NaN`` (not a number).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_not_nan()
                 assert_that(123.4).is_not_nan()
@@ -145,7 +145,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is real number and is ``Inf`` (infinity).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(float('inf')).is_inf()
                 assert_that(float('inf') * 1).is_inf()
@@ -166,7 +166,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is real number and is *not* ``Inf`` (infinity).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_not_inf()
                 assert_that(123.4).is_not_inf()
@@ -184,19 +184,19 @@ class NumericMixin(_MixinBase):
             return self.error("Expected not <Inf>, but was.")
         return self
 
-    def is_greater_than(self, other) -> Self:
+    def is_greater_than(self, other: object) -> Self:
         """Asserts that val is numeric and is greater than other.
 
         Args:
             other: the other date, expected to be less than val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_greater_than(0)
                 assert_that(123.4).is_greater_than(111.1)
 
-            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_after`::
+            For dates, behavior is identical to [`is_after()`][assertpy2.date.DateMixin.is_after]:
 
                 import datetime
 
@@ -218,20 +218,20 @@ class NumericMixin(_MixinBase):
             )
         return self
 
-    def is_greater_than_or_equal_to(self, other) -> Self:
+    def is_greater_than_or_equal_to(self, other: object) -> Self:
         """Asserts that val is numeric and is greater than or equal to other.
 
         Args:
             other: the other date, expected to be less than or equal to val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_greater_than_or_equal_to(0)
                 assert_that(1).is_greater_than_or_equal_to(1)
                 assert_that(123.4).is_greater_than_or_equal_to(111.1)
 
-            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_after` *except* when equal::
+            For dates, behavior is identical to [`is_after()`][assertpy2.date.DateMixin.is_after] *except* when equal:
 
                 import datetime
 
@@ -255,19 +255,19 @@ class NumericMixin(_MixinBase):
             )
         return self
 
-    def is_less_than(self, other) -> Self:
+    def is_less_than(self, other: object) -> Self:
         """Asserts that val is numeric and is less than other.
 
         Args:
             other: the other date, expected to be greater than val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_less_than(1)
                 assert_that(123.4).is_less_than(555.5)
 
-            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_before`::
+            For dates, behavior is identical to [`is_before()`][assertpy2.date.DateMixin.is_before]:
 
                 import datetime
 
@@ -289,20 +289,21 @@ class NumericMixin(_MixinBase):
             )
         return self
 
-    def is_less_than_or_equal_to(self, other) -> Self:
+    def is_less_than_or_equal_to(self, other: object) -> Self:
         """Asserts that val is numeric and is less than or equal to other.
 
         Args:
             other: the other date, expected to be greater than or equal to val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_less_than_or_equal_to(0)
                 assert_that(1).is_less_than_or_equal_to(1)
                 assert_that(123.4).is_less_than_or_equal_to(100.0)
 
-            For dates, behavior is identical to :meth:`~assertpy2.date.DateMixin.is_before` *except* when equal::
+            For dates, behavior is identical to [`is_before()`][assertpy2.date.DateMixin.is_before]
+            *except* when equal:
 
                 import datetime
 
@@ -329,7 +330,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is greater than zero.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_positive()
                 assert_that(123.4).is_positive()
@@ -346,7 +347,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is less than zero.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(-1).is_negative()
                 assert_that(-123.4).is_negative()
@@ -359,7 +360,7 @@ class NumericMixin(_MixinBase):
         """
         return self.is_less_than(0)
 
-    def is_between(self, low, high) -> Self:
+    def is_between(self, low: object, high: object) -> Self:
         """Asserts that val is numeric and is between low and high.
 
         Args:
@@ -367,12 +368,12 @@ class NumericMixin(_MixinBase):
             high: the high value
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_between(0, 2)
                 assert_that(123.4).is_between(111.1, 222.2)
 
-            For dates, works as expected::
+            For dates, works as expected:
 
                 import datetime
 
@@ -398,7 +399,7 @@ class NumericMixin(_MixinBase):
             )
         return self
 
-    def is_not_between(self, low, high) -> Self:
+    def is_not_between(self, low: object, high: object) -> Self:
         """Asserts that val is numeric and is *not* between low and high.
 
         Args:
@@ -406,7 +407,7 @@ class NumericMixin(_MixinBase):
             high: the high value
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_not_between(2, 3)
                 assert_that(1.1).is_not_between(2.2, 3.3)
@@ -435,7 +436,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is an integer and is even.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_even()
                 assert_that(2).is_even()
@@ -456,7 +457,7 @@ class NumericMixin(_MixinBase):
         """Asserts that val is an integer and is odd.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_odd()
                 assert_that(3).is_odd()
@@ -473,14 +474,14 @@ class NumericMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be odd, but was not.")
         return self
 
-    def is_divisible_by(self, divisor) -> Self:
+    def is_divisible_by(self, divisor: int) -> Self:
         """Asserts that val is an integer and is divisible by divisor.
 
         Args:
             divisor: the divisor to check against (must be a non-zero integer)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(10).is_divisible_by(5)
                 assert_that(12).is_divisible_by(3)
@@ -504,16 +505,16 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is close to other within tolerance.
 
         Args:
-            other: the other value, expected to be close to val within tolerance
-            tolerance: the tolerance
+            other (object): the other value, expected to be close to val within tolerance
+            tolerance (object): the tolerance
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(123).is_close_to(100, 25)
                 assert_that(123.4).is_close_to(123, 0.5)
 
-            For dates, works as expected::
+            For dates, works as expected:
 
                 import datetime
 
@@ -551,11 +552,11 @@ class NumericMixin(_MixinBase):
         """Asserts that val is numeric and is *not* close to other within tolerance.
 
         Args:
-            other: the other value
-            tolerance: the tolerance
+            other (object): the other value
+            tolerance (object): the tolerance
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(123).is_not_close_to(100, 22)
                 assert_that(123.4).is_not_close_to(123, 0.1)

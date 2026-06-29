@@ -12,7 +12,7 @@ class DynamicMixin(_MixinBase):
     """Dynamic assertions mixin.
 
     When testing attributes of an object (or the contents of a dict), the
-    :meth:`~assertpy2.base.BaseMixin.is_equal_to` assertion can be a bit verbose::
+    [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to] assertion can be a bit verbose:
 
         fred = Person('Fred', 'Smith')
 
@@ -23,13 +23,13 @@ class DynamicMixin(_MixinBase):
     Instead, use dynamic assertions in the form of ``has_<name>()`` where ``<name>`` is the name of
     any attribute, property, or zero-argument method on the given object. Dynamic equality
     assertions test if actual is equal to expected using the ``==`` operator. Using dynamic
-    assertions, we can rewrite the above example as::
+    assertions, we can rewrite the above example as:
 
         assert_that(fred).has_first_name('Fred')
         assert_that(fred).has_name('Fred Smith')
         assert_that(fred).has_say_hello('Hello, Fred!')
 
-    Similarly, dynamic assertions also work on any *dict-like* object::
+    Similarly, dynamic assertions also work on any *dict-like* object:
 
         fred = {
             'first_name': 'Fred',

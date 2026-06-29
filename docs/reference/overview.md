@@ -1,0 +1,21 @@
+# Overview
+
+This reference is generated from the source docstrings and is grouped by the **mixin that implements
+each assertion**, mirroring the code layout.
+
+The assertions actually available on a value are the **union of the mixins for its type**. For example,
+on a string (``assert_that("x")``) you can call everything on [String assertions](strings.md),
+[Containment assertions](containment.md), [Core & objects](core.md), and
+[File & path assertions](files.md). For a task-oriented view organized by value type instead, see the
+[Type assertions guide](../assertions.md).
+
+- [Entry points](entry-points.md) - the top-level functions such as ``assert_that``, ``assert_warn``,
+  ``soft_assertions``, and ``fail``.
+- [Matchers](matchers.md) - the ``match.*`` namespace of composable matchers.
+- [Core & objects](core.md) - assertions available on every value (equality, identity, ``satisfies``, ...).
+- Type-specific pages - strings, numbers, collections, dicts, dates, files, bytes.
+- [Dynamic assertions](dynamic.md) - the ``has_<name>()`` family.
+- [Structured failures](errors.md) and [Async & eventual assertions](async.md).
+
+Signatures here are the runtime implementations. How the static return type narrows per value type (the
+typed overloads that drive editor autocomplete) is explained in [Type safety](../type-safety.md).

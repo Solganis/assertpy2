@@ -13,10 +13,10 @@ __tracebackhide__ = True
 class DictMixin(_MixinBase):
     """Dict assertions mixin."""
 
-    def contains_key(self, *keys) -> Self:
+    def contains_key(self, *keys: object) -> Self:
         """Asserts the val is a dict and contains the given key or keys.
 
-        Alias for :meth:`~assertpy2.contains.ContainsMixin.contains`.
+        Alias for [`contains()`][assertpy2.contains.ContainsMixin.contains].
 
         Checks if the dict contains the given key or keys using ``in`` operator.
 
@@ -24,7 +24,7 @@ class DictMixin(_MixinBase):
             *keys: the key or keys expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that({'a': 1, 'b': 2}).contains_key('a')
                 assert_that({'a': 1, 'b': 2}).contains_key('a', 'b')
@@ -38,10 +38,10 @@ class DictMixin(_MixinBase):
         self._require_dict_like(self.val, check_values=False, check_getitem=False)
         return self.contains(*keys)
 
-    def does_not_contain_key(self, *keys) -> Self:
+    def does_not_contain_key(self, *keys: object) -> Self:
         """Asserts the val is a dict and does not contain the given key or keys.
 
-        Alias for :meth:`~assertpy2.contains.ContainsMixin.does_not_contain`.
+        Alias for [`does_not_contain()`][assertpy2.contains.ContainsMixin.does_not_contain].
 
         Checks if the dict excludes the given key or keys using ``in`` operator.
 
@@ -49,7 +49,7 @@ class DictMixin(_MixinBase):
             *keys: the key or keys expected to be excluded
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that({'a': 1, 'b': 2}).does_not_contain_key('x')
                 assert_that({'a': 1, 'b': 2}).does_not_contain_key('x', 'y')
@@ -63,7 +63,7 @@ class DictMixin(_MixinBase):
         self._require_dict_like(self.val, check_values=False, check_getitem=False)
         return self.does_not_contain(*keys)
 
-    def contains_value(self, *values) -> Self:
+    def contains_value(self, *values: object) -> Self:
         """Asserts that val is a dict and contains the given value or values.
 
         Checks if the dict contains the given value or values in *any* key.
@@ -72,7 +72,7 @@ class DictMixin(_MixinBase):
             *values: the value or values expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that({'a': 1, 'b': 2}).contains_value(1)
                 assert_that({'a': 1, 'b': 2}).contains_value(1, 2)
@@ -94,7 +94,7 @@ class DictMixin(_MixinBase):
             )
         return self
 
-    def does_not_contain_value(self, *values) -> Self:
+    def does_not_contain_value(self, *values: object) -> Self:
         """Asserts that val is a dict and does not contain the given value or values.
 
         Checks if the dict excludes the given value or values across *all* keys.
@@ -103,7 +103,7 @@ class DictMixin(_MixinBase):
             *values: the value or values expected to be excluded
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that({'a': 1, 'b': 2}).does_not_contain_value(3)
                 assert_that({'a': 1, 'b': 2}).does_not_contain_value(3, 4)
@@ -132,11 +132,11 @@ class DictMixin(_MixinBase):
         Checks if the dict contains the given key-value pair or pairs.
 
         Args:
-            *args: the entry or entries expected to be contained (as ``{k: v}`` args)
-            **kwargs: the entry or entries expected to be contained (as ``k=v`` kwargs)
+            *args (object): the entry or entries expected to be contained (as ``{k: v}`` args)
+            **kwargs (object): the entry or entries expected to be contained (as ``k=v`` kwargs)
 
         Examples:
-            Usage::
+            Usage:
 
                 # using args
                 assert_that({'a': 1, 'b': 2, 'c': 3}).contains_entry({'a': 1})
@@ -186,11 +186,11 @@ class DictMixin(_MixinBase):
         Checks if the dict excludes the given key-value pair or pairs.
 
         Args:
-            *args: the entry or entries expected to be excluded (as ``{k: v}`` args)
-            **kwargs: the entry or entries expected to be excluded (as ``k=v`` kwargs)
+            *args (object): the entry or entries expected to be excluded (as ``{k: v}`` args)
+            **kwargs (object): the entry or entries expected to be excluded (as ``k=v`` kwargs)
 
         Examples:
-            Usage::
+            Usage:
 
                 # using args
                 assert_that({'a': 1, 'b': 2, 'c': 3}).does_not_contain_entry({'a': 2})

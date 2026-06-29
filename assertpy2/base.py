@@ -51,7 +51,7 @@ def _array_equality_error(method: str, operand: object) -> TypeError:
 class BaseMixin(_MixinBase):
     """Base mixin."""
 
-    def described_as(self, description) -> Self:
+    def described_as(self, description: str) -> Self:
         """Describes the assertion.  On failure, the description is included in the error message.
 
         This is not an assertion itself.  But if the any of the following chained assertions fail,
@@ -61,7 +61,7 @@ class BaseMixin(_MixinBase):
             description: the error message description
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).described_as('error msg desc').is_equal_to(2)  # fails
                 # [error msg desc] Expected <1> to be equal to <2>, but was not.
@@ -72,7 +72,7 @@ class BaseMixin(_MixinBase):
         self.description = str(description)
         return self
 
-    def is_equal_to(self, other, **kwargs) -> Self:
+    def is_equal_to(self, other: object, **kwargs: object) -> Self:
         """Asserts that val is equal to other.
 
         Checks actual is equal to expected using the ``==`` operator. When val is *dict-like*
@@ -107,7 +107,7 @@ class BaseMixin(_MixinBase):
                 assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1, 'b': 2})
                 assert_that({'a', 'b'}).is_equal_to({'a', 'b'})
 
-            When the val is *dict-like*, keys can optionally be *ignored* when checking equality::
+            When the val is *dict-like*, keys can optionally be *ignored* when checking equality:
 
                 # ignore a single key
                 assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1}, ignore='b')
@@ -120,7 +120,7 @@ class BaseMixin(_MixinBase):
                     {'a': {'d': 4}}, ignore=[('a', 'b'), ('a', 'c')]
                 )
 
-            When the val is *dict-like*, only certain keys can be *included* when checking equality::
+            When the val is *dict-like*, only certain keys can be *included* when checking equality:
 
                 # include a single key
                 assert_that({'a': 1, 'b': 2}).is_equal_to({'a': 1}, include='a')
@@ -128,7 +128,7 @@ class BaseMixin(_MixinBase):
                 # include multiple keys
                 assert_that({'a': 1, 'b': 2, 'c': 3}).is_equal_to({'a': 1, 'b': 2}, include=['a', 'b'])
 
-            Works with dataclasses, namedtuples, attrs, and Pydantic models::
+            Works with dataclasses, namedtuples, attrs, and Pydantic models:
 
                 @dataclass
                 class User:
@@ -229,7 +229,7 @@ class BaseMixin(_MixinBase):
                 )
         return self
 
-    def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None):
+    def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two objects by converting to dicts and applying ignore/include filters."""
         actual_dict = self._to_comparable_dict(actual)
         expected_dict = self._to_comparable_dict(expected)
@@ -238,10 +238,10 @@ class BaseMixin(_MixinBase):
                 "ignore/include requires dict-like objects or objects with introspectable fields"
                 " (dataclass, namedtuple, attrs, Pydantic model, or object with __dict__)"
             )
-        if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include):
-            self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include)
+        if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
+            self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
 
-    def _seq_equal_with_filter(self, actual, expected, *, ignore=None, include=None):
+    def _seq_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two sequences pairwise, converting elements to dicts for ignore/include."""
         if len(actual) != len(expected):
             return self.error(
@@ -326,7 +326,7 @@ class BaseMixin(_MixinBase):
 
     @staticmethod
     def _build_equality_diff(
-        actual: object, expected: object, *, _prefix: str = "", _seen: set[int] | None = None
+        actual: object, expected: object, *, _prefix: str = "", _seen: set[int] | None = None, config=None
     ) -> DiffResult:
         if _seen is None:
             _seen = set()
@@ -381,7 +381,7 @@ class BaseMixin(_MixinBase):
         ):
             return DiffResult(
                 kind="dataclass",
-                entries=BaseMixin._dataclass_diff_entries(actual, expected, _prefix, _seen),
+                entries=BaseMixin._dataclass_diff_entries(actual, expected, _prefix, _seen, config),
             )
         if is_model_dump_object(actual) and is_model_dump_object(expected):
             actual_dict = actual.model_dump()
@@ -486,7 +486,7 @@ class BaseMixin(_MixinBase):
             and not isinstance(expected, type)
         ):
             child_seen = _seen | {id(actual), id(expected)}
-            return BaseMixin._dataclass_diff_entries(actual, expected, prefix, child_seen) or None
+            return BaseMixin._dataclass_diff_entries(actual, expected, prefix, child_seen, config)
         if is_namedtuple(actual) and is_namedtuple(expected):
             child_seen = _seen | {id(actual), id(expected)}
             entries = []
@@ -694,22 +694,22 @@ class BaseMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def each(self, matcher) -> Self:
+    def each(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that every item in val satisfies the given matcher.
 
         Args:
-            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+            matcher: a `Matcher` instance, or a callable that takes
                 a value and returns a bool
 
         Examples:
-            Usage with matchers::
+            Usage with matchers:
 
                 from assertpy2 import match
 
                 assert_that([1, 2, 3]).each(match.is_positive())
                 assert_that([10, 20, 30]).each(match.between(1, 100))
 
-            Usage with extracting::
+            Usage with extracting:
 
                 assert_that(users).extracting('age').each(match.between(18, 120))
 
@@ -749,14 +749,14 @@ class BaseMixin(_MixinBase):
 
         ``val`` may be a dict or a pydantic-style model (anything exposing ``model_dump()``), which is
         normalized to its dict before matching.  Each key in ``spec`` maps to either a
-        :class:`~assertpy2.matchers.Matcher`, a raw value (checked via ``==``), or a nested ``dict``
+        `Matcher`, a raw value (checked via ``==``), or a nested ``dict``
         for recursive matching.  Extra keys in val that are absent from the spec are allowed.
 
         Args:
             spec: a dict where values can be Matcher instances, raw values, or nested dicts
 
         Examples:
-            Usage::
+            Usage:
 
                 from assertpy2 import assert_that, match
 
@@ -796,7 +796,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is callable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(lambda: None).is_callable()
                 assert_that(print).is_callable()
@@ -815,7 +815,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is not callable.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(42).is_not_callable()
                 assert_that('foo').is_not_callable()
@@ -830,21 +830,21 @@ class BaseMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to not be callable, but was.")
         return self
 
-    def any_satisfy(self, matcher) -> Self:
+    def any_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that at least one item in val satisfies the given matcher.
 
         Args:
-            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+            matcher: a `Matcher` instance, or a callable that takes
                 a value and returns a bool
 
         Examples:
-            Usage with matchers::
+            Usage with matchers:
 
                 from assertpy2 import match
 
                 assert_that([1, -2, 3]).any_satisfy(match.is_negative())
 
-            Usage with callables::
+            Usage with callables:
 
                 assert_that([1, 2, 3]).any_satisfy(lambda x: x > 2)
 
@@ -866,17 +866,17 @@ class BaseMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def all_satisfy(self, matcher) -> Self:
+    def all_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that all items in val satisfy the given matcher.
 
-        Semantic alias for :meth:`each`.
+        Semantic alias for [`each()`][assertpy2.base.BaseMixin.each].
 
         Args:
-            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+            matcher: a `Matcher` instance, or a callable that takes
                 a value and returns a bool
 
         Examples:
-            Usage with matchers::
+            Usage with matchers:
 
                 from assertpy2 import match
 
@@ -890,21 +890,21 @@ class BaseMixin(_MixinBase):
         """
         return self.each(matcher)
 
-    def none_satisfy(self, matcher) -> Self:
+    def none_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that no item in val satisfies the given matcher.
 
         Args:
-            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+            matcher: a `Matcher` instance, or a callable that takes
                 a value and returns a bool
 
         Examples:
-            Usage with matchers::
+            Usage with matchers:
 
                 from assertpy2 import match
 
                 assert_that([1, 2, 3]).none_satisfy(match.is_negative())
 
-            Usage with callables::
+            Usage with callables:
 
                 assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
 
@@ -1047,7 +1047,7 @@ class BaseMixin(_MixinBase):
             other: the expected value
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1 + 2).is_not_equal_to(4)
                 assert_that('foo').is_not_equal_to('bar')
@@ -1074,7 +1074,7 @@ class BaseMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be not equal to <{other}>, but was.")
         return self
 
-    def is_same_as(self, other) -> Self:
+    def is_same_as(self, other: object) -> Self:
         """Asserts that val is identical to other.
 
         Checks actual is identical to expected using the ``is`` operator.
@@ -1083,24 +1083,24 @@ class BaseMixin(_MixinBase):
             other: the expected value
 
         Examples:
-            Basic types are identical::
+            Basic types are identical:
 
                 assert_that(1).is_same_as(1)
                 assert_that('foo').is_same_as('foo')
                 assert_that(123.4).is_same_as(123.4)
 
-            As are immutables like ``tuple``::
+            As are immutables like ``tuple``:
 
                 assert_that((1, 2, 3)).is_same_as((1, 2, 3))
 
-            But mutable collections like ``list``, ``dict``, and ``set`` are not::
+            But mutable collections like ``list``, ``dict``, and ``set`` are not:
 
                 # these all fail...
                 assert_that(['a', 'b']).is_same_as(['a', 'b'])  # fails
                 assert_that({'a': 1, 'b': 2}).is_same_as({'a': 1, 'b': 2})  # fails
                 assert_that({'a', 'b'}).is_same_as({'a', 'b'})  # fails
 
-            Unless they are the same object::
+            Unless they are the same object:
 
                 x = {'a': 1, 'b': 2}
                 y = x
@@ -1116,7 +1116,7 @@ class BaseMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be identical to <{other}>, but was not.")
         return self
 
-    def is_not_same_as(self, other) -> Self:
+    def is_not_same_as(self, other: object) -> Self:
         """Asserts that val is not identical to other.
 
         Checks actual is not identical to expected using the ``is`` operator.
@@ -1125,7 +1125,7 @@ class BaseMixin(_MixinBase):
             other: the expected value
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_not_same_as(2)
                 assert_that('foo').is_not_same_as('bar')
@@ -1151,7 +1151,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is true.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(True).is_true()
                 assert_that(1).is_true()
@@ -1176,7 +1176,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is false.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(False).is_false()
                 assert_that(0).is_false()
@@ -1201,7 +1201,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is none.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(None).is_none()
                 assert_that(print('hello world')).is_none()
@@ -1220,7 +1220,7 @@ class BaseMixin(_MixinBase):
         """Asserts that val is not none.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(0).is_not_none()
                 assert_that('foo').is_not_none()
@@ -1249,7 +1249,7 @@ class BaseMixin(_MixinBase):
             some_type (type): the expected type
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_type_of(int)
                 assert_that('foo').is_type_of(str)
@@ -1273,14 +1273,14 @@ class BaseMixin(_MixinBase):
             return self.error(f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.")
         return self
 
-    def is_instance_of(self, some_class) -> Self:
+    def is_instance_of(self, some_class: type) -> Self:
         """Asserts that val is an instance of the given class.
 
         Args:
             some_class: the expected class
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that(1).is_instance_of(int)
                 assert_that('foo').is_instance_of(str)
@@ -1291,7 +1291,7 @@ class BaseMixin(_MixinBase):
                 assert_that({'a', 'b'}).is_instance_of(set)
                 assert_that(True).is_instance_of(bool)
 
-            With a user-defined class::
+            With a user-defined class:
 
                 class Foo: pass
                 f = Foo()
@@ -1323,7 +1323,7 @@ class BaseMixin(_MixinBase):
             length (int): the expected length
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_length(3)
                 assert_that(['a', 'b']).is_length(2)

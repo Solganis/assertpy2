@@ -16,7 +16,7 @@ __tracebackhide__ = True
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
 
-    def contains(self, *items) -> Self:
+    def contains(self, *items: object) -> Self:
         """Asserts that val contains the given item or items.
 
         Checks if the collection contains the given item or items using ``in`` operator.
@@ -25,7 +25,7 @@ class ContainsMixin(_MixinBase):
             *items: the item or items expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').contains('f')
                 assert_that('foo').contains('f', 'oo')
@@ -42,11 +42,12 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val does **not** contain the item or items
 
         Tip:
-            Use the :meth:`~assertpy2.dict.DictMixin.contains_key` alias when working with
+            Use the [`contains_key()`][assertpy2.dict.DictMixin.contains_key] alias when working with
             *dict-like* objects to be self-documenting.
 
         See Also:
-            :meth:`~assertpy2.string.StringMixin.contains_ignoring_case` - for case-insensitive string contains
+            [`contains_ignoring_case()`][assertpy2.string.StringMixin.contains_ignoring_case] -
+                for case-insensitive string contains
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
@@ -100,7 +101,7 @@ class ContainsMixin(_MixinBase):
                     )
         return self
 
-    def does_not_contain(self, *items) -> Self:
+    def does_not_contain(self, *items: object) -> Self:
         """Asserts that val does not contain the given item or items.
 
         Checks if the collection excludes the given item or items using ``in`` operator.
@@ -109,7 +110,7 @@ class ContainsMixin(_MixinBase):
             *items: the item or items expected to be excluded
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').does_not_contain('x')
                 assert_that(['a', 'b']).does_not_contain('x', 'y')
@@ -125,7 +126,7 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val **does** contain the item or items
 
         Tip:
-            Use the :meth:`~assertpy2.dict.DictMixin.does_not_contain_key` alias when working with
+            Use the [`does_not_contain_key()`][assertpy2.dict.DictMixin.does_not_contain_key] alias when working with
             *dict-like* objects to be self-documenting.
         """
         if len(items) == 0:
@@ -142,7 +143,7 @@ class ContainsMixin(_MixinBase):
                 )
         return self
 
-    def contains_only(self, *items) -> Self:
+    def contains_only(self, *items: object) -> Self:
         """Asserts that val contains *only* the given item or items.
 
         Checks if the collection contains only the given item or items using ``in`` operator.
@@ -151,7 +152,7 @@ class ContainsMixin(_MixinBase):
             *items: the *only* item or items expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').contains_only('f', 'o')
                 assert_that(['a', 'a', 'b']).contains_only('a', 'b')
@@ -183,7 +184,7 @@ class ContainsMixin(_MixinBase):
                 )
         return self
 
-    def contains_sequence(self, *items) -> Self:
+    def contains_sequence(self, *items: object) -> Self:
         """Asserts that val contains the given ordered sequence of items.
 
         Checks if the collection contains the given sequence of items using ``in`` operator.
@@ -192,7 +193,7 @@ class ContainsMixin(_MixinBase):
             *items: the sequence of items expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').contains_sequence('f', 'o')
                 assert_that('foo').contains_sequence('o', 'o')
@@ -234,7 +235,7 @@ class ContainsMixin(_MixinBase):
         """Asserts that val is iterable and *does* contain duplicates.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').contains_duplicates()
                 assert_that(['a', 'a', 'b']).contains_duplicates()
@@ -257,7 +258,7 @@ class ContainsMixin(_MixinBase):
         """Asserts that val is iterable and *does not* contain any duplicates.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('fox').does_not_contain_duplicates()
                 assert_that(['a', 'b', 'c']).does_not_contain_duplicates()
@@ -280,7 +281,7 @@ class ContainsMixin(_MixinBase):
         """Asserts that val is empty.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('').is_empty()
                 assert_that([]).is_empty()
@@ -305,7 +306,7 @@ class ContainsMixin(_MixinBase):
         """Asserts that val is *not* empty.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_not_empty()
                 assert_that(['a', 'b']).is_not_empty()
@@ -326,17 +327,18 @@ class ContainsMixin(_MixinBase):
                 return self.error("Expected not empty, but was empty.")
         return self
 
-    def contains_exactly(self, *items) -> Self:
+    def contains_exactly(self, *items: object) -> Self:
         """Asserts that val contains exactly the given items in the given order.
 
-        Unlike :meth:`contains_only` (which ignores order) and :meth:`contains_sequence`
+        Unlike [`contains_only()`][assertpy2.contains.ContainsMixin.contains_only] (which ignores
+        order) and [`contains_sequence()`][assertpy2.contains.ContainsMixin.contains_sequence]
         (which allows extra items), this method requires exact count, items, and order.
 
         Args:
             *items: the items expected, in exact order
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([1, 2, 3]).contains_exactly(1, 2, 3)
                 assert_that(['a', 'b']).contains_exactly('a', 'b')
@@ -371,17 +373,18 @@ class ContainsMixin(_MixinBase):
             )
         return self
 
-    def contains_in_order(self, *items) -> Self:
+    def contains_in_order(self, *items: object) -> Self:
         """Asserts that val contains the given items in the given order (as a subsequence).
 
         Items must appear in the given order but do not need to be contiguous.
-        Unlike :meth:`contains_sequence` which requires contiguous items.
+        Unlike [`contains_sequence()`][assertpy2.contains.ContainsMixin.contains_sequence] which
+        requires contiguous items.
 
         Args:
             *items: the items expected, in order (but not necessarily contiguous)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that([1, 5, 2, 8, 3]).contains_in_order(1, 2, 3)
                 assert_that(['a', 'x', 'b', 'y', 'c']).contains_in_order('a', 'b', 'c')
@@ -481,14 +484,14 @@ class ContainsMixin(_MixinBase):
                     return self
         return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.")
 
-    def is_not_in(self, *items) -> Self:
+    def is_not_in(self, *items: object) -> Self:
         """Asserts that val is not equal to one of the given items.
 
         Args:
             *items: the items expected to exclude val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_not_in('bar', 'baz', 'box')
                 assert_that(1).is_not_in(-1, -2, -3)

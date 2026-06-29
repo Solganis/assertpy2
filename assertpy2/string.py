@@ -31,7 +31,7 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to contain only {description}, but did not.")
         return self
 
-    def is_equal_to_ignoring_case(self, other) -> Self:
+    def is_equal_to_ignoring_case(self, other: str) -> Self:
         """Asserts that val is a string and is case-insensitive equal to other.
 
         Checks actual is equal to expected using the ``==`` operator and ``str.lower()``.
@@ -40,7 +40,7 @@ class StringMixin(_MixinBase):
             other: the expected value
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_equal_to_ignoring_case('FOO')
                 assert_that('FOO').is_equal_to_ignoring_case('foo')
@@ -60,7 +60,7 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.")
         return self
 
-    def contains_ignoring_case(self, *items) -> Self:
+    def contains_ignoring_case(self, *items: str) -> Self:
         """Asserts that val is string and contains the given item or items.
 
         Walks val and checks for item or items using the ``==`` operator and ``str.lower()``.
@@ -69,7 +69,7 @@ class StringMixin(_MixinBase):
             *items: the item or items expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').contains_ignoring_case('F', 'oO')
                 assert_that(['a', 'B']).contains_ignoring_case('A', 'b')
@@ -127,14 +127,14 @@ class StringMixin(_MixinBase):
             raise TypeError("val is not a string or iterable")
         return self
 
-    def starts_with(self, prefix) -> Self:
+    def starts_with(self, prefix: str) -> Self:
         """Asserts that val is string or iterable and starts with prefix.
 
         Args:
             prefix: the prefix
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').starts_with('fo')
                 assert_that(['a', 'b', 'c']).starts_with('a')
@@ -168,14 +168,14 @@ class StringMixin(_MixinBase):
             raise TypeError("val is not a string or iterable")
         return self
 
-    def ends_with(self, suffix) -> Self:
+    def ends_with(self, suffix: str) -> Self:
         """Asserts that val is string or iterable and ends with suffix.
 
         Args:
             suffix: the suffix
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').ends_with('oo')
                 assert_that(['a', 'b', 'c']).ends_with('c')
@@ -214,25 +214,25 @@ class StringMixin(_MixinBase):
             pattern (str): the regular expression pattern, as raw string (aka prefixed with ``r``)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').matches(r'\\w')
                 assert_that('123-456-7890').matches(r'\\d{3}-\\d{3}-\\d{4}')
 
-            Match is partial unless anchored, so these assertion pass::
+            Match is partial unless anchored, so these assertion pass:
 
                 assert_that('foo').matches(r'\\w')
                 assert_that('foo').matches(r'oo')
                 assert_that('foo').matches(r'\\w{2}')
 
             To match the entire string, just use an anchored regex pattern where ``^`` and ``$``
-            match the start and end of line and ``\\A`` and ``\\Z`` match the start and end of string::
+            match the start and end of line and ``\\A`` and ``\\Z`` match the start and end of string:
 
                 assert_that('foo').matches(r'^\\w{3}$')
                 assert_that('foo').matches(r'\\A\\w{3}\\Z')
 
             And regex flags, such as ``re.MULTILINE`` and ``re.DOTALL``, can only be applied via
-            *inline modifiers*, such as ``(?m)`` and ``(?s)``::
+            *inline modifiers*, such as ``(?m)`` and ``(?s)``:
 
                 s = '''bar
                 foo
@@ -252,7 +252,8 @@ class StringMixin(_MixinBase):
 
         Tip:
             Regular expressions are tricky.  Be sure to use raw strings (aka prefixed with ``r``).
-            Also, note that the :meth:`matches` assertion passes for partial matches (as does the
+            Also, note that the [`matches()`][assertpy2.string.StringMixin.matches] assertion passes
+            for partial matches (as does the
             underlying ``re.match`` method).  So, if you need to match the entire string, you must
             include anchors in the regex pattern.
         """
@@ -273,7 +274,7 @@ class StringMixin(_MixinBase):
             pattern (str): the regular expression pattern, as raw string (aka prefixed with ``r``)
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').does_not_match(r'\\d+')
                 assert_that('123').does_not_match(r'\\w+')
@@ -285,7 +286,7 @@ class StringMixin(_MixinBase):
             AssertionError: if val **does** match pattern
 
         See Also:
-            :meth:`matches` - for more about regex patterns
+            [`matches()`][assertpy2.string.StringMixin.matches] - for more about regex patterns
         """
         if not isinstance(self.val, str):
             raise TypeError("val is not a string")
@@ -301,7 +302,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are alphabetic (using ``str.isalpha()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_alpha()
 
@@ -317,7 +318,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are digits (using ``str.isdigit()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('1234567890').is_digit()
 
@@ -333,7 +334,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are lowercase (using ``str.lower()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_lower()
 
@@ -349,7 +350,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are uppercase (using ``str.upper()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('FOO').is_upper()
 
@@ -365,7 +366,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are alphanumeric (using ``str.isalnum()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('abc123').is_alphanumeric()
 
@@ -381,7 +382,7 @@ class StringMixin(_MixinBase):
         """Asserts that val is non-empty string and all characters are whitespace (using ``str.isspace()``).
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('  ').is_whitespace()
                 assert_that('\\t\\n').is_whitespace()
@@ -394,14 +395,14 @@ class StringMixin(_MixinBase):
         """
         return self._assert_string_chars(str.isspace, "whitespace")
 
-    def contains_any_of(self, *items) -> Self:
+    def contains_any_of(self, *items: str) -> Self:
         """Asserts that val is a string and contains at least one of the given items.
 
         Args:
             *items: the items, at least one of which is expected to be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foobar').contains_any_of('foo', 'xxx')
                 assert_that('foobar').contains_any_of('xxx', 'bar')
@@ -423,14 +424,14 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to contain any of {self._fmt_items(items)}, but did not.")
         return self
 
-    def contains_none_of(self, *items) -> Self:
+    def contains_none_of(self, *items: str) -> Self:
         """Asserts that val is a string and contains none of the given items.
 
         Args:
             *items: the items, none of which should be contained
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foobar').contains_none_of('xxx', 'yyy')
 
@@ -462,7 +463,7 @@ class StringMixin(_MixinBase):
         effectively an ``isinstance(val, str)`` check.
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_unicode()
 
@@ -485,11 +486,11 @@ class StringMixin(_MixinBase):
                 (the entire match).
 
         Examples:
-            Usage with positional groups::
+            Usage with positional groups:
 
                 assert_that("status=200 path=/api").extracting_group(r"status=(\\d+)", 1).is_equal_to("200")
 
-            Usage with named groups::
+            Usage with named groups:
 
                 assert_that("2024-01-15 ERROR").extracting_group(
                     r"(?P<level>\\w+)$", "level"
@@ -533,13 +534,13 @@ class StringMixin(_MixinBase):
             pattern: the regular expression pattern with one or more groups
 
         Examples:
-            Positional groups::
+            Positional groups:
 
                 assert_that("2024-01-15 ERROR").matches_with_groups(
                     r"(\\d{4}-\\d{2}-\\d{2}) (\\w+)"
                 ).is_length(2)
 
-            Named groups::
+            Named groups:
 
                 assert_that("status=200").matches_with_groups(
                     r"(?P<key>\\w+)=(?P<val>\\w+)"

@@ -639,9 +639,9 @@ class TestMatcherEqProtocol:
         assert -5 == ~match.is_positive()
 
     def test_hash_unique_instances(self):
-        m1 = match.is_positive()
-        m2 = match.is_positive()
-        matcher_set = {m1, m2}
+        first_matcher = match.is_positive()
+        second_matcher = match.is_positive()
+        matcher_set = {first_matcher, second_matcher}
         assert_that(matcher_set).is_length(2)
 
     def test_hash_same_instance(self):
