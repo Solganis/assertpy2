@@ -11,7 +11,7 @@ authors = [
 maintainers = [
     { name = "Solganis", email = "solganis.dev@gmail.com" },
 ]
-keywords = ["test", "testing", "assert", "assertion", "assertthat", "assert_that", "pytest", "unittest"]
+keywords = ["test", "testing", "assert", "assertion", "assertthat", "assert_that", "pytest", "unittest", "assertpy", "fluent", "matchers", "type-safe"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
