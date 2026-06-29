@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [base, numeric, string, contains, collection, dict, date, matchers, helpers]
+        module: [base, numeric, string, contains, collection, dict, date, matchers, helpers, _compare, dataframe, json_mixin, snapshot, bytes_mixin, dynamic, extracting, warning, exception, async_assertions, file, behave_matchers]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -34,7 +34,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --extra json --group mutation
+        run: uv sync --extra json --extra behave --group mutation
 
       - name: Run mutation testing
         env:
