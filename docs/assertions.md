@@ -96,9 +96,18 @@ assert_that(["a", "b", "c"]).starts_with("a").ends_with("c")
 assert_that([1, -2, 3]).any_satisfy(lambda x: x < 0)
 assert_that([1, 2, 3]).all_satisfy(lambda x: x > 0)
 assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
+
+assert_that([2, 4, 6]).satisfies_exactly(lambda x: x == 2, lambda x: x == 4, lambda x: x == 6)
+assert_that([1, 2, 3]).zip_satisfies([2, 4, 6], lambda actual, other: other == actual * 2)
+assert_that([1, 2, 3]).contains_only_once(1, 3)
+assert_that([1, 2, 3]).has_same_size_as(("a", "b", "c"))
 ```
 
 `any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
+
+`satisfies_exactly` pairs the i-th item with the i-th matcher (and requires equal length), `zip_satisfies`
+checks a two-arg predicate over items zipped with another iterable, `contains_only_once` requires each given
+item to occur exactly once, and `has_same_size_as` compares lengths against another sized object.
 
 Lists of lists can be flattened by index with `extracting` (see [dict flattening](#dict-flattening)):
 

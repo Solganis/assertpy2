@@ -406,14 +406,63 @@ class ContainsMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but did not.")
         return self
 
-    def is_in(self, *items) -> Self:
+    def contains_only_once(self, *items: object) -> Self:
+        """Asserts that val contains each given item exactly once.
+
+        Each given item must appear in val with a count of exactly one: an item absent from val is
+        reported as missing, an item occurring more than once is reported as duplicated.
+
+        Args:
+            *items: the items each expected to occur exactly once
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).contains_only_once(1, 3)
+                assert_that('foo').contains_only_once('f')
+
+                assert_that([1, 2, 2, 3]).contains_only_once(2)  # fails (occurs twice)
+                assert_that([1, 2, 3]).contains_only_once(4)  # fails (missing)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any given item is missing from val or occurs more than once
+            TypeError: if val is not iterable
+            ValueError: if no items are given
+        """
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        try:
+            val_list = list(self.val)
+        except TypeError:
+            raise TypeError("val is not iterable") from None
+        counts = Counter(val_list)
+        missing = [item for item in items if counts[item] == 0]
+        duplicated = [item for item in items if counts[item] > 1]
+        if missing or duplicated:
+            entries = [DiffEntry(path="missing", actual=None, expected=item) for item in missing]
+            entries.extend(DiffEntry(path="duplicated", actual=counts[item], expected=item) for item in duplicated)
+            problems = []
+            if missing:
+                problems.append(f"did not contain {self._fmt_items(missing)}")
+            if duplicated:
+                problems.append(f"contained {self._fmt_items(duplicated)} more than once")
+            return self.error(
+                f"Expected <{self.val}> to contain {self._fmt_items(items)} only once, but {' and '.join(problems)}.",
+                diff=DiffResult(kind="contains", entries=entries),
+            )
+        return self
+
+    def is_in(self, *items: object) -> Self:
         """Asserts that val is equal to one of the given items.
 
         Args:
             *items: the items expected to contain val
 
         Examples:
-            Usage::
+            Usage:
 
                 assert_that('foo').is_in('foo', 'bar', 'baz')
                 assert_that(1).is_in(0, 1, 2, 3)
