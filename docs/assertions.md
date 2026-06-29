@@ -352,6 +352,25 @@ assert_that(fred.name).is_equal_to("Fred Smith")          # property
 assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")  # method
 ```
 
+### Recursive field assertions
+
+`all_fields_satisfy` walks the whole object graph (mappings, dataclasses, namedtuples, Pydantic models,
+lists, tuples) and applies one [matcher](matchers.md) or callable to every scalar leaf, reporting the path
+of each leaf that does not satisfy it. `has_no_none_fields` is the common special case:
+
+```python
+assert_that({"a": 1, "nested": {"b": 2}}).all_fields_satisfy(match.is_positive())
+assert_that([1, [2, 3]]).all_fields_satisfy(lambda x: x > 0)
+assert_that({"id": 1, "profile": {"name": "Alice"}}).has_no_none_fields()
+
+assert_that({"a": 1, "b": {"c": -2}}).all_fields_satisfy(match.is_positive())  # fails
+# Expected all fields to satisfy a positive value, but 1 field did not.
+#   b.c: expected a positive value, but was -2
+```
+
+Scalars, strings and sets are treated as single leaves (use `each` / `all_satisfy` for element-wise set
+checks), and circular references are reported once rather than recursed into.
+
 ### Extracting attributes from objects
 
 Flatten a collection of objects on an attribute, property, or zero-argument method with `extracting`:

@@ -546,22 +546,129 @@ class BaseMixin(_MixinBase):
             return BaseMixin._sequence_diff_entries(actual, expected, prefix, child_seen, config)
         return None
 
-    def satisfies(self, matcher) -> Self:
+    @staticmethod
+    def _walk_leaves(value, prefix="", _seen=None):
+        """Yield ``(path, leaf)`` for every scalar leaf of an object graph, depth-first.
+
+        Recurses into the same containers as the rich-diff engine (`_sub_diff_entries()`): mappings,
+        dataclasses, namedtuples, model-dump objects, lists and tuples.  Anything else - scalars, strings,
+        sets, opaque objects - is yielded as a single leaf, so the paths match the diffs.  A circular
+        reference yields one ``(path, "<circular ref>")`` leaf and stops, mirroring the cycle guard.
+        """
+        if _seen is None:
+            _seen = set()
+        if id(value) in _seen:
+            yield (prefix or ".", "<circular ref>")
+            return
+        if is_mapping_like(value):
+            child_seen = _seen | {id(value)}
+            for key in value:
+                yield from BaseMixin._walk_leaves(value[key], f"{prefix}.{key}" if prefix else str(key), child_seen)
+            return
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            child_seen = _seen | {id(value)}
+            for field in dataclasses.fields(value):
+                path = f"{prefix}.{field.name}" if prefix else field.name
+                yield from BaseMixin._walk_leaves(getattr(value, field.name), path, child_seen)
+            return
+        if is_namedtuple(value):
+            child_seen = _seen | {id(value)}
+            for field_name in value._fields:
+                path = f"{prefix}.{field_name}" if prefix else field_name
+                yield from BaseMixin._walk_leaves(getattr(value, field_name), path, child_seen)
+            return
+        if is_model_dump_object(value):
+            child_seen = _seen | {id(value)}
+            dumped = value.model_dump()
+            for key in dumped:
+                yield from BaseMixin._walk_leaves(dumped[key], f"{prefix}.{key}" if prefix else str(key), child_seen)
+            return
+        if isinstance(value, (list, tuple)):
+            child_seen = _seen | {id(value)}
+            for index, item in enumerate(value):
+                yield from BaseMixin._walk_leaves(item, f"{prefix}[{index}]" if prefix else f"[{index}]", child_seen)
+            return
+        yield (prefix or ".", value)
+
+    def all_fields_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
+        """Asserts that every scalar leaf in val's object graph satisfies the given matcher.
+
+        Walks val recursively (mappings, dataclasses, namedtuples, Pydantic models, lists, tuples) and
+        applies the matcher to each leaf value, reporting the path of every leaf that does not satisfy it.
+        Scalars, strings, sets and opaque objects are treated as single leaves.
+
+        Args:
+            matcher: a `Matcher` or callable predicate applied to every leaf
+
+        Examples:
+            Usage:
+
+                from assertpy2 import match
+
+                assert_that({"a": 1, "nested": {"b": 2}}).all_fields_satisfy(match.is_positive())
+                assert_that([1, [2, 3]]).all_fields_satisfy(lambda x: x > 0)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any leaf does **not** satisfy the matcher
+            TypeError: if matcher is neither a Matcher nor callable
+        """
+        if not isinstance(matcher, Matcher) and not callable(matcher):
+            raise TypeError("given arg must be a Matcher or callable")
+        description = _describe_matcher(matcher)
+        failures = [
+            DiffEntry(path=path, actual=leaf, expected=description)
+            for path, leaf in BaseMixin._walk_leaves(self.val)
+            if not _apply_matcher(matcher, leaf)
+        ]
+        if failures:
+            count = len(failures)
+            field_word = "field" if count == 1 else "fields"
+            return self.error(
+                f"Expected all fields to satisfy {description}, but {count} {field_word} did not.",
+                actual=self.val,
+                expected=description,
+                diff=DiffResult(kind="match", entries=failures),
+            )
+        return self
+
+    def has_no_none_fields(self) -> Self:
+        """Asserts that no scalar leaf in val's object graph is ``None``.
+
+        Convenience wrapper over `all_fields_satisfy()` with a not-``None`` matcher; reports the path
+        of every ``None`` leaf found anywhere in the graph.
+
+        Examples:
+            Usage:
+
+                assert_that({"id": 1, "profile": {"name": "Alice"}}).has_no_none_fields()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if any leaf **is** ``None``
+        """
+        return self.all_fields_satisfy(IsNotNoneMatcher())
+
+    def satisfies(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that val satisfies the given matcher.
 
         Args:
-            matcher: a :class:`~assertpy2.matchers.Matcher` instance, or a callable that takes
+            matcher: a `Matcher` instance, or a callable that takes
                 a value and returns a bool
 
         Examples:
-            Usage with matchers::
+            Usage with matchers:
 
                 from assertpy2 import match
 
                 assert_that(7).satisfies(match.greater_than(5) & match.less_than(10))
                 assert_that('hello').satisfies(match.starts_with('he'))
 
-            Usage with callables::
+            Usage with callables:
 
                 assert_that(42).satisfies(lambda x: x % 2 == 0)
 
