@@ -16,7 +16,7 @@ one-line change with no behavioral surprises.
   3.10 through 3.15. If you are on an older interpreter, upgrade Python first - this is the only hard
   requirement of the migration.
 - **No runtime dependencies on Python 3.11+.** On 3.10 a single tiny backport (`typing_extensions`) is
-  pulled in automatically. The extras (`[json]`, `[allure]`, `[behave]`) stay opt-in.
+  pulled in automatically. The extras (`[json]`, `[data]`, `[allure]`, `[behave]`) stay opt-in.
 
 ## Switch the import
 

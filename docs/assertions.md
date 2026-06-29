@@ -401,6 +401,12 @@ It also works on collections of dicts (extracting by key), Pydantic models, and 
 key-value pairs that must all match, or a predicate:
 
 ```python
+users = [
+    {"user": "Fred", "active": True, "age": 25},
+    {"user": "Johnny", "active": True, "age": 18},
+    {"user": "Bob", "active": False, "age": 30},
+]
+
 assert_that(users).extracting("user", filter="active").is_equal_to(["Fred", "Johnny"])
 assert_that(users).extracting("user", filter={"active": False}).is_equal_to(["Bob"])
 assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_to(["Fred", "Bob"])

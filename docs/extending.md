@@ -68,6 +68,9 @@ A few conventions keep custom assertions consistent with the built-ins:
 6. Always `return self` so the assertion chains.
 
 ```python
+import numbers
+
+
 def is_multiple_of(self, other):
     if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
         raise TypeError("val must be a positive integer")

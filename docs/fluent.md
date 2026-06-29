@@ -99,6 +99,12 @@ assert_that([42]).single().is_equal_to(42)
 Pipeline methods return a new builder, so they chain with each other and with any assertion:
 
 ```python
-assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().is_positive()
+assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().satisfies(match.is_positive())
 assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
 ```
+
+!!! note
+    Pipeline navigation (`first`/`last`/`element`/`single`/`mapped`/`flat_mapped`) keeps the
+    collection's static type, so a type checker still offers iterable methods after it. End on a
+    type-agnostic assertion (`satisfies`, `is_equal_to`, `is_not_none`, ...) rather than a
+    type-specific one like `is_positive`.

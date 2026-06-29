@@ -6,7 +6,8 @@
 pip install assertpy2
 ```
 
-Optional extras: `assertpy2[json]` (JSONPath / JSON Schema), `assertpy2[allure]`, `assertpy2[behave]`.
+Optional extras: `assertpy2[json]` (JSONPath / JSON Schema), `assertpy2[data]` (pandas / polars / numpy),
+`assertpy2[allure]`, `assertpy2[behave]`.
 
 !!! tip "Coming from the original assertpy?"
     assertpy2 is a drop-in replacement on Python 3.10+. See [Migrating from assertpy](migration.md) for
