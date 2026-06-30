@@ -78,7 +78,13 @@ mutation = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-p", "no:assertpy2"]
+# --strict-markers: unknown @pytest.mark.* is an error, not a silent typo.
+addopts = ["-p", "no:assertpy2", "--strict-markers"]
+xfail_strict = true  # an xfail that unexpectedly passes (xpass) fails the run
+# Warnings are errors: a deprecation or runtime warning fails the run instead of
+# scrolling past. The suite already passes clean under this; add targeted
+# `"ignore::<Category>"` entries here only if a third-party warning forces it.
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 branch = true
