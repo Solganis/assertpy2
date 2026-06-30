@@ -94,17 +94,58 @@ source = ["assertpy2"]
 omit = ["tests/*", "assertpy2/__init__.py", "assertpy2/_typing.py", "assertpy2/_compat.py"]
 
 [tool.ruff]
+# 120 feeds both `ruff format` and the E501 lint. Unlike black-style configs we do
+# NOT disable E501 (see the empty `ignore` below): line length is a hard rule, not
+# just a formatter hint, so the formatter and the linter agree at 120.
 line-length = 120
-target-version = "py310"
+target-version = "py310"  # lowest Python we support; UP rewrites target this floor
 
 [tool.ruff.lint]
+# Enable preview rules, but ONLY the ones named explicitly in `select`
+# (explicit-preview-rules), so we can opt into a single preview rule (E301) without
+# pulling in every unstable rule ruff ships behind the preview flag.
 preview = true
 explicit-preview-rules = true
-select = ["E", "E301", "F", "W", "N", "I", "UP", "B", "A", "C4", "PIE", "PGH", "SIM", "RUF", "ERA", "PERF", "TC"]
+
+# Curated set, not "ALL": each prefix is here on purpose. Plugin name + why we keep it.
+select = [
+    "E",     # pycodestyle errors
+    "E301",  # pycodestyle, preview-gated: require a blank line between methods (not in stable "E")
+    "F",     # Pyflakes - unused imports/names, undefined names
+    "W",     # pycodestyle warnings
+    "N",     # pep8-naming - naming conventions
+    "I",     # isort - import ordering
+    "UP",    # pyupgrade - modernize syntax to our py310+ floor
+    "B",     # flake8-bugbear - likely bugs and footguns
+    "A",     # flake8-builtins - don't shadow builtins
+    "ASYNC", # flake8-async - async footguns (blocking calls, missing await) in async assertions/polling
+    "C4",    # flake8-comprehensions - drop redundant list()/dict()/set() wrappers
+    "PIE",   # flake8-pie - small idiom simplifications
+    "PGH",   # pygrep-hooks - forbid blanket `noqa`/`type: ignore` (must name a rule code)
+    "PLE",   # Pylint errors - real-error subset (not style)
+    "SIM",   # flake8-simplify - collapse redundant constructs
+    "T10",   # flake8-debugger - no committed breakpoint()/pdb calls
+    "RUF",   # Ruff-specific rules
+    "ERA",   # eradicate - no commented-out code
+    "PERF",  # Perflint - performance anti-patterns
+    "TC",    # flake8-type-checking - keep typing-only imports under TYPE_CHECKING
+]
+
+# Intentionally empty: nothing is globally ignored. In particular E501 stays ON
+# (see line-length note above). Per-file relaxations go in per-file-ignores, not here.
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E741", "SIM102", "SIM300", "A002", "ERA001"]
+# Tests trade a few style rules for directness and literal fixtures:
+"tests/*" = [
+    "E741",    # ambiguous one-letter names (l/I/O) are fine in throwaway test locals
+    "SIM102",  # keep nested `if`s when they read closer to the scenario under test
+    "SIM300",  # allow Yoda-style literal-first comparisons in hand-written test data
+    "A002",    # fixtures/helpers may take args named like builtins (id, type, filter, ...)
+    "ERA001",  # example snippets deliberately left as comments in tests
+]
 
 [tool.ty.analysis]
+# Suppressions must be ty-native `# ty: ignore[rule]`. Make ty disregard mypy's
+# generic `# type: ignore` so a stray mypy-style comment can't silently mask a ty error.
 respect-type-ignore-comments = false
