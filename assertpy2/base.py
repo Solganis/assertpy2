@@ -148,9 +148,10 @@ class BaseMixin(_MixinBase):
             AssertionError: if actual is **not** equal to expected
             TypeError: if ``ignore``/``include`` is a one-shot or otherwise unsupported iterable, or is
                 used on a value that is neither dict-like nor has introspectable fields; if ``tolerance`` is
-                not a real number or ``comparators`` is not a dict of callables; or if val or other is an
-                element-wise array/frame-like (numpy/pandas/polars) whose ``==`` has no single truth value
-                (compare the value's own equality, e.g. ``actual.equals(expected)``, instead)
+                not a real number or ``comparators`` is not a dict of callables; or if val or other is (or
+                contains, at any nesting depth) an element-wise array/frame-like (numpy/pandas/polars) whose
+                ``==`` has no single truth value (compare the value's own equality, e.g.
+                ``actual.equals(expected)``, instead)
             ValueError: if ``tolerance`` is ``NaN`` or negative
 
         Tip:
