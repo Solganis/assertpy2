@@ -211,6 +211,11 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
 ```
 
 !!! note
+    `each_item` iterates the value twice on failure (once to decide, once to describe the failing
+    item), so pass a materialized sequence - a one-shot generator will produce a correct verdict but
+    a degraded failure message.
+
+!!! note
     Keys present in the value but absent from the spec are ignored, so a structure spec validates a
     subset of fields rather than requiring an exact match.
 
