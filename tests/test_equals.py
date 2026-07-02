@@ -1,6 +1,10 @@
+import collections
+import dataclasses
+
 import pytest
 
 from assertpy2 import assert_that
+from assertpy2._compare import _find_ambiguous_operand
 
 
 def test_is_equal():
@@ -136,3 +140,128 @@ class TestArrayLikeEqualityGuard:
         with pytest.raises(TypeError) as exc_info:
             assert_that(frame).is_equal_to(frame)
         assert_that(str(exc_info.value)).contains("element-wise")
+
+
+class _RaisingEq:
+    """Non-array value whose ``==`` raises, to pin that only array-caused errors are converted."""
+
+    def __eq__(self, other):
+        raise ValueError("raising eq")
+
+    __hash__ = object.__hash__
+
+
+@dataclasses.dataclass
+class _ArrayField:
+    payload: object
+
+
+@dataclasses.dataclass
+class _EmptyDataclass:
+    pass
+
+
+class _ArrayModel:
+    """Duck pydantic model: ``__eq__`` compares dumps, so an array field breaks it like real pydantic."""
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def model_dump(self):
+        return {"payload": self.payload}
+
+    def __eq__(self, other):
+        return self.model_dump() == other.model_dump()
+
+    __hash__ = object.__hash__
+
+
+class TestNestedArrayLikeEqualityGuard:
+    """The array/frame-like guard applies at any nesting depth, not only to the top-level operands."""
+
+    def test_array_like_as_dict_value(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": _FakeArray()}).is_equal_to({"a": _FakeArray()})
+        assert_that(str(exc_info.value)).contains("is_equal_to").contains("_FakeArray").contains("element-wise")
+
+    def test_array_like_in_list_inside_dict(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": [_FakeArray()]}).is_equal_to({"a": [_FakeArray()]})
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_in_top_level_list(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that([_FakeArray()]).is_equal_to([_FakeArray()])
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_in_namedtuple(self):
+        point = collections.namedtuple("point", ["payload"])
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(point(_FakeArray())).is_equal_to(point(_FakeArray()))
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_as_dataclass_field(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_ArrayField(_FakeArray())).is_equal_to(_ArrayField(_FakeArray()))
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_as_model_field(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_ArrayModel(_FakeArray())).is_equal_to(_ArrayModel(_FakeArray()))
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_with_ignored_sibling_key(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": _FakeArray(), "b": 2}).is_equal_to({"a": _FakeArray(), "b": 3}, ignore="b")
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_with_tolerance(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": _FakeArray(), "x": 1.0}).is_equal_to({"a": _FakeArray(), "x": 1.0}, tolerance=0.1)
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_array_like_reached_only_in_diff_phase(self):
+        # differing key counts make the boolean check pass cleanly; the diff walk hits the array
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": _FakeArray(), "b": 1}).is_equal_to({"a": _FakeArray()})
+        assert_that(str(exc_info.value)).contains("_FakeArray")
+
+    def test_non_array_comparison_error_propagates_unchanged(self):
+        with pytest.raises(ValueError, match="raising eq"):
+            assert_that({"a": _RaisingEq()}).is_equal_to({"a": _RaisingEq()})
+
+    def test_numpy_array_nested_in_dict_raises_clear_error(self):
+        numpy = pytest.importorskip("numpy")
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": numpy.array([1, 2])}).is_equal_to({"a": numpy.array([1, 2])})
+        assert_that(str(exc_info.value)).contains("element-wise")
+
+
+class TestFindAmbiguousOperand:
+    """Direct coverage of the error-path search over shapes a crashed comparison cannot produce itself."""
+
+    def test_shared_cyclic_sibling_is_skipped(self):
+        loop = {}
+        loop["self"] = loop
+        arr = _FakeArray()
+        found = _find_ambiguous_operand({"loop": loop, "arr": arr}, {"loop": loop, "arr": _FakeArray()})
+        assert_that(found).is_same_as(arr)
+
+    def test_key_without_counterpart_is_skipped(self):
+        arr = _FakeArray()
+        found = _find_ambiguous_operand({"only": 1, "arr": arr}, {"arr": _FakeArray(), "other": 2})
+        assert_that(found).is_same_as(arr)
+
+    def test_dataclass_field_missing_on_expected(self):
+        arr = _FakeArray()
+        found = _find_ambiguous_operand(_ArrayField(arr), _EmptyDataclass())
+        assert_that(found).is_same_as(arr)
+
+    def test_dataclass_without_array_returns_none(self):
+        assert_that(_find_ambiguous_operand(_ArrayField(1), _ArrayField(2))).is_none()
+
+    def test_list_without_array_returns_none(self):
+        assert_that(_find_ambiguous_operand([_RaisingEq()], [_RaisingEq()])).is_none()
+
+    def test_plain_scalars_return_none(self):
+        assert_that(_find_ambiguous_operand(1, 2)).is_none()
