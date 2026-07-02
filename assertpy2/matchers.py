@@ -48,7 +48,11 @@ class BaseMatcher:
         return NotMatcher(self)
 
     def __eq__(self, other: object) -> bool:
-        return self.matches(other)
+        # an operand the predicate cannot evaluate means "no match"; ``==`` must never raise
+        try:
+            return self.matches(other)
+        except (TypeError, ValueError):
+            return False
 
     def __hash__(self) -> int:
         return id(self)
