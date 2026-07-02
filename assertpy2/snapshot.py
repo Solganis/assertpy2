@@ -63,7 +63,10 @@ class _Encoder(json.JSONEncoder):
         elif isinstance(o, complex):
             return {"__type__": "complex", "__data__": [o.real, o.imag]}
         elif isinstance(o, datetime.datetime):
-            return {"__type__": "datetime", "__data__": o.strftime("%Y-%m-%d %H:%M:%S")}
+            # the sub-second format is used only when needed, so snapshots without microseconds keep
+            # the historical format and stay readable by older versions
+            fmt = "%Y-%m-%d %H:%M:%S.%f" if o.microsecond else "%Y-%m-%d %H:%M:%S"
+            return {"__type__": "datetime", "__data__": o.strftime(fmt)}
         elif "__dict__" in dir(o) and type(o) is not type:
             return {
                 "__type__": "instance",
@@ -85,7 +88,9 @@ class _Decoder(json.JSONDecoder):
             elif decoded["__type__"] == "complex":
                 return complex(decoded["__data__"][0], decoded["__data__"][1])
             elif decoded["__type__"] == "datetime":
-                return datetime.datetime.strptime(decoded["__data__"], "%Y-%m-%d %H:%M:%S")
+                raw = decoded["__data__"]
+                fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in raw else "%Y-%m-%d %H:%M:%S"
+                return datetime.datetime.strptime(raw, fmt)
             elif decoded["__type__"] == "instance":
                 module_name = decoded["__module__"]
                 if module_name not in sys.modules:
