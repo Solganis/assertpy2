@@ -160,6 +160,54 @@ class TestSnapshotCreatedWarning:
                 assert_that(next(values)).snapshot(path=str(tmp_path))
 
 
+class TestSnapshotCompareOptions:
+    def test_ignore_volatile_field(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"name": "Alice", "ts": 1}).snapshot(id="opt-ignore", path=str(tmp_path))
+        assert_that({"name": "Alice", "ts": 999}).snapshot(id="opt-ignore", path=str(tmp_path), ignore="ts")
+        with pytest.raises(AssertionError):
+            assert_that({"name": "Bob", "ts": 999}).snapshot(id="opt-ignore", path=str(tmp_path), ignore="ts")
+
+    def test_first_capture_stores_full_value_despite_ignore(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"name": "Alice", "ts": 1}).snapshot(id="opt-full", path=str(tmp_path), ignore="ts")
+        assert_that({"name": "Alice", "ts": 42}).snapshot(id="opt-full", path=str(tmp_path), ignore="ts")
+        with pytest.raises(AssertionError):
+            # without ignore the stored ts must be compared, proving the capture kept the full value
+            assert_that({"name": "Alice", "ts": 42}).snapshot(id="opt-full", path=str(tmp_path))
+
+    def test_include_only_selected_keys(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1, "b": 2}).snapshot(id="opt-include", path=str(tmp_path))
+        assert_that({"a": 1, "b": 999}).snapshot(id="opt-include", path=str(tmp_path), include="a")
+
+    def test_nested_ignore_path(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"user": {"name": "Alice", "session": "s1"}}).snapshot(id="opt-nested", path=str(tmp_path))
+        assert_that({"user": {"name": "Alice", "session": "s2"}}).snapshot(
+            id="opt-nested", path=str(tmp_path), ignore=[("user", "session")]
+        )
+
+    def test_tolerance_absorbs_float_noise(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"price": 1.0}).snapshot(id="opt-tol", path=str(tmp_path))
+        assert_that({"price": 1.0004}).snapshot(id="opt-tol", path=str(tmp_path), tolerance=0.001)
+        with pytest.raises(AssertionError):
+            assert_that({"price": 1.01}).snapshot(id="opt-tol", path=str(tmp_path), tolerance=0.001)
+
+    def test_comparators_own_matching_fields(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"name": "Alice"}).snapshot(id="opt-cmp", path=str(tmp_path))
+        assert_that({"name": "ALICE"}).snapshot(
+            id="opt-cmp", path=str(tmp_path), comparators={"name": lambda a, e: a.lower() == e.lower()}
+        )
+
+    def test_bad_tolerance_fails_on_first_capture(self, tmp_path):
+        with pytest.raises(TypeError, match="tolerance arg must be a real number"):
+            assert_that({"a": 1}).snapshot(id="opt-bad-tol", path=str(tmp_path), tolerance="high")
+        assert_that(os.path.isfile(os.path.join(str(tmp_path), "snap-opt-bad-tol.json"))).is_false()
+
+
 def test_snapshot_not_serializable(tmp_path):
     with pytest.raises(TypeError) as exc_info:
         assert_that(range(5)).snapshot(id="nonser", path=str(tmp_path))

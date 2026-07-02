@@ -135,7 +135,7 @@ assert_that({"a": 1}).snapshot(id="my-custom-id")
 assert_that({"a": 1}).snapshot(path="my-custom-folder")
 ```
 
-## Volatile fields and float noise
+### Volatile fields and float noise
 
 The comparison accepts the same selective options as `is_equal_to()` - `ignore`, `include`,
 `tolerance`, and `comparators` - so timestamps, generated ids, or float jitter don't break snapshots.

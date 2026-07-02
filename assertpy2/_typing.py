@@ -48,7 +48,16 @@ if TYPE_CHECKING:
         def is_in(self, *items: object) -> Self: ...
         def is_not_in(self, *items: object) -> Self: ...
         # SnapshotMixin
-        def snapshot(self, id: str | None = ..., path: str = ...) -> Self: ...  # noqa: A002  # mirrors public snapshot() parameter
+        def snapshot(
+            self,
+            id: str | None = ...,  # noqa: A002  # mirrors public snapshot() parameter
+            path: str = ...,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[object, Callable[..., bool]] | None = ...,
+        ) -> Self: ...
         # NegatedBuilder
         @property
         def not_(self) -> NegatedBuilder: ...
