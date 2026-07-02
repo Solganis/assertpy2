@@ -638,6 +638,30 @@ class TestMatcherEqProtocol:
     def test_eq_negated_matcher(self):
         assert -5 == ~match.is_positive()
 
+    def test_eq_unorderable_operand_is_false(self):
+        assert (match.is_positive() == object()) is False
+
+    def test_eq_reflected_unorderable_operand_is_false(self):
+        assert (object() == match.is_positive()) is False
+
+    def test_eq_matcher_vs_matcher_is_false(self):
+        assert (match.is_positive() == match.is_positive()) is False
+
+    def test_eq_ambiguous_truth_value_is_false(self):
+        class _Elementwise:
+            def __bool__(self):
+                raise ValueError("ambiguous")
+
+        class _ArrayLike:
+            def __gt__(self, other):
+                return _Elementwise()
+
+        assert (match.is_positive() == _ArrayLike()) is False
+
+    def test_membership_with_mixed_types_does_not_raise(self):
+        assert match.is_positive() in [object(), "x", 5]
+        assert match.is_positive() not in [object(), "x", -5]
+
     def test_hash_unique_instances(self):
         first_matcher = match.is_positive()
         second_matcher = match.is_positive()
