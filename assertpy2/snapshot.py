@@ -10,6 +10,7 @@ import time
 import warnings
 from typing import TYPE_CHECKING, Final
 
+from ._compare import _build_compare_config
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
@@ -156,7 +157,16 @@ class SnapshotMixin(_MixinBase):
     silent (and fails explicitly under ``-W error``).
     """
 
-    def snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
+    def snapshot(
+        self,
+        id: str | None = None,  # noqa: A002  # `id` is the public snapshot-identifier parameter
+        path: str = "__snapshots",
+        *,
+        ignore: object = None,
+        include: object = None,
+        tolerance: float | None = None,
+        comparators: dict | None = None,
+    ) -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,
@@ -169,9 +179,24 @@ class SnapshotMixin(_MixinBase):
 
         Snapshots are identified by test filename plus line number by default.
 
+        The comparison accepts the same selective options as
+        [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to], so volatile fields (timestamps,
+        generated ids) or float noise don't break snapshots.  The snapshot file always stores the
+        **full** value; the options only shape the comparison.
+
         Args:
             id: a custom snapshot identifier (defaults to test filename plus line number)
             path: the directory where snapshots are stored (defaults to ``__snapshots``)
+
+        Keyword Args:
+            ignore (Hashable | list | set | frozenset | None): the key/field (or collection of
+                keys/fields) to ignore when comparing; accepts the same nested-path tuples,
+                ``re.Pattern`` and ``type`` specs as ``is_equal_to()``.
+            include (Hashable | list | set | frozenset | None): the key/field (or collection of
+                keys/fields) to compare, everything else ignored.
+            tolerance (float | None): an absolute tolerance applied to every real-number leaf.
+            comparators (dict | None): a dict mapping a ``type`` or a field name to an
+                ``(actual, expected) -> bool`` predicate that owns matching leaves.
 
         Examples:
             Usage:
@@ -198,15 +223,24 @@ class SnapshotMixin(_MixinBase):
 
                 assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot(path='my-custom-folder')
 
+            Ignore volatile fields, or tolerate float noise, without touching the stored snapshot:
+
+                assert_that(api_response).snapshot(id='order', ignore=['created_at', ('user', 'session_id')])
+                assert_that(metrics).snapshot(id='latency', tolerance=0.001)
+
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
             AssertionError: if val does **not** equal to on-disk snapshot
+            TypeError: if ``tolerance`` is not a real number, or ``comparators`` is not a dict of
+                callables (validated on every run, including the capturing first one)
+            ValueError: if ``tolerance`` is ``NaN`` or negative
 
         Warns:
             SnapshotCreatedWarning: when this run captured a new snapshot instead of comparing
         """
+        _build_compare_config(tolerance, comparators)  # a bad tolerance must fail the capturing first run too
         lineno = ""
         if id:
             # custom id
@@ -245,7 +279,9 @@ class SnapshotMixin(_MixinBase):
                 _save(snapname, self.val if id else {lineno: self.val})
 
         if snapshot_value is not _UNSET:
-            return self.is_equal_to(snapshot_value)
+            return self.is_equal_to(
+                snapshot_value, ignore=ignore, include=include, tolerance=tolerance, comparators=comparators
+            )
         warnings.warn(
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
             " subsequent runs compare against it (delete the file to re-capture)",
