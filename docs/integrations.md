@@ -126,7 +126,8 @@ value = parse_int("42")  # 42
 Fluent equality assertions for [pandas](https://pandas.pydata.org/),
 [polars](https://pola.rs/) and [numpy](https://numpy.org/). These types compare element-wise, so a
 plain `is_equal_to()` cannot reduce them to a single truth value (it raises a clear `TypeError` telling
-you to use the methods below).
+you to use the methods below - including when the array or frame sits nested inside a dict, dataclass,
+or list under comparison).
 
 !!! note "Optional dependency"
     Each library is its own extra, so you only install what you use (a polars user does not pull in

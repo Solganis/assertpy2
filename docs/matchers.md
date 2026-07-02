@@ -88,6 +88,10 @@ assert 42 == (match.is_positive() & match.less_than(100))
     This makes matchers a drop-in addition to an existing suite: add one import, use `match.*` in any
     `==` comparison, no rewrite required.
 
+Matcher `==` never raises: an operand the predicate cannot evaluate (a string handed to
+`match.is_positive()`, an object with no ordering) simply compares as not equal, so a matcher that
+leaks into a membership check or a foreign comparison stays safe.
+
 ## Available matchers
 
 | Matcher | Matches |
@@ -155,7 +159,8 @@ assert_that(response).matches_structure({
 
 The value under test can be a plain dict or a Pydantic model (anything exposing `model_dump()`); a
 model is normalized to its dict before matching, so the same spec works either way, including inside
-`satisfies()` and the `==` form:
+`satisfies()` and the `==` form. Normalization applies at every level - a model nested inside a plain
+dict matches too, and failure paths still point at the leaf field (`address.city`):
 
 ```python
 from pydantic import BaseModel
