@@ -10,10 +10,13 @@ import time
 
 import pytest
 
-from assertpy2 import assert_that, fail
+from assertpy2 import SnapshotCreatedWarning, assert_that, fail
 from assertpy2.snapshot import _file_lock
 
 
+# first pass re-captures every snapshot; the capture warnings themselves are pinned in
+# TestSnapshotCreatedWarning, here they would only obscure the roundtrip
+@pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
 @pytest.mark.parametrize("count", [1, 2])
 def test_snapshot_roundtrip_all_types(count):
     # test runs twice
@@ -130,6 +133,31 @@ def test_snapshot_roundtrip_all_types(count):
     ).snapshot()
 
     assert_that({"__type__": "foo", "__data__": "bar"}).snapshot()
+
+
+class TestSnapshotCreatedWarning:
+    def test_first_capture_warns_and_second_run_compares(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning, match="captured the value instead of comparing"):
+            assert_that({"a": 1}).snapshot(id="warn-first", path=str(tmp_path))
+        # the suite runs with warnings-as-errors, so a silent pass here proves no second warning
+        assert_that({"a": 1}).snapshot(id="warn-first", path=str(tmp_path))
+
+    def test_new_line_in_existing_file_warns(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(1).snapshot(path=str(tmp_path))
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(2).snapshot(path=str(tmp_path))  # same file, new line -> a fresh sub-snap capture
+
+    def test_same_line_second_iteration_compares(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            for value in [7, 7]:
+                assert_that(value).snapshot(path=str(tmp_path))
+
+    def test_same_line_second_iteration_fails_on_drift(self, tmp_path):
+        values = iter([7, 8])
+        with pytest.warns(SnapshotCreatedWarning), pytest.raises(AssertionError):
+            for _ in range(2):
+                assert_that(next(values)).snapshot(path=str(tmp_path))
 
 
 def test_snapshot_not_serializable(tmp_path):
