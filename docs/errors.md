@@ -78,6 +78,31 @@ failed, with the actual value in red - every mismatch, not just the first (no gr
 Nested structures are diffed recursively and report the exact path to the differing value (for example
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
 
+!!! note
+    Cycle protection applies to the diff rendering and to the selective-comparison path
+    (`ignore` / `include`). The bare equality check itself follows Python's own `==` semantics, so
+    comparing two structurally equal *cyclic* graphs raises `RecursionError` - exactly as a plain
+    `assert a == b` would.
+
+### Catching failures with their types intact
+
+`pytest.raises(AssertionError)` types the caught exception as plain `AssertionError`, so a type
+checker flags `.actual` / `.expected` / `.diff` access. Catch `AssertionFailure` instead - it is the
+subclass actually raised whenever structured data is attached:
+
+```python
+import pytest
+from assertpy2 import AssertionFailure, assert_that
+
+def test_diff_is_machine_readable():
+    with pytest.raises(AssertionFailure) as exc_info:
+        assert_that({"role": "guest"}).is_equal_to({"role": "admin"})
+
+    failure = exc_info.value  # typed as AssertionFailure
+    assert_that(failure.diff.kind).is_equal_to("dict")
+    assert_that(failure.diff.entries[0].path).is_equal_to("role")
+```
+
 The rich diff comes from the fluent form. The `==` drop-in for matchers (for example
 `assert response == {"id": match.is_positive()}`) hands rendering to pytest instead, which prints its
 own dict comparison without the path.

@@ -48,6 +48,12 @@ with soft_assertions() as sa:
         2. Expected <error> to be equal to <ok>, but was not.
     ```
 
+!!! note
+    Soft mode collects *assertion* failures only. After a failed `raises()` / `warns()` +
+    `when_called_with()` inside a soft context there is no captured value to assert on, so the rest
+    of that one chain becomes inert and is skipped silently; independent assertions that follow are
+    collected as usual.
+
 ### assert_all
 
 A convenience wrapper for inline soft assertions, equivalent to wrapping the calls in
@@ -150,3 +156,15 @@ assert_that(api_response).snapshot(id="order", ignore=["created_at", ("user", "s
 assert_that(metrics).snapshot(id="latency", tolerance=0.001)
 assert_that(payload).snapshot(id="user", comparators={"name": lambda a, e: a.lower() == e.lower()})
 ```
+
+### Known limitations
+
+- **Tuples round-trip as lists** (JSON has no tuple), so a snapshot of `(1, 2)` compares as `[1, 2]`
+  on the next run and fails. Convert tuples before snapshotting.
+- **Supported types** are the JSON natives plus `set`, `complex`, `datetime.datetime` (including
+  microseconds), and objects with a `__dict__`. `datetime.date`, `datetime.time`, `Decimal`, and
+  `bytes` raise `TypeError` on capture.
+- **Snapshot ids are case-insensitive**: filenames are lower-cased, so ids differing only by case
+  collide in one file.
+- **The write lock is not crash-safe**: a process killed mid-write leaves a stale `.lock` file next
+  to the snapshot; delete it if snapshot writes start timing out.
