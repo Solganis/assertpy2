@@ -12,6 +12,19 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
+def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
+    """Normalize an ``ignoring`` spec (one exception type or a tuple of them) to a validated tuple.
+
+    Only ``Exception`` subclasses are accepted, so ``BaseException``-only classes such as
+    ``KeyboardInterrupt`` can never be swallowed by the polling loop.
+    """
+    exceptions = ignoring if isinstance(ignoring, tuple) else (ignoring,)
+    for exception_type in exceptions:
+        if not (isinstance(exception_type, type) and issubclass(exception_type, Exception)):
+            raise TypeError("given ignoring arg must be an Exception subclass or a tuple of Exception subclasses")
+    return exceptions
+
+
 class AsyncAssertionBuilder:
     """Async assertion builder that polls a callable until an assertion passes or timeout expires.
 
@@ -23,6 +36,7 @@ class AsyncAssertionBuilder:
         description: optional error description forwarded to the builder
         timeout: maximum seconds to keep retrying
         interval: seconds between retries
+        ignoring: exception types the polling loop retries instead of propagating
     """
 
     def __init__(
@@ -33,12 +47,14 @@ class AsyncAssertionBuilder:
         description: str = "",
         timeout: float = 5.0,
         interval: float = 0.5,
+        ignoring: tuple[type[Exception], ...] = (),
     ):
         self._func = func
         self._builder_func = builder_func
         self._description = description
         self._timeout = timeout
         self._interval = interval
+        self._ignoring = ignoring
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
@@ -50,6 +66,20 @@ class AsyncAssertionBuilder:
         self._interval = interval
         return self
 
+    def ignoring(self, *exceptions: type[Exception]) -> Self:
+        """Replace the exception types the polling loop retries instead of propagating.
+
+        Examples:
+            Usage:
+
+                await assert_that(get_order).eventually().within(10).ignoring(ConnectionError).has_status("PAID")
+
+        Raises:
+            TypeError: if any argument is not an ``Exception`` subclass
+        """
+        self._ignoring = _normalize_ignoring(exceptions)
+        return self
+
     def __getattr__(self, name: str):
         if name.startswith("_"):
             raise AttributeError(name)
@@ -58,7 +88,7 @@ class AsyncAssertionBuilder:
             async def _poll():
                 loop = asyncio.get_running_loop()
                 deadline = loop.time() + self._timeout
-                last_error: AssertionError | None = None
+                last_error: Exception | None = None
                 while True:
                     try:
                         val = self._func()
@@ -68,12 +98,13 @@ class AsyncAssertionBuilder:
                         method = getattr(builder, name)
                         method(*args, **kwargs)
                         return builder
-                    except AssertionError as exc:  # noqa: PERF203  # retry-on-failure needs the try/except per poll iteration
+                    except (AssertionError, *self._ignoring) as exc:  # noqa: PERF203  # retry-on-failure needs the try/except per poll iteration
                         last_error = exc
                         if loop.time() >= deadline:
+                            # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
+                            failure = str(last_error) if isinstance(last_error, AssertionError) else repr(last_error)
                             raise AssertionError(
-                                f"Expected condition not met after {self._timeout:.1f} seconds."
-                                f" Last failure: {last_error}"
+                                f"Expected condition not met after {self._timeout:.1f} seconds. Last failure: {failure}"
                             ) from last_error
                         await asyncio.sleep(self._interval)
 

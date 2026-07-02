@@ -87,9 +87,21 @@ await assert_that(get_name).eventually().starts_with("Al")
 await assert_that(get_count).eventually().is_between(10, 20)
 ```
 
+By default only a failing assertion is retried: any exception raised by the probe itself propagates
+immediately. When "not ready yet" manifests as an exception (a connection refused while a service
+boots, a record not yet visible), list those exception types in `ignoring`:
+
+```python
+await assert_that(get_order).eventually(timeout=10, ignoring=ConnectionError).has_status("PAID")
+
+# or configure fluently, like within()/every()
+await assert_that(get_order).eventually().within(10).ignoring(ConnectionError, TimeoutError).has_status("PAID")
+```
+
 !!! note
-    Only `AssertionError` is retried; other exceptions propagate immediately. On timeout the last
-    `AssertionError` is chained for context.
+    Only `AssertionError` (plus any `ignoring` types) is retried; other exceptions propagate
+    immediately. On timeout the last failure is chained for context. `ignoring` accepts only
+    `Exception` subclasses, so `KeyboardInterrupt` and friends can never be swallowed.
 
 ## Snapshot testing
 

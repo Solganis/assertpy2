@@ -29,7 +29,7 @@ if TYPE_CHECKING:
         _StringAssertion,
     )
 
-from .async_assertions import AsyncAssertionBuilder
+from .async_assertions import AsyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
 from .collection import CollectionMixin
@@ -631,7 +631,13 @@ class AssertionBuilder(
                 raise AssertionFailure(out, actual=actual, expected=expected, diff=diff)
             raise AssertionError(out)
 
-    def eventually(self, *, timeout: float = 5.0, interval: float = 0.5) -> AsyncAssertionBuilder:
+    def eventually(
+        self,
+        *,
+        timeout: float = 5.0,
+        interval: float = 0.5,
+        ignoring: type[Exception] | tuple[type[Exception], ...] = (),
+    ) -> AsyncAssertionBuilder:
         """Switch to async polling mode for eventual-consistency assertions.
 
         The current ``val`` must be a callable (sync or async).  Returns an
@@ -639,9 +645,16 @@ class AssertionBuilder(
         methods are coroutines that poll ``val()`` until the assertion passes or
         ``timeout`` expires.
 
+        By default only a failing assertion is retried: any exception raised by ``val()`` itself
+        propagates immediately.  A probe that signals "not ready yet" by raising (a connection refused
+        while a service boots, a record not yet visible) can be retried too by listing those exception
+        types in ``ignoring``.
+
         Args:
             timeout: maximum seconds to keep retrying (default ``5.0``)
             interval: seconds between retries (default ``0.5``)
+            ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
+                propagating (default: none)
 
         Examples:
             Usage:
@@ -659,11 +672,19 @@ class AssertionBuilder(
                     assert_that(get_count).eventually(timeout=2).is_equal_to(3)
                 )
 
+            Retry a probe that raises while the system under test is not ready yet:
+
+                await assert_that(get_order).eventually(timeout=10, ignoring=ConnectionError).has_status("PAID")
+
+                # or configure fluently on the returned builder
+                await assert_that(get_order).eventually().within(10).ignoring(ConnectionError).has_status("PAID")
+
         Returns:
             AsyncAssertionBuilder: an async builder whose assertion methods are awaitable
 
         Raises:
-            TypeError: if ``val`` is not callable
+            TypeError: if ``val`` is not callable, or if ``ignoring`` contains anything that is not an
+                ``Exception`` subclass
         """
         if not callable(self.val):
             raise TypeError("val must be callable when using eventually()")
@@ -673,4 +694,5 @@ class AssertionBuilder(
             description=self.description,
             timeout=timeout,
             interval=interval,
+            ignoring=_normalize_ignoring(ignoring),
         )
