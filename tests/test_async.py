@@ -96,6 +96,113 @@ class TestEventuallyPrivateAttrs:
             _ = builder._nonexistent
 
 
+class TestEventuallyIgnoring:
+    def test_ignored_exception_is_retried(self):
+        calls = {"n": 0}
+
+        def probe():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise ConnectionError("not ready")
+            return 42
+
+        asyncio.run(assert_that(probe).eventually(timeout=2, interval=0.05, ignoring=ConnectionError).is_equal_to(42))
+        assert_that(calls["n"]).is_equal_to(3)
+
+    def test_exception_not_ignored_propagates_immediately(self):
+        calls = {"n": 0}
+
+        def probe():
+            calls["n"] += 1
+            raise ConnectionError("not ready")
+
+        with pytest.raises(ConnectionError, match="not ready"):
+            asyncio.run(assert_that(probe).eventually(timeout=2, interval=0.05).is_equal_to(42))
+        assert_that(calls["n"]).is_equal_to(1)
+
+    def test_other_exception_still_propagates(self):
+        def probe():
+            raise KeyError("missing")
+
+        with pytest.raises(KeyError, match="missing"):
+            asyncio.run(
+                assert_that(probe).eventually(timeout=1, interval=0.05, ignoring=ConnectionError).is_equal_to(42)
+            )
+
+    def test_ignoring_tuple_of_exceptions(self):
+        errors = iter([ConnectionError("boot"), TimeoutError("slow")])
+
+        def probe():
+            error = next(errors, None)
+            if error is not None:
+                raise error
+            return "ready"
+
+        asyncio.run(
+            assert_that(probe)
+            .eventually(timeout=2, interval=0.05, ignoring=(ConnectionError, TimeoutError))
+            .is_equal_to("ready")
+        )
+
+    def test_ignored_exception_until_timeout_reports_last_failure(self):
+        def probe():
+            raise ConnectionError("still booting")
+
+        with pytest.raises(AssertionError, match=r"not met after .* ConnectionError\('still booting'\)"):
+            asyncio.run(assert_that(probe).eventually(timeout=0.15, interval=0.05, ignoring=ConnectionError).is_none())
+
+    def test_ignoring_chainable_on_builder(self):
+        calls = {"n": 0}
+
+        def probe():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise ConnectionError("not ready")
+            return "ok"
+
+        asyncio.run(assert_that(probe).eventually().within(2).every(0.05).ignoring(ConnectionError).is_equal_to("ok"))
+
+    def test_mixed_exception_and_assertion_failures(self):
+        states = iter([ConnectionError("boot"), "loading", "ready"])
+
+        def probe():
+            state = next(states, "ready")
+            if isinstance(state, Exception):
+                raise state
+            return state
+
+        asyncio.run(
+            assert_that(probe).eventually(timeout=2, interval=0.05, ignoring=ConnectionError).is_equal_to("ready")
+        )
+
+    def test_async_probe_with_ignored_exception(self):
+        calls = {"n": 0}
+
+        async def probe():
+            calls["n"] += 1
+            if calls["n"] < 2:
+                raise ConnectionError("not ready")
+            return 7
+
+        asyncio.run(assert_that(probe).eventually(timeout=2, interval=0.05, ignoring=ConnectionError).is_equal_to(7))
+
+    def test_ignoring_rejects_non_exception_type(self):
+        with pytest.raises(TypeError, match="Exception subclass"):
+            assert_that(lambda: 1).eventually(ignoring=42)
+
+    def test_ignoring_rejects_non_exception_in_tuple(self):
+        with pytest.raises(TypeError, match="Exception subclass"):
+            assert_that(lambda: 1).eventually(ignoring=(ValueError, "oops"))
+
+    def test_ignoring_rejects_base_exception_only_classes(self):
+        with pytest.raises(TypeError, match="Exception subclass"):
+            assert_that(lambda: 1).eventually(ignoring=KeyboardInterrupt)
+
+    def test_ignoring_method_rejects_non_exception_type(self):
+        with pytest.raises(TypeError, match="Exception subclass"):
+            assert_that(lambda: 1).eventually().ignoring(int)
+
+
 class TestContextVarsIsolation:
     def test_soft_assertions_thread_isolation(self):
         errors_from_threads = {}
