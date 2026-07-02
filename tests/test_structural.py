@@ -468,6 +468,37 @@ class TestStructureMatcherOnModel:
             )
 
 
+class _AmbiguousArray:
+    """Array-like: element-wise ``==`` whose truth value is ambiguous (an ndarray stand-in)."""
+
+    def __array__(self):
+        return None
+
+    def __eq__(self, other):
+        return self
+
+    def __bool__(self):
+        raise ValueError("ambiguous")
+
+    __hash__ = object.__hash__
+
+
+class TestArrayLeavesInStructure:
+    def test_raw_array_leaf_raises_actionable_error(self):
+        with pytest.raises(TypeError, match="matches_structure"):
+            assert_that({"a": _AmbiguousArray()}).matches_structure({"a": _AmbiguousArray()})
+
+    def test_matcher_wrapped_array_leaf_records_mismatch(self):
+        # mirrors BaseMatcher.__eq__ totality: a predicate that cannot evaluate is "no match"
+        with pytest.raises(AssertionError, match="a value equal to"):
+            assert_that({"a": _AmbiguousArray()}).matches_structure({"a": match.equal_to(_AmbiguousArray())})
+
+    def test_matcher_that_cannot_evaluate_records_mismatch(self):
+        # the non-array face of the same rule: `> 0` on a str raises TypeError -> mismatch, not a crash
+        with pytest.raises(AssertionError, match="at <n>"):
+            assert_that({"n": "not-a-number"}).matches_structure({"n": match.is_positive()})
+
+
 class TestModelNestedInsideDict:
     """A model under a plain dict is normalized per level, so it matches specs and keeps leaf paths."""
 

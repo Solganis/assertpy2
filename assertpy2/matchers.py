@@ -5,6 +5,7 @@ import threading
 import uuid as _uuid_mod
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
+from ._compare import _guarded_not_equal
 from ._introspection import is_model_dump_object
 
 if TYPE_CHECKING:
@@ -659,7 +660,12 @@ class StructureMatcher(BaseMatcher):
             if isinstance(expected, StructureMatcher) and isinstance((normalized := self._as_mapping(actual)), dict):
                 mismatches.extend(self._walk(normalized, expected._spec, current_path, seen))
             elif isinstance(expected, Matcher):
-                if not expected.matches(actual):
+                # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match"
+                try:
+                    matched = expected.matches(actual)
+                except (TypeError, ValueError):
+                    matched = False
+                if not matched:
                     mismatches.append(
                         _SpecMismatch(current_path, actual, expected.describe(), expected.describe_mismatch(actual))
                     )
@@ -669,7 +675,7 @@ class StructureMatcher(BaseMatcher):
                     mismatches.extend(self._walk(normalized, expected, current_path, seen))
                 else:
                     mismatches.append(_SpecMismatch(current_path, actual, "a dict", None))
-            elif actual != expected:
+            elif _guarded_not_equal(actual, expected, method="matches_structure"):
                 mismatches.append(_SpecMismatch(current_path, actual, f"<{expected}>", None))
         return mismatches
 

@@ -133,7 +133,7 @@ def _find_ambiguous_operand(actual, expected, _seen=None):
     return None
 
 
-def _guarded_not_equal(actual, expected) -> bool:
+def _guarded_not_equal(actual, expected, *, method="is_equal_to") -> bool:
     """``bool(actual != expected)``, converting the ambiguity raised from *inside* a container's ``==``
     (where the top-level operand gate cannot see the array member) into the actionable ``TypeError``."""
     try:
@@ -142,7 +142,18 @@ def _guarded_not_equal(actual, expected) -> bool:
         operand = _find_ambiguous_operand(actual, expected)
         if operand is None:
             raise
-        raise _array_equality_error("is_equal_to", operand) from error
+        raise _array_equality_error(method, operand) from error
+
+
+def _guarded_equal(actual, expected, *, method) -> bool:
+    """``bool(actual == expected)`` with the same nested array/frame-like guard as `_guarded_not_equal`."""
+    try:
+        return bool(actual == expected)
+    except (ValueError, TypeError) as error:
+        operand = _find_ambiguous_operand(actual, expected)
+        if operand is None:
+            raise
+        raise _array_equality_error(method, operand) from error
 
 
 def _is_real_number(value) -> bool:
