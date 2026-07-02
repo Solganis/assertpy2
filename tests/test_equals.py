@@ -230,6 +230,15 @@ class TestNestedArrayLikeEqualityGuard:
         with pytest.raises(ValueError, match="raising eq"):
             assert_that({"a": _RaisingEq()}).is_equal_to({"a": _RaisingEq()})
 
+    def test_is_not_equal_to_array_like_as_dict_value(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"a": _FakeArray()}).is_not_equal_to({"a": _FakeArray()})
+        assert_that(str(exc_info.value)).contains("is_not_equal_to").contains("_FakeArray")
+
+    def test_is_not_equal_to_non_array_error_propagates_unchanged(self):
+        with pytest.raises(ValueError, match="raising eq"):
+            assert_that({"a": _RaisingEq()}).is_not_equal_to({"a": _RaisingEq()})
+
     def test_numpy_array_nested_in_dict_raises_clear_error(self):
         numpy = pytest.importorskip("numpy")
         with pytest.raises(TypeError) as exc_info:

@@ -7,6 +7,7 @@ from ._compare import (
     _ambiguous_array_operand,
     _array_equality_error,
     _build_compare_config,
+    _guarded_equal,
     _guarded_not_equal,
     _node_decision,
 )
@@ -712,14 +713,15 @@ class BaseMixin(_MixinBase):
 
         Raises:
             AssertionError: if actual **is** equal to expected
-            TypeError: if val or other is an element-wise array/frame-like (numpy/pandas/polars) whose
-                ``==`` has no single truth value; compare the value's own equality instead
+            TypeError: if val or other is (or contains, at any nesting depth) an element-wise
+                array/frame-like (numpy/pandas/polars) whose ``==`` has no single truth value; compare
+                the value's own equality instead
         """
         operand = _ambiguous_array_operand(self.val, other)
         if operand is not None:
             raise _array_equality_error("is_not_equal_to", operand)
 
-        if self.val == other:
+        if _guarded_equal(self.val, other, method="is_not_equal_to"):
             return self.error(f"Expected <{self.val}> to be not equal to <{other}>, but was.")
         return self
 
