@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, match
-from assertpy2.base import BaseMixin
+from assertpy2._diff import _walk_leaves
 
 Pair = namedtuple("Pair", ["a", "b"])
 
@@ -27,65 +27,65 @@ class FakeModel:
 
 class TestWalkLeavesTraversal:
     def test_top_level_dict(self):
-        leaves = dict(BaseMixin._walk_leaves({"a": 1, "b": 2}))
+        leaves = dict(_walk_leaves({"a": 1, "b": 2}))
         assert_that(leaves).is_equal_to({"a": 1, "b": 2})
 
     def test_nested_dict_paths_are_dotted(self):
-        leaves = dict(BaseMixin._walk_leaves({"outer": {"inner": 1}}))
+        leaves = dict(_walk_leaves({"outer": {"inner": 1}}))
         assert_that(leaves).is_equal_to({"outer.inner": 1})
 
     def test_top_level_list_paths_are_indexed(self):
-        leaves = dict(BaseMixin._walk_leaves([10, 20]))
+        leaves = dict(_walk_leaves([10, 20]))
         assert_that(leaves).is_equal_to({"[0]": 10, "[1]": 20})
 
     def test_nested_list_paths(self):
-        leaves = dict(BaseMixin._walk_leaves([[1, 2]]))
+        leaves = dict(_walk_leaves([[1, 2]]))
         assert_that(leaves).is_equal_to({"[0][0]": 1, "[0][1]": 2})
 
     def test_top_level_dataclass(self):
-        leaves = dict(BaseMixin._walk_leaves(Point(1, 2)))
+        leaves = dict(_walk_leaves(Point(1, 2)))
         assert_that(leaves).is_equal_to({"x": 1, "y": 2})
 
     def test_nested_dataclass(self):
-        leaves = dict(BaseMixin._walk_leaves({"p": Point(1, 2)}))
+        leaves = dict(_walk_leaves({"p": Point(1, 2)}))
         assert_that(leaves).is_equal_to({"p.x": 1, "p.y": 2})
 
     def test_top_level_namedtuple(self):
-        leaves = dict(BaseMixin._walk_leaves(Pair(1, 2)))
+        leaves = dict(_walk_leaves(Pair(1, 2)))
         assert_that(leaves).is_equal_to({"a": 1, "b": 2})
 
     def test_nested_namedtuple(self):
-        leaves = dict(BaseMixin._walk_leaves({"pair": Pair(1, 2)}))
+        leaves = dict(_walk_leaves({"pair": Pair(1, 2)}))
         assert_that(leaves).is_equal_to({"pair.a": 1, "pair.b": 2})
 
     def test_top_level_model(self):
-        leaves = dict(BaseMixin._walk_leaves(FakeModel(x=1, y=2)))
+        leaves = dict(_walk_leaves(FakeModel(x=1, y=2)))
         assert_that(leaves).is_equal_to({"x": 1, "y": 2})
 
     def test_nested_model(self):
-        leaves = dict(BaseMixin._walk_leaves({"m": FakeModel(x=1)}))
+        leaves = dict(_walk_leaves({"m": FakeModel(x=1)}))
         assert_that(leaves).is_equal_to({"m.x": 1})
 
     def test_bare_scalar_is_root_leaf(self):
-        leaves = list(BaseMixin._walk_leaves(5))
+        leaves = list(_walk_leaves(5))
         assert_that(leaves).is_equal_to([(".", 5)])
 
     def test_set_is_single_leaf(self):
         value = frozenset({1, 2})
-        leaves = list(BaseMixin._walk_leaves(value))
+        leaves = list(_walk_leaves(value))
         assert_that(leaves).is_equal_to([(".", value)])
 
     def test_circular_reference_yields_one_leaf(self):
         data = {"a": 1}
         data["self"] = data
-        leaves = dict(BaseMixin._walk_leaves(data))
+        leaves = dict(_walk_leaves(data))
         assert_that(leaves).is_equal_to({"a": 1, "self": "<circular ref>"})
 
     def test_circular_through_list_is_guarded(self):
         # `child_seen = _seen | {id}` -> `&`/`-` would drop the seen ids and recurse forever.
         lst = [1]
         lst.append(lst)
-        leaves = dict(BaseMixin._walk_leaves(lst))
+        leaves = dict(_walk_leaves(lst))
         assert_that(leaves).is_equal_to({"[0]": 1, "[1]": "<circular ref>"})
 
     def test_circular_through_dataclass_is_guarded(self):
@@ -96,26 +96,26 @@ class TestWalkLeavesTraversal:
 
         node = Node(1)
         node.child = node
-        leaves = dict(BaseMixin._walk_leaves(node))
+        leaves = dict(_walk_leaves(node))
         assert_that(leaves).is_equal_to({"value": 1, "child": "<circular ref>"})
 
     def test_circular_through_namedtuple_is_guarded(self):
         holder = []
         pair = Pair(holder, 2)
         holder.append(pair)
-        leaves = dict(BaseMixin._walk_leaves(pair))
+        leaves = dict(_walk_leaves(pair))
         assert_that(leaves).is_equal_to({"a[0]": "<circular ref>", "b": 2})
 
     def test_circular_through_model_is_guarded(self):
         holder = []
         model = FakeModel(items=holder)
         holder.append(model)
-        leaves = dict(BaseMixin._walk_leaves(model))
+        leaves = dict(_walk_leaves(model))
         assert_that(leaves).is_equal_to({"items[0]": "<circular ref>"})
 
     def test_empty_container_yields_no_leaves(self):
-        assert_that(list(BaseMixin._walk_leaves({}))).is_empty()
-        assert_that(list(BaseMixin._walk_leaves([]))).is_empty()
+        assert_that(list(_walk_leaves({}))).is_empty()
+        assert_that(list(_walk_leaves([]))).is_empty()
 
 
 class TestAllFieldsSatisfy:
