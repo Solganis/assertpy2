@@ -88,7 +88,7 @@ class DataFrameMixin(_MixinBase):
             return self.error(f"Expected the {label} to equal the expected one, but they differ:\n{exc}")
         return self
 
-    def is_array_equal(self, expected: object) -> Self:
+    def is_array_equal(self, expected: object, **options: Any) -> Self:
         """Asserts that val equals *expected* element-wise, via numpy's ``assert_array_equal``.
 
         Works on any array-likes numpy can coerce (``ndarray``, nested lists, ...); shape and every
@@ -96,6 +96,8 @@ class DataFrameMixin(_MixinBase):
 
         Args:
             expected: the expected array-like
+            **options: keyword options forwarded to numpy's ``assert_array_equal``
+                (e.g. ``strict=True``, ``err_msg="..."``)
 
         Examples:
             Usage:
@@ -103,6 +105,7 @@ class DataFrameMixin(_MixinBase):
                 import numpy as np
 
                 assert_that(np.array([1, 2, 3])).is_array_equal(np.array([1, 2, 3]))
+                assert_that(np.array([1, 2, 3])).is_array_equal(np.array([1, 2, 3]), strict=True)
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
@@ -113,13 +116,13 @@ class DataFrameMixin(_MixinBase):
         """
         _, testing = _load("numpy")
         try:
-            testing.assert_array_equal(self.val, expected)
+            testing.assert_array_equal(self.val, expected, **options)
         except AssertionError as exc:
             return self.error(f"Expected the arrays to be equal, but they differ:\n{exc}")
         return self
 
     def is_array_close_to(
-        self, expected: object, *, rtol: float = 1e-05, atol: float = 1e-08, equal_nan: bool = False
+        self, expected: object, *, rtol: float = 1e-05, atol: float = 1e-08, equal_nan: bool = False, **options: Any
     ) -> Self:
         """Asserts that val is element-wise close to *expected*, via numpy's ``assert_allclose``.
 
@@ -131,6 +134,8 @@ class DataFrameMixin(_MixinBase):
             rtol: relative tolerance (numpy default ``1e-05``)
             atol: absolute tolerance (numpy default ``1e-08``)
             equal_nan: whether ``NaN`` in the same position compares equal
+            **options: further keyword options forwarded to numpy's ``assert_allclose``
+                (e.g. ``err_msg="..."``, ``strict=True``)
 
         Examples:
             Usage:
@@ -148,7 +153,7 @@ class DataFrameMixin(_MixinBase):
         """
         _, testing = _load("numpy")
         try:
-            testing.assert_allclose(self.val, expected, rtol=rtol, atol=atol, equal_nan=equal_nan)
+            testing.assert_allclose(self.val, expected, rtol=rtol, atol=atol, equal_nan=equal_nan, **options)
         except AssertionError as exc:
             return self.error(f"Expected the arrays to be close, but they differ:\n{exc}")
         return self
