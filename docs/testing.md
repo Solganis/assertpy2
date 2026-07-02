@@ -112,10 +112,15 @@ Capture a data structure to disk as JSON and compare against it on every run. Bo
 assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
 ```
 
-On the first run the snapshot file is created and the test passes; on later runs the value is compared
-to the stored snapshot and the test fails on any mismatch. Most Python structures are supported
-(`dict`, `list`, `set`, objects, numbers, `None`, complex). Commit snapshot artifacts (the
-`__snapshots` folder) to source control.
+On the first run the snapshot file is created, a `SnapshotCreatedWarning` is emitted, and the test
+passes; on later runs the value is compared to the stored snapshot and the test fails on any mismatch.
+Most Python structures are supported (`dict`, `list`, `set`, objects, numbers, `None`, complex). Commit
+snapshot artifacts (the `__snapshots` folder) to source control.
+
+!!! note
+    The capture warning makes a first run visible - a wrong first capture would otherwise silently
+    become the reference. Under `-W error` (or `filterwarnings = ["error"]`) a new capture fails
+    explicitly, which is usually what you want in CI.
 
 ### Updating snapshots
 
@@ -128,4 +133,16 @@ Snapshots are keyed by test filename plus line number by default; override with 
 ```python
 assert_that({"a": 1}).snapshot(id="my-custom-id")
 assert_that({"a": 1}).snapshot(path="my-custom-folder")
+```
+
+## Volatile fields and float noise
+
+The comparison accepts the same selective options as `is_equal_to()` - `ignore`, `include`,
+`tolerance`, and `comparators` - so timestamps, generated ids, or float jitter don't break snapshots.
+The snapshot file always stores the full value; the options only shape the comparison:
+
+```python
+assert_that(api_response).snapshot(id="order", ignore=["created_at", ("user", "session_id")])
+assert_that(metrics).snapshot(id="latency", tolerance=0.001)
+assert_that(payload).snapshot(id="user", comparators={"name": lambda a, e: a.lower() == e.lower()})
 ```

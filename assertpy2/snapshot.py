@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import time
+import warnings
 from typing import TYPE_CHECKING, Final
 
 from ._mixin_base import _MixinBase
@@ -19,6 +20,15 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _UNSET: Final = object()
+
+
+class SnapshotCreatedWarning(UserWarning):
+    """Emitted when `snapshot()` writes a new snapshot instead of comparing.
+
+    The first run of a snapshot assertion captures the current value and passes without comparing
+    anything, so a wrong first capture would silently become the reference.  This warning makes that
+    capture visible; suites running with ``-W error`` turn it into an explicit failure.
+    """
 
 
 @contextlib.contextmanager
@@ -141,13 +151,17 @@ class SnapshotMixin(_MixinBase):
     **Updating**
 
     It's easy to update your snapshots...just delete them all and re-run the test suite to regenerate all snapshots.
+    Each capture of a new snapshot emits a
+    [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning], so a first run is never
+    silent (and fails explicitly under ``-W error``).
     """
 
     def snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
         On the first run of a test before the snapshot file has been saved, a snapshot is created,
-        stored to disk, and the test *always* passes.  But on all subsequent runs, val is compared
+        stored to disk, a [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning] is
+        emitted, and the test *always* passes.  But on all subsequent runs, val is compared
         to the on-disk snapshot, and the test fails if they don't match.
 
         Snapshot artifacts are stored in the ``__snapshots`` directory by default, and should be
@@ -189,6 +203,9 @@ class SnapshotMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does **not** equal to on-disk snapshot
+
+        Warns:
+            SnapshotCreatedWarning: when this run captured a new snapshot instead of comparing
         """
         lineno = ""
         if id:
@@ -229,4 +246,10 @@ class SnapshotMixin(_MixinBase):
 
         if snapshot_value is not _UNSET:
             return self.is_equal_to(snapshot_value)
+        warnings.warn(
+            f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
+            " subsequent runs compare against it (delete the file to re-capture)",
+            SnapshotCreatedWarning,
+            stacklevel=2,
+        )
         return self

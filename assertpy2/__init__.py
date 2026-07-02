@@ -16,6 +16,7 @@ from .async_assertions import AsyncAssertionBuilder
 from .errors import AssertionFailure, DiffEntry, DiffResult
 from .file import contents_of
 from .matchers import Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
+from .snapshot import SnapshotCreatedWarning
 
 __all__ = [
     "AssertionFailure",
@@ -24,6 +25,7 @@ __all__ = [
     "DiffResult",
     "Matcher",
     "NegatedBuilder",
+    "SnapshotCreatedWarning",
     "SoftAssertionCollector",
     "WarningLoggingAdapter",
     "__version__",
