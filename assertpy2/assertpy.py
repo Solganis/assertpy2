@@ -655,6 +655,11 @@ class AssertionBuilder(
         while a service boots, a record not yet visible) can be retried too by listing those exception
         types in ``ignoring``.
 
+        Polling itself is always strict - retrying *requires* hard failures - but the final timeout
+        failure honors the builder's mode: inside
+        [`soft_assertions()`][assertpy2.assertpy.soft_assertions] it is collected instead of raised,
+        and under [`assert_warn()`][assertpy2.assertpy.assert_warn] it is logged.
+
         Args:
             timeout: maximum seconds to keep retrying (default ``5.0``)
             interval: seconds between retries (default ``0.5``)
@@ -700,4 +705,6 @@ class AssertionBuilder(
             timeout=timeout,
             interval=interval,
             ignoring=_normalize_ignoring(ignoring),
+            kind=self.kind,
+            logger=self.logger,
         )

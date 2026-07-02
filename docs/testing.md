@@ -103,6 +103,10 @@ await assert_that(get_order).eventually().within(10).ignoring(ConnectionError, T
     immediately. On timeout the last failure is chained for context. `ignoring` accepts only
     `Exception` subclasses, so `KeyboardInterrupt` and friends can never be swallowed.
 
+    Polling itself is always strict - retrying requires hard failures - but the final timeout
+    failure honors the builder's mode: inside `soft_assertions()` it is collected instead of
+    raised, and under `assert_warn()` it is logged.
+
 ## Snapshot testing
 
 Capture a data structure to disk as JSON and compare against it on every run. Borrowed from

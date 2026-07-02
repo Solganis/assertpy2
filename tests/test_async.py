@@ -1,9 +1,11 @@
 import asyncio
+import logging
 import threading
+from io import StringIO
 
 import pytest
 
-from assertpy2 import assert_that, soft_assertions, soft_fail
+from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_assertions, soft_fail
 from assertpy2.async_assertions import AsyncAssertionBuilder
 
 
@@ -201,6 +203,56 @@ class TestEventuallyIgnoring:
     def test_ignoring_method_rejects_non_exception_type(self):
         with pytest.raises(TypeError, match="Exception subclass"):
             assert_that(lambda: 1).eventually().ignoring(int)
+
+
+class TestEventuallyFailureModes:
+    """Polling always retries on hard failures; the final timeout failure honors the builder's mode."""
+
+    def test_soft_collects_timeout_failure_and_continues(self):
+        async def scenario():
+            with soft_assertions():
+                await assert_that(lambda: 1).eventually(timeout=0.15, interval=0.05).is_equal_to(2)
+                assert_that("after-eventually-marker").is_equal_to("other")
+
+        with pytest.raises(AssertionError) as exc_info:
+            asyncio.run(scenario())
+        text = str(exc_info.value)
+        assert_that(text).contains("soft assertion failures")
+        assert_that(text).contains("not met after")
+        assert_that(text).contains("after-eventually-marker")
+
+    def test_soft_passing_eventually_collects_nothing(self):
+        async def scenario():
+            with soft_assertions():
+                await assert_that(lambda: 42).eventually(timeout=1, interval=0.05).is_equal_to(42)
+
+        asyncio.run(scenario())
+
+    def test_soft_timeout_message_keeps_single_description_prefix(self):
+        async def scenario():
+            with soft_assertions():
+                await (
+                    assert_that(lambda: 1)
+                    .described_as("probe-label")
+                    .eventually(timeout=0.15, interval=0.05)
+                    .is_equal_to(2)
+                )
+
+        with pytest.raises(AssertionError) as exc_info:
+            asyncio.run(scenario())
+        assert_that(str(exc_info.value).count("[probe-label]")).is_equal_to(1)
+
+    def test_warn_logs_timeout_failure_without_raising(self):
+        capture = StringIO()
+        logger = logging.getLogger("capture-eventually-warn")
+        logger.addHandler(logging.StreamHandler(capture))
+        adapted = WarningLoggingAdapter(logger, None)
+
+        async def scenario():
+            await assert_warn(lambda: 1, logger=adapted).eventually(timeout=0.15, interval=0.05).is_equal_to(2)
+
+        asyncio.run(scenario())
+        assert_that(capture.getvalue()).contains("not met after").contains("to be equal to <2>")
 
 
 class TestContextVarsIsolation:
