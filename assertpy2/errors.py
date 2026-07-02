@@ -17,7 +17,13 @@ class DiffEntry:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DiffResult:
-    """Structured diff between two values."""
+    """Structured diff between two values.
+
+    ``kind`` is the diff *category* - which shape of comparison produced the entries (``"dict"``,
+    ``"sequence"``, ``"dataclass"``, ``"namedtuple"``, ``"model"``, ``"set"``, ``"string"``,
+    ``"scalar"``, ``"contains"``, or ``"match"``).  It is unrelated to the assertion builder's
+    ``kind`` argument, which selects the failure mode (``None``/``"soft"``/``"warn"``).
+    """
 
     kind: str
     entries: list[DiffEntry] = field(default_factory=list)
