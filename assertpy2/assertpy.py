@@ -454,15 +454,19 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
                 frame = frame.f_back
 
             previous_frame = None
-            for frame in reversed(
-                frames
-            ):  # pragma: no branch - loop always finds an assertpy frame when called from error()
+            for frame in reversed(frames):
                 for assertpy_filename in ASSERTPY_FILES:
                     if frame[0].endswith(assertpy_filename):
                         return previous_frame
                 previous_frame = frame
+            return None  # pragma: no cover - error() is always reached through an assertpy frame
 
-        filename, lineno = _unwind(inspect.currentframe())
+        # a user file living under a directory named "assertpy2" can shadow every frame, so the
+        # location prefix is skipped rather than crashing the warning
+        caller = _unwind(inspect.currentframe())
+        if caller is None:
+            return msg, kwargs
+        filename, lineno = caller
         return f"[{os.path.basename(filename)}:{lineno}]: {msg}", kwargs
 
 
