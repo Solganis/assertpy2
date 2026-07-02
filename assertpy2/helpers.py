@@ -8,6 +8,7 @@ import re
 from assertpy2.errors import DiffResult
 
 from ._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
+from ._diff import _sub_diff_entries
 from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 
@@ -306,7 +307,7 @@ class HelpersMixin(_MixinBase):
             )
             include_err = f" including keys {include_fmt}"
 
-        diff_entries = self._sub_diff_entries(val, other, "", config=config) or []
+        diff_entries = _sub_diff_entries(val, other, "", config=config) or []
         diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
 
         val_repr = _dict_repr(val, other)
