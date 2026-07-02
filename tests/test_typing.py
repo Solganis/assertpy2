@@ -66,3 +66,29 @@ if TYPE_CHECKING:
     # is_equal_to keeps its protocol with the recursive-comparison kwargs.
     assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion)
     assert_type(assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion)
+
+    # Ordering is declared wherever the runtime supports it (assertpy#128): lexicographic on str and
+    # bytes/bytearray, chronological on dates (including is_between; is_close_to stays datetime-only
+    # at runtime, so the shared date protocol does not advertise it).
+    assert_type(assert_that("banana").is_greater_than("apple"), _StringAssertion)
+    assert_type(assert_that("apple").is_less_than("banana"), _StringAssertion)
+    assert_type(assert_that("b").is_greater_than_or_equal_to("a"), _StringAssertion)
+    assert_type(assert_that("a").is_less_than_or_equal_to("b"), _StringAssertion)
+    assert_type(assert_that(b"b").is_greater_than(b"a"), _BytesAssertion)
+    assert_type(assert_that(b"a").is_less_than(bytearray(b"b")), _BytesAssertion)
+    assert_type(assert_that(bytearray(b"b")).is_greater_than_or_equal_to(b"a"), _BytesAssertion)
+    assert_type(assert_that(b"a").is_less_than_or_equal_to(b"b"), _BytesAssertion)
+    assert_type(assert_that(datetime.date(2026, 1, 2)).is_greater_than(datetime.date(2026, 1, 1)), _DateAssertion)
+    assert_type(assert_that(datetime.date(2026, 1, 1)).is_less_than(datetime.date(2026, 1, 2)), _DateAssertion)
+    assert_type(
+        assert_that(datetime.datetime(2026, 1, 2)).is_greater_than_or_equal_to(datetime.datetime(2026, 1, 1)),
+        _DateAssertion,
+    )
+    assert_type(
+        assert_that(datetime.datetime(2026, 1, 1)).is_less_than_or_equal_to(datetime.datetime(2026, 1, 2)),
+        _DateAssertion,
+    )
+    assert_type(
+        assert_that(datetime.date(2026, 1, 2)).is_between(datetime.date(2026, 1, 1), datetime.date(2026, 1, 3)),
+        _DateAssertion,
+    )
