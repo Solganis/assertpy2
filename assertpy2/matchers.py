@@ -656,16 +656,17 @@ class StructureMatcher(BaseMatcher):
                 mismatches.append(_SpecMismatch(current_path, _MISSING, _describe_spec_value(expected), None))
                 continue
             actual = value[key]
-            if isinstance(expected, StructureMatcher) and isinstance(actual, dict):
-                mismatches.extend(self._walk(actual, expected._spec, current_path, seen))
+            if isinstance(expected, StructureMatcher) and isinstance((normalized := self._as_mapping(actual)), dict):
+                mismatches.extend(self._walk(normalized, expected._spec, current_path, seen))
             elif isinstance(expected, Matcher):
                 if not expected.matches(actual):
                     mismatches.append(
                         _SpecMismatch(current_path, actual, expected.describe(), expected.describe_mismatch(actual))
                     )
             elif isinstance(expected, dict):
-                if isinstance(actual, dict):
-                    mismatches.extend(self._walk(actual, expected, current_path, seen))
+                normalized = self._as_mapping(actual)
+                if isinstance(normalized, dict):
+                    mismatches.extend(self._walk(normalized, expected, current_path, seen))
                 else:
                     mismatches.append(_SpecMismatch(current_path, actual, "a dict", None))
             elif actual != expected:

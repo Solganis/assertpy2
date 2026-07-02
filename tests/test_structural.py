@@ -466,3 +466,28 @@ class TestStructureMatcherOnModel:
             assert_that(User(id=-1, name="Bob", address=Address(city="LA"))).matches_structure(
                 {"id": match.is_positive()}
             )
+
+
+class TestModelNestedInsideDict:
+    """A model under a plain dict is normalized per level, so it matches specs and keeps leaf paths."""
+
+    def test_model_under_nested_structure_matcher_keeps_leaf_path(self):
+        value = {"address": _SpecModel(city="LA")}
+        matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
+        result = matcher.collect_mismatches(value)
+        assert_that(result[0][0]).is_equal_to("address.city")
+
+    def test_model_under_plain_dict_spec_matches(self):
+        value = {"address": _SpecModel(city="NYC")}
+        assert_that(match.structure({"address": {"city": "NYC"}}).matches(value)).is_true()
+
+    def test_model_under_plain_dict_spec_keeps_leaf_path(self):
+        value = {"address": _SpecModel(city="LA")}
+        result = match.structure({"address": {"city": "NYC"}}).collect_mismatches(value)
+        assert_that(result[0][0]).is_equal_to("address.city")
+
+    def test_matches_structure_failure_shows_model_leaf_path(self):
+        with pytest.raises(AssertionError, match=r"at <address\.city>"):
+            assert_that({"address": _SpecModel(city="LA")}).matches_structure(
+                {"address": match.structure({"city": "NYC"})}
+            )
