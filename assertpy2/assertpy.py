@@ -590,8 +590,9 @@ class AssertionBuilder(
             val: the value to be tested (aka the actual value)
             description (str, optional): the extra error message description.  Defaults to ``''``
                 (aka empty string)
-            kind (str, optional): the kind of assertions, one of ``None``, ``soft``, or ``warn``.
-                Defaults to ``None``
+            kind (str, optional): the failure mode of the assertions, one of ``None`` (raise),
+                ``soft`` (collect), or ``warn`` (log).  Defaults to ``None``.  Unrelated to
+                [`DiffResult.kind`][assertpy2.errors.DiffResult], which is a diff category
             expected (Error, optional): the expected exception.  Defaults to ``None``
             logger (Logger, optional): the logger for warning messages.  Defaults to ``None``
         """
