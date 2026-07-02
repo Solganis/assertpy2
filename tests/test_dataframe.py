@@ -42,13 +42,13 @@ def _fake_numpy(*, fail):
     library = types.ModuleType("numpy")
     testing = types.ModuleType("numpy.testing")
 
-    def assert_array_equal(actual, expected):
+    def assert_array_equal(actual, expected, **options):
         if fail:
-            raise AssertionError("numpy arrays differ")
+            raise AssertionError(f"numpy arrays differ; options={options}")
 
-    def assert_allclose(actual, expected, *, rtol, atol, equal_nan):
+    def assert_allclose(actual, expected, *, rtol, atol, equal_nan, **options):
         if fail:
-            raise AssertionError(f"numpy not close; rtol={rtol} atol={atol} equal_nan={equal_nan}")
+            raise AssertionError(f"numpy not close; rtol={rtol} atol={atol} equal_nan={equal_nan} options={options}")
 
     testing.assert_array_equal = assert_array_equal
     testing.assert_allclose = assert_allclose
@@ -124,6 +124,14 @@ class TestArrayAssertionsDuckTyped:
         with _fake_numpy(fail=True), pytest.raises(AssertionError, match="rtol=1e-05 atol=1e-08 equal_nan=False"):
             assert_that([1.0]).is_array_close_to([2.0])
 
+    def test_is_array_equal_forwards_options(self):
+        with _fake_numpy(fail=True), pytest.raises(AssertionError, match=r"options=\{'strict': True\}"):
+            assert_that([1, 2, 3]).is_array_equal([1, 2, 9], strict=True)
+
+    def test_is_array_close_to_forwards_options(self):
+        with _fake_numpy(fail=True), pytest.raises(AssertionError, match=r"options=\{'strict': True\}"):
+            assert_that([1.0]).is_array_close_to([2.0], strict=True)
+
 
 class TestMissingLibraries:
     def test_pandas_missing_raises_clear_importerror(self):
@@ -174,3 +182,12 @@ class TestRealLibraries:
         assert_that(numpy.array([1.0, 2.0])).is_array_close_to(numpy.array([1.0, 2.0000001]))
         with pytest.raises(AssertionError):
             assert_that(numpy.array([1.0, 2.0])).is_array_close_to(numpy.array([1.0, 2.5]))
+
+    def test_numpy_array_equal_options_passthrough(self):
+        numpy = pytest.importorskip("numpy")
+        actual = numpy.array([1, 2], dtype="int32")
+        expected = numpy.array([1, 2], dtype="int64")
+        assert_that(actual).is_array_equal(expected)
+        with pytest.raises(AssertionError):
+            # strict=True adds numpy's dtype check, so the forwarded option must flip the verdict
+            assert_that(actual).is_array_equal(expected, strict=True)
