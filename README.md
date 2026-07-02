@@ -140,7 +140,6 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models, and matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`). Circular reference protection.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format.
-- **Property-based tested**: comparison, selective-diff, matcher algebra, and collection logic are checked with [Hypothesis](https://hypothesis.readthedocs.io) against reference semantics, on top of 100% branch coverage.
 
 **Type safety**
 
