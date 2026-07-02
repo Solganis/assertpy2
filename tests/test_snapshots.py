@@ -160,6 +160,25 @@ class TestSnapshotCreatedWarning:
                 assert_that(next(values)).snapshot(path=str(tmp_path))
 
 
+class TestSnapshotDatetimeMicroseconds:
+    def test_microseconds_survive_the_roundtrip(self, tmp_path):
+        timestamp = datetime.datetime(2026, 1, 1, 12, 0, 0, 123456)
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(timestamp).snapshot(id="micro", path=str(tmp_path))
+        assert_that(timestamp).snapshot(id="micro", path=str(tmp_path))
+        with pytest.raises(AssertionError):
+            assert_that(timestamp.replace(microsecond=999999)).snapshot(id="micro", path=str(tmp_path))
+
+    def test_zero_microseconds_keep_the_historical_format(self, tmp_path):
+        # snapshots without sub-second precision must stay readable by older library versions
+        timestamp = datetime.datetime(2000, 11, 22, 3, 44, 55)
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(timestamp).snapshot(id="legacy", path=str(tmp_path))
+        raw = json.loads((tmp_path / "snap-legacy.json").read_text())
+        assert_that(raw["__data__"]).is_equal_to("2000-11-22 03:44:55")
+        assert_that(timestamp).snapshot(id="legacy", path=str(tmp_path))
+
+
 class TestSnapshotCompareOptions:
     def test_ignore_volatile_field(self, tmp_path):
         with pytest.warns(SnapshotCreatedWarning):
