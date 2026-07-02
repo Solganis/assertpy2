@@ -7,7 +7,7 @@ import re
 
 from assertpy2.errors import DiffResult
 
-from ._compare import _CompareConfig, _node_decision, _spec_matches
+from ._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
 from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 
@@ -138,7 +138,7 @@ class HelpersMixin(_MixinBase):
         _seen = _seen | {pair}
 
         if not (ignore or include or config is not None):
-            return val != other
+            return _guarded_not_equal(val, other)
 
         ignores = []  # bound for the nested-recursion use below; only read when ``ignore`` is set
         if ignore or include:
@@ -210,7 +210,7 @@ class HelpersMixin(_MixinBase):
                 )
                 if subdicts_not_equal:
                     return True
-            elif val[key] != other[key]:
+            elif _guarded_not_equal(val[key], other[key]):
                 return True
         return False
 

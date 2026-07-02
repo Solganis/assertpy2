@@ -4,7 +4,13 @@ import collections.abc
 import dataclasses
 from typing import TYPE_CHECKING, Any, Final
 
-from ._compare import _build_compare_config, _node_decision
+from ._compare import (
+    _ambiguous_array_operand,
+    _array_equality_error,
+    _build_compare_config,
+    _guarded_not_equal,
+    _node_decision,
+)
 from ._introspection import is_mapping_like, is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
@@ -18,34 +24,6 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _SENTINEL: Final = object()
-
-
-def _ambiguous_array_operand(value: object, other: object) -> object | None:
-    """Return the array/frame-like operand whose ``==`` has no single truth value, else ``None``.
-
-    numpy/pandas/polars containers expose ``__array__`` and compare element-wise, so ``bool(a == b)``
-    raises rather than yielding one bool (and a ``DataFrame`` also quacks dict-like, which would otherwise
-    mis-dispatch the comparison).  The ``__array__`` gate keeps the extra comparison off the hot path; the
-    truth test is actually attempted, so 0-d / scalar array values (which *are* truth-testable) pass
-    through unchanged.
-    """
-    for candidate, counterpart in ((value, other), (other, value)):
-        if hasattr(candidate, "__array__"):
-            try:
-                bool(candidate == counterpart)
-            except (ValueError, TypeError):
-                return candidate
-    return None
-
-
-def _array_equality_error(method: str, operand: object) -> TypeError:
-    """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
-    return TypeError(
-        f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
-        " no single truth value. Compare the value's own equality (e.g."
-        " assert_that(actual.equals(expected)).is_true()), assert on extracted scalars (columns, shape,"
-        " length), or use satisfies(...) with an explicit predicate."
-    )
 
 
 class BaseMixin(_MixinBase):
@@ -219,7 +197,7 @@ class BaseMixin(_MixinBase):
                     diff=diff,
                 )
         else:
-            if self.val != other:
+            if _guarded_not_equal(self.val, other):
                 diff = self._build_equality_diff(self.val, other)
                 return self.error(
                     f"Expected <{self.val}> to be equal to <{other}>, but was not.",

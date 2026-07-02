@@ -13,11 +13,14 @@ express to the type checker.
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import numbers
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from ._introspection import is_mapping_like, is_model_dump_object
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -57,6 +60,89 @@ def _build_compare_config(tolerance, comparators) -> _CompareConfig | None:
             if not callable(comparator):
                 raise TypeError("each comparator must be callable")
     return _CompareConfig(tolerance=tolerance, comparators=comparators)
+
+
+def _ambiguous_array_operand(value: object, other: object) -> object | None:
+    """Return the array/frame-like operand whose ``==`` has no single truth value, else ``None``.
+
+    numpy/pandas/polars containers expose ``__array__`` and compare element-wise, so ``bool(a == b)``
+    raises rather than yielding one bool (and a ``DataFrame`` also quacks dict-like, which would otherwise
+    mis-dispatch the comparison).  The ``__array__`` gate keeps the extra comparison off the hot path; the
+    truth test is actually attempted, so 0-d / scalar array values (which *are* truth-testable) pass
+    through unchanged.
+    """
+    for candidate, counterpart in ((value, other), (other, value)):
+        if hasattr(candidate, "__array__"):
+            try:
+                bool(candidate == counterpart)
+            except (ValueError, TypeError):
+                return candidate
+    return None
+
+
+def _array_equality_error(method: str, operand: object) -> TypeError:
+    """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
+    return TypeError(
+        f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
+        " no single truth value. Compare the value's own equality (e.g."
+        " assert_that(actual.equals(expected)).is_true()), assert on extracted scalars (columns, shape,"
+        " length), or use satisfies(...) with an explicit predicate."
+    )
+
+
+def _find_ambiguous_operand(actual, expected, _seen=None):
+    """Locate the array/frame-like member that broke a comparison, walking the diff engine's containers.
+
+    Cold error-path only; ``None`` means the error was not array-caused and must be re-raised unchanged.
+    """
+    if _seen is None:
+        _seen = set()
+    pair = (id(actual), id(expected))
+    if pair in _seen:
+        return None
+    _seen = _seen | {pair}
+    operand = _ambiguous_array_operand(actual, expected)
+    if operand is not None:
+        return operand
+    if is_mapping_like(actual) and is_mapping_like(expected):
+        expected_keys = set(expected)
+        for key in actual:
+            if key in expected_keys:
+                found = _find_ambiguous_operand(actual[key], expected[key], _seen)
+                if found is not None:
+                    return found
+        return None
+    if (
+        dataclasses.is_dataclass(actual)
+        and not isinstance(actual, type)
+        and dataclasses.is_dataclass(expected)
+        and not isinstance(expected, type)
+    ):
+        for field in dataclasses.fields(actual):
+            found = _find_ambiguous_operand(getattr(actual, field.name), getattr(expected, field.name, None), _seen)
+            if found is not None:
+                return found
+        return None
+    if is_model_dump_object(actual) and is_model_dump_object(expected):
+        return _find_ambiguous_operand(actual.model_dump(), expected.model_dump(), _seen)
+    if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
+        for actual_item, expected_item in zip(actual, expected, strict=False):
+            found = _find_ambiguous_operand(actual_item, expected_item, _seen)
+            if found is not None:
+                return found
+    return None
+
+
+def _guarded_not_equal(actual, expected) -> bool:
+    """``bool(actual != expected)``, converting the ambiguity raised from *inside* a container's ``==``
+    (where the top-level operand gate cannot see the array member) into the actionable ``TypeError``."""
+    try:
+        return bool(actual != expected)
+    except (ValueError, TypeError) as error:
+        operand = _find_ambiguous_operand(actual, expected)
+        if operand is None:
+            raise
+        raise _array_equality_error("is_equal_to", operand) from error
 
 
 def _is_real_number(value) -> bool:
@@ -114,7 +200,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             return "equal" if comparator(actual, expected) else "leaf"
         if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
             return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"
-    return "recurse" if actual != expected else "equal"
+    return "recurse" if _guarded_not_equal(actual, expected) else "equal"
 
 
 def _spec_matches(key, value, specs) -> bool:
