@@ -37,6 +37,9 @@ class AsyncAssertionBuilder:
         timeout: maximum seconds to keep retrying
         interval: seconds between retries
         ignoring: exception types the polling loop retries instead of propagating
+        kind: the failure mode of the *final* timeout failure (``None``/``"soft"``/``"warn"``);
+            polling itself always retries on hard failures
+        logger: the logger for ``"warn"`` mode
     """
 
     def __init__(
@@ -48,6 +51,8 @@ class AsyncAssertionBuilder:
         timeout: float = 5.0,
         interval: float = 0.5,
         ignoring: tuple[type[Exception], ...] = (),
+        kind: str | None = None,
+        logger: object = None,
     ):
         self._func = func
         self._builder_func = builder_func
@@ -55,6 +60,8 @@ class AsyncAssertionBuilder:
         self._timeout = timeout
         self._interval = interval
         self._ignoring = ignoring
+        self._kind = kind
+        self._logger = logger
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
@@ -103,9 +110,14 @@ class AsyncAssertionBuilder:
                         if loop.time() >= deadline:
                             # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
                             failure = str(last_error) if isinstance(last_error, AssertionError) else repr(last_error)
-                            raise AssertionError(
+                            message = (
                                 f"Expected condition not met after {self._timeout:.1f} seconds. Last failure: {failure}"
-                            ) from last_error
+                            )
+                            if self._kind in ("soft", "warn"):
+                                # inner failures already carry the description; an empty one here
+                                # avoids a double prefix in the collected/logged message
+                                return self._builder_func(None, "", self._kind, None, self._logger).error(message)
+                            raise AssertionError(message) from last_error
                         await asyncio.sleep(self._interval)
 
             return _poll()
