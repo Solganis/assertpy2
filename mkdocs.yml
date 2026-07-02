@@ -117,7 +117,7 @@ nav:
   - Extending:
       - Custom assertions: extending.md
       - Integrations: integrations.md
-  - Reference:
+  - API Reference:
       - Overview: reference/overview.md
       - Entry points: reference/entry-points.md
       - Core & objects: reference/core.md
