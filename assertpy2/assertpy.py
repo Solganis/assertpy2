@@ -496,6 +496,10 @@ class NegatedBuilder:
         self._builder = builder
 
     def __getattr__(self, name: str) -> object:
+        if name == "eventually":
+            # eventually() switches the chain to polling instead of asserting, so "inverting" it is
+            # meaningless and would otherwise fail loudly with a misleading message
+            raise TypeError("eventually() cannot be negated with not_; assert the inverted condition instead")
         attr = getattr(self._builder, name)
         if not callable(attr):
             return attr
