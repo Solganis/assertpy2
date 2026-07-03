@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import warnings
 from typing import Final
 
 import pytest
+
+from .errors import _safe_repr, _truncated
 
 try:
     import allure  # ty: ignore[unresolved-import]  # optional dependency
@@ -151,6 +154,48 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
     return "\n".join(lines)
 
 
+def _json_safe(value, _depth=0, _seen=None):
+    """Convert *value* to JSON-native data for an attachment: typed where possible, bounded and total.
+
+    Scalars and containers pass through as real JSON values so the Allure viewer renders a tree and
+    consumers can parse them.  Everything else degrades to a marked fallback instead of failing the
+    attachment: ``{"__repr__": ...}`` for non-JSON values (objects, datetimes, non-finite floats,
+    cycles, over-deep nesting), the snapshot codec's ``{"__type__": "set", "__data__": [...]}``
+    envelope for sets, and `_truncated` caps on strings and container sizes.
+    """
+    if _seen is None:
+        _seen = set()
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else {"__repr__": repr(value)}
+    if isinstance(value, str):
+        return _truncated(value)
+    if _depth >= 6:
+        return {"__repr__": _truncated(_safe_repr(value))}
+    if id(value) in _seen:
+        return {"__repr__": "<circular ref>"}
+    if isinstance(value, dict):
+        seen = _seen | {id(value)}
+        items = list(value.items())
+        out = {}
+        for key, val in items[:100]:
+            out[key if isinstance(key, str) else _safe_repr(key)] = _json_safe(val, _depth + 1, seen)
+        if len(items) > 100:
+            out["__truncated__"] = f"... and {len(items) - 100} more keys"
+        return out
+    if isinstance(value, (list, tuple)):
+        seen = _seen | {id(value)}
+        out = [_json_safe(item, _depth + 1, seen) for item in value[:100]]
+        if len(value) > 100:
+            out.append({"__repr__": f"... and {len(value) - 100} more items"})
+        return out
+    if isinstance(value, (set, frozenset)):
+        items = sorted(value, key=_safe_repr)
+        return {"__type__": "set", "__data__": [_json_safe(item, _depth + 1, _seen) for item in items[:100]]}
+    return {"__repr__": _truncated(_safe_repr(value))}
+
+
 def _diff_to_json(diff, max_entries=50):
     entries = getattr(diff, "entries", None)
     if not entries:
@@ -161,28 +206,28 @@ def _diff_to_json(diff, max_entries=50):
     items = [
         {
             "path": str(getattr(entry, "path", "")),
-            "actual": repr(getattr(entry, "actual", None)),
-            "expected": repr(getattr(entry, "expected", None)),
+            "actual": _json_safe(getattr(entry, "actual", None)),
+            "expected": _json_safe(getattr(entry, "expected", None)),
         }
         for entry in visible
     ]
-    payload = {"kind": kind, "entries": items}
+    payload = {"format": 2, "kind": kind, "entries": items}
     if truncated:
         payload["truncated"] = truncated
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
 
 
 def _attach_allure(actual, expected, diff, *, mode="diff", max_entries=50):
     if mode == "off":
         return
     if mode == "full" and (actual is not None or expected is not None):
-        data = {}
+        data = {"format": 2}
         if actual is not None:
-            data["actual"] = repr(actual)
+            data["actual"] = _json_safe(actual)
         if expected is not None:
-            data["expected"] = repr(expected)
+            data["expected"] = _json_safe(expected)
         allure.attach(
-            body=json.dumps(data, ensure_ascii=False, indent=2),
+            body=json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False),
             name="AssertionFailure",
             attachment_type=allure.attachment_type.JSON,
         )

@@ -31,22 +31,33 @@ A **Structured Diff** attachment (modes `diff`, `full`) with a path-level breakd
 
 ```json
 {
+  "format": 2,
   "kind": "dict",
   "entries": [
-    {"path": "user.settings.theme", "actual": "'dark'", "expected": "'light'"},
-    {"path": "user.settings.lang", "actual": "'en'", "expected": "'ru'"}
+    {"path": "user.settings.theme", "actual": "dark", "expected": "light"},
+    {"path": "user.settings.retries", "actual": 3, "expected": 5}
   ]
 }
 ```
+
+Values are native JSON (numbers, strings, booleans, nested objects and arrays), so the Allure viewer
+renders them as a collapsible tree and downstream tooling can parse them. Anything JSON cannot express
+degrades to a marked fallback instead of failing the attachment: `{"__repr__": "..."}` for arbitrary
+objects, datetimes, non-finite floats and circular references, and `{"__type__": "set", "__data__":
+[...]}` for sets. Oversized values are capped (strings at 4000 chars, containers at 100 items).
 
 An **AssertionFailure** attachment (mode `full` only) with actual and expected values:
 
 ```json
 {
-  "actual": "{'name': 'Alice', 'age': 30}",
-  "expected": "{'name': 'Alice', 'age': 25}"
+  "format": 2,
+  "actual": {"name": "Alice", "age": 30},
+  "expected": {"name": "Alice", "age": 25}
 }
 ```
+
+The `format` field versions the attachment schema (`2` = typed values; attachments without the field
+are the older repr-string format), so downstream tooling can branch explicitly.
 
 Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
 
