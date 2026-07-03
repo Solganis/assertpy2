@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import inspect
+from collections import deque
+from itertools import pairwise
 from typing import TYPE_CHECKING
+
+from .errors import AssertionFailure, PollSample, PollTrace, _json_safe
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -10,6 +15,67 @@ if TYPE_CHECKING:
     from ._compat import Self
 
 __tracebackhide__ = True
+
+_PROBE_UNSET = object()
+
+
+class _PollRecorder:
+    """Collects per-poll samples, collapsing identical runs and keeping the first and last polls."""
+
+    def __init__(self, head: int = 5, tail: int = 20):
+        self._head: list[PollSample] = []
+        self._head_limit = head
+        self._tail: deque[PollSample] = deque(maxlen=tail)
+        self.dropped = 0
+        self.total_polls = 0
+
+    def record(self, elapsed, outcome, value, detail):
+        self.total_polls += 1
+        last = self._tail[-1] if self._tail else (self._head[-1] if self._head else None)
+        if last is not None and (last.outcome, last.value, last.detail) == (outcome, value, detail):
+            collapsed = dataclasses.replace(last, repeats=last.repeats + 1)
+            if self._tail:
+                self._tail[-1] = collapsed
+            else:
+                self._head[-1] = collapsed
+            return
+        sample = PollSample(elapsed=elapsed, outcome=outcome, value=value, detail=detail)
+        if len(self._head) < self._head_limit:
+            self._head.append(sample)
+            return
+        if len(self._tail) == self._tail.maxlen:
+            self.dropped += 1
+        self._tail.append(sample)
+
+    def build(self, elapsed) -> PollTrace:
+        samples = self._head + list(self._tail)
+        return PollTrace(
+            samples=samples,
+            total_polls=self.total_polls,
+            dropped=self.dropped,
+            elapsed=elapsed,
+            summary=_summarize(samples, self.total_polls, elapsed),
+        )
+
+
+def _summarize(samples, total_polls, elapsed) -> str:
+    """Classify the convergence trend of a timed-out poll into one diagnostic sentence."""
+    fails = [sample for sample in samples if sample.outcome == "fail"]
+    if not fails:
+        types = {sample.detail.split("(", 1)[0] for sample in samples}
+        raised = types.pop() if len(types) == 1 else "exceptions"
+        return f"probe raised {raised} on all {total_polls} polls"
+    error_polls = sum(sample.repeats for sample in samples if sample.outcome == "error")
+    changes = [current for previous, current in pairwise(fails) if current.value != previous.value]
+    change_word = "time" if len(changes) == 1 else "times"
+    if error_polls:
+        poll_word = "poll" if error_polls == 1 else "polls"
+        trend = f"value then changed {len(changes)} {change_word}" if changes else "value then never changed"
+        return f"probe recovered after {error_polls} raising {poll_word}; {trend}"
+    if not changes:
+        return f"value unchanged across {total_polls} polls"
+    last_change = elapsed - changes[-1].elapsed
+    return f"value changed {len(changes)} {change_word}; last change {last_change:.1f}s before the deadline"
 
 
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
@@ -94,30 +160,47 @@ class AsyncAssertionBuilder:
         def _make_coroutine(*args, **kwargs):
             async def _poll():
                 loop = asyncio.get_running_loop()
-                deadline = loop.time() + self._timeout
+                start = loop.time()
+                deadline = start + self._timeout
+                recorder = _PollRecorder()
                 last_error: Exception | None = None
                 while True:
+                    probed = _PROBE_UNSET
                     try:
                         val = self._func()
                         if inspect.isawaitable(val):
                             val = await val
+                        probed = val
                         builder = self._builder_func(val, self._description)
                         method = getattr(builder, name)
                         method(*args, **kwargs)
                         return builder
-                    except (AssertionError, *self._ignoring) as exc:  # noqa: PERF203  # retry-on-failure needs the try/except per poll iteration
+                    except (
+                        AssertionError,
+                        *self._ignoring,
+                    ) as exc:  # retry-on-failure needs the try/except per poll iteration
                         last_error = exc
+                        # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
+                        failure = str(exc) if isinstance(exc, AssertionError) else repr(exc)
+                        recorder.record(
+                            elapsed=loop.time() - start,
+                            outcome="fail" if isinstance(exc, AssertionError) else "error",
+                            # sanitized eagerly: probes often mutate and return the same live object,
+                            # so each sample must be a point-in-time snapshot, not a reference
+                            value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
+                            detail=failure,
+                        )
                         if loop.time() >= deadline:
-                            # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
-                            failure = str(last_error) if isinstance(last_error, AssertionError) else repr(last_error)
+                            trace = recorder.build(loop.time() - start)
                             message = (
-                                f"Expected condition not met after {self._timeout:.1f} seconds. Last failure: {failure}"
+                                f"Expected condition not met after {self._timeout:.1f} seconds"
+                                f" ({trace.summary}). Last failure: {failure}"
                             )
                             if self._kind in ("soft", "warn"):
                                 # inner failures already carry the description; an empty one here
                                 # avoids a double prefix in the collected/logged message
                                 return self._builder_func(None, "", self._kind, None, self._logger).error(message)
-                            raise AssertionError(message) from last_error
+                            raise AssertionFailure(message, trace=trace) from last_error
                         await asyncio.sleep(self._interval)
 
             return _poll()

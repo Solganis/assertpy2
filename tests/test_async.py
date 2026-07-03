@@ -5,8 +5,16 @@ from io import StringIO
 
 import pytest
 
-from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_assertions, soft_fail
-from assertpy2.async_assertions import AsyncAssertionBuilder
+from assertpy2 import (
+    AssertionFailure,
+    PollSample,
+    WarningLoggingAdapter,
+    assert_that,
+    assert_warn,
+    soft_assertions,
+    soft_fail,
+)
+from assertpy2.async_assertions import AsyncAssertionBuilder, _PollRecorder, _summarize
 
 
 class TestEventuallyBasic:
@@ -253,6 +261,157 @@ class TestEventuallyFailureModes:
 
         asyncio.run(scenario())
         assert_that(capture.getvalue()).contains("not met after").contains("to be equal to <2>")
+
+
+class TestPollRecorder:
+    """Unit coverage of collapsing and first+last retention, deterministic via direct record() calls."""
+
+    def test_identical_polls_collapse_into_repeats(self):
+        recorder = _PollRecorder()
+        for _ in range(4):
+            recorder.record(elapsed=0.1, outcome="fail", value=1, detail="same")
+        trace = recorder.build(elapsed=1.0)
+        assert_that(trace.samples).is_length(1)
+        assert_that(trace.samples[0].repeats).is_equal_to(4)
+        assert_that(trace.total_polls).is_equal_to(4)
+
+    def test_collapse_applies_inside_the_tail_window(self):
+        recorder = _PollRecorder(head=1, tail=3)
+        recorder.record(elapsed=0.0, outcome="fail", value=0, detail="d0")
+        recorder.record(elapsed=0.1, outcome="fail", value=1, detail="d1")
+        recorder.record(elapsed=0.2, outcome="fail", value=1, detail="d1")
+        trace = recorder.build(elapsed=1.0)
+        assert_that(trace.samples).is_length(2)
+        assert_that(trace.samples[1].repeats).is_equal_to(2)
+        assert_that(trace.samples[1].elapsed).is_equal_to(0.1)
+
+    def test_retention_keeps_first_and_last_and_counts_dropped(self):
+        recorder = _PollRecorder(head=2, tail=3)
+        for index in range(10):
+            recorder.record(elapsed=float(index), outcome="fail", value=index, detail=f"d{index}")
+        trace = recorder.build(elapsed=10.0)
+        assert_that([sample.value for sample in trace.samples]).is_equal_to([0, 1, 7, 8, 9])
+        assert_that(trace.dropped).is_equal_to(5)
+        assert_that(trace.total_polls).is_equal_to(10)
+
+    def test_error_and_fail_outcomes_do_not_collapse_together(self):
+        recorder = _PollRecorder()
+        recorder.record(elapsed=0.0, outcome="error", value=None, detail="ConnectionError('x')")
+        recorder.record(elapsed=0.1, outcome="fail", value=None, detail="ConnectionError('x')")
+        assert_that(recorder.build(elapsed=1.0).samples).is_length(2)
+
+
+class TestTraceSummary:
+    def _sample(self, **overrides):
+        base = {"elapsed": 0.0, "outcome": "fail", "value": 1, "detail": "d", "repeats": 1}
+        base.update(overrides)
+        return PollSample(**base)
+
+    def test_all_errors_single_type(self):
+        samples = [self._sample(outcome="error", detail="ConnectionError('boot')", value=None)]
+        assert_that(_summarize(samples, 7, 5.0)).is_equal_to("probe raised ConnectionError on all 7 polls")
+
+    def test_all_errors_mixed_types(self):
+        samples = [
+            self._sample(outcome="error", detail="ConnectionError('boot')", value=None),
+            self._sample(outcome="error", detail="TimeoutError('slow')", value=None, elapsed=0.5),
+        ]
+        assert_that(_summarize(samples, 4, 5.0)).is_equal_to("probe raised exceptions on all 4 polls")
+
+    def test_recovered_then_stable(self):
+        samples = [
+            self._sample(outcome="error", detail="ConnectionError('boot')", value=None, repeats=3),
+            self._sample(elapsed=1.5, value={"s": 1}),
+        ]
+        assert_that(_summarize(samples, 5, 5.0)).is_equal_to(
+            "probe recovered after 3 raising polls; value then never changed"
+        )
+
+    def test_recovered_then_changing(self):
+        samples = [
+            self._sample(outcome="error", detail="ConnectionError('boot')", value=None),
+            self._sample(elapsed=1.0, value={"s": 1}),
+            self._sample(elapsed=2.0, value={"s": 2}),
+        ]
+        assert_that(_summarize(samples, 3, 5.0)).is_equal_to(
+            "probe recovered after 1 raising poll; value then changed 1 time"
+        )
+
+    def test_value_never_changed(self):
+        samples = [self._sample(repeats=9)]
+        assert_that(_summarize(samples, 9, 5.0)).is_equal_to("value unchanged across 9 polls")
+
+    def test_value_changed_reports_last_change(self):
+        samples = [
+            self._sample(elapsed=0.0, value=1),
+            self._sample(elapsed=1.0, value=2),
+            self._sample(elapsed=3.5, value=3),
+        ]
+        assert_that(_summarize(samples, 3, 5.0)).is_equal_to(
+            "value changed 2 times; last change 1.5s before the deadline"
+        )
+
+
+class TestEventuallyTrace:
+    def test_timeout_failure_carries_the_trace(self):
+        states = iter([ConnectionError("boot"), {"s": "PENDING"}])
+
+        def probe():
+            state = next(states, {"s": "PENDING"})
+            if isinstance(state, Exception):
+                raise state
+            return state
+
+        async def scenario():
+            await (
+                assert_that(probe)
+                .eventually(timeout=1.0, interval=0.01, ignoring=ConnectionError)
+                .is_equal_to({"s": "PAID"})
+            )
+
+        with pytest.raises(AssertionFailure) as exc_info:
+            asyncio.run(scenario())
+        trace = exc_info.value.trace
+        assert_that(trace).is_not_none()
+        assert_that(trace.samples[0].outcome).is_equal_to("error")
+        assert_that(trace.samples[0].value).is_none()
+        assert_that(trace.samples[1].outcome).is_equal_to("fail")
+        assert_that(trace.samples[1].value).is_equal_to({"s": "PENDING"})
+        assert_that(trace.total_polls).is_greater_than_or_equal_to(2)
+        assert_that(str(exc_info.value)).contains("(probe recovered after 1 raising poll;")
+
+    def test_samples_are_point_in_time_snapshots_of_a_mutating_probe(self):
+        live = {"step": 0}
+
+        def probe():
+            live["step"] += 1
+            return live
+
+        async def scenario():
+            await assert_that(probe).eventually(timeout=1.0, interval=0.01).is_equal_to({"step": -1})
+
+        with pytest.raises(AssertionFailure) as exc_info:
+            asyncio.run(scenario())
+        samples = exc_info.value.trace.samples
+        assert_that(len(samples)).is_greater_than_or_equal_to(2)
+        assert_that(samples[0].value).is_not_equal_to(samples[-1].value)
+        assert_that(samples[0].value).is_equal_to({"step": 1})
+
+    def test_unchanged_value_produces_unchanged_summary(self):
+        async def scenario():
+            await assert_that(lambda: 7).eventually(timeout=0.15, interval=0.03).is_equal_to(8)
+
+        with pytest.raises(AssertionFailure, match=r"\(value unchanged across \d+ polls\)"):
+            asyncio.run(scenario())
+
+    def test_soft_mode_message_carries_the_summary(self):
+        async def scenario():
+            with soft_assertions():
+                await assert_that(lambda: 7).eventually(timeout=0.15, interval=0.03).is_equal_to(8)
+
+        with pytest.raises(AssertionError) as exc_info:
+            asyncio.run(scenario())
+        assert_that(str(exc_info.value)).contains("value unchanged across")
 
 
 class TestContextVarsIsolation:

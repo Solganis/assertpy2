@@ -113,6 +113,29 @@ await assert_that(get_order).eventually().within(10).ignoring(ConnectionError, T
     failure honors the builder's mode: inside `soft_assertions()` it is collected instead of
     raised, and under `assert_warn()` it is logged.
 
+### Polling trace
+
+Every poll is recorded, so a timeout failure diagnoses itself instead of just reporting that time ran
+out. The message carries a one-line trend - `probe raised ConnectionError on all 12 polls`, `value
+unchanged across 12 polls`, or `value changed 3 times; last change 0.4s before the deadline` - which
+immediately separates "the service never came up" from "it converged to the wrong value" from "the
+timeout is too short". The raised `AssertionFailure` carries the full timeline as `.trace` (a
+[`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples, identical consecutive polls collapsed),
+the pytest report gets a `Polling Trace` section:
+
+```text
+polled 9 times over 5.0s; probe recovered after 2 raising polls; value then changed 1 time
+  t=+0.0s error x2: ConnectionError('boot')
+  t=+0.5s fail x2: Expected <{'status': 'PENDING'}> to be equal to <{'status': 'PAID'}>, but was not.
+  t=+1.5s fail x5: Expected <{'status': 'SHIPPED'}> to be equal to <{'status': 'PAID'}>, but was not.
+```
+
+and Allure receives a typed `Polling Trace` JSON attachment including diffs between consecutive
+distinct samples. Sample values are point-in-time snapshots (safe even when the probe mutates and
+returns the same object), capped by the same limits as other attachments; long polls keep the first 5
+and last 20 samples. In soft/warn modes the message keeps the trend line; the full trace object
+travels only with the strict `AssertionFailure`.
+
 ## Snapshot testing
 
 Capture a data structure to disk as JSON and compare against it on every run. Borrowed from

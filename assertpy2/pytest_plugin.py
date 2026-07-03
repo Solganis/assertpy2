@@ -3,10 +3,12 @@ from __future__ import annotations
 import contextlib
 import json
 import warnings
+from itertools import pairwise
 from typing import Final
 
 import pytest
 
+from ._diff import _sub_diff_entries
 from .errors import _json_safe
 
 try:
@@ -72,8 +74,9 @@ def pytest_runtest_makereport(item, call):
     actual = getattr(exc, "actual", None)
     expected = getattr(exc, "expected", None)
     diff = getattr(exc, "diff", None)
+    trace = getattr(exc, "trace", None)
 
-    if actual is None and expected is None and diff is None:
+    if actual is None and expected is None and diff is None and trace is None:
         return
 
     if actual is not None or expected is not None:
@@ -89,11 +92,14 @@ def pytest_runtest_makereport(item, call):
         max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
         report.sections.append(("Structured Diff", _format_diff(diff, color=use_color, max_entries=max_entries)))
 
+    if trace is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
+        report.sections.append(("Polling Trace", _format_trace(trace)))
+
     if _HAS_ALLURE:
         mode = getattr(item.config, "_assertpy2_allure_mode", "diff")
         allure_max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
         with contextlib.suppress(Exception):
-            _attach_allure(actual, expected, diff, mode=mode, max_entries=allure_max_entries)
+            _attach_allure(actual, expected, diff, trace=trace, mode=mode, max_entries=allure_max_entries)
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
@@ -153,6 +159,57 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
     return "\n".join(lines)
 
 
+def _format_trace(trace) -> str:
+    """Render a `PollTrace` as a compact per-poll timeline for the terminal report section."""
+    lines = [f"polled {trace.total_polls} times over {trace.elapsed:.1f}s; {trace.summary}"]
+    if trace.dropped:
+        lines.append(f"  ... {trace.dropped} middle samples dropped")
+    for sample in trace.samples:
+        repeats = f" x{sample.repeats}" if sample.repeats > 1 else ""
+        lines.append(f"  t=+{sample.elapsed:.1f}s {sample.outcome}{repeats}: {sample.detail}")
+    return "\n".join(lines)
+
+
+def _trace_to_json(trace):
+    """Serialize a `PollTrace` to the typed attachment JSON, with diffs between distinct samples."""
+    samples = []
+    for sample in trace.samples:
+        item = {"t": round(sample.elapsed, 3), "outcome": sample.outcome, "detail": sample.detail}
+        if sample.value is not None:
+            item["value"] = sample.value
+        if sample.repeats > 1:
+            item["repeats"] = sample.repeats
+        samples.append(item)
+    deltas = []
+    fails = [sample for sample in trace.samples if sample.outcome == "fail"]
+    for previous, current in pairwise(fails):
+        if current.value == previous.value:
+            continue
+        entries = _sub_diff_entries(previous.value, current.value, "")
+        if entries is None:
+            entries_json = [{"path": ".", "actual": previous.value, "expected": current.value}]
+        else:
+            entries_json = [
+                {"path": entry.path, "actual": entry.actual, "expected": entry.expected} for entry in entries
+            ]
+        deltas.append(
+            {"from_t": round(previous.elapsed, 3), "to_t": round(current.elapsed, 3), "entries": entries_json}
+        )
+    payload = {
+        "format": 2,
+        "kind": "polling-trace",
+        "total_polls": trace.total_polls,
+        "elapsed": round(trace.elapsed, 3),
+        "summary": trace.summary,
+        "samples": samples,
+    }
+    if trace.dropped:
+        payload["dropped"] = trace.dropped
+    if deltas:
+        payload["deltas"] = deltas
+    return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
+
+
 def _diff_to_json(diff, max_entries=50):
     entries = getattr(diff, "entries", None)
     if not entries:
@@ -174,7 +231,7 @@ def _diff_to_json(diff, max_entries=50):
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
 
 
-def _attach_allure(actual, expected, diff, *, mode="diff", max_entries=50):
+def _attach_allure(actual, expected, diff, *, trace=None, mode="diff", max_entries=50):
     if mode == "off":
         return
     if mode == "full" and (actual is not None or expected is not None):
@@ -196,3 +253,9 @@ def _attach_allure(actual, expected, diff, *, mode="diff", max_entries=50):
                 name="Structured Diff",
                 attachment_type=allure.attachment_type.JSON,
             )
+    if trace is not None:
+        allure.attach(
+            body=_trace_to_json(trace),
+            name="Polling Trace",
+            attachment_type=allure.attachment_type.JSON,
+        )
