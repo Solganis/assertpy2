@@ -9,6 +9,7 @@ from assertpy2 import assert_that, match
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 from assertpy2.pytest_plugin import (
     _diff_to_json,
+    _json_safe,
     pytest_addoption,
     pytest_configure,
     pytest_runtest_makereport,
@@ -268,20 +269,25 @@ class TestDiffToJson:
         diff = DiffResult(kind="dict")
         assert_that(_diff_to_json(diff)).is_none()
 
+    def test_payload_carries_format_version(self):
+        # consumers can branch on the attachment schema: 1 = repr-strings (implicit), 2 = typed values
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
+        assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(2)
+
     def test_returns_valid_json(self):
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
         result = json.loads(_diff_to_json(diff))
         assert_that(result["kind"]).is_equal_to("dict")
         assert_that(result["entries"]).is_length(1)
         assert_that(result["entries"][0]["path"]).is_equal_to("a")
-        assert_that(result["entries"][0]["actual"]).is_equal_to("1")
-        assert_that(result["entries"][0]["expected"]).is_equal_to("2")
+        assert_that(result["entries"][0]["actual"]).is_equal_to(1)
+        assert_that(result["entries"][0]["expected"]).is_equal_to(2)
 
-    def test_preserves_repr_format(self):
+    def test_string_values_stay_native_strings(self):
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual="<b>", expected="&")])
         result = json.loads(_diff_to_json(diff))
-        assert_that(result["entries"][0]["actual"]).is_equal_to("'<b>'")
-        assert_that(result["entries"][0]["expected"]).is_equal_to("'&'")
+        assert_that(result["entries"][0]["actual"]).is_equal_to("<b>")
+        assert_that(result["entries"][0]["expected"]).is_equal_to("&")
 
     def test_multiple_entries(self):
         diff = DiffResult(
@@ -304,6 +310,79 @@ class TestDiffToJson:
         result = json.loads(_diff_to_json(diff, max_entries=2))
         assert_that(result["entries"]).is_length(2)
         assert_that(result["truncated"]).is_equal_to(3)
+
+
+class _RaisingRepr:
+    def __repr__(self):
+        raise RuntimeError("broken repr")
+
+
+class TestJsonSafe:
+    """The attachment sanitizer is typed where possible, and total and bounded everywhere else."""
+
+    def test_native_scalars_pass_through(self):
+        assert_that(_json_safe(None)).is_none()
+        assert_that(_json_safe(True)).is_true()
+        assert_that(_json_safe(7)).is_equal_to(7)
+        assert_that(_json_safe(1.5)).is_equal_to(1.5)
+        assert_that(_json_safe("text")).is_equal_to("text")
+
+    def test_non_finite_floats_become_markers(self):
+        assert_that(_json_safe(float("nan"))).is_equal_to({"__repr__": "nan"})
+        assert_that(_json_safe(float("inf"))).is_equal_to({"__repr__": "inf"})
+
+    def test_huge_string_is_truncated(self):
+        result = _json_safe("x" * 10_000)
+        assert_that(result).contains("more chars")
+        assert_that(len(result)).is_less_than(5_000)
+
+    def test_containers_stay_typed(self):
+        assert_that(_json_safe({"a": [1, (2, 3)]})).is_equal_to({"a": [1, [2, 3]]})
+
+    def test_non_string_keys_become_reprs(self):
+        assert_that(_json_safe({1: "a", (2, 3): "b"})).is_equal_to({"1": "a", "(2, 3)": "b"})
+
+    def test_oversized_dict_gets_truncation_marker(self):
+        result = _json_safe({f"k{i:03d}": i for i in range(150)})
+        assert_that(result["__truncated__"]).is_equal_to("... and 50 more keys")
+        assert_that(result).is_length(101)
+
+    def test_oversized_list_gets_truncation_marker(self):
+        result = _json_safe(list(range(150)))
+        assert_that(result).is_length(101)
+        assert_that(result[-1]).is_equal_to({"__repr__": "... and 50 more items"})
+
+    def test_set_uses_snapshot_envelope(self):
+        assert_that(_json_safe({2, 1})).is_equal_to({"__type__": "set", "__data__": [1, 2]})
+        assert_that(_json_safe(frozenset({"a"}))).is_equal_to({"__type__": "set", "__data__": ["a"]})
+
+    def test_depth_cap_degrades_to_repr_marker(self):
+        nested = {"level": 1}
+        for _ in range(8):
+            nested = {"level": nested}
+        blob = json.dumps(_json_safe(nested))
+        assert_that(blob).contains("__repr__")
+
+    def test_cycle_degrades_to_marker(self):
+        cyclic = [1]
+        cyclic.append(cyclic)
+        assert_that(_json_safe(cyclic)).is_equal_to([1, {"__repr__": "<circular ref>"}])
+
+    def test_arbitrary_object_becomes_repr_marker(self):
+        class Point:
+            def __repr__(self):
+                return "Point(1, 2)"
+
+        assert_that(_json_safe(Point())).is_equal_to({"__repr__": "Point(1, 2)"})
+
+    def test_raising_repr_never_loses_the_attachment(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=_RaisingRepr(), expected=1)])
+        body = json.loads(_diff_to_json(diff))
+        assert_that(body["entries"][0]["actual"]).is_equal_to({"__repr__": "<unreprable _RaisingRepr>"})
+
+    def test_output_is_strict_json(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=float("nan"), expected=1)])
+        assert_that(json.loads(_diff_to_json(diff))["entries"][0]["actual"]).is_equal_to({"__repr__": "nan"})
 
 
 def _mock_allure():
@@ -370,8 +449,8 @@ class TestAllureDiffMode:
         assert_that(body["kind"]).is_equal_to("match")
         actuals = {entry["path"]: entry["actual"] for entry in body["entries"]}
         assert_that(actuals).contains_key("role", "email")
-        assert_that(actuals["role"]).is_equal_to("'superadmin'")
-        assert_that(actuals["email"]).is_equal_to("<missing>")
+        assert_that(actuals["role"]).is_equal_to("superadmin")
+        assert_that(actuals["email"]).is_equal_to({"__repr__": "<missing>"})
 
 
 class TestAllureFullMode:
@@ -381,7 +460,7 @@ class TestAllureFullMode:
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         assert_that(mock.attach.call_count).is_equal_to(1)
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"actual": "1", "expected": "2"})
+        assert_that(body).is_equal_to({"format": 2, "actual": 1, "expected": 2})
         assert_that(mock.attach.call_args_list[0].kwargs["name"]).is_equal_to("AssertionFailure")
         assert_that(mock.attach.call_args_list[0].kwargs["attachment_type"]).is_equal_to("json")
 
@@ -390,22 +469,22 @@ class TestAllureFullMode:
         exc = AssertionFailure("fail", actual=42)
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"actual": "42"})
+        assert_that(body).is_equal_to({"format": 2, "actual": 42})
 
     def test_only_expected_when_full(self):
         mock = _mock_allure()
         exc = AssertionFailure("fail", expected="abc")
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"expected": "'abc'"})
+        assert_that(body).is_equal_to({"format": 2, "expected": "abc"})
 
-    def test_repr_preserves_types(self):
+    def test_containers_attach_as_typed_json(self):
         mock = _mock_allure()
         exc = AssertionFailure("fail", actual={"a": 1}, expected=[1, 2])
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body["actual"]).is_equal_to("{'a': 1}")
-        assert_that(body["expected"]).is_equal_to("[1, 2]")
+        assert_that(body["actual"]).is_equal_to({"a": 1})
+        assert_that(body["expected"]).is_equal_to([1, 2])
 
     def test_all_three_produces_two_attachments(self):
         mock = _mock_allure()
