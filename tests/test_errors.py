@@ -1,3 +1,5 @@
+import pytest
+
 from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, soft_assertions
 
 
@@ -158,3 +160,50 @@ class TestStructuredErrorFromAssertions:
         assert_that(42).is_equal_to(42)
         assert_that("foo").is_equal_to("foo")
         assert_that({"a": 1}).is_equal_to({"a": 1})
+
+
+class TestMessageTruncation:
+    """Rendered failure text is capped; the structured payload always keeps the full data."""
+
+    def test_huge_operand_repr_is_capped(self):
+        huge = "x" * 10_000
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(huge).is_equal_to("y")
+        message = str(exc_info.value)
+        assert_that(len(message)).is_less_than(10_000)
+        assert_that(message).contains("more chars")
+
+    def test_is_not_equal_to_huge_operands_capped(self):
+        huge = "x" * 10_000
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(huge).is_not_equal_to(huge)
+        message = str(exc_info.value)
+        assert_that(len(message)).is_less_than(10_000)
+        assert_that(message).contains("more chars")
+
+    def test_huge_dict_message_is_capped_but_payload_is_full(self):
+        actual = {index: index for index in range(10_000)}
+        expected = {index: index + 1 for index in range(10_000)}
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        failure = exc_info.value
+        assert_that(len(str(failure))).is_less_than(20_000)
+        assert_that(failure.diff.entries).is_length(10_000)
+        assert_that(failure.actual).is_length(10_000)
+
+    def test_diff_str_renders_at_most_fifty_entries(self):
+        entries = [DiffEntry(path=str(index), actual=index, expected=index + 1) for index in range(60)]
+        rendered = str(DiffResult(kind="dict", entries=entries))
+        assert_that(rendered).contains("... and 10 more entries")
+        assert_that(rendered.splitlines()).is_length(52)
+
+    def test_diff_str_at_fifty_entries_is_not_truncated(self):
+        entries = [DiffEntry(path=str(index), actual=index, expected=index + 1) for index in range(50)]
+        rendered = str(DiffResult(kind="dict", entries=entries))
+        assert_that(rendered).does_not_contain("more entries")
+        assert_that(rendered.splitlines()).is_length(51)
+
+    def test_diff_entry_huge_leaf_is_capped(self):
+        entry = DiffEntry(path="k", actual="x" * 10_000, expected="y")
+        assert_that(len(str(entry))).is_less_than(6_000)
+        assert_that(str(entry)).contains("more chars")

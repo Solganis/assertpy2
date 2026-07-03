@@ -5,7 +5,7 @@ import math
 import numbers
 import re
 
-from assertpy2.errors import DiffResult
+from assertpy2.errors import DiffResult, _truncated
 
 from ._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
 from ._diff import _sub_diff_entries
@@ -310,8 +310,8 @@ class HelpersMixin(_MixinBase):
         diff_entries = _sub_diff_entries(val, other, "", config=config) or []
         diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
 
-        val_repr = _dict_repr(val, other)
-        other_repr = _dict_repr(other, val)
+        val_repr = _truncated(_dict_repr(val, other))
+        other_repr = _truncated(_dict_repr(other, val))
         ignore_part = ignore_err if ignore else ""
         include_part = include_err if include else ""
         self.error(

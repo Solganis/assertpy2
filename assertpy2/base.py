@@ -14,7 +14,7 @@ from ._compare import (
 from ._diff import _build_equality_diff, _walk_leaves
 from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
-from .errors import DiffEntry, DiffResult
+from .errors import DiffEntry, DiffResult, _truncated
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher
 
 if TYPE_CHECKING:
@@ -191,7 +191,7 @@ class BaseMixin(_MixinBase):
             diff = _build_equality_diff(self.val, other, config=config)
             if diff.entries:
                 return self.error(
-                    f"Expected <{self.val}> to be equal to <{other}>, but was not.",
+                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not.",
                     actual=self.val,
                     expected=other,
                     diff=diff,
@@ -200,7 +200,7 @@ class BaseMixin(_MixinBase):
             if _guarded_not_equal(self.val, other):
                 diff = _build_equality_diff(self.val, other)
                 return self.error(
-                    f"Expected <{self.val}> to be equal to <{other}>, but was not.",
+                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not.",
                     actual=self.val,
                     expected=other,
                     diff=diff,
@@ -722,7 +722,9 @@ class BaseMixin(_MixinBase):
             raise _array_equality_error("is_not_equal_to", operand)
 
         if _guarded_equal(self.val, other, method="is_not_equal_to"):
-            return self.error(f"Expected <{self.val}> to be not equal to <{other}>, but was.")
+            return self.error(
+                f"Expected <{_truncated(str(self.val))}> to be not equal to <{_truncated(str(other))}>, but was."
+            )
         return self
 
     def is_same_as(self, other: object) -> Self:
