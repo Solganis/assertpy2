@@ -79,10 +79,10 @@ Nested structures are diffed recursively and report the exact path to the differ
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
 
 !!! note
-    Cycle protection applies to the diff rendering and to the selective-comparison path
-    (`ignore` / `include`). The bare equality check itself follows Python's own `==` semantics, so
-    comparing two structurally equal *cyclic* graphs raises `RecursionError` - exactly as a plain
-    `assert a == b` would.
+    Cycle detection applies to the diff rendering and to the selective-comparison path
+    (`ignore` / `include`), which treats a revisited pair as equal rather than recursing. The bare
+    equality check itself follows Python's own `==` semantics, so comparing two structurally equal
+    *cyclic* graphs raises `RecursionError` - exactly as a plain `assert a == b` would.
 
 ### Catching failures with their types intact
 
