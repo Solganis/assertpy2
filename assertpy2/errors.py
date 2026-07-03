@@ -3,6 +3,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+def _truncated(text: str, limit: int = 4000) -> str:
+    """Cap *text* for embedding into a failure message; normal-sized values stay byte-identical.
+
+    Bounds only the rendered message: the structured payload (`AssertionFailure.actual` /
+    ``.expected`` / ``.diff``) always keeps the full data.
+    """
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}... ({len(text) - limit} more chars)"
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DiffEntry:
     """Single difference between actual and expected values at a specific path."""
@@ -12,7 +23,7 @@ class DiffEntry:
     expected: object = None
 
     def __str__(self) -> str:
-        return f"  at {self.path}: actual=<{self.actual}>, expected=<{self.expected}>"
+        return f"  at {self.path}: actual=<{_truncated(str(self.actual))}>, expected=<{_truncated(str(self.expected))}>"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -32,7 +43,9 @@ class DiffResult:
         if not self.entries:
             return ""
         lines = [f"diff ({self.kind}):"]
-        lines.extend(str(entry) for entry in self.entries)
+        lines.extend(str(entry) for entry in self.entries[:50])
+        if len(self.entries) > 50:
+            lines.append(f"  ... and {len(self.entries) - 50} more entries")
         return "\n".join(lines)
 
 
