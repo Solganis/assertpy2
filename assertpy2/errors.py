@@ -3,6 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+def _safe_repr(value: object) -> str:
+    """``repr(value)`` that never raises: error rendering must survive a broken user ``__repr__``."""
+    try:
+        return repr(value)
+    except Exception:  # any user exception here must not shadow the assertion failure being rendered
+        return f"<unreprable {type(value).__name__}>"
+
+
+def _safe_str(value: object) -> str:
+    """``str(value)`` that never raises, falling back to `_safe_repr`."""
+    try:
+        return str(value)
+    except Exception:
+        return _safe_repr(value)
+
+
 def _truncated(text: str, limit: int = 4000) -> str:
     """Cap *text* for embedding into a failure message; normal-sized values stay byte-identical.
 
