@@ -410,7 +410,12 @@ def add_extension(func):
     """
     if not callable(func):
         raise TypeError("func must be callable")
-    _extensions[func.__name__] = func
+    if isinstance(func, types.FunctionType):
+        # plain functions bind once here via the descriptor protocol, keeping assert_that() free of
+        # per-call grafting; the dedicated subclass keeps AssertionBuilder itself pristine on removal
+        setattr(_ExtendedBuilder, func.__name__, func)
+    else:
+        _extensions[func.__name__] = func
 
 
 def remove_extension(func):
@@ -428,13 +433,18 @@ def remove_extension(func):
     """
     if not callable(func):
         raise TypeError("func must be callable")
-    if func.__name__ in _extensions:
-        del _extensions[func.__name__]
+    if func.__name__ in vars(_ExtendedBuilder):
+        delattr(_ExtendedBuilder, func.__name__)
+    _extensions.pop(func.__name__, None)
 
 
 def _builder(val, description="", kind=None, expected=None, logger=None):
-    """Internal helper to build a new `AssertionBuilder` instance and glue on any extension methods."""
-    ab = AssertionBuilder(val, description, kind, expected, logger)
+    """Internal helper to build a new `AssertionBuilder` instance and glue on any extension methods.
+
+    Function extensions already live on `_ExtendedBuilder`; only non-function callables (which the
+    descriptor protocol cannot bind) still need per-instance grafting here.
+    """
+    ab = _ExtendedBuilder(val, description, kind, expected, logger)
     if _extensions:
         for name, func in _extensions.items():
             meth = types.MethodType(func, ab)
@@ -708,3 +718,8 @@ class AssertionBuilder(
             kind=self.kind,
             logger=self.logger,
         )
+
+
+class _ExtendedBuilder(AssertionBuilder):
+    """Host for user extensions: `add_extension()` installs plain functions here, so binding happens
+    once at registration and `AssertionBuilder` itself stays pristine when an extension is removed."""

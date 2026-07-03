@@ -179,3 +179,68 @@ def test_dupe_extensions():
     dupe1()
     dupe2()
     dupe1()
+
+
+class TestExtensionBindingMechanics:
+    """Plain functions bind to the extension host class once; exotic callables fall back to
+    per-instance grafting; removal never damages the original API."""
+
+    def test_extension_shadowing_a_builtin_method_is_restored_on_removal(self):
+        def is_true(self):
+            return self.error("shadowed is_true")
+
+        add_extension(is_true)
+        try:
+            with pytest.raises(AssertionError, match="shadowed is_true"):
+                assert_that(True).is_true()
+        finally:
+            remove_extension(is_true)
+        assert_that(True).is_true()
+
+    def test_callable_object_extension_uses_per_instance_fallback(self):
+        class IsBar:
+            __name__ = "is_bar"
+
+            def __call__(self, builder):
+                if builder.val != "bar":
+                    return builder.error(f"Expected <{builder.val}> to be bar, but was not.")
+                return builder
+
+        extension = IsBar()
+        add_extension(extension)
+        try:
+            assert_that("bar").is_bar()
+            with pytest.raises(AssertionError, match="to be bar"):
+                assert_that("baz").is_bar()
+        finally:
+            remove_extension(extension)
+        with pytest.raises(AttributeError):
+            assert_that("bar").is_bar()
+
+    def test_extension_becomes_visible_to_builders_created_before_registration(self):
+        builder = assert_that("foo")
+
+        def is_visible_late(self):
+            return self
+
+        add_extension(is_visible_late)
+        try:
+            builder.is_visible_late()
+        finally:
+            remove_extension(is_visible_late)
+
+    def test_removed_extension_disappears_from_live_builders(self):
+        def is_transient(self):
+            return self
+
+        add_extension(is_transient)
+        builder = assert_that("foo")
+        builder.is_transient()
+        remove_extension(is_transient)
+        with pytest.raises(AttributeError):
+            builder.is_transient()
+
+    def test_builder_stays_an_assertion_builder_instance(self):
+        from assertpy2.assertpy import AssertionBuilder
+
+        assert_that(assert_that(1)).is_instance_of(AssertionBuilder)
