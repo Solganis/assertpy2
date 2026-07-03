@@ -17,7 +17,7 @@ from typing import Final
 
 from ._compare import _node_decision
 from ._introspection import is_mapping_like, is_model_dump_object, is_namedtuple
-from .errors import DiffEntry, DiffResult
+from .errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 
 __tracebackhide__ = True
 
@@ -170,9 +170,9 @@ def _build_equality_diff(
         )
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = []
-        for item in sorted(actual - expected, key=repr):
+        for item in sorted(actual - expected, key=_safe_repr):
             entries.append(DiffEntry(path="extra", actual=item, expected=None))
-        for item in sorted(expected - actual, key=repr):
+        for item in sorted(expected - actual, key=_safe_repr):
             entries.append(DiffEntry(path="missing", actual=None, expected=item))
         return DiffResult(kind="set", entries=entries)
     if isinstance(actual, str) and isinstance(expected, str):
@@ -217,8 +217,8 @@ def _sub_diff_entries(
         entries: list[DiffEntry] = []
         actual_keys = set(actual)
         expected_keys = set(expected)
-        for key in sorted(actual_keys | expected_keys, key=repr):
-            path = f"{prefix}.{key}" if prefix else str(key)
+        for key in sorted(actual_keys | expected_keys, key=_safe_repr):
+            path = f"{prefix}.{_safe_str(key)}" if prefix else _safe_str(key)
             if key not in expected_keys:
                 entries.append(DiffEntry(path=path, actual=actual[key], expected=None))
             elif key not in actual_keys:
@@ -318,7 +318,7 @@ def _walk_leaves(value, prefix="", _seen=None):
     if is_mapping_like(value):
         child_seen = _seen | {id(value)}
         for key in value:
-            yield from _walk_leaves(value[key], f"{prefix}.{key}" if prefix else str(key), child_seen)
+            yield from _walk_leaves(value[key], f"{prefix}.{_safe_str(key)}" if prefix else _safe_str(key), child_seen)
         return
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         child_seen = _seen | {id(value)}

@@ -407,3 +407,24 @@ def test_ignore_all_nested_keys():
     assert_that({"a": {"b": 1}}).is_equal_to({"a": {}}, ignore=[("a", "b")])
     assert_that({"a": {"b": 1, "c": 2}}).is_equal_to({"a": {}}, ignore=[("a", "b"), ("a", "c")])
     assert_that({"a": 1, "b": {"c": 2}}).is_equal_to({"b": {}}, ignore=["a", ("b", "c")])
+
+
+class _BadRepr:
+    """Identity equality on purpose: two instances must actually differ so the repr gets rendered."""
+
+    def __repr__(self):
+        raise RuntimeError("broken repr")
+
+
+class TestDictErrorSurvivesBrokenRepr:
+    """Error rendering must produce the AssertionError, never leak a user's raising __repr__."""
+
+    def test_broken_repr_value_still_renders_the_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": _BadRepr(), "b": 1}).is_equal_to({"a": _BadRepr(), "b": 2})
+        assert_that(str(exc_info.value)).contains("unreprable _BadRepr")
+
+    def test_broken_repr_key_still_renders_the_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({_BadRepr(): 1, "b": 1}).is_equal_to({_BadRepr(): 1, "b": 2})
+        assert_that(str(exc_info.value)).contains("to be equal to")

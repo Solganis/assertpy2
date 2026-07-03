@@ -5,7 +5,7 @@ import math
 import numbers
 import re
 
-from assertpy2.errors import DiffResult, _truncated
+from assertpy2.errors import DiffResult, _safe_repr, _truncated
 
 from ._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
 from ._diff import _sub_diff_entries
@@ -272,23 +272,23 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(mapping)}
             parts = []
             ellip = False
-            for key, value in sorted(mapping.items(), key=lambda item: repr(item[0])):
+            for key, value in sorted(mapping.items(), key=lambda item: _safe_repr(item[0])):
                 if key not in counterpart:
-                    parts.append(f"{key!r}: {value!r}")
+                    parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                 else:
                     decision = _node_decision(value, counterpart[key], config, field=key)
                     if decision == "equal":
                         ellip = True
                     elif decision == "leaf":
-                        parts.append(f"{key!r}: {value!r}")
+                        parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                     else:  # recurse
                         value_repr = (
                             _dict_repr(value, counterpart[key], _seen)
                             if self._is_dict_like(value, check_values=False)
                             and self._is_dict_like(counterpart[key], check_values=False)
-                            else repr(value)
+                            else _safe_repr(value)
                         )
-                        parts.append(f"{key!r}: {value_repr}")
+                        parts.append(f"{_safe_repr(key)}: {value_repr}")
             out = ", ".join(parts)
             ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
             return f"{{{ellip_prefix}{out}}}"
