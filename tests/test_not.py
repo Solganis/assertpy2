@@ -148,3 +148,8 @@ class TestNotWithMatchers:
 
     def test_not_each(self):
         assert_that([1, -2, 3]).not_.each(match.is_positive())
+
+
+def test_not_rejects_eventually_with_clear_error():
+    with pytest.raises(TypeError, match="cannot be negated"):
+        assert_that(lambda: 1).not_.eventually()
