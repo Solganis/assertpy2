@@ -56,6 +56,27 @@ An **AssertionFailure** attachment (mode `full` only) with actual and expected v
 }
 ```
 
+A **Polling Trace** attachment (modes `diff`, `full`) when an
+[`eventually()`](testing.md#polling-trace) assertion times out, with per-poll samples and diffs
+between consecutive distinct values:
+
+```json
+{
+  "format": 2,
+  "kind": "polling-trace",
+  "total_polls": 9,
+  "elapsed": 5.0,
+  "summary": "probe recovered after 2 raising polls; value then changed 1 time",
+  "samples": [
+    {"t": 0.0, "outcome": "error", "detail": "ConnectionError('boot')", "repeats": 2},
+    {"t": 0.5, "outcome": "fail", "value": {"status": "PENDING"}, "detail": "Expected ...", "repeats": 2}
+  ],
+  "deltas": [
+    {"from_t": 0.5, "to_t": 1.5, "entries": [{"path": "status", "actual": "PENDING", "expected": "SHIPPED"}]}
+  ]
+}
+```
+
 The `format` field versions the attachment schema (`2` = typed values; attachments without the field
 are the older repr-string format), so downstream tooling can branch explicitly.
 

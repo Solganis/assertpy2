@@ -84,6 +84,13 @@ Nested structures are diffed recursively and report the exact path to the differ
     equality check itself follows Python's own `==` semantics, so comparing two structurally equal
     *cyclic* graphs raises `RecursionError` - exactly as a plain `assert a == b` would.
 
+### Polling failures carry a trace
+
+An [`eventually()`](testing.md#async-assertions) timeout attaches its convergence telemetry as
+`failure.trace` - a [`PollTrace`][assertpy2.errors.PollTrace] with per-poll
+[`PollSample`][assertpy2.errors.PollSample] entries and a one-line trend summary. See
+[Polling trace](testing.md#polling-trace).
+
 ### Catching failures with their types intact
 
 `pytest.raises(AssertionError)` types the caught exception as plain `AssertionError`, so a type

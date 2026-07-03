@@ -108,6 +108,41 @@ class DiffResult:
         return "\n".join(lines)
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PollSample:
+    """One recorded poll of an [`eventually()`][assertpy2.assertpy.AssertionBuilder.eventually] probe.
+
+    ``outcome`` is ``"fail"`` (the probe returned a value, the assertion on it failed) or ``"error"``
+    (the probe raised an ignored exception before producing a value).  ``value`` is a JSON-safe
+    point-in-time snapshot of the probed value (``None`` for ``"error"`` samples); ``detail`` carries
+    the failure message or the exception repr.  Consecutive identical polls are collapsed into one
+    sample with ``repeats`` counting the run; ``elapsed`` is the run's first occurrence, in seconds
+    from the start of polling.
+    """
+
+    elapsed: float
+    outcome: str
+    value: object
+    detail: str
+    repeats: int = 1
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PollTrace:
+    """Convergence telemetry attached to an ``eventually()`` timeout failure.
+
+    ``samples`` keeps the first and last polls (middle entries beyond the retention window are
+    counted in ``dropped``); ``total_polls`` is the real number of polls; ``summary`` is a one-line
+    trend classification of why the condition never held.
+    """
+
+    samples: list[PollSample]
+    total_polls: int
+    dropped: int
+    elapsed: float
+    summary: str
+
+
 class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; kept for backward compatibility
     """Structured assertion failure with optional diff data.
 
@@ -122,8 +157,10 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         actual: object = None,
         expected: object = None,
         diff: DiffResult | None = None,
+        trace: PollTrace | None = None,
     ):
         super().__init__(message)
         self.actual = actual
         self.expected = expected
         self.diff = diff
+        self.trace = trace

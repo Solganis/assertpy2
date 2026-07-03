@@ -21,3 +21,15 @@ subclasses ``AssertionError``, so existing ``except AssertionError`` handlers ke
       show_root_heading: true
       show_root_full_path: false
       show_root_toc_entry: true
+
+::: assertpy2.errors.PollTrace
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
+::: assertpy2.errors.PollSample
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true

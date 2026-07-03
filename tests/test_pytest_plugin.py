@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from assertpy2 import assert_that, match
-from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
+from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
     _diff_to_json,
+    _format_trace,
     _json_safe,
+    _trace_to_json,
     pytest_addoption,
     pytest_configure,
     pytest_runtest_makereport,
@@ -383,6 +385,81 @@ class TestJsonSafe:
     def test_output_is_strict_json(self):
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=float("nan"), expected=1)])
         assert_that(json.loads(_diff_to_json(diff))["entries"][0]["actual"]).is_equal_to({"__repr__": "nan"})
+
+
+def _make_trace():
+    samples = [
+        PollSample(elapsed=0.0, outcome="error", value=None, detail="ConnectionError('boot')", repeats=2),
+        PollSample(elapsed=0.4, outcome="fail", value={"s": "PENDING"}, detail="Expected <...>"),
+        PollSample(elapsed=0.8, outcome="fail", value={"s": "SHIPPED"}, detail="Expected <...>", repeats=3),
+    ]
+    return PollTrace(samples=samples, total_polls=6, dropped=0, elapsed=1.2, summary="probe recovered")
+
+
+class TestPollingTrace:
+    def test_terminal_section_renders_timeline(self):
+        report = _make_report()
+        exc = AssertionFailure("fail", trace=_make_trace())
+        _run_hook(report, _make_call(exc=exc))
+        body = dict(report.sections)["Polling Trace"]
+        assert_that(body).contains("polled 6 times over 1.2s; probe recovered")
+        assert_that(body).contains("t=+0.0s error x2: ConnectionError('boot')")
+        assert_that(body).contains("t=+0.8s fail x3:")
+
+    def test_terminal_section_reports_dropped_samples(self):
+        trace = PollTrace(samples=_make_trace().samples, total_polls=40, dropped=10, elapsed=9.0, summary="s")
+        assert_that(_format_trace(trace)).contains("10 middle samples dropped")
+
+    def test_trace_json_schema_and_deltas(self):
+        body = json.loads(_trace_to_json(_make_trace()))
+        assert_that(body["format"]).is_equal_to(2)
+        assert_that(body["kind"]).is_equal_to("polling-trace")
+        assert_that(body["total_polls"]).is_equal_to(6)
+        assert_that(body["samples"]).is_length(3)
+        assert_that(body["samples"][0]).does_not_contain_key("value")
+        assert_that(body["samples"][0]["repeats"]).is_equal_to(2)
+        assert_that(body["deltas"]).is_length(1)
+        assert_that(body["deltas"][0]["entries"]).is_equal_to(
+            [{"path": "s", "actual": "PENDING", "expected": "SHIPPED"}]
+        )
+
+    def test_trace_json_scalar_delta_falls_back_to_root_path(self):
+        samples = [
+            PollSample(elapsed=0.0, outcome="fail", value=1, detail="d"),
+            PollSample(elapsed=0.5, outcome="fail", value=2, detail="d"),
+        ]
+        trace = PollTrace(samples=samples, total_polls=2, dropped=0, elapsed=1.0, summary="s")
+        body = json.loads(_trace_to_json(trace))
+        assert_that(body["deltas"][0]["entries"]).is_equal_to([{"path": ".", "actual": 1, "expected": 2}])
+
+    def test_trace_json_reports_dropped_and_skips_equal_neighbors(self):
+        samples = [
+            PollSample(elapsed=0.0, outcome="fail", value={"s": 1}, detail="d"),
+            PollSample(elapsed=0.4, outcome="error", value=None, detail="ConnectionError('x')"),
+            PollSample(elapsed=0.8, outcome="fail", value={"s": 1}, detail="d"),
+        ]
+        trace = PollTrace(samples=samples, total_polls=30, dropped=7, elapsed=2.0, summary="s")
+        body = json.loads(_trace_to_json(trace))
+        assert_that(body["dropped"]).is_equal_to(7)
+        assert_that(body).does_not_contain_key("deltas")
+
+    def test_trace_json_without_changes_has_no_deltas(self):
+        samples = [PollSample(elapsed=0.0, outcome="fail", value=1, detail="d", repeats=4)]
+        trace = PollTrace(samples=samples, total_polls=4, dropped=0, elapsed=1.0, summary="s")
+        assert_that(json.loads(_trace_to_json(trace))).does_not_contain_key("deltas")
+
+    def test_trace_attached_to_allure(self):
+        mock = _mock_allure()
+        exc = AssertionFailure("fail", trace=_make_trace())
+        _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock)
+        names = [call.kwargs["name"] for call in mock.attach.call_args_list]
+        assert_that(names).contains("Polling Trace")
+
+    def test_trace_not_attached_when_off(self):
+        mock = _mock_allure()
+        exc = AssertionFailure("fail", trace=_make_trace())
+        _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="off")
+        mock.attach.assert_not_called()
 
 
 def _mock_allure():
