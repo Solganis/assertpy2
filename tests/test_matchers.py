@@ -1,7 +1,53 @@
+from datetime import date, datetime, timedelta, timezone
+
 import pytest
 
 from assertpy2 import AssertionFailure, Matcher, assert_that, match
 from assertpy2.matchers import BaseMatcher
+
+
+class TestTemporalMatchers:
+    def test_is_now_matches_current(self):
+        assert_that(datetime.now()).satisfies(match.is_now())
+
+    def test_is_now_within_and_outside_delta(self):
+        assert_that(datetime.now() - timedelta(seconds=1)).satisfies(match.is_now(3))
+        assert_that(match.is_now(3).matches(datetime.now() - timedelta(seconds=30))).is_false()
+
+    def test_is_now_accepts_timedelta_delta(self):
+        assert_that(datetime.now()).satisfies(match.is_now(timedelta(seconds=5)))
+
+    def test_is_now_timezone_aware(self):
+        assert_that(datetime.now(timezone.utc)).satisfies(match.is_now())
+        assert_that(datetime.now(timezone(timedelta(hours=5)))).satisfies(match.is_now())
+
+    def test_is_now_rejects_non_datetime(self):
+        assert_that(match.is_now().matches("2020-01-01")).is_false()
+        assert_that(match.is_now().matches(12345)).is_false()
+        assert_that(match.is_now().matches(date.today())).is_false()
+
+    def test_is_now_in_expected_dict(self):
+        assert_that({"id": "x", "ts": datetime.now()}).is_equal_to({"id": "x", "ts": match.is_now(3)})
+
+    def test_is_now_describe(self):
+        assert_that(match.is_now(3).describe()).contains("within").contains("of now")
+
+    def test_is_before_and_after(self):
+        assert_that(datetime(2000, 1, 1)).satisfies(match.is_before(datetime(2020, 1, 1)))
+        assert_that(datetime(2030, 1, 1)).satisfies(match.is_after(datetime(2020, 1, 1)))
+        assert_that(match.is_before(datetime(2020, 1, 1)).matches(datetime(2030, 1, 1))).is_false()
+        assert_that(match.is_after(datetime(2020, 1, 1)).matches(datetime(2000, 1, 1))).is_false()
+
+    def test_is_before_after_reject_non_comparable(self):
+        # naive value vs aware reference is not comparable -> no match, no raise
+        assert_that(match.is_before(datetime.now(timezone.utc)).matches(datetime(2000, 1, 1))).is_false()
+        assert_that(match.is_after(datetime.now(timezone.utc)).matches(datetime(2000, 1, 1))).is_false()
+        assert_that(match.is_before(datetime(2020, 1, 1)).matches("not a date")).is_false()
+        assert_that(match.is_after(datetime(2020, 1, 1)).matches(42)).is_false()
+
+    def test_is_before_after_describe(self):
+        assert_that(match.is_before(datetime(2020, 1, 1)).describe()).contains("before")
+        assert_that(match.is_after(datetime(2020, 1, 1)).describe()).contains("after")
 
 
 class TestBaseMatcherAbstract:

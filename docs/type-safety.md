@@ -124,6 +124,38 @@ purely static.
     advanced / checker-dependent. Do **not** disable PyCharm's *Unresolved attribute reference*
     inspection to work around it - it is a core check; scope any workaround to the specific line.
 
+### Contract narrowing with assert_conforms
+
+`is_instance_of()` narrows a value that is *already* an instance; `assert_conforms()` goes one step
+further - it **validates a raw payload against a pydantic v2 model and continues over the validated
+instance**, narrowing the chain to that model. It is the capstone for API-response testing: parse,
+validate, and type in one step.
+
+```python
+from pydantic import BaseModel
+
+from assertpy2 import assert_conforms, assert_that
+
+class Order(BaseModel):
+    id: int
+    total: float
+
+order = assert_conforms(response.json(), Order).value  # .value: Order (validated and coerced)
+assert_that(order.total).is_greater_than(0)
+```
+
+`assert_conforms(payload, Order)` runs `Order.model_validate(payload)`: on failure the assertion fails
+with pydantic's validation errors; on success it returns a builder over the validated, coerced
+instance, so `.value` hands back a typed `Order`. It needs pydantic installed.
+
+`assert_conforms` is a **function**, not a method on the builder, and that is deliberate. A method
+(`assert_that(payload).conforms_to(Order)`) can only narrow when the payload's own static type is
+narrowable, so the dominant case - the `Any` a `response.json()` decodes to - would stay `Any`, and an
+explicitly `dict`-typed payload would stay `dict`. Because `assert_conforms` drives its return type
+from the `model` argument instead of from the payload, it narrows to `Order` for **every** input,
+`Any` included. And since it yields a class-narrowed builder (the same mechanism as
+`is_instance_of()`), the narrowing lights up in PyCharm too, not only the CLI checkers.
+
 ## py.typed and PEP 561
 
 `assertpy2` ships a `py.typed` marker and is [PEP 561](https://peps.python.org/pep-0561/) compliant, so the

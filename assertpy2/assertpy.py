@@ -41,7 +41,7 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure
+from .errors import AssertionFailure, _truncated
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -277,6 +277,54 @@ def assert_that(val: object, description="") -> _CoreAssertion:
     if _soft_ctx.get():
         return _builder(val, description, "soft")
     return _builder(val, description)
+
+
+def assert_conforms(val: object, model: type[_U], description: str = "") -> AssertionBuilder[_U]:
+    """Validate ``val`` against a pydantic v2 ``model`` and continue over the validated instance.
+
+    The narrowing-complete companion to [`assert_that()`][assertpy2.assertpy.assert_that] for
+    contract testing.  Runs ``model.model_validate(val)``: on success the returned builder carries
+    the validated, coerced model instance (so ``.value`` and ``extracting`` see typed fields); on
+    failure it fails with pydantic's validation errors.  Because the return type is driven by
+    ``model`` rather than by the type of ``val``, the chain narrows to ``model`` for **any** input,
+    including the ``Any`` a decoded JSON payload carries - the typed capstone of the narrowing family.
+
+    Args:
+        val: the raw payload to validate (e.g. a decoded JSON response)
+        model: a pydantic v2 model class (anything exposing ``model_validate``)
+        description (str, optional): the extra error message description.  Defaults to ``''``
+
+    Examples:
+        Usage:
+
+            from assertpy2 import assert_conforms, assert_that
+
+            order = assert_conforms(response.json(), OrderModel).value  # .value: OrderModel
+            assert_that(order.total).is_greater_than(0)
+
+    Returns:
+        AssertionBuilder: a builder over the validated model instance, statically typed as ``model``
+
+    Raises:
+        TypeError: if ``model`` is not a pydantic v2 model class
+        AssertionError: if ``val`` does not validate against ``model``
+    """
+    if not (isinstance(model, type) and hasattr(model, "model_validate")):
+        raise TypeError("assert_conforms requires a pydantic v2 model class")
+    kind = "soft" if _soft_ctx.get() else None
+    builder = _builder(val, description, kind)
+    pydantic = sys.modules.get("pydantic")  # loaded already, since model exposes model_validate
+    catchable: tuple[type[BaseException], ...] = (pydantic.ValidationError,) if pydantic is not None else ()
+    try:
+        # duck-typed pydantic call, guarded by the hasattr check above
+        validated = model.model_validate(val)  # ty: ignore[call-non-callable]  # model_validate is dynamic
+    except catchable as exc:
+        return builder.error(
+            f"Expected <{_truncated(str(val))}> to conform to <{model.__name__}>, but it did not:\n{exc}",
+            actual=val,
+            expected=model,
+        )
+    return builder.builder(validated, description, kind)
 
 
 def assert_warn(val: object, description="", logger=None):
