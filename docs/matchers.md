@@ -126,6 +126,9 @@ leaks into a membership check or a foreign comparison stays safe.
 | `match.ends_with(suffix)` | a string ending with `suffix` |
 | `match.is_uuid()` | a string parseable as a UUID |
 | `match.is_non_empty_string()` | a non-empty string |
+| `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`) of now; handles naive and tz-aware values |
+| `match.is_before(dt)` | a `datetime` strictly before `dt` (a non-comparable value never matches) |
+| `match.is_after(dt)` | a `datetime` strictly after `dt` (a non-comparable value never matches) |
 | `match.ignore()` | anything (placeholder for structural matching) |
 | `match.each_item(matcher)` | an iterable whose every item matches `matcher` |
 | `match.structure(spec)` | a dict or model matching a nested `spec` |

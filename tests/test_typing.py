@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs, assert_type
 
-    from assertpy2 import assert_that
+    from assertpy2 import assert_conforms, assert_that
     from assertpy2._typing import (
         _BytesAssertion,
         _CallableAssertion,
@@ -145,6 +145,16 @@ if TYPE_CHECKING:
     assert_type(assert_that(anything).is_not_none().satisfies(_is_paid).value, _PaidOrder)
     # a plain (non-TypeIs) predicate does not narrow: the chain keeps its type
     assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), AssertionBuilder[_Order])
+
+    # assert_conforms() narrows to the validated model for ANY input - the narrowing capstone. Because the
+    # return type is driven by the model arg (not the value), even the `Any` a decoded JSON payload
+    # carries and an explicitly dict-typed payload both narrow, where a method on the builder could not.
+    json_payload = cast("Any", {"id": 1})
+    dict_payload = cast("dict[str, object]", {"id": 1})
+    assert_type(assert_conforms(anything, _Order), AssertionBuilder[_Order])
+    assert_type(assert_conforms(anything, _Order).value, _Order)
+    assert_type(assert_conforms(json_payload, _PaidOrder).value, _PaidOrder)
+    assert_type(assert_conforms(dict_payload, _PaidOrder).value, _PaidOrder)
 
     # `.value` on the typed protocols returns each protocol's value-family type.
     assert_type(assert_that("text").value, str)

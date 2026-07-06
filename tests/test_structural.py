@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -522,3 +522,57 @@ class TestModelNestedInsideDict:
             assert_that({"address": _SpecModel(city="LA")}).matches_structure(
                 {"address": match.structure({"city": "NYC"})}
             )
+
+
+class TestAssertConforms:
+    @staticmethod
+    def _order_model():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Order(BaseModel):
+            id: int
+            total: float
+            currency: str = "USD"
+
+        return Order
+
+    def test_valid_continues_over_validated_model(self):
+        order_cls = self._order_model()
+        result = assert_conforms({"id": 1, "total": 4.2}, order_cls)
+        assert_that(result.val).is_instance_of(order_cls)
+
+    def test_coerces_and_defaults(self):
+        order_cls = self._order_model()
+        validated = assert_conforms({"id": "7", "total": 4.2}, order_cls).value
+        assert_that(validated.id).is_equal_to(7)
+        assert_that(validated.currency).is_equal_to("USD")
+
+    def test_capstone_value_chain(self):
+        order_cls = self._order_model()
+        order = assert_conforms({"id": 1, "total": 4.2}, order_cls).value
+        assert_that(order.total).is_greater_than(0)
+
+    def test_invalid_fails_with_validation_errors(self):
+        order_cls = self._order_model()
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms({"id": "notint", "total": "x"}, order_cls)
+        assert_that(str(exc_info.value)).contains("conform to <Order>").contains("int_parsing")
+
+    def test_description_is_prepended_on_failure(self):
+        order_cls = self._order_model()
+        with pytest.raises(AssertionError, match=r"^\[order payload\]"):
+            assert_conforms({"id": "notint"}, order_cls, "order payload")
+
+    def test_non_pydantic_type_raises_typeerror(self):
+        with pytest.raises(TypeError, match="pydantic v2 model"):
+            assert_conforms({}, dict)
+
+    def test_non_type_arg_raises_typeerror(self):
+        with pytest.raises(TypeError, match="pydantic v2 model"):
+            assert_conforms({}, "not a type")
+
+    def test_soft_collects_failure(self):
+        order_cls = self._order_model()
+        with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
+            assert_conforms({"id": "bad", "total": "x"}, order_cls)

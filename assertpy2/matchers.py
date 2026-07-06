@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import threading
 import uuid as _uuid_mod
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
 from ._compare import _guarded_not_equal
@@ -557,6 +558,55 @@ class IsNonEmptyStringMatcher(BaseMatcher):
         return "a non-empty string"
 
 
+class IsNowMatcher(BaseMatcher):
+    """Matches a ``datetime`` within a tolerance of the current time."""
+
+    def __init__(self, delta: timedelta):
+        self._delta = delta
+
+    def matches(self, value: Any) -> bool:
+        if not isinstance(value, datetime):
+            return False
+        # datetime.now(tzinfo) is naive for a naive value and aware (same offset) for an aware one, so
+        # the subtraction never mixes offset-naive and offset-aware operands (which would raise)
+        return abs(value - datetime.now(value.tzinfo)) <= self._delta
+
+    def describe(self) -> str:
+        return f"a datetime within {self._delta} of now"
+
+
+class IsBeforeMatcher(BaseMatcher):
+    """Matches a ``datetime`` strictly before a reference ``datetime``."""
+
+    def __init__(self, other: datetime):
+        self._other = other
+
+    def matches(self, value: Any) -> bool:
+        try:
+            return isinstance(value, datetime) and value < self._other
+        except TypeError:  # naive vs aware operands are not comparable -> no match
+            return False
+
+    def describe(self) -> str:
+        return f"a datetime before {self._other}"
+
+
+class IsAfterMatcher(BaseMatcher):
+    """Matches a ``datetime`` strictly after a reference ``datetime``."""
+
+    def __init__(self, other: datetime):
+        self._other = other
+
+    def matches(self, value: Any) -> bool:
+        try:
+            return isinstance(value, datetime) and value > self._other
+        except TypeError:  # naive vs aware operands are not comparable -> no match
+            return False
+
+    def describe(self) -> str:
+        return f"a datetime after {self._other}"
+
+
 class EachMatcher(BaseMatcher):
     """Matches when every item in an iterable satisfies the wrapped matcher."""
 
@@ -969,6 +1019,26 @@ class _MatchNamespace:
     def is_non_empty_string() -> IsNonEmptyStringMatcher:
         """Matcher for a non-empty string."""
         return IsNonEmptyStringMatcher()
+
+    @staticmethod
+    def is_now(delta: float | timedelta = 2.0) -> IsNowMatcher:
+        """Matcher for a ``datetime`` within ``delta`` of the current time.
+
+        Args:
+            delta: tolerance as seconds (a number) or a ``timedelta``; defaults to 2 seconds. Naive and
+                timezone-aware values are both handled (compared against ``now`` in the same awareness).
+        """
+        return IsNowMatcher(delta if isinstance(delta, timedelta) else timedelta(seconds=delta))
+
+    @staticmethod
+    def is_before(other: datetime) -> IsBeforeMatcher:
+        """Matcher for a ``datetime`` strictly before ``other`` (a non-comparable value never matches)."""
+        return IsBeforeMatcher(other)
+
+    @staticmethod
+    def is_after(other: datetime) -> IsAfterMatcher:
+        """Matcher for a ``datetime`` strictly after ``other`` (a non-comparable value never matches)."""
+        return IsAfterMatcher(other)
 
     @staticmethod
     def each_item(matcher: Matcher) -> EachMatcher:
