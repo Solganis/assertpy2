@@ -16,8 +16,10 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import assert_that, match
+from assertpy2 import assert_conforms, assert_that, match
 from assertpy2._contract import contract_drift, shape, shape_diff
+from assertpy2.assertpy import _format_soft_errors
+from assertpy2.errors import _disambiguated
 from assertpy2.snapshot import _Decoder, _Encoder
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
@@ -598,3 +600,75 @@ def test_contract_drift_is_total(payload):
         items: list[Sub]
 
     contract_drift(payload, Item)
+
+
+# --- Invariants for the failure-diagnostics, soft-report, and list-conformance work ---
+
+_collidable = st.sampled_from([0, 1, 2, "0", "1", "2", 1.0, 2.0, "1.0", "2.0", True, False, None, "None", "True"])
+
+
+@settings(deadline=None)
+@given(left=_collidable, right=_collidable)
+def test_disambiguated_distinguishes_colliding_reprs(left, right):
+    # two unequal values that render to the same repr stay distinguishable once tagged by type
+    shown_left, shown_right = _disambiguated(left, right)
+    if str(left) == str(right) and type(left) is not type(right):
+        assert_that(shown_left).is_not_equal_to(shown_right)
+
+
+_soft_groups = st.none() | st.sampled_from(["Headers", "Body"])
+_soft_specs = st.lists(st.tuples(_soft_groups, st.booleans()), min_size=1, max_size=8)
+
+
+@settings(deadline=None)
+@given(specs=_soft_specs)
+def test_soft_report_numbers_every_failure_sequentially(specs):
+    # the aggregated report carries every message once, numbered 1..N across any grouping
+    entries = [
+        (group, (f"file{i}.py", i) if located else None, f"failure message {i}")
+        for i, (group, located) in enumerate(specs)
+    ]
+    report = _format_soft_errors(entries)
+    for _, _, message in entries:
+        assert_that(report).contains(message)
+    for number in range(1, len(entries) + 1):
+        assert_that(report).contains(f"{number}. ")
+
+
+_field = st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6)
+
+
+@settings(deadline=None)
+@given(ids=st.lists(st.integers(), max_size=6), suffix=st.text(max_size=4))
+def test_assert_conforms_each_preserves_length_and_order(ids, suffix):
+    # each=True validates every item, preserving count and order (coercion applied per element)
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Item(BaseModel):
+        id: int
+        name: str
+
+    payloads = [{"id": ident, "name": f"{suffix}{ident}"} for ident in ids]
+    validated = assert_conforms(payloads, Item, each=True).val
+    assert_that(validated).is_length(len(ids))
+    assert_that([item.id for item in validated]).is_equal_to(ids)
+
+
+@settings(deadline=None)
+@given(ids=st.lists(st.integers(), min_size=1, max_size=5), position=st.integers(), extra=_field)
+def test_assert_conforms_each_exact_reports_indexed_drift(ids, position, extra):
+    # an undeclared field on element i surfaces as drift path [i].field, tying each=exact to P8
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Item(BaseModel):
+        id: int
+
+    assume(extra != "id")
+    index = position % len(ids)
+    payloads = [{"id": ident} for ident in ids]
+    payloads[index] = {**payloads[index], extra: 1}
+    with pytest.raises(AssertionError) as exc_info:
+        assert_conforms(payloads, Item, each=True, exact=True)
+    assert_that(str(exc_info.value)).contains(f"[{index}].{extra}")
