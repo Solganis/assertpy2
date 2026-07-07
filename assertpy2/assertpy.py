@@ -781,6 +781,7 @@ class AssertionBuilder(
         self._not_expected = False
         self._expected_warning = None
         self._return_value = _UNSET
+        self._raised_exception = _UNSET
         # holds the failure message when an assertion on this builder collects/logs a failure under
         # soft/warn mode (first failure wins = the root cause, not its consequences); makes `.value`
         # refuse to hand back an unverified value and surface that root failure instead of silently

@@ -156,6 +156,33 @@ assert_that(safe_func).does_not_raise(ValueError).when_called_with("foo")
     For the common "did it raise?" case without inspecting the message, prefer pytest's
     `pytest.raises` context manager.
 
+Beyond the message, the caught exception can be inspected in three more ways.
+
+**The exception object** - `raised()` pivots to the caught exception itself, so you can assert on its
+type, `args`, or custom attributes, not only its message string:
+
+```python
+err = assert_that(load).raises(ConfigError).when_called_with("bad.toml").raised().value
+assert_that(err.code).is_equal_to(42)
+```
+
+**The cause chain** - `caused_by()` asserts the exception was chained from a given cause (an explicit
+`raise ... from`, or an exception raised during handling), and `has_root_cause()` walks to the root of
+the chain. Both pivot to that cause's message so the chain continues:
+
+```python
+# def save(row): ... raise ServiceError("save failed") from TimeoutError("db timeout")
+assert_that(save).raises(ServiceError).when_called_with(row).caused_by(TimeoutError)
+assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(TimeoutError).is_equal_to("db timeout")
+```
+
+**Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`) - `contains_error()`
+asserts the caught group contains, recursively, an exception of each given type:
+
+```python
+assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
+```
+
 ### Expected warnings
 
 For a called function, assert it emits a warning and chain assertions on the warning message:

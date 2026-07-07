@@ -20,6 +20,7 @@ class _MixinBase:
         _not_expected: bool
         _expected_warning: type[Warning] | None
         _return_value: object
+        _raised_exception: object
 
         def error(
             self,

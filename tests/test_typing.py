@@ -23,8 +23,10 @@ if TYPE_CHECKING:
     from assertpy2._typing import (
         _BytesAssertion,
         _CallableAssertion,
+        _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
+        _InvokedAssertion,
         _IterableAssertion,
         _NumericAssertion,
         _PathAssertion,
@@ -119,6 +121,14 @@ if TYPE_CHECKING:
     # eventually() and eventually_sync() switch the chain to the polling builders.
     assert_type(assert_that(len).eventually(trace=False), AsyncAssertionBuilder)
     assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), SyncAssertionBuilder)
+
+    # exception cluster: when_called_with() gives the invoked (string message + chain) protocol;
+    # caused_by()/has_root_cause()/contains_error() keep it; raised() pivots to the exception object.
+    assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().contains_error(KeyError), _InvokedAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().raised(), _CoreAssertion)
 
     # Typed extract-and-continue: the generic fallback tracks the input type, `.value` hands it back,
     # and the narrowing terminals refine it (is_not_none strips None, is_instance_of narrows to the class).
