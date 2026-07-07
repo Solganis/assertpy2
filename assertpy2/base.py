@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
+# Atomic scalar types whose ``==`` yields a real bool and which cannot contain an array/frame-like:
+# for these, ``is_equal_to`` skips the compare-config, array-operand guard, and dict-like dispatch.
+# Containers (dict/list/tuple/set) are excluded - they may nest a numpy operand and need the guarded path.
+_EQ_ATOMIC = frozenset({int, float, bool, complex, str, bytes, bytearray, type(None)})
+
 
 def _describe_unpaired(matcher, raised_count):
     """Describe an unpaired matcher, noting raised probes so a buggy predicate is not mistaken for a mismatch."""
@@ -194,9 +199,23 @@ class BaseMixin(_MixinBase):
             [`is_equal_to_ignoring_case()`][assertpy2.string.StringMixin.is_equal_to_ignoring_case] -
                 for case-insensitive string equality
         """
-        ignore = kwargs.get("ignore")
-        include = kwargs.get("include")
-        config = _build_compare_config(kwargs.get("tolerance"), kwargs.get("comparators"))
+        if not kwargs:
+            if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
+                # atomic scalars: no array/dict-likeness, == yields a real bool - skip config/guards entirely
+                if self.val != other:
+                    actual_repr, expected_repr = _truncated(str(self.val)), _truncated(str(other))
+                    return self.error(
+                        f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
+                        actual=self.val,
+                        expected=other,
+                        diff=_build_equality_diff(self.val, other),
+                    )
+                return self
+            ignore = include = config = None
+        else:
+            ignore = kwargs.get("ignore")
+            include = kwargs.get("include")
+            config = _build_compare_config(kwargs.get("tolerance"), kwargs.get("comparators"))
 
         operand = _ambiguous_array_operand(self.val, other)
         if operand is not None:

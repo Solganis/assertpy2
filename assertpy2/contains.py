@@ -18,9 +18,8 @@ __tracebackhide__ = True
 def _multiset_diff_entries(val_items, given_items):
     """Build extra/missing `DiffEntry` rows between two item lists compared as multisets (order ignored)."""
     try:
-        extra_counts = Counter(val_items) - Counter(given_items)
-        missing_counts = Counter(given_items) - Counter(val_items)
-        extra, missing = list(extra_counts.elements()), list(missing_counts.elements())
+        val_counts, given_counts = Counter(val_items), Counter(given_items)
+        extra, missing = list((val_counts - given_counts).elements()), list((given_counts - val_counts).elements())
     except TypeError:  # unhashable items: quadratic multiset subtraction via == instead of Counter
         missing = list(given_items)
         extra = []

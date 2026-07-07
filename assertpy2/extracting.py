@@ -189,18 +189,21 @@ class ExtractingMixin(_MixinBase):
             return True
 
         def _sort(item):
-            if "sort" in kwargs:
-                if isinstance(kwargs["sort"], str):
-                    return _extract(item, kwargs["sort"])
-                elif isinstance(kwargs["sort"], collections.abc.Iterable):
-                    sort_keys = [_extract(item, key) for key in kwargs["sort"] if isinstance(key, str)]
-                    return tuple(sort_keys)
-                elif callable(kwargs["sort"]):
-                    return kwargs["sort"](item)
+            # only called when "sort" is in kwargs (the caller guards); 0 is a stable no-op for a sort
+            # arg that is not a str, iterable, or callable (e.g. an explicit sort=None)
+            sort = kwargs["sort"]
+            if isinstance(sort, str):
+                return _extract(item, sort)
+            if isinstance(sort, collections.abc.Iterable):
+                return tuple(_extract(item, key) for key in sort if isinstance(key, str))
+            if callable(sort):
+                return sort(item)
             return 0
 
+        # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
+        source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
         extracted = []
-        for item in sorted(self.val, key=lambda value: _sort(value)):
+        for item in source:
             if _filter(item):
                 extracted_values = [_extract(item, name) for name in names]
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])

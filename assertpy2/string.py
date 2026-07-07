@@ -125,11 +125,12 @@ class StringMixin(_MixinBase):
                         f"Expected <{self.val}> to case-insensitive contain item <{items[0]}>, but did not."
                     )
             else:
+                val_lower = self.val.lower()
                 missing = []
                 for item in items:
                     if not isinstance(item, str):
                         raise TypeError("given args must all be strings")
-                    if item.lower() not in self.val.lower():
+                    if item.lower() not in val_lower:
                         missing.append(item)
                 if missing:
                     return self.error(
@@ -141,11 +142,12 @@ class StringMixin(_MixinBase):
             for item in items:
                 if not isinstance(item, str):
                     raise TypeError("given args must all be strings")
+                item_lower = item.lower()
                 found = False
                 for value in self.val:
                     if not isinstance(value, str):
                         raise TypeError("val items must all be strings")
-                    if item.lower() == value.lower():
+                    if item_lower == value.lower():
                         found = True
                         break
                 if not found:
