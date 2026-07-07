@@ -78,6 +78,10 @@ failed, with the actual value in red - every mismatch, not just the first (no gr
 Nested structures are diffed recursively and report the exact path to the differing value (for example
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
 
+When two values render to the same text but are not equal - most often because they differ only in type -
+the message tags each with its type, so `assert_that("1").is_equal_to(1)` reads
+`Expected <1:str> to be equal to <1:int>, but was not.` rather than a baffling `<1>` / `<1>`.
+
 !!! note
     Cycle detection applies to the diff rendering and to the selective-comparison path
     (`ignore` / `include`), which treats a revisited pair as equal rather than recursing. The bare
