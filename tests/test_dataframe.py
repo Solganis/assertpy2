@@ -95,7 +95,6 @@ class TestIsFrameEqualDuckTyped:
 
     def test_root_extracted_from_dotted_module(self):
         # Real frames live in dotted modules ("pandas.core.frame"); the root must be the first segment.
-        # `split(".", 1)[0]` -> `[1]` or limit `0` would mis-extract the root and wrongly raise TypeError.
         with _fake_frame_lib("pandas", fail=False):
             frame = type("DataFrame", (), {"__module__": "pandas.core.frame"})()
             assert_that(frame).is_frame_equal(frame)
@@ -120,7 +119,7 @@ class TestArrayAssertionsDuckTyped:
 
     def test_is_array_close_to_forwards_default_tolerances(self):
         # The defaults must match numpy's own (rtol=1e-05, atol=1e-08, equal_nan=False) and be forwarded
-        # unchanged; mutating any default literal would silently use a different tolerance.
+        # unchanged.
         with _fake_numpy(fail=True), pytest.raises(AssertionError, match="rtol=1e-05 atol=1e-08 equal_nan=False"):
             assert_that([1.0]).is_array_close_to([2.0])
 

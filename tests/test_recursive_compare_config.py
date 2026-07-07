@@ -253,14 +253,14 @@ class TestConfigWithFilter:
             assert_that([1.0]).is_equal_to([1.5], include="x", tolerance=0.001)
 
     def test_nested_dict_vs_scalar_under_config_fails_cleanly(self):
-        # one side dict-nested, the other scalar; `and` -> `or` in the recursion would descend into the
-        # scalar and raise TypeError instead of reporting a clean difference.
+        # one side dict-nested, the other scalar: reports a clean difference, not a TypeError from
+        # descending into the scalar.
         with pytest.raises(AssertionFailure):
             assert_that({"a": {"x": 1.0}}).is_equal_to({"a": 5.0}, tolerance=0.001)
 
     def test_tolerated_key_does_not_short_circuit_later_keys(self):
         # int keys hash deterministically (hash(0)=0 < hash(1)=1), so the set iterates 0 then 1: key 0 is
-        # tolerated, key 1 differs.  `continue` -> `break` would stop after key 0 and miss the difference.
+        # within tolerance and key 1 differs, so both keys must be checked, not just the first.
         with pytest.raises(AssertionFailure):
             assert_that({0: 1.0, 1: 5.0}).is_equal_to({0: 1.0001, 1: 9.0}, tolerance=0.001)
 

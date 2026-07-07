@@ -348,20 +348,17 @@ def test_extracting_iterable_failure_index_is_not_int():
     assert_that(str(exc_info.value)).contains("list indices must be integers")
 
 
-# --- mutation hardening (cosmic-ray on extracting.py) ---
+# --- extraction shape: namedtuple fields, single vs multiple names ---
 
 
 def test_extracting_namedtuple_by_field_name():
-    # `type(name) is str` -> `!=`/`<` and `name in _fields` AddNot would mis-route namedtuple field access.
     point = namedtuple("Point", ["x", "y"])
     assert_that([point(1, 2), point(3, 4)]).extracting("x").is_equal_to([1, 3])
 
 
 def test_extracting_single_name_returns_bare_values():
-    # `len(extracted) > 1` -> `> 0` would wrap each single extraction in a 1-tuple.
     assert_that([{"a": 1}, {"a": 2}]).extracting("a").is_equal_to([1, 2])
 
 
 def test_extracting_multiple_names_returns_tuples():
-    # `len(extracted) > 1` -> `> 2` would drop the second value instead of building a tuple.
     assert_that([{"a": 1, "b": 2}]).extracting("a", "b").is_equal_to([(1, 2)])

@@ -147,21 +147,21 @@ class TestBytesSoftMode:
         assert_that(msg).contains("2.")
 
 
-class TestBytesMutationHardening:
-    """Close real gaps surfaced by cosmic-ray on bytes_mixin.py."""
+class TestBytesBoundaryCases:
+    """Boundary and operator-direction cases for the bytes assertions."""
 
     def test_has_byte_at_index_equal_to_length_raises_range_error(self):
         with pytest.raises(IndexError, match="to be in range"):
-            assert_that(b"abc").has_byte_at(3, 0)  # index == len; `>=` -> `>` would slip to a raw IndexError
+            assert_that(b"abc").has_byte_at(3, 0)  # index equal to length
 
     def test_has_byte_at_index_beyond_length_raises_range_error(self):
         with pytest.raises(IndexError, match="to be in range"):
-            assert_that(b"abc").has_byte_at(5, 0)  # index > len; `>=` -> `==`/`is` would slip to a raw IndexError
+            assert_that(b"abc").has_byte_at(5, 0)  # index past the end
 
     def test_has_byte_at_actual_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
-            assert_that(b"\xff").has_byte_at(0, 0x01)  # actual 0xff > 0x01; `!=` -> `<` would wrongly pass
+            assert_that(b"\xff").has_byte_at(0, 0x01)
 
     def test_is_hex_equal_to_actual_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
-            assert_that(b"\xff").is_hex_equal_to("01")  # val > expected; `!=` -> `<` would wrongly pass
+            assert_that(b"\xff").is_hex_equal_to("01")

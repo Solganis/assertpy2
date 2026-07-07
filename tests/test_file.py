@@ -142,9 +142,7 @@ def test_is_named_failure(tmpfile):
 
 
 def test_is_named_failure_name_sorts_after_basename(tmpfile):
-    # Guards the `!=` filename check against a `>` mutant: when the expected name sorts AFTER the actual
-    # basename, `>` would wrongly report a match. Appending a char makes the expected name a strict
-    # superstring of the basename, so it is guaranteed larger and unequal regardless of the basename.
+    # a name that sorts after the basename (basename + an extra char) is still a mismatch
     larger_name = os.path.basename(tmpfile.name) + "x"
     with pytest.raises(AssertionError):
         assert_that(tmpfile.name).is_named(larger_name)

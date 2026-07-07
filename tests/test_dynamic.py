@@ -88,18 +88,16 @@ def test_chaining():
     assert_that(fred).has_first_name("Fred").has_last_name("Smith").has_shoe_size(12)
 
 
-class TestDynamicMutationHardening:
-    """Close real gaps surfaced by cosmic-ray on dynamic.py."""
+class TestDynamicDictAccess:
+    """Dynamic ``has_<key>()`` access on dict values: wording, subscript access, and comparison."""
 
     def test_missing_dict_key_reports_key_wording(self):
-        # Delete_Not on the dict branch would say "attribute"; AddNot on the membership test would KeyError.
         with pytest.raises(AssertionError, match="Expected key"):
             assert_that({"a": 1}).has_b()
 
     def test_present_dict_key_compares_via_subscript(self):
-        # line 70 Delete_Not would `getattr` (AttributeError) instead of `[]`; `args[0]` -> `args[1]` IndexErrors.
         assert_that({"name": "Alice"}).has_name("Alice")
 
     def test_dict_value_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
-            assert_that({"n": 5}).has_n(3)  # actual 5 > expected 3; `!=` -> `<` would wrongly pass
+            assert_that({"n": 5}).has_n(3)

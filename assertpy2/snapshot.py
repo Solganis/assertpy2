@@ -218,7 +218,7 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
     """Serialize snapshot read-modify-write across processes via an ``O_EXCL`` lock file.
 
     Not crash-safe: a process that dies while holding the lock leaves a stale lock file and other
-    writers time out.  Accepted for now - snapshots are dev-time artifacts and crashes mid-write are rare.
+    writers time out.  Accepted: snapshots are development-time files and crashes mid-write are rare.
     """
     lockpath = f"{target}.lock"
     deadline = time.monotonic() + timeout
