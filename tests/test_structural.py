@@ -673,6 +673,47 @@ class TestAssertConformsExact:
             assert_conforms(broken, order_cls, exact=True)
         assert_that(str(exc_info.value)).contains("did not").does_not_contain("conform exactly")
 
+    def test_each_validates_every_item_of_a_list_endpoint(self):
+        order_cls = self._models()
+        result = assert_conforms([self._clean(), self._clean()], order_cls, each=True)
+        assert_that(result.val).is_length(2)
+        assert_that(result.val[0]).is_instance_of(order_cls)
+
+    def test_each_reports_the_failing_item_index(self):
+        order_cls = self._models()
+        payloads = [self._clean(), {**self._clean(), "id": "notint"}]
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms(payloads, order_cls, each=True)
+        assert_that(str(exc_info.value)).contains("item [1]").contains("to conform")
+
+    def test_each_exact_drift_carries_the_element_index(self):
+        order_cls = self._models()
+        payloads = [self._clean(), {**self._clean(), "promo": "X"}]
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms(payloads, order_cls, each=True, exact=True)
+        assert_that(str(exc_info.value)).contains("[1].promo")
+
+    def test_each_exact_clean_list_passes(self):
+        order_cls = self._models()
+        result = assert_conforms([self._clean(), self._clean()], order_cls, each=True, exact=True)
+        assert_that(result.val).is_length(2)
+
+    def test_each_accepts_a_tuple_and_an_empty_payload(self):
+        order_cls = self._models()
+        assert_that(assert_conforms((), order_cls, each=True).val).is_equal_to([])
+
+    def test_each_requires_a_list_or_tuple_payload(self):
+        order_cls = self._models()
+        with pytest.raises(TypeError) as exc_info:
+            assert_conforms(self._clean(), order_cls, each=True)
+        assert_that(str(exc_info.value)).contains("list or tuple")
+
+    def test_each_soft_collects_the_item_failure(self):
+        order_cls = self._models()
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_conforms([{**self._clean(), "id": "x"}], order_cls, each=True)
+        assert_that(str(exc_info.value)).contains("item [0]")
+
 
 class TestContractDrift:
     """Unit coverage of the drift walker's branches."""

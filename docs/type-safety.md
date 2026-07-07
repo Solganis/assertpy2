@@ -168,6 +168,18 @@ from the `model` argument instead of from the payload, it narrows to `Order` for
 `Any` included. And since it yields a class-narrowed builder (the same mechanism as
 `is_instance_of()`), the narrowing lights up in PyCharm too, not only the CLI checkers.
 
+A **list endpoint** (a JSON array of objects) validates element-by-element with `each=True`, narrowing
+the chain to `list[Order]`:
+
+```python
+orders = assert_conforms(response.json(), Order, each=True).value  # .value: list[Order]
+assert_that(orders).extracting("total").contains(199.0)
+```
+
+`each=True` validates every item against `Order`, reporting `item [i]` on the first that fails, and
+composes with `exact=True` for per-element drift (drift paths are prefixed with the element index, e.g.
+`[3].promo_code`).
+
 ### Contract drift with `exact=True`
 
 `model_validate` **silently drops** fields the model does not declare, so a stale model keeps passing

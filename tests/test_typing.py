@@ -157,6 +157,9 @@ if TYPE_CHECKING:
     assert_type(assert_conforms(anything, _Order).value, _Order)
     assert_type(assert_conforms(json_payload, _PaidOrder).value, _PaidOrder)
     assert_type(assert_conforms(dict_payload, _PaidOrder).value, _PaidOrder)
+    # a list endpoint (each=True) narrows to list[model]
+    assert_type(assert_conforms(anything, _Order, each=True), AssertionBuilder[list[_Order]])
+    assert_type(assert_conforms(anything, _Order, each=True).value, list[_Order])
 
     # collection element-access pivots narrow to the element type (universal narrowing across pivots)
     assert_type(assert_that([1, 2, 3]).first().value, int)

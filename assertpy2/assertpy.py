@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 import types
-from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Final, Generic, Literal, TypeVar, overload
 
 if TYPE_CHECKING:
     import datetime
@@ -328,9 +328,17 @@ def assert_that(val: object, description="") -> _CoreAssertion:
     return _builder(val, description)
 
 
+@overload
 def assert_conforms(
-    val: object, model: type[_U], description: str = "", *, exact: bool = False
-) -> AssertionBuilder[_U]:
+    val: object, model: type[_U], description: str = ..., *, exact: bool = ..., each: Literal[False] = ...
+) -> AssertionBuilder[_U]: ...
+@overload
+def assert_conforms(
+    val: object, model: type[_U], description: str = ..., *, exact: bool = ..., each: Literal[True]
+) -> AssertionBuilder[list[_U]]: ...
+def assert_conforms(
+    val: object, model: type[_U], description: str = "", *, exact: bool = False, each: bool = False
+) -> AssertionBuilder[Any]:
     """Validate ``val`` against a pydantic v2 ``model`` and continue over the validated instance.
 
     The narrowing-complete companion to [`assert_that()`][assertpy2.assertpy.assert_that] for
@@ -352,6 +360,9 @@ def assert_conforms(
         description (str, optional): the extra error message description.  Defaults to ``''``
         exact (bool, optional): also fail if the payload carries fields ``model`` does not declare.
             Defaults to ``False``
+        each (bool, optional): validate a *list* payload element-by-element against ``model`` (for list
+            endpoints), narrowing the chain to ``list[model]``.  ``exact`` then applies per element.
+            Defaults to ``False``
 
     Examples:
         Usage:
@@ -363,6 +374,9 @@ def assert_conforms(
 
             # catch silent API growth: fail if the response grew fields the model does not declare
             assert_conforms(response.json(), OrderModel, exact=True)
+
+            # a list endpoint: validate every item, narrowing to list[OrderModel]
+            orders = assert_conforms(response.json(), OrderModel, each=True).value  # .value: list[OrderModel]
 
     Returns:
         AssertionBuilder: a builder over the validated model instance, statically typed as ``model``
@@ -377,6 +391,29 @@ def assert_conforms(
     builder = _builder(val, description, kind)
     pydantic = sys.modules.get("pydantic")  # loaded already, since model exposes model_validate
     catchable: tuple[type[BaseException], ...] = (pydantic.ValidationError,) if pydantic is not None else ()
+    if each:
+        if not isinstance(val, (list, tuple)):
+            raise TypeError("assert_conforms(each=True) requires a list or tuple payload")
+        validated_items = []
+        for index, item in enumerate(val):
+            try:
+                validated_items.append(model.model_validate(item))  # ty: ignore[call-non-callable]  # dynamic
+            except catchable as exc:  # noqa: PERF203  # per-element catch reports which item failed; ~0 cost on 3.11+
+                return builder.error(
+                    f"Expected item [{index}] to conform to <{model.__name__}>, but it did not:\n{exc}",
+                    actual=val,
+                    expected=model,
+                )
+        if exact:
+            drift = [f"[{index}].{path}" for index, item in enumerate(val) for path in contract_drift(item, model)]
+            if drift:
+                return builder.error(
+                    f"Expected every item to conform exactly to <{model.__name__}>, but"
+                    f" {len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}",
+                    actual=val,
+                    expected=model,
+                )
+        return builder.builder(validated_items, description, kind)
     try:
         # duck-typed pydantic call, guarded by the hasattr check above
         validated = model.model_validate(val)  # ty: ignore[call-non-callable]  # model_validate is dynamic
