@@ -1,26 +1,84 @@
 from __future__ import annotations
 
+import base64
 import contextlib
 import datetime
+import decimal
+import enum
 import inspect
 import json
 import os
 import sys
 import time
+import uuid
 import warnings
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from ._compare import _build_compare_config
 from ._mixin_base import _MixinBase
+from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
 
     from ._compat import Self
 
 __tracebackhide__ = True
 
 _UNSET: Final = object()
+
+
+class _Serializer(NamedTuple):
+    cls: type
+    encode: Callable[[object], object]
+    decode: Callable[[object], object]
+    tag: str
+
+
+# user-registered serializers, checked before the built-in codec (last registered wins)
+_SERIALIZERS: list[_Serializer] = []
+
+
+def register_snapshot_serializer(
+    cls: type,
+    encode: Callable[[object], object],
+    decode: Callable[[object], object],
+    *,
+    tag: str | None = None,
+) -> None:
+    """Register a custom (encode, decode) pair for snapshotting values of type ``cls``.
+
+    The typed codec covers common non-JSON types (``set``, ``complex``, ``datetime``/``date``/``time``,
+    ``Decimal``, ``bytes``, ``uuid.UUID``, ``Enum``); register a serializer for anything else - a
+    domain object, an ORM row, a ``pathlib.Path`` - so ``snapshot()`` stores and round-trips it instead
+    of raising ``TypeError``.  Matching is by ``isinstance`` (so subclasses are covered), the registry
+    is consulted **before** the built-ins, and a later registration wins over an earlier one for
+    overlapping types.
+
+    Args:
+        cls: the type (matched by ``isinstance``) the serializer applies to
+        encode: ``value -> json_safe`` (the returned object must itself be JSON-serializable or
+            handled by another serializer)
+        decode: ``json_safe -> value`` (the inverse; runs your own code on snapshot load, so it is a
+            trusted, explicit opt-in - unlike the automatic instance decode, which never imports)
+        tag: a stable identifier stored in the snapshot to route decoding (defaults to the type's
+            fully-qualified name); change it only deliberately, since existing snapshots key on it
+
+    Examples:
+        Usage:
+
+            import pathlib
+
+            register_snapshot_serializer(pathlib.PurePath, str, pathlib.PurePath)
+
+    Raises:
+        TypeError: if ``cls`` is not a type, or ``encode`` / ``decode`` are not callable
+    """
+    if not isinstance(cls, type):
+        raise TypeError("cls must be a type")
+    if not callable(encode) or not callable(decode):
+        raise TypeError("encode and decode must be callable")
+    _SERIALIZERS.insert(0, _Serializer(cls, encode, decode, tag or f"{cls.__module__}.{cls.__qualname__}"))
 
 
 class SnapshotCreatedWarning(UserWarning):
@@ -30,6 +88,128 @@ class SnapshotCreatedWarning(UserWarning):
     anything, so a wrong first capture would silently become the reference.  This warning makes that
     capture visible; suites running with ``-W error`` turn it into an explicit failure.
     """
+
+
+class SnapshotUpdatedWarning(UserWarning):
+    """Emitted when `snapshot()` overwrites a stored snapshot in update mode.
+
+    Update mode (the ``--assertpy2-snapshot-update`` pytest flag, or the
+    ``ASSERTPY2_SNAPSHOT_UPDATE`` environment variable) replaces failing snapshots with the current
+    value instead of failing.  Each overwrite emits this warning, so an update run reports exactly
+    which snapshots changed instead of rewriting them silently.
+    """
+
+
+# set by the pytest plugin when --assertpy2-snapshot-update is given; the env var covers other runners
+_UPDATE_ALL: bool = False
+
+# tri-state CI mode set by the pytest plugin flags (None = not set by a flag)
+_CI_MODE: bool | None = None
+
+# (snapname, key) pairs touched this session; key is the lineno for a default-id sub-snap, or "" for a
+# whole-file custom-id snapshot. The pytest plugin reads this at session finish to report obsolete
+# snapshots (xdist workers ship their sets to the controller).
+_TOUCHED: set[tuple[str, str]] = set()
+
+_TRUTHY: Final = frozenset({"1", "true", "yes", "on"})
+_FALSY: Final = frozenset({"0", "false", "no", "off"})
+
+
+def _update_enabled() -> bool:
+    return _UPDATE_ALL or os.environ.get("ASSERTPY2_SNAPSHOT_UPDATE", "").strip().lower() in _TRUTHY
+
+
+def _ci_mode_enabled() -> bool:
+    """Whether snapshot creation is forbidden (a missing snapshot fails instead of being created).
+
+    Precedence: the pytest ``--assertpy2-snapshot-ci`` / ``--assertpy2-snapshot-no-ci`` flags, then the
+    ``ASSERTPY2_SNAPSHOT_CI`` env var (explicit on/off), then autodetection of a CI environment (a
+    truthy ``CI`` var, set by GitHub Actions, GitLab CI, CircleCI, and most others).
+    """
+    if _CI_MODE is not None:
+        return _CI_MODE
+    explicit = os.environ.get("ASSERTPY2_SNAPSHOT_CI", "").strip().lower()
+    if explicit in _FALSY:
+        return False
+    if explicit in _TRUTHY:
+        return True
+    return os.environ.get("CI", "").strip().lower() in _TRUTHY
+
+
+def _forbid_creation_in_ci(snapname: str) -> None:
+    """In CI mode a missing snapshot is a hard failure, not a silent create - the golden was never
+    committed, so drift detection for this test would be silently off."""
+    if _ci_mode_enabled():
+        raise AssertionError(
+            f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the snapshot"
+            " to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or unset CI /"
+            " ASSERTPY2_SNAPSHOT_CI)"
+        )
+
+
+def _combine_ignore(ignore, placeholders):
+    """Merge the placeholder keys into the caller's ``ignore`` spec, so token fields are skipped by the
+    equality comparison (their matcher is asserted separately)."""
+    if not placeholders:
+        return ignore
+    keys = list(placeholders)
+    if ignore is None:
+        return keys
+    if isinstance(ignore, (list, set, frozenset)):
+        return [*keys, *ignore]
+    return [*keys, ignore]  # a single key or a nested-path tuple
+
+
+def _find_orphans(touched):
+    """Given the ``(snapname, key)`` pairs touched this session, return obsolete snapshots as
+    ``(sub_key_orphans, whole_file_orphans)``.
+
+    A sub-key orphan is ``(snapname, lineno)`` still on disk in a *touched* default-id file whose test
+    line was not exercised this run (that specific test was deleted).  A whole-file orphan is a snapshot
+    file in a touched directory that was not touched at all (its test/module is gone).  Only directories
+    that had at least one live snapshot this run are scanned, so an unrelated directory is never judged.
+    """
+    touched_files = {snapname for snapname, _ in touched}
+    custom_touched = {snapname for snapname, key in touched if key == ""}
+    touched_keys: dict[str, set[str]] = {}
+    for snapname, key in touched:
+        if key != "":
+            touched_keys.setdefault(snapname, set()).add(key)
+
+    sub_orphans: list[tuple[str, str]] = []
+    whole_orphans: list[str] = []
+    for directory in sorted({os.path.dirname(snapname) for snapname, _ in touched}):
+        if not os.path.isdir(directory):
+            continue
+        for fname in sorted(os.listdir(directory)):
+            if not (fname.startswith("snap-") and fname.endswith(".json")):
+                continue
+            snapname = os.path.join(directory, fname)
+            if snapname not in touched_files:
+                whole_orphans.append(snapname)
+                continue
+            if snapname in custom_touched:
+                continue  # a touched whole-file custom-id snapshot is live
+            data = _load(snapname)
+            live = touched_keys.get(snapname, set())
+            sub_orphans.extend((snapname, key) for key in sorted(data) if key not in live)
+    return sub_orphans, whole_orphans
+
+
+def _prune_sub_key_orphans(sub_orphans):
+    """Remove obsolete sub-snap keys from their files, deleting a file that becomes empty."""
+    by_file: dict[str, set[str]] = {}
+    for snapname, key in sub_orphans:
+        by_file.setdefault(snapname, set()).add(key)
+    for snapname, keys in by_file.items():
+        with _file_lock(snapname):
+            data = _load(snapname)
+            for key in keys:
+                data.pop(key, None)
+            if data:
+                _save(snapname, data)
+            else:
+                os.unlink(snapname)
 
 
 @contextlib.contextmanager
@@ -58,15 +238,37 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
 
 class _Encoder(json.JSONEncoder):
     def default(self, o):
+        for entry in _SERIALIZERS:
+            if isinstance(o, entry.cls):
+                return {"__type__": "custom", "__tag__": entry.tag, "__data__": entry.encode(o)}
         if isinstance(o, set):
             return {"__type__": "set", "__data__": list(o)}
         elif isinstance(o, complex):
             return {"__type__": "complex", "__data__": [o.real, o.imag]}
         elif isinstance(o, datetime.datetime):
-            # the sub-second format is used only when needed, so snapshots without microseconds keep
-            # the historical format and stay readable by older versions
+            # the sub-second and offset suffixes are used only when needed, so snapshots without
+            # microseconds/tzinfo keep the historical format and stay readable by older versions
             fmt = "%Y-%m-%d %H:%M:%S.%f" if o.microsecond else "%Y-%m-%d %H:%M:%S"
+            if o.tzinfo is not None:
+                fmt += "%z"
             return {"__type__": "datetime", "__data__": o.strftime(fmt)}
+        elif isinstance(o, datetime.date):
+            return {"__type__": "date", "__data__": o.isoformat()}
+        elif isinstance(o, datetime.time):
+            return {"__type__": "time", "__data__": o.isoformat()}
+        elif isinstance(o, decimal.Decimal):
+            return {"__type__": "decimal", "__data__": str(o)}
+        elif isinstance(o, (bytes, bytearray)):
+            return {"__type__": "bytes", "__data__": base64.b64encode(bytes(o)).decode("ascii")}
+        elif isinstance(o, uuid.UUID):
+            return {"__type__": "uuid", "__data__": str(o)}
+        elif isinstance(o, enum.Enum):
+            return {
+                "__type__": "enum",
+                "__class__": o.__class__.__name__,
+                "__module__": o.__class__.__module__,
+                "__data__": o.value,
+            }
         elif "__dict__" in dir(o) and type(o) is not type:
             return {
                 "__type__": "instance",
@@ -89,20 +291,48 @@ class _Decoder(json.JSONDecoder):
                 return complex(decoded["__data__"][0], decoded["__data__"][1])
             elif decoded["__type__"] == "datetime":
                 raw = decoded["__data__"]
-                fmt = "%Y-%m-%d %H:%M:%S.%f" if "." in raw else "%Y-%m-%d %H:%M:%S"
+                tail = raw[len("0000-00-00 00:00:00") :]  # the date part contains "-", so probe past the seconds
+                fmt = "%Y-%m-%d %H:%M:%S"
+                if "." in tail:
+                    fmt += ".%f"
+                if "+" in tail or "-" in tail:
+                    fmt += "%z"
                 return datetime.datetime.strptime(raw, fmt)
+            elif decoded["__type__"] == "date":
+                return datetime.date.fromisoformat(decoded["__data__"])
+            elif decoded["__type__"] == "time":
+                return datetime.time.fromisoformat(decoded["__data__"])
+            elif decoded["__type__"] == "decimal":
+                return decimal.Decimal(decoded["__data__"])
+            elif decoded["__type__"] == "bytes":
+                return base64.b64decode(decoded["__data__"])
+            elif decoded["__type__"] == "uuid":
+                return uuid.UUID(decoded["__data__"])
+            elif decoded["__type__"] == "custom":
+                tag = decoded.get("__tag__")
+                for entry in _SERIALIZERS:
+                    if entry.tag == tag:
+                        return entry.decode(decoded["__data__"])
+                return decoded  # no serializer registered for this tag this run - leave the marker as-is
+            elif decoded["__type__"] == "enum":
+                target_class = _resolve_class(decoded["__module__"], decoded["__class__"])
+                return target_class(decoded["__data__"]) if target_class is not None else decoded
             elif decoded["__type__"] == "instance":
-                module_name = decoded["__module__"]
-                if module_name not in sys.modules:
-                    return decoded
-                module = sys.modules[module_name]
-                target_class = getattr(module, decoded["__class__"], None)
+                target_class = _resolve_class(decoded["__module__"], decoded["__class__"])
                 if target_class is None:
                     return decoded
                 instance = target_class.__new__(target_class)
                 instance.__dict__ = decoded["__data__"]
                 return instance
         return decoded
+
+
+def _resolve_class(module_name, class_name):
+    """Resolve a class by module+name without importing anything (never runs arbitrary imports, per the
+    snapshot security model); returns ``None`` if the module is not already imported or the name is absent."""
+    if module_name not in sys.modules:
+        return None
+    return getattr(sys.modules[module_name], class_name, None)
 
 
 def _save(name, val):
@@ -151,16 +381,62 @@ class SnapshotMixin(_MixinBase):
             "c": 3
         }
 
-    The JSON formatting support most python data structures (dict, list, object, etc), but not custom
-    binary data.
+    The JSON formatting supports most python data structures (dict, list, object, etc).  Values
+    without a native JSON form round-trip through typed markers: ``set``, ``complex``,
+    ``datetime.datetime`` (including timezone-aware), ``datetime.date``, ``datetime.time``,
+    ``decimal.Decimal``, ``bytes`` (stored base64-encoded), ``uuid.UUID``, and ``Enum`` members.
+    Any other type can be handled by registering a serializer with
+    [`register_snapshot_serializer()`][assertpy2.snapshot.register_snapshot_serializer].
 
     **Updating**
 
-    It's easy to update your snapshots...just delete them all and re-run the test suite to regenerate all snapshots.
-    Each capture of a new snapshot emits a
-    [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning], so a first run is never
-    silent (and fails explicitly under ``-W error``).
+    Run pytest with ``--assertpy2-snapshot-update`` (or set the ``ASSERTPY2_SNAPSHOT_UPDATE``
+    environment variable for other runners) and every failing snapshot comparison overwrites the
+    stored value instead of failing, each emitting a
+    [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning].  Matching snapshots are
+    left untouched.  Deleting the snapshot files and re-running still works too - each fresh capture
+    emits a [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning], so neither a first
+    run nor an update run is ever silent (and both fail explicitly under ``-W error``).
+
+    **CI mode**
+
+    On a first run a missing snapshot is *created* and the test passes - convenient locally, but a
+    hazard in CI: a snapshot test whose golden was never committed would create it in the ephemeral
+    workspace, pass, and silently disable drift detection for that test.  In CI mode a missing
+    snapshot is instead a hard failure.  Enable it with the ``--assertpy2-snapshot-ci`` pytest flag
+    or the ``ASSERTPY2_SNAPSHOT_CI`` environment variable; it is also auto-enabled when a ``CI``
+    environment variable is set (the near-universal CI marker).  Disable the autodetection with
+    ``--assertpy2-snapshot-no-ci`` or ``ASSERTPY2_SNAPSHOT_CI=0``.  Local runs are unaffected.
     """
+
+    def _with_placeholder_tokens(self, placeholders):
+        """A shallow copy of the dict-like val with placeholder keys replaced by descriptive tokens, so
+        the stored snapshot documents the expected shape instead of a volatile captured value."""
+        stored = dict(self.val)
+        for key, matcher in placeholders.items():
+            stored[key] = {"__placeholder__": _describe_matcher(matcher)}
+        return stored
+
+    def _check_placeholders(self, placeholders) -> None:
+        """Assert each placeholder field of val is present and satisfies its matcher (shape, not value)."""
+        for key, matcher in placeholders.items():
+            present = key in self.val
+            if not present or not _apply_matcher(matcher, self.val[key]):
+                actual = repr(self.val[key]) if present else "missing"
+                self.error(
+                    f"Expected snapshot placeholder <{key}> to satisfy {_describe_matcher(matcher)}, but was {actual}."
+                )
+
+    def _snapshot_stale(self, snapshot_value, *, ignore, include, tolerance, comparators) -> bool:
+        """Whether the stored snapshot no longer matches val, decided via a strict throwaway builder
+        (under soft/warn kinds ``self.is_equal_to`` would not raise)."""
+        try:
+            self.builder(self.val, "").is_equal_to(
+                snapshot_value, ignore=ignore, include=include, tolerance=tolerance, comparators=comparators
+            )
+        except AssertionError:
+            return True
+        return False
 
     def snapshot(
         self,
@@ -171,6 +447,7 @@ class SnapshotMixin(_MixinBase):
         include: object = None,
         tolerance: float | None = None,
         comparators: dict | None = None,
+        placeholders: dict | None = None,
     ) -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
@@ -183,6 +460,17 @@ class SnapshotMixin(_MixinBase):
         committed to source control alongside any code changes.
 
         Snapshots are identified by test filename plus line number by default.
+
+        In update mode (the ``--assertpy2-snapshot-update`` pytest flag, or the
+        ``ASSERTPY2_SNAPSHOT_UPDATE`` environment variable) a failing comparison overwrites the
+        stored snapshot with the current value and passes, emitting a
+        [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning]; a matching snapshot
+        is left untouched.
+
+        In CI mode (the ``--assertpy2-snapshot-ci`` pytest flag, the ``ASSERTPY2_SNAPSHOT_CI``
+        environment variable, or an auto-detected ``CI`` environment) a *missing* snapshot is a hard
+        ``AssertionError`` instead of being created and passing, so an uncommitted golden fails the
+        build rather than silently disabling drift detection.
 
         The comparison accepts the same selective options as
         [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to], so volatile fields (timestamps,
@@ -202,6 +490,11 @@ class SnapshotMixin(_MixinBase):
             tolerance (float | None): an absolute tolerance applied to every real-number leaf.
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
                 ``(actual, expected) -> bool`` predicate that owns matching leaves.
+            placeholders (dict | None): a dict mapping a top-level key of a *dict-like* val to a
+                ``Matcher`` (or callable predicate).  The stored snapshot records a descriptive token
+                (``Any<...>``) for that field instead of the volatile value, and the comparison asserts
+                the actual field satisfies the matcher (presence + shape) rather than exact equality -
+                so a generated id or timestamp reads as its shape in the golden and never breaks it.
 
         Examples:
             Usage:
@@ -233,19 +526,37 @@ class SnapshotMixin(_MixinBase):
                 assert_that(api_response).snapshot(id='order', ignore=['created_at', ('user', 'session_id')])
                 assert_that(metrics).snapshot(id='latency', tolerance=0.001)
 
+            Store a shape token for a volatile field, and assert its shape on every run:
+
+                from assertpy2 import match
+
+                assert_that(response).snapshot(id='order', placeholders={'id': match.is_uuid()})
+                # stored as {"id": {"__placeholder__": "a valid UUID string"}, ...}
+
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
             AssertionError: if val does **not** equal to on-disk snapshot
             TypeError: if ``tolerance`` is not a real number, or ``comparators`` is not a dict of
-                callables (validated on every run, including the capturing first one)
+                callables (validated on every run, including the capturing first one); or if
+                ``placeholders`` is given for a non-dict-like val, or maps to a non-matcher value
             ValueError: if ``tolerance`` is ``NaN`` or negative
 
         Warns:
             SnapshotCreatedWarning: when this run captured a new snapshot instead of comparing
+            SnapshotUpdatedWarning: when update mode overwrote a stale snapshot instead of failing
         """
         _build_compare_config(tolerance, comparators)  # a bad tolerance must fail the capturing first run too
+        if placeholders:
+            self._require_dict_like(self.val, name="val")  # placeholders address keys of a dict-like value
+            for matcher in placeholders.values():
+                if not _is_matcher(matcher) and not callable(matcher):
+                    raise TypeError("placeholder values must be Matcher instances or callables")
+        # the stored snapshot documents placeholders as tokens; the comparison ignores those keys and
+        # asserts their matcher separately, so a volatile field never breaks the snapshot
+        stored_val = self._with_placeholder_tokens(placeholders) if placeholders else self.val
+        effective_ignore = _combine_ignore(ignore, placeholders)
         lineno = ""
         if id:
             # custom id
@@ -261,11 +572,14 @@ class SnapshotMixin(_MixinBase):
             lineno = str(caller.f_lineno)
             snapname = _name(path, file_name)
 
+        _TOUCHED.add((snapname, "" if id else lineno))
         os.makedirs(path, exist_ok=True)
 
         # Serialize read-modify-write so parallel workers (pytest-xdist) sharing a snap file don't lose
-        # each other's entries.  The comparison runs after the lock is released.
+        # each other's entries.  The normal comparison runs after the lock is released; the update-mode
+        # rewrite decision must stay inside it.
         snapshot_value = _UNSET
+        updated = False
         with _file_lock(snapname):
             if os.path.isfile(snapname):
                 snap = _load(snapname)
@@ -277,15 +591,45 @@ class SnapshotMixin(_MixinBase):
                     snapshot_value = snap[lineno]
                 else:
                     # lineno not in snap, so create sub-snap and pass
-                    snap[lineno] = self.val
+                    _forbid_creation_in_ci(snapname)
+                    snap[lineno] = stored_val
                     _save(snapname, snap)
+
+                if (
+                    snapshot_value is not _UNSET
+                    and _update_enabled()
+                    and self._snapshot_stale(
+                        snapshot_value,
+                        ignore=effective_ignore,
+                        include=include,
+                        tolerance=tolerance,
+                        comparators=comparators,
+                    )
+                ):
+                    if id:
+                        _save(snapname, stored_val)
+                    else:
+                        snap[lineno] = stored_val
+                        _save(snapname, snap)
+                    updated = True
             else:
                 # no snap, so create and pass
-                _save(snapname, self.val if id else {lineno: self.val})
+                _forbid_creation_in_ci(snapname)
+                _save(snapname, stored_val if id else {lineno: stored_val})
 
+        if updated:
+            warnings.warn(
+                f"updated snapshot <{snapname}>: this run overwrote the stored value instead of comparing;"
+                " subsequent runs compare against it",
+                SnapshotUpdatedWarning,
+                stacklevel=2,
+            )
+            return self
         if snapshot_value is not _UNSET:
+            if placeholders:
+                self._check_placeholders(placeholders)
             return self.is_equal_to(
-                snapshot_value, ignore=ignore, include=include, tolerance=tolerance, comparators=comparators
+                snapshot_value, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
             )
         warnings.warn(
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
