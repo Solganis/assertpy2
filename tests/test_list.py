@@ -2,7 +2,7 @@ import collections
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 
 
 def test_is_length():
@@ -16,6 +16,42 @@ def test_is_length_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(["a", "b", "c"]).is_length(4)
     assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b', 'c']> to be of length <4>, but was <3>.")
+
+
+def test_is_length_between():
+    assert_that(["a", "b", "c"]).is_length_between(1, 5)
+    assert_that("foo").is_length_between(3, 3)
+    assert_that((1, 2)).is_length_between(2, 4)
+    assert_that({"a": 1}).is_length_between(0, 1)
+
+
+def test_is_length_between_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(["a", "b", "c"]).is_length_between(4, 6)
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <['a', 'b', 'c']> to be of length between <4> and <6>, but was <3>."
+    )
+
+
+def test_is_length_between_above_high_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(["a", "b", "c"]).is_length_between(0, 2)
+    assert_that(str(exc_info.value)).contains("to be of length between <0> and <2>, but was <3>.")
+
+
+def test_is_length_between_bad_args():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(["a"]).is_length_between("1", 2)
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be an int")
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(["a"]).is_length_between(1, "2")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be an int")
+    with pytest.raises(ValueError) as exc_info:
+        assert_that(["a"]).is_length_between(0, -1)
+    assert_that(str(exc_info.value)).is_equal_to("given args must be positive ints")
+    with pytest.raises(ValueError) as exc_info:
+        assert_that(["a"]).is_length_between(2, 1)
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be less than given high arg")
 
 
 def test_is_length_bad_arg_failure():
@@ -192,6 +228,14 @@ def test_contains_sequence_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(4, 5)
     assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <4, 5>, but did not.")
+
+
+def test_contains_sequence_tail_prefix_absent_fails_cleanly():
+    # the last element matches the sequence's first item but the full sequence runs past the end:
+    # the scan must fail cleanly (AssertionError), never walk off the end into IndexError (loop-bound guard)
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([1, 2, 3]).contains_sequence(3, 9)
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <3, 9>, but did not.")
 
 
 def test_contains_sequence_bad_val_failure():
@@ -414,6 +458,50 @@ class Person:
         self.name = name
 
 
+class TestContainsClosestElement:
+    def test_closest_element_pinpoints_difference(self):
+        haystack = [{"id": 1, "name": "Alice", "role": "admin"}, {"id": 2, "name": "Bob", "role": "user"}]
+        with pytest.raises(AssertionError) as exc:
+            assert_that(haystack).contains({"id": 2, "name": "Bob", "role": "ADMIN"})
+        assert_that(str(exc.value)).contains("Closest element").contains("role ('user' != 'ADMIN')")
+
+    def test_closest_element_populates_structured_diff(self):
+        haystack = [{"id": 2, "name": "Bob", "role": "user"}]
+        with pytest.raises(AssertionError) as exc:
+            assert_that(haystack).contains({"id": 2, "name": "Bob", "role": "ADMIN"})
+        assert_that([entry.path for entry in exc.value.diff.entries]).contains("role")
+
+    def test_unrelated_needle_has_no_closest(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that([{"id": 1, "name": "Alice"}]).contains({"zzz": 999})
+        assert_that(str(exc.value)).does_not_contain("Closest element")
+
+    def test_scalar_haystack_with_dict_needle_has_no_closest(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that([1, 2, 3]).contains({"a": 1})
+        assert_that(str(exc.value)).does_not_contain("Closest element")
+
+    def test_closest_is_the_most_similar_of_several(self):
+        # element 0 differs only in y; element 1 differs in x and y -> element 0 is closest
+        with pytest.raises(AssertionError) as exc:
+            assert_that([{"id": 2, "x": 1, "y": 2}, {"id": 2, "x": 9, "y": 9}]).contains({"id": 2, "x": 1, "y": 1})
+        assert_that(str(exc.value)).contains("{'id': 2, 'x': 1, 'y': 2}").contains("y (2 != 1)")
+
+    def test_many_differences_are_truncated(self):
+        # 4 differing paths, limit 3 -> reports exactly "and 1 more" (pins the count, not just its presence)
+        with pytest.raises(AssertionError) as exc:
+            assert_that([{"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}]).contains(
+                {"a": 1, "b": 99, "c": 99, "d": 99, "e": 99}
+            )
+        assert_that(str(exc.value)).contains("Closest element").contains("and 1 more")
+
+    def test_differences_exactly_at_limit_have_no_more_suffix(self):
+        # exactly `limit` (3) differing paths -> all shown, no "and 0 more" suffix (boundary at == limit)
+        with pytest.raises(AssertionError) as exc:
+            assert_that([{"a": 1, "b": 2, "c": 3, "d": 4}]).contains({"a": 1, "b": 99, "c": 99, "d": 99})
+        assert_that(str(exc.value)).contains("Closest element").does_not_contain("more")
+
+
 class TestContainsExactly:
     def test_list(self):
         assert_that([1, 2, 3]).contains_exactly(1, 2, 3)
@@ -447,6 +535,85 @@ class TestContainsExactly:
     def test_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_exactly(1)
+        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+
+    def test_unhashable_items_failure(self):
+        # the failure path used Counter and crashed with TypeError on unhashable items
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([[1], [2]]).contains_exactly([2], [1], [3])
+        assert_that(str(exc_info.value)).contains("to contain exactly")
+        entries = exc_info.value.diff.entries
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in entries]).is_equal_to(
+            [("missing", None, [3])]
+        )
+
+
+class TestContainsExactlyInAnyOrder:
+    def test_list(self):
+        assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3)
+
+    def test_same_order(self):
+        assert_that([1, 2, 3]).contains_exactly_in_any_order(1, 2, 3)
+
+    def test_tuple(self):
+        assert_that((2, 3, 1)).contains_exactly_in_any_order(1, 2, 3)
+
+    def test_string_chars(self):
+        assert_that("cba").contains_exactly_in_any_order("a", "b", "c")
+
+    def test_duplicates_counted(self):
+        assert_that(["b", "a", "b"]).contains_exactly_in_any_order("a", "b", "b")
+
+    def test_unhashable_items(self):
+        assert_that([[3], [1, 2]]).contains_exactly_in_any_order([1, 2], [3])
+
+    def test_mixed_non_comparable_types_diff_fails_cleanly(self):
+        # a failing diff over non-comparable items (int + str) must sort stably by repr for the message,
+        # never by natural order (which raises TypeError on mixed types)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, "a"]).contains_exactly_in_any_order(2, "b")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "Expected <[1, 'a']> to contain exactly <2, 'b'> in any order, but did not."
+        )
+
+    def test_extra_duplicate_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 2]).contains_exactly_in_any_order(1, 2)
+        assert_that(str(exc_info.value)).is_equal_to(
+            "Expected <[1, 2, 2]> to contain exactly <1, 2> in any order, but did not."
+        )
+
+    def test_missing_duplicate_failure(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2]).contains_exactly_in_any_order(1, 2, 2)
+        assert_that(str(exc_info.value)).contains("to contain exactly").contains("in any order")
+
+    def test_failure_diff_entries(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([1, 4]).contains_exactly_in_any_order(1, 2)
+        diff = exc_info.value.diff
+        assert_that(diff.kind).is_equal_to("contains")
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in diff.entries]).is_equal_to(
+            [("extra", 4, None), ("missing", None, 2)]
+        )
+
+    def test_unhashable_items_failure(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([[1], [1]]).contains_exactly_in_any_order([1], [2])
+        assert_that(str(exc_info.value)).contains("in any order")
+        entries = exc_info.value.diff.entries
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in entries]).is_equal_to(
+            [("extra", [1], None), ("missing", None, [2])]
+        )
+
+    def test_empty_args_failure(self):
+        with pytest.raises(ValueError) as exc_info:
+            assert_that([1]).contains_exactly_in_any_order()
+        assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
+
+    def test_not_iterable_failure(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(42).contains_exactly_in_any_order(1)
         assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 

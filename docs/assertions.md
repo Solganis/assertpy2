@@ -11,6 +11,8 @@ assert_that("123").is_digit()
 assert_that("FOO").is_upper()
 assert_that("foo").is_equal_to("foo").is_not_equal_to("bar")
 assert_that("foo").is_equal_to_ignoring_case("FOO")
+assert_that("foo bar").is_equal_to_ignoring_whitespace("foobar")
+assert_that("foo").is_length_between(1, 5)
 assert_that("foo123").is_alphanumeric()
 assert_that("   ").is_whitespace()
 
@@ -27,6 +29,7 @@ assert_that("fox").does_not_contain_duplicates()
 assert_that("foo").is_in("foo", "bar", "baz")
 assert_that("foo").is_subset_of("abcdefghijklmnopqrstuvwxyz")
 assert_that("foo").starts_with("f").ends_with("oo")
+assert_that("FooBar").starts_with_ignoring_case("foo").ends_with_ignoring_case("BAR")
 
 assert_that("foo").matches(r"\w")
 assert_that("123-456-7890").matches(r"\d{3}-\d{3}-\d{4}")
@@ -85,6 +88,7 @@ assert_that(["a", "b"]).does_not_contain("x", "y")
 assert_that(["a", "b"]).contains_only("a", "b")
 assert_that(["a", "b", "c"]).contains_sequence("b", "c")
 assert_that(["a", "b", "c"]).contains_exactly("a", "b", "c")
+assert_that(["c", "a", "b"]).contains_exactly_in_any_order("a", "b", "c")
 assert_that(["a", "x", "b", "y", "c"]).contains_in_order("a", "b", "c")
 assert_that(["a", "b"]).is_subset_of(["a", "b", "c"])
 assert_that(["a", "b", "c"]).is_sorted()
@@ -98,16 +102,20 @@ assert_that([1, 2, 3]).all_satisfy(lambda x: x > 0)
 assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
 
 assert_that([2, 4, 6]).satisfies_exactly(lambda x: x == 2, lambda x: x == 4, lambda x: x == 6)
+assert_that([4, 2]).satisfies_exactly_in_any_order(lambda x: x == 2, lambda x: x == 4)
 assert_that([1, 2, 3]).zip_satisfies([2, 4, 6], lambda actual, other: other == actual * 2)
 assert_that([1, 2, 3]).contains_only_once(1, 3)
 assert_that([1, 2, 3]).has_same_size_as(("a", "b", "c"))
+assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_between(1, 5)
 ```
 
 `any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
 
-`satisfies_exactly` pairs the i-th item with the i-th matcher (and requires equal length), `zip_satisfies`
+`satisfies_exactly` pairs the i-th item with the i-th matcher (and requires equal length), while
+`satisfies_exactly_in_any_order` accepts any one-to-one pairing of items and matchers. `zip_satisfies`
 checks a two-arg predicate over items zipped with another iterable, `contains_only_once` requires each given
 item to occur exactly once, and `has_same_size_as` compares lengths against another sized object.
+`contains_exactly_in_any_order` requires multiset equality: exact items and counts, order ignored.
 
 Lists of lists can be flattened by index with `extracting` (see [dict flattening](#dict-flattening)):
 
@@ -356,6 +364,8 @@ All bytes assertions work with soft assertions, warn mode, and `.not_` negation.
 fred = Person("Fred", "Smith")
 
 assert_that(fred).is_not_none().is_type_of(Person).is_instance_of(object)
+assert_that(fred).is_instance_of_any(Person, dict)
+assert_that(Person).is_subclass_of(object)
 assert_that(fred).is_same_as(fred)
 assert_that(fred.say_hello).is_callable()
 assert_that(fred.first_name).is_not_callable()

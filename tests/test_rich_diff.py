@@ -348,6 +348,73 @@ class TestIsEqualToWithDiff:
         assert_that(42).is_equal_to(42)
 
 
+class TestListMessageCollapse:
+    def test_list_in_dict_collapses_to_changed_element(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"rows": [{"id": 1, "v": "x"}, {"id": 2, "v": "y"}, {"id": 3, "v": "z"}]}).is_equal_to(
+                {"rows": [{"id": 1, "v": "x"}, {"id": 2, "v": "CHANGED"}, {"id": 3, "v": "z"}]}
+            )
+        msg = str(exc.value)
+        assert_that(msg).contains("[.., {.., 'v': 'y'}]")
+        assert_that(msg).does_not_contain("'id': 1").does_not_contain("'id': 3")
+
+    def test_scalar_list_collapses(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1, 2, 3, 4, 5]}).is_equal_to({"a": [1, 2, 999, 4, 5]})
+        assert_that(str(exc.value)).contains("'a': [.., 3]")
+
+    def test_tuple_renders_with_parens(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"t": (1, 2, 3)}).is_equal_to({"t": (1, 9, 3)})
+        assert_that(str(exc.value)).contains("'t': (.., 2)")
+
+    def test_nested_list_of_lists(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"m": [[1, 2], [3, 4]]}).is_equal_to({"m": [[1, 2], [3, 99]]})
+        assert_that(str(exc.value)).contains("[.., [.., 4]]")
+
+    def test_extra_element_shown(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1, 2, 3]}).is_equal_to({"a": [1, 2]})
+        assert_that(str(exc.value)).contains("'a': [.., 3]")
+
+    def test_tolerance_mismatch_shows_element_as_leaf(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1.0, 2.0, 3.0]}).is_equal_to({"a": [1.0, 2.5, 3.0]}, tolerance=0.1)
+        assert_that(str(exc.value)).contains("'a': [.., 2.0]")
+
+    def test_pure_dict_message_unchanged(self):
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"user": {"id": 1, "zip": "10001"}}).is_equal_to({"user": {"id": 1, "zip": "99999"}})
+        assert_that(str(exc.value)).contains("{.., 'zip': '10001'}")
+
+    def test_self_referential_list_is_guarded(self):
+        circular = [1]
+        circular.append(circular)  # a list containing itself
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"x": circular}).is_equal_to({"x": [1, [99]]})
+        assert_that(str(exc.value)).contains("<circular ref>")
+
+    def test_list_versus_dict_at_same_key_renders_without_crash(self):
+        # a list on one side and a mapping on the other at the same key must not be routed through the
+        # list collapser (which would index the mapping by position and raise); it renders as a plain leaf
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1, 2]}).is_equal_to({"a": {"x": 1}})
+        assert_that(str(exc.value)).contains("'a': [1, 2]")
+
+    def test_fully_differing_list_has_no_ellipsis(self):
+        # nothing collapses (every element differs) -> no ".." prefix should be added
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1, 2]}).is_equal_to({"a": [9, 8]})
+        assert_that(str(exc.value)).contains("'a': [1, 2]").does_not_contain("..")
+
+    def test_multiple_extra_elements_are_all_shown(self):
+        # more than one trailing element beyond the counterpart's length -> all of them shown, not just the first
+        with pytest.raises(AssertionError) as exc:
+            assert_that({"a": [1, 2, 3, 4]}).is_equal_to({"a": [1, 2]})
+        assert_that(str(exc.value)).contains("[.., 3, 4]")
+
+
 class TestDiffResultStr:
     def test_empty_entries(self):
         diff = DiffResult(kind="scalar", entries=[])

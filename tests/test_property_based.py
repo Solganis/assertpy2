@@ -7,7 +7,7 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 """
 
 import copy
-from collections import namedtuple
+from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
 
 import pytest
@@ -294,6 +294,131 @@ def test_is_subset_of_matches_set_subset(items, superset):
     else:
         with pytest.raises(AssertionError):
             assert_that(items).is_subset_of(superset)
+
+
+# === Multiset semantics of contains_exactly_in_any_order ===
+
+
+@given(val=st.lists(st.integers(), max_size=6), expected=st.lists(st.integers(), min_size=1, max_size=6))
+def test_contains_exactly_in_any_order_matches_multiset_equality(val, expected):
+    if Counter(val) == Counter(expected):
+        assert_that(val).contains_exactly_in_any_order(*expected)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(val).contains_exactly_in_any_order(*expected)
+
+
+@given(items=st.lists(st.integers(), min_size=1, max_size=6), data=st.data())
+def test_contains_exactly_in_any_order_is_permutation_invariant(items, data):
+    shuffled = data.draw(st.permutations(items))
+    assert_that(items).contains_exactly_in_any_order(*shuffled)
+
+
+@given(items=st.lists(st.lists(st.integers(), max_size=3), min_size=1, max_size=5), data=st.data())
+def test_contains_exactly_in_any_order_unhashable_permutation_invariant(items, data):
+    # lists as items force the quadratic non-Counter fallback
+    shuffled = data.draw(st.permutations(items))
+    assert_that(items).contains_exactly_in_any_order(*shuffled)
+
+
+# === Bipartite pairing of satisfies_exactly_in_any_order ===
+# With pure equality matchers a perfect pairing exists iff the two multisets are equal,
+# so Python's Counter is an independent oracle for the Kuhn matching implementation.
+
+
+@given(val=st.lists(st.integers(0, 5), max_size=5), expected=st.lists(st.integers(0, 5), min_size=1, max_size=5))
+def test_satisfies_exactly_in_any_order_equality_matchers_match_multisets(val, expected):
+    matchers = [match.equal_to(item) for item in expected]
+    if Counter(val) == Counter(expected):
+        assert_that(val).satisfies_exactly_in_any_order(*matchers)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(val).satisfies_exactly_in_any_order(*matchers)
+
+
+@given(items=st.lists(st.integers(), min_size=1, max_size=5), data=st.data())
+def test_satisfies_exactly_in_any_order_is_permutation_invariant(items, data):
+    shuffled = data.draw(st.permutations(items))
+    assert_that(items).satisfies_exactly_in_any_order(*[match.equal_to(item) for item in shuffled])
+
+
+# === Relational size family mirrors len() comparisons ===
+
+_bounds = st.tuples(st.integers(0, 10), st.integers(0, 10)).map(sorted)
+
+
+@given(items=st.lists(st.integers(), max_size=10), size=st.integers(0, 10))
+def test_has_size_greater_than_matches_len_semantics(items, size):
+    if len(items) > size:
+        assert_that(items).has_size_greater_than(size)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(items).has_size_greater_than(size)
+
+
+@given(items=st.lists(st.integers(), max_size=10), size=st.integers(0, 10))
+def test_has_size_less_than_matches_len_semantics(items, size):
+    if len(items) < size:
+        assert_that(items).has_size_less_than(size)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(items).has_size_less_than(size)
+
+
+@given(items=st.lists(st.integers(), max_size=10), bounds=_bounds)
+def test_has_size_between_matches_len_semantics(items, bounds):
+    low, high = bounds
+    if low <= len(items) <= high:
+        assert_that(items).has_size_between(low, high)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(items).has_size_between(low, high)
+
+
+@given(items=st.lists(st.integers(), max_size=10), bounds=_bounds)
+def test_is_length_between_matches_len_semantics(items, bounds):
+    low, high = bounds
+    if low <= len(items) <= high:
+        assert_that(items).is_length_between(low, high)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(items).is_length_between(low, high)
+
+
+# === String normalization sugar ===
+
+_ascii_text = st.text(alphabet=st.characters(min_codepoint=33, max_codepoint=126))
+
+
+@given(text=st.text(), data=st.data())
+def test_inserting_whitespace_keeps_ignoring_whitespace_equality(text, data):
+    position = data.draw(st.integers(0, len(text)))
+    whitespace = data.draw(st.sampled_from([" ", "\t", "\n", "  ", "\r\n"]))
+    padded = text[:position] + whitespace + text[position:]
+    assert_that(padded).is_equal_to_ignoring_whitespace(text)
+
+
+@given(left=st.text(), right=st.text())
+def test_is_equal_to_ignoring_whitespace_matches_normalization(left, right):
+    if "".join(left.split()) == "".join(right.split()):
+        assert_that(left).is_equal_to_ignoring_whitespace(right)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(left).is_equal_to_ignoring_whitespace(right)
+
+
+# ascii-only: for unicode, lower(swapcase(s)) may differ from lower(s) (e.g. 'ß'.swapcase() == 'SS'),
+# which is a property of Python casing rules rather than of the assertion under test
+@given(text=_ascii_text.filter(lambda s: len(s) >= 1), data=st.data())
+def test_starts_with_ignoring_case_accepts_case_mangled_prefix(text, data):
+    prefix_length = data.draw(st.integers(1, len(text)))
+    assert_that(text).starts_with_ignoring_case(text[:prefix_length].swapcase())
+
+
+@given(text=_ascii_text.filter(lambda s: len(s) >= 1), data=st.data())
+def test_ends_with_ignoring_case_accepts_case_mangled_suffix(text, data):
+    suffix_length = data.draw(st.integers(1, len(text)))
+    assert_that(text).ends_with_ignoring_case(text[-suffix_length:].swapcase())
 
 
 # === Point 3: nested ignore via tuple key-paths (recursion in _dict_not_equal) ===

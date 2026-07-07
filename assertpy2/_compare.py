@@ -71,6 +71,8 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
     truth test is actually attempted, so 0-d / scalar array values (which *are* truth-testable) pass
     through unchanged.
     """
+    if not hasattr(value, "__array__") and not hasattr(other, "__array__"):
+        return None  # fast path: no array-like operand, skip the tuple/loop on every is_equal_to
     for candidate, counterpart in ((value, other), (other, value)):
         if hasattr(candidate, "__array__"):
             try:

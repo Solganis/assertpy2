@@ -153,3 +153,50 @@ class TestNotWithMatchers:
 def test_not_rejects_eventually_with_clear_error():
     with pytest.raises(TypeError, match="cannot be negated"):
         assert_that(lambda: 1).not_.eventually()
+
+
+def test_not_rejects_eventually_sync_with_clear_error():
+    with pytest.raises(TypeError, match="cannot be negated"):
+        assert_that(lambda: 1).not_.eventually_sync()
+
+
+def test_not_rejects_described_as_with_clear_error():
+    # described_as() configures the chain; negating it produced a bogus "to NOT satisfy" failure
+    with pytest.raises(TypeError, match=r"call described_as\(\) before not_"):
+        assert_that(1).not_.described_as("desc")
+
+
+def test_described_as_before_not_keeps_working():
+    with pytest.raises(AssertionError, match=r"\[desc\] Expected <1> to NOT satisfy: is_equal_to\(\)"):
+        assert_that(1).described_as("desc").not_.is_equal_to(1)
+
+
+def test_not_rejects_extracting_with_clear_error():
+    # extracting() pivots to a new value; negating it raised on success instead of asserting anything
+    with pytest.raises(TypeError, match=r"negate the assertion after extracting\(\)"):
+        assert_that([{"a": 1}]).not_.extracting("a")
+
+
+def test_extracting_before_not_keeps_working():
+    assert_that([{"a": 1}]).extracting("a").not_.contains(2)
+
+
+@pytest.mark.parametrize(
+    "step", ["filtered_on", "mapped", "flat_mapped", "first", "last", "element", "single", "decoded_as", "at_json_path"]
+)
+def test_not_rejects_pipeline_transformers_with_clear_error(step):
+    # transformers never raise AssertionError, so negating them could only produce a bogus failure
+    with pytest.raises(TypeError, match=f"negate the assertion after {step}"):
+        getattr(assert_that([1]).not_, step)
+
+
+def test_pipeline_transformer_before_not_keeps_working():
+    assert_that([1, -2, 3]).filtered_on(lambda x: x > 0).not_.is_empty()
+    assert_that([10, 20]).first().not_.is_equal_to(20)
+
+
+def test_hybrid_pivots_stay_negatable():
+    # extracting_group / matches_with_groups both assert (pattern must match) and pivot,
+    # so negating them is meaningful and stays allowed
+    assert_that("abc").not_.matches_with_groups(r"(\d+)")
+    assert_that("abc").not_.extracting_group(r"(\d+)", 1)

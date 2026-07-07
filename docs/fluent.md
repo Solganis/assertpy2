@@ -46,6 +46,18 @@ assert_that(-5).not_.satisfies(match.is_positive())
 assert_that([1, -2, 3]).not_.each(match.is_positive())
 ```
 
+!!! note
+    Only assertions can be negated. Chain steps that configure or transform instead of asserting -
+    `described_as()`, `extracting()`, the collection pipeline (`filtered_on()`, `mapped()`,
+    `first()`, ...), `decoded_as()`, `at_json_path()`, `eventually()`, `eventually_sync()` - raise
+    a `TypeError` under `.not_`; place them before `.not_` (or negate the assertion that follows
+    them) instead:
+
+    ```python
+    assert_that(1).described_as("desc").not_.is_none()          # description before not_
+    assert_that(people).extracting("name").not_.contains("Zoe")  # negate after extracting
+    ```
+
 ## Collection pipeline
 
 Pipeline methods transform the value before asserting. Each returns a new builder, so the original

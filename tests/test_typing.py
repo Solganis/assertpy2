@@ -14,8 +14,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     import pathlib
+    from collections.abc import Callable
+    from typing import Any, cast
 
-    from typing_extensions import assert_type
+    from typing_extensions import TypeIs, assert_type
 
     from assertpy2 import assert_that
     from assertpy2._typing import (
@@ -29,6 +31,7 @@ if TYPE_CHECKING:
         _StringAssertion,
     )
     from assertpy2.assertpy import AssertionBuilder
+    from assertpy2.async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
 
     # Each call is a static assertion: it fails type checking if assert_that stops returning the
     # documented Protocol for that value type. The mapping mirrors the table in docs/type-safety.md.
@@ -47,7 +50,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(b"raw"), _BytesAssertion)
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion)
     assert_type(assert_that(len), _CallableAssertion)
-    assert_type(assert_that(object()), AssertionBuilder)
+    assert_type(assert_that(object()), AssertionBuilder[object])
 
     # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion)
@@ -92,3 +95,63 @@ if TYPE_CHECKING:
         assert_that(datetime.date(2026, 1, 2)).is_between(datetime.date(2026, 1, 1), datetime.date(2026, 1, 3)),
         _DateAssertion,
     )
+
+    # The any-order, relational-size, string-sugar, and type methods keep their protocols (return Self).
+    assert_type(assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3), _IterableAssertion)
+    assert_type(assert_that("cba").contains_exactly_in_any_order("a", "b", "c"), _StringAssertion)
+    assert_type(
+        assert_that([1, 2]).satisfies_exactly_in_any_order(lambda x: x > 1, lambda x: x < 2), _IterableAssertion
+    )
+    assert_type(assert_that([1, 2]).has_size_greater_than(1), _IterableAssertion)
+    assert_type(assert_that("ab").has_size_less_than(3), _StringAssertion)
+    assert_type(assert_that({"k": 1}).has_size_between(0, 2), _DictAssertion)
+    assert_type(assert_that(b"ab").has_size_between(1, 2), _BytesAssertion)
+    assert_type(assert_that("ab").is_length_between(1, 3), _StringAssertion)
+    assert_type(assert_that(42).is_length_between(0, 9), _NumericAssertion)
+    assert_type(assert_that("a b").is_equal_to_ignoring_whitespace("ab"), _StringAssertion)
+    assert_type(assert_that("FooBar").starts_with_ignoring_case("foo"), _StringAssertion)
+    assert_type(assert_that("FooBar").ends_with_ignoring_case("BAR"), _StringAssertion)
+    assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion)
+    assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
+
+    # eventually() and eventually_sync() switch the chain to the polling builders.
+    assert_type(assert_that(len).eventually(trace=False), AsyncAssertionBuilder)
+    assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), SyncAssertionBuilder)
+
+    # Typed extract-and-continue: the generic fallback tracks the input type, `.value` hands it back,
+    # and the narrowing terminals refine it (is_not_none strips None, is_instance_of narrows to the class).
+    maybe_name = cast("str | None", "fred")
+    anything = cast("object", "fred")
+    assert_type(assert_that(maybe_name), AssertionBuilder[str | None])
+    assert_type(assert_that(maybe_name).is_not_none(), AssertionBuilder[str])
+    assert_type(assert_that(maybe_name).is_not_none().value, str)
+    assert_type(assert_that(anything).is_instance_of(bool), AssertionBuilder[bool])
+    assert_type(assert_that(anything).is_instance_of(bool).value, bool)
+    assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)
+    assert_type(assert_that(anything).is_not_none(), AssertionBuilder[object])
+
+    # User-extensible refinement narrowing: a TypeIs predicate narrows satisfies() to the guarded type,
+    # so a domain predicate (richer than isinstance) narrows the chain and `.value` hands it back typed.
+    class _Order: ...
+
+    class _PaidOrder(_Order): ...
+
+    def _is_paid(order: _Order) -> TypeIs[_PaidOrder]:
+        return isinstance(order, _PaidOrder)
+
+    some_order = cast("_Order", _PaidOrder())
+    assert_type(assert_that(some_order).satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    assert_type(assert_that(some_order).satisfies(_is_paid).value, _PaidOrder)
+    assert_type(assert_that(anything).is_not_none().satisfies(_is_paid).value, _PaidOrder)
+    # a plain (non-TypeIs) predicate does not narrow: the chain keeps its type
+    assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), AssertionBuilder[_Order])
+
+    # `.value` on the typed protocols returns each protocol's value-family type.
+    assert_type(assert_that("text").value, str)
+    assert_type(assert_that(42).value, int | float | complex)
+    assert_type(assert_that({"key": 1}).value, dict[Any, Any])
+    assert_type(assert_that([1, 2]).value, list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any])
+    assert_type(assert_that(b"raw").value, bytes | bytearray)
+    assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
+    assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
+    assert_type(assert_that(len).value, Callable[..., object])
