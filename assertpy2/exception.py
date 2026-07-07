@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, cast
 
+from ._compat import BaseExceptionGroup
 from ._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
@@ -9,7 +10,17 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
-_UNSET: Final = object()  # sentinel: no return value captured yet
+_UNSET: Final = object()  # sentinel: no return value / exception captured yet
+
+
+def _effective_cause(exc: BaseException) -> BaseException | None:
+    """The exception that chained into *exc*: explicit ``__cause__`` (``raise ... from``), else the
+    implicit ``__context__`` (a raise during handling), unless the context was suppressed."""
+    if exc.__cause__ is not None:
+        return exc.__cause__
+    if not exc.__suppress_context__:
+        return exc.__context__
+    return None
 
 
 class _InertBuilder:
@@ -94,7 +105,9 @@ class ExceptionMixin(_MixinBase):
             self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), self.expected):
-                return self.builder(str(e), self.description, self.kind, logger=self.logger)
+                captured = self.builder(str(e), self.description, self.kind, logger=self.logger)
+                captured._raised_exception = e
+                return captured
             else:
                 self.error(
                     f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
@@ -135,6 +148,110 @@ class ExceptionMixin(_MixinBase):
         if self._return_value is _UNSET:
             raise TypeError("no return value captured; returned() is only valid after a call that completed normally")
         return self.builder(self._return_value, self.description, self.kind, logger=self.logger)
+
+    def raised(self) -> Self:
+        """Pivots the chain to the exception object caught by
+        [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with], to assert on its type,
+        ``args``, or custom attributes - not only its message string.
+
+        Examples:
+            Usage:
+
+                err = assert_that(load).raises(ConfigError).when_called_with("bad").raised().value
+                assert_that(err.code).is_equal_to(42)
+
+        Returns:
+            AssertionBuilder: a new instance wrapping the caught exception object
+
+        Raises:
+            TypeError: if no exception was captured (the call did not raise, or
+                [`when_called_with()`][assertpy2.exception.ExceptionMixin.when_called_with] was not invoked first)
+        """
+        exc = self._require_raised("raised")
+        return self.builder(exc, self.description, self.kind, logger=self.logger)
+
+    def caused_by(self, ex: type) -> Self:
+        """Asserts the caught exception was chained from a cause of type ``ex`` (``raise ... from``, or an
+        exception raised during handling), then pivots the chain to that cause's message.
+
+        Examples:
+            Usage:
+
+                assert_that(save).raises(ServiceError).when_called_with(row).caused_by(TimeoutError)
+
+        Args:
+            ex: the expected cause type
+
+        Returns:
+            AssertionBuilder: a new instance wrapping the cause's message (chain on it, or walk deeper)
+        """
+        exc = self._require_raised("caused_by")
+        cause = _effective_cause(exc)
+        if cause is None or not isinstance(cause, ex):
+            found = "no cause" if cause is None else f"<{type(cause).__name__}>"
+            self.error(f"Expected <{type(exc).__name__}> to be caused by <{ex.__name__}>, but the cause was {found}.")
+            return cast("Self", _InertBuilder())
+        pivoted = self.builder(str(cause), self.description, self.kind, logger=self.logger)
+        pivoted._raised_exception = cause
+        return pivoted
+
+    def has_root_cause(self, ex: type) -> Self:
+        """Asserts the *root* of the caught exception's cause chain is of type ``ex``, then pivots the chain
+        to that root cause's message.
+
+        Args:
+            ex: the expected root-cause type
+
+        Returns:
+            AssertionBuilder: a new instance wrapping the root cause's message
+        """
+        exc = self._require_raised("has_root_cause")
+        root = exc
+        seen = {id(root)}
+        while (nxt := _effective_cause(root)) is not None and id(nxt) not in seen:
+            root = nxt
+            seen.add(id(root))
+        if not isinstance(root, ex):
+            self.error(
+                f"Expected <{type(exc).__name__}> to have root cause <{ex.__name__}>,"
+                f" but the root cause was <{type(root).__name__}>."
+            )
+            return cast("Self", _InertBuilder())
+        pivoted = self.builder(str(root), self.description, self.kind, logger=self.logger)
+        pivoted._raised_exception = root
+        return pivoted
+
+    def contains_error(self, *ex_types: type) -> Self:
+        """Asserts the caught exception is an exception group that contains, recursively, an exception of
+        each given type (for [`raises(ExceptionGroup)`][assertpy2.exception.ExceptionMixin.raises]).
+
+        Examples:
+            Usage:
+
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
+
+        Args:
+            *ex_types: the exception types the group must contain
+
+        Returns:
+            AssertionBuilder: this instance, to chain further assertions on the group
+        """
+        exc = self._require_raised("contains_error")
+        if not isinstance(exc, BaseExceptionGroup):
+            self.error(f"Expected the raised <{type(exc).__name__}> to be an exception group, but it was not.")
+            return cast("Self", _InertBuilder())
+        for ex in ex_types:
+            if exc.subgroup(ex) is None:
+                self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.")
+                return cast("Self", _InertBuilder())
+        return self
+
+    def _require_raised(self, method: str) -> BaseException:
+        if self._raised_exception is _UNSET:
+            raise TypeError(
+                f"no exception captured; {method}() is only valid after raises()...when_called_with() caught one"
+            )
+        return cast("BaseException", self._raised_exception)
 
     def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
         assert self.expected is not None

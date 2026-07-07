@@ -11,6 +11,7 @@ import datetime
 import json
 from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
+from itertools import pairwise
 
 import pytest
 from hypothesis import assume, given, settings
@@ -672,3 +673,20 @@ def test_assert_conforms_each_exact_reports_indexed_drift(ids, position, extra):
     with pytest.raises(AssertionError) as exc_info:
         assert_conforms(payloads, Item, each=True, exact=True)
     assert_that(str(exc_info.value)).contains(f"[{index}].{extra}")
+
+
+_chain_types = st.sampled_from([ValueError, KeyError, TypeError, RuntimeError, IndexError, AttributeError])
+
+
+@settings(deadline=None)
+@given(chain=st.lists(_chain_types, min_size=1, max_size=6))
+def test_has_root_cause_walks_to_the_deepest_link(chain):
+    # a __cause__ chain of arbitrary depth: has_root_cause finds its last link, whatever the depth
+    errors = [exc_type(f"e{index}") for index, exc_type in enumerate(chain)]
+    for outer, inner in pairwise(errors):
+        outer.__cause__ = inner
+
+    def raise_head():
+        raise errors[0]
+
+    assert_that(raise_head).raises(chain[0]).when_called_with().has_root_cause(chain[-1])

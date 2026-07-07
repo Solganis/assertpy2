@@ -1,4 +1,5 @@
 import logging
+import sys
 from io import StringIO
 
 import pytest
@@ -226,3 +227,163 @@ class TestDoesNotRaise:
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(raises_value_error).does_not_raise(ValueError).when_called_with()
         assert_that(str(exc_info.value)).contains("to not raise <ValueError>")
+
+
+class _ConfigError(Exception):
+    def __init__(self, message, code):
+        super().__init__(message)
+        self.code = code
+
+
+def _raise_config():
+    raise _ConfigError("bad config", 42)
+
+
+def _raise_wrapped_from():
+    try:
+        raise KeyError("missing")
+    except KeyError as exc:
+        raise ValueError("wrapped") from exc
+
+
+def _raise_during_handling():
+    try:
+        raise ZeroDivisionError
+    except ZeroDivisionError:
+        raise RuntimeError("during handling")  # noqa: B904  # intentional implicit __context__ (no `from`)
+
+
+def _raise_suppressed():
+    try:
+        raise ZeroDivisionError
+    except ZeroDivisionError:
+        raise ValueError("clean") from None  # suppresses the chained context
+
+
+def _raise_deep_chain():
+    try:
+        try:
+            raise KeyError("root")
+        except KeyError as exc:
+            raise TimeoutError("middle") from exc
+    except TimeoutError as exc:
+        raise ValueError("top") from exc
+
+
+# Exception groups are a 3.11+ feature; alias the builtin once and gate the group tests on the version.
+if sys.version_info >= (3, 11):
+    _ExceptionGroup = ExceptionGroup  # noqa: F821  # 3.11+ builtin; TestContainsError is skipped below on 3.10
+
+
+def _raise_group():
+    raise _ExceptionGroup("boom", [ValueError("v"), KeyError("k")])
+
+
+class TestRaisedPivot:
+    def test_pivots_to_exception_object(self):
+        err = assert_that(_raise_config).raises(_ConfigError).when_called_with().raised().value
+        assert_that(err.code).is_equal_to(42)
+
+    def test_raised_object_supports_core_assertions(self):
+        assert_that(_raise_config).raises(_ConfigError).when_called_with().raised().is_instance_of(_ConfigError)
+
+    def test_raised_without_capture_fails(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_raise_config).raised()
+        assert_that(str(exc_info.value)).contains("no exception captured")
+
+
+class TestCausedBy:
+    def test_explicit_cause(self):
+        assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(KeyError)
+
+    def test_implicit_context_cause(self):
+        assert_that(_raise_during_handling).raises(RuntimeError).when_called_with().caused_by(ZeroDivisionError)
+
+    def test_pivots_to_cause_message(self):
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(KeyError)
+        chain.is_equal_to("'missing'")
+
+    def test_wrong_cause_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(TypeError)
+        assert_that(str(exc_info.value)).contains("to be caused by <TypeError>").contains("<KeyError>")
+
+    def test_no_cause_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().caused_by(KeyError)
+        assert_that(str(exc_info.value)).contains("the cause was no cause")
+
+    def test_suppressed_context_has_no_cause(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_suppressed).raises(ValueError).when_called_with().caused_by(ZeroDivisionError)
+        assert_that(str(exc_info.value)).contains("the cause was no cause")
+
+    def test_wrong_cause_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(TypeError)
+        assert_that(str(exc_info.value)).contains("to be caused by <TypeError>")
+
+    def test_caused_by_without_capture_fails(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_raise_config).caused_by(KeyError)
+        assert_that(str(exc_info.value)).contains("no exception captured")
+
+
+class TestHasRootCause:
+    def test_single_level_root(self):
+        assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().has_root_cause(KeyError)
+
+    def test_deep_chain_root(self):
+        assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(KeyError)
+
+    def test_pivots_to_root_message(self):
+        chain = assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(KeyError)
+        chain.is_equal_to("'root'")
+
+    def test_wrong_root_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(TypeError)
+        assert_that(str(exc_info.value)).contains("root cause <TypeError>").contains("<KeyError>")
+
+    def test_wrong_root_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(TypeError)
+        assert_that(str(exc_info.value)).contains("root cause")
+
+    def test_cyclic_cause_chain_terminates(self):
+        first = ValueError("a")
+        second = KeyError("b")
+        first.__cause__ = second
+        second.__cause__ = first  # a cycle the walk must not loop on
+
+        def raise_cyclic():
+            raise first
+
+        assert_that(raise_cyclic).raises(ValueError).when_called_with().has_root_cause(KeyError)
+
+
+@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+class TestContainsError:
+    def test_group_contains_all(self):
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
+
+    def test_group_missing_type_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().contains_error(TypeError)
+        assert_that(str(exc_info.value)).contains("to contain <TypeError>")
+
+    def test_not_a_group_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().contains_error(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_missing_type_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().contains_error(TypeError)
+        assert_that(str(exc_info.value)).contains("to contain <TypeError>")
+
+    def test_not_a_group_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().contains_error(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
