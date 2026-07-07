@@ -13,10 +13,11 @@ from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_that, match
+from assertpy2._contract import contract_drift, shape, shape_diff
 from assertpy2.snapshot import _Decoder, _Encoder
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
@@ -492,3 +493,108 @@ def test_nested_include_compares_only_listed_leaves(base, data):
             right[outer][leaf] += 1000  # perturb only NON-included leaves (keys untouched)
     # comparing only the included leaf-paths -> equal, since those leaves are left intact
     assert_that(base).is_equal_to(right, include=list(included))
+
+
+# --- contract shape / drift (assert_conforms exact + matches_contract_snapshot) ---
+
+# JSON-like values including NaN/inf floats: contract shape must survive them (they are just "number").
+_json_atoms = st.none() | st.booleans() | st.integers() | st.floats() | st.text()
+_json = st.recursive(_json_atoms, lambda children: st.lists(children) | st.dictionaries(_keys, children), max_leaves=20)
+
+
+def _canon(value):
+    """Replace every scalar leaf with a fixed representative of its category, preserving structure."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return 0
+    if isinstance(value, str):
+        return ""
+    if isinstance(value, dict):
+        return {key: _canon(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_canon(item) for item in value]
+    return value  # None
+
+
+@settings(deadline=None)
+@given(value=_json)
+def test_shape_never_drifts_from_itself(value):
+    # P1: a value's shape is identical to itself - the snapshot never fails on unchanged structure
+    assert_that(shape_diff(shape(value), shape(value))).is_empty()
+
+
+@settings(deadline=None)
+@given(value=_json)
+def test_shape_ignores_leaf_values(value):
+    # P2 (value-tolerance): rewriting every leaf with a same-category value leaves the shape unchanged
+    assert_that(shape(value)).is_equal_to(shape(_canon(value)))
+    assert_that(shape_diff(shape(value), shape(_canon(value)))).is_empty()
+
+
+@settings(deadline=None)
+@given(left=_json, right=_json)
+def test_shape_diff_is_total(left, right):
+    # P3 (totality): shape and shape_diff never raise on any pair of JSON-like values
+    shape_diff(shape(left), shape(right))
+
+
+@settings(deadline=None)
+@given(number=st.integers() | st.floats())
+def test_numbers_share_one_category(number):
+    # P4: int and float (incl NaN/inf) collapse to one category, so 5 vs 5.0 is never drift
+    assert_that(shape(number)).is_equal_to("number")
+
+
+@settings(deadline=None)
+@given(value=_json)
+def test_duplicate_elements_merge_to_one(value):
+    # P5: two identical elements merge to a single element shape (merge is reflexive)
+    assert_that(shape([value, value])).is_equal_to(shape([value]))
+
+
+@settings(deadline=None)
+@given(ident=st.integers(), name=st.text(), tags=st.lists(st.text()))
+def test_conforming_dump_has_no_drift(ident, name, tags):
+    # P7: a model's own dumped instance never drifts from the model
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Item(BaseModel):
+        id: int
+        name: str
+        tags: list[str]
+
+    assert_that(contract_drift(Item(id=ident, name=name, tags=tags).model_dump(), Item)).is_empty()
+
+
+@settings(deadline=None)
+@given(payload=st.dictionaries(_keys, _json_atoms), extra_key=st.text(min_size=1))
+def test_undeclared_key_is_always_detected(payload, extra_key):
+    # P8: any key the model does not declare surfaces as drift
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Item(BaseModel):
+        id: int
+
+    assume(extra_key != "id")
+    assert_that(contract_drift({**payload, extra_key: 1}, Item)).contains(extra_key)
+
+
+@settings(deadline=None)
+@given(payload=st.dictionaries(_keys, _json))
+def test_contract_drift_is_total(payload):
+    # P9: contract_drift never raises on an arbitrary dict payload, even through sub-model recursion
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Sub(BaseModel):
+        x: int
+
+    class Item(BaseModel):
+        id: int
+        sub: Sub
+        items: list[Sub]
+
+    contract_drift(payload, Item)
