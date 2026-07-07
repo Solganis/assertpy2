@@ -103,11 +103,25 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
     raise TypeError("given arg must be a Matcher or callable")
 
 
+def _describe_callable(predicate: Callable[..., object]) -> str:
+    """A readable, deterministic name for a predicate callable in a message.
+
+    Avoids the ``<function <lambda> at 0x...>`` repr, whose address is noise that changes every run,
+    while keeping a named function's name (the useful part) and still flagging a lambda as a lambda.
+    """
+    name = getattr(predicate, "__name__", None)
+    if name == "<lambda>":
+        return "a lambda predicate"
+    if name:
+        return f"predicate {name}()"
+    return "the given predicate"
+
+
 def _describe_matcher(matcher: Matcher | Callable[..., object]) -> str:
     """Describe a ``Matcher`` or callable for the "expected" half of an error or diff entry."""
     if _is_matcher(matcher):
         return matcher.describe()
-    return f"<{matcher}>"
+    return _describe_callable(matcher)
 
 
 # --- Combinators ---

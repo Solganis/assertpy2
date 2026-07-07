@@ -37,6 +37,13 @@ def test_is_equal_list_failure():
     assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b']> to be equal to <['a', 'b', 'c']>, but was not.")
 
 
+def test_is_equal_type_collision_annotates_types():
+    # when the two reprs collide, the message tags each with its type so it does not read as "1 != 1"
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("1").is_equal_to(1)
+    assert_that(str(exc_info.value)).is_equal_to("Expected <1:str> to be equal to <1:int>, but was not.")
+
+
 def test_is_not_equal():
     assert_that("foo").is_not_equal_to("bar")
     assert_that(123).is_not_equal_to(234)
