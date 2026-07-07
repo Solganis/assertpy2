@@ -1206,12 +1206,11 @@ class TestDictCircularRefNotEqual:
         assert_that(result).is_false()
 
 
-class TestDiffOrderingMutants:
-    """Guards the rich-diff `!=` field/element guards against ordering mutants (`<`/`<=`/`==`).
+class TestDiffOrderingActualGreater:
+    """The field/element diff must report a difference when actual is greater than expected.
 
-    Each case has a differing slot where actual > expected, so a `<`/`<=`/`==` mutant of the `!=`
-    guard would skip the entry and the assertion fails. The symmetric actual < expected direction
-    (which guards `>`/`>=`) is already covered by the existing diff tests above.
+    Each case has a differing slot where actual > expected, and the diff must still surface it. The
+    symmetric actual < expected direction is already covered by the diff tests above.
     """
 
     def test_build_namedtuple_actual_greater(self):

@@ -82,7 +82,6 @@ class TestWalkLeavesTraversal:
         assert_that(leaves).is_equal_to({"a": 1, "self": "<circular ref>"})
 
     def test_circular_through_list_is_guarded(self):
-        # `child_seen = _seen | {id}` -> `&`/`-` would drop the seen ids and recurse forever.
         lst = [1]
         lst.append(lst)
         leaves = dict(_walk_leaves(lst))
