@@ -73,6 +73,7 @@ if TYPE_CHECKING:
     assert_type(
         assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion[str, int]
     )
+    assert_type(assert_that({"k": 1}).is_equal_to({"k": None}, ignore_null=True), _DictAssertion[str, int])
 
     # Ordering is declared wherever the runtime supports it (assertpy#128): lexicographic on str and
     # bytes/bytearray, chronological on dates (including is_between; is_close_to stays datetime-only
