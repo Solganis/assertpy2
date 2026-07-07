@@ -59,6 +59,7 @@ __version__ = "2.15.0"
 _T = TypeVar("_T")
 if TYPE_CHECKING:
     _U = TypeVar("_U")
+    _E = TypeVar("_E")  # element type of a collection, so first()/element()/... narrow to it
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -212,7 +213,15 @@ def assert_that(val: str, description: str = "") -> _StringAssertion: ...
 
 
 @overload
-def assert_that(val: int | float | complex, description: str = "") -> _NumericAssertion: ...
+def assert_that(val: int, description: str = "") -> _NumericAssertion[int]: ...
+
+
+@overload
+def assert_that(val: float, description: str = "") -> _NumericAssertion[float]: ...
+
+
+@overload
+def assert_that(val: complex, description: str = "") -> _NumericAssertion[complex]: ...
 
 
 @overload
@@ -220,11 +229,11 @@ def assert_that(val: dict, description: str = "") -> _DictAssertion: ...
 
 
 @overload
-def assert_that(val: list | tuple, description: str = "") -> _IterableAssertion: ...
+def assert_that(val: list[_E] | tuple[_E, ...], description: str = "") -> _IterableAssertion[_E]: ...
 
 
 @overload
-def assert_that(val: set | frozenset, description: str = "") -> _IterableAssertion: ...
+def assert_that(val: set[_E] | frozenset[_E], description: str = "") -> _IterableAssertion[_E]: ...
 
 
 @overload

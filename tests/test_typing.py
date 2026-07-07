@@ -36,14 +36,14 @@ if TYPE_CHECKING:
     # Each call is a static assertion: it fails type checking if assert_that stops returning the
     # documented Protocol for that value type. The mapping mirrors the table in docs/type-safety.md.
     assert_type(assert_that("text"), _StringAssertion)
-    assert_type(assert_that(42), _NumericAssertion)
-    assert_type(assert_that(3.14), _NumericAssertion)
-    assert_type(assert_that(complex(1, 2)), _NumericAssertion)
+    assert_type(assert_that(42), _NumericAssertion[int])
+    assert_type(assert_that(3.14), _NumericAssertion[float])
+    assert_type(assert_that(complex(1, 2)), _NumericAssertion[complex])
     assert_type(assert_that({"key": "value"}), _DictAssertion)
-    assert_type(assert_that(["a", "b"]), _IterableAssertion)
-    assert_type(assert_that(("a", "b")), _IterableAssertion)
-    assert_type(assert_that({"a", "b"}), _IterableAssertion)
-    assert_type(assert_that(frozenset({"a"})), _IterableAssertion)
+    assert_type(assert_that(["a", "b"]), _IterableAssertion[str])
+    assert_type(assert_that(("a", "b")), _IterableAssertion[str])
+    assert_type(assert_that({"a", "b"}), _IterableAssertion[str])
+    assert_type(assert_that(frozenset({"a"})), _IterableAssertion[str])
     assert_type(assert_that(datetime.date(2026, 1, 1)), _DateAssertion)
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateAssertion)
     assert_type(assert_that(pathlib.Path("/tmp")), _PathAssertion)
@@ -53,10 +53,10 @@ if TYPE_CHECKING:
     assert_type(assert_that(object()), AssertionBuilder[object])
 
     # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
-    assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion)
-    assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion)
-    assert_type(assert_that([1, 2]).contains_only_once(1), _IterableAssertion)
-    assert_type(assert_that([1, 2]).has_same_size_as((3, 4)), _IterableAssertion)
+    assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
+    assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion[int])
+    assert_type(assert_that([1, 2]).contains_only_once(1), _IterableAssertion[int])
+    assert_type(assert_that([1, 2]).has_same_size_as((3, 4)), _IterableAssertion[int])
     assert_type(assert_that("ab").contains_only_once("a"), _StringAssertion)
     assert_type(assert_that("ab").has_same_size_as("cd"), _StringAssertion)
     assert_type(assert_that({"k": 1}).has_same_size_as({"j": 2}), _DictAssertion)
@@ -64,7 +64,7 @@ if TYPE_CHECKING:
 
     # The recursive leaf assertions live on the core protocol, so they keep each value's own type.
     assert_type(assert_that({"k": 1}).all_fields_satisfy(lambda x: x > 0), _DictAssertion)
-    assert_type(assert_that(42).has_no_none_fields(), _NumericAssertion)
+    assert_type(assert_that(42).has_no_none_fields(), _NumericAssertion[int])
 
     # is_equal_to keeps its protocol with the recursive-comparison kwargs.
     assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion)
@@ -97,21 +97,21 @@ if TYPE_CHECKING:
     )
 
     # The any-order, relational-size, string-sugar, and type methods keep their protocols (return Self).
-    assert_type(assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3), _IterableAssertion)
+    assert_type(assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3), _IterableAssertion[int])
     assert_type(assert_that("cba").contains_exactly_in_any_order("a", "b", "c"), _StringAssertion)
     assert_type(
-        assert_that([1, 2]).satisfies_exactly_in_any_order(lambda x: x > 1, lambda x: x < 2), _IterableAssertion
+        assert_that([1, 2]).satisfies_exactly_in_any_order(lambda x: x > 1, lambda x: x < 2), _IterableAssertion[int]
     )
-    assert_type(assert_that([1, 2]).has_size_greater_than(1), _IterableAssertion)
+    assert_type(assert_that([1, 2]).has_size_greater_than(1), _IterableAssertion[int])
     assert_type(assert_that("ab").has_size_less_than(3), _StringAssertion)
     assert_type(assert_that({"k": 1}).has_size_between(0, 2), _DictAssertion)
     assert_type(assert_that(b"ab").has_size_between(1, 2), _BytesAssertion)
     assert_type(assert_that("ab").is_length_between(1, 3), _StringAssertion)
-    assert_type(assert_that(42).is_length_between(0, 9), _NumericAssertion)
+    assert_type(assert_that(42).is_length_between(0, 9), _NumericAssertion[int])
     assert_type(assert_that("a b").is_equal_to_ignoring_whitespace("ab"), _StringAssertion)
     assert_type(assert_that("FooBar").starts_with_ignoring_case("foo"), _StringAssertion)
     assert_type(assert_that("FooBar").ends_with_ignoring_case("BAR"), _StringAssertion)
-    assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion)
+    assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
 
     # eventually() and eventually_sync() switch the chain to the polling builders.
@@ -156,11 +156,25 @@ if TYPE_CHECKING:
     assert_type(assert_conforms(json_payload, _PaidOrder).value, _PaidOrder)
     assert_type(assert_conforms(dict_payload, _PaidOrder).value, _PaidOrder)
 
+    # collection element-access pivots narrow to the element type (universal narrowing across pivots)
+    assert_type(assert_that([1, 2, 3]).first().value, int)
+    assert_type(assert_that(["a", "b"]).last().value, str)
+    assert_type(assert_that((1.0, 2.0)).element(0).value, float)
+    order_list = cast("list[_Order]", [])
+    assert_type(assert_that(order_list).single().value, _Order)
+    assert_type(assert_that(order_list).first(), AssertionBuilder[_Order])
+    # a map pivot re-types the element; a filter preserves it
+    assert_type(assert_that([1, 2]).mapped(str).value, list[str] | tuple[str, ...] | set[str] | frozenset[str])
+    assert_type(
+        assert_that(order_list).filtered_on(lambda o: True).value,
+        list[_Order] | tuple[_Order, ...] | set[_Order] | frozenset[_Order],
+    )
+
     # `.value` on the typed protocols returns each protocol's value-family type.
     assert_type(assert_that("text").value, str)
-    assert_type(assert_that(42).value, int | float | complex)
+    assert_type(assert_that(42).value, int)
     assert_type(assert_that({"key": 1}).value, dict[Any, Any])
-    assert_type(assert_that([1, 2]).value, list[Any] | tuple[Any, ...] | set[Any] | frozenset[Any])
+    assert_type(assert_that([1, 2]).value, list[int] | tuple[int, ...] | set[int] | frozenset[int])
     assert_type(assert_that(b"raw").value, bytes | bytearray)
     assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)

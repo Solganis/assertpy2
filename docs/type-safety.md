@@ -78,20 +78,32 @@ dict assertions, ...), so extract-and-continue works after pivots too:
 name = assert_that(b"fred").decoded_as().is_length(4).value  # typed as str
 ```
 
+Collection assertions are generic over the element type, so element-access pivots
+(`first()`/`last()`/`element()`/`single()`) narrow the chain to the element - a list of models stays
+typed all the way down:
+
+```python
+orders: list[Order] = repo.all_orders()
+total = assert_that(orders).first().value.total  # first()/last()/element()/single(): Order
+mapped = assert_that(orders).mapped(lambda o: o.total).value  # re-typed to a collection of float
+```
+
 Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime;
 here the narrowing is purely static - checked by ty, mypy, and Pyright - with zero runtime cost
 beyond returning the value.
 
-!!! note "Narrowing assumes strict mode"
-    The narrowing reflects the strict `assert_that` default, where a failed `is_not_none()` or
-    `is_instance_of()` halts the chain before `.value` is reached, so the value really does match
-    the narrowed type. Inside [`soft_assertions()`](testing.md#soft-assertions) or under
-    `assert_warn()` a failed assertion does **not** halt, and extraction there is incoherent
-    (extract-once-established versus continue-past-failure are opposite intents), so `.value` raises
-    `TypeError` rather than hand back a value that could contradict its static type - read `.value`
-    in strict mode, or after the soft block. Note too that the narrowed builder exposes the full
-    assertion API rather than the type-filtered subset, since an arbitrary narrowed class has no
-    per-type protocol.
+!!! note "The narrowing is sound in every mode"
+    `.value` never hands back a value that contradicts its narrowed type - that guarantee holds in
+    every mode, not just strict. In the strict `assert_that` default a failed `is_not_none()` or
+    `is_instance_of()` halts the chain before `.value` is reached, so the value genuinely matches the
+    narrowed type. Inside [`soft_assertions()`](testing.md#soft-assertions) or under `assert_warn()`
+    a failure is *collected* instead of halting, so reading `.value` there would be reading past an
+    unestablished fact - and rather than leak a value that could violate its static type, `.value`
+    **raises** `TypeError`, and a pivot like `first()` or `extracting()` rejects the untrusted value on
+    its own input check. Either way nothing unsound escapes: in soft mode you get an exception, never a
+    wrong-typed value. Read `.value` in strict mode, or after the soft block has closed. (The narrowed
+    builder also exposes the full assertion API rather than the type-filtered subset, since an arbitrary
+    narrowed class has no per-type protocol.)
 
 ### Refinement narrowing with a TypeIs predicate (advanced)
 
