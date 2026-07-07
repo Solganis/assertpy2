@@ -690,3 +690,15 @@ def test_has_root_cause_walks_to_the_deepest_link(chain):
         raise errors[0]
 
     assert_that(raise_head).raises(chain[0]).when_called_with().has_root_cause(chain[-1])
+
+
+@settings(deadline=None)
+@given(
+    common=st.dictionaries(_keys, st.integers(), max_size=5),
+    nulls=st.dictionaries(_keys, st.integers(), max_size=3),
+)
+def test_ignore_null_skips_every_expected_none_key(common, nulls):
+    # any key the expected leaves None accepts any actual value; the rest must still match
+    expected = {**common, **dict.fromkeys(nulls, None)}
+    actual = {**common, **nulls}
+    assert_that(actual).is_equal_to(expected, ignore_null=True)
