@@ -3,7 +3,8 @@
 ## Soft assertions
 
 By default a failure halts the test immediately. Soft assertions collect failures and raise them
-together at the end, so one run reports every problem:
+together at the end, so one run reports every problem - and each collected failure carries its
+`file:line`, so you can jump straight to the assertion that failed:
 
 ```python
 from assertpy2 import assert_that, soft_assertions
@@ -17,9 +18,9 @@ with soft_assertions():
 ??? failure "Collected failures raised at the end of the block"
     ```
     AssertionError: soft assertion failures:
-    1. Expected <foo> to be of length <4>, but was <3>.
-    2. Expected <foo> to be empty string, but was not.
-    3. Expected <foo> to be equal to <bar>, but was not.
+    1. Expected <foo> to be of length <4>, but was <3>.  [test_str.py:12]
+    2. Expected <foo> to be empty string, but was not.  [test_str.py:13]
+    3. Expected <foo> to be equal to <bar>, but was not.  [test_str.py:14]
     ```
 
 !!! note
@@ -43,9 +44,9 @@ with soft_assertions() as sa:
     ```
     soft assertion failures:
       [Headers]
-        1. Expected <text/html> to be equal to <application/json>, but was not.
+        1. Expected <text/html> to be equal to <application/json>, but was not.  [test_api.py:37]
       [Body]
-        2. Expected <error> to be equal to <ok>, but was not.
+        2. Expected <error> to be equal to <ok>, but was not.  [test_api.py:39]
     ```
 
 !!! note

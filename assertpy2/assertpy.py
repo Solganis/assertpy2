@@ -72,9 +72,33 @@ ASSERTPY_FILES: Final = [
     os.path.join("assertpy2", name) for name in os.listdir(os.path.dirname(__file__)) if name.endswith(".py")
 ]
 
+
+def _caller_location() -> tuple[str, int] | None:
+    """The ``(filename, lineno)`` of the user frame that called into assertpy2, skipping internal frames.
+
+    Used to locate a warn-mode warning and each collected soft-assertion failure.  A user file living
+    under a directory named ``assertpy2`` could shadow every frame, so ``None`` is returned rather than
+    crashing.
+    """
+    frames = []
+    frame = inspect.currentframe()
+    while frame:
+        frames.append((frame.f_code.co_filename, frame.f_lineno))
+        frame = frame.f_back
+    previous: tuple[str, int] | None = None
+    for filename, lineno in reversed(frames):
+        if any(filename.endswith(internal) for internal in ASSERTPY_FILES):
+            return previous
+        previous = (filename, lineno)
+    return None  # pragma: no cover - error() is always reached through an assertpy frame
+
+
 # soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
-_soft_err: contextvars.ContextVar[list[tuple[str | None, str]]] = contextvars.ContextVar("assertpy2_soft_err")
+# each entry is (group label, caller location, message)
+_soft_err: contextvars.ContextVar[list[tuple[str | None, tuple[str, int] | None, str]]] = contextvars.ContextVar(
+    "assertpy2_soft_err"
+)
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
 
@@ -102,20 +126,29 @@ class SoftAssertionCollector:
             _soft_group.reset(token)
 
 
-def _format_soft_errors(errs: list[tuple[str | None, str]]) -> str:
-    has_groups = any(group is not None for group, _ in errs)
+def _located(location: tuple[str, int] | None, msg: str) -> str:
+    """Append ``[file:line]`` so each collected soft failure can be jumped to, matching warn-mode."""
+    if location is None:  # pragma: no cover - only None when a user file shadows assertpy2 (see _caller_location)
+        return msg
+    return f"{msg}  [{os.path.basename(location[0])}:{location[1]}]"
+
+
+def _format_soft_errors(errs: list[tuple[str | None, tuple[str, int] | None, str]]) -> str:
+    has_groups = any(group is not None for group, _, _ in errs)
     if not has_groups:
-        return "soft assertion failures:\n" + "\n".join(f"{i + 1}. {msg}" for i, (_, msg) in enumerate(errs))
+        return "soft assertion failures:\n" + "\n".join(
+            f"{i + 1}. {_located(loc, msg)}" for i, (_, loc, msg) in enumerate(errs)
+        )
 
     lines = ["soft assertion failures:"]
     current_group: str | None = object()  # ty: ignore[invalid-assignment]  # sentinel
-    for counter, (group, msg) in enumerate(errs, 1):
+    for counter, (group, loc, msg) in enumerate(errs, 1):
         if group != current_group:
             current_group = group
             if group is not None:
                 lines.append(f"  [{group}]")
         indent = "    " if group is not None else "  "
-        lines.append(f"{indent}{counter}. {msg}")
+        lines.append(f"{indent}{counter}. {_located(loc, msg)}")
     return "\n".join(lines)
 
 
@@ -143,14 +176,14 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
                 assert_that('123').is_alpha()
 
         When the context ends, any assertion failures are collected together and a single
-        ``AssertionError`` is raised:
+        ``AssertionError`` is raised, each tagged with the ``file:line`` it came from:
 
             AssertionError: soft assertion failures:
-            1. Expected <foo> to be of length <4>, but was <3>.
-            2. Expected <foo> to be empty string, but was not.
-            3. Expected <False>, but was not.
-            4. Expected <foo> to contain only digits, but did not.
-            5. Expected <123> to contain only alphabetic chars, but did not.
+            1. Expected <foo> to be of length <4>, but was <3>.  [test_str.py:10]
+            2. Expected <foo> to be empty string, but was not.  [test_str.py:11]
+            3. Expected <False>, but was not.  [test_str.py:12]
+            4. Expected <foo> to contain only digits, but did not.  [test_str.py:13]
+            5. Expected <123> to contain only alphabetic chars, but did not.  [test_str.py:14]
 
         Group errors by section:
 
@@ -458,16 +491,16 @@ def soft_fail(msg=""):
                 soft_fail('my message')
                 assert_that('foo').is_equal_to('bar')
 
-        Fails, and outputs the following soft error list:
+        Fails, and outputs the following soft error list (each tagged with its ``file:line``):
 
             AssertionError: soft assertion failures:
-            1. Expected <1> to be equal to <2>, but was not.
-            2. Fail: my message!
-            3. Expected <foo> to be equal to <bar>, but was not.
+            1. Expected <1> to be equal to <2>, but was not.  [test_add.py:10]
+            2. Fail: my message!  [test_add.py:11]
+            3. Expected <foo> to be equal to <bar>, but was not.  [test_add.py:12]
 
     """
     if _soft_ctx.get():
-        _soft_err.get().append((_soft_group.get(), f"Fail: {msg}!" if msg else "Fail!"))
+        _soft_err.get().append((_soft_group.get(), _caller_location(), f"Fail: {msg}!" if msg else "Fail!"))
         return
     fail(msg)
 
@@ -553,23 +586,7 @@ class WarningLoggingAdapter(logging.LoggerAdapter):
     """Logging adapter to unwind the stack to get the correct callee filename and line number."""
 
     def process(self, msg, kwargs):
-        def _unwind(frame):
-            frames = []
-            while frame:
-                frames.append((frame.f_code.co_filename, frame.f_lineno))
-                frame = frame.f_back
-
-            previous_frame = None
-            for frame in reversed(frames):
-                for assertpy_filename in ASSERTPY_FILES:
-                    if frame[0].endswith(assertpy_filename):
-                        return previous_frame
-                previous_frame = frame
-            return None  # pragma: no cover - error() is always reached through an assertpy frame
-
-        # a user file living under a directory named "assertpy2" can shadow every frame, so the
-        # location prefix is skipped rather than crashing the warning
-        caller = _unwind(inspect.currentframe())
+        caller = _caller_location()
         if caller is None:
             return msg, kwargs
         filename, lineno = caller
@@ -666,7 +683,7 @@ class NegatedBuilder:
         if len(err_list) > before:
             del err_list[before:]
             return self._builder
-        err_list.append((_soft_group.get(), self._make_msg(name)))
+        err_list.append((_soft_group.get(), _caller_location(), self._make_msg(name)))
         return self._builder
 
     def _negated_warn(
@@ -873,7 +890,7 @@ class AssertionBuilder(
         elif self.kind == "soft":
             if self._value_taint_reason is None:
                 self._value_taint_reason = out
-            _soft_err.get().append((_soft_group.get(), out))
+            _soft_err.get().append((_soft_group.get(), _caller_location(), out))
             return self
         else:
             if expected is not None or diff is not None:

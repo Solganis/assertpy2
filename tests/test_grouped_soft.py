@@ -45,9 +45,19 @@ class TestGroupedSoftAssertions:
             assert_that(3).is_equal_to(4)
         msg = str(exc_info.value)
         assert_that(msg).starts_with("soft assertion failures:")
-        assert_that(msg).contains("1. Expected <1>")
-        assert_that(msg).contains("2. Expected <3>")
-        assert_that(msg).does_not_contain("[")
+        assert_that(msg).contains("\n1. Expected <1>")  # flat numbering, not indented under a group
+        assert_that(msg).contains("\n2. Expected <3>")
+        assert_that(msg).contains("test_grouped_soft.py:")  # each failure carries its source location
+
+    def test_each_failure_is_located_at_its_own_line(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            assert_that(3).is_equal_to(4)
+        report = str(exc_info.value).splitlines()
+        first_location = report[1].rsplit("[", 1)[1]  # trailing [file:line] of failure 1
+        second_location = report[2].rsplit("[", 1)[1]
+        assert_that(first_location).contains("test_grouped_soft.py:")
+        assert_that(first_location).is_not_equal_to(second_location)  # the two failures locate independently
 
     def test_groups_success_no_error(self):
         with soft_assertions() as sa:
