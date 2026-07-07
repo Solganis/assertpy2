@@ -14,7 +14,7 @@ from ._compare import (
 from ._diff import _build_equality_diff, _walk_leaves
 from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
-from .errors import DiffEntry, DiffResult, _truncated
+from .errors import DiffEntry, DiffResult, _disambiguated, _truncated
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
@@ -203,7 +203,7 @@ class BaseMixin(_MixinBase):
             if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
                 # atomic scalars: no array/dict-likeness, == yields a real bool - skip config/guards entirely
                 if self.val != other:
-                    actual_repr, expected_repr = _truncated(str(self.val)), _truncated(str(other))
+                    actual_repr, expected_repr = _disambiguated(self.val, other)
                     return self.error(
                         f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
                         actual=self.val,
@@ -247,9 +247,10 @@ class BaseMixin(_MixinBase):
                 )
         else:
             if _guarded_not_equal(self.val, other):
+                actual_repr, expected_repr = _disambiguated(self.val, other)
                 diff = _build_equality_diff(self.val, other)
                 return self.error(
-                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not.",
+                    f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
                     actual=self.val,
                     expected=other,
                     diff=diff,
@@ -393,7 +394,7 @@ class BaseMixin(_MixinBase):
                 )
         elif callable(matcher):
             if not matcher(self.val):
-                return self.error(f"Expected <{self.val}> to satisfy <{matcher}>, but did not.")
+                return self.error(f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.")
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self
@@ -442,7 +443,8 @@ class BaseMixin(_MixinBase):
             for i, item in enumerate(self.val):
                 if not matcher(item):
                     return self.error(
-                        f"Expected all items to satisfy <{matcher}>, but item at index {i} <{item}> did not."
+                        f"Expected all items to satisfy {_describe_matcher(matcher)},"
+                        f" but item at index {i} <{item}> did not."
                     )
         else:
             raise TypeError("given arg must be a Matcher or callable")
@@ -565,7 +567,7 @@ class BaseMixin(_MixinBase):
                 return self.error(f"Expected any item to satisfy {matcher.describe()}, but none did.")
         elif callable(matcher):
             if not any(matcher(item) for item in self.val):
-                return self.error(f"Expected any item to satisfy <{matcher}>, but none did.")
+                return self.error(f"Expected any item to satisfy {_describe_matcher(matcher)}, but none did.")
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self
@@ -629,7 +631,9 @@ class BaseMixin(_MixinBase):
         elif callable(matcher):
             for i, item in enumerate(self.val):
                 if matcher(item):
-                    return self.error(f"Expected no item to satisfy <{matcher}>, but item at index {i} <{item}> did.")
+                    return self.error(
+                        f"Expected no item to satisfy {_describe_matcher(matcher)}, but item at index {i} <{item}> did."
+                    )
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self

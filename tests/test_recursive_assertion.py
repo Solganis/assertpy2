@@ -154,6 +154,16 @@ class TestAllFieldsSatisfy:
             assert_that([5]).all_fields_satisfy(lambda x: x < 0)
         assert_that(exc_info.value.diff.entries[0].expected).contains("lambda")
 
+    def test_failing_unnamed_callable_described_in_diff(self):
+        # a callable object (no __name__) reads as "the given predicate", not a raw <object at 0x...> repr
+        class _Negative:
+            def __call__(self, value):
+                return value < 0
+
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([5]).all_fields_satisfy(_Negative())
+        assert_that(exc_info.value.diff.entries[0].expected).is_equal_to("the given predicate")
+
     def test_bad_matcher_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).all_fields_satisfy(42)

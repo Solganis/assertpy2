@@ -31,6 +31,18 @@ def _truncated(text: str, limit: int = 4000) -> str:
     return f"{text[:limit]}... ({len(text) - limit} more chars)"
 
 
+def _disambiguated(actual: object, other: object) -> tuple[str, str]:
+    """Render two *unequal* values, tagging each with its ``:type`` when their plain reprs would collide.
+
+    So ``is_equal_to`` on ``"1"`` vs ``1`` reads ``<1:str>`` / ``<1:int>`` instead of a baffling
+    ``<1>`` / ``<1>``, ``but was not`` - the difference is the type, and now the message says so.
+    """
+    actual_str, other_str = _truncated(str(actual)), _truncated(str(other))
+    if actual_str == other_str:
+        return f"{actual_str}:{type(actual).__name__}", f"{other_str}:{type(other).__name__}"
+    return actual_str, other_str
+
+
 def _json_safe(value, _depth=0, _seen=None):
     """Convert *value* to JSON-native data for an attachment: typed where possible, bounded and total.
 
