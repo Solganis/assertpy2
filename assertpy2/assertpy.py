@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
     from .matchers import Matcher
 
+from ._contract import contract_drift
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
@@ -279,7 +280,9 @@ def assert_that(val: object, description="") -> _CoreAssertion:
     return _builder(val, description)
 
 
-def assert_conforms(val: object, model: type[_U], description: str = "") -> AssertionBuilder[_U]:
+def assert_conforms(
+    val: object, model: type[_U], description: str = "", *, exact: bool = False
+) -> AssertionBuilder[_U]:
     """Validate ``val`` against a pydantic v2 ``model`` and continue over the validated instance.
 
     The narrowing-complete companion to [`assert_that()`][assertpy2.assertpy.assert_that] for
@@ -289,10 +292,18 @@ def assert_conforms(val: object, model: type[_U], description: str = "") -> Asse
     ``model`` rather than by the type of ``val``, the chain narrows to ``model`` for **any** input,
     including the ``Any`` a decoded JSON payload carries - the typed capstone of the narrowing family.
 
+    With ``exact=True`` it also asserts **contract drift**: the payload must not carry fields the model
+    does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model passes even
+    after the live API grows new fields; ``exact`` catches that drift (recursively, into nested
+    sub-models and lists), reporting the exact paths.  Alias-aware, and a model that opts into extras
+    (``extra="allow"``) is respected.
+
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)
         model: a pydantic v2 model class (anything exposing ``model_validate``)
         description (str, optional): the extra error message description.  Defaults to ``''``
+        exact (bool, optional): also fail if the payload carries fields ``model`` does not declare.
+            Defaults to ``False``
 
     Examples:
         Usage:
@@ -302,12 +313,15 @@ def assert_conforms(val: object, model: type[_U], description: str = "") -> Asse
             order = assert_conforms(response.json(), OrderModel).value  # .value: OrderModel
             assert_that(order.total).is_greater_than(0)
 
+            # catch silent API growth: fail if the response grew fields the model does not declare
+            assert_conforms(response.json(), OrderModel, exact=True)
+
     Returns:
         AssertionBuilder: a builder over the validated model instance, statically typed as ``model``
 
     Raises:
         TypeError: if ``model`` is not a pydantic v2 model class
-        AssertionError: if ``val`` does not validate against ``model``
+        AssertionError: if ``val`` does not validate against ``model``, or (with ``exact``) drifts from it
     """
     if not (isinstance(model, type) and hasattr(model, "model_validate")):
         raise TypeError("assert_conforms requires a pydantic v2 model class")
@@ -324,6 +338,15 @@ def assert_conforms(val: object, model: type[_U], description: str = "") -> Asse
             actual=val,
             expected=model,
         )
+    if exact:
+        drift = contract_drift(val, model)
+        if drift:
+            return builder.error(
+                f"Expected <{_truncated(str(val))}> to conform exactly to <{model.__name__}>, but it carries"
+                f" {len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}",
+                actual=val,
+                expected=model,
+            )
     return builder.builder(validated, description, kind)
 
 

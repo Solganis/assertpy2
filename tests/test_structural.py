@@ -1,6 +1,9 @@
+import typing
+
 import pytest
 
 from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
+from assertpy2._contract import _submodel, contract_drift, shape, shape_diff
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -576,3 +579,191 @@ class TestAssertConforms:
         order_cls = self._order_model()
         with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
             assert_conforms({"id": "bad", "total": "x"}, order_cls)
+
+
+class TestAssertConformsExact:
+    @staticmethod
+    def _models():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from datetime import datetime
+
+        from pydantic import BaseModel
+
+        class Customer(BaseModel):
+            name: str
+
+        class Item(BaseModel):
+            sku: str
+
+        class Order(BaseModel):
+            id: int
+            total: float
+            created: datetime
+            customer: Customer
+            items: list[Item]
+
+        return Order
+
+    @staticmethod
+    def _clean():
+        return {
+            "id": 1,
+            "total": 5,  # int for a float field: a JSON number, not drift
+            "created": "2020-01-01T00:00:00",  # str for a datetime field: normal JSON, not drift
+            "customer": {"name": "Ann"},
+            "items": [{"sku": "A"}, {"sku": "B"}],
+        }
+
+    def test_exact_clean_passes_without_coercion_noise(self):
+        order_cls = self._models()
+        assert_that(conforms_val := assert_conforms(self._clean(), order_cls, exact=True).value).is_not_none()
+        assert_that(conforms_val.id).is_equal_to(1)
+
+    def test_default_lenient_ignores_extra_fields(self):
+        order_cls = self._models()
+        grew = {**self._clean(), "promo_code": "X"}
+        assert_that(assert_conforms(grew, order_cls).value).is_instance_of(order_cls)
+
+    def test_exact_top_level_drift_fails(self):
+        order_cls = self._models()
+        grew = {**self._clean(), "promo_code": "X"}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms(grew, order_cls, exact=True)
+        assert_that(str(exc_info.value)).contains("conform exactly").contains("promo_code")
+
+    def test_exact_nested_and_list_drift_paths(self):
+        order_cls = self._models()
+        payload = self._clean()
+        payload["customer"] = {"name": "Ann", "vip": True}
+        payload["items"] = [{"sku": "A"}, {"sku": "B", "gift_wrap": True}]
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms(payload, order_cls, exact=True)
+        message = str(exc_info.value)
+        assert_that(message).contains("customer.vip").contains("items[1].gift_wrap")
+
+    def test_exact_alias_not_flagged(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Aliased(BaseModel):
+            user_id: int = Field(alias="userId")
+
+        assert_that(assert_conforms({"userId": 1}, Aliased, exact=True).value.user_id).is_equal_to(1)
+
+    def test_exact_respects_extra_allow_config(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict
+
+        class Loose(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            id: int
+
+        assert_that(assert_conforms({"id": 1, "anything": 2}, Loose, exact=True).value.id).is_equal_to(1)
+
+    def test_exact_soft_collects_drift(self):
+        order_cls = self._models()
+        grew = {**self._clean(), "promo_code": "X"}
+        with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
+            assert_conforms(grew, order_cls, exact=True)
+
+    def test_validation_error_precedes_drift(self):
+        order_cls = self._models()
+        broken = {**self._clean(), "id": "notint", "surprise": 1}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms(broken, order_cls, exact=True)
+        assert_that(str(exc_info.value)).contains("did not").does_not_contain("conform exactly")
+
+
+class TestContractDrift:
+    """Unit coverage of the drift walker's branches."""
+
+    @staticmethod
+    def _submodels():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            inner: Inner = Field(alias="innerAlias")
+            pair: tuple[Inner, ...]
+            either: int | str  # union of non-models: not recursed
+            note: str
+
+        return Inner, Outer
+
+    def test_non_dict_payload_has_no_drift(self):
+        _, outer = self._submodels()
+        assert_that(contract_drift(42, outer)).is_empty()
+
+    def test_alias_resolved_tuple_and_union_branches(self):
+        _, outer = self._submodels()
+        payload = {
+            "innerAlias": {"x": 1, "deep": 2},  # sub-model via alias -> recurse
+            "pair": [{"x": 1}, {"x": 2, "oops": 9}],  # tuple[Inner, ...] -> per-element recurse
+            "either": "ok",  # union of non-models -> skipped
+            "note": "n",
+        }
+        assert_that(sorted(contract_drift(payload, outer))).is_equal_to(["inner.deep", "pair[1].oops"])
+
+    def test_null_submodel_value_is_skipped(self):
+        _, outer = self._submodels()
+        payload = {"innerAlias": None, "pair": [], "either": 1, "note": "n"}  # sub-model value None -> no recurse
+        assert_that(contract_drift(payload, outer)).is_empty()
+
+    def test_submodel_peels_optional_list_and_rejects_non_models(self):
+        inner, _ = self._submodels()
+        assert_that(_submodel(inner)).is_equal_to(inner)  # bare model
+        assert_that(_submodel(inner | None)).is_equal_to(inner)  # optional union arm peeled
+        assert_that(_submodel(list[inner])).is_equal_to(inner)  # list[Model] -> element
+        assert_that(_submodel(int)).is_none()  # non-model type
+        assert_that(_submodel(typing.Any)).is_none()  # non-type annotation
+        assert_that(_submodel(int | str)).is_none()  # union of >1 non-None arm
+
+
+class TestShape:
+    def test_scalar_categories(self):
+        assert_that(shape(None)).is_equal_to("null")
+        assert_that(shape(True)).is_equal_to("bool")
+        assert_that(shape(7)).is_equal_to("number")
+        assert_that(shape(7.5)).is_equal_to("number")  # int and float share one category
+        assert_that(shape("x")).is_equal_to("str")
+        assert_that(shape(b"raw")).is_equal_to("bytes")  # fallback to type name
+
+    def test_dict_and_empty_list(self):
+        assert_that(shape({"id": 1, "name": "a"})).is_equal_to({"id": "number", "name": "str"})
+        assert_that(shape([])).is_equal_to([])
+
+    def test_list_merges_element_shapes(self):
+        assert_that(shape([{"a": 1}, {"a": 2}])).is_equal_to([{"a": "number"}])  # equal element shapes
+        assert_that(shape([{"a": 1}, {"b": 2}])).is_equal_to([{"a": "number", "b": "number"}])  # dict union
+        assert_that(shape([None, 1])).is_equal_to(["number"])  # null yields to concrete (left)
+        assert_that(shape([1, None])).is_equal_to(["number"])  # null yields to concrete (right)
+        assert_that(shape([1, "x"])).is_equal_to(["mixed"])  # genuinely different scalars
+        assert_that(shape([[], [1]])).is_equal_to([["number"]])  # nested list, empty element merged (left)
+        assert_that(shape([[1], []])).is_equal_to([["number"]])  # nested list, empty element merged (right)
+        assert_that(shape([[1], ["x"]])).is_equal_to([["mixed"]])  # two non-empty nested lists merged
+
+
+class TestShapeDiff:
+    def test_no_drift_and_null_wildcard(self):
+        assert_that(shape_diff({"a": "number"}, {"a": "number"})).is_empty()
+        assert_that(shape_diff("null", "str")).is_empty()  # nullable wildcard, either side
+        assert_that(shape_diff("str", "null")).is_empty()
+
+    def test_added_removed_nested(self):
+        old = {"id": "number", "user": {"name": "str"}}
+        new = {"id": "number", "user": {"name": "str", "vip": "bool"}, "extra": "str"}
+        assert_that(sorted(shape_diff(old, new))).is_equal_to([("added", "extra", ""), ("added", "user.vip", "")])
+        assert_that(shape_diff(new, old)).contains(("removed", "extra", ""), ("removed", "user.vip", ""))
+
+    def test_list_elementwise_and_empty(self):
+        assert_that(shape_diff([{"a": "number"}], [{"a": "number", "b": "str"}])).is_equal_to([("added", "[*].b", "")])
+        assert_that(shape_diff([], ["str"])).is_empty()  # empty either side: element shape unknown
+        assert_that(shape_diff(["str"], [])).is_empty()
+
+    def test_retyped_names_objects_and_lists(self):
+        assert_that(shape_diff("number", "str")).is_equal_to([("retyped", "", "number -> str")])
+        assert_that(shape_diff({"a": "number"}, "str")).is_equal_to([("retyped", "", "object -> str")])
+        assert_that(shape_diff("str", ["number"])).is_equal_to([("retyped", "", "str -> list")])

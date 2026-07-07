@@ -156,6 +156,28 @@ from the `model` argument instead of from the payload, it narrows to `Order` for
 `Any` included. And since it yields a class-narrowed builder (the same mechanism as
 `is_instance_of()`), the narrowing lights up in PyCharm too, not only the CLI checkers.
 
+### Contract drift with `exact=True`
+
+`model_validate` **silently drops** fields the model does not declare, so a stale model keeps passing
+after the live API grows new fields - your test is green while the contract has drifted. `exact=True`
+catches that: it fails when the payload carries any field the model does not declare, recursively into
+nested sub-models and lists, reporting the exact paths.
+
+```python
+# response grew a `promo_code` field, and its nested customer grew `loyalty_tier`
+assert_conforms(response.json(), OrderModel, exact=True)
+```
+```text
+Expected <{...}> to conform exactly to <OrderModel>, but it carries 2 undeclared field(s)
+the model does not declare: ['customer.loyalty_tier', 'promo_code']
+```
+
+It is alias-aware (an aliased payload key is not mistaken for drift) and respects a model that opts into
+extras (`model_config = ConfigDict(extra="allow")`). It reports only **structural** drift (undeclared
+fields), not type coercions - a `datetime` field legitimately arrives as a JSON string, so flagging
+coercions would be noise. This is stricter and more informative than pydantic's model-level
+`extra="forbid"`: it is per-call and names every drifted path.
+
 ## py.typed and PEP 561
 
 `assertpy2` ships a `py.typed` marker and is [PEP 561](https://peps.python.org/pep-0561/) compliant, so the

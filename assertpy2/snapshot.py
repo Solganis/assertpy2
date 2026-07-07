@@ -15,6 +15,7 @@ import warnings
 from typing import TYPE_CHECKING, Final, NamedTuple
 
 from ._compare import _build_compare_config
+from ._contract import shape, shape_diff
 from ._mixin_base import _MixinBase
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 
@@ -354,6 +355,12 @@ def _name(path, name):
         raise ValueError("failed to create snapshot filename, either bad path or bad name") from None
 
 
+def _format_shape_drift(drift):
+    """Render `shape_diff` entries as an aligned added/removed/retyped report."""
+    glyph = {"added": "+", "removed": "-", "retyped": "~"}
+    return "\n".join(f"  {glyph[kind]} {where} {detail}".rstrip() for kind, where, detail in drift)
+
+
 class SnapshotMixin(_MixinBase):
     """Snapshot mixin.
 
@@ -633,6 +640,112 @@ class SnapshotMixin(_MixinBase):
             )
         warnings.warn(
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
+            " subsequent runs compare against it (delete the file to re-capture)",
+            SnapshotCreatedWarning,
+            stacklevel=2,
+        )
+        return self
+
+    def matches_contract_snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
+        """Asserts that val's *structure* matches a contract snapshot stored previously.
+
+        Records the shape - paths and type categories, never values - on the first run, then on later
+        runs fails only on **structural** drift: a field added, removed, or retyped.  It is value-tolerant
+        by construction, so dynamic ids, timestamps, and amounts change freely without breaking the
+        snapshot, and it needs no hand-written model - the contract is inferred from the first response.
+        Numbers are one category (``5`` and ``5.0`` do not drift) and a ``null`` sample is a nullable
+        wildcard.
+
+        The model-driven counterpart is
+        [`assert_conforms(..., exact=True)`][assertpy2.assertpy.assert_conforms]: reach for that when you
+        already have a pydantic model, and for this when you would rather capture the shape from a real
+        response.
+
+        Honors the same update mode (``--assertpy2-snapshot-update``), CI mode
+        (``--assertpy2-snapshot-ci``), and storage layout as
+        [`snapshot()`][assertpy2.snapshot.SnapshotMixin.snapshot].  Because a contract is inferred from a
+        single observation it cannot know which fields are optional, so a legitimately sometimes-absent
+        field reads as ``removed``; re-record with update mode when the contract really changed.
+
+        Args:
+            id: a custom snapshot identifier (defaults to test filename plus line number)
+            path: the directory where snapshots are stored (defaults to ``__snapshots``)
+
+        Examples:
+            Usage:
+
+                assert_that(response.json()).matches_contract_snapshot()
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val's structure drifts from the stored contract snapshot
+
+        Warns:
+            SnapshotCreatedWarning: when this run captured a new contract instead of comparing
+            SnapshotUpdatedWarning: when update mode overwrote a drifted contract instead of failing
+        """
+        contract = shape(self.val)
+        lineno = ""
+        if id:
+            snapname = _name(path, id)
+        else:
+            frame = inspect.currentframe()
+            caller = frame.f_back if frame is not None else None
+            if caller is None:  # pragma: no cover - frame introspection always available in CPython
+                raise RuntimeError("cannot determine caller frame")
+            file_name = os.path.splitext(os.path.basename(caller.f_code.co_filename))[0]
+            lineno = str(caller.f_lineno)
+            snapname = _name(path, file_name)
+
+        _TOUCHED.add((snapname, "" if id else lineno))
+        os.makedirs(path, exist_ok=True)
+
+        stored = _UNSET
+        updated = False
+        with _file_lock(snapname):
+            if os.path.isfile(snapname):
+                snap = _load(snapname)
+                if id:
+                    stored = snap
+                elif lineno in snap:
+                    stored = snap[lineno]
+                else:
+                    _forbid_creation_in_ci(snapname)
+                    snap[lineno] = contract
+                    _save(snapname, snap)
+
+                if stored is not _UNSET and _update_enabled() and shape_diff(stored, contract):
+                    if id:
+                        _save(snapname, contract)
+                    else:
+                        snap[lineno] = contract
+                        _save(snapname, snap)
+                    updated = True
+            else:
+                _forbid_creation_in_ci(snapname)
+                _save(snapname, contract if id else {lineno: contract})
+
+        if updated:
+            warnings.warn(
+                f"updated contract snapshot <{snapname}>: this run overwrote the stored shape instead of"
+                " comparing; subsequent runs compare against it",
+                SnapshotUpdatedWarning,
+                stacklevel=2,
+            )
+            return self
+        if stored is not _UNSET:
+            drift = shape_diff(stored, contract)
+            if drift:
+                return self.error(
+                    f"Expected <{self.val}> to match contract snapshot <{snapname}>, but the structure"
+                    f" drifted:\n{_format_shape_drift(drift)}",
+                    actual=self.val,
+                )
+            return self
+        warnings.warn(
+            f"created contract snapshot <{snapname}>: this run captured the shape instead of comparing;"
             " subsequent runs compare against it (delete the file to re-capture)",
             SnapshotCreatedWarning,
             stacklevel=2,

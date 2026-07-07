@@ -63,6 +63,7 @@ if TYPE_CHECKING:
             comparators: dict[object, Callable[..., bool]] | None = ...,
             placeholders: dict[Hashable, Matcher | Callable[..., bool]] | None = ...,
         ) -> Self: ...
+        def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> Self: ...  # noqa: A002  # mirrors public parameter
         # NegatedBuilder
         @property
         def not_(self) -> NegatedBuilder: ...
