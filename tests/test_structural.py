@@ -721,6 +721,61 @@ class TestContractDrift:
         assert_that(_submodel(typing.Any)).is_none()  # non-type annotation
         assert_that(_submodel(int | str)).is_none()  # union of >1 non-None arm
 
+    def test_validation_alias_str_not_flagged(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Model(BaseModel):
+            user_id: int = Field(validation_alias="userId")
+
+        assert_that(contract_drift({"userId": 1}, Model)).is_empty()
+
+    def test_alias_choices_not_flagged_but_genuine_drift_caught(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasChoices, BaseModel, Field
+
+        class Model(BaseModel):
+            user_id: int = Field(validation_alias=AliasChoices("uid", "userId"))
+
+        assert_that(contract_drift({"uid": 1}, Model)).is_empty()
+        assert_that(contract_drift({"userId": 1}, Model)).is_empty()
+        assert_that(contract_drift({"uid": 1, "surprise": 9}, Model)).is_equal_to(["surprise"])
+
+    def test_alias_path_top_level_key_not_flagged(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasPath, BaseModel, Field
+
+        class Model(BaseModel):
+            city: str = Field(validation_alias=AliasPath("address", "city"))
+
+        assert_that(contract_drift({"address": {"city": "NYC"}}, Model)).is_empty()
+
+    def test_submodel_resolved_via_validation_alias(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            inner: Inner = Field(validation_alias="innerAlias")
+
+        assert_that(contract_drift({"innerAlias": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
+
+    def test_submodel_value_resolution_alias_loop_branches(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasChoices, BaseModel, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            plain: Inner  # absent from payload, no alias -> empty alias loop
+            aliased: Inner = Field(validation_alias=AliasChoices("first", "second"))
+
+        # `plain` missing (no alias to fall back to); `aliased` present under the SECOND choice
+        assert_that(contract_drift({"second": {"x": 1, "deep": 9}}, Outer)).is_equal_to(["aliased.deep"])
+
 
 class TestShape:
     def test_scalar_categories(self):

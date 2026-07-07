@@ -27,14 +27,32 @@ def _submodel(annotation: object) -> type | None:
     return None
 
 
+def _collect_aliases(keys: list[str], alias: object) -> None:
+    """Add every top-level payload key an alias spec maps to (str, ``AliasChoices``, ``AliasPath``)."""
+    if isinstance(alias, str):
+        keys.append(alias)
+    elif alias is not None:
+        for choice in getattr(alias, "choices", ()):  # AliasChoices
+            _collect_aliases(keys, choice)
+        path = getattr(alias, "path", None)  # AliasPath: its first segment is the consumed top-level key
+        if path and isinstance(path[0], str):
+            keys.append(path[0])
+
+
+def _alias_keys(info: Any) -> list[str]:
+    """Every top-level key a field may appear under, across ``alias`` and ``validation_alias``."""
+    keys: list[str] = []
+    _collect_aliases(keys, getattr(info, "alias", None))
+    _collect_aliases(keys, getattr(info, "validation_alias", None))
+    return keys
+
+
 def _declared_keys(model: Any) -> set[str]:
-    """Field names plus their string aliases, so an aliased payload key is not mistaken for drift."""
+    """Field names plus all their aliases, so an aliased payload key is not mistaken for drift."""
     keys: set[str] = set()
     for name, info in model.model_fields.items():
         keys.add(name)
-        alias = getattr(info, "alias", None)
-        if isinstance(alias, str):
-            keys.add(alias)
+        keys.update(_alias_keys(info))
     return keys
 
 
@@ -54,10 +72,12 @@ def contract_drift(payload: object, model: Any, path: str = "") -> list[str]:
         submodel = _submodel(info.annotation)
         if submodel is None:
             continue
-        alias = getattr(info, "alias", None)
         value = payload.get(name)
-        if value is None and isinstance(alias, str):
-            value = payload.get(alias)
+        if value is None:
+            for alias in _alias_keys(info):
+                if alias in payload:
+                    value = payload.get(alias)
+                    break
         if isinstance(value, (list, tuple)):
             for index, element in enumerate(value):
                 drift += contract_drift(element, submodel, f"{path}{name}[{index}].")
