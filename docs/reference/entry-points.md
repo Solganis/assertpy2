@@ -11,6 +11,12 @@ drives editor autocomplete.
       show_root_heading: true
       show_root_toc_entry: true
 
+::: assertpy2.assertpy.AssertionBuilder.value
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
 ::: assertpy2.assertpy.assert_warn
     options:
       show_root_heading: true

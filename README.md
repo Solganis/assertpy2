@@ -121,7 +121,7 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [**Recursive field assertions**](https://solganis.github.io/assertpy2/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph, reporting the exact path.
 - [**Universal negation**](https://solganis.github.io/assertpy2/fluent/#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
-- [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`.
+- [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants.
 - [**Fluent chaining**](https://solganis.github.io/assertpy2/fluent/#chaining): write assertions as readable one-liners that chain naturally.
 
 **Built-in types**
@@ -136,14 +136,15 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 **Testing**
 
 - [**Soft assertions**](https://solganis.github.io/assertpy2/testing/#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
-- [**Async assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` with polling/retry for eventual consistency.
+- [**Polling assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) with retry for eventual consistency.
 - [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models, and matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`). Circular reference protection.
-- [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format.
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format; update via `--assertpy2-snapshot-update`.
 
 **Type safety**
 
 - [**Type-aware autocomplete**](https://solganis.github.io/assertpy2/type-safety/): 9 Protocols, IDE shows only relevant methods per type.
+- [**Typed narrowing**](https://solganis.github.io/assertpy2/type-safety/#typed-narrowing-with-value): `.value` hands the checked value back; `is_not_none()` / `is_instance_of()` narrow its static type - no casts.
 - **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
 
 **Extensibility**

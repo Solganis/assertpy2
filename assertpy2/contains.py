@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from ._compare import _guarded_not_equal
+from ._diff import _sub_diff_entries
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
-from .matchers import Matcher
+from .matchers import _is_matcher
 
 if TYPE_CHECKING:
     from ._compat import Self
@@ -13,8 +15,55 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
+def _multiset_diff_entries(val_items, given_items):
+    """Build extra/missing `DiffEntry` rows between two item lists compared as multisets (order ignored)."""
+    try:
+        extra_counts = Counter(val_items) - Counter(given_items)
+        missing_counts = Counter(given_items) - Counter(val_items)
+        extra, missing = list(extra_counts.elements()), list(missing_counts.elements())
+    except TypeError:  # unhashable items: quadratic multiset subtraction via == instead of Counter
+        missing = list(given_items)
+        extra = []
+        for item in val_items:
+            if item in missing:
+                missing.remove(item)
+            else:
+                extra.append(item)
+    entries = [DiffEntry(path="extra", actual=item, expected=None) for item in sorted(extra, key=repr)]
+    entries.extend(DiffEntry(path="missing", actual=None, expected=item) for item in sorted(missing, key=repr))
+    return entries
+
+
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
+
+    def _closest_element(self, item):
+        """The dict-like element of val most similar to a dict-like ``item``, with its diff entries, or
+        ``None`` when nothing shares enough structure to be an actionable 'did you mean' hint.
+
+        Similarity is the fewest differing paths among elements that share at least one equal key, so an
+        unrelated element is never offered.  Runs only on a failed ``contains``, never on the hot path.
+        """
+        if not self._is_dict_like(item, check_values=False):
+            return None
+        best = None
+        for element in self.val:
+            if not self._is_dict_like(element, check_values=False):
+                continue
+            if not any(key in item and not _guarded_not_equal(element[key], item[key]) for key in element):
+                continue  # no shared equal key -> not related enough to suggest
+            entries = _sub_diff_entries(element, item, "", config=None) or []
+            if best is None or len(entries) < len(best[1]):
+                best = (element, entries)
+        return best
+
+    @staticmethod
+    def _fmt_closest(entries, limit=3):
+        """A compact 'path (actual != expected)' summary of the closest element's differences."""
+        parts = [f"{entry.path} ({entry.actual!r} != {entry.expected!r})" for entry in entries[:limit]]
+        if len(entries) > limit:
+            parts.append(f"and {len(entries) - limit} more")
+        return ", ".join(parts)
 
     def contains(self, *items: object) -> Self:
         """Asserts that val contains the given item or items.
@@ -53,7 +102,7 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         elif len(items) == 1:
             item = items[0]
-            if isinstance(item, Matcher):
+            if _is_matcher(item):
                 if not any(item.matches(value) for value in self.val):
                     diff = DiffResult(
                         kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item.describe())]
@@ -63,23 +112,30 @@ class ContainsMixin(_MixinBase):
                         diff=diff,
                     )
             elif item not in self.val:
-                diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
                 if self._is_dict_like(self.val):
+                    diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
                     return self.error(f"Expected <{self.val}> to contain key <{item}>, but did not.", diff=diff)
-                else:
-                    return self.error(f"Expected <{self.val}> to contain item <{item}>, but did not.", diff=diff)
+                closest = self._closest_element(item)
+                if closest is not None:
+                    element, entries = closest
+                    return self.error(
+                        f"Expected <{self.val}> to contain item <{item}>, but did not."
+                        f" Closest element <{element}> differs at {self._fmt_closest(entries)}.",
+                        diff=DiffResult(kind="contains", entries=entries),
+                    )
+                diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
+                return self.error(f"Expected <{self.val}> to contain item <{item}>, but did not.", diff=diff)
         else:
             missing = []
             for item in items:
-                if isinstance(item, Matcher):
+                if _is_matcher(item):
                     if not any(item.matches(value) for value in self.val):
                         missing.append(item)
                 elif item not in self.val:
                     missing.append(item)
             if missing:
                 missing_desc = [
-                    missing_item.describe() if isinstance(missing_item, Matcher) else missing_item
-                    for missing_item in missing
+                    missing_item.describe() if _is_matcher(missing_item) else missing_item for missing_item in missing
                 ]
                 diff = DiffResult(
                     kind="contains",
@@ -356,20 +412,54 @@ class ContainsMixin(_MixinBase):
         except TypeError:
             raise TypeError("val is not iterable") from None
         if val_list != list(items):
-            val_counts = Counter(val_list)
-            item_counts = Counter(items)
-            entries = [
-                DiffEntry(path="extra", actual=item, expected=None)
-                for item in sorted((val_counts - item_counts).elements(), key=repr)
-            ]
-            entries.extend(
-                DiffEntry(path="missing", actual=None, expected=item)
-                for item in sorted((item_counts - val_counts).elements(), key=repr)
-            )
+            entries = _multiset_diff_entries(val_list, list(items))
             diff = DiffResult(kind="contains", entries=entries) if entries else None
             return self.error(
                 f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.",
                 diff=diff,
+            )
+        return self
+
+    def contains_exactly_in_any_order(self, *items: object) -> Self:
+        """Asserts that val contains exactly the given items, in any order.
+
+        Like [`contains_exactly()`][assertpy2.contains.ContainsMixin.contains_exactly] but ignoring
+        order: val and the given items must be equal as multisets, so duplicates count (each item
+        must occur exactly as many times as given).  Unlike
+        [`contains_only()`][assertpy2.contains.ContainsMixin.contains_only] (which checks membership
+        both ways and ignores counts), an extra duplicate or a missing one fails.
+
+        Args:
+            *items: the items expected, in any order
+
+        Examples:
+            Usage:
+
+                assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3)
+                assert_that(['b', 'a', 'b']).contains_exactly_in_any_order('a', 'b', 'b')
+
+                assert_that([1, 2, 2]).contains_exactly_in_any_order(1, 2)  # fails (extra 2)
+                assert_that([1, 2]).contains_exactly_in_any_order(1, 2, 2)  # fails (missing 2)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** contain exactly the given items in any order
+            TypeError: if val is not iterable
+            ValueError: if no items are given
+        """
+        if len(items) == 0:
+            raise ValueError("one or more args must be given")
+        try:
+            val_list = list(self.val)
+        except TypeError:
+            raise TypeError("val is not iterable") from None
+        entries = _multiset_diff_entries(val_list, list(items))
+        if entries:
+            return self.error(
+                f"Expected <{self.val}> to contain exactly {self._fmt_items(items)} in any order, but did not.",
+                diff=DiffResult(kind="contains", entries=entries),
             )
         return self
 

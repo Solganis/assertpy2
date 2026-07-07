@@ -11,6 +11,8 @@ from ._introspection import is_model_dump_object
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from typing_extensions import TypeIs
+
 
 @runtime_checkable
 class Matcher(Protocol):
@@ -21,6 +23,27 @@ class Matcher(Protocol):
     def describe(self) -> str: ...
 
     def describe_mismatch(self, value: Any) -> str: ...
+
+
+# builtin scalar/container types are never matchers; a frozenset membership test skips the expensive
+# runtime_checkable protocol isinstance for the common operand of contains()/satisfies()/matcher dispatch
+_NON_MATCHER_TYPES: Final = frozenset(
+    {int, float, bool, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset, type(None)}
+)
+
+
+def _is_matcher(obj: object) -> TypeIs[Matcher]:
+    """Fast membership test for the runtime_checkable ``Matcher`` protocol.
+
+    ``isinstance(x, Matcher)`` is expensive for non-matchers: the runtime_checkable check walks every
+    protocol member through ``getattr_static``.  A builtin-type fast path skips it for the common
+    operand while staying *strictly equivalent* to ``isinstance(obj, Matcher)`` - those builtin types
+    are never matchers, and every other object (including any custom class) falls through to the full
+    protocol check unchanged, so attribute access is never triggered where ``isinstance`` would not.
+    """
+    if type(obj) in _NON_MATCHER_TYPES:
+        return False
+    return isinstance(obj, Matcher)
 
 
 class BaseMatcher:
@@ -72,7 +95,7 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
     predicate, mirroring the dispatch in ``satisfies``/``each``: a `Matcher` is checked via
     ``matches``, a callable via its return value, and anything else raises ``TypeError``.
     """
-    if isinstance(matcher, Matcher):
+    if _is_matcher(matcher):
         return matcher.matches(value)
     if callable(matcher):
         return bool(matcher(value))
@@ -81,7 +104,7 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
 
 def _describe_matcher(matcher: Matcher | Callable[..., object]) -> str:
     """Describe a ``Matcher`` or callable for the "expected" half of an error or diff entry."""
-    if isinstance(matcher, Matcher):
+    if _is_matcher(matcher):
         return matcher.describe()
     return f"<{matcher}>"
 
@@ -571,7 +594,7 @@ _MISSING: Final = _MissingSentinel()
 
 def _describe_spec_value(value: object) -> str:
     """Describe a single structure-spec value (matcher, nested dict spec, or raw value)."""
-    if isinstance(value, Matcher):
+    if _is_matcher(value):
         return value.describe()
     if isinstance(value, dict):
         parts = [f"{key}: {_describe_spec_value(sub_value)}" for key, sub_value in value.items()]
@@ -659,7 +682,7 @@ class StructureMatcher(BaseMatcher):
             actual = value[key]
             if isinstance(expected, StructureMatcher) and isinstance((normalized := self._as_mapping(actual)), dict):
                 mismatches.extend(self._walk(normalized, expected._spec, current_path, seen))
-            elif isinstance(expected, Matcher):
+            elif _is_matcher(expected):
                 # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match"
                 try:
                     matched = expected.matches(actual)

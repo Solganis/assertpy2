@@ -60,6 +60,38 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.")
         return self
 
+    def is_equal_to_ignoring_whitespace(self, other: str) -> Self:
+        """Asserts that val is a string and is equal to other ignoring all whitespace.
+
+        All whitespace (spaces, tabs, newlines) is stripped from both strings before comparing with
+        the ``==`` operator, so differences in spacing, indentation, or line breaks don't matter.
+        Case still does.
+
+        Args:
+            other: the expected value
+
+        Examples:
+            Usage:
+
+                assert_that('foo bar').is_equal_to_ignoring_whitespace('foobar')
+                assert_that('foo\\nbar').is_equal_to_ignoring_whitespace('foo bar')
+                assert_that('  foo  ').is_equal_to_ignoring_whitespace('foo')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if actual is **not** equal to expected ignoring whitespace
+            TypeError: if val or the given arg is not a string
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if not isinstance(other, str):
+            raise TypeError("given arg must be a string")
+        if "".join(self.val.split()) != "".join(other.split()):
+            return self.error(f"Expected <{self.val}> to be equal to <{other}> ignoring whitespace, but was not.")
+        return self
+
     def contains_ignoring_case(self, *items: str) -> Self:
         """Asserts that val is string and contains the given item or items.
 
@@ -205,6 +237,72 @@ class StringMixin(_MixinBase):
                 return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.")
         else:
             raise TypeError("val is not a string or iterable")
+        return self
+
+    def starts_with_ignoring_case(self, prefix: str) -> Self:
+        """Asserts that val is a string and starts with prefix, ignoring case.
+
+        Like [`starts_with()`][assertpy2.string.StringMixin.starts_with] but case-insensitive
+        (via ``str.lower()``), and strings only.
+
+        Args:
+            prefix: the prefix
+
+        Examples:
+            Usage:
+
+                assert_that('FooBar').starts_with_ignoring_case('foo')
+                assert_that('foobar').starts_with_ignoring_case('FOO')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** case-insensitive start with prefix
+            TypeError: if val or the given prefix is not a string
+            ValueError: if the given prefix is empty
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if not isinstance(prefix, str):
+            raise TypeError("given prefix arg must be a string")
+        if len(prefix) == 0:
+            raise ValueError("given prefix arg must not be empty")
+        if not self.val.lower().startswith(prefix.lower()):
+            return self.error(f"Expected <{self.val}> to case-insensitive start with <{prefix}>, but did not.")
+        return self
+
+    def ends_with_ignoring_case(self, suffix: str) -> Self:
+        """Asserts that val is a string and ends with suffix, ignoring case.
+
+        Like [`ends_with()`][assertpy2.string.StringMixin.ends_with] but case-insensitive
+        (via ``str.lower()``), and strings only.
+
+        Args:
+            suffix: the suffix
+
+        Examples:
+            Usage:
+
+                assert_that('FooBar').ends_with_ignoring_case('BAR')
+                assert_that('foobar').ends_with_ignoring_case('Bar')
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does **not** case-insensitive end with suffix
+            TypeError: if val or the given suffix is not a string
+            ValueError: if the given suffix is empty
+        """
+        if not isinstance(self.val, str):
+            raise TypeError("val is not a string")
+        if not isinstance(suffix, str):
+            raise TypeError("given suffix arg must be a string")
+        if len(suffix) == 0:
+            raise ValueError("given suffix arg must not be empty")
+        if not self.val.lower().endswith(suffix.lower()):
+            return self.error(f"Expected <{self.val}> to case-insensitive end with <{suffix}>, but did not.")
         return self
 
     def matches(self, pattern) -> Self:

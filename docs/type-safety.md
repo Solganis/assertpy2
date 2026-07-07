@@ -56,6 +56,74 @@ changes a return type fails the build. `ty` additionally type-checks the whole p
     message, and `returned()` pivots to the type-agnostic core assertions for the call's return value -
     never advertising methods that may not apply. See [Errors & Reporting](errors.md#expected-exceptions).
 
+## Typed narrowing with .value
+
+Assertions don't just check a value - they can hand it back, typed. The `value` property ends a
+chain by returning the checked value as-is, and for object- and union-typed values two assertions
+refine its static type along the way: `is_not_none()` removes `None`, and `is_instance_of()`
+narrows to the checked class. The usual `assert x is not None` / `cast()` dance to satisfy a type
+checker disappears:
+
+```python
+order: Order | None = repo.find_order(42)
+
+paid = assert_that(order).is_not_none().is_instance_of(PaidOrder).value
+paid.refund()  # statically typed as PaidOrder - no cast, no bare assert
+```
+
+On the per-type protocols `value` returns the family type (`str` for string assertions, `dict` for
+dict assertions, ...), so extract-and-continue works after pivots too:
+
+```python
+name = assert_that(b"fred").decoded_as().is_length(4).value  # typed as str
+```
+
+Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime;
+here the narrowing is purely static - checked by ty, mypy, and Pyright - with zero runtime cost
+beyond returning the value.
+
+!!! note "Narrowing assumes strict mode"
+    The narrowing reflects the strict `assert_that` default, where a failed `is_not_none()` or
+    `is_instance_of()` halts the chain before `.value` is reached, so the value really does match
+    the narrowed type. Inside [`soft_assertions()`](testing.md#soft-assertions) or under
+    `assert_warn()` a failed assertion does **not** halt, and extraction there is incoherent
+    (extract-once-established versus continue-past-failure are opposite intents), so `.value` raises
+    `TypeError` rather than hand back a value that could contradict its static type - read `.value`
+    in strict mode, or after the soft block. Note too that the narrowed builder exposes the full
+    assertion API rather than the type-filtered subset, since an arbitrary narrowed class has no
+    per-type protocol.
+
+### Refinement narrowing with a TypeIs predicate (advanced)
+
+`is_not_none()` and `is_instance_of()` are two built-in narrowers. `satisfies()` extends narrowing
+to **your own** predicates: pass a predicate typed with [`TypeIs`](https://peps.python.org/pep-0742/)
+and it narrows the chain to the guarded type. Unlike `is_instance_of()`, which narrows by class only,
+a `TypeIs` predicate narrows by any runtime condition - a refinement type:
+
+```python
+from typing import TypeIs  # or `from typing_extensions import TypeIs` on Python < 3.13
+
+def is_paid(order: Order) -> TypeIs[PaidOrder]:
+    return isinstance(order, PaidOrder) and order.status == "PAID"
+
+paid = assert_that(order).is_not_none().satisfies(is_paid).value
+paid.refund()  # statically typed as PaidOrder - narrowed by a domain predicate, not just a class
+```
+
+The runtime behavior of `satisfies()` is unchanged (it just runs the predicate); the narrowing is
+purely static.
+
+!!! warning "Checker support: not yet in PyCharm"
+    This narrowing is solved by **ty, pyright, and mypy** today (so it works in VS Code / Pylance and
+    in CI). **PyCharm does not yet solve type variables through `TypeIs`**, so there the result stays
+    the un-narrowed type and accessing a narrowed-only member reports a false *Unresolved attribute
+    reference*. This is tracked upstream in
+    [JetBrains PY-89124](https://youtrack.jetbrains.com/issue/PY-89124); when it is fixed the narrowing
+    lights up in PyCharm with no change here. Until then, on PyCharm prefer `is_instance_of()` for
+    class narrowing (which PyCharm does narrow), and treat `satisfies()`-based refinement narrowing as
+    advanced / checker-dependent. Do **not** disable PyCharm's *Unresolved attribute reference*
+    inspection to work around it - it is a core check; scope any workaround to the specific line.
+
 ## py.typed and PEP 561
 
 `assertpy2` ships a `py.typed` marker and is [PEP 561](https://peps.python.org/pep-0561/) compliant, so the

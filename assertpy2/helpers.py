@@ -103,6 +103,8 @@ class HelpersMixin(_MixinBase):
 
     def _is_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True):
         """Return whether *candidate* has the requested dict-like attributes."""
+        if type(candidate) is dict:  # fast path: a real dict satisfies every check, skip the ABC isinstance
+            return True
         if not isinstance(candidate, collections.abc.Iterable):
             return False
         if check_keys and not callable(getattr(candidate, "keys", None)):
@@ -282,16 +284,59 @@ class HelpersMixin(_MixinBase):
                     elif decision == "leaf":
                         parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                     else:  # recurse
-                        value_repr = (
-                            _dict_repr(value, counterpart[key], _seen)
-                            if self._is_dict_like(value, check_values=False)
-                            and self._is_dict_like(counterpart[key], check_values=False)
-                            else _safe_repr(value)
-                        )
+                        other_value = counterpart[key]
+                        if self._is_dict_like(value, check_values=False) and self._is_dict_like(
+                            other_value, check_values=False
+                        ):
+                            value_repr = _dict_repr(value, other_value, _seen)
+                        elif _both_list_like(value, other_value):
+                            value_repr = _list_repr(value, other_value, _seen)
+                        else:
+                            value_repr = _safe_repr(value)
                         parts.append(f"{_safe_repr(key)}: {value_repr}")
             out = ", ".join(parts)
             ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
             return f"{{{ellip_prefix}{out}}}"
+
+        def _both_list_like(left, right):
+            return (
+                isinstance(left, (list, tuple))
+                and isinstance(right, (list, tuple))
+                and not is_namedtuple(left)
+                and not is_namedtuple(right)
+            )
+
+        def _list_repr(seq, counterpart, _seen):
+            """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
+            the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}]``
+            instead of dumping the whole list.  Always reached through ``_dict_repr`` (a list is only ever
+            a nested value), so ``_seen`` is passed in, never defaulted."""
+            if id(seq) in _seen:
+                return "[<circular ref>]"
+            _seen = _seen | {id(seq)}
+            parts = []
+            ellip = False
+            for index, value in enumerate(seq):
+                if index >= len(counterpart):
+                    parts.append(_safe_repr(value))  # extra element beyond the counterpart's length
+                    continue
+                other_value = counterpart[index]
+                decision = _node_decision(value, other_value, config, field=None)
+                if decision == "equal":
+                    ellip = True
+                elif decision == "leaf":
+                    parts.append(_safe_repr(value))
+                elif self._is_dict_like(value, check_values=False) and self._is_dict_like(
+                    other_value, check_values=False
+                ):
+                    parts.append(_dict_repr(value, other_value, _seen))
+                elif _both_list_like(value, other_value):
+                    parts.append(_list_repr(value, other_value, _seen))
+                else:
+                    parts.append(_safe_repr(value))
+            opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
+            ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
+            return f"{opener}{ellip_prefix}{', '.join(parts)}{closer}"
 
         ignore_err = include_err = ""
         if ignore:

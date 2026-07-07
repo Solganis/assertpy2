@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import inspect
+import time
 from collections import deque
 from itertools import pairwise
 from typing import TYPE_CHECKING
@@ -78,6 +79,15 @@ def _summarize(samples, total_polls, elapsed) -> str:
     return f"value changed {len(changes)} {change_word}; last change {last_change:.1f}s before the deadline"
 
 
+def _timeout_failure(recorder: _PollRecorder | None, timeout: float, elapsed: float, failure: str):
+    """Build the ``(message, trace)`` pair for a timed-out poll; without a recorder there is no trace."""
+    if recorder is None:
+        return f"Expected condition not met after {timeout:.1f} seconds. Last failure: {failure}", None
+    trace = recorder.build(elapsed)
+    message = f"Expected condition not met after {timeout:.1f} seconds ({trace.summary}). Last failure: {failure}"
+    return message, trace
+
+
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
     """Normalize an ``ignoring`` spec (one exception type or a tuple of them) to a validated tuple.
 
@@ -106,6 +116,8 @@ class AsyncAssertionBuilder:
         kind: the failure mode of the *final* timeout failure (``None``/``"soft"``/``"warn"``);
             polling itself always retries on hard failures
         logger: the logger for ``"warn"`` mode
+        trace: record a [`PollTrace`][assertpy2.errors.PollTrace] of the polling timeline
+            (default ``True``); ``False`` skips the flight recorder entirely
     """
 
     def __init__(
@@ -119,6 +131,7 @@ class AsyncAssertionBuilder:
         ignoring: tuple[type[Exception], ...] = (),
         kind: str | None = None,
         logger: object = None,
+        trace: bool = True,
     ):
         self._func = func
         self._builder_func = builder_func
@@ -128,6 +141,7 @@ class AsyncAssertionBuilder:
         self._ignoring = ignoring
         self._kind = kind
         self._logger = logger
+        self._trace = trace
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
@@ -162,7 +176,7 @@ class AsyncAssertionBuilder:
                 loop = asyncio.get_running_loop()
                 start = loop.time()
                 deadline = start + self._timeout
-                recorder = _PollRecorder()
+                recorder = _PollRecorder() if self._trace else None
                 last_error: Exception | None = None
                 while True:
                     probed = _PROBE_UNSET
@@ -182,20 +196,17 @@ class AsyncAssertionBuilder:
                         last_error = exc
                         # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
                         failure = str(exc) if isinstance(exc, AssertionError) else repr(exc)
-                        recorder.record(
-                            elapsed=loop.time() - start,
-                            outcome="fail" if isinstance(exc, AssertionError) else "error",
-                            # sanitized eagerly: probes often mutate and return the same live object,
-                            # so each sample must be a point-in-time snapshot, not a reference
-                            value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
-                            detail=failure,
-                        )
-                        if loop.time() >= deadline:
-                            trace = recorder.build(loop.time() - start)
-                            message = (
-                                f"Expected condition not met after {self._timeout:.1f} seconds"
-                                f" ({trace.summary}). Last failure: {failure}"
+                        if recorder is not None:
+                            recorder.record(
+                                elapsed=loop.time() - start,
+                                outcome="fail" if isinstance(exc, AssertionError) else "error",
+                                # sanitized eagerly: probes often mutate and return the same live object,
+                                # so each sample must be a point-in-time snapshot, not a reference
+                                value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
+                                detail=failure,
                             )
+                        if loop.time() >= deadline:
+                            message, trace = _timeout_failure(recorder, self._timeout, loop.time() - start, failure)
                             if self._kind in ("soft", "warn"):
                                 # inner failures already carry the description; an empty one here
                                 # avoids a double prefix in the collected/logged message
@@ -206,3 +217,122 @@ class AsyncAssertionBuilder:
             return _poll()
 
         return _make_coroutine
+
+
+class SyncAssertionBuilder:
+    """Blocking assertion builder that polls a sync callable until an assertion passes or timeout expires.
+
+    Do not instantiate directly; use
+    [`eventually_sync()`][assertpy2.assertpy.AssertionBuilder.eventually_sync] instead.
+
+    Args:
+        func: a sync callable that produces the value to test (an async probe raises ``TypeError``)
+        builder_func: factory function to create assertion builders (receives ``val``, ``description``)
+        description: optional error description forwarded to the builder
+        timeout: maximum seconds to keep retrying
+        interval: seconds between retries
+        ignoring: exception types the polling loop retries instead of propagating
+        kind: the failure mode of the *final* timeout failure (``None``/``"soft"``/``"warn"``);
+            polling itself always retries on hard failures
+        logger: the logger for ``"warn"`` mode
+        trace: record a [`PollTrace`][assertpy2.errors.PollTrace] of the polling timeline
+            (default ``True``); ``False`` skips the flight recorder entirely
+    """
+
+    def __init__(
+        self,
+        func: Callable,
+        *,
+        builder_func: Callable,
+        description: str = "",
+        timeout: float = 5.0,
+        interval: float = 0.5,
+        ignoring: tuple[type[Exception], ...] = (),
+        kind: str | None = None,
+        logger: object = None,
+        trace: bool = True,
+    ):
+        self._func = func
+        self._builder_func = builder_func
+        self._description = description
+        self._timeout = timeout
+        self._interval = interval
+        self._ignoring = ignoring
+        self._kind = kind
+        self._logger = logger
+        self._trace = trace
+
+    def within(self, timeout: float) -> Self:
+        """Override the timeout (in seconds)."""
+        self._timeout = timeout
+        return self
+
+    def every(self, interval: float) -> Self:
+        """Override the polling interval (in seconds)."""
+        self._interval = interval
+        return self
+
+    def ignoring(self, *exceptions: type[Exception]) -> Self:
+        """Replace the exception types the polling loop retries instead of propagating.
+
+        Examples:
+            Usage:
+
+                assert_that(get_order).eventually_sync().within(10).ignoring(ConnectionError).has_status("PAID")
+
+        Raises:
+            TypeError: if any argument is not an ``Exception`` subclass
+        """
+        self._ignoring = _normalize_ignoring(exceptions)
+        return self
+
+    def __getattr__(self, name: str):
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def _run(*args, **kwargs):
+            start = time.monotonic()
+            deadline = start + self._timeout
+            recorder = _PollRecorder() if self._trace else None
+            last_error: Exception | None = None
+            while True:
+                probed = _PROBE_UNSET
+                try:
+                    val = self._func()
+                    if inspect.isawaitable(val):
+                        if inspect.iscoroutine(val):
+                            val.close()  # an orphaned coroutine would warn "never awaited" at GC time
+                        raise TypeError(
+                            "given probe returned an awaitable; use eventually() and await it for async probes"
+                        )
+                    probed = val
+                    builder = self._builder_func(val, self._description)
+                    method = getattr(builder, name)
+                    method(*args, **kwargs)
+                    return builder
+                except (
+                    AssertionError,
+                    *self._ignoring,
+                ) as exc:  # retry-on-failure needs the try/except per poll iteration
+                    last_error = exc
+                    # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
+                    failure = str(exc) if isinstance(exc, AssertionError) else repr(exc)
+                    if recorder is not None:
+                        recorder.record(
+                            elapsed=time.monotonic() - start,
+                            outcome="fail" if isinstance(exc, AssertionError) else "error",
+                            # sanitized eagerly: probes often mutate and return the same live object,
+                            # so each sample must be a point-in-time snapshot, not a reference
+                            value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
+                            detail=failure,
+                        )
+                    if time.monotonic() >= deadline:
+                        message, trace = _timeout_failure(recorder, self._timeout, time.monotonic() - start, failure)
+                        if self._kind in ("soft", "warn"):
+                            # inner failures already carry the description; an empty one here
+                            # avoids a double prefix in the collected/logged message
+                            return self._builder_func(None, "", self._kind, None, self._logger).error(message)
+                        raise AssertionFailure(message, trace=trace) from last_error
+                    time.sleep(self._interval)
+
+        return _run

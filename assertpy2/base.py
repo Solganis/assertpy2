@@ -15,7 +15,7 @@ from ._diff import _build_equality_diff, _walk_leaves
 from ._introspection import is_model_dump_object, is_namedtuple
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult, _truncated
-from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher
+from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -23,6 +23,36 @@ if TYPE_CHECKING:
     from ._compat import Self
 
 __tracebackhide__ = True
+
+
+def _describe_unpaired(matcher, raised_count):
+    """Describe an unpaired matcher, noting raised probes so a buggy predicate is not mistaken for a mismatch."""
+    description = _describe_matcher(matcher)
+    if raised_count:
+        item_word = "item" if raised_count == 1 else "items"
+        return f"{description} (probe raised TypeError on {raised_count} {item_word})"
+    return description
+
+
+def _max_bipartite_assignment(satisfied: list[list[bool]]) -> list[int | None]:
+    """Pair each row with a distinct satisfying column via Kuhn's augmenting paths (None if unpairable)."""
+    column_owner: dict[int, int] = {}
+
+    def _augment(row: int, visited: set[int]) -> bool:
+        for column, ok in enumerate(satisfied[row]):
+            if ok and column not in visited:
+                visited.add(column)
+                if column not in column_owner or _augment(column_owner[column], visited):
+                    column_owner[column] = row
+                    return True
+        return False
+
+    for row in range(len(satisfied)):
+        _augment(row, set())
+    assignment: list[int | None] = [None] * len(satisfied)
+    for column, row in column_owner.items():
+        assignment[row] = column
+    return assignment
 
 
 class BaseMixin(_MixinBase):
@@ -265,7 +295,7 @@ class BaseMixin(_MixinBase):
             AssertionError: if any leaf does **not** satisfy the matcher
             TypeError: if matcher is neither a Matcher nor callable
         """
-        if not isinstance(matcher, Matcher) and not callable(matcher):
+        if not _is_matcher(matcher) and not callable(matcher):
             raise TypeError("given arg must be a Matcher or callable")
         description = _describe_matcher(matcher)
         failures = [
@@ -322,13 +352,18 @@ class BaseMixin(_MixinBase):
 
                 assert_that(42).satisfies(lambda x: x % 2 == 0)
 
+            When the callable is typed with ``TypeIs`` it also *narrows* the chain to the guarded type
+            (refinement narrowing), so ``.value`` hands the value back typed - see
+            [Type Safety](../type-safety.md#refinement-narrowing-with-a-typeis-predicate-advanced) for
+            checker support (advanced; not yet in PyCharm).
+
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
             AssertionError: if val does **not** satisfy the matcher
         """
-        if isinstance(matcher, Matcher):
+        if _is_matcher(matcher):
             if not matcher.matches(self.val):
                 description = matcher.describe()
                 return self.error(
@@ -371,7 +406,7 @@ class BaseMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        if isinstance(matcher, Matcher):
+        if _is_matcher(matcher):
             description = matcher.describe()
             for i, item in enumerate(self.val):
                 if not matcher.matches(item):
@@ -506,7 +541,7 @@ class BaseMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        if isinstance(matcher, Matcher):
+        if _is_matcher(matcher):
             if not any(matcher.matches(item) for item in self.val):
                 return self.error(f"Expected any item to satisfy {matcher.describe()}, but none did.")
         elif callable(matcher):
@@ -566,7 +601,7 @@ class BaseMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        if isinstance(matcher, Matcher):
+        if _is_matcher(matcher):
             for i, item in enumerate(self.val):
                 if matcher.matches(item):
                     return self.error(
@@ -633,6 +668,85 @@ class BaseMixin(_MixinBase):
                 actual=self.val,
                 expected=[_describe_matcher(matcher) for matcher in matchers],
                 diff=DiffResult(kind="match", entries=entries),
+            )
+        return self
+
+    def satisfies_exactly_in_any_order(self, *matchers: Matcher | Callable[..., bool]) -> Self:
+        """Asserts that the items and the given matchers can be paired one-to-one, in any order.
+
+        Like [`satisfies_exactly()`][assertpy2.base.BaseMixin.satisfies_exactly] but ignoring
+        positions: passes when some one-to-one assignment pairs every item with a distinct matcher
+        it satisfies.  The lengths must still match, and no matcher may be reused for two items.
+
+        Since every matcher is probed against every item, a probe that raises ``TypeError`` (a
+        type-incompatible comparison on a mixed collection, like ``is_positive()`` meeting a string)
+        counts as a non-match instead of crashing the pairing.  On failure, an unpaired matcher whose
+        probes raised is annotated with the raise count in the diff, so a buggy predicate is not
+        mistaken for an ordinary mismatch.
+
+        Args:
+            *matchers: one `Matcher` or callable predicate per expected item, in any order
+
+        Examples:
+            Usage:
+
+                from assertpy2 import match
+
+                assert_that(["foo", 3]).satisfies_exactly_in_any_order(
+                    match.is_odd(), match.is_instance_of(str)
+                )
+                assert_that([2, 1]).satisfies_exactly_in_any_order(lambda x: x == 1, lambda x: x == 2)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if the length differs, or no one-to-one pairing satisfies all matchers
+            TypeError: if val is not iterable, or a given arg is neither a Matcher nor callable
+            ValueError: if no matchers are given
+        """
+        if len(matchers) == 0:
+            raise ValueError("one or more args must be given")
+        for matcher in matchers:
+            if not _is_matcher(matcher) and not callable(matcher):
+                raise TypeError("given arg must be a Matcher or callable")
+        if not isinstance(self.val, collections.abc.Iterable):
+            raise TypeError("val is not iterable")
+        items = list(self.val)
+        if len(items) != len(matchers):
+            return self.error(
+                f"Expected collection length <{len(matchers)}>, but was <{len(items)}>.",
+                actual=self.val,
+                expected=[_describe_matcher(matcher) for matcher in matchers],
+            )
+        raised_counts = [0] * len(matchers)
+        satisfied = []
+        for item in items:
+            row = []
+            for column, matcher in enumerate(matchers):
+                try:
+                    row.append(_apply_matcher(matcher, item))
+                except TypeError:  # noqa: PERF203  # every probe may raise independently on a mixed collection
+                    raised_counts[column] += 1
+                    row.append(False)
+            satisfied.append(row)
+        assignment = _max_bipartite_assignment(satisfied)
+        unpaired_items = [index for index, column in enumerate(assignment) if column is None]
+        if unpaired_items:
+            paired_columns = {column for column in assignment if column is not None}
+            entries = [DiffEntry(path="extra", actual=items[index], expected=None) for index in unpaired_items]
+            entries.extend(
+                DiffEntry(path="missing", actual=None, expected=_describe_unpaired(matcher, raised_counts[column]))
+                for column, matcher in enumerate(matchers)
+                if column not in paired_columns
+            )
+            failed = "item" if len(unpaired_items) == 1 else "items"
+            return self.error(
+                f"Expected items to satisfy the given matchers in any order,"
+                f" but no pairing covers {len(unpaired_items)} {failed}.",
+                actual=self.val,
+                expected=[_describe_matcher(matcher) for matcher in matchers],
+                diff=DiffResult(kind="contains", entries=entries),
             )
         return self
 
@@ -967,6 +1081,79 @@ class BaseMixin(_MixinBase):
             raise TypeError("given arg must be a class") from None
         return self
 
+    def is_instance_of_any(self, *some_classes: type) -> Self:
+        """Asserts that val is an instance of at least one of the given classes.
+
+        Args:
+            *some_classes: the candidate classes
+
+        Examples:
+            Usage:
+
+                assert_that(1).is_instance_of_any(int, float)
+                assert_that('foo').is_instance_of_any(str, bytes)
+                assert_that(TimeoutError()).is_instance_of_any(OSError, ValueError)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** an instance of any of the given classes
+            TypeError: if a given arg is not a class
+            ValueError: if no classes are given
+        """
+        if len(some_classes) == 0:
+            raise ValueError("one or more args must be given")
+        try:
+            if not isinstance(self.val, some_classes):
+                type_name = self._type(self.val)
+                class_names = ", ".join(some_class.__name__ for some_class in some_classes)
+                return self.error(
+                    f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not."
+                )
+        except TypeError:
+            raise TypeError("given args must all be classes") from None
+        return self
+
+    def is_subclass_of(self, some_class: type) -> Self:
+        """Asserts that val is a class and is a subclass of the given class.
+
+        Checks the class hierarchy using the ``issubclass()`` built-in, so a class counts as a
+        subclass of itself.
+
+        Args:
+            some_class: the expected ancestor class
+
+        Examples:
+            Usage:
+
+                assert_that(bool).is_subclass_of(int)
+                assert_that(TimeoutError).is_subclass_of(OSError)
+
+                class Base: pass
+                class Derived(Base): pass
+
+                assert_that(Derived).is_subclass_of(Base)
+                assert_that(Derived).is_subclass_of(Derived)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val is **not** a subclass of the given class
+            TypeError: if val or the given arg is not a class
+        """
+        if not isinstance(self.val, type):
+            raise TypeError("val must be a class")
+        try:
+            if not issubclass(self.val, some_class):
+                return self.error(
+                    f"Expected <{self.val.__name__}> to be subclass of <{some_class.__name__}>, but was not."
+                )
+        except TypeError:
+            raise TypeError("given arg must be a class") from None
+        return self
+
     def is_length(self, length) -> Self:
         """Asserts that val is the given length.
 
@@ -996,4 +1183,45 @@ class BaseMixin(_MixinBase):
             raise ValueError("given arg must be a positive int")
         if len(self.val) != length:
             return self.error(f"Expected <{self.val}> to be of length <{length}>, but was <{len(self.val)}>.")
+        return self
+
+    def is_length_between(self, low: int, high: int) -> Self:
+        """Asserts that val's length is between low and high (both inclusive).
+
+        Checks val's length using the ``len()`` built-in, like
+        [`is_length()`][assertpy2.base.BaseMixin.is_length].  Identical to
+        [`has_size_between()`][assertpy2.collection.CollectionMixin.has_size_between] apart from
+        the error message wording.
+
+        Args:
+            low: the inclusive lower length bound
+            high: the inclusive upper length bound
+
+        Examples:
+            Usage:
+
+                assert_that('foo').is_length_between(1, 5)
+                assert_that(['a', 'b']).is_length_between(2, 2)
+                assert_that((1, 2, 3)).is_length_between(0, 3)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val's length is **not** between low and high
+            TypeError: if a given arg is not an int
+            ValueError: if a given arg is negative, or low is greater than high
+        """
+        if type(low) is not int:
+            raise TypeError("given low arg must be an int")
+        if type(high) is not int:
+            raise TypeError("given high arg must be an int")
+        if low < 0 or high < 0:
+            raise ValueError("given args must be positive ints")
+        if low > high:
+            raise ValueError("given low arg must be less than given high arg")
+        if not low <= len(self.val) <= high:
+            return self.error(
+                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{len(self.val)}>."
+            )
         return self

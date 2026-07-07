@@ -9,12 +9,14 @@ import logging
 import os
 import sys
 import types
-from typing import TYPE_CHECKING, Final, overload
+from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar, overload
 
 if TYPE_CHECKING:
     import datetime
     import pathlib
     from collections.abc import Callable, Iterator
+
+    from typing_extensions import TypeIs
 
     from ._compat import Self
     from ._typing import (
@@ -28,8 +30,9 @@ if TYPE_CHECKING:
         _PathAssertion,
         _StringAssertion,
     )
+    from .matchers import Matcher
 
-from .async_assertions import AsyncAssertionBuilder, _normalize_ignoring
+from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
 from .collection import CollectionMixin
@@ -49,7 +52,12 @@ from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
 
-__version__ = "2.14.0"
+__version__ = "2.15.0"
+
+# the tracked value type of the generic AssertionBuilder fallback (_U appears only in narrowing stubs)
+_T = TypeVar("_T")
+if TYPE_CHECKING:
+    _U = TypeVar("_U")
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -235,11 +243,13 @@ def assert_that(val: Callable[..., object], description: str = "") -> _CallableA
 
 
 # Fallback returns the concrete AssertionBuilder so object- and union-typed values keep the full API.
-# The specific protocols are not assignable to AssertionBuilder, so mypy --strict reports overload-overlap
-# for each specific overload and pyright one reportOverlappingOverload; ty (the gate) does not flag it. Kept
-# intentionally - returning _CoreAssertion here would strip type-specific assertions from object/union values.
+# It is generic over the value type, so `.value` gives the input type back and the narrowing terminals
+# (`is_not_none()`, `is_instance_of()`) refine it. The specific protocols are not assignable to
+# AssertionBuilder, so mypy --strict reports overload-overlap for each specific overload and pyright one
+# reportOverlappingOverload; ty (the gate) does not flag it. Kept intentionally - returning _CoreAssertion
+# here would strip type-specific assertions from object/union values.
 @overload
-def assert_that(val: object, description: str = "") -> AssertionBuilder: ...
+def assert_that(val: _T, description: str = "") -> AssertionBuilder[_T]: ...
 
 
 # Return the common base protocol so each overload stays consistent with the impl (no reportInconsistentOverload).
@@ -489,6 +499,43 @@ _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
 
 
+# Chain steps that transform the value instead of asserting (their failures are never AssertionError,
+# so negating them can only produce a misleading "Expected ... to NOT satisfy" message).  Hybrids that
+# both assert and pivot (extracting_group, matches_with_groups, when_called_with) stay negatable.
+_TRANSFORMER_STEPS: Final = frozenset(
+    {
+        "extracting",
+        "filtered_on",
+        "mapped",
+        "flat_mapped",
+        "first",
+        "last",
+        "element",
+        "single",
+        "decoded_as",
+        "at_json_path",
+    }
+)
+
+# Chain steps that configure or transform instead of asserting: "inverting" them is meaningless and
+# would otherwise fail later with a misleading "Expected ... to NOT satisfy" message.
+_NON_NEGATABLE: Final = {
+    "eventually": "eventually() cannot be negated with not_; assert the inverted condition instead",
+    "eventually_sync": "eventually_sync() cannot be negated with not_; assert the inverted condition instead",
+    "described_as": (
+        "described_as() only sets the failure description and cannot be negated with not_;"
+        " call described_as() before not_ instead"
+    ),
+    **{
+        name: (
+            f"{name}() transforms the value instead of asserting, so it cannot be negated with not_;"
+            f" negate the assertion after {name}() instead"
+        )
+        for name in _TRANSFORMER_STEPS
+    },
+}
+
+
 class NegatedBuilder:
     """Proxy that inverts the next assertion. Created by ``assert_that(val).not_``."""
 
@@ -496,10 +543,8 @@ class NegatedBuilder:
         self._builder = builder
 
     def __getattr__(self, name: str) -> object:
-        if name == "eventually":
-            # eventually() switches the chain to polling instead of asserting, so "inverting" it is
-            # meaningless and would otherwise fail loudly with a misleading message
-            raise TypeError("eventually() cannot be negated with not_; assert the inverted condition instead")
+        if name in _NON_NEGATABLE:
+            raise TypeError(_NON_NEGATABLE[name])
         attr = getattr(self._builder, name)
         if not callable(attr):
             return attr
@@ -570,6 +615,7 @@ class AssertionBuilder(
     BytesMixin,
     DataFrameMixin,
     BaseMixin,
+    Generic[_T],
 ):
     """The main assertion class.  Never call the constructor directly, always use the
     [`assert_that()`][assertpy2.assertpy.assert_that] helper instead.  Or if you just want warning messages, use the
@@ -595,11 +641,105 @@ class AssertionBuilder(
         self._not_expected = False
         self._expected_warning = None
         self._return_value = _UNSET
+        # holds the failure message when an assertion on this builder collects/logs a failure under
+        # soft/warn mode (first failure wins = the root cause, not its consequences); makes `.value`
+        # refuse to hand back an unverified value and surface that root failure instead of silently
+        # breaking its narrowed type
+        self._value_taint_reason: str | None = None
 
     @property
     def not_(self) -> NegatedBuilder:
         """Invert the next assertion in the chain."""
         return NegatedBuilder(self)
+
+    @property
+    def value(self) -> _T:
+        """The value under test, returned as-is for typed extract-and-continue.
+
+        Ends a chain by handing the checked value back, so a test can keep using it after the
+        assertions passed.  For object- and union-typed values the static type is the input type,
+        refined by the narrowing assertions:
+        [`is_not_none()`][assertpy2.base.BaseMixin.is_not_none] removes ``None`` from the type, and
+        [`is_instance_of()`][assertpy2.base.BaseMixin.is_instance_of] narrows to the checked class -
+        no ``cast()`` or bare ``assert`` needed to satisfy a type checker.
+
+        ``value`` is a strict-mode extraction.  If an assertion on the current value failed under
+        [`soft_assertions()`][assertpy2.assertpy.soft_assertions] or
+        [`assert_warn()`][assertpy2.assertpy.assert_warn] - where a failure is collected or logged
+        instead of halting - reading ``value`` raises ``TypeError`` rather than handing back an
+        unverified value.  This guard is deliberate and **not** narrowing-specific: ``value`` hands
+        back the value only when *every* assertion on it passed, so a failed ``is_equal_to`` taints it
+        exactly as a failed ``is_not_none`` does (the contract is "extract only what was fully
+        established").
+
+        The taint is per-value, not for the whole chain: a value-changing step
+        ([`extracting()`][assertpy2.extracting.ExtractingMixin.extracting],
+        [`first()`][assertpy2.collection.CollectionMixin.first],
+        [`decoded_as()`][assertpy2.bytes_mixin.BytesMixin.decoded_as], ...) begins a *new* value with a
+        fresh guard.  That is still safe, because those steps validate their own input and reject
+        ``None`` or an incompatible type - so a pivot can never reach ``.value`` with a value derived
+        from a failed ``is_not_none()``; it raises in the pivot first.  What survives a pivot is only a
+        real derived fact from a usable value (the failed assertion was an orthogonal claim), which is
+        consistent with the collect-and-continue intent of soft mode.
+
+        ``value`` and those modes are opposite intents (extract-once-established vs
+        continue-past-failure), so read ``value`` in strict mode, or after the soft block has closed.
+
+        Examples:
+            Usage:
+
+                order: Order | None = repo.find_order(42)
+                paid = assert_that(order).is_not_none().is_instance_of(PaidOrder).value
+                paid.refund()  # statically typed as PaidOrder
+
+        Returns:
+            object: the original value under test (never a copy)
+
+        Raises:
+            TypeError: if an assertion on this chain failed under ``soft_assertions()`` or
+                ``assert_warn()``, so the value cannot be trusted to match its narrowed type; the
+                message carries the underlying (root) failure so its cause is not lost
+        """
+        if self._value_taint_reason is not None:
+            raise TypeError(
+                "cannot extract .value: the underlying assertion failed under soft or warn mode - "
+                f"{self._value_taint_reason} (read .value in strict mode, or after the soft-assertions block)"
+            )
+        return self.val
+
+    if TYPE_CHECKING:
+        # Narrowing declarations, shadowing the runtime mixin methods for type checkers only:
+        # is_not_none() removes None from the tracked value type, is_instance_of() narrows it to the
+        # checked class. Runtime behavior lives in BaseMixin and is unchanged.
+
+        @overload
+        def is_not_none(self: AssertionBuilder[_U | None]) -> AssertionBuilder[_U]: ...
+        @overload
+        def is_not_none(self) -> Self: ...
+        def is_not_none(self) -> Any:  # overload impl stub required outside stub files, never executed
+            ...
+
+        # the Self overload is never picked by calls (a class arg always binds type[_U] first); it keeps
+        # AssertionBuilder structurally conformant with the protocols' `(type) -> Self` contract. pyright
+        # flags it reportOverlappingOverload - intentional, same category as the assert_that fallback overlap
+        @overload
+        def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
+        @overload
+        def is_instance_of(self, some_class: type) -> Self: ...
+        def is_instance_of(self, some_class: type) -> Any:  # overload impl stub, never executed
+            ...
+
+        # satisfies() narrows when given a `TypeIs` predicate (user-extensible refinement narrowing):
+        # a predicate typed `Callable[..., TypeIs[U]]` refines the tracked value to U, so a domain
+        # predicate (class + condition) narrows the chain to its target type. Solved by ty/pyright/mypy;
+        # PyCharm does not yet solve TypeVars through TypeIs (tracked in JetBrains PY-89124), so this
+        # narrowing is advertised as advanced/checker-dependent. Runtime behavior lives in BaseMixin.
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
+        @overload
+        def satisfies(self, matcher: Matcher | Callable[..., bool]) -> Self: ...
+        def satisfies(self, matcher: Any) -> Any:  # overload impl stub, never executed
+            ...
 
     def builder(self, val, description="", kind=None, expected=None, logger=None):
         """Helper to build a new `AssertionBuilder` instance. Use this only if not chaining to ``self``.
@@ -640,9 +780,13 @@ class AssertionBuilder(
         """
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self.kind == "warn":
+            if self._value_taint_reason is None:
+                self._value_taint_reason = out
             self.logger.warning(out)
             return self
         elif self.kind == "soft":
+            if self._value_taint_reason is None:
+                self._value_taint_reason = out
             _soft_err.get().append((_soft_group.get(), out))
             return self
         else:
@@ -656,6 +800,7 @@ class AssertionBuilder(
         timeout: float = 5.0,
         interval: float = 0.5,
         ignoring: type[Exception] | tuple[type[Exception], ...] = (),
+        trace: bool = True,
     ) -> AsyncAssertionBuilder:
         """Switch to async polling mode for eventual-consistency assertions.
 
@@ -679,6 +824,9 @@ class AssertionBuilder(
             interval: seconds between retries (default ``0.5``)
             ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
                 propagating (default: none)
+            trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
+                timeout failure (default ``True``); pass ``False`` to skip recording, for tight
+                polling loops where per-poll snapshots of a heavy probed value are too costly
 
         Examples:
             Usage:
@@ -721,9 +869,82 @@ class AssertionBuilder(
             ignoring=_normalize_ignoring(ignoring),
             kind=self.kind,
             logger=self.logger,
+            trace=trace,
+        )
+
+    def eventually_sync(
+        self,
+        *,
+        timeout: float = 5.0,
+        interval: float = 0.5,
+        ignoring: type[Exception] | tuple[type[Exception], ...] = (),
+        trace: bool = True,
+    ) -> SyncAssertionBuilder:
+        """Switch to blocking polling mode for eventual-consistency assertions, without asyncio.
+
+        The synchronous sibling of [`eventually()`][assertpy2.assertpy.AssertionBuilder.eventually]:
+        the current ``val`` must be a sync callable, and the returned
+        `SyncAssertionBuilder` exposes assertion methods
+        that block the calling thread (via ``time.sleep``) while polling ``val()`` until the
+        assertion passes or ``timeout`` expires - no event loop and no ``await`` needed.  A probe
+        that returns an awaitable raises ``TypeError``; poll async probes with ``eventually()``.
+
+        Retry, failure-mode, and diagnostics semantics are identical to ``eventually()``: only a
+        failing assertion (or an exception type listed in ``ignoring``) is retried, the final
+        timeout failure honors the builder's soft/warn mode, and it carries the same
+        [`PollTrace`][assertpy2.errors.PollTrace] flight recorder.
+
+        Args:
+            timeout: maximum seconds to keep retrying (default ``5.0``)
+            interval: seconds between retries (default ``0.5``)
+            ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
+                propagating (default: none)
+            trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
+                timeout failure (default ``True``); pass ``False`` to skip recording, for tight
+                polling loops where per-poll snapshots of a heavy probed value are too costly
+
+        Examples:
+            Usage:
+
+                from assertpy2 import assert_that
+
+                counter = {"n": 0}
+
+                def get_count():
+                    counter["n"] += 1
+                    return counter["n"]
+
+                assert_that(get_count).eventually_sync(timeout=2, interval=0.1).is_equal_to(3)
+
+            Retry a probe that raises while the system under test is not ready yet:
+
+                assert_that(get_order).eventually_sync(timeout=10, ignoring=ConnectionError).has_status("PAID")
+
+                # or configure fluently on the returned builder
+                assert_that(get_order).eventually_sync().within(10).ignoring(ConnectionError).has_status("PAID")
+
+        Returns:
+            SyncAssertionBuilder: a blocking builder whose assertion methods poll on call
+
+        Raises:
+            TypeError: if ``val`` is not callable, or if ``ignoring`` contains anything that is not an
+                ``Exception`` subclass
+        """
+        if not callable(self.val):
+            raise TypeError("val must be callable when using eventually_sync()")
+        return SyncAssertionBuilder(
+            self.val,
+            builder_func=_builder,
+            description=self.description,
+            timeout=timeout,
+            interval=interval,
+            ignoring=_normalize_ignoring(ignoring),
+            kind=self.kind,
+            logger=self.logger,
+            trace=trace,
         )
 
 
-class _ExtendedBuilder(AssertionBuilder):
+class _ExtendedBuilder(AssertionBuilder[Any]):
     """Host for user extensions: `add_extension()` installs plain functions here, so binding happens
     once at registration and `AssertionBuilder` itself stays pristine when an extension is removed."""

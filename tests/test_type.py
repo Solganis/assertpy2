@@ -67,3 +67,64 @@ def test_is_instance_of_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_instance_of("bad")
     assert_that(str(exc_info.value)).is_equal_to("given arg must be a class")
+
+
+def test_is_instance_of_any():
+    assert_that(1).is_instance_of_any(int, float)
+    assert_that(1.5).is_instance_of_any(int, float)
+    assert_that("foo").is_instance_of_any(str, bytes)
+    assert_that(Bar()).is_instance_of_any(Foo)
+    assert_that(TimeoutError()).is_instance_of_any(OSError, ValueError)
+
+
+def test_is_instance_of_any_chaining():
+    assert_that(1).is_instance_of_any(int, float).is_equal_to(1)
+
+
+def test_is_instance_of_any_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("foo").is_instance_of_any(int, float)
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo:str> to be instance of any of <int, float>, but was not."
+    )
+
+
+def test_is_instance_of_any_no_args_failure():
+    with pytest.raises(ValueError) as exc_info:
+        assert_that("foo").is_instance_of_any()
+    assert_that(str(exc_info.value)).is_equal_to("one or more args must be given")
+
+
+def test_is_instance_of_any_bad_arg_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that("foo").is_instance_of_any(int, "bad")
+    assert_that(str(exc_info.value)).is_equal_to("given args must all be classes")
+
+
+def test_is_subclass_of():
+    assert_that(Bar).is_subclass_of(Foo)
+    assert_that(Bar).is_subclass_of(Bar)
+    assert_that(bool).is_subclass_of(int)
+    assert_that(TimeoutError).is_subclass_of(OSError)
+
+
+def test_is_subclass_of_chaining():
+    assert_that(Bar).is_subclass_of(Foo).is_not_none()
+
+
+def test_is_subclass_of_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(Foo).is_subclass_of(Bar)
+    assert_that(str(exc_info.value)).is_equal_to("Expected <Foo> to be subclass of <Bar>, but was not.")
+
+
+def test_is_subclass_of_non_class_val_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(Foo()).is_subclass_of(Foo)
+    assert_that(str(exc_info.value)).is_equal_to("val must be a class")
+
+
+def test_is_subclass_of_bad_arg_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(Foo).is_subclass_of("bad")
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a class")

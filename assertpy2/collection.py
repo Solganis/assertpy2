@@ -217,6 +217,100 @@ class CollectionMixin(_MixinBase):
             )
         return self
 
+    def has_size_greater_than(self, size: int) -> Self:
+        """Asserts that val has a length strictly greater than the given size.
+
+        Args:
+            size: the size val's length must exceed
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).has_size_greater_than(2)
+                assert_that('foo').has_size_greater_than(1)
+                assert_that({'a': 1, 'b': 2}).has_size_greater_than(1)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val's length is **not** greater than the given size
+            TypeError: if the given arg is not an int
+            ValueError: if the given arg is negative
+        """
+        if type(size) is not int:
+            raise TypeError("given arg must be an int")
+        if size < 0:
+            raise ValueError("given arg must be a positive int")
+        if len(self.val) <= size:
+            return self.error(f"Expected <{self.val}> to have size greater than <{size}>, but was <{len(self.val)}>.")
+        return self
+
+    def has_size_less_than(self, size: int) -> Self:
+        """Asserts that val has a length strictly less than the given size.
+
+        Args:
+            size: the size val's length must stay under
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).has_size_less_than(4)
+                assert_that('foo').has_size_less_than(5)
+                assert_that({'a': 1, 'b': 2}).has_size_less_than(3)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val's length is **not** less than the given size
+            TypeError: if the given arg is not an int
+            ValueError: if the given arg is negative
+        """
+        if type(size) is not int:
+            raise TypeError("given arg must be an int")
+        if size < 0:
+            raise ValueError("given arg must be a positive int")
+        if len(self.val) >= size:
+            return self.error(f"Expected <{self.val}> to have size less than <{size}>, but was <{len(self.val)}>.")
+        return self
+
+    def has_size_between(self, low: int, high: int) -> Self:
+        """Asserts that val has a length between low and high (both inclusive).
+
+        Args:
+            low: the inclusive lower size bound
+            high: the inclusive upper size bound
+
+        Examples:
+            Usage:
+
+                assert_that([1, 2, 3]).has_size_between(1, 5)
+                assert_that('foo').has_size_between(3, 3)
+                assert_that({'a': 1, 'b': 2}).has_size_between(0, 2)
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val's length is **not** between low and high
+            TypeError: if a given arg is not an int
+            ValueError: if a given arg is negative, or low is greater than high
+        """
+        if type(low) is not int:
+            raise TypeError("given low arg must be an int")
+        if type(high) is not int:
+            raise TypeError("given high arg must be an int")
+        if low < 0 or high < 0:
+            raise ValueError("given args must be positive ints")
+        if low > high:
+            raise ValueError("given low arg must be less than given high arg")
+        if not low <= len(self.val) <= high:
+            return self.error(
+                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{len(self.val)}>."
+            )
+        return self
+
     def filtered_on(self, predicate: Callable[[Any], bool]) -> Self:
         """Returns a new builder with elements matching the predicate.
 

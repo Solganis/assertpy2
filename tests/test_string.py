@@ -212,6 +212,38 @@ def test_is_equal_ignoring_case_bad_arg_type_failure():
     assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
 
 
+def test_is_equal_ignoring_whitespace():
+    assert_that("foo bar").is_equal_to_ignoring_whitespace("foobar")
+    assert_that("foo\nbar").is_equal_to_ignoring_whitespace("foo bar")
+    assert_that("  foo  ").is_equal_to_ignoring_whitespace("foo")
+    assert_that("foo\tbar baz").is_equal_to_ignoring_whitespace("foobarbaz")
+
+
+def test_is_equal_ignoring_whitespace_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("foo bar").is_equal_to_ignoring_whitespace("foo baz")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foo bar> to be equal to <foo baz> ignoring whitespace, but was not."
+    )
+
+
+def test_is_equal_ignoring_whitespace_case_still_matters_failure():
+    with pytest.raises(AssertionError):
+        assert_that("foo bar").is_equal_to_ignoring_whitespace("FOOBAR")
+
+
+def test_is_equal_ignoring_whitespace_bad_value_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(123).is_equal_to_ignoring_whitespace("123")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+
+
+def test_is_equal_ignoring_whitespace_bad_arg_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that("fred").is_equal_to_ignoring_whitespace(12)
+    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
+
+
 def test_starts_with():
     assert_that("fred").starts_with("f")
     assert_that("fred").starts_with("fr")
@@ -281,6 +313,66 @@ def test_ends_with_bad_arg_type_failure():
 def test_ends_with_bad_arg_empty_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that("fred").ends_with("")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must not be empty")
+
+
+def test_starts_with_ignoring_case():
+    assert_that("FooBar").starts_with_ignoring_case("foo")
+    assert_that("foobar").starts_with_ignoring_case("FOO")
+    assert_that("fred").starts_with_ignoring_case("fred")
+
+
+def test_starts_with_ignoring_case_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("FooBar").starts_with_ignoring_case("bar")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <FooBar> to case-insensitive start with <bar>, but did not.")
+
+
+def test_starts_with_ignoring_case_bad_value_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(["a", "b"]).starts_with_ignoring_case("a")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+
+
+def test_starts_with_ignoring_case_bad_arg_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that("fred").starts_with_ignoring_case(123)
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string")
+
+
+def test_starts_with_ignoring_case_bad_arg_empty_failure():
+    with pytest.raises(ValueError) as exc_info:
+        assert_that("fred").starts_with_ignoring_case("")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must not be empty")
+
+
+def test_ends_with_ignoring_case():
+    assert_that("FooBar").ends_with_ignoring_case("BAR")
+    assert_that("foobar").ends_with_ignoring_case("Bar")
+    assert_that("fred").ends_with_ignoring_case("fred")
+
+
+def test_ends_with_ignoring_case_failure():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("FooBar").ends_with_ignoring_case("foo")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <FooBar> to case-insensitive end with <foo>, but did not.")
+
+
+def test_ends_with_ignoring_case_bad_value_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that(["a", "b"]).ends_with_ignoring_case("b")
+    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+
+
+def test_ends_with_ignoring_case_bad_arg_type_failure():
+    with pytest.raises(TypeError) as exc_info:
+        assert_that("fred").ends_with_ignoring_case(123)
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string")
+
+
+def test_ends_with_ignoring_case_bad_arg_empty_failure():
+    with pytest.raises(ValueError) as exc_info:
+        assert_that("fred").ends_with_ignoring_case("")
     assert_that(str(exc_info.value)).is_equal_to("given suffix arg must not be empty")
 
 
