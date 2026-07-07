@@ -1,20 +1,28 @@
 import contextlib
 import json
+import os
 import warnings
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2 import pytest_plugin as pytest_plugin
+from assertpy2 import snapshot as snapshot_module
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
     _diff_to_json,
     _format_trace,
+    _is_full_run,
     _json_safe,
     _trace_to_json,
     pytest_addoption,
     pytest_configure,
     pytest_runtest_makereport,
+    pytest_sessionfinish,
+    pytest_testnodedown,
+    pytest_unconfigure,
 )
 
 
@@ -596,28 +604,180 @@ class TestAllureOffMode:
         mock.attach.assert_not_called()
 
 
+def _make_config(*, ini="diff", snapshot_update=False):
+    # a bare MagicMock returns a truthy mock from getoption(), which would flip the snapshot-update
+    # module flag and leak update mode into unrelated tests
+    config = MagicMock()
+    config.getini.return_value = ini
+    config.getoption.return_value = snapshot_update
+    return config
+
+
 class TestPytestConfigure:
     def test_valid_mode_stored(self):
-        config = MagicMock()
-        config.getini.return_value = "full"
+        config = _make_config(ini="full")
         pytest_configure(config)
         assert_that(config._assertpy2_allure_mode).is_equal_to("full")
 
     def test_default_diff_mode_stored(self):
-        config = MagicMock()
-        config.getini.return_value = "diff"
+        config = _make_config(ini="diff")
         pytest_configure(config)
         assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
 
     def test_invalid_mode_warns_and_falls_back(self):
-        config = MagicMock()
-        config.getini.return_value = "unknown"
+        config = _make_config(ini="unknown")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             pytest_configure(config)
         assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
         assert_that(caught).is_length(1)
         assert_that(str(caught[0].message)).contains("unknown")
+
+
+class TestSnapshotUpdateOption:
+    def test_addoption_registers_flag(self):
+        parser = MagicMock()
+        pytest_addoption(parser)
+        names = [call[0][0] for call in parser.addoption.call_args_list]
+        assert_that(names).contains("--assertpy2-snapshot-update")
+
+    def test_flag_toggles_module_state_and_unconfigure_resets(self):
+        config = _make_config(snapshot_update=True)
+        try:
+            pytest_configure(config)
+            assert_that(snapshot_module._UPDATE_ALL).is_true()
+        finally:
+            pytest_unconfigure(config)
+        assert_that(snapshot_module._UPDATE_ALL).is_false()
+
+    def test_without_flag_module_state_untouched(self):
+        config = _make_config(snapshot_update=False)
+        pytest_configure(config)
+        assert_that(snapshot_module._UPDATE_ALL).is_false()
+        pytest_unconfigure(config)
+        assert_that(snapshot_module._UPDATE_ALL).is_false()
+
+    def test_ci_flag_sets_mode_true_and_unconfigure_resets(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_CI_MODE", None)
+        config = _make_config()
+        config.getoption.side_effect = lambda name: name == "assertpy2_snapshot_ci"
+        pytest_configure(config)
+        assert_that(snapshot_module._CI_MODE).is_true()
+        pytest_unconfigure(config)
+        assert_that(snapshot_module._CI_MODE).is_none()
+
+    def test_no_ci_flag_sets_mode_false_and_unconfigure_resets(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_CI_MODE", True)  # start from a distinct state
+        config = _make_config()
+        config.getoption.side_effect = lambda name: name == "assertpy2_snapshot_no_ci"
+        pytest_configure(config)
+        assert_that(snapshot_module._CI_MODE).is_false()  # elif no-ci branch set it False
+        pytest_unconfigure(config)
+        assert_that(snapshot_module._CI_MODE).is_none()
+
+
+def _controller_config(reporter, *, full=True):
+    # a controller (non-xdist-worker) config: no ``workeroutput`` attr, so pytest_sessionfinish takes
+    # the aggregation-and-report branch instead of the worker ship-out branch
+    option = SimpleNamespace(keyword="" if full else "somekeyword", markexpr="", last_failed=False, failed_first=False)
+    pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
+    return SimpleNamespace(option=option, pluginmanager=pluginmanager)
+
+
+class TestSnapshotOrphans:
+    def test_worker_ships_touched_to_controller(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {("/x/snap-a.json", "10")})
+        config = SimpleNamespace(workeroutput={})
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_touched"]).is_equal_to([["/x/snap-a.json", "10"]])
+
+    def test_testnodedown_collects_worker_touches(self):
+        pytest_plugin._controller_touched.clear()
+        node = SimpleNamespace(workeroutput={"assertpy2_touched": [["/x/snap-a.json", "10"]]})
+        pytest_testnodedown(node, None)
+        assert_that(pytest_plugin._controller_touched).contains(("/x/snap-a.json", "10"))
+        pytest_plugin._controller_touched.clear()
+
+    def test_testnodedown_ignores_node_without_touches(self):
+        pytest_plugin._controller_touched.clear()
+        pytest_testnodedown(SimpleNamespace(workeroutput={}), None)
+        assert_that(pytest_plugin._controller_touched).is_empty()
+
+    def test_is_full_run_variants(self):
+        def config(**opt):
+            base = {"keyword": "", "markexpr": "", "last_failed": False, "failed_first": False}
+            return SimpleNamespace(option=SimpleNamespace(**{**base, **opt}))
+
+        assert_that(_is_full_run(config())).is_true()
+        assert_that(_is_full_run(config(keyword="k"))).is_false()
+        assert_that(_is_full_run(config(markexpr="m"))).is_false()
+        assert_that(_is_full_run(config(last_failed=True))).is_false()
+        assert_that(_is_full_run(config(failed_first=True))).is_false()
+
+    def test_sessionfinish_no_touches_is_quiet(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", set())
+        pytest_plugin._controller_touched.clear()
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter)), 0)
+        reporter.write_line.assert_not_called()
+
+    def test_sessionfinish_no_orphans_is_quiet(self, tmp_path, monkeypatch):
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter)), 0)
+        reporter.write_line.assert_not_called()
+
+    def test_reports_sub_key_orphan_without_pruning(self, tmp_path, monkeypatch):
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", False)
+        monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE", raising=False)
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter)), 0)
+        text = " ".join(str(call) for call in reporter.write_line.call_args_list)
+        assert_that(text).contains("::30").contains("full run to remove")
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+
+    def test_prunes_sub_key_under_update_full_run(self, tmp_path, monkeypatch):
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=True)), 0)
+        text = " ".join(str(call) for call in reporter.write_line.call_args_list)
+        assert_that(text).contains("removed")
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).does_not_contain_key("30")  # pruned
+
+    def test_no_prune_on_filtered_run(self, tmp_path, monkeypatch):
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=False)), 0)
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+
+    def test_whole_file_orphan_is_report_only_even_under_update(self, tmp_path, monkeypatch):
+        live = str(tmp_path / "snap-live.json")
+        dead = str(tmp_path / "snap-dead.json")
+        for target in (live, dead):
+            with open(target, "w") as handle:
+                json.dump({"10": 1}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(live, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=True)), 0)
+        assert_that(os.path.isfile(dead)).is_true()  # whole file is never auto-pruned
+        text = " ".join(str(call) for call in reporter.write_line.call_args_list)
+        assert_that(text).contains("obsolete snapshot file")
 
 
 class TestAllureExceptionSafety:

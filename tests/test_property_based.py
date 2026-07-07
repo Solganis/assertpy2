@@ -7,6 +7,8 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 """
 
 import copy
+import datetime
+import json
 from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
 
@@ -15,6 +17,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_that, match
+from assertpy2.snapshot import _Decoder, _Encoder
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
 _atoms = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
@@ -419,6 +422,39 @@ def test_starts_with_ignoring_case_accepts_case_mangled_prefix(text, data):
 def test_ends_with_ignoring_case_accepts_case_mangled_suffix(text, data):
     suffix_length = data.draw(st.integers(1, len(text)))
     assert_that(text).ends_with_ignoring_case(text[-suffix_length:].swapcase())
+
+
+# === Snapshot typed-codec round-trip ===
+# The codec is exercised directly (no files): encode -> decode must reproduce an equal value.
+
+_snapshot_zones = st.sampled_from(
+    [
+        None,
+        datetime.timezone.utc,
+        datetime.timezone(datetime.timedelta(hours=5, minutes=30)),
+        datetime.timezone(datetime.timedelta(hours=-8)),
+        datetime.timezone(datetime.timedelta(minutes=5, seconds=30)),  # sub-minute offsets are legal since 3.7
+    ]
+)
+_snapshot_codec_values = (
+    st.dates()
+    | st.times(timezones=_snapshot_zones)
+    | st.decimals(allow_nan=False)
+    | st.binary(max_size=64)
+    | st.datetimes(
+        min_value=datetime.datetime(1900, 1, 1),
+        max_value=datetime.datetime(9999, 12, 30),
+        timezones=_snapshot_zones,
+    )
+)
+
+
+@settings(deadline=None)
+@given(value=_snapshot_codec_values)
+def test_snapshot_codec_roundtrip(value):
+    encoded = json.dumps({"v": value}, cls=_Encoder)
+    decoded = json.loads(encoded, cls=_Decoder)
+    assert_that(decoded["v"]).is_equal_to(value)
 
 
 # === Point 3: nested ignore via tuple key-paths (recursion in _dict_not_equal) ===

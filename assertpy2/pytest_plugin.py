@@ -8,6 +8,7 @@ from typing import Final
 
 import pytest
 
+from . import snapshot as _snapshot
 from ._diff import _sub_diff_entries
 from .errors import _json_safe
 
@@ -22,6 +23,24 @@ _ALLURE_MODES: Final = frozenset({"off", "diff", "full"})
 
 
 def pytest_addoption(parser):
+    parser.addoption(
+        "--assertpy2-snapshot-update",
+        action="store_true",
+        default=False,
+        help="Overwrite failing assertpy2 snapshots with the current values instead of failing",
+    )
+    parser.addoption(
+        "--assertpy2-snapshot-ci",
+        action="store_true",
+        default=False,
+        help="Fail instead of creating a missing assertpy2 snapshot (auto-enabled when a CI env is detected)",
+    )
+    parser.addoption(
+        "--assertpy2-snapshot-no-ci",
+        action="store_true",
+        default=False,
+        help="Disable CI mode / its autodetection, allowing missing snapshots to be created",
+    )
     parser.addini(
         "assertpy2_allure",
         help="Allure attachment mode: off, diff (default), full",
@@ -55,6 +74,79 @@ def pytest_configure(config):
         config._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
         config._assertpy2_diff_max = 50
+    if config.getoption("assertpy2_snapshot_update"):
+        _snapshot._UPDATE_ALL = True
+    if config.getoption("assertpy2_snapshot_ci"):
+        _snapshot._CI_MODE = True
+    elif config.getoption("assertpy2_snapshot_no_ci"):
+        _snapshot._CI_MODE = False
+
+
+def pytest_unconfigure(config):
+    if config.getoption("assertpy2_snapshot_update"):
+        _snapshot._UPDATE_ALL = False
+    if config.getoption("assertpy2_snapshot_ci") or config.getoption("assertpy2_snapshot_no_ci"):
+        _snapshot._CI_MODE = None
+
+
+# snapshots touched by xdist workers, collected on the controller as each worker finishes
+_controller_touched: set = set()
+
+
+@pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed
+def pytest_testnodedown(node, error):
+    """xdist controller hook: collect the touched snapshots each worker shipped as it exits."""
+    touched = getattr(node, "workeroutput", {}).get("assertpy2_touched")
+    if touched:
+        _controller_touched.update(tuple(item) for item in touched)
+
+
+def _is_full_run(config) -> bool:
+    """Whether the run selected all tests (no ``-k`` / ``-m`` / ``--lf`` / ``--ff``); pruning obsolete
+    sub-snaps is only safe on a full run, since a deselected live test would look obsolete otherwise."""
+    opt = config.option
+    return not (
+        getattr(opt, "keyword", "")
+        or getattr(opt, "markexpr", "")
+        or getattr(opt, "last_failed", False)
+        or getattr(opt, "failed_first", False)
+    )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    config = session.config
+    if hasattr(config, "workeroutput"):  # xdist worker: ship touched set to the controller, defer the rest
+        config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
+        return
+    touched = set(_snapshot._TOUCHED) | _controller_touched
+    _controller_touched.clear()
+    if not touched:
+        return
+    sub_orphans, whole_orphans = _snapshot._find_orphans(touched)
+    if not sub_orphans and not whole_orphans:
+        return
+    pruned = []
+    # prune obsolete sub-snaps only under update mode on a full run; whole files are always report-only
+    if sub_orphans and _snapshot._update_enabled() and _is_full_run(config):
+        _snapshot._prune_sub_key_orphans(sub_orphans)
+        pruned, sub_orphans = sub_orphans, []
+    _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned)
+
+
+def _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned):
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None:  # pragma: no cover - the terminal reporter is always present under pytest
+        return
+    lines = [f"removed obsolete snapshot: {snap}::{key}" for snap, key in pruned]
+    lines += [
+        f"obsolete snapshot (run --assertpy2-snapshot-update on a full run to remove): {snap}::{key}"
+        for snap, key in sub_orphans
+    ]
+    lines += [f"obsolete snapshot file (delete manually if its test is gone): {snap}" for snap in whole_orphans]
+    reporter.write_line("")
+    reporter.write_line("assertpy2 snapshots:")
+    for line in lines:
+        reporter.write_line(f"  {line}")
 
 
 @pytest.hookimpl(hookwrapper=True)
