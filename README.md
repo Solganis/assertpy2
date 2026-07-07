@@ -135,16 +135,18 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 
 **Testing**
 
-- [**Soft assertions**](https://solganis.github.io/assertpy2/testing/#soft-assertions): thread-safe, async-safe via `contextvars`. Group errors with `sa.group()`, or use `assert_all()`.
-- [**Polling assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) with retry for eventual consistency.
+- [**Soft assertions**](https://solganis.github.io/assertpy2/testing/#soft-assertions): thread-safe, async-safe via `contextvars`; each collected failure is reported with its `file:line`. Group errors with `sa.group()`, or use `assert_all()`.
+- [**Polling assertions**](https://solganis.github.io/assertpy2/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace pinpointing why a timeout never settled.
+- [**Expected exceptions**](https://solganis.github.io/assertpy2/errors/#expected-exceptions): `raises().when_called_with()` then assert on the message, walk the cause chain (`caused_by()`, `has_root_cause()`), match an `ExceptionGroup` (`contains_error()`), or pivot to the exception object (`raised()`).
 - [**Structured errors**](https://solganis.github.io/assertpy2/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/errors/#rich-pytest-diffs): recursive structural diffs for lists, sets, strings, dicts, dataclasses, namedtuples, Pydantic models, and matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`). Circular reference protection.
-- [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format; update via `--assertpy2-snapshot-update`.
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/testing/#snapshot-testing): store and compare data structures in JSON format; update via `--assertpy2-snapshot-update`. [`matches_contract_snapshot()`](https://solganis.github.io/assertpy2/testing/#contract-snapshots) catches structural regressions, value-tolerant.
 
 **Type safety**
 
 - [**Type-aware autocomplete**](https://solganis.github.io/assertpy2/type-safety/): 9 Protocols, IDE shows only relevant methods per type.
-- [**Typed narrowing**](https://solganis.github.io/assertpy2/type-safety/#typed-narrowing-with-value): `.value` hands the checked value back; `is_not_none()` / `is_instance_of()` narrow its static type - no casts.
+- [**Typed narrowing**](https://solganis.github.io/assertpy2/type-safety/#typed-narrowing-with-value): `.value` hands the checked value back; `is_not_none()`, `is_instance_of()`, and a [`satisfies()` `TypeIs` predicate](https://solganis.github.io/assertpy2/type-safety/#refinement-narrowing-with-a-typeis-predicate-advanced) narrow its static type - no casts.
+- [**Contract testing**](https://solganis.github.io/assertpy2/type-safety/#contract-narrowing-with-assert_conforms): `assert_conforms()` validates a raw payload against a Pydantic v2 model and narrows the chain to it - the capstone for API-response tests; [`exact=True`](https://solganis.github.io/assertpy2/type-safety/#contract-drift-with-exacttrue) catches silent contract drift (undeclared fields), `each=True` validates list endpoints.
 - **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
 
 **Extensibility**
