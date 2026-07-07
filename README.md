@@ -130,7 +130,7 @@ See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) gui
 - [**Bytes assertions**](https://solganis.github.io/assertpy2/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
 - [**Dynamic assertions**](https://solganis.github.io/assertpy2/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
 - [**Dict comparison**](https://solganis.github.io/assertpy2/assertions/#selective-comparison-ignore--include): `is_equal_to()` with `ignore` and `include` for selective key/field matching (dicts, dataclasses, namedtuples, Pydantic models, attrs, plain objects), including by regex or type.
-- [**Recursive comparison**](https://solganis.github.io/assertpy2/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance` (absolute float tolerance at any depth) or `comparators` (per-type / per-field predicates) for nested structures.
+- [**Recursive comparison**](https://solganis.github.io/assertpy2/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance` (absolute float tolerance at any depth), `comparators` (per-type / per-field predicates), or `ignore_null` (skip fields the expected template leaves `None`) for nested structures.
 - [**Extracting**](https://solganis.github.io/assertpy2/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
 
 **Testing**

@@ -106,6 +106,9 @@ class BaseMixin(_MixinBase):
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
                 ``(actual, expected) -> bool`` predicate that owns matching leaves; a field-name key wins
                 over a type key.
+            ignore_null (bool): when ``True``, skip any named field the *expected* side leaves ``None``
+                (a partial expected/template), at any depth.  Only the expected side is skipped, so an
+                unexpectedly ``None`` actual field is still reported.  Defaults to ``False``.
 
         Examples:
             Usage:
@@ -215,7 +218,9 @@ class BaseMixin(_MixinBase):
         else:
             ignore = kwargs.get("ignore")
             include = kwargs.get("include")
-            config = _build_compare_config(kwargs.get("tolerance"), kwargs.get("comparators"))
+            config = _build_compare_config(
+                kwargs.get("tolerance"), kwargs.get("comparators"), kwargs.get("ignore_null", False)
+            )
 
         operand = _ambiguous_array_operand(self.val, other)
         if operand is not None:
