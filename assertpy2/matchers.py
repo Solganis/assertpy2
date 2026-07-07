@@ -495,9 +495,16 @@ class ContainsStringMatcher(BaseMatcher):
 class MatchesRegexMatcher(BaseMatcher):
     def __init__(self, pattern: str):
         self.pattern = pattern
+        self._compiled: re.Pattern[str] | None = None
 
     def matches(self, value: Any) -> bool:
-        return isinstance(value, str) and re.search(self.pattern, value) is not None
+        if not isinstance(value, str):
+            return False
+        if self._compiled is None:
+            # compile on first use so a reused matcher (each/filtered_on) skips the re-cache lookup per
+            # element; a bad pattern still raises here, on first matches(), exactly as re.search did
+            self._compiled = re.compile(self.pattern)
+        return self._compiled.search(value) is not None
 
     def describe(self) -> str:
         return f"a string matching pattern <{self.pattern}>"
