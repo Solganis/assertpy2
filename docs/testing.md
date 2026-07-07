@@ -242,6 +242,33 @@ Matching is by `isinstance` (subclasses included), the registry is consulted bef
 a later registration wins. The `decode` half runs your own code on load, so it is a trusted, explicit
 opt-in - unlike the automatic instance decode, which never imports.
 
+### Contract snapshots
+
+`snapshot()` compares exact values, so a response full of generated ids and timestamps needs `ignore`
+or `placeholders` to stay stable. When you care about the response's *shape* rather than its values,
+reach for `matches_contract_snapshot()`: it records the structure - paths and type categories, never
+values - and on later runs fails only on **structural** drift (a field added, removed, or retyped).
+
+```python
+assert_that(response.json()).matches_contract_snapshot()
+```
+
+It is value-tolerant by construction, so dynamic ids, timestamps, and amounts (and `5` vs `5.0`) change
+freely; a real contract change fails with the drifted paths:
+
+```text
+Expected <{...}> to match contract snapshot <...>, but the structure drifted:
+  + promo_code
+  ~ id number -> str
+```
+
+No hand-written model is needed - the contract is inferred from the first response, and it shares the
+same storage, update mode, and CI mode as `snapshot()`. The model-driven counterpart is
+[`assert_conforms(..., exact=True)`](type-safety.md#contract-drift-with-exacttrue): reach for that when
+you already have a pydantic model. Because a contract is inferred from a single observation it cannot
+know which fields are optional, so a legitimately sometimes-absent field reads as `removed`; re-record
+with update mode when the contract really changed.
+
 ### Shape placeholders
 
 `comparators` and `ignore` make the *comparison* tolerate volatile fields, but the golden still stores

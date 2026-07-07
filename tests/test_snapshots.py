@@ -900,3 +900,89 @@ def test_file_lock_serializes_concurrent_writes(tmp_path):
     with open(target) as fp:
         final = json.load(fp)
     assert_that(final).is_length(15)  # every writer's entry survived - no lost updates
+
+
+_CONTRACT_SAMPLE = {"id": 1, "total": 5, "created": None, "customer": {"name": "A"}, "items": [{"sku": "X", "qty": 1}]}
+
+
+class TestContractSnapshot:
+    def test_first_run_creates_and_warns(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning, match="captured the shape"):
+            assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-first", path=str(tmp_path))
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_value_tolerant_same_structure_passes(self, tmp_path):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-tol", path=str(tmp_path))
+        changed = {"id": 999, "total": 8.75, "created": "2026-07-06", "customer": {"name": "Z"}, "items": []}
+        assert_that(changed).matches_contract_snapshot(id="c-tol", path=str(tmp_path))  # values differ, shape same
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_added_field_drift_fails_with_report(self, tmp_path):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-add", path=str(tmp_path))
+        grew = {**_CONTRACT_SAMPLE, "promo": "X", "customer": {"name": "A", "vip": True}}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(grew).matches_contract_snapshot(id="c-add", path=str(tmp_path))
+        message = str(exc_info.value)
+        assert_that(message).contains("structure").contains("+ promo").contains("+ customer.vip")
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_removed_and_retyped_drift_fails(self, tmp_path):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-rr", path=str(tmp_path))
+        shrank = {k: v for k, v in _CONTRACT_SAMPLE.items() if k != "total"}
+        with pytest.raises(AssertionError, match=r"- total"):
+            assert_that(shrank).matches_contract_snapshot(id="c-rr", path=str(tmp_path))
+        retyped = {**_CONTRACT_SAMPLE, "id": "1"}
+        with pytest.raises(AssertionError, match="number -> str"):
+            assert_that(retyped).matches_contract_snapshot(id="c-rr", path=str(tmp_path))
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_list_element_drift(self, tmp_path):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-list", path=str(tmp_path))
+        drifted = {**_CONTRACT_SAMPLE, "items": [{"sku": "X", "qty": 1, "gift": True}]}
+        with pytest.raises(AssertionError, match=r"items\[\*\]\.gift"):
+            assert_that(drifted).matches_contract_snapshot(id="c-list", path=str(tmp_path))
+
+    def test_lineno_based_create_then_compare(self, tmp_path):
+        payloads = iter([{"a": 1}, {"a": 2}])  # same line, second run compares (same shape -> passes)
+        with pytest.warns(SnapshotCreatedWarning):
+            for _ in range(2):
+                assert_that(next(payloads)).matches_contract_snapshot(path=str(tmp_path))
+
+    def test_new_line_in_existing_file_creates(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(path=str(tmp_path))
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"b": 2}).matches_contract_snapshot(path=str(tmp_path))  # same file, new sub-snap
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_update_mode_rewrites_drifted_id(self, tmp_path, monkeypatch):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-up", path=str(tmp_path))
+        grew = {**_CONTRACT_SAMPLE, "promo": "X"}
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning, match="overwrote the stored shape"):
+            assert_that(grew).matches_contract_snapshot(id="c-up", path=str(tmp_path))
+        monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE")
+        assert_that(grew).matches_contract_snapshot(id="c-up", path=str(tmp_path))  # rewritten shape now matches
+
+    def test_update_mode_rewrites_drifted_lineno(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        values = iter([{"a": 1}, {"a": 1, "b": 2}])  # both calls below share one source line
+        for expected in (SnapshotCreatedWarning, SnapshotUpdatedWarning):
+            with pytest.warns(expected):
+                assert_that(next(values)).matches_contract_snapshot(path=str(tmp_path))
+
+    @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
+    def test_update_mode_leaves_matching_untouched(self, tmp_path, monkeypatch):
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-keep", path=str(tmp_path))
+        target = os.path.join(str(tmp_path), "snap-c-keep.json")
+        before = os.path.getmtime(target)
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(
+            id="c-keep", path=str(tmp_path)
+        )  # same shape, no rewrite
+        assert_that(os.path.getmtime(target)).is_equal_to(before)
+
+    def test_ci_mode_forbids_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionError, match="CI mode forbids"):
+            assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-ci", path=str(tmp_path))
