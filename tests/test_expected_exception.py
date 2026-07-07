@@ -324,6 +324,11 @@ class TestCausedBy:
             assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(TypeError)
         assert_that(str(exc_info.value)).contains("to be caused by <TypeError>")
 
+    def test_pivot_carries_the_cause_object(self):
+        # after caused_by, raised() hands back the cause object itself, so the chain can walk deeper
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(KeyError)
+        chain.raised().is_instance_of(KeyError)
+
     def test_caused_by_without_capture_fails(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(_raise_config).caused_by(KeyError)
@@ -361,6 +366,23 @@ class TestHasRootCause:
             raise first
 
         assert_that(raise_cyclic).raises(ValueError).when_called_with().has_root_cause(KeyError)
+
+    def test_cycle_not_returning_to_head_terminates(self):
+        head = ValueError("head")
+        mid = KeyError("mid")
+        tail = TypeError("tail")
+        head.__cause__ = mid
+        mid.__cause__ = tail
+        tail.__cause__ = mid  # a mid<->tail cycle that never returns to the head
+
+        def raise_head():
+            raise head
+
+        assert_that(raise_head).raises(ValueError).when_called_with().has_root_cause(TypeError)
+
+    def test_pivot_carries_the_root_object(self):
+        chain = assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(KeyError)
+        chain.raised().is_instance_of(KeyError)
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
