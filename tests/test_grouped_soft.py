@@ -13,6 +13,14 @@ class TestGroupedSoftAssertions:
         assert_that(msg).contains("1. Expected <1>")
         assert_that(msg).contains("2. Expected <3>")
 
+    def test_grouped_report_indents_items_and_locates_them(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions() as sa, sa.group("Body"):
+            assert_that(1).is_equal_to(2)
+        report = str(exc_info.value)
+        assert_that(report).contains("\n  [Body]")  # group header at a 2-space indent
+        assert_that(report).contains("\n    1. Expected <1>")  # its item indented one level deeper
+        assert_that(report).contains("test_grouped_soft.py:")  # each grouped failure still carries its location
+
     def test_multiple_groups(self):
         with pytest.raises(AssertionError) as exc_info, soft_assertions() as sa:
             with sa.group("Headers"):

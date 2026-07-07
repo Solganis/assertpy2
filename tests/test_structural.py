@@ -561,6 +561,8 @@ class TestAssertConforms:
         with pytest.raises(AssertionError) as exc_info:
             assert_conforms({"id": "notint", "total": "x"}, order_cls)
         assert_that(str(exc_info.value)).contains("conform to <Order>").contains("int_parsing")
+        assert_that(exc_info.value.actual).is_equal_to({"id": "notint", "total": "x"})
+        assert_that(exc_info.value.expected).is_equal_to(order_cls)
 
     def test_description_is_prepended_on_failure(self):
         order_cls = self._order_model()
@@ -630,6 +632,8 @@ class TestAssertConformsExact:
         with pytest.raises(AssertionError) as exc_info:
             assert_conforms(grew, order_cls, exact=True)
         assert_that(str(exc_info.value)).contains("conform exactly").contains("promo_code")
+        assert_that(exc_info.value.actual).is_equal_to(grew)
+        assert_that(exc_info.value.expected).is_equal_to(order_cls)
 
     def test_exact_nested_and_list_drift_paths(self):
         order_cls = self._models()
@@ -685,6 +689,8 @@ class TestAssertConformsExact:
         with pytest.raises(AssertionError) as exc_info:
             assert_conforms(payloads, order_cls, each=True)
         assert_that(str(exc_info.value)).contains("item [1]").contains("to conform")
+        assert_that(exc_info.value.actual).is_equal_to(payloads)
+        assert_that(exc_info.value.expected).is_equal_to(order_cls)
 
     def test_each_exact_drift_carries_the_element_index(self):
         order_cls = self._models()
@@ -692,6 +698,8 @@ class TestAssertConformsExact:
         with pytest.raises(AssertionError) as exc_info:
             assert_conforms(payloads, order_cls, each=True, exact=True)
         assert_that(str(exc_info.value)).contains("[1].promo")
+        assert_that(exc_info.value.actual).is_equal_to(payloads)
+        assert_that(exc_info.value.expected).is_equal_to(order_cls)
 
     def test_each_exact_clean_list_passes(self):
         order_cls = self._models()
