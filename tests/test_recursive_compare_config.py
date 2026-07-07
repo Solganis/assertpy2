@@ -272,3 +272,44 @@ class TestNoConfigUnchanged:
     def test_plain_unequal_scalar_fails(self):
         with pytest.raises(AssertionFailure):
             assert_that(1).is_equal_to(2)
+
+
+@dataclass
+class OptUser:
+    name: str
+    age: int | None = None
+    score: float | None = None
+
+
+class TestIgnoreNull:
+    def test_object_expected_null_field_ignored(self):
+        assert_that(OptUser("A", 30, 9.5)).is_equal_to(OptUser("A"), ignore_null=True)
+
+    def test_object_non_null_field_still_compared(self):
+        with pytest.raises(AssertionFailure):
+            assert_that(OptUser("A", 30)).is_equal_to(OptUser("B", 30), ignore_null=True)
+
+    def test_dict_expected_null_value_ignored(self):
+        assert_that({"a": 1, "b": 5}).is_equal_to({"a": 1, "b": None}, ignore_null=True)
+
+    def test_actual_null_vs_expected_value_not_masked(self):
+        # safety: only expected-None fields are skipped, so an unexpectedly-None actual is still caught
+        with pytest.raises(AssertionFailure):
+            assert_that(OptUser("A", None)).is_equal_to(OptUser("A", 30), ignore_null=True)
+
+    def test_nested_expected_null_field_ignored(self):
+        assert_that({"user": {"name": "A", "age": 30}}).is_equal_to(
+            {"user": {"name": "A", "age": None}}, ignore_null=True
+        )
+
+    def test_list_elements_are_not_null_fields(self):
+        # a None *element* has no field name, so ignore_null must not skip it
+        with pytest.raises(AssertionFailure):
+            assert_that([1, 5]).is_equal_to([1, None], ignore_null=True)
+
+    def test_combined_with_tolerance(self):
+        assert_that(OptUser("A", 30, 1.0)).is_equal_to(OptUser("A", None, 1.0001), ignore_null=True, tolerance=0.001)
+
+    def test_ignore_null_not_a_bool_fails(self):
+        with pytest.raises(TypeError, match="ignore_null"):
+            assert_that({}).is_equal_to({}, ignore_null="yes")

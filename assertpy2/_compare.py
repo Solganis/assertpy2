@@ -31,20 +31,25 @@ class _CompareConfig:
     """Tolerance and custom comparators for a single ``is_equal_to`` call.
 
     ``tolerance`` is an absolute tolerance applied to real-number leaves; ``comparators`` maps a ``type`` or
-    an immediate field name to a ``(actual, expected) -> bool`` predicate that owns matching leaves.
+    an immediate field name to a ``(actual, expected) -> bool`` predicate that owns matching leaves;
+    ``ignore_null`` skips a named field whenever the *expected* side leaves it ``None``.
     """
 
     tolerance: float | None = None
     comparators: dict[object, Callable[[object, object], bool]] | None = None
+    ignore_null: bool = False
 
 
-def _build_compare_config(tolerance, comparators) -> _CompareConfig | None:
-    """Validate the ``is_equal_to`` ``tolerance``/``comparators`` kwargs and build a config (``None`` if neither).
+def _build_compare_config(tolerance, comparators, ignore_null=False) -> _CompareConfig | None:
+    """Validate the ``is_equal_to`` ``tolerance``/``comparators``/``ignore_null`` kwargs and build a config.
 
-    ``tolerance`` must be a non-negative real number (not ``bool``/``complex``/``NaN``); ``comparators`` must be a
-    dict of ``(actual, expected) -> bool`` callables keyed by ``type`` or field name.
+    Returns ``None`` when none are set.  ``tolerance`` must be a non-negative real number (not
+    ``bool``/``complex``/``NaN``); ``comparators`` must be a dict of ``(actual, expected) -> bool`` callables
+    keyed by ``type`` or field name; ``ignore_null`` must be a bool.
     """
-    if tolerance is None and comparators is None:
+    if ignore_null is not False and ignore_null is not True:
+        raise TypeError("given ignore_null arg must be a bool")
+    if tolerance is None and comparators is None and not ignore_null:
         return None
     if tolerance is not None:
         if isinstance(tolerance, bool) or not isinstance(tolerance, numbers.Number) or isinstance(tolerance, complex):
@@ -59,7 +64,7 @@ def _build_compare_config(tolerance, comparators) -> _CompareConfig | None:
         for comparator in comparators.values():
             if not callable(comparator):
                 raise TypeError("each comparator must be callable")
-    return _CompareConfig(tolerance=tolerance, comparators=comparators)
+    return _CompareConfig(tolerance=tolerance, comparators=comparators, ignore_null=ignore_null)
 
 
 def _ambiguous_array_operand(value: object, other: object) -> object | None:
@@ -208,6 +213,8 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
     never recursed into.
     """
     if config is not None:
+        if config.ignore_null and field is not None and expected is None:
+            return "equal"  # a named field the expected side leaves None is not compared
         comparator = _resolve_comparator(actual, config, field=field)
         if comparator is not None:
             return "equal" if comparator(actual, expected) else "leaf"

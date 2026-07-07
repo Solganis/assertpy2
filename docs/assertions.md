@@ -228,6 +228,15 @@ Use `comparators` to change *how* a field or type is compared; to drop a field f
 entirely, use `ignore` (above) rather than an always-true comparator (`ignore` also handles fields missing
 on one side or with incomparable types).
 
+`ignore_null=True` skips any named field the **expected** side leaves `None`, at any depth - handy for a
+partial expected/template. Only the expected side is skipped, so an unexpectedly `None` *actual* field is
+still reported (never masked):
+
+```python
+# compare only the fields the expected template sets; age and address, left None, are ignored
+assert_that(user).is_equal_to(User(name="Alice"), ignore_null=True)
+```
+
 Sequence elements have no field name, so a `comparators` field-name key does not apply to them (use a type
 key or `tolerance`); sets compare by standard equality.
 
