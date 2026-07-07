@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(42), _NumericAssertion[int])
     assert_type(assert_that(3.14), _NumericAssertion[float])
     assert_type(assert_that(complex(1, 2)), _NumericAssertion[complex])
-    assert_type(assert_that({"key": "value"}), _DictAssertion)
+    assert_type(assert_that({"key": "value"}), _DictAssertion[str, str])
     assert_type(assert_that(["a", "b"]), _IterableAssertion[str])
     assert_type(assert_that(("a", "b")), _IterableAssertion[str])
     assert_type(assert_that({"a", "b"}), _IterableAssertion[str])
@@ -47,8 +47,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.date(2026, 1, 1)), _DateAssertion)
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateAssertion)
     assert_type(assert_that(pathlib.Path("/tmp")), _PathAssertion)
-    assert_type(assert_that(b"raw"), _BytesAssertion)
-    assert_type(assert_that(bytearray(b"raw")), _BytesAssertion)
+    assert_type(assert_that(b"raw"), _BytesAssertion[bytes])
+    assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])
 
@@ -59,16 +59,18 @@ if TYPE_CHECKING:
     assert_type(assert_that([1, 2]).has_same_size_as((3, 4)), _IterableAssertion[int])
     assert_type(assert_that("ab").contains_only_once("a"), _StringAssertion)
     assert_type(assert_that("ab").has_same_size_as("cd"), _StringAssertion)
-    assert_type(assert_that({"k": 1}).has_same_size_as({"j": 2}), _DictAssertion)
-    assert_type(assert_that(b"ab").has_same_size_as(b"cd"), _BytesAssertion)
+    assert_type(assert_that({"k": 1}).has_same_size_as({"j": 2}), _DictAssertion[str, int])
+    assert_type(assert_that(b"ab").has_same_size_as(b"cd"), _BytesAssertion[bytes])
 
     # The recursive leaf assertions live on the core protocol, so they keep each value's own type.
-    assert_type(assert_that({"k": 1}).all_fields_satisfy(lambda x: x > 0), _DictAssertion)
+    assert_type(assert_that({"k": 1}).all_fields_satisfy(lambda x: x > 0), _DictAssertion[str, int])
     assert_type(assert_that(42).has_no_none_fields(), _NumericAssertion[int])
 
     # is_equal_to keeps its protocol with the recursive-comparison kwargs.
-    assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion)
-    assert_type(assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion)
+    assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion[str, float])
+    assert_type(
+        assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion[str, int]
+    )
 
     # Ordering is declared wherever the runtime supports it (assertpy#128): lexicographic on str and
     # bytes/bytearray, chronological on dates (including is_between; is_close_to stays datetime-only
@@ -77,10 +79,10 @@ if TYPE_CHECKING:
     assert_type(assert_that("apple").is_less_than("banana"), _StringAssertion)
     assert_type(assert_that("b").is_greater_than_or_equal_to("a"), _StringAssertion)
     assert_type(assert_that("a").is_less_than_or_equal_to("b"), _StringAssertion)
-    assert_type(assert_that(b"b").is_greater_than(b"a"), _BytesAssertion)
-    assert_type(assert_that(b"a").is_less_than(bytearray(b"b")), _BytesAssertion)
-    assert_type(assert_that(bytearray(b"b")).is_greater_than_or_equal_to(b"a"), _BytesAssertion)
-    assert_type(assert_that(b"a").is_less_than_or_equal_to(b"b"), _BytesAssertion)
+    assert_type(assert_that(b"b").is_greater_than(b"a"), _BytesAssertion[bytes])
+    assert_type(assert_that(b"a").is_less_than(bytearray(b"b")), _BytesAssertion[bytes])
+    assert_type(assert_that(bytearray(b"b")).is_greater_than_or_equal_to(b"a"), _BytesAssertion[bytearray])
+    assert_type(assert_that(b"a").is_less_than_or_equal_to(b"b"), _BytesAssertion[bytes])
     assert_type(assert_that(datetime.date(2026, 1, 2)).is_greater_than(datetime.date(2026, 1, 1)), _DateAssertion)
     assert_type(assert_that(datetime.date(2026, 1, 1)).is_less_than(datetime.date(2026, 1, 2)), _DateAssertion)
     assert_type(
@@ -104,8 +106,8 @@ if TYPE_CHECKING:
     )
     assert_type(assert_that([1, 2]).has_size_greater_than(1), _IterableAssertion[int])
     assert_type(assert_that("ab").has_size_less_than(3), _StringAssertion)
-    assert_type(assert_that({"k": 1}).has_size_between(0, 2), _DictAssertion)
-    assert_type(assert_that(b"ab").has_size_between(1, 2), _BytesAssertion)
+    assert_type(assert_that({"k": 1}).has_size_between(0, 2), _DictAssertion[str, int])
+    assert_type(assert_that(b"ab").has_size_between(1, 2), _BytesAssertion[bytes])
     assert_type(assert_that("ab").is_length_between(1, 3), _StringAssertion)
     assert_type(assert_that(42).is_length_between(0, 9), _NumericAssertion[int])
     assert_type(assert_that("a b").is_equal_to_ignoring_whitespace("ab"), _StringAssertion)
@@ -173,9 +175,9 @@ if TYPE_CHECKING:
     # `.value` on the typed protocols returns each protocol's value-family type.
     assert_type(assert_that("text").value, str)
     assert_type(assert_that(42).value, int)
-    assert_type(assert_that({"key": 1}).value, dict[Any, Any])
+    assert_type(assert_that({"key": 1}).value, dict[str, int])
     assert_type(assert_that([1, 2]).value, list[int] | tuple[int, ...] | set[int] | frozenset[int])
-    assert_type(assert_that(b"raw").value, bytes | bytearray)
+    assert_type(assert_that(b"raw").value, bytes)
     assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., object])

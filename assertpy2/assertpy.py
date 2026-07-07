@@ -60,6 +60,8 @@ _T = TypeVar("_T")
 if TYPE_CHECKING:
     _U = TypeVar("_U")
     _E = TypeVar("_E")  # element type of a collection, so first()/element()/... narrow to it
+    _K = TypeVar("_K")  # dict key type, so .value keeps dict[K, V]
+    _V = TypeVar("_V")  # dict value type
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
@@ -225,7 +227,7 @@ def assert_that(val: complex, description: str = "") -> _NumericAssertion[comple
 
 
 @overload
-def assert_that(val: dict, description: str = "") -> _DictAssertion: ...
+def assert_that(val: dict[_K, _V], description: str = "") -> _DictAssertion[_K, _V]: ...
 
 
 @overload
@@ -245,7 +247,11 @@ def assert_that(val: pathlib.Path, description: str = "") -> _PathAssertion: ...
 
 
 @overload
-def assert_that(val: bytes | bytearray, description: str = "") -> _BytesAssertion: ...
+def assert_that(val: bytes, description: str = "") -> _BytesAssertion[bytes]: ...
+
+
+@overload
+def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytearray]: ...
 
 
 @overload
