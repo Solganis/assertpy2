@@ -56,6 +56,16 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     [:octicons-arrow-right-24: Testing](testing.md)
 
+-   :material-alert-circle:{ .lg .middle } __Expected exceptions__
+
+    ---
+
+    `raises().when_called_with()`, then assert on the message, walk the cause chain (`caused_by()`,
+    `has_root_cause()`), match an `ExceptionGroup` (`contains_error()`), or pivot to the exception object
+    (`raised()`).
+
+    [:octicons-arrow-right-24: Errors & reporting](errors.md#expected-exceptions)
+
 -   :material-format-list-checks:{ .lg .middle } __Structured failures__
 
     ---
