@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <b>The fully-typed fluent assertion library for Python.</b><br>
-  A modern, batteries-included fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>.
+  <b>The fully-typed fluent assertion library for Python</b><br>
+  A modern, batteries-included fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>
 </p>
 
 <p align="center">
