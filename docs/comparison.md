@@ -1,14 +1,14 @@
 # Comparison
 
 assertpy2 is the only library compared here that gives you the fluent, matcher, and `==` styles in a
-single import, then goes further with static typing, thread- and async-safe soft assertions, async
+single import, then goes further with type-narrowing assertions, contract testing, thread- and async-safe soft assertions, async
 polling, and structured failures. The tables below are a side-by-side comparison with the
 common alternatives.
 
 !!! success "In short"
     assertpy2 unifies the fluent, matcher, and `==` styles in one typed package,
     then adds thread- and async-safe soft assertions, async polling, structured failures, and rich
-    pytest diffs. It ships **36 composable matchers** and **over 100 assertion methods** across **12 value types**,
+    pytest diffs. It ships **39 composable matchers** and **over 100 assertion methods** across **12 value types**,
     with no runtime dependencies on Python 3.11+. One import, all three styles.
 
 ## The approaches
@@ -19,7 +19,7 @@ common alternatives.
 - **PyHamcrest** is a matcher framework: `assert_that(value, is_(greater_than(5)))`. assertpy2 provides
   the same composable-matcher model (`&`, `|`, `~`, custom matchers) inside a typed fluent API.
 - **assertpy** (the original) introduced the fluent `assert_that(x).is_...()` chaining this project is
-  built on. It is no longer actively maintained (last release `1.1`) and has no static typing. assertpy2 is
+  built on. Its last release is `1.1` (2020) and it has no static typing. assertpy2 is
   its successor and substantially expands the assertion set - adding the entire bytes
   family, more string and collection assertions, structural matching, the collection pipeline, JSON
   Path/Schema, regex group extraction, async polling, universal negation, and composable matchers on top
@@ -138,6 +138,8 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Mix styles in one suite | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
 | Static typing (`py.typed`, overloads) | n/a | No | No | **Typed** | **[Yes](type-safety.md)** |
 | Autocomplete filtered by value type | No | No | No | No | **[Yes](type-safety.md#type-aware-autocomplete)** |
+| Typed narrowing (the assertion returns the value, narrowed) | No | No | No | No | **[Yes](type-safety.md#typed-narrowing-with-value)** |
+| Contract testing (validate a payload and narrow to the model) | No | No | No | No | **[Yes](type-safety.md#contract-narrowing-with-assert_conforms)** |
 | Fluent chaining | No | No | **Yes** | No | **[Yes](fluent.md#chaining)** |
 | Composable matchers | No | **Yes** | No | **Yes** | **[Yes](matchers.md)** |
 | Works inside plain `==` | n/a | No | No | **Yes** | **[Yes](matchers.md)** |
@@ -147,7 +149,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Structural matching (nested) | manual | partial | No | **Yes** | **[Yes](matchers.md#structural-matching)** |
-| Recursive comparison (tolerance / comparators) | `approx` | No | No | partial | **[Yes](assertions.md#recursive-comparison-tolerance--custom-comparators)** |
+| Recursive comparison (tolerance / comparators / null-skip) | `approx` | No | No | partial | **[Yes](assertions.md#recursive-comparison-tolerance--custom-comparators)** |
 | Collection / ordering assertions | manual | **Yes** | **Yes** | **Yes** | **[Yes](assertions.md#lists)** |
 | Negation of any assertion (`.not_`) | manual | partial | No | partial | **[Yes](fluent.md#universal-negation)** |
 | Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](fluent.md#collection-pipeline)** |
@@ -155,6 +157,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Regex group extraction | manual | No | No | No | **[Yes](data.md#regex-group-extraction)** |
 | JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](data.md)** |
 | File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](assertions.md#files)** |
+| Exception cause chains / groups (`caused_by`, `contains_error`) | manual | No | No | No | **[Yes](errors.md#expected-exceptions)** |
 | Data frame / array equality (pandas/polars/numpy) | manual | No | No | No | **[Yes](integrations.md#data-frames-and-arrays)** |
 | Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](extending.md)** |
 
@@ -165,7 +168,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Soft assertions | plugin | No | **Yes** | No | **[Yes](testing.md#soft-assertions)** |
 | Soft assertions thread-safe **and** async-safe | n/a | n/a | No | n/a | **[Yes](testing.md#soft-assertions)** |
 | Grouped soft assertions (`sa.group`) | No | No | No | No | **[Yes](testing.md#grouped-soft-assertions)** |
-| Async / eventual polling (`eventually()`) | No | No | No | No | **[Yes](testing.md#async-assertions)** |
+| Async / sync polling (`eventually()` / `eventually_sync()`) | No | No | No | No | **[Yes](testing.md#async-assertions)** |
 | Structured failure data (`.actual` / `.expected` / `.diff`) | No | No | No | No | **[Yes](errors.md#structured-errors)** |
 | Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](errors.md#rich-pytest-diffs)** |
 | Snapshot testing | plugin | No | **Yes** | No | **[Yes](testing.md#snapshot-testing)** |
@@ -230,14 +233,19 @@ Across the columns above, assertpy2 is the only option that:
   juggling of libraries;
 - is statically typed: `@overload` protocols and `py.typed` give autocomplete filtered by the value's
   type and usage verified by a type checker before the test runs;
+- **returns the value it checked, statically narrowed** (`.value` after `is_not_none()` / `is_instance_of()`),
+  and validates *and* narrows a whole payload against a Pydantic model with `assert_conforms()` - neither of
+  which any other tool here does;
 - has soft assertions that are both **thread-safe and async-safe** (independent state per thread and per
   `asyncio.Task` via `contextvars`). The original assertpy's soft assertions are not thread-safe, and
   the other tools have no soft assertions at all;
-- polls for eventual consistency with `eventually()`, for async operations and reactive systems;
+- polls for eventual consistency with `eventually()` (async) and `eventually_sync()` (blocking), for async
+  operations and reactive systems;
 - attaches structured failure data (`.actual` / `.expected` / `.diff`) and renders rich, recursive
   diffs in pytest reports;
-- adds a collection pipeline, regex group extraction, dynamic `has_<name>()` assertions, snapshot
-  testing, JSON Path and Schema validation, file/date/bytes assertions, and Allure/Behave integrations.
+- adds exception cause-chain and group assertions, a collection pipeline, regex group extraction, dynamic
+  `has_<name>()` assertions, snapshot testing, JSON Path and Schema validation, file/date/bytes assertions,
+  and Allure/Behave integrations.
 
 All of that with no runtime dependencies on Python 3.11+ (one tiny backport on 3.10): breadth that
 would otherwise require
