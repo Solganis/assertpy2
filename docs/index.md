@@ -3,8 +3,8 @@
 Fluent, fully type-aware assertions for Python.
 
 `assertpy2` is a modern fork of `assertpy`: readable `assert_that(...)` chains,
-composable matchers, structural matching, soft and async assertions, and a pytest plugin that renders
-rich structural diffs on failure.
+composable matchers, structural matching, type-narrowing assertions and contract testing, soft and async
+assertions, and a pytest plugin that renders rich structural diffs on failure.
 
 ## Why assertpy2
 
@@ -19,6 +19,16 @@ rich structural diffs on failure.
     `assertpy` and most alternatives.
 
     [:octicons-arrow-right-24: Type safety](type-safety.md)
+
+-   :material-target:{ .lg .middle } __Typed narrowing & contracts__
+
+    ---
+
+    An assertion **returns the value it checked, statically narrowed** (`.value` after `is_not_none()` /
+    `is_instance_of()`), and `assert_conforms()` validates a payload against a Pydantic model and narrows
+    to it - no `cast`, no bare `assert`.
+
+    [:octicons-arrow-right-24: Typed narrowing](type-safety.md#typed-narrowing-with-value)
 
 -   :material-puzzle:{ .lg .middle } __Composable matchers__
 
@@ -41,7 +51,8 @@ rich structural diffs on failure.
 
     ---
 
-    Collect multiple failures in one run; poll for eventual consistency with `eventually()`.
+    Collect multiple failures in one run; poll for eventual consistency with `eventually()` (async) or
+    `eventually_sync()` (blocking).
 
     [:octicons-arrow-right-24: Testing](testing.md)
 

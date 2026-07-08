@@ -85,8 +85,10 @@ New capabilities the original never had, ready whenever you want them:
 
 - [Composable matchers](matchers.md) usable in `.satisfies()`, `.each()`, and plain `==`.
 - [Structural matching](matchers.md#structural-matching) for API-response shapes.
+- [Typed narrowing](type-safety.md#typed-narrowing-with-value) (`.value`) and [contract testing](type-safety.md#contract-narrowing-with-assert_conforms) (`assert_conforms()`) for typed API-response tests.
+- [Exception cause chains and groups](errors.md#expected-exceptions) (`caused_by()`, `has_root_cause()`, `contains_error()`).
 - The [collection pipeline](fluent.md#collection-pipeline) and [universal negation](fluent.md#universal-negation).
-- [Async polling](testing.md#async-assertions) with `eventually()`.
+- [Async and blocking polling](testing.md#async-assertions) with `eventually()` / `eventually_sync()`.
 - [JSON Path / Schema](data.md), [regex group extraction](data.md#regex-group-extraction), and
   [bytes assertions](assertions.md#bytes--bytearray).
 

@@ -6,9 +6,9 @@ fit the value, and a type checker rejects misuse before the test ever runs.
 
 ## Type-aware autocomplete
 
-`assert_that()` is overloaded into nine typed results - eight type-specific Protocols plus an `object`
-fallback - instead of a single `Any`. Your IDE then suggests only the methods relevant to the value you
-are testing, not all 100+:
+`assert_that()` is overloaded so each value type gets its own typed Protocol - string, numeric, collection,
+dict, date, path, bytes, and callable assertions - with a generic fallback for anything else, instead of a
+single `Any`. Your IDE then suggests only the methods relevant to the value you are testing, not all 100+:
 
 - `assert_that("hello").` → string methods: `starts_with`, `matches`, `is_alpha`, `is_lower`, ...
 - `assert_that(42).` → numeric methods: `is_positive`, `is_between`, `is_close_to`, ...
