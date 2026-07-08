@@ -106,8 +106,6 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 9 type-specific Protocols instead of one `Any`. Works in PyCharm, VS Code, and any LSP-compatible editor.
 
-See the [**Type Safety**](https://solganis.github.io/assertpy2/type-safety/) guide for the full walkthrough.
-
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
 An assertion doesn't just check a value - it hands it back, statically narrowed. `is_not_none()` strips
@@ -169,8 +167,6 @@ Returning the value it verified, statically narrowed, lets you assert and use th
 - [**Custom matchers**](https://solganis.github.io/assertpy2/matchers/#custom-matchers): `register_matcher()` for domain-specific matchers, composable with `&`, `|`, `~`.
 - [**Regex group extraction**](https://solganis.github.io/assertpy2/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
 - [**Extensions**](https://solganis.github.io/assertpy2/extending/): `add_extension()` for custom assertion methods.
-
-See the [full documentation](https://solganis.github.io/assertpy2/) for all assertion methods, examples, and advanced features.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/integrations/">Integrations</a></h2>
 
