@@ -186,7 +186,7 @@ stored value instead of failing. Each overwrite emits a `SnapshotUpdatedWarning`
 exactly which snapshots changed; matching snapshots are left untouched, and the comparison options
 (`ignore`, `tolerance`, ...) are honored when deciding whether a snapshot is stale:
 
-```console
+```bash
 pytest --assertpy2-snapshot-update
 ```
 
@@ -200,7 +200,7 @@ A first run *creates* a missing snapshot and passes - handy locally, but in CI i
 whose golden was never committed creates it in the ephemeral workspace, passes, and silently disables
 drift detection. Enable CI mode to make a missing snapshot a hard failure instead:
 
-```console
+```bash
 pytest --assertpy2-snapshot-ci
 ```
 
