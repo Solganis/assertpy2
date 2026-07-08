@@ -18,5 +18,12 @@
    equivalent of the ~90% browser zoom this document reads best at - while still
    letting readers zoom on top. */
 :root {
-  font-size: 122%;
+  font-size: 124%;
+}
+/* Material renders admonition (!!! note) and <details> content smaller than body
+   (.64rem vs ~.7rem); the root reduction above made that already-small text hard to
+   read. Lift note/details text to body size so density does not cost legibility. */
+.md-typeset .admonition,
+.md-typeset details {
+  font-size: 0.7rem;
 }
