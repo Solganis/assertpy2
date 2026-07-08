@@ -172,6 +172,21 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Warn mode (non-failing assertions) | No | No | **Yes** | No | **[Yes](errors.md#warnings-instead-of-failures)** |
 | Allure / Behave integrations | No | No | No | No | **[Yes](integrations.md)** |
 
+!!! note "On snapshot testing: where assertpy2 does and does not lead"
+    That row compares assertion libraries, not the dedicated snapshot tools - and it is worth being
+    straight about the difference. If snapshots are central to your workflow, the specialists lead that
+    niche: [syrupy](https://github.com/syrupy-project/syrupy) for external-file snapshots, and
+    [inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source snapshots (Pydantic-endorsed,
+    with richer `snapshot()` operator semantics like `<=` and `in`).
+
+    assertpy2's snapshot is an external-file (syrupy-family) convenience **bundled with the rest of your
+    assertions**, so an occasional snapshot needs no extra tool and no extra dependency - it is not a
+    category-leading snapshot engine, and it does not try to be. Where it is genuinely distinct is
+    [`matches_contract_snapshot()`](testing.md#contract-snapshots): a value-tolerant *structural* snapshot
+    (paths and type categories, not values) that neither syrupy nor inline-snapshot offers. Rule of thumb:
+    reach for a specialist when snapshots are the point; reach for assertpy2's when you want a snapshot
+    inline with everything else, or when you want structural (contract) regression rather than value-exact.
+
 ## Project health
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
