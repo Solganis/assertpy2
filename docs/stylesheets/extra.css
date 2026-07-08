@@ -11,3 +11,12 @@
   --md-typeset-a-color:           #b388ff;  /* links */
   --md-accent-fg-color:           #cbb2ff;  /* link hover / interactive accent */
 }
+
+/* Global type density. Material scales the whole page (text, headings, spacing,
+   admonition padding) off an enlarged root (~125%), which reads airy at 100%
+   zoom. Tightening the root scales everything down proportionally - the native
+   equivalent of the ~90% browser zoom this document reads best at - while still
+   letting readers zoom on top. */
+:root {
+  font-size: 122%;
+}
