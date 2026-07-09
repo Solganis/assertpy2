@@ -4,9 +4,7 @@
     <source media="(prefers-color-scheme: light)" srcset="docs/logo.svg">
     <img src="docs/logo.svg" alt="assertpy2" width="280">
   </picture>
-</p>
-
-<p align="center">
+  <br>
   <b>The fully-typed fluent assertion library for Python</b><br>
   A modern, batteries-included fork of <a href="https://github.com/assertpy/assertpy">assertpy</a>
 </p>
