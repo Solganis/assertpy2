@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Final, NamedTuple
 from ._compare import _build_compare_config
 from ._contract import shape, shape_diff
 from ._mixin_base import _MixinBase
+from .errors import _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
@@ -739,7 +740,7 @@ class SnapshotMixin(_MixinBase):
             drift = shape_diff(stored, contract)
             if drift:
                 return self.error(
-                    f"Expected <{self.val}> to match contract snapshot <{snapname}>, but the structure"
+                    f"Expected <{_truncated(str(self.val))}> to match contract snapshot <{snapname}>, but the structure"
                     f" drifted:\n{_format_shape_drift(drift)}",
                     actual=self.val,
                 )
