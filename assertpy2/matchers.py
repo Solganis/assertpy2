@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import threading
 import uuid as _uuid_mod
@@ -261,14 +262,26 @@ class BetweenMatcher(BaseMatcher):
         return f"a value between <{self.low}> and <{self.high}>"
 
 
+def _is_nan(value: Any) -> bool:
+    """Whether value is a NaN float/Decimal; False for operands math.isnan rejects (datetime, str)."""
+    try:
+        return math.isnan(value)
+    except (TypeError, ValueError):
+        return False
+
+
 class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
         self.expected = expected
         self.tolerance = tolerance
 
     def matches(self, value: Any) -> bool:
+        # mirror is_close_to: NaN is never close, and a band comparison (not abs) so inf is close to inf.
+        # Arithmetic is anchored on ``value`` (the band edges), so inf/inf never forms ``inf - inf`` (NaN).
+        if _is_nan(value) or _is_nan(self.expected) or _is_nan(self.tolerance):
+            return False
         try:
-            return bool(abs(value - self.expected) <= self.tolerance)
+            return not (value - self.tolerance > self.expected or value + self.tolerance < self.expected)
         except TypeError:
             return False
 
