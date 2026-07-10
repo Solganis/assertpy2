@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from math import inf, nan
 
 import pytest
 
@@ -162,6 +163,18 @@ class TestCloseToMatcher:
 
     def test_describe(self):
         assert_that(match.close_to(10.0, 0.5).describe()).is_equal_to("a value within <0.5> of <10.0>")
+
+    def test_infinity_is_close_to_itself_like_fluent(self):
+        # parity with assert_that(inf).is_close_to(inf, 1), which passes: both APIs must agree
+        assert_that(match.close_to(inf, 1).matches(inf)).is_true()
+        assert_that(match.close_to(inf, 1).matches(5.0)).is_false()
+
+    def test_nan_is_never_close(self):
+        assert_that(match.close_to(5.0, 1).matches(nan)).is_false()
+        assert_that(match.close_to(nan, 1).matches(5.0)).is_false()
+
+    def test_nan_tolerance_never_matches(self):
+        assert_that(match.close_to(5.0, nan).matches(5.0)).is_false()
 
 
 class TestOrderingMatchersIncompatibleTypes:
