@@ -13,12 +13,11 @@
 }
 
 /* Global type density. Material scales the whole page (text, headings, spacing,
-   admonition padding) off an enlarged root (~125%), which reads airy at 100%
-   zoom. Tightening the root scales everything down proportionally - the native
-   equivalent of the ~90% browser zoom this document reads best at - while still
-   letting readers zoom on top. */
+   admonition padding) off an enlarged root (~125% by default). Nudge it up a
+   touch for a more airy read - everything scales proportionally, and readers can
+   still zoom on top. */
 :root {
-  font-size: 124%;
+  font-size: 130%;
 }
 /* Material renders admonition (!!! note) and <details> content smaller than body
    (.64rem vs ~.7rem); the root reduction above made that already-small text hard to
