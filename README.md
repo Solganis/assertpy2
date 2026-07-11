@@ -46,12 +46,12 @@ def test_user():
     assert_that(user).has_name("Alice")
 ```
 
-Browse the [full documentation](https://solganis.github.io/assertpy2/) for every assertion, matcher, and integration.
+The [full documentation](https://solganis.github.io/assertpy2/) covers every assertion, matcher, and integration.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/comparison/">Why fluent assertions?</a></h2>
 
-A fluent chain reads as one intent and replaces several bare asserts - and your IDE
-offers only the [methods that fit the value's type](https://solganis.github.io/assertpy2/type-safety/):
+A fluent chain reads as one intent and replaces several bare asserts -<br>
+and your IDE offers only the [methods that fit the value's type](https://solganis.github.io/assertpy2/type-safety/):
 
 ```python
 # bare - three statements, no autocomplete help
@@ -63,8 +63,8 @@ assert "admin" in items
 assert_that(items).is_instance_of(list).is_length(3).contains("admin")
 ```
 
-The real difference shows up when a test fails. Here a nested response has two wrong
-fields. Plain `assert` dumps both structures and leaves you to find them:
+The real difference shows up when a test fails. Here a nested response has two wrong fields.<br>
+Plain `assert` dumps both structures and leaves you to find them:
 
 ```text
 assert response == expected
@@ -93,7 +93,7 @@ Recursive diffs cover dicts, dataclasses, namedtuples, and Pydantic models - and
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/type-safety/">Type-aware autocomplete</a></h2>
 
-`assert_that()` uses `@overload` to return type-specific Protocols.
+`assert_that()` uses `@overload` to return type-specific Protocols.<br>
 Your IDE shows only methods relevant to the value you're testing, not all 100+:
 
 - `assert_that("hello").` &rarr; string methods: `starts_with`, `matches`, `is_alpha`, ...
@@ -102,7 +102,8 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 - `assert_that(my_dict).` &rarr; dict methods: `contains_key`, `contains_entry`, `has_json_path`, ...
 - `assert_that(b"\x89PNG").` &rarr; bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
 
-9 type-specific Protocols instead of one `Any`. Works in PyCharm, VS Code, and any LSP-compatible editor.
+9 type-specific Protocols instead of one `Any`.<br>
+Works in PyCharm, VS Code, and any LSP-compatible editor.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
@@ -115,13 +116,15 @@ order = assert_that(repo.find(42)).is_not_none().is_instance_of(PaidOrder).value
 order.refund()  # statically PaidOrder - verified by ty, mypy, and pyright
 ```
 
-For API tests, [`assert_conforms()`](https://solganis.github.io/assertpy2/type-safety/#contract-narrowing-with-assert_conforms) validates a raw payload against a Pydantic model and narrows the chain to it, with `exact=True` catching silent contract drift:
+For API tests, [`assert_conforms()`](https://solganis.github.io/assertpy2/type-safety/#contract-narrowing-with-assert_conforms) validates a raw payload against a Pydantic model and narrows the chain to it,<br>
+with `exact=True` catching silent contract drift:
 
 ```python
 data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 ```
 
-Returning the value it verified, statically narrowed, lets you assert and use the result in a single step.
+Returning the value it verified, statically narrowed,<br>
+lets you assert and use the result in a single step.
 
 <h2 align="center">Features</h2>
 
@@ -167,9 +170,6 @@ Returning the value it verified, statically narrowed, lets you assert and use th
 - [**Extensions**](https://solganis.github.io/assertpy2/extending/): `add_extension()` for custom assertion methods.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/integrations/">Integrations</a></h2>
-
-Optional adapters, each its own extra; full configuration and examples are in the
-[Integrations guide](https://solganis.github.io/assertpy2/integrations/).
 
 - [**Allure**](https://solganis.github.io/assertpy2/integrations/#allure) (`pip install assertpy2[allure]`): the pytest plugin auto-attaches structured diff and actual/expected data to Allure reports, in three configurable modes.
 - [**Behave**](https://solganis.github.io/assertpy2/integrations/#behave) (`pip install assertpy2[behave]`): ready-made parameter types (`PositiveInt`, `NonEmptyString`, ...) for step definitions like `{age:PositiveInt}`.
