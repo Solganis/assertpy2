@@ -26,3 +26,14 @@
 .md-typeset details {
   font-size: 0.7rem;
 }
+
+/* Prose wrapping. Let the browser avoid orphans (a lone word on the last line) rather
+   than needing a manual <br> per paragraph, and keep an inline code span whole instead
+   of splitting it mid-token across a line break. */
+.md-typeset p,
+.md-typeset li {
+  text-wrap: pretty;
+}
+.md-typeset :not(pre) > code {
+  white-space: nowrap;
+}
