@@ -10,20 +10,16 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Solganis/assertpy2/actions/workflows/ci.yml"><img src="https://github.com/Solganis/assertpy2/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Solganis/assertpy2/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Solganis/assertpy2/ci.yml?branch=main&amp;label=CI" alt="CI"></a>
+  <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/v/assertpy2" alt="PyPI version"></a>
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/pyversions/assertpy2" alt="Python"></a>
-  <a href="https://codecov.io/gh/Solganis/assertpy2"><img src="https://codecov.io/gh/Solganis/assertpy2/graph/badge.svg" alt="Coverage"></a>
   <a href="https://pepy.tech/projects/assertpy2"><img src="https://static.pepy.tech/badge/assertpy2/month" alt="Downloads"></a>
   <br>
-  <a href="https://solganis.github.io/assertpy2/"><img src="https://img.shields.io/badge/Docs-online-black" alt="Documentation"></a>
-  <a href="https://docs.astral.sh/ruff/"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
-  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
-  <a href="https://github.com/astral-sh/ty"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty"></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://api.scorecard.dev/projects/github.com/Solganis/assertpy2/badge" alt="OpenSSF Scorecard"></a>
-  <a href="https://www.bestpractices.dev/projects/12990"><img src="https://www.bestpractices.dev/projects/12990/badge" alt="OpenSSF Best Practices"></a>
-  <br>
   <a href="https://solganis.github.io/assertpy2/type-safety/"><img src="https://img.shields.io/badge/type--checked-ty%20%7C%20mypy%20%7C%20pyright-2ea043" alt="public overloads type-checked by ty, mypy --strict, and pyright with zero suppressions"></a>
+  <a href="https://solganis.github.io/assertpy2/"><img src="https://img.shields.io/badge/docs-online-black" alt="Documentation"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://img.shields.io/ossf-scorecard/github.com/Solganis/assertpy2?label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/12990"><img src="https://www.bestpractices.dev/projects/12990/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
 ---
