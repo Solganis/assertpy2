@@ -101,4 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs succeeded
-        run: '[ "${{ needs.test.result }}" = "success" ] && [ "${{ needs.lint.result }}" = "success" ]'
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+        run: '[ "$TEST_RESULT" = "success" ] && [ "$LINT_RESULT" = "success" ]'
