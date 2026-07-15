@@ -43,7 +43,10 @@ jobs:
           cat > cosmic-ray.toml <<EOF
           [cosmic-ray]
           module-path = "assertpy2/${MODULE}.py"
-          timeout = 30.0
+          # Bounds each test run, including the baseline that runs the whole suite once.
+          # Must exceed the full-suite runtime under 21-way matrix contention, or the baseline
+          # spuriously times out and the module's job dies before mutating anything.
+          timeout = 120.0
           excluded-modules = []
           test-command = ".venv/bin/python -m pytest tests/ -x -q -p no:cacheprovider"
 
