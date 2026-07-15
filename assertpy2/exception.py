@@ -254,13 +254,13 @@ class ExceptionMixin(_MixinBase):
         return cast("BaseException", self._raised_exception)
 
     def _when_called_with_not_expected(self, *some_args, **some_kwargs) -> Self:
-        assert self.expected is not None
+        expected = cast("type[BaseException]", self.expected)  # when_called_with() rejects an unset expectation
         try:
             result = self.val(*some_args, **some_kwargs)
         except BaseException as e:
-            if issubclass(type(e), self.expected):
+            if issubclass(type(e), expected):
                 self.error(
-                    f"Expected <{self.val.__name__}> to not raise <{self.expected.__name__}>"
+                    f"Expected <{self.val.__name__}> to not raise <{expected.__name__}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but did raise <{type(e).__name__}>."
                 )

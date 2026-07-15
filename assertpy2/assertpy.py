@@ -141,7 +141,7 @@ def _format_soft_errors(errs: list[tuple[str | None, tuple[str, int] | None, str
         )
 
     lines = ["soft assertion failures:"]
-    current_group: str | None = object()  # ty: ignore[invalid-assignment]  # sentinel
+    current_group: str | None = None
     for counter, (group, loc, msg) in enumerate(errs, 1):
         if group != current_group:
             current_group = group
