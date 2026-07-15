@@ -63,17 +63,17 @@ The diff for that failure - and the other diff shapes - renders like this.
 **Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, Pydantic `model`, `string`, `scalar`)
 show the path with the removal in red and the addition in green - this is the diff for the example above:
 
-![Colored sequence diff: [1].name with the removal in red and the addition in green](assets/diff-sequence.svg)
+![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)
 
 **Set and contains** show extra items in red and missing items in green:
 
-![Colored set diff: extra items in red, missing items in green](assets/diff-set.svg)
+![Colored set diff: extra items in red, missing items in green](../assets/diff-set.svg)
 
 **Match** (`matches_structure()`, `satisfies()`, `each()`) shows each field's path and the predicate that
 failed, with the actual value in red - every mismatch, not just the first (no green: a predicate has no
 "addition"):
 
-![Colored match diff: each field's path, the failed predicate, and the actual value in red](assets/diff-match.svg)
+![Colored match diff: each field's path, the failed predicate, and the actual value in red](../assets/diff-match.svg)
 
 Nested structures are diffed recursively and report the exact path to the differing value (for example
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.

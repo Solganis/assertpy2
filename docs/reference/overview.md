@@ -7,7 +7,7 @@ The assertions actually available on a value are the **union of the mixins for i
 on a string (``assert_that("x")``) you can call everything on [String assertions](strings.md),
 [Containment assertions](containment.md), [Core & objects](core.md), and
 [File & path assertions](files.md). For a task-oriented view organized by value type instead, see the
-[Type assertions guide](../assertions.md).
+[Type assertions guide](../guides/assertions.md).
 
 - [Entry points](entry-points.md) - the top-level functions such as ``assert_that``, ``assert_conforms``,
   ``assert_warn``, ``soft_assertions``, and ``fail``.
@@ -20,4 +20,4 @@ on a string (``assert_that("x")``) you can call everything on [String assertions
 - [Structured failures](errors.md), [Warning assertions](warnings.md), and [Async & eventual assertions](async.md).
 
 Signatures here are the runtime implementations. How the static return type narrows per value type (the
-typed overloads that drive editor autocomplete) is explained in [Type safety](../type-safety.md).
+typed overloads that drive editor autocomplete) is explained in [Type safety](../concepts/type-safety.md).

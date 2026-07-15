@@ -18,7 +18,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     checker rejects `assert_that("foo").is_positive()` before the test runs. The core advantage over
     `assertpy` and most alternatives.
 
-    [:octicons-arrow-right-24: Type safety](type-safety.md)
+    [:octicons-arrow-right-24: Type safety](concepts/type-safety.md)
 
 -   :material-target:{ .lg .middle } __Typed narrowing & contracts__
 
@@ -28,7 +28,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     `is_instance_of()`), and `assert_conforms()` validates a payload against a Pydantic model and narrows
     to it - no `cast`, no bare `assert`.
 
-    [:octicons-arrow-right-24: Typed narrowing](type-safety.md#typed-narrowing-with-value)
+    [:octicons-arrow-right-24: Typed narrowing](concepts/type-safety.md#typed-narrowing-with-value)
 
 -   :material-puzzle:{ .lg .middle } __Composable matchers__
 
@@ -36,7 +36,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`, reusable across assertions.
 
-    [:octicons-arrow-right-24: Matchers](matchers.md)
+    [:octicons-arrow-right-24: Matchers](guides/matchers.md)
 
 -   :material-file-tree:{ .lg .middle } __Structural matching__
 
@@ -45,7 +45,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     Declarative validation of dicts, Pydantic models, and API responses, with the exact path to each
     mismatch on failure.
 
-    [:octicons-arrow-right-24: Structural matching](matchers.md#structural-matching)
+    [:octicons-arrow-right-24: Structural matching](guides/matchers.md#structural-matching)
 
 -   :material-timer-sand:{ .lg .middle } __Soft & async assertions__
 
@@ -54,7 +54,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     Collect multiple failures in one run; poll for eventual consistency with `eventually()` (async) or
     `eventually_sync()` (blocking).
 
-    [:octicons-arrow-right-24: Testing](testing.md)
+    [:octicons-arrow-right-24: Testing](guides/testing.md)
 
 -   :material-alert-circle:{ .lg .middle } __Expected exceptions__
 
@@ -64,7 +64,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     `has_root_cause()`), match an `ExceptionGroup` (`contains_error()`), or pivot to the exception object
     (`raised()`).
 
-    [:octicons-arrow-right-24: Errors & reporting](errors.md#expected-exceptions)
+    [:octicons-arrow-right-24: Errors & reporting](guides/errors.md#expected-exceptions)
 
 -   :material-format-list-checks:{ .lg .middle } __Structured failures__
 
@@ -73,7 +73,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin renders recursive
     diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
 
-    [:octicons-arrow-right-24: Errors & reporting](errors.md)
+    [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
 
 -   :material-table:{ .lg .middle } __Data frames & arrays__
 
@@ -81,7 +81,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     pandas / polars / numpy data-frame and array assertions, alongside Allure and Behave integrations.
 
-    [:octicons-arrow-right-24: Integrations](integrations.md)
+    [:octicons-arrow-right-24: Integrations](extending/integrations.md)
 
 </div>
 
@@ -108,6 +108,7 @@ assert_that({"id": 1, "name": "Alice"}).matches_structure(
 
 When a check fails, the pytest plugin points at the exact field instead of dumping both structures:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(response).matches_structure({
     "user": match.structure({
@@ -120,5 +121,5 @@ assert_that(response).matches_structure({
 
 ![Structured diff in the terminal: every failing field with its path and the predicate that failed, in color](assets/diff-match.svg)
 
-See [Quickstart](getting-started.md) to dive in, or browse [Type assertions](assertions.md),
-[Matchers](matchers.md), and the rest of the navigation for the full set of assertions and integrations.
+See [Quickstart](getting-started/quickstart.md) to dive in, or browse [Type assertions](guides/assertions.md),
+[Matchers](guides/matchers.md), and the rest of the navigation for the full set of assertions and integrations.

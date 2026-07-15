@@ -379,7 +379,7 @@ class BaseMixin(_MixinBase):
 
             When the callable is typed with ``TypeIs`` it also *narrows* the chain to the guarded type
             (refinement narrowing), so ``.value`` hands the value back typed - see
-            [Type Safety](../type-safety.md#refinement-narrowing-with-a-typeis-predicate-advanced) for
+            [Type Safety](../concepts/type-safety.md#refinement-narrowing-with-a-typeis-predicate-advanced) for
             checker support (advanced; not yet in PyCharm).
 
         Returns:

@@ -22,6 +22,7 @@ one-line change with no behavioral surprises.
 
 === "Before"
 
+    <!-- docs-guard: skip -->
     ```python
     from assertpy import assert_that, soft_assertions, fail
     ```
@@ -77,20 +78,20 @@ You get these the moment you switch, without touching any test code:
   auto-registered pytest plugin renders recursive diffs for lists, dicts, dataclasses, namedtuples, and
   Pydantic models. Set `assertpy2_diff = "off"` if you prefer the plain message.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
-  value's type, and a type checker flags misuse before the tests run - see [Type Safety](type-safety.md).
+  value's type, and a type checker flags misuse before the tests run - see [Type Safety](../concepts/type-safety.md).
 
 ## What you can now adopt
 
 New capabilities the original never had, ready whenever you want them:
 
-- [Composable matchers](matchers.md) usable in `.satisfies()`, `.each()`, and plain `==`.
-- [Structural matching](matchers.md#structural-matching) for API-response shapes.
-- [Typed narrowing](type-safety.md#typed-narrowing-with-value) (`.value`) and [contract testing](type-safety.md#contract-narrowing-with-assert_conforms) (`assert_conforms()`) for typed API-response tests.
-- [Exception cause chains and groups](errors.md#expected-exceptions) (`caused_by()`, `has_root_cause()`, `contains_error()`).
-- The [collection pipeline](fluent.md#collection-pipeline) and [universal negation](fluent.md#universal-negation).
-- [Async and blocking polling](testing.md#async-assertions) with `eventually()` / `eventually_sync()`.
-- [JSON Path / Schema](data.md), [regex group extraction](data.md#regex-group-extraction), and
-  [bytes assertions](assertions.md#bytes--bytearray).
+- [Composable matchers](../guides/matchers.md) usable in `.satisfies()`, `.each()`, and plain `==`.
+- [Structural matching](../guides/matchers.md#structural-matching) for API-response shapes.
+- [Typed narrowing](../concepts/type-safety.md#typed-narrowing-with-value) (`.value`) and [contract testing](../concepts/type-safety.md#contract-narrowing-with-assert_conforms) (`assert_conforms()`) for typed API-response tests.
+- [Exception cause chains and groups](../guides/errors.md#expected-exceptions) (`caused_by()`, `has_root_cause()`, `contains_error()`).
+- The [collection pipeline](../guides/fluent.md#collection-pipeline) and [universal negation](../guides/fluent.md#universal-negation).
+- [Async and blocking polling](../guides/testing.md#async-assertions) with `eventually()` / `eventually_sync()`.
+- [JSON Path / Schema](../guides/data.md), [regex group extraction](../guides/data.md#regex-group-extraction), and
+  [bytes assertions](../guides/assertions.md#bytes--bytearray).
 
 See the [comparison](comparison.md) for the full feature delta.
 

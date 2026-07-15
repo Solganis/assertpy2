@@ -54,7 +54,7 @@ changes a return type fails the build. `ty` additionally type-checks the whole p
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
     message, and `returned()` pivots to the type-agnostic core assertions for the call's return value -
-    never advertising methods that may not apply. See [Errors & Reporting](errors.md#expected-exceptions).
+    never advertising methods that may not apply. See [Errors & Reporting](../guides/errors.md#expected-exceptions).
 
 ## Typed narrowing with .value
 
@@ -96,7 +96,7 @@ beyond returning the value.
     `.value` never hands back a value that contradicts its narrowed type - that guarantee holds in
     every mode, not just strict. In the strict `assert_that` default a failed `is_not_none()` or
     `is_instance_of()` halts the chain before `.value` is reached, so the value genuinely matches the
-    narrowed type. Inside [`soft_assertions()`](testing.md#soft-assertions) or under `assert_warn()`
+    narrowed type. Inside [`soft_assertions()`](../guides/testing.md#soft-assertions) or under `assert_warn()`
     a failure is *collected* instead of halting, so reading `.value` there would be reading past an
     unestablished fact - and rather than leak a value that could violate its static type, `.value`
     **raises** `TypeError`, and a pivot like `first()` or `extracting()` rejects the untrusted value on
