@@ -50,10 +50,25 @@ jobs:
 
       - name: Install dependencies (all integrations)
         if: matrix.full-deps
-        run: uv sync --extra json --extra data --group integrations
+        run: uv sync --extra json --extra data --group integrations --group docs-examples
 
       - name: Test with coverage
-        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml tests
+        if: '!matrix.full-deps'
+        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml --ignore=tests/test_docs_examples.py tests
+
+      - name: Test with coverage (enforce 100%)
+        # Only the full-deps cell has every integration installed and 0 skips, so it is
+        # the only cell that can reach 100%. This is the hard local gate; Codecov's status
+        # is reporting on top, not the sole guard (it uploads async and can fail open).
+        # The doc-example guard is excluded here so its runs never pad the coverage number.
+        if: matrix.full-deps
+        run: uv run pytest -v --cov=assertpy2 --cov-report=term-missing --cov-report=xml --cov-fail-under=100 --ignore=tests/test_docs_examples.py tests
+
+      - name: Guard doc examples
+        # Runs once (docs are platform-independent) and without coverage, so executing the
+        # README/guide snippets can't mask a real coverage gap in the test suite.
+        if: matrix.full-deps
+        run: uv run pytest tests/test_docs_examples.py
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
