@@ -19,7 +19,6 @@
   <a href="https://solganis.github.io/assertpy2/type-safety/"><img src="https://img.shields.io/badge/type--checked-ty%20%7C%20mypy%20%7C%20pyright-2ea043" alt="public overloads type-checked by ty, mypy --strict, and pyright with zero suppressions"></a>
   <a href="https://solganis.github.io/assertpy2/"><img src="https://img.shields.io/badge/docs-online-black" alt="Documentation"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://img.shields.io/ossf-scorecard/github.com/Solganis/assertpy2?label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard"></a>
-  <a href="https://www.bestpractices.dev/projects/12990"><img src="https://www.bestpractices.dev/projects/12990/badge" alt="OpenSSF Best Practices"></a>
 </p>
 
 ---
