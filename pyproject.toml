@@ -67,6 +67,7 @@ dev = [
 docs = [
     "mkdocs-material>=9.7.6",
     "mkdocstrings[python]>=1.0.4",
+    "mkdocs-redirects>=1.2.3",
 ]
 # Real third-party libraries the duck-typed integration paths are verified against in CI (the suite
 # otherwise skips these tests); pandas/polars/numpy come from the [data] extra instead.
@@ -81,6 +82,9 @@ typecheck = [
 ]
 mutation = [
     "cosmic-ray>=8.4.6",
+]
+docs-examples = [
+    "pytest-examples>=0.0.18",
 ]
 
 [tool.pytest.ini_options]
