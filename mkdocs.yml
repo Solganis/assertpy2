@@ -69,6 +69,20 @@ markdown_extensions:
 
 plugins:
   - search
+  - redirects:
+      redirect_maps:
+        getting-started.md: getting-started/quickstart.md
+        migration.md: getting-started/migration.md
+        comparison.md: getting-started/comparison.md
+        assertions.md: guides/assertions.md
+        fluent.md: guides/fluent.md
+        matchers.md: guides/matchers.md
+        data.md: guides/data.md
+        testing.md: guides/testing.md
+        errors.md: guides/errors.md
+        type-safety.md: concepts/type-safety.md
+        extending.md: extending/custom-assertions.md
+        integrations.md: extending/integrations.md
   - mkdocstrings:
       handlers:
         python:
@@ -91,6 +105,9 @@ plugins:
             show_symbol_type_toc: false
             signature_crossrefs: false
 
+hooks:
+  - mkdocs_hooks.py
+
 extra_css:
   - stylesheets/extra.css
 
@@ -102,21 +119,24 @@ watch:
 nav:
   - Introduction: index.md
   - Getting started:
-      - Quickstart: getting-started.md
-      - Migrating from assertpy: migration.md
-      - Comparison: comparison.md
+      - Quickstart: getting-started/quickstart.md
+      - Migrating from assertpy: getting-started/migration.md
+      - Comparison: getting-started/comparison.md
   - Guides:
-      - Type assertions: assertions.md
-      - Fluent API: fluent.md
-      - Matchers: matchers.md
-      - Data navigation: data.md
-      - Testing: testing.md
-      - Errors & reporting: errors.md
+      - The assertion API:
+          - Type assertions: guides/assertions.md
+          - Fluent API: guides/fluent.md
+      - Matching & data:
+          - Matchers: guides/matchers.md
+          - Data navigation: guides/data.md
+      - In your test suite:
+          - Testing: guides/testing.md
+          - Errors & reporting: guides/errors.md
   - Concepts:
-      - Type safety: type-safety.md
+      - Type safety: concepts/type-safety.md
   - Extending:
-      - Custom assertions: extending.md
-      - Integrations: integrations.md
+      - Custom assertions: extending/custom-assertions.md
+      - Integrations: extending/integrations.md
   - API Reference:
       - Overview: reference/overview.md
       - Entry points: reference/entry-points.md

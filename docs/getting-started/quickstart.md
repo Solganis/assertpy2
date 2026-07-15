@@ -25,7 +25,7 @@ assert_that([1, 2, 3]).contains(1).does_not_contain(9).is_subset_of([1, 2, 3, 4]
 ```
 
 Because every assertion is statically typed, your editor only suggests methods valid for the value's
-type, and a type checker flags misuse before the test runs. See [Type Safety](type-safety.md) for how the
+type, and a type checker flags misuse before the test runs. See [Type Safety](../concepts/type-safety.md) for how the
 overloads work.
 
 ## When an assertion fails
@@ -44,10 +44,10 @@ straight at the differing field instead of dumping the whole value:
 assert_that(actual).is_equal_to(expected)
 ```
 
-![Colored dict diff: user.role shown with its path, removal in red and addition in green](assets/diff-equal.svg)
+![Colored dict diff: user.role shown with its path, removal in red and addition in green](../assets/diff-equal.svg)
 
 The same path-level diff backs `matches_structure()`, `satisfies()`, and `each()`. See
-[Errors & Reporting](errors.md) for the full diff format and configuration.
+[Errors & Reporting](../guides/errors.md) for the full diff format and configuration.
 
 ## Collect multiple failures
 
@@ -64,6 +64,6 @@ with soft_assertions():
 
 ## Next steps
 
-- [Matchers](matchers.md) for composable, reusable conditions.
-- [Fluent API](fluent.md) for chaining, negation, and the collection pipeline.
+- [Matchers](../guides/matchers.md) for composable, reusable conditions.
+- [Fluent API](../guides/fluent.md) for chaining, negation, and the collection pipeline.
 - Browse the assertion reference in the navigation for every type-specific assertion.

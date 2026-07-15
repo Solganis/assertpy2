@@ -41,6 +41,7 @@ assert_that("foo").does_not_match(r"\d+")
     underlying `re.match`); anchor the pattern (`^...$`) to match the whole string. Inline flags such as
     `(?m)` and `(?s)` work, even though `matches()` takes no flags argument.
 
+    <!-- docs-guard: skip -->
     ```python
     assert_that("foo").matches(r"\w{2}")     # partial, passes
     assert_that("foo").matches(r"^\w{3}$")   # whole string, passes
@@ -178,6 +179,7 @@ namedtuples, Pydantic models, attrs, and plain objects; for sequences each eleme
 with the same filters. A single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those is
 accepted; any other iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
 
+<!-- docs-guard: skip -->
 ```python
 # ignore keys (single, list/set/frozenset, or nested tuple)
 assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore="b")
@@ -200,6 +202,7 @@ assert_that(User(1, "Alice", "a@x.com")).is_equal_to(User(99, "Alice", "a@x.com"
 `ignore` and `include` also accept a `re.Pattern` (matched against field names) or a `type` (matched
 against field values):
 
+<!-- docs-guard: skip -->
 ```python
 import re
 
@@ -215,6 +218,7 @@ leaf (`abs(actual - expected) <= tolerance`); `comparators` maps a `type` or a f
 `(actual, expected) -> bool` predicate (a field-name key wins over a type key). Tolerated or
 comparator-equal leaves are reported in neither the message nor the diff.
 
+<!-- docs-guard: skip -->
 ```python
 # absolute float tolerance, at any depth
 assert_that({"point": {"x": 1.0001, "y": 2.0}}).is_equal_to({"point": {"x": 1.0, "y": 2.0}}, tolerance=0.001)
@@ -232,6 +236,7 @@ on one side or with incomparable types).
 partial expected/template. Only the expected side is skipped, so an unexpectedly `None` *actual* field is
 still reported (never masked):
 
+<!-- docs-guard: skip -->
 ```python
 # compare only the fields the expected template sets; age and address, left None, are ignored
 assert_that(user).is_equal_to(User(name="Alice"), ignore_null=True)
@@ -305,6 +310,7 @@ assert_that(today).is_after_or_equal_to(yesterday)
 
 Equality can ignore units of time, and the numeric comparisons work on dates too:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(today).is_equal_to_ignoring_milliseconds(today_0us)
 assert_that(today).is_equal_to_ignoring_seconds(today_0s)
@@ -325,6 +331,7 @@ assert_that(x).has_hour(3).has_minute(4).has_second(5).has_microsecond(6)
 
 ## Files
 
+<!-- docs-guard: skip -->
 ```python
 assert_that("foo.txt").exists().is_file()
 assert_that("missing.txt").does_not_exist()
@@ -338,6 +345,7 @@ assert_that("/usr/bin/python").is_executable()
 Read a file into a string with `contents_of()` (default encoding `utf-8`) and continue with string
 assertions:
 
+<!-- docs-guard: skip -->
 ```python
 from assertpy2 import assert_that, contents_of
 
@@ -369,6 +377,7 @@ All bytes assertions work with soft assertions, warn mode, and `.not_` negation.
 
 ## Objects
 
+<!-- docs-guard: skip -->
 ```python
 fred = Person("Fred", "Smith")
 
@@ -390,6 +399,7 @@ assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")  # method
 lists, tuples) and applies one [matcher](matchers.md) or callable to every scalar leaf, reporting the path
 of each leaf that does not satisfy it. `has_no_none_fields` is the common special case:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that({"a": 1, "nested": {"b": 2}}).all_fields_satisfy(match.is_positive())
 assert_that([1, [2, 3]]).all_fields_satisfy(lambda x: x > 0)
@@ -407,6 +417,7 @@ checks), and circular references are reported once rather than recursed into.
 
 Flatten a collection of objects on an attribute, property, or zero-argument method with `extracting`:
 
+<!-- docs-guard: skip -->
 ```python
 people = [Person("Fred", "Smith"), Person("Bob", "Barr")]
 
@@ -440,6 +451,7 @@ assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_t
 `sort` orders the extracted items. It may be a key/attribute name, an iterable of names (tie-breaking
 left to right), or a key function:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(users).extracting("user", sort="age").is_equal_to(["Johnny", "Fred", "Bob"])
 assert_that(users).extracting("user", sort=["active", "age"]).is_equal_to(["Bob", "Johnny", "Fred"])
@@ -451,6 +463,7 @@ assert_that(users).extracting("user", sort=lambda x: -x["age"]).is_equal_to(["Bo
 `assertpy2` exposes `has_<name>()` for any attribute, property, or zero-argument method on the value,
 so attribute checks stay compact:
 
+<!-- docs-guard: skip -->
 ```python
 fred = Person("Fred", "Smith")
 
@@ -470,6 +483,7 @@ assert_that({"first_name": "Fred", "last_name": "Smith"}).has_first_name("Fred")
 Exception and warning assertions wrap a *callable* rather than a value: you assert on what calling the
 function does, then chain assertions on the resulting message.
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(some_func).raises(RuntimeError).when_called_with("foo")
 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")

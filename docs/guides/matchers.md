@@ -227,7 +227,7 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
 When fields do not match, the pytest plugin prints the exact path and the predicate that failed - every
 mismatch, not just the first:
 
-![Colored match diff: user.name, user.role and user.age each shown with their path and the predicate that failed](assets/diff-match.svg)
+![Colored match diff: user.name, user.role and user.age each shown with their path and the predicate that failed](../assets/diff-match.svg)
 
 The same `match` diff is produced by [`satisfies()`](#satisfies) and [`each()`](#each) whenever a
 matcher fails inside an assertion.
@@ -249,6 +249,7 @@ assert_that("alice@example.com").satisfies(match.is_valid_email())
 
 Parametrised matchers take arguments:
 
+<!-- docs-guard: skip -->
 ```python
 @register_matcher("has_status")
 def has_status(expected: str):
@@ -259,6 +260,7 @@ assert_that(order).satisfies(match.has_status("active"))
 
 They compose and nest like built-ins:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(email).satisfies(match.is_valid_email() & match.contains_string("@company.com"))
 assert_that(response).matches_structure({

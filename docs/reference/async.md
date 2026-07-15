@@ -3,7 +3,7 @@
 Poll a callable until an assertion passes or the timeout expires. Start with ``eventually()`` on a
 callable value, chain the assertion you expect to eventually hold, and await the result - or use
 ``eventually_sync()`` for the same polling without an event loop. See
-[Testing](../testing.md#async-assertions) for usage.
+[Testing](../guides/testing.md#async-assertions) for usage.
 
 ::: assertpy2.assertpy.AssertionBuilder.eventually
     options:

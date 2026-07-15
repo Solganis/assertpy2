@@ -57,7 +57,7 @@ An **AssertionFailure** attachment (mode `full` only) with actual and expected v
 ```
 
 A **Polling Trace** attachment (modes `diff`, `full`) when an
-[`eventually()`](testing.md#polling-trace) assertion times out, with per-poll samples and diffs
+[`eventually()`](../guides/testing.md#polling-trace) assertion times out, with per-poll samples and diffs
 between consecutive distinct values:
 
 ```json

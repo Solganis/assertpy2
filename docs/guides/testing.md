@@ -265,7 +265,7 @@ Expected <{...}> to match contract snapshot <...>, but the structure drifted:
 
 No hand-written model is needed - the contract is inferred from the first response, and it shares the
 same storage, update mode, and CI mode as `snapshot()`. The model-driven counterpart is
-[`assert_conforms(..., exact=True)`](type-safety.md#contract-drift-with-exacttrue): reach for that when
+[`assert_conforms(..., exact=True)`](../concepts/type-safety.md#contract-drift-with-exacttrue): reach for that when
 you already have a pydantic model. Because a contract is inferred from a single observation it cannot
 know which fields are optional, so a legitimately sometimes-absent field reads as `removed`; re-record
 with update mode when the contract really changed.

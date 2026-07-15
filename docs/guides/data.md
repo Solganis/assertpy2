@@ -27,6 +27,7 @@ Raises `ValueError` if the path does not exist.
 
 Assert that a path is present or absent:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(data).has_json_path("$.meta.total")
 assert_that(data).does_not_have_json_path("$.error")
@@ -36,6 +37,7 @@ assert_that(data).does_not_have_json_path("$.error")
 
 Validate against a JSON Schema dict, or load it from a file:
 
+<!-- docs-guard: skip -->
 ```python
 schema = {
     "type": "object",
@@ -49,6 +51,7 @@ assert_that(data).matches_json_schema_from_file("schemas/user.json")
 
 JSON assertions chain and work with soft assertions:
 
+<!-- docs-guard: skip -->
 ```python
 with soft_assertions():
     assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()

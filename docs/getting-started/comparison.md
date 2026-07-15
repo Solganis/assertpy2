@@ -136,44 +136,44 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 |---|:---:|:---:|:---:|:---:|:---:|
 | Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#all-three-styles-one-import)** |
 | Mix styles in one suite | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
-| Static typing (`py.typed`, overloads) | n/a | No | No | **Typed** | **[Yes](type-safety.md)** |
-| Autocomplete filtered by value type | No | No | No | No | **[Yes](type-safety.md#type-aware-autocomplete)** |
-| Typed narrowing (the assertion returns the value, narrowed) | No | No | No | No | **[Yes](type-safety.md#typed-narrowing-with-value)** |
-| Contract testing (validate a payload and narrow to the model) | No | No | No | No | **[Yes](type-safety.md#contract-narrowing-with-assert_conforms)** |
-| Fluent chaining | No | No | **Yes** | No | **[Yes](fluent.md#chaining)** |
-| Composable matchers | No | **Yes** | No | **Yes** | **[Yes](matchers.md)** |
-| Works inside plain `==` | n/a | No | No | **Yes** | **[Yes](matchers.md)** |
+| Static typing (`py.typed`, overloads) | n/a | No | No | **Typed** | **[Yes](../concepts/type-safety.md)** |
+| Autocomplete filtered by value type | No | No | No | No | **[Yes](../concepts/type-safety.md#type-aware-autocomplete)** |
+| Typed narrowing (the assertion returns the value, narrowed) | No | No | No | No | **[Yes](../concepts/type-safety.md#typed-narrowing-with-value)** |
+| Contract testing (validate a payload and narrow to the model) | No | No | No | No | **[Yes](../concepts/type-safety.md#contract-narrowing-with-assert_conforms)** |
+| Fluent chaining | No | No | **Yes** | No | **[Yes](../guides/fluent.md#chaining)** |
+| Composable matchers | No | **Yes** | No | **Yes** | **[Yes](../guides/matchers.md)** |
+| Works inside plain `==` | n/a | No | No | **Yes** | **[Yes](../guides/matchers.md)** |
 
 ## Assertions and matchers
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Structural matching (nested) | manual | partial | No | **Yes** | **[Yes](matchers.md#structural-matching)** |
-| Recursive comparison (tolerance / comparators / null-skip) | `approx` | No | No | partial | **[Yes](assertions.md#recursive-comparison-tolerance--custom-comparators)** |
-| Collection / ordering assertions | manual | **Yes** | **Yes** | **Yes** | **[Yes](assertions.md#lists)** |
-| Negation of any assertion (`.not_`) | manual | partial | No | partial | **[Yes](fluent.md#universal-negation)** |
-| Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](fluent.md#collection-pipeline)** |
-| Dynamic attribute assertions (`has_<name>()`) | No | No | **Yes** | No | **[Yes](assertions.md#dynamic-assertions-on-objects)** |
-| Regex group extraction | manual | No | No | No | **[Yes](data.md#regex-group-extraction)** |
-| JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](data.md)** |
-| File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](assertions.md#files)** |
-| Exception cause chains / groups (`caused_by`, `contains_error`) | manual | No | No | No | **[Yes](errors.md#expected-exceptions)** |
-| Data frame / array equality (pandas/polars/numpy) | manual | No | No | No | **[Yes](integrations.md#data-frames-and-arrays)** |
-| Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](extending.md)** |
+| Structural matching (nested) | manual | partial | No | **Yes** | **[Yes](../guides/matchers.md#structural-matching)** |
+| Recursive comparison (tolerance / comparators / null-skip) | `approx` | No | No | partial | **[Yes](../guides/assertions.md#recursive-comparison-tolerance--custom-comparators)** |
+| Collection / ordering assertions | manual | **Yes** | **Yes** | **Yes** | **[Yes](../guides/assertions.md#lists)** |
+| Negation of any assertion (`.not_`) | manual | partial | No | partial | **[Yes](../guides/fluent.md#universal-negation)** |
+| Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](../guides/fluent.md#collection-pipeline)** |
+| Dynamic attribute assertions (`has_<name>()`) | No | No | **Yes** | No | **[Yes](../guides/assertions.md#dynamic-assertions-on-objects)** |
+| Regex group extraction | manual | No | No | No | **[Yes](../guides/data.md#regex-group-extraction)** |
+| JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](../guides/data.md)** |
+| File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](../guides/assertions.md#files)** |
+| Exception cause chains / groups (`caused_by`, `contains_error`) | manual | No | No | No | **[Yes](../guides/errors.md#expected-exceptions)** |
+| Data frame / array equality (pandas/polars/numpy) | manual | No | No | No | **[Yes](../extending/integrations.md#data-frames-and-arrays)** |
+| Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](../extending/custom-assertions.md)** |
 
 ## Reporting, safety and tooling
 
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
-| Soft assertions | plugin | No | **Yes** | No | **[Yes](testing.md#soft-assertions)** |
-| Soft assertions thread-safe **and** async-safe | n/a | n/a | No | n/a | **[Yes](testing.md#soft-assertions)** |
-| Grouped soft assertions (`sa.group`) | No | No | No | No | **[Yes](testing.md#grouped-soft-assertions)** |
-| Async / sync polling (`eventually()` / `eventually_sync()`) | No | No | No | No | **[Yes](testing.md#async-assertions)** |
-| Structured failure data (`.actual` / `.expected` / `.diff`) | No | No | No | No | **[Yes](errors.md#structured-errors)** |
-| Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](errors.md#rich-pytest-diffs)** |
-| Snapshot testing | plugin | No | **Yes** | No | **[Yes](testing.md#snapshot-testing)** |
-| Warn mode (non-failing assertions) | No | No | **Yes** | No | **[Yes](errors.md#warnings-instead-of-failures)** |
-| Allure / Behave integrations | No | No | No | No | **[Yes](integrations.md)** |
+| Soft assertions | plugin | No | **Yes** | No | **[Yes](../guides/testing.md#soft-assertions)** |
+| Soft assertions thread-safe **and** async-safe | n/a | n/a | No | n/a | **[Yes](../guides/testing.md#soft-assertions)** |
+| Grouped soft assertions (`sa.group`) | No | No | No | No | **[Yes](../guides/testing.md#grouped-soft-assertions)** |
+| Async / sync polling (`eventually()` / `eventually_sync()`) | No | No | No | No | **[Yes](../guides/testing.md#async-assertions)** |
+| Structured failure data (`.actual` / `.expected` / `.diff`) | No | No | No | No | **[Yes](../guides/errors.md#structured-errors)** |
+| Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](../guides/errors.md#rich-pytest-diffs)** |
+| Snapshot testing | plugin | No | **Yes** | No | **[Yes](../guides/testing.md#snapshot-testing)** |
+| Warn mode (non-failing assertions) | No | No | **Yes** | No | **[Yes](../guides/errors.md#warnings-instead-of-failures)** |
+| Allure / Behave integrations | No | No | No | No | **[Yes](../extending/integrations.md)** |
 
 !!! note "On snapshot testing: where assertpy2 does and does not lead"
     That row compares assertion libraries, not the dedicated snapshot tools - and it is worth being
@@ -185,7 +185,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
     assertpy2's snapshot is an external-file (syrupy-family) convenience **bundled with the rest of your
     assertions**, so an occasional snapshot needs no extra tool and no extra dependency - it is not a
     category-leading snapshot engine, and it does not try to be. Where it is genuinely distinct is
-    [`matches_contract_snapshot()`](testing.md#contract-snapshots): a value-tolerant *structural* snapshot
+    [`matches_contract_snapshot()`](../guides/testing.md#contract-snapshots): a value-tolerant *structural* snapshot
     (paths and type categories, not values) that neither syrupy nor inline-snapshot offers. Rule of thumb:
     reach for a specialist when snapshots are the point; reach for assertpy2's when you want a snapshot
     inline with everything else, or when you want structural (contract) regression rather than value-exact.

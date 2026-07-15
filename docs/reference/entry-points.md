@@ -3,7 +3,7 @@
 The top-level functions exported by ``assertpy2``.
 
 ``assert_that`` is statically overloaded: the return type narrows to the assertions valid for the
-value's type. Each per-type overload is listed below. See [Type safety](../type-safety.md) for how this
+value's type. Each per-type overload is listed below. See [Type safety](../concepts/type-safety.md) for how this
 drives editor autocomplete.
 
 ::: assertpy2.assertpy.assert_that
