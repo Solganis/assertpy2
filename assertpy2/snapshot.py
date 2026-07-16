@@ -14,6 +14,7 @@ import uuid
 import warnings
 from typing import TYPE_CHECKING, Final, NamedTuple
 
+from . import _inline
 from ._compare import _build_compare_config
 from ._contract import shape, shape_diff
 from ._mixin_base import _MixinBase
@@ -146,6 +147,15 @@ def _forbid_creation_in_ci(snapname: str) -> None:
             f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the snapshot"
             " to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or unset CI /"
             " ASSERTPY2_SNAPSHOT_CI)"
+        )
+
+
+def _inline_literal_or_raise(value: object) -> None:
+    """Reject values that cannot round-trip as a source literal (an inline snapshot rewrites source)."""
+    if not _inline.is_literalable(value):
+        raise TypeError(
+            "an inline snapshot literal must be a dict/list/tuple/set of scalars, not"
+            f" {type(value).__name__} - use snapshot() to store it in a file instead"
         )
 
 
@@ -646,6 +656,98 @@ class SnapshotMixin(_MixinBase):
             stacklevel=2,
         )
         return self
+
+    def matches_inline(
+        self,
+        expected: object = _UNSET,
+        *,
+        ignore: object = None,
+        include: object = None,
+        tolerance: float | None = None,
+        comparators: dict[object, Callable[..., bool]] | None = None,
+        placeholders: dict[object, object] | None = None,
+    ) -> Self:
+        """Asserts that val equals an inline snapshot literal written at the call site.
+
+        Unlike [`snapshot()`][assertpy2.snapshot.SnapshotMixin.snapshot], which stores the value in a
+        separate file, an inline snapshot lives as a literal argument in the test source. Call it empty
+        the first time and run with ``--assertpy2-snapshot-update`` to record the value into the source;
+        later runs compare against it. The same selective knobs as ``snapshot()`` apply, so volatile
+        fields never make the snapshot brittle.
+
+        The comparison itself is an ordinary equality check with no source introspection, so it works
+        under ``pytest-xdist`` and needs neither the ``[inline]`` extra nor any assertion rewriting;
+        only recording (empty call under update mode) reads the source.
+
+        Args:
+            expected: the recorded literal; omit it to record on the next update run.
+            ignore: key(s)/path(s) to skip in the comparison (as in ``is_equal_to``).
+            include: restrict the comparison to these key(s)/path(s).
+            tolerance: absolute numeric tolerance applied at every depth.
+            comparators: per-type custom equality callables.
+            placeholders: ``{key: matcher}`` for volatile fields - the key is ignored by the equality
+                comparison and its matcher asserted separately.
+
+        Examples:
+            Usage:
+
+                assert_that({"id": 1, "name": "Alice"}).matches_inline({"id": 1, "name": "Alice"})
+
+        Returns:
+            AssertionBuilder: returns this instance to chain to the next assertion
+
+        Raises:
+            AssertionError: if val does not equal the recorded literal, or the snapshot is still empty
+        """
+        if placeholders:
+            self._require_dict_like(self.val, name="val")  # placeholders address keys of a dict-like value
+            for matcher in placeholders.values():
+                if not _is_matcher(matcher) and not callable(matcher):
+                    raise TypeError("placeholder values must be Matcher instances or callables")
+        if expected is _UNSET:
+            if _ci_mode_enabled():
+                raise AssertionError(
+                    "inline snapshot is empty and CI mode forbids recording it - record it locally with"
+                    " --assertpy2-snapshot-update and commit the source"
+                )
+            if _update_enabled():
+                _inline_literal_or_raise(self.val)
+                frame = inspect.currentframe()
+                caller = frame.f_back if frame is not None else None
+                if caller is None:  # pragma: no cover - frame introspection always available in CPython
+                    raise RuntimeError("cannot determine caller frame")
+                _inline.record_create(caller, self.val)
+                warnings.warn(
+                    "recorded inline snapshot: this run captured the value into the test source;"
+                    " subsequent runs compare against it",
+                    SnapshotCreatedWarning,
+                    stacklevel=2,
+                )
+                return self
+            raise AssertionError("inline snapshot is empty; run --assertpy2-snapshot-update to record it")
+
+        effective_ignore = _combine_ignore(ignore, placeholders)
+        if _update_enabled() and self._snapshot_stale(
+            expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
+        ):
+            _inline_literal_or_raise(self.val)
+            frame = inspect.currentframe()
+            caller = frame.f_back if frame is not None else None
+            if caller is None:  # pragma: no cover - frame introspection always available in CPython
+                raise RuntimeError("cannot determine caller frame")
+            _inline.record_update(caller, self.val)
+            warnings.warn(
+                "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
+                " subsequent runs compare against it",
+                SnapshotUpdatedWarning,
+                stacklevel=2,
+            )
+            return self
+        if placeholders:
+            self._check_placeholders(placeholders)
+        return self.is_equal_to(
+            expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
+        )
 
     def matches_contract_snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
         """Asserts that val's *structure* matches a contract snapshot stored previously.
