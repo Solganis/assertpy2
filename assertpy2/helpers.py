@@ -5,6 +5,11 @@ import math
 import numbers
 import re
 
+try:
+    import attrs
+except ImportError:  # pragma: no cover - optional dependency; the attrs branch runs only when present
+    attrs = None  # ty: ignore[invalid-assignment]  # sentinel for the absent optional module
+
 from assertpy2.errors import DiffResult, _safe_repr, _truncated
 
 from ._engine._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
@@ -379,8 +384,8 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            import attrs  # available whenever an attrs instance exists; recurse like dataclasses.asdict
-
+            # attrs is importable whenever an attrs instance exists, so the guarded import bound it;
+            # asdict recurses like dataclasses.asdict, flattening nested attrs for ignore/include
             return attrs.asdict(obj)
         if hasattr(obj, "__dict__") and not isinstance(obj, type):
             return dict(vars(obj))
