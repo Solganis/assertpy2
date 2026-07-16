@@ -29,6 +29,7 @@ GUARDED_DOCS = [
     "docs/guides/data.md",
     "docs/index.md",
     "docs/getting-started/migration.md",
+    "docs/recipes.md",
 ]
 
 # assertpy2's public API minus its submodules (which shadow builtins like `dict`/`bytes`), plus the
