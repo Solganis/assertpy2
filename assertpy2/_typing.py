@@ -224,6 +224,15 @@ if TYPE_CHECKING:
         def does_not_have_json_path(self, path: str) -> Self: ...
         def matches_json_schema(self, schema: dict[str, Any]) -> Self: ...
         def matches_json_schema_from_file(self, path: str | Path) -> Self: ...
+        def conforms_to_openapi(
+            self,
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> Self: ...
 
     class _DictAssertion(_CoreAssertion, Protocol[_K, _V]):
         """Assertions available for ``dict`` values, generic over the key and value types."""
@@ -257,6 +266,15 @@ if TYPE_CHECKING:
         def does_not_have_json_path(self, path: str) -> Self: ...
         def matches_json_schema(self, schema: dict[str, Any]) -> Self: ...
         def matches_json_schema_from_file(self, path: str | Path) -> Self: ...
+        def conforms_to_openapi(
+            self,
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> Self: ...
 
     class _DateAssertion(_CoreAssertion, Protocol):
         """Assertions available for ``datetime.date`` and ``datetime.datetime`` values."""
