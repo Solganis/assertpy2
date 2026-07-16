@@ -8,6 +8,7 @@ from typing import Final
 
 import pytest
 
+from . import _inline
 from . import snapshot as _snapshot
 from ._diff import _sub_diff_entries
 from .errors import _json_safe
@@ -92,13 +93,20 @@ def pytest_unconfigure(config):
 # snapshots touched by xdist workers, collected on the controller as each worker finishes
 _controller_touched: set = set()
 
+# inline-snapshot source edits recorded by xdist workers, applied on the controller (workers must not
+# rewrite shared source files in parallel)
+_controller_inline: list = []
+
 
 @pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed
 def pytest_testnodedown(node, error):
-    """xdist controller hook: collect the touched snapshots each worker shipped as it exits."""
+    """xdist controller hook: collect the touched snapshots and inline edits each worker shipped."""
     touched = getattr(node, "workeroutput", {}).get("assertpy2_touched")
     if touched:
         _controller_touched.update(tuple(item) for item in touched)
+    inline = getattr(node, "workeroutput", {}).get("assertpy2_inline")
+    if inline:
+        _controller_inline.extend(tuple(record) for record in inline)
 
 
 def _is_full_run(config) -> bool:
@@ -115,9 +123,14 @@ def _is_full_run(config) -> bool:
 
 def pytest_sessionfinish(session, exitstatus):
     config = session.config
-    if hasattr(config, "workeroutput"):  # xdist worker: ship touched set to the controller, defer the rest
+    if hasattr(config, "workeroutput"):  # xdist worker: ship recorded work to the controller, defer the rest
         config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
+        config.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
         return
+    # controller / single process: apply inline edits (workers' plus any recorded here) into source
+    _inline._RECORDS.extend(_controller_inline)
+    _controller_inline.clear()
+    _inline.apply_inline_records()
     touched = set(_snapshot._TOUCHED) | _controller_touched
     _controller_touched.clear()
     if not touched:
