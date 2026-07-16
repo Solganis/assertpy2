@@ -46,6 +46,7 @@ rendered by the plugin as colored diff sections.
 | `dataclass` | `dataclass` | Field-by-field, handles differing types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
 | Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
+| attrs class | `attrs` | Field-by-field, recursive into nested fields |
 | other | `scalar` | Single actual-vs-expected entry |
 | `contains` family | `contains` | Missing and extra items |
 | matcher mismatch | `match` | `matches_structure()` / `satisfies()` / `each()`: path + failed predicate |
@@ -57,6 +58,11 @@ rendered by the plugin as colored diff sections.
 ```
 
 The diff for that failure - and the other diff shapes - renders like this.
+
+The comparison is recursive, so for a very large or deeply nested value it walks the whole object graph.
+When the payload is huge and you only care about a few fields, extract those and assert on them instead
+of comparing the whole thing - it is faster and the failure stays focused. See
+[When full structural comparison is too much](../recipes.md#when-full-structural-comparison-is-too-much).
 
 ### What each diff kind looks like
 
