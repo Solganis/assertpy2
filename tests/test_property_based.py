@@ -21,7 +21,8 @@ from assertpy2 import assert_conforms, assert_that, match
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
-from assertpy2.errors import _disambiguated
+from assertpy2.errors import AssertionFailure, _disambiguated
+from assertpy2.pytest_plugin import _format_diff
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
 _atoms = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
@@ -218,6 +219,40 @@ def test_namedtuple_is_equal_to_consistent_with_eq(left, right):
 @given(value=_pairs)
 def test_namedtuple_is_equal_to_reflexive(value):
     assert_that(value).is_equal_to(copy.deepcopy(value))
+
+
+# === Diff well-formedness: any unequal pair yields a renderable, well-formed DiffResult ===
+# Fuzzes the whole failure path - _build_equality_diff, the disambiguating message, and the plugin's
+# colored renderer - so no generated structure can make the diff crash or emit a non-string path.
+
+
+@settings(deadline=None)
+@given(left=_values, right=_values)
+def test_diff_is_well_formed_for_unequal_values(left, right):
+    if left == right:
+        return
+    with pytest.raises(AssertionFailure) as exc_info:
+        assert_that(left).is_equal_to(right)
+    failure = exc_info.value
+    assert isinstance(str(failure), str)  # message (incl. _disambiguated) renders without raising
+    diff = failure.diff
+    if diff is not None:
+        assert isinstance(diff.kind, str)
+        assert all(isinstance(entry.path, str) for entry in diff.entries)
+        assert isinstance(_format_diff(diff, color=True), str)  # plugin renderer survives any diff
+
+
+@settings(deadline=None)
+@given(left=_outers, right=_outers)
+def test_diff_is_well_formed_for_unequal_dataclasses(left, right):
+    if left == right:
+        return
+    with pytest.raises(AssertionFailure) as exc_info:
+        assert_that(left).is_equal_to(right)
+    diff = exc_info.value.diff
+    if diff is not None:
+        assert all(isinstance(entry.path, str) for entry in diff.entries)
+        assert isinstance(_format_diff(diff, color=True), str)
 
 
 # === Point 2: multiset / ordering semantics of collection assertions ===
