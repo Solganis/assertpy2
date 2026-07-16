@@ -46,7 +46,7 @@ assertpy2 = "assertpy2.pytest_plugin"
 allure = ["allure-pytest>=2.13"]
 behave = ["behave>=1.2.6"]
 data = ["assertpy2[numpy,pandas,polars]"]
-json = ["jsonpath-ng>=1.8", "jsonschema>=4.0"]
+json = ["jsonpath-ng>=1.8", "jsonschema>=4.18"]
 numpy = ["numpy>=1.26"]
 pandas = ["pandas>=2.0"]
 polars = ["polars>=1.0"]

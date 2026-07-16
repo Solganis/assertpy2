@@ -299,7 +299,7 @@ requires-dist = [
     { name = "assertpy2", extras = ["numpy", "pandas", "polars"], marker = "extra == 'data'" },
     { name = "behave", marker = "extra == 'behave'", specifier = ">=1.2.6" },
     { name = "jsonpath-ng", marker = "extra == 'json'", specifier = ">=1.8" },
-    { name = "jsonschema", marker = "extra == 'json'", specifier = ">=4.0" },
+    { name = "jsonschema", marker = "extra == 'json'", specifier = ">=4.18" },
     { name = "numpy", marker = "extra == 'numpy'", specifier = ">=1.26" },
     { name = "pandas", marker = "extra == 'pandas'", specifier = ">=2.0" },
     { name = "polars", marker = "extra == 'polars'", specifier = ">=1.0" },
