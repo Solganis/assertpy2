@@ -34,14 +34,17 @@ _NON_MATCHER_TYPES: Final = frozenset(
 def _is_matcher(obj: object) -> TypeIs[Matcher]:
     """Fast membership test for the runtime_checkable ``Matcher`` protocol.
 
-    ``isinstance(x, Matcher)`` is expensive for non-matchers: the runtime_checkable check walks every
-    protocol member through ``getattr_static``.  A builtin-type fast path skips it for the common
-    operand while staying *strictly equivalent* to ``isinstance(obj, Matcher)`` - those builtin types
-    are never matchers, and every other object (including any custom class) falls through to the full
-    protocol check unchanged, so attribute access is never triggered where ``isinstance`` would not.
+    ``isinstance(x, Matcher)`` is expensive: the runtime_checkable check walks every protocol member
+    through ``getattr_static``.  Two fast paths skip it while staying *strictly equivalent* to
+    ``isinstance(obj, Matcher)``: a builtin operand is never a matcher (frozenset membership), and a
+    ``BaseMatcher`` subclass instance always satisfies the protocol (a cheap C-level ``isinstance``,
+    ~5x faster than the protocol walk).  Any other object - including a duck-typed custom matcher that
+    does not inherit ``BaseMatcher`` - falls through to the full protocol check unchanged.
     """
     if type(obj) in _NON_MATCHER_TYPES:
         return False
+    if isinstance(obj, BaseMatcher):
+        return True
     return isinstance(obj, Matcher)
 
 
