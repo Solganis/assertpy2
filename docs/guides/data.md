@@ -54,53 +54,51 @@ JSON assertions chain and work with soft assertions:
 <!-- docs-guard: skip -->
 ```python
 with soft_assertions():
-    assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()
+    assert_that(response).has_json_path("$.data")
+    assert_that(response).at_json_path("$.data.id").is_positive()
 ```
 
 ### conforms_to_openapi
 
 Validate a response body against an OpenAPI operation's response schema - the one contract check none of
-the other assertion libraries here offer. Both OpenAPI 3.0 (its `nullable` keyword) and 3.1 are supported;
-`$ref`, `oneOf`/`allOf`/`anyOf`, `enum`, and `format` all validate with full JSON-Schema semantics. Pass
-the parsed spec (loading YAML/JSON is your job) plus the operation's path and method:
+the other assertion libraries here offer.
+
+Both OpenAPI 3.0 (its `nullable` keyword) and 3.1 are supported, and `$ref`, `oneOf`/`allOf`/`anyOf`,
+`enum`, and `format` all validate with full JSON-Schema semantics. Pass the parsed spec (loading
+YAML/JSON is your job) plus the operation's path and method:
 
 ```python
+schema = {
+    "type": "object",
+    "required": ["id", "total"],
+    "properties": {
+        "id": {"type": "integer"},
+        "total": {"type": "number"},
+        "email": {"type": "string", "format": "email", "nullable": True},
+    },
+}
 spec = {
     "openapi": "3.0.3",
     "paths": {
         "/orders/{id}": {
             "get": {
                 "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "type": "object",
-                                    "required": ["id", "total"],
-                                    "properties": {
-                                        "id": {"type": "integer"},
-                                        "total": {"type": "number"},
-                                        "email": {"type": "string", "format": "email", "nullable": True},
-                                    },
-                                }
-                            }
-                        }
-                    }
+                    "200": {"content": {"application/json": {"schema": schema}}}
                 }
             }
         }
     },
 }
 
-assert_that({"id": 42, "total": 19.99, "email": None}).conforms_to_openapi(spec, "/orders/{id}", "get")
+body = {"id": 42, "total": 19.99, "email": None}
+assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 ```
 
 `status` defaults to `200`, then `201`, then `default`; pass `status=` to pick another. When the body does
-not conform, every violation is reported with its JSON path and the expected constraint - all of them, not
-just the first:
+not conform, the message names the operation and counts the failures (`found 3 violations`), then reports
+each with its JSON path and the expected constraint - all of them, not just the first:
 
 ```text
-Expected the value to conform to the OpenAPI schema for <GET /orders/{id}> response <200>, but found 3 violations.
 diff (openapi):
   $:
     - {'id': 'x7', 'email': 'not-an-email'}
@@ -124,10 +122,14 @@ Search the value for a pattern and continue asserting on the captured group:
 ```python
 log = "2024-01-15 ERROR status=500 path=/api/users"
 
-assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")        # by index
-assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")  # by name
-assert_that("abc123").extracting_group(r"\d+").is_equal_to("123")               # group 0 = whole match
-assert_that("count=42").extracting_group(r"count=(\d+)", 1).is_digit().is_length(2)  # chains
+# by index
+assert_that(log).extracting_group(r"status=(\d+)", 1).is_equal_to("500")
+# by name
+assert_that(log).extracting_group(r"(?P<level>\w+) status", "level").is_equal_to("ERROR")
+# group 0 = whole match
+assert_that("abc123").extracting_group(r"\d+").is_equal_to("123")
+# chains
+assert_that("count=42").extracting_group(r"count=(\d+)", 1).is_digit().is_length(2)
 ```
 
 ### matches_with_groups()

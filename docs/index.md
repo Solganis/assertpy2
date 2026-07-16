@@ -2,9 +2,15 @@
 
 Fluent, fully type-aware assertions for Python.
 
-`assertpy2` is a modern fork of `assertpy`: readable `assert_that(...)` chains,
-composable matchers, structural matching, type-narrowing assertions and contract testing, soft and async
-assertions, and a pytest plugin that renders rich structural diffs on failure.
+A drop-in, fully typed fork of `assertpy` - the same fluent `assert_that(...)` chains, but the type
+checker follows every one, and each assertion hands back the value it checked, statically narrowed.
+
+```python
+from assertpy2 import assert_that
+
+# port is a typed int - the value the chain checked, narrowed
+port = assert_that(8080).is_instance_of(int).is_positive().value
+```
 
 ## Why assertpy2
 
@@ -14,9 +20,8 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     ---
 
-    `assert_that("hello").` offers only string methods, `assert_that(42).` only numeric ones, and a type
-    checker rejects `assert_that("foo").is_positive()` before the test runs. The core advantage over
-    `assertpy` and most alternatives.
+    String methods on strings, numeric methods on numbers - the type checker rejects the wrong ones
+    before the test even runs. The core advantage over `assertpy` and most alternatives.
 
     [:octicons-arrow-right-24: Type safety](concepts/type-safety.md)
 
@@ -24,9 +29,9 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     ---
 
-    An assertion **returns the value it checked, statically narrowed** (`.value` after `is_not_none()` /
-    `is_instance_of()`), and `assert_conforms()` validates a payload against a Pydantic model and narrows
-    to it - no `cast`, no bare `assert`.
+    An assertion **returns the value it checked, statically narrowed** to the asserted type - so `.value`
+    is typed, with no `cast` and no bare `assert`. `assert_conforms()` does the same against a Pydantic
+    model.
 
     [:octicons-arrow-right-24: Typed narrowing](concepts/type-safety.md#typed-narrowing-with-value)
 
@@ -34,7 +39,8 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     ---
 
-    `match.greater_than(5)`, `match.is_uuid()`, combined with `&`, `|`, `~`, reusable across assertions.
+    Predicate matchers you combine with the `&`, `|`, and `~` operators and reuse across assertions - or
+    register your own.
 
     [:octicons-arrow-right-24: Matchers](guides/matchers.md)
 
@@ -60,9 +66,8 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     ---
 
-    `raises().when_called_with()`, then assert on the message, walk the cause chain (`caused_by()`,
-    `has_root_cause()`), match an `ExceptionGroup` (`contains_error()`), or pivot to the exception object
-    (`raised()`).
+    Assert that a call raises, then chain onto the message, the cause chain, an `ExceptionGroup`, or the
+    exception object itself.
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md#expected-exceptions)
 
@@ -70,10 +75,19 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 
     ---
 
-    `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin renders recursive
-    diffs for lists, dicts, dataclasses, namedtuples, attrs classes, and Pydantic models.
+    Failures carry machine-readable `.actual`, `.expected`, and `.diff`, and the pytest plugin renders
+    recursive diffs for dicts, dataclasses, attrs, and Pydantic models.
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
+
+-   :material-camera:{ .lg .middle } __Snapshot testing__
+
+    ---
+
+    External-file, in-source, and value-tolerant contract snapshots - all three under one selective,
+    typed API, with inline recording under `pytest-xdist`.
+
+    [:octicons-arrow-right-24: Snapshots](guides/testing.md#snapshot-testing)
 
 -   :material-table:{ .lg .middle } __Data frames & arrays__
 
@@ -82,6 +96,15 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     pandas / polars / numpy data-frame and array assertions, alongside Allure and Behave integrations.
 
     [:octicons-arrow-right-24: Integrations](extending/integrations.md)
+
+-   :material-api:{ .lg .middle } __JSON & API assertions__
+
+    ---
+
+    Navigate JSON with JSON Path, validate it against a JSON Schema or an OpenAPI response contract, and
+    pull values out with regex groups - built for API and service tests.
+
+    [:octicons-arrow-right-24: JSON & data](guides/data.md)
 
 </div>
 

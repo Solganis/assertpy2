@@ -33,6 +33,14 @@ Because every assertion is statically typed, your editor only suggests methods v
 type, and a type checker flags misuse before the test runs. See [Type Safety](../concepts/type-safety.md) for how the
 overloads work.
 
+Assertions also **return the value they checked**, statically narrowed - so you keep using it, correctly
+typed, with no `cast`:
+
+```python
+# name is typed as str - the value the chain checked
+name = assert_that("Alice").is_instance_of(str).is_not_empty().value
+```
+
 ## When an assertion fails
 
 A failing assertion raises an `AssertionError` with a precise message:

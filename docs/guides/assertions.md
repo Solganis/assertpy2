@@ -102,21 +102,28 @@ assert_that([1, -2, 3]).any_satisfy(lambda x: x < 0)
 assert_that([1, 2, 3]).all_satisfy(lambda x: x > 0)
 assert_that([1, 2, 3]).none_satisfy(lambda x: x < 0)
 
-assert_that([2, 4, 6]).satisfies_exactly(lambda x: x == 2, lambda x: x == 4, lambda x: x == 6)
+assert_that([2, 4, 6]).satisfies_exactly(
+    lambda x: x == 2, lambda x: x == 4, lambda x: x == 6
+)
 assert_that([4, 2]).satisfies_exactly_in_any_order(lambda x: x == 2, lambda x: x == 4)
 assert_that([1, 2, 3]).zip_satisfies([2, 4, 6], lambda actual, other: other == actual * 2)
 assert_that([1, 2, 3]).contains_only_once(1, 3)
 assert_that([1, 2, 3]).has_same_size_as(("a", "b", "c"))
-assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_between(1, 5)
+assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_between(
+    1, 5
+)
 ```
 
 `any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
 
-`satisfies_exactly` pairs the i-th item with the i-th matcher (and requires equal length), while
-`satisfies_exactly_in_any_order` accepts any one-to-one pairing of items and matchers. `zip_satisfies`
-checks a two-arg predicate over items zipped with another iterable, `contains_only_once` requires each given
-item to occur exactly once, and `has_same_size_as` compares lengths against another sized object.
-`contains_exactly_in_any_order` requires multiset equality: exact items and counts, order ignored.
+The exact-pairing and multiset assertions:
+
+- `satisfies_exactly` - pairs the i-th item with the i-th matcher (equal length required);
+  `satisfies_exactly_in_any_order` - any one-to-one pairing instead.
+- `zip_satisfies` - checks a two-arg predicate over items zipped with another iterable.
+- `contains_only_once` - each given item must occur exactly once.
+- `has_same_size_as` - compares lengths against another sized object.
+- `contains_exactly_in_any_order` - multiset equality: exact items and counts, order ignored.
 
 Lists of lists can be flattened by index with `extracting` (see [dict flattening](#dict-flattening)):
 
@@ -174,17 +181,21 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 
 ### Selective comparison (ignore / include)
 
-`is_equal_to()` can ignore or include specific keys or fields. This works with dicts, dataclasses,
-namedtuples, Pydantic models, attrs, and plain objects; for sequences each element is compared pairwise
-with the same filters. A single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those is
-accepted; any other iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
+`is_equal_to()` can ignore or include specific keys or fields - across dicts, dataclasses, namedtuples,
+Pydantic models, attrs, and plain objects (for sequences, each element is compared pairwise with the
+same filters).
+
+The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those; any other
+iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
 
 <!-- docs-guard: skip -->
 ```python
 # ignore keys (single, list/set/frozenset, or nested tuple)
 assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, ignore="b")
 assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, ignore={"b", "c"})
-assert_that({"a": 1, "b": {"c": 2, "d": 3}}).is_equal_to({"a": 1, "b": {"c": 2}}, ignore=("b", "d"))
+assert_that({"a": 1, "b": {"c": 2, "d": 3}}).is_equal_to(
+    {"a": 1, "b": {"c": 2}}, ignore=("b", "d")
+)
 
 # include only specific keys
 assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 2}, include=["a", "b"])
@@ -196,7 +207,9 @@ class User:
     name: str
     email: str
 
-assert_that(User(1, "Alice", "a@x.com")).is_equal_to(User(99, "Alice", "a@x.com"), ignore="id")
+assert_that(User(1, "Alice", "a@x.com")).is_equal_to(
+    User(99, "Alice", "a@x.com"), ignore="id"
+)
 
 # attrs instances work the same, including nested paths
 @attrs.define
@@ -214,26 +227,38 @@ against field values):
 ```python
 import re
 
-assert_that(payload).is_equal_to(expected, ignore=re.compile(r"^_"))  # ignore private-ish keys
-assert_that(payload).is_equal_to(expected, ignore=float)               # ignore all float fields
+# ignore private-ish keys (matched against field names)
+assert_that(payload).is_equal_to(expected, ignore=re.compile(r"^_"))
+# ignore all float fields
+assert_that(payload).is_equal_to(expected, ignore=float)
 ```
 
 ### Recursive comparison (tolerance / custom comparators)
 
 `is_equal_to()` can compare two concrete nested structures with a numeric tolerance or with custom
-comparators, anywhere in the graph. `tolerance` is an absolute tolerance applied to every real-number
-leaf (`abs(actual - expected) <= tolerance`); `comparators` maps a `type` or a field name to an
-`(actual, expected) -> bool` predicate (a field-name key wins over a type key). Tolerated or
-comparator-equal leaves are reported in neither the message nor the diff.
+comparators, anywhere in the graph:
+
+- `tolerance` - an absolute tolerance applied to every real-number leaf (`abs(actual - expected) <= tolerance`).
+- `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
+  field-name key wins over a type key).
+
+Tolerated or comparator-equal leaves are reported in neither the message nor the diff.
 
 <!-- docs-guard: skip -->
 ```python
 # absolute float tolerance, at any depth
-assert_that({"point": {"x": 1.0001, "y": 2.0}}).is_equal_to({"point": {"x": 1.0, "y": 2.0}}, tolerance=0.001)
+assert_that({"point": {"x": 1.0001, "y": 2.0}}).is_equal_to(
+    {"point": {"x": 1.0, "y": 2.0}}, tolerance=0.001
+)
 
 # comparator by type, or by field name
-assert_that(order).is_equal_to(expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)})
-assert_that(order).is_equal_to(expected, comparators={"name": lambda a, e: a.lower() == e.lower()})  # case-insensitive
+assert_that(order).is_equal_to(
+    expected, comparators={float: lambda a, e: round(a, 2) == round(e, 2)}
+)
+# case-insensitive comparator by field name
+assert_that(order).is_equal_to(
+    expected, comparators={"name": lambda a, e: a.lower() == e.lower()}
+)
 ```
 
 Use `comparators` to change *how* a field or type is compared; to drop a field from the comparison
@@ -246,7 +271,8 @@ still reported (never masked):
 
 <!-- docs-guard: skip -->
 ```python
-# compare only the fields the expected template sets; age and address, left None, are ignored
+# compare only the fields the expected template sets;
+# age and address, left None, are ignored
 assert_that(user).is_equal_to(User(name="Alice"), ignore_null=True)
 ```
 
@@ -325,7 +351,8 @@ assert_that(today).is_equal_to_ignoring_seconds(today_0s)
 assert_that(today).is_equal_to_ignoring_time(today_0h)
 
 assert_that(middle).is_between(yesterday, today)
-assert_that(yesterday).is_close_to(today, datetime.timedelta(hours=24))  # tolerance is a timedelta
+# tolerance is a timedelta
+assert_that(yesterday).is_close_to(today, datetime.timedelta(hours=24))
 ```
 
 Date properties can be asserted dynamically with `has_<property>` (see
@@ -357,7 +384,9 @@ assertions:
 ```python
 from assertpy2 import assert_that, contents_of
 
-assert_that(contents_of("foo.txt", "ascii")).starts_with("foo").ends_with("bar").contains("oob")
+assert_that(contents_of("foo.txt", "ascii")).starts_with("foo").ends_with(
+    "bar"
+).contains("oob")
 ```
 
 ## Bytes / bytearray
@@ -430,9 +459,13 @@ Flatten a collection of objects on an attribute, property, or zero-argument meth
 people = [Person("Fred", "Smith"), Person("Bob", "Barr")]
 
 assert_that(people).extracting("first_name").contains("Fred", "Bob")
-assert_that(people).extracting("first_name", "last_name").contains(("Fred", "Smith"), ("Bob", "Barr"))
-assert_that(people).extracting("name").contains("Fred Smith", "Bob Barr")          # property
-assert_that(people).extracting("say_hello").contains("Hello, Fred!", "Hello, Bob!")  # method
+assert_that(people).extracting("first_name", "last_name").contains(
+    ("Fred", "Smith"), ("Bob", "Barr")
+)
+# property
+assert_that(people).extracting("name").contains("Fred Smith", "Bob Barr")
+# zero-argument method
+assert_that(people).extracting("say_hello").contains("Hello, Fred!", "Hello, Bob!")
 ```
 
 It also works on collections of dicts (extracting by key), Pydantic models, and across subclasses in a mixed collection.
@@ -451,7 +484,9 @@ users = [
 
 assert_that(users).extracting("user", filter="active").is_equal_to(["Fred", "Johnny"])
 assert_that(users).extracting("user", filter={"active": False}).is_equal_to(["Bob"])
-assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_to(["Fred", "Bob"])
+assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_to(
+    ["Fred", "Bob"]
+)
 ```
 
 #### Sorting
@@ -462,8 +497,12 @@ left to right), or a key function:
 <!-- docs-guard: skip -->
 ```python
 assert_that(users).extracting("user", sort="age").is_equal_to(["Johnny", "Fred", "Bob"])
-assert_that(users).extracting("user", sort=["active", "age"]).is_equal_to(["Bob", "Johnny", "Fred"])
-assert_that(users).extracting("user", sort=lambda x: -x["age"]).is_equal_to(["Bob", "Fred", "Johnny"])
+assert_that(users).extracting("user", sort=["active", "age"]).is_equal_to(
+    ["Bob", "Johnny", "Fred"]
+)
+assert_that(users).extracting("user", sort=lambda x: -x["age"]).is_equal_to(
+    ["Bob", "Fred", "Johnny"]
+)
 ```
 
 ### Dynamic assertions on objects
@@ -483,7 +522,9 @@ assert_that(fred).has_say_hello("Hello, Fred!")  # zero-arg method
 Dynamic assertions also work on dicts, keyed by entry name:
 
 ```python
-assert_that({"first_name": "Fred", "last_name": "Smith"}).has_first_name("Fred").has_last_name("Smith")
+assert_that(
+    {"first_name": "Fred", "last_name": "Smith"}
+).has_first_name("Fred").has_last_name("Smith")
 ```
 
 ## Exceptions
@@ -497,7 +538,8 @@ assert_that(some_func).raises(RuntimeError).when_called_with("foo")
 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
 ```
 
-See [Errors & Reporting](errors.md) for the full set, including
-[expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings), walking the
-cause chain (`caused_by()`, `has_root_cause()`), matching an `ExceptionGroup` (`contains_error()`), and
-pivoting to the raised exception (`raised()`) or the call's return value (`returned()`).
+See [Errors & Reporting](errors.md) for the full set:
+
+- [expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings);
+- the cause chain (`caused_by()`, `has_root_cause()`) and `ExceptionGroup` matching (`contains_error()`);
+- pivoting to the raised exception (`raised()`) or the call's return value (`returned()`).

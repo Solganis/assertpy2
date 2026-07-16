@@ -79,6 +79,8 @@ def is_multiple_of(self, other):
 
     _, rem = divmod(self.val, other)
     if rem > 0:
-        return self.error(f"Expected <{self.val}> to be multiple of <{other}>, but was not.")
+        return self.error(
+            f"Expected <{self.val}> to be multiple of <{other}>, but was not."
+        )
     return self
 ```
