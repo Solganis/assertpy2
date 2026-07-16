@@ -226,6 +226,38 @@ test was deselected. A whole obsolete file is only ever reported, never auto-del
 `pytest-xdist` the touched-snapshot sets from all workers are aggregated on the controller first, so a
 snapshot exercised on another worker is never mistaken for an orphan.
 
+### Inline snapshots
+
+An inline snapshot keeps the expected value **in the test source** instead of a separate file. Call
+`matches_inline()` empty, record it once with `--assertpy2-snapshot-update`, and the literal is written
+back into the call:
+
+```python
+# before recording
+assert_that(client.get("/orders/1").json()).matches_inline()
+
+# after `pytest --assertpy2-snapshot-update`
+assert_that(client.get("/orders/1").json()).matches_inline({"id": 1, "status": "paid"})
+```
+
+Later runs compare against the literal, and update mode overwrites it on drift - just like `snapshot()`.
+The same selective knobs apply, so volatile fields never make the snapshot brittle:
+
+```python
+assert_that(order).matches_inline(
+    {"id": 0, "total": 42.0}, placeholders={"id": match.is_uuid()}, tolerance=0.01
+)
+```
+
+Recording needs the `[inline]` extra (`pip install assertpy2[inline]`); the **comparison** does not -
+it is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
+assertion rewriting. Under xdist the recorded edits are shipped to the controller and applied once,
+never written by workers in parallel.
+
+Inline snapshots hold source **literals**, so only JSON-ish values work (a `dict`/`list`/`tuple`/`set`
+of scalars). For a `datetime`, `Decimal`, `UUID`, or a custom object use `snapshot()` instead - the two
+are complementary, sharing the same update flag, CI mode, selective comparison, and structured diff.
+
 ### Custom types
 
 Beyond the built-in codec (`set`, `complex`, `datetime`/`date`/`time`, `Decimal`, `bytes`, `UUID`,
