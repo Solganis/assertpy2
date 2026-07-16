@@ -1,0 +1,40 @@
+name: CodSpeed
+
+# Continuous performance gate: run the micro-benchmarks (benchmarks/test_perf.py) under CodSpeed's CPU
+# simulation, which measures a deterministic instruction count rather than wall time, so a runner's noise
+# never flakes it. CodSpeed compares each commit to the base and reports a pass/fail on the PR. A public
+# repo uploads over OIDC (id-token), so no token secret is needed - only the CodSpeed GitHub App installed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  benchmarks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d31148d669074a8d0a63714ba94f3201e7020bc3 # v8.3.0
+
+      - name: Run benchmarks under CodSpeed
+        uses: CodSpeedHQ/action@f99becdce5e5d51fd556489ebef684f4ecfd6286 # v4.18.5
+        with:
+          mode: simulation
+          run: uv run --locked --group benchmark pytest benchmarks/ --codspeed --no-cov

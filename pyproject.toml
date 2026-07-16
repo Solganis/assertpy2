@@ -87,6 +87,11 @@ mutation = [
 docs-examples = [
     "pytest-examples>=0.0.18",
 ]
+# Performance regression gate. Own group: pytest-codspeed is only needed by the CodSpeed CI job and a
+# manual `pytest benchmarks/ --codspeed`, not by the suite every contributor runs.
+benchmark = [
+    "pytest-codspeed>=5",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
