@@ -342,17 +342,19 @@ def assert_conforms(
     """Validate ``val`` against a pydantic v2 ``model`` and continue over the validated instance.
 
     The narrowing-complete companion to [`assert_that()`][assertpy2.assertpy.assert_that] for
-    contract testing.  Runs ``model.model_validate(val)``: on success the returned builder carries
-    the validated, coerced model instance (so ``.value`` and ``extracting`` see typed fields); on
-    failure it fails with pydantic's validation errors.  Because the return type is driven by
-    ``model`` rather than by the type of ``val``, the chain narrows to ``model`` for **any** input,
-    including the ``Any`` a decoded JSON payload carries - the typed capstone of the narrowing family.
+    contract testing.  Runs ``model.model_validate(val)``: on success the returned builder carries the
+    validated, coerced instance (so ``.value`` and ``extracting`` see typed fields); on failure it
+    fails with pydantic's validation errors.
+
+    Because the return type is driven by ``model`` rather than by the type of ``val``, the chain
+    narrows to ``model`` for **any** input - including the ``Any`` a decoded JSON payload carries.
 
     With ``exact=True`` it also asserts **contract drift**: the payload must not carry fields the model
-    does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model passes even
-    after the live API grows new fields; ``exact`` catches that drift (recursively, into nested
-    sub-models and lists), reporting the exact paths.  Alias-aware, and a model that opts into extras
-    (``extra="allow"``) is respected.
+    does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model keeps
+    passing after the live API grows new ones.
+
+    ``exact`` catches that drift - recursively, into nested sub-models and lists - and reports the
+    exact paths.  It is alias-aware, and respects a model that opts into extras (``extra="allow"``).
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)
@@ -798,33 +800,25 @@ class AssertionBuilder(
         """The value under test, returned as-is for typed extract-and-continue.
 
         Ends a chain by handing the checked value back, so a test can keep using it after the
-        assertions passed.  For object- and union-typed values the static type is the input type,
-        refined by the narrowing assertions:
-        [`is_not_none()`][assertpy2.base.BaseMixin.is_not_none] removes ``None`` from the type, and
-        [`is_instance_of()`][assertpy2.base.BaseMixin.is_instance_of] narrows to the checked class -
-        no ``cast()`` or bare ``assert`` needed to satisfy a type checker.
+        assertions passed.  For object- and union-typed values the static type is refined by the
+        narrowing assertions along the way:
+        [`is_not_none()`][assertpy2.base.BaseMixin.is_not_none] removes ``None`` and
+        [`is_instance_of()`][assertpy2.base.BaseMixin.is_instance_of] narrows to the checked class, so
+        no ``cast()`` or bare ``assert`` is needed to satisfy a type checker.
 
-        ``value`` is a strict-mode extraction.  If an assertion on the current value failed under
+        ``value`` is a strict-mode extraction: it hands the value back only when *every* assertion on
+        it passed.  If one failed under
         [`soft_assertions()`][assertpy2.assertpy.soft_assertions] or
-        [`assert_warn()`][assertpy2.assertpy.assert_warn] - where a failure is collected or logged
-        instead of halting - reading ``value`` raises ``TypeError`` rather than handing back an
-        unverified value.  This guard is deliberate and **not** narrowing-specific: ``value`` hands
-        back the value only when *every* assertion on it passed, so a failed ``is_equal_to`` taints it
-        exactly as a failed ``is_not_none`` does (the contract is "extract only what was fully
-        established").
+        [`assert_warn()`][assertpy2.assertpy.assert_warn] - where failures are collected, not raised -
+        reading ``value`` raises ``TypeError`` instead of returning an unverified value.  Read it in
+        strict mode, or after the soft block has closed.
 
-        The taint is per-value, not for the whole chain: a value-changing step
+        The taint is per-value, not per-chain.  A value-changing pivot
         ([`extracting()`][assertpy2.extracting.ExtractingMixin.extracting],
         [`first()`][assertpy2.collection.CollectionMixin.first],
-        [`decoded_as()`][assertpy2.bytes_mixin.BytesMixin.decoded_as], ...) begins a *new* value with a
-        fresh guard.  That is still safe, because those steps validate their own input and reject
-        ``None`` or an incompatible type - so a pivot can never reach ``.value`` with a value derived
-        from a failed ``is_not_none()``; it raises in the pivot first.  What survives a pivot is only a
-        real derived fact from a usable value (the failed assertion was an orthogonal claim), which is
-        consistent with the collect-and-continue intent of soft mode.
-
-        ``value`` and those modes are opposite intents (extract-once-established vs
-        continue-past-failure), so read ``value`` in strict mode, or after the soft block has closed.
+        [`decoded_as()`][assertpy2.bytes_mixin.BytesMixin.decoded_as], ...) starts a *new* value with a
+        fresh guard and validates its own input, so a pivot never reaches ``.value`` with a value
+        derived from a failed assertion - it raises in the pivot first.
 
         Examples:
             Usage:

@@ -101,10 +101,11 @@ class DiffEntry:
 class DiffResult:
     """Structured diff between two values.
 
-    ``kind`` is the diff *category* - which shape of comparison produced the entries (``"dict"``,
-    ``"sequence"``, ``"dataclass"``, ``"namedtuple"``, ``"model"``, ``"attrs"``, ``"set"``,
-    ``"string"``, ``"scalar"``, ``"contains"``, ``"match"``, or ``"openapi"``).  It is unrelated to
-    the assertion builder's ``kind`` argument, which selects the failure mode
+    ``kind`` names the diff *category* - the shape of comparison that produced the entries. It is one
+    of ``"dict"``, ``"sequence"``, ``"dataclass"``, ``"namedtuple"``, ``"model"``, ``"attrs"``,
+    ``"set"``, ``"string"``, ``"scalar"``, ``"contains"``, ``"match"``, or ``"openapi"``.
+
+    It is unrelated to the assertion builder's ``kind`` argument, which selects the failure mode
     (``None``/``"soft"``/``"warn"``).
     """
 
@@ -125,12 +126,14 @@ class DiffResult:
 class PollSample:
     """One recorded poll of an [`eventually()`][assertpy2.assertpy.AssertionBuilder.eventually] probe.
 
-    ``outcome`` is ``"fail"`` (the probe returned a value, the assertion on it failed) or ``"error"``
-    (the probe raised an ignored exception before producing a value).  ``value`` is a JSON-safe
-    point-in-time snapshot of the probed value (``None`` for ``"error"`` samples); ``detail`` carries
-    the failure message or the exception repr.  Consecutive identical polls are collapsed into one
-    sample with ``repeats`` counting the run; ``elapsed`` is the run's first occurrence, in seconds
-    from the start of polling.
+    ``outcome`` is ``"fail"`` (the probe returned a value and the assertion on it failed) or
+    ``"error"`` (the probe raised an ignored exception before producing a value).
+
+    ``value`` is a JSON-safe point-in-time snapshot of the probed value, ``None`` for ``"error"``
+    samples, and ``detail`` carries the failure message or the exception repr.
+
+    Consecutive identical polls are collapsed into one sample: ``repeats`` counts the run, and
+    ``elapsed`` is its first occurrence, in seconds from the start of polling.
     """
 
     elapsed: float
@@ -144,9 +147,10 @@ class PollSample:
 class PollTrace:
     """Convergence telemetry attached to an ``eventually()`` timeout failure.
 
-    ``samples`` keeps the first and last polls (middle entries beyond the retention window are
-    counted in ``dropped``); ``total_polls`` is the real number of polls; ``summary`` is a one-line
-    trend classification of why the condition never held.
+    ``samples`` keeps the first and last polls, with middle entries beyond the retention window
+    counted in ``dropped``, and ``total_polls`` is the real number of polls.
+
+    ``summary`` is a one-line trend classification of why the condition never held.
     """
 
     samples: list[PollSample]

@@ -35,11 +35,12 @@ def register_snapshot_serializer(
     """Register a custom (encode, decode) pair for snapshotting values of type ``cls``.
 
     The typed codec covers common non-JSON types (``set``, ``complex``, ``datetime``/``date``/``time``,
-    ``Decimal``, ``bytes``, ``uuid.UUID``, ``Enum``); register a serializer for anything else - a
+    ``Decimal``, ``bytes``, ``uuid.UUID``, ``Enum``).  Register a serializer for anything else - a
     domain object, an ORM row, a ``pathlib.Path`` - so ``snapshot()`` stores and round-trips it instead
-    of raising ``TypeError``.  Matching is by ``isinstance`` (so subclasses are covered), the registry
-    is consulted **before** the built-ins, and a later registration wins over an earlier one for
-    overlapping types.
+    of raising ``TypeError``.
+
+    Matching is by ``isinstance`` (so subclasses are covered), the registry is consulted **before** the
+    built-ins, and a later registration wins over an earlier one for overlapping types.
 
     Args:
         cls: the type (matched by ``isinstance``) the serializer applies to
@@ -79,10 +80,12 @@ class SnapshotCreatedWarning(UserWarning):
 class SnapshotUpdatedWarning(UserWarning):
     """Emitted when `snapshot()` overwrites a stored snapshot in update mode.
 
-    Update mode (the ``--assertpy2-snapshot-update`` pytest flag, or the
-    ``ASSERTPY2_SNAPSHOT_UPDATE`` environment variable) replaces failing snapshots with the current
-    value instead of failing.  Each overwrite emits this warning, so an update run reports exactly
-    which snapshots changed instead of rewriting them silently.
+    Update mode replaces failing snapshots with the current value instead of failing; turn it on with
+    the ``--assertpy2-snapshot-update`` pytest flag or the ``ASSERTPY2_SNAPSHOT_UPDATE`` environment
+    variable.
+
+    Each overwrite emits this warning, so an update run reports exactly which snapshots changed instead
+    of rewriting them silently.
     """
 
 
@@ -245,25 +248,18 @@ def _format_shape_drift(drift):
 
 
 class SnapshotMixin(_MixinBase):
-    """Snapshot mixin.
+    """Assertions that compare a value against a stored snapshot, recording it on the first run.
 
-    Take a snapshot of a python data structure, store it on disk in JSON format, and automatically
-    compare the latest data to the stored data on every test run.
+    Capture a python data structure to disk as JSON and compare the current value against it on every
+    later run - a few well-placed snapshot tests cover a lot of surface with very little code.
 
-    Functional testing (which snapshot testing falls under) is very much blackbox testing.  When
-    something goes wrong, it's hard to pinpoint the issue, because functional tests typically
-    provide minimal *isolation* as compared to unit tests.  On the plus side, snapshots typically
-    do provide enormous *leverage* as a few well-placed snapshot tests can strongly verify that an
-    application is working.  Similar coverage would otherwise require dozens if not hundreds of
-    unit tests.
+    **On-disk format**
 
-    **On-disk Format**
-
-    Snapshots are stored in a readable JSON format.  For example:
+    Snapshots are stored as readable JSON.  For example:
 
         assert_that({'a': 1, 'b': 2, 'c': 3}).snapshot()
 
-    Would be stored as:
+    is stored as:
 
         {
             "a": 1,
@@ -271,32 +267,33 @@ class SnapshotMixin(_MixinBase):
             "c": 3
         }
 
-    The JSON formatting supports most python data structures (dict, list, object, etc).  Values
-    without a native JSON form round-trip through typed markers: ``set``, ``complex``,
-    ``datetime.datetime`` (including timezone-aware), ``datetime.date``, ``datetime.time``,
-    ``decimal.Decimal``, ``bytes`` (stored base64-encoded), ``uuid.UUID``, and ``Enum`` members.
-    Any other type can be handled by registering a serializer with
+    Most python structures are supported (dict, list, object, and so on).  Values without a native
+    JSON form round-trip through typed markers: ``set``, ``complex``, ``datetime``/``date``/``time``
+    (timezone-aware included), ``decimal.Decimal``, ``bytes`` (base64-encoded), ``uuid.UUID``, and
+    ``Enum`` members.  Any other type can be handled by registering a serializer with
     [`register_snapshot_serializer()`][assertpy2.snapshot.register_snapshot_serializer].
 
     **Updating**
 
-    Run pytest with ``--assertpy2-snapshot-update`` (or set the ``ASSERTPY2_SNAPSHOT_UPDATE``
-    environment variable for other runners) and every failing snapshot comparison overwrites the
-    stored value instead of failing, each emitting a
-    [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning].  Matching snapshots are
-    left untouched.  Deleting the snapshot files and re-running still works too - each fresh capture
-    emits a [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning], so neither a first
-    run nor an update run is ever silent (and both fail explicitly under ``-W error``).
+    Run pytest with ``--assertpy2-snapshot-update`` (or set ``ASSERTPY2_SNAPSHOT_UPDATE`` for other
+    runners) and every failing comparison overwrites the stored value instead of failing.
+
+    Each overwrite emits a [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning], and
+    matching snapshots are left untouched.  Deleting the snapshot files and re-running works too - each
+    fresh capture emits a [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning].  So
+    neither a first run nor an update run is ever silent, and both fail explicitly under ``-W error``.
 
     **CI mode**
 
-    On a first run a missing snapshot is *created* and the test passes - convenient locally, but a
-    hazard in CI: a snapshot test whose golden was never committed would create it in the ephemeral
-    workspace, pass, and silently disable drift detection for that test.  In CI mode a missing
-    snapshot is instead a hard failure.  Enable it with the ``--assertpy2-snapshot-ci`` pytest flag
-    or the ``ASSERTPY2_SNAPSHOT_CI`` environment variable; it is also auto-enabled when a ``CI``
-    environment variable is set (the near-universal CI marker).  Disable the autodetection with
-    ``--assertpy2-snapshot-no-ci`` or ``ASSERTPY2_SNAPSHOT_CI=0``.  Local runs are unaffected.
+    On a first run a missing snapshot is *created* and the test passes.  That is convenient locally,
+    but a hazard in CI: a snapshot test whose golden was never committed would create it in the
+    ephemeral workspace, pass, and silently disable drift detection for that test.
+
+    In CI mode a missing snapshot is instead a hard failure.  Enable it with the
+    ``--assertpy2-snapshot-ci`` pytest flag or the ``ASSERTPY2_SNAPSHOT_CI`` environment variable; it
+    is also auto-enabled when a ``CI`` environment variable is set (the near-universal CI marker).
+    Disable the autodetection with ``--assertpy2-snapshot-no-ci`` or ``ASSERTPY2_SNAPSHOT_CI=0``.
+    Local runs are unaffected.
     """
 
     def _with_placeholder_tokens(self, placeholders):
@@ -341,26 +338,22 @@ class SnapshotMixin(_MixinBase):
     ) -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
-        On the first run of a test before the snapshot file has been saved, a snapshot is created,
-        stored to disk, a [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning] is
-        emitted, and the test *always* passes.  But on all subsequent runs, val is compared
-        to the on-disk snapshot, and the test fails if they don't match.
+        On the first run, before the snapshot file exists, the value is captured to disk, a
+        [`SnapshotCreatedWarning`][assertpy2.snapshot.SnapshotCreatedWarning] is emitted, and the test
+        passes.  On every later run the value is compared to the stored snapshot and the test fails on
+        any mismatch.
 
-        Snapshot artifacts are stored in the ``__snapshots`` directory by default, and should be
-        committed to source control alongside any code changes.
+        Snapshots live in the ``__snapshots`` directory by default (commit them to source control) and
+        are identified by test filename plus line number, unless you pass ``id`` or ``path``.
 
-        Snapshots are identified by test filename plus line number by default.
+        In **update mode** (``--assertpy2-snapshot-update``, or the ``ASSERTPY2_SNAPSHOT_UPDATE`` env
+        var) a failing comparison overwrites the stored snapshot and passes, emitting a
+        [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning]; a matching snapshot is
+        left untouched.
 
-        In update mode (the ``--assertpy2-snapshot-update`` pytest flag, or the
-        ``ASSERTPY2_SNAPSHOT_UPDATE`` environment variable) a failing comparison overwrites the
-        stored snapshot with the current value and passes, emitting a
-        [`SnapshotUpdatedWarning`][assertpy2.snapshot.SnapshotUpdatedWarning]; a matching snapshot
-        is left untouched.
-
-        In CI mode (the ``--assertpy2-snapshot-ci`` pytest flag, the ``ASSERTPY2_SNAPSHOT_CI``
-        environment variable, or an auto-detected ``CI`` environment) a *missing* snapshot is a hard
-        ``AssertionError`` instead of being created and passing, so an uncommitted golden fails the
-        build rather than silently disabling drift detection.
+        In **CI mode** (``--assertpy2-snapshot-ci``, ``ASSERTPY2_SNAPSHOT_CI``, or an auto-detected
+        ``CI`` environment) a *missing* snapshot is a hard ``AssertionError`` instead of being created,
+        so an uncommitted golden fails the build rather than silently disabling drift detection.
 
         The comparison accepts the same selective options as
         [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to], so volatile fields (timestamps,
@@ -382,9 +375,9 @@ class SnapshotMixin(_MixinBase):
                 ``(actual, expected) -> bool`` predicate that owns matching leaves.
             placeholders (dict | None): a dict mapping a top-level key of a *dict-like* val to a
                 ``Matcher`` (or callable predicate).  The stored snapshot records a descriptive token
-                (``Any<...>``) for that field instead of the volatile value, and the comparison asserts
-                the actual field satisfies the matcher (presence + shape) rather than exact equality -
-                so a generated id or timestamp reads as its shape in the golden and never breaks it.
+                (``Any<...>``) for that field instead of the volatile value; each run then asserts the
+                field is present and satisfies the matcher, not that it equals a fixed value - so a
+                generated id or timestamp reads as its shape and never breaks the snapshot.
 
         Examples:
             Usage:
@@ -542,10 +535,11 @@ class SnapshotMixin(_MixinBase):
         """Asserts that val equals an inline snapshot literal written at the call site.
 
         Unlike [`snapshot()`][assertpy2.snapshot.SnapshotMixin.snapshot], which stores the value in a
-        separate file, an inline snapshot lives as a literal argument in the test source. Call it empty
-        the first time and run with ``--assertpy2-snapshot-update`` to record the value into the source;
-        later runs compare against it. The same selective knobs as ``snapshot()`` apply, so volatile
-        fields never make the snapshot brittle.
+        separate file, an inline snapshot lives as a literal argument in the test source.
+
+        Call it empty the first time and run with ``--assertpy2-snapshot-update`` to record the value
+        into the source; later runs compare against it. The same selective knobs as ``snapshot()``
+        apply, so volatile fields never make the snapshot brittle.
 
         The comparison itself is an ordinary equality check with no source introspection, so it works
         under ``pytest-xdist`` and needs neither the ``[inline]`` extra nor any assertion rewriting;
@@ -625,11 +619,12 @@ class SnapshotMixin(_MixinBase):
         """Asserts that val's *structure* matches a contract snapshot stored previously.
 
         Records the shape - paths and type categories, never values - on the first run, then on later
-        runs fails only on **structural** drift: a field added, removed, or retyped.  It is value-tolerant
-        by construction, so dynamic ids, timestamps, and amounts change freely without breaking the
-        snapshot, and it needs no hand-written model - the contract is inferred from the first response.
-        Numbers are one category (``5`` and ``5.0`` do not drift) and a ``null`` sample is a nullable
-        wildcard.
+        runs fails only on **structural** drift: a field added, removed, or retyped.
+
+        It is value-tolerant by construction, so dynamic ids, timestamps, and amounts change freely
+        without breaking the snapshot, and it needs no hand-written model - the contract is inferred
+        from the first response.  Numbers are one category (``5`` and ``5.0`` do not drift), and a
+        ``null`` sample is a nullable wildcard.
 
         The model-driven counterpart is
         [`assert_conforms(..., exact=True)`][assertpy2.assertpy.assert_conforms]: reach for that when you
@@ -638,9 +633,11 @@ class SnapshotMixin(_MixinBase):
 
         Honors the same update mode (``--assertpy2-snapshot-update``), CI mode
         (``--assertpy2-snapshot-ci``), and storage layout as
-        [`snapshot()`][assertpy2.snapshot.SnapshotMixin.snapshot].  Because a contract is inferred from a
-        single observation it cannot know which fields are optional, so a legitimately sometimes-absent
-        field reads as ``removed``; re-record with update mode when the contract really changed.
+        [`snapshot()`][assertpy2.snapshot.SnapshotMixin.snapshot].
+
+        Because a contract is inferred from a single observation it cannot know which fields are
+        optional, so a legitimately sometimes-absent field reads as ``removed``; re-record with update
+        mode when the contract really changed.
 
         Args:
             id: a custom snapshot identifier (defaults to test filename plus line number)
