@@ -395,8 +395,8 @@ assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")  # method
 
 ### Recursive field assertions
 
-`all_fields_satisfy` walks the whole object graph (mappings, dataclasses, namedtuples, Pydantic models,
-lists, tuples) and applies one [matcher](matchers.md) or callable to every scalar leaf, reporting the path
+`all_fields_satisfy` walks the whole object graph (mappings, dataclasses, namedtuples, attrs classes,
+Pydantic models, lists, tuples) and applies one [matcher](matchers.md) or callable to every scalar leaf, reporting the path
 of each leaf that does not satisfy it. `has_no_none_fields` is the common special case:
 
 <!-- docs-guard: skip -->

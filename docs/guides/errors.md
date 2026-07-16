@@ -39,10 +39,10 @@ rendered by the plugin as colored diff sections.
 
 | Type | Diff kind | How it works |
 |---|---|---|
-| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, namedtuples, and models |
+| `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, namedtuples, attrs classes, and models |
 | `set`, `frozenset` | `set` | Extra and missing items |
 | `str` | `string` | Line-by-line comparison |
-| `dict` | `dict` | Key-by-key, recursive into nested dicts, lists, dataclasses, namedtuples, and models |
+| `dict` | `dict` | Key-by-key, recursive into nested dicts, lists, dataclasses, namedtuples, attrs classes, and models |
 | `dataclass` | `dataclass` | Field-by-field, handles differing types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
 | Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
@@ -60,7 +60,7 @@ The diff for that failure - and the other diff shapes - renders like this.
 
 ### What each diff kind looks like
 
-**Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, Pydantic `model`, `string`, `scalar`)
+**Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, `attrs`, Pydantic `model`, `string`, `scalar`)
 show the path with the removal in red and the addition in green - this is the diff for the example above:
 
 ![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)

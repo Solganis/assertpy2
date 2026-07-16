@@ -160,8 +160,8 @@ assert_that(response).matches_structure({
 })
 ```
 
-The value under test can be a plain dict or a Pydantic model (anything exposing `model_dump()`); a
-model is normalized to its dict before matching, so the same spec works either way, including inside
+The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
+attrs instance; a model or attrs instance is normalized to its dict before matching, so the same spec works either way, including inside
 `satisfies()` and the `==` form. Normalization applies at every level - a model nested inside a plain
 dict matches too, and failure paths still point at the leaf field (`address.city`):
 
