@@ -1,11 +1,11 @@
 import pytest
 
-attrs = pytest.importorskip("attrs", reason="attrs not installed")
-import attr
-
 from assertpy2 import assert_that, match
 from assertpy2._introspection import is_attrs_instance
 from assertpy2.errors import AssertionFailure
+
+attrs = pytest.importorskip("attrs", reason="attrs not installed")
+import attr  # noqa: E402  # low-level attrs API, imported only after importorskip confirms attrs is installed
 
 
 @attrs.define
