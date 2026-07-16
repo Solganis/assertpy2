@@ -87,7 +87,9 @@ def apply_inline_records() -> list[str]:
             content = handle.read()
         for start, end, text in sorted(edits, reverse=True):
             content = content[:start] + text + content[end:]
-        with open(filename, "w", encoding="utf-8") as handle:
+        with open(filename, "w", encoding="utf-8", newline="") as handle:
+            # newline="" writes the (universal-newline-normalized) content verbatim, so an LF source
+            # file stays LF instead of being rewritten to the platform ending on Windows
             handle.write(content)
         touched.append(filename)
     _RECORDS.clear()
