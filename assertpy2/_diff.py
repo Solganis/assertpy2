@@ -317,9 +317,9 @@ def _walk_leaves(value, prefix="", _seen=None):
     """Yield ``(path, leaf)`` for every scalar leaf of an object graph, depth-first.
 
     Recurses into the same containers as the rich-diff engine (`_sub_diff_entries()`): mappings,
-    dataclasses, namedtuples, model-dump objects, lists and tuples.  Anything else - scalars, strings,
-    sets, opaque objects - is yielded as a single leaf, so the paths match the diffs.  A circular
-    reference yields one ``(path, "<circular ref>")`` leaf and stops, mirroring the cycle guard.
+    dataclasses, namedtuples, model-dump objects, attrs instances, lists and tuples.  Anything else -
+    scalars, strings, sets, opaque objects - is yielded as a single leaf, so the paths match the diffs.
+    A circular reference yields one ``(path, "<circular ref>")`` leaf and stops, mirroring the cycle guard.
     """
     if _seen is None:
         _seen = set()
@@ -348,6 +348,12 @@ def _walk_leaves(value, prefix="", _seen=None):
         dumped = value.model_dump()
         for key in dumped:
             yield from _walk_leaves(dumped[key], f"{prefix}.{key}" if prefix else str(key), child_seen)
+        return
+    if is_attrs_instance(value):
+        child_seen = _seen | {id(value)}
+        for field in value.__attrs_attrs__:
+            path = f"{prefix}.{field.name}" if prefix else field.name
+            yield from _walk_leaves(getattr(value, field.name), path, child_seen)
         return
     if isinstance(value, (list, tuple)):
         child_seen = _seen | {id(value)}
