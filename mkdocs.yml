@@ -132,6 +132,7 @@ nav:
       - In your test suite:
           - Testing: guides/testing.md
           - Errors & reporting: guides/errors.md
+  - Patterns & recipes: recipes.md
   - Concepts:
       - Type safety: concepts/type-safety.md
   - Extending:
