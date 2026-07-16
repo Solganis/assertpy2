@@ -50,7 +50,7 @@ jobs:
 
       - name: Install dependencies (all integrations)
         if: matrix.full-deps
-        run: uv sync --extra json --extra data --group integrations --group docs-examples
+        run: uv sync --extra json --extra data --extra inline --group integrations --group docs-examples
 
       - name: Test with coverage
         if: '!matrix.full-deps'
