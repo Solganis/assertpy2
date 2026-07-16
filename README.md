@@ -157,6 +157,8 @@ lets you assert and use the result in a single step.
 - [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive structural diffs across lists, sets, dicts, dataclasses, namedtuples, Pydantic models, and matchers, with circular-reference protection.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): store and compare data structures in JSON format; update via `--assertpy2-snapshot-update`. [`matches_contract_snapshot()`](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots) catches structural regressions, value-tolerant.
+- [**Inline snapshots**](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots): `matches_inline()` records the expected value straight into the test source with `--assertpy2-snapshot-update`; the comparison is a plain equality check, so it runs under `pytest-xdist` with no assertion rewriting.
+- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi(spec, path, method)` validates a JSON response body against an operation's response schema (OpenAPI 3.0/3.1, `$ref`, `oneOf`, `enum`, `format`), reporting every violation with its JSON path.
 
 **Extensibility**
 
