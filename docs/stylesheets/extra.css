@@ -19,6 +19,14 @@
 :root {
   font-size: 130%;
 }
+/* Vertical rhythm. Loosen the line-height a touch above Material's ~1.6 and add a little
+   space between paragraphs so the (enlarged) body reads less dense - airier, not sparse. */
+.md-typeset {
+  line-height: 1.72;
+}
+.md-typeset p {
+  margin-block: 1.15em;
+}
 /* Material renders admonition (!!! note) and <details> content smaller than body
    (.64rem vs ~.7rem); the root reduction above made that already-small text hard to
    read. Lift note/details text to body size so density does not cost legibility. */
@@ -28,12 +36,13 @@
 }
 
 /* Prose wrapping. Let the browser avoid orphans (a lone word on the last line) rather
-   than needing a manual <br> per paragraph, and keep an inline code span whole instead
-   of splitting it mid-token across a line break. */
+   than needing a manual <br> per paragraph, and let a long inline code span wrap at its
+   token boundaries instead of jumping whole to the next line - only a single token too
+   long for the line ever breaks mid-word. */
 .md-typeset p,
 .md-typeset li {
   text-wrap: pretty;
 }
 .md-typeset :not(pre) > code {
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
