@@ -3,10 +3,12 @@
 This reference is generated from the source docstrings and is grouped by the **mixin that implements
 each assertion**, mirroring the code layout.
 
-The assertions actually available on a value are the **union of the mixins for its type**. For example,
-on a string (``assert_that("x")``) you can call everything on [String assertions](strings.md),
+The assertions actually available on a value are the **union of the mixins for its type**. On a string
+(``assert_that("x")``), for example, that is everything on [String assertions](strings.md),
 [Containment assertions](containment.md), [Core & objects](core.md), and
-[File & path assertions](files.md). For a task-oriented view organized by value type instead, see the
+[File & path assertions](files.md).
+
+For a task-oriented view organized by value type instead, see the
 [Type assertions guide](../guides/assertions.md).
 
 - [Entry points](entry-points.md) - the top-level functions such as ``assert_that``, ``assert_conforms``,

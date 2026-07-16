@@ -153,7 +153,9 @@ For a called function, assert it raises and chain assertions on the message:
 
 ```python
 assert_that(some_func).raises(RuntimeError).when_called_with("foo")
-assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_equal_to("some err")
+assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_equal_to(
+    "some err"
+)
 ```
 
 Or assert it does **not** raise a given exception:
@@ -183,14 +185,18 @@ the chain. Both pivot to that cause's message so the chain continues:
 ```python
 # def save(row): ... raise ServiceError("save failed") from TimeoutError("db timeout")
 assert_that(save).raises(ServiceError).when_called_with(row).caused_by(TimeoutError)
-assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(TimeoutError).is_equal_to("db timeout")
+assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(
+    TimeoutError
+).is_equal_to("db timeout")
 ```
 
 **Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`) - `contains_error()`
 asserts the caught group contains, recursively, an exception of each given type:
 
 ```python
-assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
+assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(
+    ValueError, KeyError
+)
 ```
 
 ### Expected warnings
@@ -199,7 +205,9 @@ For a called function, assert it emits a warning and chain assertions on the war
 
 ```python
 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
-assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").matches("since 2.6")
+assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").matches(
+    "since 2.6"
+)
 ```
 
 The category defaults to `Warning` (matches any warning) and matches subclasses. Or assert it does
@@ -213,8 +221,14 @@ To also assert on the value the call returned (alongside the warning, or after `
 `does_not_raise`), pivot with `returned()`:
 
 ```python
-assert_that(make_client).warns(DeprecationWarning).when_called_with().returned().is_instance_of(Client)
-assert_that(adder).does_not_raise(TypeError).when_called_with(1, 2).returned().is_equal_to(3)
+(
+    assert_that(make_client).warns(DeprecationWarning).when_called_with()
+    .returned().is_instance_of(Client)
+)
+(
+    assert_that(adder).does_not_raise(TypeError).when_called_with(1, 2)
+    .returned().is_equal_to(3)
+)
 ```
 
 `returned()` exposes the type-agnostic core assertions (`is_equal_to`, `is_instance_of`, `satisfies`,

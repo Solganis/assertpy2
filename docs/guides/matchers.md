@@ -88,9 +88,9 @@ assert 42 == (match.is_positive() & match.less_than(100))
     This makes matchers a drop-in addition to an existing suite: add one import, use `match.*` in any
     `==` comparison, no rewrite required.
 
-Matcher `==` never raises: an operand the predicate cannot evaluate (a string handed to
-`match.is_positive()`, an object with no ordering) simply compares as not equal, so a matcher that
-leaks into a membership check or a foreign comparison stays safe.
+Matcher `==` never raises. When the predicate can't evaluate an operand - a string handed to
+`match.is_positive()`, or an object with no ordering - it simply compares as not equal. So a matcher
+that leaks into a membership check or a foreign comparison stays safe.
 
 ## Available matchers
 
@@ -161,9 +161,11 @@ assert_that(response).matches_structure({
 ```
 
 The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
-attrs instance; a model or attrs instance is normalized to its dict before matching, so the same spec works either way, including inside
-`satisfies()` and the `==` form. Normalization applies at every level - a model nested inside a plain
-dict matches too, and failure paths still point at the leaf field (`address.city`):
+attrs instance - a model or attrs instance is normalized to its dict first, so the same spec works
+either way, including inside `satisfies()` and the `==` form.
+
+Normalization applies at every level: a model nested in a plain dict matches too, and failure paths
+still point at the leaf field (`address.city`):
 
 ```python
 from pydantic import BaseModel
@@ -174,7 +176,9 @@ class User(BaseModel):
 
 user = User(id="550e8400-e29b-41d4-a716-446655440000", name="Alice")
 
-assert_that(user).matches_structure({"id": match.is_uuid(), "name": match.equal_to("Alice")})
+assert_that(user).matches_structure(
+    {"id": match.is_uuid(), "name": match.equal_to("Alice")}
+)
 assert_that(user).satisfies(match.structure({"id": match.is_uuid()}))
 assert user == match.structure({"id": match.is_uuid()})
 ```
@@ -278,7 +282,9 @@ They compose and nest like built-ins:
 
 <!-- docs-guard: skip -->
 ```python
-assert_that(email).satisfies(match.is_valid_email() & match.contains_string("@company.com"))
+assert_that(email).satisfies(
+    match.is_valid_email() & match.contains_string("@company.com")
+)
 assert_that(response).matches_structure({
     "email": match.is_valid_email(),
     "status": match.has_status("active"),

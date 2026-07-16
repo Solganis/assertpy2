@@ -1,10 +1,8 @@
 # Migration from assertpy
 
-`assertpy2` is a drop-in replacement for the original
-[assertpy](https://github.com/assertpy/assertpy), which has been inactive since 2020 (last release
-`1.1`). It keeps the same `assert_that(...)` API and adds static typing, composable matchers,
-structural matching, async assertions, and structured failures. For most projects the migration is a
-one-line change with no behavioral surprises.
+`assertpy2` is a drop-in, fully typed replacement for the original
+[assertpy](https://github.com/assertpy/assertpy) - the same `assert_that(...)` API, so for most projects
+the switch is a single import.
 
 !!! success "TL;DR"
     On Python 3.10+, replace `from assertpy import ...` with `from assertpy2 import ...` and run your
@@ -19,6 +17,9 @@ one-line change with no behavioral surprises.
   pulled in automatically. The extras (`[json]`, `[data]`, `[allure]`, `[behave]`) stay opt-in.
 
 ## Switch the import
+
+Swap the dependency first - uninstall `assertpy`, install `assertpy2`, and update your
+`requirements`/`pyproject` - then switch the imports:
 
 === "Before"
 
@@ -84,21 +85,12 @@ You get these the moment you switch, without touching any test code:
 
 New capabilities the original never had, ready whenever you want them:
 
-- [Composable matchers](../guides/matchers.md) usable in `.satisfies()`, `.each()`, and plain `==`.
+- [Composable matchers](../guides/matchers.md), reusable across assertions and the plain `==` form.
 - [Structural matching](../guides/matchers.md#structural-matching) for API-response shapes.
-- [Typed narrowing](../concepts/type-safety.md#typed-narrowing-with-value) (`.value`) and [contract testing](../concepts/type-safety.md#contract-narrowing-with-assert_conforms) (`assert_conforms()`) for typed API-response tests.
-- [Exception cause chains and groups](../guides/errors.md#expected-exceptions) (`caused_by()`, `has_root_cause()`, `contains_error()`).
+- [Typed narrowing](../concepts/type-safety.md#typed-narrowing-with-value) (`.value`) and [contract testing](../concepts/type-safety.md#contract-narrowing-with-assert_conforms) for typed API responses.
+- [Exception cause chains and groups](../guides/errors.md#expected-exceptions).
 - The [collection pipeline](../guides/fluent.md#collection-pipeline) and [universal negation](../guides/fluent.md#universal-negation).
-- [Async and blocking polling](../guides/testing.md#async-assertions) with `eventually()` / `eventually_sync()`.
-- [JSON Path / Schema](../guides/data.md), [regex group extraction](../guides/data.md#regex-group-extraction), and
-  [bytes assertions](../guides/assertions.md#bytes--bytearray).
+- [Async and blocking polling](../guides/testing.md#async-assertions) for eventual consistency.
+- [JSON Path / Schema](../guides/data.md), [regex group extraction](../guides/data.md#regex-group-extraction), and [bytes assertions](../guides/assertions.md#bytes--bytearray).
 
 See the [comparison](comparison.md) for the full feature delta.
-
-## Steps
-
-1. Ensure the project runs on Python 3.10+.
-2. Swap the dependency: uninstall `assertpy`, install `assertpy2`, and update `requirements` or
-   `pyproject`.
-3. Find-and-replace the imports as shown above.
-4. Run your test suite - it should pass unchanged.

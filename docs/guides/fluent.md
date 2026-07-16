@@ -47,11 +47,14 @@ assert_that([1, -2, 3]).not_.each(match.is_positive())
 ```
 
 !!! note
-    Only assertions can be negated. Chain steps that configure or transform instead of asserting -
-    `described_as()`, `extracting()`, the collection pipeline (`filtered_on()`, `mapped()`,
-    `first()`, ...), `decoded_as()`, `at_json_path()`, `eventually()`, `eventually_sync()` - raise
-    a `TypeError` under `.not_`; place them before `.not_` (or negate the assertion that follows
-    them) instead:
+    Only assertions can be negated. Steps that configure or transform - not assert - raise a
+    `TypeError` under `.not_`:
+
+    - `described_as()`, `decoded_as()`, `at_json_path()`;
+    - the collection pipeline (`extracting()`, `filtered_on()`, `mapped()`, `first()`, ...);
+    - `eventually()` / `eventually_sync()`.
+
+    Place them before `.not_` (or negate the assertion that follows them) instead:
 
     ```python
     assert_that(1).described_as("desc").not_.is_none()          # description before not_
@@ -111,7 +114,9 @@ assert_that([42]).single().is_equal_to(42)
 Pipeline methods return a new builder, so they chain with each other and with any assertion:
 
 ```python
-assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(lambda o: o.total).first().satisfies(match.is_positive())
+assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(
+    lambda o: o.total
+).first().satisfies(match.is_positive())
 assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
 ```
 

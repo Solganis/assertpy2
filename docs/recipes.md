@@ -63,8 +63,10 @@ the same selective knobs and CI mode:
 <!-- docs-guard: skip -->
 ```python
 def test_report():
-    assert_that(build_report()).snapshot()          # -> __snapshots/snap-test_report.json
-    assert_that(build_summary()).matches_inline()    # -> literal written into this line
+    # file snapshot -> __snapshots/snap-test_report.json
+    assert_that(build_report()).snapshot()
+    # inline snapshot -> the literal is written into this line
+    assert_that(build_summary()).matches_inline()
 ```
 
 Use inline for small, literal-able values you want to read next to the test; use file snapshots for
@@ -160,7 +162,9 @@ Register a reusable matcher for a domain rule once, then use it everywhere via `
 ```python
 from assertpy2 import register_matcher
 
-register_matcher("is_valid_sku", lambda value: bool(re.fullmatch(r"[A-Z]{3}-\d{4}", value)))
+register_matcher(
+    "is_valid_sku", lambda value: bool(re.fullmatch(r"[A-Z]{3}-\d{4}", value))
+)
 
 assert_that("ABC-1234").satisfies(match.is_valid_sku())
 ```
@@ -174,7 +178,11 @@ For a very large object, comparing the whole thing is slow and the diff is noisy
 you care about and assert on those:
 
 ```python
-response = {"id": "abc-123", "items": [{"sku": "A"}, {"sku": "B"}], "meta": {"total": 2, "page": 1}}
+response = {
+    "id": "abc-123",
+    "items": [{"sku": "A"}, {"sku": "B"}],
+    "meta": {"total": 2, "page": 1},
+}
 
 assert_that(response["items"]).is_length(2)
 assert_that(response).has_json_path("$.meta.total")

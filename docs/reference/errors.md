@@ -1,8 +1,9 @@
 # Structured failures
 
-The exception raised when an assertion fails, plus the structured diff it carries. ``AssertionFailure``
-subclasses ``AssertionError``, so existing ``except AssertionError`` handlers keep working. See
-[Errors & reporting](../guides/errors.md) for usage.
+The exception raised when an assertion fails, carrying the structured diff.
+
+``AssertionFailure`` subclasses ``AssertionError``, so existing ``except AssertionError`` handlers keep
+working unchanged. See [Errors & reporting](../guides/errors.md) for usage.
 
 ::: assertpy2.errors.AssertionFailure
     options:

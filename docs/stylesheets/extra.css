@@ -46,3 +46,11 @@
 .md-typeset :not(pre) > code {
   overflow-wrap: break-word;
 }
+
+/* Fenced code blocks render narrower than the 120-char code style allows, so long example lines
+   overflow into a horizontal scroll. Nudge only the block font down (Material's default is .85em;
+   inline code and body text keep their size) so ~15% more characters fit before scrolling. Tune this
+   to trade fit against legibility - lower fits wider lines, higher keeps the code larger. */
+.md-typeset pre code {
+  font-size: 0.8em;
+}

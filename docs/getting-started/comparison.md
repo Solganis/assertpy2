@@ -1,15 +1,31 @@
 # Comparison
 
-assertpy2 is the only library compared here that gives you the fluent, matcher, and `==` styles in a
-single import, then goes further with type-narrowing assertions, contract testing, thread- and async-safe soft assertions, async
-polling, and structured failures. The tables below are a side-by-side comparison with the
-common alternatives.
+The tables below compare assertpy2 side-by-side with the common alternatives - pytest's `assert`,
+PyHamcrest, the original assertpy, and dirty-equals.
 
 !!! success "In short"
     assertpy2 unifies the fluent, matcher, and `==` styles in one typed package,
     then adds thread- and async-safe soft assertions, async polling, structured failures, and rich
     pytest diffs. It ships **39 composable matchers** and **over 100 assertion methods** across **12 value types**,
-    with no runtime dependencies on Python 3.11+. One import, all three styles.
+    with no runtime dependencies on Python 3.11+.
+
+## All three styles, one import
+
+assertpy2's fluent, matcher, and `==` styles are not mutually exclusive - a single import gives you all
+three, mixable in the same test suite:
+
+```python
+from assertpy2 import assert_that, match
+
+# fluent chaining (the assertpy heritage)
+assert_that(value).is_positive().is_less_than(100)
+
+# matchers inside plain == (the dirty-equals style)
+assert response == {"id": match.is_positive(), "name": match.is_non_empty_string()}
+
+# composable matchers (the Hamcrest style)
+assert_that(value).satisfies(match.greater_than(0) & match.less_than(100))
+```
 
 ## The approaches
 
@@ -19,11 +35,8 @@ common alternatives.
 - **PyHamcrest** is a matcher framework: `assert_that(value, is_(greater_than(5)))`. assertpy2 provides
   the same composable-matcher model (`&`, `|`, `~`, custom matchers) inside a typed fluent API.
 - **assertpy** (the original) introduced the fluent `assert_that(x).is_...()` chaining this project is
-  built on. Its last release is `1.1` (2020) and it has no static typing. assertpy2 is
-  its successor and substantially expands the assertion set - adding the entire bytes
-  family, more string and collection assertions, structural matching, the collection pipeline, JSON
-  Path/Schema, regex group extraction, async polling, universal negation, and composable matchers on top
-  of the original. See [Migrating from assertpy](migration.md) to switch.
+  built on. assertpy2 is its typed successor and substantially expands the assertion set. See
+  [Migrating from assertpy](migration.md) to switch.
 - **dirty-equals** (mis)uses `__eq__` so you can write `assert response == {"id": IsPositive(), ...}`.
   assertpy2 matchers work the same way inside `==`, so the same single dependency covers this style too.
 
@@ -55,7 +68,9 @@ The same check - `id` is a positive integer and `name` is a non-empty string - i
 === "PyHamcrest"
 
     ```python
-    from hamcrest import assert_that, has_entries, greater_than, instance_of, all_of, not_, empty
+    from hamcrest import (
+        assert_that, has_entries, greater_than, instance_of, all_of, not_, empty,
+    )
 
     assert_that(response, has_entries({
         "id": greater_than(0),
@@ -197,41 +212,6 @@ whole differing container. assertpy2 keeps a path-level diff on either.
     specialist when snapshots are the point; reach for assertpy2's when you want a snapshot inline with
     everything else, or structural (contract) regression rather than value-exact.
 
-## Project health
-
-| | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Maintained | built-in | Yes | No | Yes | **Yes** |
-| Property-based tests | n/a | No | No | No | **Yes** |
-| Mutation testing | n/a | No | No | No | **Yes** |
-| Runtime dependencies | **none** | **none** | **none** | **none** | **none on 3.11+** |
-| License | MIT | BSD | BSD | MIT | BSD-3 |
-
-!!! note
-    The property-based-tests and mutation-testing rows reflect each project's published CI and test
-    configuration. assertpy2 ships a [Hypothesis](https://hypothesis.readthedocs.io) suite covering its
-    comparison, diff, and matcher logic, plus a
-    [cosmic-ray](https://github.com/sixty-north/cosmic-ray) mutation-testing suite, on top of 100% branch
-    coverage.
-
-## All three styles, one import
-
-The styles above are not mutually exclusive in assertpy2. A single import and no runtime dependencies
-on Python 3.11+ give you all of them at once, and you can mix them freely in the same test suite:
-
-```python
-from assertpy2 import assert_that, match
-
-# fluent chaining (the assertpy heritage)
-assert_that(value).is_positive().is_less_than(100)
-
-# matchers inside plain == (the dirty-equals style)
-assert response == {"id": match.is_positive(), "name": match.is_non_empty_string()}
-
-# composable matchers (the Hamcrest style)
-assert_that(value).satisfies(match.greater_than(0) & match.less_than(100))
-```
-
 ## What only assertpy2 does here
 
 Across the columns above, assertpy2 is the only option that:
@@ -253,7 +233,3 @@ Across the columns above, assertpy2 is the only option that:
 - adds exception cause-chain and group assertions, a collection pipeline, regex group extraction, dynamic
   `has_<name>()` assertions, snapshot testing, JSON Path and Schema validation, file/date/bytes assertions,
   and Allure/Behave integrations.
-
-All of that with no runtime dependencies on Python 3.11+ (one tiny backport on 3.10): breadth that
-would otherwise require
-several separate libraries.

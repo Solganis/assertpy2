@@ -41,10 +41,14 @@ A **Structured Diff** attachment (modes `diff`, `full`) with a path-level breakd
 ```
 
 Values are native JSON (numbers, strings, booleans, nested objects and arrays), so the Allure viewer
-renders them as a collapsible tree and downstream tooling can parse them. Anything JSON cannot express
-degrades to a marked fallback instead of failing the attachment: `{"__repr__": "..."}` for arbitrary
-objects, datetimes, non-finite floats and circular references, and `{"__type__": "set", "__data__":
-[...]}` for sets. Oversized values are capped (strings at 4000 chars, containers at 100 items).
+renders them as a collapsible tree and downstream tooling can parse them.
+
+Anything JSON cannot express degrades to a marked fallback instead of failing the attachment:
+
+- `{"__repr__": "..."}` for arbitrary objects, datetimes, non-finite floats, and circular references;
+- `{"__type__": "set", "__data__": [...]}` for sets.
+
+Oversized values are capped: strings at 4000 chars, containers at 100 items.
 
 An **AssertionFailure** attachment (mode `full` only) with actual and expected values:
 
@@ -157,9 +161,10 @@ value = parse_int("42")  # 42
 
 Fluent equality assertions for [pandas](https://pandas.pydata.org/),
 [polars](https://pola.rs/) and [numpy](https://numpy.org/). These types compare element-wise, so a
-plain `is_equal_to()` cannot reduce them to a single truth value (it raises a clear `TypeError` telling
-you to use the methods below - including when the array or frame sits nested inside a dict, dataclass,
-or list under comparison).
+plain `is_equal_to()` cannot reduce them to a single truth value.
+
+Instead it raises a clear `TypeError` pointing you to the methods below - including when the array or
+frame sits nested inside a dict, dataclass, or list under comparison.
 
 !!! note "Optional dependency"
     Each library is its own extra, so you only install what you use (a polars user does not pull in
@@ -172,10 +177,11 @@ or list under comparison).
 ### DataFrames and Series
 
 `is_frame_equal()` works on both pandas and polars `DataFrame` and `Series`. Comparison **semantics are
-the library's own** - it delegates to `pandas.testing.assert_frame_equal` /
-`polars.testing.assert_frame_equal` (and the `assert_series_equal` variants), so dtype strictness, row and
-column order, tolerance and categoricals behave exactly as that library defines. Any keyword options are
-forwarded straight through.
+the library's own**: it delegates to `pandas.testing.assert_frame_equal` /
+`polars.testing.assert_frame_equal` (and the `assert_series_equal` variants), so dtype strictness, row
+and column order, tolerance and categoricals behave exactly as that library defines.
+
+Any keyword options are forwarded straight through.
 
 ```python
 import pandas as pd
@@ -198,9 +204,11 @@ On failure the library's own detailed diff is carried in the assertion message.
 
 ### numpy arrays
 
-`is_array_equal()` is exact (via `numpy.testing.assert_array_equal`); `is_array_close_to()` is
-float-tolerant (via `numpy.testing.assert_allclose`), for comparing computed arrays. Both accept any
-array-like numpy can coerce.
+Two array assertions, both accepting any array-like numpy can coerce:
+
+- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`;
+- `is_array_close_to()` - float-tolerant, via `numpy.testing.assert_allclose`, for comparing computed
+  arrays.
 
 ```python
 import numpy as np
