@@ -19,9 +19,9 @@ from hypothesis import strategies as st
 
 from assertpy2 import assert_conforms, assert_that, match
 from assertpy2._contract import contract_drift, shape, shape_diff
+from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
 from assertpy2.errors import _disambiguated
-from assertpy2.snapshot import _Decoder, _Encoder
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
 _atoms = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
