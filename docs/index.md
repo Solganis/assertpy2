@@ -71,7 +71,7 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
     ---
 
     `AssertionFailure` exposes `.actual`, `.expected`, and `.diff`; the pytest plugin renders recursive
-    diffs for lists, dicts, dataclasses, namedtuples, and Pydantic models.
+    diffs for lists, dicts, dataclasses, namedtuples, attrs classes, and Pydantic models.
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
 

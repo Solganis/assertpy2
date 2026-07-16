@@ -75,8 +75,8 @@ You get these the moment you switch, without touching any test code:
   via `contextvars`, so soft assertions are safe under `pytest-xdist` and `asyncio`. The original's soft
   assertions were not thread-safe.
 - **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the
-  auto-registered pytest plugin renders recursive diffs for lists, dicts, dataclasses, namedtuples, and
-  Pydantic models. Set `assertpy2_diff = "off"` if you prefer the plain message.
+  auto-registered pytest plugin renders recursive diffs for lists, dicts, dataclasses, namedtuples, attrs
+  classes, and Pydantic models. Set `assertpy2_diff = "off"` if you prefer the plain message.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
   value's type, and a type checker flags misuse before the tests run - see [Type Safety](../concepts/type-safety.md).
 
