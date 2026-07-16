@@ -16,12 +16,19 @@ import dataclasses
 from typing import Final
 
 from ._compare import _node_decision
-from ._introspection import is_mapping_like, is_model_dump_object, is_namedtuple
+from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
 from .errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 
 __tracebackhide__ = True
 
 _SENTINEL: Final = object()
+
+
+def _field_dict(obj, is_model):
+    """Field mapping of a pydantic-style model (``model_dump()``) or an attrs instance (shallow)."""
+    if is_model:
+        return obj.model_dump()
+    return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__}
 
 
 def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
@@ -140,9 +147,11 @@ def _build_equality_diff(
             kind="dataclass",
             entries=_dataclass_diff_entries(actual, expected, _prefix, _seen, config),
         )
-    if is_model_dump_object(actual) and is_model_dump_object(expected):
-        actual_dict = actual.model_dump()
-        expected_dict = expected.model_dump()
+    both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
+    both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
+    if both_model or both_attrs:
+        actual_dict = _field_dict(actual, both_model)
+        expected_dict = _field_dict(expected, both_model)
         entries = []
         for key in sorted(set(actual_dict) | set(expected_dict)):
             path = f"{_prefix}.{key}" if _prefix else f".{key}"
@@ -162,7 +171,7 @@ def _build_equality_diff(
                         entries.extend(sub_entries)
                     else:
                         entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
-        return DiffResult(kind="model", entries=entries)
+        return DiffResult(kind="model" if both_model else "attrs", entries=entries)
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
         return DiffResult(
             kind="sequence",
@@ -272,10 +281,12 @@ def _sub_diff_entries(
                     DiffEntry(path=f"{prefix}.{field_name}", actual=None, expected=getattr(expected, field_name))
                 )
         return entries
-    if is_model_dump_object(actual) and is_model_dump_object(expected):
+    both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
+    both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
+    if both_model or both_attrs:
         child_seen = _seen | {id(actual), id(expected)}
-        actual_dict = actual.model_dump()
-        expected_dict = expected.model_dump()
+        actual_dict = _field_dict(actual, both_model)
+        expected_dict = _field_dict(expected, both_model)
         entries = []
         for key in sorted(set(actual_dict) | set(expected_dict)):
             path = f"{prefix}.{key}"

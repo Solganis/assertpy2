@@ -226,7 +226,7 @@ def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
 
     lines = [f"{cyan}diff ({kind}):{reset}"]
 
-    if kind in {"sequence", "string", "dict", "dataclass", "namedtuple", "model"}:
+    if kind in {"sequence", "string", "dict", "dataclass", "namedtuple", "model", "attrs"}:
         for entry in visible:
             path = entry.path
             if entry.expected is None:
