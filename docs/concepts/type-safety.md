@@ -202,6 +202,27 @@ fields), not type coercions - a `datetime` field legitimately arrives as a JSON 
 coercions would be noise. This is stricter and more informative than pydantic's model-level
 `extra="forbid"`: it is per-call and names every drifted path.
 
+## Set up your type checker
+
+The narrowing works in any checker mode, but strict mode surfaces the most - a wrong method called on a
+narrowed value, a missing return annotation, a `.value` read where the type was never narrowed. Turn it
+on for your checker:
+
+```toml
+# pyproject.toml - mypy
+[tool.mypy]
+strict = true
+```
+
+```toml
+# pyproject.toml - Pyright / Pylance  (or "typeCheckingMode": "strict" in pyrightconfig.json)
+[tool.pyright]
+typeCheckingMode = "strict"
+```
+
+`ty` needs no configuration - it reads the types out of the box. All three pick up `assertpy2`'s types
+automatically via the `py.typed` marker below; there is no stub package to install.
+
 ## py.typed and PEP 561
 
 `assertpy2` ships a `py.typed` marker and is [PEP 561](https://peps.python.org/pep-0561/) compliant, so the
