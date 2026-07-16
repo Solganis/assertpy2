@@ -161,8 +161,7 @@ even point-in-time snapshots cost too much; the timeout failure then reports jus
 
 ## Snapshot testing
 
-Capture a data structure to disk as JSON and compare against it on every run. Borrowed from
-[Jest](https://jestjs.io/).
+Capture a data structure to disk as JSON and compare against it on every run.
 
 ```python
 assert_that({"a": 1, "b": 2, "c": 3}).snapshot()
