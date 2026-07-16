@@ -4,12 +4,12 @@ import collections.abc
 import re
 from typing import TYPE_CHECKING
 
-from ._mixin_base import _MixinBase
+from ._engine._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

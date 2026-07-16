@@ -4,7 +4,7 @@ import dataclasses
 import pytest
 
 from assertpy2 import assert_that
-from assertpy2._compare import _find_ambiguous_operand
+from assertpy2._engine._compare import _find_ambiguous_operand
 
 
 def test_is_equal():

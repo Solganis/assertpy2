@@ -3,11 +3,11 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING
 
-from ._introspection import is_model_dump_object, is_namedtuple
-from ._mixin_base import _MixinBase
+from ._engine._introspection import is_model_dump_object, is_namedtuple
+from ._engine._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

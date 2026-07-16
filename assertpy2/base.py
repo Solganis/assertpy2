@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ._compare import (
+from ._engine._compare import (
     _ambiguous_array_operand,
     _array_equality_error,
     _build_compare_config,
@@ -10,13 +10,13 @@ from ._compare import (
     _guarded_not_equal,
     _node_decision,
 )
-from ._diff import _build_equality_diff
-from ._introspection import is_namedtuple
+from ._engine._diff import _build_equality_diff
+from ._engine._introspection import is_namedtuple
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
 
 if TYPE_CHECKING:
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

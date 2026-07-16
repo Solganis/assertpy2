@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, cast
 
-from ._compat import BaseExceptionGroup
-from ._mixin_base import _MixinBase
+from ._engine._compat import BaseExceptionGroup
+from ._engine._mixin_base import _MixinBase
 
 if TYPE_CHECKING:
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

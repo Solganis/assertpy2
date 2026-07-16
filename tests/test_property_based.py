@@ -18,7 +18,7 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_conforms, assert_that, match
-from assertpy2._contract import contract_drift, shape, shape_diff
+from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
 from assertpy2.errors import _disambiguated

@@ -10,7 +10,7 @@ import pytest
 
 from . import _inline
 from . import snapshot as _snapshot
-from ._diff import _sub_diff_entries
+from ._engine._diff import _sub_diff_entries
 from .errors import _json_safe
 
 try:

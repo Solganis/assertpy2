@@ -3,14 +3,14 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING, Any
 
-from ._introspection import is_mapping_like
-from ._mixin_base import _MixinBase
+from ._engine._introspection import is_mapping_like
+from ._engine._mixin_base import _MixinBase
 from .matchers import BaseMatcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

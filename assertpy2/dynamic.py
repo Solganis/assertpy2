@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import collections.abc
 
-from ._introspection import is_namedtuple
-from ._mixin_base import _MixinBase
+from ._engine._introspection import is_namedtuple
+from ._engine._mixin_base import _MixinBase
 
 __tracebackhide__ = True
 

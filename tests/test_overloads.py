@@ -53,6 +53,6 @@ class TestOverloadsRuntimeBehavior:
 
 class TestTypingModuleImport:
     def test_typing_module_importable(self):
-        import assertpy2._typing  # inline: tests that module is importable
+        import assertpy2._engine._typing  # inline: tests that module is importable
 
-        assert_that(assertpy2._typing).is_not_none()
+        assert_that(assertpy2._engine._typing).is_not_none()

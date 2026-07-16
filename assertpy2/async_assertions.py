@@ -13,7 +13,7 @@ from .errors import AssertionFailure, PollSample, PollTrace, _json_safe
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

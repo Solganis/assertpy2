@@ -1,7 +1,7 @@
 import pytest
 
 from assertpy2 import assert_that, match
-from assertpy2._introspection import is_attrs_instance
+from assertpy2._engine._introspection import is_attrs_instance
 from assertpy2.errors import AssertionFailure
 
 attrs = pytest.importorskip("attrs", reason="attrs not installed")

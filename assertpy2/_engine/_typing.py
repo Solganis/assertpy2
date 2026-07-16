@@ -8,10 +8,10 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any, Protocol, TypeVar
 
+    from ..assertpy import AssertionBuilder, NegatedBuilder
+    from ..async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
+    from ..matchers import Matcher
     from ._compat import Self
-    from .assertpy import AssertionBuilder, NegatedBuilder
-    from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
-    from .matchers import Matcher
 
     # ``ignore``/``include`` accept a single key, a nested-path tuple, or a list/set/frozenset of them.
     _KeySpecs = Hashable | list[Hashable] | set[Hashable] | frozenset[Hashable]

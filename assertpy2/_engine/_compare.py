@@ -2,12 +2,12 @@
 
 ``is_equal_to`` builds a `_CompareConfig` from its ``tolerance``/``comparators`` kwargs and threads it
 through both the boolean comparison (`HelpersMixin._dict_not_equal()`) and the diff/message rendering
-(`assertpy2._diff._sub_diff_entries()`, `HelpersMixin._dict_err()`).  `_node_decision()` is the single
+(`assertpy2._engine._diff._sub_diff_entries()`, `HelpersMixin._dict_err()`).  `_node_decision()` is the single
 switch both sides consult, so a tolerated or comparator-equal leaf is reported in neither.  With ``config is
 None`` every helper reproduces the engine's historical ``actual != expected`` behavior exactly.
 
 Following the package convention, the impl helpers take unannotated args (the typed public surface lives in
-`assertpy2._typing`); they operate on arbitrary user values whose operators ``numbers.Number`` cannot
+`assertpy2._engine._typing`); they operate on arbitrary user values whose operators ``numbers.Number`` cannot
 express to the type checker.
 """
 

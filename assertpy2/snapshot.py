@@ -8,9 +8,9 @@ import warnings
 from typing import TYPE_CHECKING, Final
 
 from . import _inline
-from ._compare import _build_compare_config
-from ._contract import shape, shape_diff
-from ._mixin_base import _MixinBase
+from ._engine._compare import _build_compare_config
+from ._engine._contract import shape, shape_diff
+from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
 from .errors import _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
@@ -18,7 +18,7 @@ from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

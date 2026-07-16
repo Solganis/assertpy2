@@ -3,7 +3,7 @@
 These are verified by type checkers (ty, Pyright, Mypy), not at runtime: each ``assert_type`` pins the
 overload resolution to the documented type-specific Protocol, so a regression that broadens or changes a
 return type fails the type check. The body lives under ``TYPE_CHECKING`` because the Protocols in
-:mod:`assertpy2._typing` exist only for static analysis and are absent at runtime; Pytest imports this
+:mod:`assertpy2._engine._typing` exist only for static analysis and are absent at runtime; Pytest imports this
 module without executing the block.
 """
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs, assert_type
 
     from assertpy2 import assert_conforms, assert_that
-    from assertpy2._typing import (
+    from assertpy2._engine._typing import (
         _BytesAssertion,
         _CallableAssertion,
         _CoreAssertion,

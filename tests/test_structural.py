@@ -3,7 +3,7 @@ import typing
 import pytest
 
 from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
-from assertpy2._contract import _submodel, contract_drift, shape, shape_diff
+from assertpy2._engine._contract import _submodel, contract_drift, shape, shape_diff
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
