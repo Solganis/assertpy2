@@ -179,6 +179,22 @@ assert_that(user).satisfies(match.structure({"id": match.is_uuid()}))
 assert user == match.structure({"id": match.is_uuid()})
 ```
 
+An attrs instance matches the same way. One gotcha: a private attrs field keeps its leading underscore
+in the spec key, even though attrs strips it from the generated `__init__`:
+
+```python
+from attrs import define
+
+@define
+class Address:
+    city: str
+    _zone: str  # the field name is "_zone", though attrs' __init__ takes zone=
+
+assert_that(Address("Paris", "EU")).matches_structure(
+    {"city": match.equal_to("Paris"), "_zone": match.is_not_none()}
+)
+```
+
 !!! note
     A model is matched in its `model_dump()` form: nested models become dicts, `@field_serializer` and
     `@computed_field` outputs are applied, and spec keys are the model's field names (not aliases). The

@@ -248,6 +248,9 @@ assert_that(order).matches_inline(
 )
 ```
 
+A recorded literal holds the value captured on that run, so a placeholder field shows the captured `id`
+rather than the `0` above - the placeholder governs the comparison, not what is written.
+
 Recording needs the `[inline]` extra (`pip install assertpy2[inline]`); the **comparison** does not -
 it is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting. Under xdist the recorded edits are shipped to the controller and applied once,

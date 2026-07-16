@@ -197,6 +197,14 @@ class User:
     email: str
 
 assert_that(User(1, "Alice", "a@x.com")).is_equal_to(User(99, "Alice", "a@x.com"), ignore="id")
+
+# attrs instances work the same, including nested paths
+@attrs.define
+class Account:
+    id: int
+    owner: str
+
+assert_that(Account(1, "Alice")).is_equal_to(Account(99, "Alice"), ignore="id")
 ```
 
 `ignore` and `include` also accept a `re.Pattern` (matched against field names) or a `type` (matched

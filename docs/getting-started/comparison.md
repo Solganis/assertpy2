@@ -117,18 +117,19 @@ Only assertpy2 prints the path (`user.role`) and the exact predicate that failed
 assertpy2 `==` form both hand rendering to pytest, which dumps the whole differing container for you to
 scan. The fluent form trades the zero-import convenience of `==` for a path-level diff.
 
-### With a Pydantic model
+### With a Pydantic model or attrs instance
 
-When the value is a Pydantic model, `matches_structure()` accepts it directly, with no `.model_dump()`
-step, and prints a path-level diff just like the one above:
+When the value is a Pydantic model - or an `attrs` instance - `matches_structure()` accepts it directly,
+with no `.model_dump()` / `attrs.asdict()` step: it is normalized to its fields and printed with a
+path-level diff just like the one above:
 
 ```python
 assert_that(user).matches_structure({"role": match.is_in("admin", "user")})
 ```
 
 dirty-equals cannot compare a model against a spec dict, because Pydantic's `__eq__` only matches another
-model. You dump it first (`assert user.model_dump() == {"role": IsOneOf("admin", "user")}`), and pytest
-again dumps the whole differing container. assertpy2 keeps a path-level diff on a model.
+model. You dump it first (`user.model_dump() == {"role": IsOneOf(...)}`), and pytest again dumps the
+whole differing container. assertpy2 keeps a path-level diff on either.
 
 ## Style and typing
 
@@ -155,6 +156,7 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
 | Collection pipeline (map / filter / flatten / navigate) | manual | No | No | No | **[Yes](../guides/fluent.md#collection-pipeline)** |
 | Dynamic attribute assertions (`has_<name>()`) | No | No | **Yes** | No | **[Yes](../guides/assertions.md#dynamic-assertions-on-objects)** |
 | Regex group extraction | manual | No | No | No | **[Yes](../guides/data.md#regex-group-extraction)** |
+| OpenAPI response-contract validation | No | No | No | No | **[Yes](../guides/data.md#conforms_to_openapi)** |
 | JSON Path / JSON Schema | No | No | No | `IsJson` only | **[Yes](../guides/data.md)** |
 | File / date / bytes assertions | No | No | file, date | date | **[Yes (all)](../guides/assertions.md#files)** |
 | Exception cause chains / groups (`caused_by`, `contains_error`) | manual | No | No | No | **[Yes](../guides/errors.md#expected-exceptions)** |
@@ -179,16 +181,21 @@ again dumps the whole differing container. assertpy2 keeps a path-level diff on 
     That row compares assertion libraries, not the dedicated snapshot tools - and it is worth being
     straight about the difference. If snapshots are central to your workflow, the specialists lead that
     niche: [syrupy](https://github.com/syrupy-project/syrupy) for external-file snapshots, and
-    [inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source snapshots (Pydantic-endorsed,
-    with richer `snapshot()` operator semantics like `<=` and `in`).
+    [inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source snapshots.
 
-    assertpy2's snapshot is an external-file (syrupy-family) convenience **bundled with the rest of your
-    assertions**, so an occasional snapshot needs no extra tool and no extra dependency - it is not a
-    category-leading snapshot engine, and it does not try to be. Where it is genuinely distinct is
-    [`matches_contract_snapshot()`](../guides/testing.md#contract-snapshots): a value-tolerant *structural* snapshot
-    (paths and type categories, not values) that neither syrupy nor inline-snapshot offers. Rule of thumb:
-    reach for a specialist when snapshots are the point; reach for assertpy2's when you want a snapshot
-    inline with everything else, or when you want structural (contract) regression rather than value-exact.
+    assertpy2 gives you three snapshot styles bundled with the rest of your assertions - no extra tool,
+    no extra dependency:
+
+    - [`snapshot()`](../guides/testing.md#snapshot-testing) - external-file, syrupy-family.
+    - [`matches_inline()`](../guides/testing.md#inline-snapshots) - in-source literal. Records correctly
+      under `pytest-xdist`, where inline-snapshot disables itself.
+    - [`matches_contract_snapshot()`](../guides/testing.md#contract-snapshots) - value-tolerant
+      *structural* snapshot (paths and type categories, not values), which neither syrupy nor
+      inline-snapshot offers.
+
+    The first two are not category-leading engines, and do not try to be. **Rule of thumb:** reach for a
+    specialist when snapshots are the point; reach for assertpy2's when you want a snapshot inline with
+    everything else, or structural (contract) regression rather than value-exact.
 
 ## Project health
 

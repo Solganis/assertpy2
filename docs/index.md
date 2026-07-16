@@ -91,8 +91,13 @@ assertions, and a pytest plugin that renders rich structural diffs on failure.
 pip install assertpy2
 ```
 
-Optional extras: `assertpy2[json]` (JSONPath / JSON Schema), `assertpy2[data]` (pandas / polars / numpy),
-`assertpy2[allure]`, `assertpy2[behave]`.
+Optional extras:
+
+- `assertpy2[json]` - JSONPath, JSON Schema, and OpenAPI contracts
+- `assertpy2[inline]` - inline snapshots (`matches_inline()`)
+- `assertpy2[data]` - pandas / polars / numpy
+- `assertpy2[allure]` - Allure reporting
+- `assertpy2[behave]` - Behave step matchers
 
 ## Quick example
 
