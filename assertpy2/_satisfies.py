@@ -4,7 +4,7 @@ import collections.abc
 from typing import TYPE_CHECKING, Any
 
 from ._diff import _walk_leaves
-from ._introspection import is_model_dump_object
+from ._introspection import is_attrs_instance, is_model_dump_object
 from ._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
@@ -213,8 +213,8 @@ class SatisfiesMixin(_MixinBase):
     def matches_structure(self, spec: dict[Any, Any]) -> Self:
         """Asserts that val matches the given structure specification.
 
-        ``val`` may be a dict or a pydantic-style model (anything exposing ``model_dump()``), which is
-        normalized to its dict before matching.  Each key in ``spec`` maps to either a
+        ``val`` may be a dict, a pydantic-style model (anything exposing ``model_dump()``), or an
+        ``attrs`` instance, which is normalized to its dict before matching.  Each key in ``spec`` maps to either a
         `Matcher`, a raw value (checked via ``==``), or a nested ``dict``
         for recursive matching.  Extra keys in val that are absent from the spec are allowed.
 
@@ -239,8 +239,8 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** match the structure spec
         """
-        if not isinstance(self.val, dict) and not is_model_dump_object(self.val):
-            raise TypeError("val must be a dict")
+        if not isinstance(self.val, dict) and not is_model_dump_object(self.val) and not is_attrs_instance(self.val):
+            raise TypeError("val must be a dict, a pydantic-style model, or an attrs instance")
         if not isinstance(spec, dict):
             raise TypeError("given arg must be a dict")
         matcher = StructureMatcher(spec)

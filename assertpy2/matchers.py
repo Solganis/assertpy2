@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
 from ._compare import _guarded_not_equal
-from ._introspection import is_model_dump_object
+from ._introspection import is_attrs_instance, is_model_dump_object
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -709,9 +709,13 @@ class StructureMatcher(BaseMatcher):
 
     @staticmethod
     def _as_mapping(value: Any) -> Any:
-        """Normalize a pydantic-style model (anything exposing ``model_dump()``) to its dict, so a
-        model can be matched structurally just like a plain dict; pass other values through."""
-        return value.model_dump() if is_model_dump_object(value) else value
+        """Normalize a pydantic-style model (``model_dump()``) or an attrs instance to its dict, so it
+        can be matched structurally just like a plain dict; pass other values through."""
+        if is_model_dump_object(value):
+            return value.model_dump()
+        if is_attrs_instance(value):
+            return {field.name: getattr(value, field.name) for field in value.__attrs_attrs__}
+        return value
 
     def matches(self, value: Any) -> bool:
         value = self._as_mapping(value)
