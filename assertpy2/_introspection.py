@@ -66,8 +66,9 @@ def is_namedtuple(obj: object) -> TypeGuard[NamedTupleLike]:
 
 
 def is_attrs_instance(obj: object) -> TypeGuard[AttrsInstance]:
-    """Return whether ``obj`` is an ``attrs``-decorated instance."""
-    return isinstance(obj, AttrsInstance)
+    """Return whether ``obj`` is an ``attrs``-decorated instance (not the class itself, which also
+    carries ``__attrs_attrs__`` but has no field values to read)."""
+    return not isinstance(obj, type) and isinstance(obj, AttrsInstance)
 
 
 def is_mapping_like(obj: object) -> TypeGuard[MappingLike]:

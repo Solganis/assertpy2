@@ -379,7 +379,9 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            return {attr.name: getattr(obj, attr.name) for attr in obj.__attrs_attrs__}
+            import attrs  # available whenever an attrs instance exists; recurse like dataclasses.asdict
+
+            return attrs.asdict(obj)
         if hasattr(obj, "__dict__") and not isinstance(obj, type):
             return dict(vars(obj))
         return None
