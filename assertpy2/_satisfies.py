@@ -3,16 +3,16 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING, Any
 
-from ._diff import _walk_leaves
-from ._introspection import is_attrs_instance, is_model_dump_object
-from ._mixin_base import _MixinBase
+from ._engine._diff import _walk_leaves
+from ._engine._introspection import is_attrs_instance, is_model_dump_object
+from ._engine._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

@@ -18,8 +18,8 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
-    from ._compat import Self
-    from ._typing import (
+    from ._engine._compat import Self
+    from ._engine._typing import (
         _BytesAssertion,
         _CallableAssertion,
         _CoreAssertion,
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     )
     from .matchers import Matcher
 
-from ._contract import contract_drift
+from ._engine._contract import contract_drift
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin

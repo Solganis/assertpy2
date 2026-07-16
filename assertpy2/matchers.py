@@ -7,8 +7,8 @@ import uuid as _uuid_mod
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
-from ._compare import _guarded_not_equal
-from ._introspection import is_attrs_instance, is_model_dump_object
+from ._engine._compare import _guarded_not_equal
+from ._engine._introspection import is_attrs_instance, is_model_dump_object
 
 if TYPE_CHECKING:
     from collections.abc import Callable

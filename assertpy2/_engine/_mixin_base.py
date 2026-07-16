@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import logging
 
+    from ..errors import DiffResult
     from ._compare import _CompareConfig
     from ._compat import Self
-    from .errors import DiffResult
 
 
 class _MixinBase:

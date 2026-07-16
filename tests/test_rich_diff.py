@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from assertpy2 import assert_that, match
-from assertpy2._diff import _build_equality_diff, _sub_diff_entries
+from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
 from assertpy2.errors import DiffEntry, DiffResult
 from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff

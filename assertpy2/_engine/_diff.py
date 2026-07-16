@@ -15,9 +15,9 @@ from __future__ import annotations
 import dataclasses
 from typing import Final
 
+from ..errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 from ._compare import _node_decision
 from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
-from .errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 
 __tracebackhide__ = True
 

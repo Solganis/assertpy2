@@ -3,11 +3,11 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, cast
 
-from ._mixin_base import _MixinBase
+from ._engine._mixin_base import _MixinBase
 from .exception import _InertBuilder
 
 if TYPE_CHECKING:
-    from ._compat import Self
+    from ._engine._compat import Self
 
 __tracebackhide__ = True
 

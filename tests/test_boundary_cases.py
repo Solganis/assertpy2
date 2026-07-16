@@ -9,7 +9,7 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from assertpy2 import assert_that, match
-from assertpy2._compare import _CompareConfig
+from assertpy2._engine._compare import _CompareConfig
 
 # --- matchers ---
 
