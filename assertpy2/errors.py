@@ -102,9 +102,10 @@ class DiffResult:
     """Structured diff between two values.
 
     ``kind`` is the diff *category* - which shape of comparison produced the entries (``"dict"``,
-    ``"sequence"``, ``"dataclass"``, ``"namedtuple"``, ``"model"``, ``"set"``, ``"string"``,
-    ``"scalar"``, ``"contains"``, or ``"match"``).  It is unrelated to the assertion builder's
-    ``kind`` argument, which selects the failure mode (``None``/``"soft"``/``"warn"``).
+    ``"sequence"``, ``"dataclass"``, ``"namedtuple"``, ``"model"``, ``"attrs"``, ``"set"``,
+    ``"string"``, ``"scalar"``, ``"contains"``, ``"match"``, or ``"openapi"``).  It is unrelated to
+    the assertion builder's ``kind`` argument, which selects the failure mode
+    (``None``/``"soft"``/``"warn"``).
     """
 
     kind: str

@@ -57,6 +57,64 @@ with soft_assertions():
     assert_that(response).has_json_path("$.data").at_json_path("$.data.id").is_positive()
 ```
 
+### conforms_to_openapi
+
+Validate a response body against an OpenAPI operation's response schema - the one contract check none of
+the other assertion libraries here offer. Both OpenAPI 3.0 (its `nullable` keyword) and 3.1 are supported;
+`$ref`, `oneOf`/`allOf`/`anyOf`, `enum`, and `format` all validate with full JSON-Schema semantics. Pass
+the parsed spec (loading YAML/JSON is your job) plus the operation's path and method:
+
+```python
+spec = {
+    "openapi": "3.0.3",
+    "paths": {
+        "/orders/{id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["id", "total"],
+                                    "properties": {
+                                        "id": {"type": "integer"},
+                                        "total": {"type": "number"},
+                                        "email": {"type": "string", "format": "email", "nullable": True},
+                                    },
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+}
+
+assert_that({"id": 42, "total": 19.99, "email": None}).conforms_to_openapi(spec, "/orders/{id}", "get")
+```
+
+`status` defaults to `200`, then `201`, then `default`; pass `status=` to pick another. When the body does
+not conform, every violation is reported with its JSON path and the expected constraint - all of them, not
+just the first:
+
+```text
+Expected the value to conform to the OpenAPI schema for <GET /orders/{id}> response <200>, but found 3 violations.
+diff (openapi):
+  $:
+    - {'id': 'x7', 'email': 'not-an-email'}
+    + 'all required properties present'
+  $.email:
+    - 'not-an-email'
+    + 'email format'
+  $.id:
+    - 'x7'
+    + 'type integer'
+```
+
+Needs the JSON extra: `pip install assertpy2[json]`.
+
 ## Regex Group Extraction
 
 ### extracting_group()

@@ -32,7 +32,7 @@ assert_that(body).matches_structure({
 ```
 
 When you have an OpenAPI spec, assert the whole body against the operation's response schema with
-[`conforms_to_openapi()`](reference/json.md); with a Pydantic model, reach for
+[`conforms_to_openapi()`](guides/data.md#conforms_to_openapi); with a Pydantic model, reach for
 [`assert_conforms()`](concepts/type-safety.md#contract-narrowing-with-assert_conforms), which also
 narrows the chain to the model's type.
 
@@ -68,7 +68,8 @@ def test_report():
 ```
 
 Use inline for small, literal-able values you want to read next to the test; use file snapshots for
-large payloads or values that need a custom serializer (`datetime`, `Decimal`, a domain object). See
+large payloads or values that need a custom serializer (`datetime`, `Decimal`, a domain object). Inline
+snapshots need the `[inline]` extra (`pip install assertpy2[inline]`). See
 [Snapshot testing](guides/testing.md#snapshot-testing).
 
 ## Assert on a filtered, mapped collection
