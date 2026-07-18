@@ -8,10 +8,10 @@ from typing import Final
 
 import pytest
 
-from . import _inline
+from . import _inline, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
-from .errors import _json_safe
+from .errors import _json_safe, _render_diff
 
 try:
     import allure  # ty: ignore[unresolved-import]  # optional dependency
@@ -75,6 +75,11 @@ def pytest_configure(config):
         config._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
         config._assertpy2_diff_max = 50
+    # under pytest the plugin renders the diff as its own colored report section, so keep it out of the
+    # message to avoid showing it twice; off pytest the message stays the only carrier. save/restore the
+    # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
+    config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
+    errors._RENDER_DIFF_IN_MESSAGE = False
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = True
     if config.getoption("assertpy2_snapshot_ci"):
@@ -84,6 +89,7 @@ def pytest_configure(config):
 
 
 def pytest_unconfigure(config):
+    errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = False
     if config.getoption("assertpy2_snapshot_ci") or config.getoption("assertpy2_snapshot_no_ci"):
@@ -110,9 +116,12 @@ def pytest_testnodedown(node, error):
 
 
 def _is_full_run(config) -> bool:
-    """Whether the run selected all tests (no ``-k`` / ``-m`` / ``--lf`` / ``--ff``); pruning obsolete
-    sub-snaps is only safe on a full run, since a deselected live test would look obsolete otherwise."""
+    """Whether the run selected all tests (no ``-k`` / ``-m`` / ``--lf`` / ``--ff`` and no nodeid
+    selection).  Orphan detection is only reliable on a full run, since a deselected or nodeid-selected
+    live test would otherwise look obsolete."""
     opt = config.option
+    if any("::" in str(arg) for arg in getattr(opt, "file_or_dir", None) or ()):
+        return False  # a nodeid selection (path::test) runs only a subset of a file's tests
     return not (
         getattr(opt, "keyword", "")
         or getattr(opt, "markexpr", "")
@@ -133,14 +142,16 @@ def pytest_sessionfinish(session, exitstatus):
     _inline.apply_inline_records()
     touched = set(_snapshot._TOUCHED) | _controller_touched
     _controller_touched.clear()
-    if not touched:
+    if not touched or not _is_full_run(config):
+        # on a subset run the touched set is incomplete, so orphan detection is unreliable: skip both
+        # pruning (which would delete a live but un-run sibling) and reporting (a false positive)
         return
     sub_orphans, whole_orphans = _snapshot._find_orphans(touched)
     if not sub_orphans and not whole_orphans:
         return
     pruned = []
-    # prune obsolete sub-snaps only under update mode on a full run; whole files are always report-only
-    if sub_orphans and _snapshot._update_enabled() and _is_full_run(config):
+    # prune obsolete sub-snaps only under update mode; whole files are always report-only
+    if sub_orphans and _snapshot._update_enabled():
         _snapshot._prune_sub_key_orphans(sub_orphans)
         pruned, sub_orphans = sub_orphans, []
     _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned)
@@ -208,60 +219,7 @@ def pytest_runtest_makereport(item, call):
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
-    entries = getattr(diff, "entries", None)
-    if not entries:
-        return str(diff)
-    kind = getattr(diff, "kind", "unknown")
-
-    red = "\033[31m" if color else ""
-    green = "\033[32m" if color else ""
-    cyan = "\033[36m" if color else ""
-    reset = "\033[0m" if color else ""
-
-    truncated = 0
-    visible = entries
-    if max_entries > 0 and len(entries) > max_entries:
-        truncated = len(entries) - max_entries
-        visible = entries[:max_entries]
-
-    lines = [f"{cyan}diff ({kind}):{reset}"]
-
-    if kind in {"sequence", "string", "dict", "dataclass", "namedtuple", "model", "attrs"}:
-        for entry in visible:
-            path = entry.path
-            if entry.expected is None:
-                lines.append(f"  {red}{path}: - {entry.actual!r}{reset}")
-            elif entry.actual is None:
-                lines.append(f"  {green}{path}: + {entry.expected!r}{reset}")
-            else:
-                lines.append(f"  {path}:")
-                lines.append(f"    {red}- {entry.actual!r}{reset}")
-                lines.append(f"    {green}+ {entry.expected!r}{reset}")
-    elif kind == "match":
-        lines.extend(
-            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
-            for entry in visible
-        )
-    elif kind in {"set", "contains"}:
-        extra = [e for e in visible if e.path == "extra"]
-        missing = [e for e in visible if e.path == "missing"]
-        if extra:
-            items = ", ".join(repr(e.actual) for e in extra)
-            lines.append(f"  {red}extra:   {{{items}}}{reset}")
-        if missing:
-            items = ", ".join(repr(e.expected) for e in missing)
-            lines.append(f"  {green}missing: {{{items}}}{reset}")
-    else:
-        for entry in visible:
-            path = entry.path
-            lines.append(f"  {path}:")
-            lines.append(f"    {red}- {entry.actual!r}{reset}")
-            lines.append(f"    {green}+ {entry.expected!r}{reset}")
-
-    if truncated:
-        lines.append(f"  ... and {truncated} more entries")
-
-    return "\n".join(lines)
+    return _render_diff(diff, color=color, max_entries=max_entries)
 
 
 def _format_trace(trace) -> str:
