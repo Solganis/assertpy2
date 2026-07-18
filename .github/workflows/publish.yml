@@ -46,14 +46,23 @@ jobs:
         with:
           subject-path: dist/*.tar.gz
 
-      - name: Prepare provenance bundles
+      - name: Collect provenance (sigstore bundles + in-toto)
         run: |
           mkdir -p provenance
           cp "$WHEEL_BUNDLE" "provenance/$(basename dist/*.whl).sigstore.json"
           cp "$SDIST_BUNDLE" "provenance/$(basename dist/*.tar.gz).sigstore.json"
+          jq -c '.dsseEnvelope' "$WHEEL_BUNDLE" > provenance/provenance.intoto.jsonl
+          jq -c '.dsseEnvelope' "$SDIST_BUNDLE" >> provenance/provenance.intoto.jsonl
+          test -s provenance/provenance.intoto.jsonl
         env:
           WHEEL_BUNDLE: ${{ steps.attest-wheel.outputs.bundle-path }}
           SDIST_BUNDLE: ${{ steps.attest-sdist.outputs.bundle-path }}
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+
+      - name: Generate SBOM (CycloneDX)
+        run: syft scan dir:dist -o "cyclonedx-json=provenance/assertpy2.sbom.cdx.json"
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
