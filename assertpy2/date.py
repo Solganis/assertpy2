@@ -22,7 +22,7 @@ def _require_comparable_datetimes(first: datetime.datetime, second: datetime.dat
     comparison would otherwise leak (both operands are already validated as `datetime.datetime`)."""
     if (first.utcoffset() is None) != (second.utcoffset() is None):
         raise TypeError(
-            "cannot compare a timezone-naive datetime with a timezone-aware one; make both aware or both naive first"
+            "cannot compare a timezone-naive datetime with a timezone-aware one. Make both aware or both naive first"
         )
 
 

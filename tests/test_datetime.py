@@ -590,5 +590,5 @@ def test_naive_vs_aware_comparison_raises_clear_type_error():
         lambda: assert_that(naive).is_before_or_equal_to(aware),
         lambda: assert_that(naive).is_after_or_equal_to(aware),
     ):
-        with pytest.raises(TypeError, match="timezone-naive datetime with a timezone-aware"):
+        with pytest.raises(TypeError, match=r"timezone-aware one\. Make both aware or both naive first"):
             call()
