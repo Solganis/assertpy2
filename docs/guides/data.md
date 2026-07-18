@@ -63,7 +63,8 @@ with soft_assertions():
 Validate a response body against an OpenAPI operation's response schema - the one contract check none of
 the other assertion libraries here offer.
 
-Both OpenAPI 3.0 (its `nullable` keyword) and 3.1 are supported, and `$ref`, `oneOf`/`allOf`/`anyOf`,
+OpenAPI 3.0 (its `nullable` keyword), 3.1, and Swagger 2.0 (schema declared directly on the response, its
+`x-nullable` extension) are all supported, and `$ref`, `oneOf`/`allOf`/`anyOf`,
 `enum`, and `format` all validate with full JSON-Schema semantics. Pass the parsed spec (loading
 YAML/JSON is your job) plus the operation's path and method:
 
@@ -93,6 +94,9 @@ spec = {
 body = {"id": 42, "total": 19.99, "email": None}
 assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 ```
+
+`path` is the operation's key in the spec, not the request URL. A Swagger 2.0 `basePath` (or an OpenAPI 3
+server prefix) is not part of it, so an endpoint served at `/api/v1/version` is looked up as `/version`.
 
 `status` defaults to `200`, then `201`, then `default`. Pass `status=` to pick another. When the body does
 not conform, the message names the operation and counts the failures (`found 3 violations`), then reports
