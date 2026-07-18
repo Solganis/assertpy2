@@ -301,6 +301,28 @@ class TestPollRecorder:
         assert_that(recorder.build(elapsed=1.0).samples).is_length(2)
 
 
+class TestSummaryUnderWindowOverflow:
+    """The summary reads a bounded window, so a long poll drops middle samples before classifying."""
+
+    def _summary_of(self, values):
+        recorder = _PollRecorder()
+        for index, value in enumerate(values):
+            recorder.record(elapsed=index * 0.1, outcome="fail", value=value, detail=f"got {value}")
+        trace = recorder.build(elapsed=len(values) * 0.1)
+        assert_that(trace.dropped).is_greater_than(0)  # the guard: without a drop this proves nothing
+        return trace.summary
+
+    def test_a_long_monotonic_walk_is_not_mistaken_for_oscillation(self):
+        assert_that(self._summary_of([f"step{i}" for i in range(40)])).does_not_contain("oscillates")
+
+    def test_a_long_monotonic_walk_with_plateaus_is_not_mistaken_for_oscillation(self):
+        assert_that(self._summary_of([f"step{i // 4}" for i in range(120)])).does_not_contain("oscillates")
+
+    def test_oscillation_is_still_detected_after_samples_are_dropped(self):
+        values = ["up" if i % 2 else "down" for i in range(40)]
+        assert_that(self._summary_of(values)).is_equal_to("value oscillates between 2 states across 40 polls")
+
+
 class TestTraceSummary:
     def _sample(self, **overrides):
         base = {"elapsed": 0.0, "outcome": "fail", "value": 1, "detail": "d", "repeats": 1}
