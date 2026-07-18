@@ -138,19 +138,17 @@ class StringMixin(_MixinBase):
                         f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
                     )
         elif isinstance(self.val, collections.abc.Iterable):
+            lowered_values = []
+            for value in list(self.val):  # materialize once so a one-shot iterable is not exhausted
+                # validate every element up front so the error does not depend on match/scan order
+                if not isinstance(value, str):
+                    raise TypeError("val items must all be strings")
+                lowered_values.append(value.lower())
             missing = []
             for item in items:
                 if not isinstance(item, str):
                     raise TypeError("given args must all be strings")
-                item_lower = item.lower()
-                found = False
-                for value in self.val:
-                    if not isinstance(value, str):
-                        raise TypeError("val items must all be strings")
-                    if item_lower == value.lower():
-                        found = True
-                        break
-                if not found:
+                if item.lower() not in lowered_values:
                     missing.append(item)
             if missing:
                 return self.error(

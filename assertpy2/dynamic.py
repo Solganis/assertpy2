@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections.abc
+import inspect
 
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
@@ -53,12 +54,14 @@ class DynamicMixin(_MixinBase):
         val_is_namedtuple = is_namedtuple(self.val)
         is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
 
-        if not hasattr(self.val, attr_name):
-            if is_dict and not val_is_namedtuple:
-                if attr_name not in self.val:
-                    err_msg = f"Expected key <{attr_name}>, but val has no key <{attr_name}>."
-            else:
-                err_msg = f"Expected attribute <{attr_name}>, but val has no attribute <{attr_name}>."
+        if is_dict and not val_is_namedtuple:
+            # dict-like values are read by key subscription below, so presence is a key check, not
+            # hasattr - otherwise a name that is a real method (items/get/...) but absent as a key
+            # skips this gate and then raises KeyError on the subscript
+            if attr_name not in self.val:
+                err_msg = f"Expected key <{attr_name}>, but val has no key <{attr_name}>."
+        elif not hasattr(self.val, attr_name):
+            err_msg = f"Expected attribute <{attr_name}>, but val has no attribute <{attr_name}>."
 
         def _wrapper(*args, **kwargs):
             if err_msg:
@@ -71,9 +74,12 @@ class DynamicMixin(_MixinBase):
 
                 if callable(val_attr):
                     try:
-                        actual = val_attr()
-                    except TypeError:
+                        inspect.signature(val_attr).bind()
+                    except TypeError:  # the method needs arguments, so it is not a zero-arg method
                         raise TypeError(f"val does not have zero-arg method <{attr_name}()>") from None
+                    except ValueError:  # some builtins expose no introspectable signature; just call it
+                        pass
+                    actual = val_attr()  # a TypeError from here comes from the method body, not arity
                 else:
                     actual = val_attr
 

@@ -718,11 +718,19 @@ class NegatedBuilder:
     ) -> AssertionBuilder:
         err_list = _soft_err.get()
         before = len(err_list)
+        taint_before = self._builder._value_taint_reason
         attr(*args, **kwargs)
         if len(err_list) > before:
+            # underlying assertion failed, so the negation passed: roll back the collected soft
+            # error and the taint that failure set, keeping any pre-existing taint
             del err_list[before:]
+            self._builder._value_taint_reason = taint_before
             return self._builder
-        err_list.append((_soft_group.get(), _caller_location(), self._make_msg(name)))
+        # underlying assertion passed, so the negation failed: collect it and taint .value
+        msg = self._make_msg(name)
+        if self._builder._value_taint_reason is None:
+            self._builder._value_taint_reason = msg
+        err_list.append((_soft_group.get(), _caller_location(), msg))
         return self._builder
 
     def _negated_warn(
@@ -735,7 +743,11 @@ class NegatedBuilder:
             return self._builder
         finally:
             self._builder.kind = "warn"
-        self._builder.logger.warning(self._make_msg(name))
+        # underlying assertion passed, so the negation failed: taint .value like error() does
+        msg = self._make_msg(name)
+        if self._builder._value_taint_reason is None:
+            self._builder._value_taint_reason = msg
+        self._builder.logger.warning(msg)
         return self._builder
 
 

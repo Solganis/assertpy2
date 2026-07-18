@@ -248,9 +248,15 @@ class BaseMixin(SatisfiesMixin):
                 actual=actual,
                 expected=expected,
             )
+
+        def as_comparable(item):
+            # a plain dict is already a comparable dict; _to_comparable_dict returns None for it, which
+            # would skip the ignore/include filter and fall through to a wholesale compare
+            return item if isinstance(item, dict) else self._to_comparable_dict(item)
+
         for index, (actual_item, expected_item) in enumerate(zip(actual, expected, strict=True)):
-            actual_dict = self._to_comparable_dict(actual_item)
-            expected_dict = self._to_comparable_dict(expected_item)
+            actual_dict = as_comparable(actual_item)
+            expected_dict = as_comparable(expected_item)
             if actual_dict is not None and expected_dict is not None:
                 if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
                     self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)

@@ -20,6 +20,22 @@ def _fmt_operand(value: object) -> object:
     return value
 
 
+def _is_nan(value) -> bool:
+    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN)."""
+    try:
+        return math.isnan(value)
+    except OverflowError:
+        return False
+
+
+def _is_inf(value) -> bool:
+    """`math.isinf` guarded so a bignum int/Decimal that overflows float reports False (never infinite)."""
+    try:
+        return math.isinf(value)
+    except OverflowError:
+        return False
+
+
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
     """Format a timedelta tolerance as ``h:mm:ss``."""
     tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
@@ -115,7 +131,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if not math.isnan(self.val):
+        if not _is_nan(self.val):
             return self.error(f"Expected <{self.val}> to be <NaN>, but was not.")
         return self
 
@@ -137,7 +153,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if math.isnan(self.val):
+        if _is_nan(self.val):
             return self.error("Expected not <NaN>, but was.")
         return self
 
@@ -158,7 +174,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if not math.isinf(self.val):
+        if not _is_inf(self.val):
             return self.error(f"Expected <{self.val}> to be <Inf>, but was not.")
         return self
 
@@ -180,7 +196,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if math.isinf(self.val):
+        if _is_inf(self.val):
             return self.error("Expected not <Inf>, but was.")
         return self
 
@@ -210,9 +226,14 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** greater than other
+
+        Note:
+            A ``NaN`` value is unordered, so it **fails** every relational assertion here
+            (``is_greater_than``, ``is_less_than``, ``is_between``, ``is_positive``, ...). This diverges
+            from the original assertpy, where ``NaN`` silently passes.
         """
         self._validate_compareable(other)
-        if self.val <= other:
+        if not self.val > other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not."
             )
@@ -248,7 +269,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** greater than or equal to other
         """
         self._validate_compareable(other)
-        if self.val < other:
+        if not self.val >= other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be greater than or equal to"
                 f" <{_fmt_operand(other)}>, but was not."
@@ -281,9 +302,13 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** less than other
+
+        Note:
+            A ``NaN`` value is unordered and **fails** here, diverging from the original assertpy where
+            ``NaN`` silently passes relational assertions.
         """
         self._validate_compareable(other)
-        if self.val >= other:
+        if not self.val < other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not."
             )
@@ -320,7 +345,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** less than or equal to other
         """
         self._validate_compareable(other)
-        if self.val > other:
+        if not self.val <= other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be less than or equal to <{_fmt_operand(other)}>, but was not."
             )
@@ -340,6 +365,10 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** positive
+
+        Note:
+            ``NaN`` is not positive, so this **fails** for ``float("nan")``. This diverges from the
+            original assertpy, where ``NaN`` silently passes relational assertions.
         """
         return self.is_greater_than(0)
 
@@ -357,6 +386,10 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** negative
+
+        Note:
+            ``NaN`` is not negative, so this **fails** for ``float("nan")``. This diverges from the
+            original assertpy, where ``NaN`` silently passes relational assertions.
         """
         return self.is_less_than(0)
 
@@ -388,11 +421,15 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** between low and high
+
+        Note:
+            ``NaN`` is not within any range, so this **fails** for ``float("nan")``. This diverges from
+            the original assertpy, where ``NaN`` silently passes relational assertions.
         """
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if self.val < low or self.val > high:
+        if not low <= self.val <= high:  # positive form so NaN (unordered) fails instead of passing
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be between"
                 f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not."
@@ -531,7 +568,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if not isinstance(self.val, datetime.datetime) and (math.isnan(self.val) or math.isnan(other)):
+        if not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other)):
             return self.error(
                 f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
             )

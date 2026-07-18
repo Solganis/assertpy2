@@ -4,6 +4,7 @@ import warnings
 from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
+from .errors import _callable_name
 from .exception import _InertBuilder
 
 if TYPE_CHECKING:
@@ -100,13 +101,13 @@ class WarningMixin(_MixinBase):
         if caught:
             seen = ", ".join(sorted({warning.category.__name__ for warning in caught}))
             self.error(
-                f"Expected <{self.val.__name__}> to warn <{expected.__name__}>"
+                f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                 f" but warned <{seen}>."
             )
             return cast("Self", _InertBuilder())
         self.error(
-            f"Expected <{self.val.__name__}> to warn <{expected.__name__}>"
+            f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
         )
         return cast("Self", _InertBuilder())
@@ -119,7 +120,7 @@ class WarningMixin(_MixinBase):
         if matched:
             seen = ", ".join(sorted({warning.category.__name__ for warning in matched}))
             self.error(
-                f"Expected <{self.val.__name__}> to not warn <{expected.__name__}>"
+                f"Expected <{_callable_name(self.val)}> to not warn <{expected.__name__}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                 f" but did warn <{seen}>."
             )

@@ -37,7 +37,7 @@ def contents_of(file, encoding="utf-8") -> str:
         contents = file.read()
     except AttributeError:
         try:
-            with open(file) as file_handle:
+            with open(file, encoding=encoding, errors="replace") as file_handle:
                 contents = file_handle.read()
         except TypeError:
             raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
@@ -155,8 +155,9 @@ class FileMixin(_MixinBase):
         if not isinstance(filename, (str, os.PathLike)):
             raise TypeError("given filename arg must be a path")
         val_filename = os.path.basename(os.path.abspath(self.val))
-        if val_filename != filename:
-            return self.error(f"Expected filename <{val_filename}> to be equal to <{filename}>, but was not.")
+        expected_filename = os.fspath(filename)  # normalize an os.PathLike arg to its string form
+        if val_filename != expected_filename:
+            return self.error(f"Expected filename <{val_filename}> to be equal to <{expected_filename}>, but was not.")
         return self
 
     def is_child_of(self, parent: object) -> Self:

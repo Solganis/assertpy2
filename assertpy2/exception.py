@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
+from .errors import _callable_name
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -110,14 +111,14 @@ class ExceptionMixin(_MixinBase):
                 return captured
             else:
                 self.error(
-                    f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
+                    f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but raised <{type(e).__name__}>."
                 )
                 return cast("Self", _InertBuilder())
 
         self.error(
-            f"Expected <{self.val.__name__}> to raise <{self.expected.__name__}>"
+            f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
         )
         return cast("Self", _InertBuilder())
@@ -260,7 +261,7 @@ class ExceptionMixin(_MixinBase):
         except BaseException as e:
             if issubclass(type(e), expected):
                 self.error(
-                    f"Expected <{self.val.__name__}> to not raise <{expected.__name__}>"
+                    f"Expected <{_callable_name(self.val)}> to not raise <{expected.__name__}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but did raise <{type(e).__name__}>."
                 )

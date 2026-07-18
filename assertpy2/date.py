@@ -17,6 +17,15 @@ def _require_datetime(value: object, label: str) -> None:
         raise TypeError(f"{label} must be datetime, but was type <{type(value).__name__}>")
 
 
+def _require_comparable_datetimes(first: datetime.datetime, second: datetime.datetime) -> None:
+    """Reject a naive-vs-aware pair with a clear message, instead of the raw ``TypeError`` the ``<``/``>``
+    comparison would otherwise leak (both operands are already validated as `datetime.datetime`)."""
+    if (first.utcoffset() is None) != (second.utcoffset() is None):
+        raise TypeError(
+            "cannot compare a timezone-naive datetime with a timezone-aware one; make both aware or both naive first"
+        )
+
+
 class DateMixin(_MixinBase):
     """Date and time assertions mixin."""
 
@@ -50,6 +59,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val >= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before"
@@ -87,6 +97,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val <= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after"
@@ -119,6 +130,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val > other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before or equal to"
@@ -151,6 +163,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val < other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after or equal to"

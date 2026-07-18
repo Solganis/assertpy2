@@ -350,7 +350,10 @@ class IsNotEmptyMatcher(BaseMatcher):
 
 class IsPositiveMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return bool(value > 0)
+        try:
+            return bool(value > 0)
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return "a positive value"
@@ -358,7 +361,10 @@ class IsPositiveMatcher(BaseMatcher):
 
 class IsNegativeMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return bool(value < 0)
+        try:
+            return bool(value < 0)
+        except TypeError:
+            return False
 
     def describe(self) -> str:
         return "a negative value"
@@ -484,15 +490,13 @@ class ContainsStringMatcher(BaseMatcher):
 class MatchesRegexMatcher(BaseMatcher):
     def __init__(self, pattern: str):
         self.pattern = pattern
-        self._compiled: re.Pattern[str] | None = None
+        # compile eagerly so an invalid pattern raises here, at the call site, instead of later inside
+        # matches()/__eq__/a combinator, which would break the "matchers never raise on use" contract
+        self._compiled = re.compile(pattern)
 
     def matches(self, value: Any) -> bool:
         if not isinstance(value, str):
             return False
-        if self._compiled is None:
-            # compile on first use so a reused matcher (each/filtered_on) skips the re-cache lookup per
-            # element; a bad pattern still raises here, on first matches(), exactly as re.search did
-            self._compiled = re.compile(self.pattern)
         return self._compiled.search(value) is not None
 
     def describe(self) -> str:

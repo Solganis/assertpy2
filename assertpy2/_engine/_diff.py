@@ -13,15 +13,12 @@ diff builders.
 from __future__ import annotations
 
 import dataclasses
-from typing import Final
 
 from ..errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 from ._compare import _node_decision
 from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
 
 __tracebackhide__ = True
-
-_SENTINEL: Final = object()
 
 
 def _field_dict(obj, is_model):
@@ -121,11 +118,13 @@ def _build_equality_diff(
         entries: list[DiffEntry] = []
         for field in actual._fields:
             actual_value = getattr(actual, field)
-            expected_value = getattr(expected, field, _SENTINEL)
             path = f"{_prefix}.{field}"
-            if expected_value is _SENTINEL:
+            # use _fields membership, not getattr/hasattr: a field name colliding with an inherited
+            # tuple method (count/index) would otherwise resolve to that bound method, not be "absent"
+            if field not in expected._fields:
                 entries.append(DiffEntry(path=path, actual=actual_value, expected=None))
             else:
+                expected_value = getattr(expected, field)
                 decision = _node_decision(actual_value, expected_value, config, field=field)
                 if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
@@ -134,7 +133,7 @@ def _build_equality_diff(
         entries.extend(
             DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
             for field in expected._fields
-            if not hasattr(actual, field)
+            if field not in actual._fields
         )
         return DiffResult(kind="namedtuple", entries=entries)
     if (
@@ -256,10 +255,10 @@ def _sub_diff_entries(
         entries = []
         for field_name in actual._fields:
             actual_value = getattr(actual, field_name)
-            expected_value = getattr(expected, field_name, _SENTINEL)
-            if expected_value is _SENTINEL:
+            if field_name not in expected._fields:  # _fields, not getattr sentinel (count/index collide)
                 entries.append(DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None))
             else:
+                expected_value = getattr(expected, field_name)
                 decision = _node_decision(actual_value, expected_value, config, field=field_name)
                 if decision == "leaf":
                     entries.append(
@@ -276,7 +275,7 @@ def _sub_diff_entries(
                             DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
                         )
         for field_name in expected._fields:
-            if not hasattr(actual, field_name):
+            if field_name not in actual._fields:  # _fields, not hasattr (count/index collide)
                 entries.append(
                     DiffEntry(path=f"{prefix}.{field_name}", actual=None, expected=getattr(expected, field_name))
                 )

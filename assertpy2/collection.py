@@ -332,7 +332,7 @@ class CollectionMixin(_MixinBase):
             filtered = [item for item in self.val if predicate.matches(item)]
         else:
             filtered = [item for item in self.val if predicate(item)]
-        return self.builder(filtered, self.description, self.kind)
+        return self.builder(filtered, self.description, self.kind, logger=self.logger)
 
     def mapped(self, func: Callable[[Any], Any]) -> Self:
         """Returns a new builder with each element transformed by func.
@@ -350,7 +350,7 @@ class CollectionMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        return self.builder([func(item) for item in self.val], self.description, self.kind)
+        return self.builder([func(item) for item in self.val], self.description, self.kind, logger=self.logger)
 
     def flat_mapped(self, func: Callable[[Any], Iterable[Any]]) -> Self:
         """Returns a new builder with each element expanded and flattened by func.
@@ -368,7 +368,9 @@ class CollectionMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        return self.builder([inner for item in self.val for inner in func(item)], self.description, self.kind)
+        return self.builder(
+            [inner for item in self.val for inner in func(item)], self.description, self.kind, logger=self.logger
+        )
 
     def first(self) -> Self:
         """Returns a new builder with the first element of val.
@@ -387,7 +389,7 @@ class CollectionMixin(_MixinBase):
         items = self._as_list()
         if not items:
             raise ValueError("Expected non-empty iterable, but was empty.")
-        return self.builder(items[0], self.description, self.kind)
+        return self.builder(items[0], self.description, self.kind, logger=self.logger)
 
     def last(self) -> Self:
         """Returns a new builder with the last element of val.
@@ -406,7 +408,7 @@ class CollectionMixin(_MixinBase):
         items = self._as_list()
         if not items:
             raise ValueError("Expected non-empty iterable, but was empty.")
-        return self.builder(items[-1], self.description, self.kind)
+        return self.builder(items[-1], self.description, self.kind, logger=self.logger)
 
     def element(self, index: int) -> Self:
         """Returns a new builder with the element at the given index.
@@ -428,7 +430,7 @@ class CollectionMixin(_MixinBase):
         items = self._as_list()
         if index < 0 or index >= len(items):
             raise IndexError(f"Expected index {index} to be in range [0, {len(items)}), but was out of range.")
-        return self.builder(items[index], self.description, self.kind)
+        return self.builder(items[index], self.description, self.kind, logger=self.logger)
 
     def single(self) -> Self:
         """Returns a new builder with the only element of val.
@@ -449,4 +451,4 @@ class CollectionMixin(_MixinBase):
             raise ValueError("Expected iterable with single element, but was empty.")
         if len(items) > 1:
             raise ValueError(f"Expected iterable with single element, but had {len(items)} elements.")
-        return self.builder(items[0], self.description, self.kind)
+        return self.builder(items[0], self.description, self.kind, logger=self.logger)

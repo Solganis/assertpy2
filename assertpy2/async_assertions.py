@@ -29,9 +29,15 @@ class _PollRecorder:
         self._tail: deque[PollSample] = deque(maxlen=tail)
         self.dropped = 0
         self.total_polls = 0
+        self.fail_polls = 0  # counted across all polls, not just the retained window
+        self.error_polls = 0
 
     def record(self, elapsed, outcome, value, detail):
         self.total_polls += 1
+        if outcome == "fail":
+            self.fail_polls += 1
+        else:  # the only other outcome is "error"
+            self.error_polls += 1
         last = self._tail[-1] if self._tail else (self._head[-1] if self._head else None)
         if last is not None and (last.outcome, last.value, last.detail) == (outcome, value, detail):
             collapsed = dataclasses.replace(last, repeats=last.repeats + 1)
@@ -55,18 +61,21 @@ class _PollRecorder:
             total_polls=self.total_polls,
             dropped=self.dropped,
             elapsed=elapsed,
-            summary=_summarize(samples, self.total_polls, elapsed),
+            summary=_summarize(samples, self.total_polls, elapsed, self.fail_polls, self.error_polls),
         )
 
 
-def _summarize(samples, total_polls, elapsed) -> str:
-    """Classify the convergence trend of a timed-out poll into one diagnostic sentence."""
-    fails = [sample for sample in samples if sample.outcome == "fail"]
-    if not fails:
+def _summarize(samples, total_polls, elapsed, fail_polls, error_polls) -> str:
+    """Classify the convergence trend of a timed-out poll into one diagnostic sentence.
+
+    ``fail_polls``/``error_polls`` count every poll, not just the retained samples, so the summary
+    stays correct even when the bounded window dropped some fail samples.
+    """
+    if fail_polls == 0:
         types = {sample.detail.split("(", 1)[0] for sample in samples}
         raised = types.pop() if len(types) == 1 else "exceptions"
         return f"probe raised {raised} on all {total_polls} polls"
-    error_polls = sum(sample.repeats for sample in samples if sample.outcome == "error")
+    fails = [sample for sample in samples if sample.outcome == "fail"]
     changes = [current for previous, current in pairwise(fails) if current.value != previous.value]
     change_word = "time" if len(changes) == 1 else "times"
     if error_polls:
