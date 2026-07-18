@@ -436,3 +436,13 @@ def test_ignore_include_applies_to_dict_elements_in_a_list():
     assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 1, "b": 999}], include="a")
     with pytest.raises(AssertionError):
         assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 9, "b": 2}], ignore="b")
+
+
+def test_cyclic_dict_under_ignore_is_treated_as_equal():
+    # the selective-comparison path detects a revisited pair and treats it as equal rather than
+    # recursing; without that accumulation the walk never sees the repeat and the comparison diverges
+    actual = {"k": 1}
+    actual["self"] = actual
+    expected = {"k": 2}
+    expected["self"] = expected
+    assert_that(actual).is_equal_to(expected, ignore="k")

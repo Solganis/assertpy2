@@ -217,3 +217,25 @@ def test_dict_repr_survives_mapping_without_items():
 
     with pytest.raises(AssertionError):
         assert_that(MinimalMapping({"a": 1, "b": 2})).is_equal_to(MinimalMapping({"a": 1, "b": 3}))
+
+
+def test_nested_mapping_without_values_still_takes_the_dict_path():
+    # a nested value is matched with check_values=False on purpose: a mapping that lacks values() must
+    # still be compared key-by-key, so a nested ignore path reaches into it. Demanding values() here
+    # would drop it to a plain equality check and the ignore would silently stop applying.
+    class MinimalMapping:
+        def __init__(self, data):
+            self._data = data
+
+        def keys(self):
+            return self._data.keys()
+
+        def __getitem__(self, key):
+            return self._data[key]
+
+        def __iter__(self):
+            return iter(self._data)
+
+    actual = {"d": MinimalMapping({"a": 1, "b": 2})}
+    expected = {"d": MinimalMapping({"a": 1, "b": 999})}
+    assert_that(actual).is_equal_to(expected, ignore=("d", "b"))
