@@ -89,6 +89,22 @@ def test_extracting_reports_the_index_of_the_failing_item():
     assert_that(str(exc_info.value)).ends_with("(at index 2, item is <int>)")
 
 
+def test_extracting_suggests_a_close_attribute_name():
+    with pytest.raises(ValueError) as exc_info:
+        assert_that(people).extracting("frist_name")
+    assert_that(str(exc_info.value)).contains("did you mean 'first_name'?")
+
+
+def test_extracting_survives_an_item_with_a_broken_dir():
+    class Hostile:
+        def __dir__(self):
+            raise RuntimeError("boom")
+
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([Hostile()]).extracting("foo")
+    assert_that(str(exc_info.value)).does_not_contain("did you mean")
+
+
 def test_extracting_dict_missing_key_failure():
     people_as_dicts = [{"first_name": person.first_name, "last_name": person.last_name} for person in people]
     with pytest.raises(ValueError) as exc_info:
