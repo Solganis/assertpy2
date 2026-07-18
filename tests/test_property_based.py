@@ -19,10 +19,18 @@ from hypothesis import strategies as st
 
 from assertpy2 import assert_conforms, assert_that, match
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
+from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
-from assertpy2.errors import AssertionFailure, _disambiguated
+from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _disambiguated
 from assertpy2.pytest_plugin import _format_diff
+
+try:  # the OpenAPI properties need the [json] extra; the rest of the file does not
+    import jsonschema  # noqa: F401  # presence gate only
+
+    _HAS_JSONSCHEMA = True
+except ImportError:  # pragma: no cover - exercised only in an env without the extra
+    _HAS_JSONSCHEMA = False
 
 # JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
 _atoms = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
@@ -737,3 +745,202 @@ def test_ignore_null_skips_every_expected_none_key(common, nulls):
     expected = {**common, **dict.fromkeys(nulls, None)}
     actual = {**common, **nulls}
     assert_that(actual).is_equal_to(expected, ignore_null=True)
+
+
+# --- OpenAPI response contracts: conformance is total and independent of the spec version ---
+
+_OPENAPI_TYPES = {"string": st.text(max_size=5), "integer": st.integers(), "boolean": st.booleans()}
+
+
+@st.composite
+def _openapi_operation(draw, min_required=0):
+    """A generated object schema, a body built to satisfy it, and one required key to drop.
+
+    ``min_required`` pins the schema to at least that many required keys, for the tests whose whole
+    point is a missing one: filtering those cases out afterwards would throw away half the examples.
+    """
+    names = draw(st.lists(st.text(alphabet="abcdef", min_size=1, max_size=3), min_size=1, max_size=4, unique=True))
+    types = {name: draw(st.sampled_from(sorted(_OPENAPI_TYPES))) for name in names}
+    required = sorted(draw(st.lists(st.sampled_from(names), unique=True, min_size=min_required)))
+    body = {name: draw(_OPENAPI_TYPES[kind]) for name, kind in types.items()}
+    schema = {
+        "type": "object",
+        "required": required,
+        "properties": {name: {"type": kind} for name, kind in types.items()},
+    }
+    dropped = draw(st.sampled_from(required)) if required else None
+    return schema, body, dropped
+
+
+def _spec_30(schema):
+    content = {"application/json": {"schema": schema}}
+    return {"openapi": "3.0.3", "paths": {"/r": {"get": {"responses": {"200": {"content": content}}}}}}
+
+
+def _spec_20(schema):
+    operation = {"produces": ["application/json"], "responses": {"200": {"schema": schema}}}
+    return {"swagger": "2.0", "paths": {"/r": {"get": operation}}}
+
+
+def _conforms(spec, body):
+    try:
+        assert_that(body).conforms_to_openapi(spec, "/r", "get")
+    except AssertionFailure:
+        return False
+    return True
+
+
+@pytest.mark.skipif(not _HAS_JSONSCHEMA, reason="needs the [json] extra")
+@settings(deadline=None)
+@given(operation=_openapi_operation())
+def test_a_body_built_from_the_schema_always_conforms(operation):
+    schema, body, _dropped = operation
+    assert_that(_conforms(_spec_30(schema), body)).is_true()
+
+
+@pytest.mark.skipif(not _HAS_JSONSCHEMA, reason="needs the [json] extra")
+@settings(deadline=None)
+@given(operation=_openapi_operation(min_required=1))
+def test_dropping_a_required_key_is_always_detected(operation):
+    schema, body, dropped = operation
+    broken = {name: value for name, value in body.items() if name != dropped}
+    assert_that(_conforms(_spec_30(schema), broken)).is_false()
+
+
+@pytest.mark.skipif(not _HAS_JSONSCHEMA, reason="needs the [json] extra")
+@settings(deadline=None)
+@given(operation=_openapi_operation())
+def test_swagger_2_and_openapi_3_agree_on_every_verdict(operation):
+    # the two spec versions reach the schema by different routes, so their verdicts must not diverge
+    schema, body, dropped = operation
+    assert_that(_conforms(_spec_20(schema), body)).is_equal_to(_conforms(_spec_30(schema), body))
+    if dropped is not None:
+        broken = {name: value for name, value in body.items() if name != dropped}
+        assert_that(_conforms(_spec_20(schema), broken)).is_equal_to(_conforms(_spec_30(schema), broken))
+
+
+# --- inline snapshots: a recorded literal round-trips through the source it is written into ---
+
+_literal_atoms = (
+    st.none() | st.booleans() | st.integers() | st.text(max_size=5) | st.floats(allow_nan=False, allow_infinity=False)
+)
+_literals = st.recursive(
+    _literal_atoms,
+    lambda children: (
+        st.lists(children, max_size=4)
+        | st.tuples(children)
+        | st.dictionaries(st.text(max_size=3), children, max_size=4)
+        | st.frozensets(st.integers(), max_size=4)
+    ),
+    max_leaves=8,
+)
+
+
+@settings(deadline=None)
+@given(value=_literals, column=st.integers(min_value=0, max_value=40))
+def test_a_recorded_inline_literal_round_trips(value, column):
+    # matches_inline writes this text into the test source, so Python's own evaluation is the oracle.
+    # eval is safe here: the input is the literal this very call just rendered, never outside data.
+    assume(is_literalable(value))
+    restored = eval(_format_literal(value, column))
+    assert_that(restored).is_equal_to(value)
+
+
+# --- string diffs: every caret row explains the content row above it ---
+
+
+@st.composite
+def _line_and_edit(draw):
+    """A line plus a one-character edit of it, so the renderer has an intra-line change to point at.
+
+    Two unrelated random strings would mostly be empty or share nothing, which never produces a caret
+    row and leaves the property vacuous.
+    """
+    # every category str.splitlines() treats as a break is out, or the row extraction below over-splits
+    printable = st.characters(exclude_categories=("Cc", "Cs", "Zl", "Zp"))
+    base = draw(st.text(alphabet=printable, min_size=1, max_size=30))
+    index = draw(st.integers(min_value=0, max_value=len(base) - 1))
+    replacement = draw(printable)
+    assume(base[index] != replacement)
+    return base, base[:index] + replacement + base[index + 1 :]
+
+
+@settings(deadline=None)
+@given(pair=_line_and_edit())
+def test_string_diff_shows_both_sides_with_anchored_carets(pair):
+    left, right = pair
+    rendered = _format_diff(DiffResult(kind="string", entries=[DiffEntry(path="line 1", actual=left, expected=right)]))
+    rows = rendered.splitlines()[2:]  # past the "diff (string):" header and the path row
+    # both sides must be spelled out: a renderer that drops one leaves the reader guessing
+    assert_that([row[6:] for row in rows if row.startswith("    - ")]).is_equal_to([left])
+    assert_that([row[6:] for row in rows if row.startswith("    + ")]).is_equal_to([right])
+    # a caret row only ever annotates the content row directly above it
+    assert_that(rows[0].startswith("    ?")).is_false()
+    for previous, row in pairwise(rows):
+        if row.startswith("    ?"):
+            assert_that(previous.startswith(("    - ", "    + "))).is_true()
+
+
+# --- collection pipeline: each transform mirrors its Python counterpart ---
+
+
+@settings(deadline=None)
+@given(items=st.lists(st.integers(), max_size=12))
+def test_mapped_mirrors_the_comprehension(items):
+    assert_that(assert_that(items).mapped(lambda item: item * 2).val).is_equal_to([item * 2 for item in items])
+
+
+@settings(deadline=None)
+@given(items=st.lists(st.integers(), max_size=12), threshold=st.integers())
+def test_filtered_on_mirrors_the_comprehension(items, threshold):
+    def keeps(item):
+        return item > threshold
+
+    assert_that(assert_that(items).filtered_on(keeps).val).is_equal_to([item for item in items if keeps(item)])
+
+
+@settings(deadline=None)
+@given(items=st.lists(st.integers(), max_size=12))
+def test_flat_mapped_equals_flatten_of_map(items):
+    def expand(item):
+        return [item, -item]
+
+    assert_that(assert_that(items).flat_mapped(expand).val).is_equal_to(
+        [part for item in items for part in expand(item)]
+    )
+
+
+@settings(deadline=None)
+@given(items=st.lists(st.integers(), min_size=1, max_size=12), offset=st.integers(min_value=0, max_value=100))
+def test_element_first_and_last_agree_with_indexing(items, offset):
+    index = offset % len(items)
+    assert_that(assert_that(items).element(index).val).is_equal_to(items[index])
+    assert_that(assert_that(items).first().val).is_equal_to(items[0])
+    assert_that(assert_that(items).last().val).is_equal_to(items[-1])
+
+
+# --- temporal assertions: the relational pairs are exact complements ---
+
+
+def _holds(check):
+    try:
+        check()
+    except AssertionError:
+        return False
+    return True
+
+
+@settings(deadline=None)
+@given(left=st.datetimes(), right=st.datetimes())
+def test_is_before_is_the_exact_complement_of_is_after_or_equal_to(left, right):
+    before = _holds(lambda: assert_that(left).is_before(right))
+    after_or_equal = _holds(lambda: assert_that(left).is_after_or_equal_to(right))
+    assert_that(before).is_not_equal_to(after_or_equal)
+
+
+@settings(deadline=None)
+@given(left=st.datetimes(), right=st.datetimes())
+def test_is_after_is_the_exact_complement_of_is_before_or_equal_to(left, right):
+    after = _holds(lambda: assert_that(left).is_after(right))
+    before_or_equal = _holds(lambda: assert_that(left).is_before_or_equal_to(right))
+    assert_that(after).is_not_equal_to(before_or_equal)
