@@ -356,6 +356,27 @@ class TestTraceSummary:
             "value changed 2 times; last change 1.5s before the deadline"
         )
 
+    def test_value_flapping_is_reported_as_oscillation(self):
+        # "changed 4 times" reads like slow progress; the probe is really stuck alternating
+        samples = [self._sample(elapsed=float(i), value="up" if i % 2 else "down") for i in range(5)]
+        assert_that(self._summary(samples, 5, 5.0)).is_equal_to("value oscillates between 2 states across 5 polls")
+
+    def test_returning_to_an_earlier_value_once_is_oscillation(self):
+        samples = [
+            self._sample(elapsed=0.0, value=1),
+            self._sample(elapsed=1.0, value=2),
+            self._sample(elapsed=2.0, value=3),
+            self._sample(elapsed=3.0, value=1),
+        ]
+        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("value oscillates between 3 states across 4 polls")
+
+    def test_steady_progress_is_not_reported_as_oscillation(self):
+        # the guard that matters: a value walking through new states must keep the last-change wording
+        samples = [self._sample(elapsed=float(i), value=i) for i in range(4)]
+        assert_that(self._summary(samples, 4, 5.0)).is_equal_to(
+            "value changed 3 times; last change 2.0s before the deadline"
+        )
+
     def test_dropped_fail_samples_not_reported_as_all_raised(self):
         # fail_polls counts every poll, so even when the retained window holds only error samples the
         # summary must not claim the probe raised on all polls (some polls returned a value and failed)
