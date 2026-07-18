@@ -62,7 +62,9 @@ def test_contains_only():
 def test_contains_only_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": 1, "b": 2}).contains_only("a", "x")
-    assert_that(str(exc_info.value)).contains("to contain only <'a', 'x'>, but did contain <b>.")
+    assert_that(str(exc_info.value)).contains(
+        "to contain only <'a', 'x'>, but did contain <b> and did not contain <x>."
+    )
 
 
 def test_contains_only_multi_failure():
