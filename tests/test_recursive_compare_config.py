@@ -320,3 +320,75 @@ class TestIgnoreNull:
     def test_ignore_null_not_a_bool_fails(self):
         with pytest.raises(TypeError, match="ignore_null"):
             assert_that({}).is_equal_to({}, ignore_null="yes")
+
+
+class TestConfigThroughNestedContainers:
+    """A container reached through a dict keeps the compare config.
+
+    The equality decision delegates to the same structural walker that renders the diff, so every shape
+    the walker decomposes is compared under the config.  It used to fall back to plain equality there, so
+    tolerance / comparators / ignore_null silently stopped applying below the first non-dict container -
+    the shape of almost every JSON API response.
+    """
+
+    def test_tolerance_reaches_dicts_inside_a_nested_list(self):
+        assert_that({"d": [{"s": 1.0}]}).is_equal_to({"d": [{"s": 1.001}]}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_nested_list_of_lists(self):
+        assert_that({"d": [[1.0]]}).is_equal_to({"d": [[1.001]]}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_nested_tuple(self):
+        assert_that({"d": ({"s": 1.0},)}).is_equal_to({"d": ({"s": 1.001},)}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_nested_dataclass(self):
+        assert_that({"d": Point(1.0, 2.0)}).is_equal_to({"d": Point(1.001, 2.0)}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_nested_namedtuple(self):
+        assert_that({"d": Pair(1.0, 2.0)}).is_equal_to({"d": Pair(1.001, 2.0)}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_nested_model(self):
+        assert_that({"d": FakeModel(s=1.0)}).is_equal_to({"d": FakeModel(s=1.001)}, tolerance=0.01)
+
+    def test_tolerance_reaches_a_list_of_dataclasses(self):
+        assert_that({"d": [Point(1.0, 2.0)]}).is_equal_to({"d": [Point(1.001, 2.0)]}, tolerance=0.01)
+
+    def test_comparators_reach_a_nested_list(self):
+        close = {float: lambda actual, expected: abs(actual - expected) < 0.01}
+        assert_that({"d": [{"s": 1.0}]}).is_equal_to({"d": [{"s": 1.001}]}, comparators=close)
+
+    def test_ignore_null_reaches_a_nested_list(self):
+        assert_that({"d": [{"a": 1, "b": 5}]}).is_equal_to({"d": [{"a": 1, "b": None}]}, ignore_null=True)
+
+    def test_identical_container_short_circuits_on_identity(self):
+        # identity first, the way Python's own container comparison does, so a self-unequal value matches
+        shared = [float("nan")]
+        assert_that({"d": shared, "k": 1}).is_equal_to({"d": shared, "k": 2}, ignore="k")
+
+    def test_length_mismatch_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": [{"s": 1.0}]}).is_equal_to({"d": [{"s": 1.0}, {"s": 2.0}]}, tolerance=0.01)
+
+    def test_leaf_outside_tolerance_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": [1.0]}).is_equal_to({"d": [9.0]}, tolerance=0.01)
+
+    def test_dataclass_outside_tolerance_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": Point(1.0, 2.0)}).is_equal_to({"d": Point(9.0, 2.0)}, tolerance=0.01)
+
+    def test_dict_element_difference_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": [{"s": 1.0, "n": "a"}]}).is_equal_to({"d": [{"s": 1.0, "n": "b"}]}, tolerance=0.01)
+
+    def test_inner_list_difference_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": [[1.0]]}).is_equal_to({"d": [[9.0]]}, tolerance=0.01)
+
+    def test_undecomposable_leaf_difference_still_fails(self):
+        # a string is a leaf the walker does not decompose, so it falls back to the plain check
+        with pytest.raises(AssertionError):
+            assert_that({"d": "a"}).is_equal_to({"d": "b"}, tolerance=0.01)
+
+    def test_plain_difference_without_config_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"d": [1, 2], "k": 1}).is_equal_to({"d": [1, 9], "k": 2}, ignore="k")

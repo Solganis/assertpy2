@@ -20,6 +20,37 @@ from ._engine._mixin_base import _MixinBase
 __tracebackhide__ = True
 
 
+def _values_not_equal(value: object, other_value: object, config: _CompareConfig | None) -> bool:
+    """Whether two non-mapping values differ, delegating to the shared structural walker.
+
+    Asking `_sub_diff_entries` keeps the equality *decision* and the rendered *diff* in agreement: every
+    shape it can decompose (dataclass, attrs, namedtuple, model, sequence) is then compared under the
+    compare config, instead of falling back to plain equality and silently dropping that config.
+    Without a config there is nothing to honour, so the plain check is kept exactly as it was.
+    """
+    if value is other_value:
+        return False  # identity first, the way Python's own container comparison short-circuits
+    if config is None:
+        return _guarded_not_equal(value, other_value)
+    entries = _sub_diff_entries(value, other_value, "", config=config)
+    if entries is None:  # a leaf the walker does not decompose
+        return _guarded_not_equal(value, other_value)
+    return bool(entries)
+
+
+def _both_list_like(left: object, right: object) -> bool:
+    """Whether both values are plain sequences, so they compare element-by-element.
+
+    Namedtuples are excluded on purpose: they carry field names and are compared field-wise.
+    """
+    return (
+        isinstance(left, (list, tuple))
+        and isinstance(right, (list, tuple))
+        and not is_namedtuple(left)
+        and not is_namedtuple(right)
+    )
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -201,24 +232,20 @@ class HelpersMixin(_MixinBase):
                     continue
                 if decision == "leaf":
                     return True
+            nested_ignore = (
+                [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignore else None
+            )
+            nested_include = (
+                [entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key]
+                if include
+                else None
+            )
             if self._is_dict_like(val[key], check_values=False) and self._is_dict_like(other[key], check_values=False):
-                subdicts_not_equal = self._dict_not_equal(
-                    val[key],
-                    other[key],
-                    ignore=[entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key]
-                    if ignore
-                    else None,
-                    include=[
-                        entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key
-                    ]
-                    if include
-                    else None,
-                    config=config,
-                    _seen=_seen,
-                )
-                if subdicts_not_equal:
+                if self._dict_not_equal(
+                    val[key], other[key], ignore=nested_ignore, include=nested_include, config=config, _seen=_seen
+                ):
                     return True
-            elif _guarded_not_equal(val[key], other[key]):
+            elif _values_not_equal(val[key], other[key], config):
                 return True
         return False
 
@@ -304,14 +331,6 @@ class HelpersMixin(_MixinBase):
             out = ", ".join(parts)
             ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
             return f"{{{ellip_prefix}{out}}}"
-
-        def _both_list_like(left, right):
-            return (
-                isinstance(left, (list, tuple))
-                and isinstance(right, (list, tuple))
-                and not is_namedtuple(left)
-                and not is_namedtuple(right)
-            )
 
         def _list_repr(seq, counterpart, _seen):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
