@@ -322,6 +322,88 @@ class TestIgnoreNull:
             assert_that({}).is_equal_to({}, ignore_null="yes")
 
 
+_ELIDED = re.compile(r"[\[{]\.\.")
+
+
+def _elision_matrix():
+    """(label, actual, expected, kwargs) across the shapes whose failure message gets reduced."""
+    shapes = [
+        ("flat_dict", {"a": 1.0}, {"a": 1.001}, {"a": 9.0}),
+        ("nested_dict", {"n": {"a": 1.0}}, {"n": {"a": 1.001}}, {"n": {"a": 9.0}}),
+        ("dict_to_list_dicts", {"d": [{"a": 1.0}]}, {"d": [{"a": 1.001}]}, {"d": [{"a": 9.0}]}),
+        ("dict_to_list_lists", {"d": [[1.0]]}, {"d": [[1.001]]}, {"d": [[9.0]]}),
+        ("dict_to_tuple", {"d": (1.0,)}, {"d": (1.001,)}, {"d": (9.0,)}),
+        ("dict_to_dataclass", {"d": Point(1.0, 2.0)}, {"d": Point(1.001, 2.0)}, {"d": Point(9.0, 2.0)}),
+        ("dict_to_namedtuple", {"d": Pair(1.0, 2.0)}, {"d": Pair(1.001, 2.0)}, {"d": Pair(9.0, 2.0)}),
+        ("dict_to_model", {"d": FakeModel(a=1.0)}, {"d": FakeModel(a=1.001)}, {"d": FakeModel(a=9.0)}),
+        (
+            "deep_payload",
+            {"ok": True, "data": [{"id": 1, "o": {"s": 1.0}}]},
+            {"ok": True, "data": [{"id": 1, "o": {"s": 1.001}}]},
+            {"ok": True, "data": [{"id": 1, "o": {"s": 9.0}}]},
+        ),
+    ]
+    configs = [
+        ("no_config", {}),
+        ("tolerance", {"tolerance": 0.01}),
+        ("comparators", {"comparators": {float: lambda x, y: abs(x - y) < 0.01}}),
+        ("ignore_null", {"ignore_null": True}),
+    ]
+    specs = [("no_spec", {}), ("ignore_bare", {"ignore": "a"}), ("ignore_tuple", {"ignore": ("d", "a")})]
+    for name, actual, near, far in shapes:
+        variants = [("near", near), ("far", far), ("extra_key", {**actual, "zz": 1})]
+        for variant, expected in variants:
+            for config_name, config in configs:
+                for spec_name, spec in specs:
+                    label = f"{name}/{variant}/{config_name}/{spec_name}"
+                    yield label, actual, expected, {**config, **spec}
+
+
+def _elided_failure(actual, expected, kwargs):
+    """Return the failure whose message hides the equal parts, or ``None`` when the invariant is moot.
+
+    A plain ``AssertionError``, or a message that names both values outright, is readable on its own
+    and carries no diff by design, so only the elided form takes part in the sweep.
+    """
+    try:
+        assert_that(actual).is_equal_to(expected, **kwargs)
+    except AssertionFailure as failure:
+        return failure if _ELIDED.search(str(failure).splitlines()[0]) else None
+    except AssertionError:
+        return None
+    return None
+
+
+class TestElidedFailureAlwaysCarriesDiff:
+    """A message that hides the equal parts must be explained by the structured diff.
+
+    The dict failure message is reduced to the differing keys (``{.., 'b': 2}``), which is only
+    readable because the diff spells out what changed.  The verdict and the diff are produced at
+    separate call sites, so drift between them yields a failure that claims inequality while showing
+    nothing - a real 2026-07 defect.  This pins the pairing across a shape/config/spec matrix rather
+    than for one hand-picked case.
+    """
+
+    def test_every_elided_failure_is_explained_by_its_diff(self):
+        violations = [
+            f"{label}: {str(failure).splitlines()[0]}"
+            for label, actual, expected, kwargs in _elision_matrix()
+            if (failure := _elided_failure(actual, expected, kwargs)) is not None
+            and (failure.diff is None or not failure.diff.entries)
+        ]
+        assert_that(violations).is_empty()
+
+    def test_the_matrix_actually_exercises_elided_failures(self):
+        # a guard on the guard: if the message stops eliding, the sweep above would go vacuous
+        elided = [
+            label
+            for label, actual, expected, kwargs in _elision_matrix()
+            if _elided_failure(actual, expected, kwargs) is not None
+        ]
+        assert_that(elided).is_not_empty()
+        assert_that(len(elided)).is_greater_than(20)
+
+
 class TestConfigThroughNestedContainers:
     """A container reached through a dict keeps the compare config.
 
