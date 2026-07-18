@@ -43,7 +43,12 @@ def _openapi_nullable_to_null(node: Any) -> Any:
     """
     if isinstance(node, dict):
         rewritten = {key: _openapi_nullable_to_null(value) for key, value in node.items()}
-        if not rewritten.pop("nullable", False):
+        nullable = rewritten.get("nullable")
+        if not isinstance(nullable, bool):
+            # a non-boolean "nullable" is a property literally named "nullable", not the OpenAPI keyword
+            return rewritten
+        del rewritten["nullable"]
+        if not nullable:  # nullable: false - drop the keyword, add no null
             return rewritten
         node_type = rewritten.get("type")
         if isinstance(node_type, str):
@@ -56,6 +61,33 @@ def _openapi_nullable_to_null(node: Any) -> Any:
     if isinstance(node, list):
         return [_openapi_nullable_to_null(item) for item in node]
     return node
+
+
+def _stringify_keys(node: Any) -> Any:
+    """Recursively convert all mapping keys to strings.
+
+    YAML parses a numeric-looking key such as a status code (``200:``) as an ``int``, but OpenAPI and
+    JSON-Schema keys are semantically strings and the JSON-Pointer resolver matches string segments.
+    """
+    if isinstance(node, dict):
+        return {str(key): _stringify_keys(value) for key, value in node.items()}
+    if isinstance(node, list):
+        return [_stringify_keys(item) for item in node]
+    return node
+
+
+def _resolve_local_ref(spec: dict[str, Any], ref: str):
+    """Follow a local JSON-Pointer ``$ref`` (``#/a/b/c``); return ``(target_node, [a, b, c])``, or
+    ``(None, [])`` for a non-local or dangling ref."""
+    if not ref.startswith("#/"):
+        return None, []
+    segments = [part.replace("~1", "/").replace("~0", "~") for part in ref[2:].split("/")]
+    node: Any = spec
+    for segment in segments:
+        if not isinstance(node, dict) or segment not in node:
+            return None, []
+        node = node[segment]
+    return node, segments
 
 
 def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str | int | None, content_type: str):
@@ -77,10 +109,17 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         status_key = next((code for code in ("200", "201", "default") if code in responses), "")
         if not status_key:
             raise ValueError(f"Specify status: <{method.upper()} {path}> declares responses {sorted(responses)}.")
-    content = responses[status_key].get("content", {})
+    response = responses[status_key]
+    response_segments = ["paths", path, method_key, "responses", status_key]
+    if isinstance(response, dict) and "$ref" in response:
+        # a Response Object may be a local $ref into components; resolve it and point at the target
+        response, response_segments = _resolve_local_ref(spec, response["$ref"])
+        if response is None:
+            raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> has an unresolvable $ref.")
+    content = response.get("content", {}) if isinstance(response, dict) else {}
     if content_type not in content or "schema" not in content[content_type]:
         raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> declares no <{content_type}> schema.")
-    segments = ["paths", path, method_key, "responses", status_key, "content", content_type, "schema"]
+    segments = [*response_segments, "content", content_type, "schema"]
     pointer = "#/" + "/".join(segment.replace("~", "~0").replace("/", "~1") for segment in segments)
     return status_key, pointer
 
@@ -277,6 +316,7 @@ class JsonMixin(_MixinBase):
         import referencing
         from referencing.jsonschema import DRAFT4, DRAFT202012
 
+        spec = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
         is_openapi_31 = str(spec.get("openapi", "")).startswith("3.1")
         status_key, pointer = _openapi_resolve(spec, path, method, status, content_type)
         document = spec if is_openapi_31 else _openapi_nullable_to_null(spec)

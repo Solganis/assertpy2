@@ -279,7 +279,9 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(mapping)}
             parts = []
             ellip = False
-            for key, value in sorted(mapping.items(), key=lambda item: _safe_repr(item[0])):
+            # build items by iterating keys + [] (the dict-likeness gate guarantees those, not items())
+            mapping_items = ((key, mapping[key]) for key in mapping)
+            for key, value in sorted(mapping_items, key=lambda item: _safe_repr(item[0])):
                 if key not in counterpart:
                     parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                 else:
@@ -378,7 +380,21 @@ class HelpersMixin(_MixinBase):
         Returns None if the object cannot be converted.
         """
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            return dataclasses.asdict(obj)
+            # like dataclasses.asdict but keeps leaf values by reference; asdict deep-copies every leaf,
+            # which crashes on un-copyable fields (locks, sockets) and breaks identity equality even for
+            # fields the caller ignores
+            def as_shallow(node):
+                if dataclasses.is_dataclass(node) and not isinstance(node, type):
+                    return {field.name: as_shallow(getattr(node, field.name)) for field in dataclasses.fields(node)}
+                if isinstance(node, tuple) and hasattr(node, "_fields"):
+                    return type(node)(*[as_shallow(item) for item in node])
+                if isinstance(node, (list, tuple)):
+                    return type(node)(as_shallow(item) for item in node)
+                if isinstance(node, dict):
+                    return {as_shallow(key): as_shallow(value) for key, value in node.items()}
+                return node
+
+            return as_shallow(obj)
         if is_namedtuple(obj):
             return dict(obj._asdict())
         if is_model_dump_object(obj):

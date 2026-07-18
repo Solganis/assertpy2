@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections.abc
+import inspect
 from typing import TYPE_CHECKING
 
 from ._engine._introspection import is_model_dump_object, is_namedtuple
@@ -144,31 +145,35 @@ class ExtractingMixin(_MixinBase):
         if len(names) == 0:
             raise ValueError("one or more name args must be given")
 
+        def _attr_value(item, name):
+            attr = getattr(item, name)
+            if not callable(attr):
+                return attr
+            try:
+                inspect.signature(attr).bind()
+            except TypeError:  # the callable needs arguments, so it is not a zero-arg method
+                raise ValueError(f"item method <{name}()> exists, but is not zero-arg method") from None
+            except ValueError:  # some builtins expose no introspectable signature; fall back to calling
+                pass
+            return attr()  # a TypeError from here comes from the method body, not an arity mismatch
+
         def _extract(item, name):
             if self._is_dict_like(item, check_values=False):
                 if name in item:
                     return item[name]
-                else:
-                    raise ValueError(f"item keys {list(item.keys())} did not contain key <{name}>")
-            elif is_namedtuple(item) and type(name) is str:
+                raise ValueError(f"item keys {list(item.keys())} did not contain key <{name}>")
+            if is_namedtuple(item) and type(name) is str:
                 if name in item._fields:
                     return getattr(item, name)
-                else:  # val has no attribute <foo>
-                    raise ValueError(f"item attributes {item._fields} did not contain attribute <{name}>")
-            elif isinstance(item, collections.abc.Iterable) and not is_model_dump_object(item):
+                if hasattr(item, name):  # a property or zero-arg method on the NamedTuple subclass
+                    return _attr_value(item, name)
+                raise ValueError(f"item attributes {item._fields} did not contain attribute <{name}>")
+            if isinstance(item, collections.abc.Iterable) and not is_model_dump_object(item):
                 self._check_iterable(item, name="item")
                 return item[name]
-            elif hasattr(item, name):
-                attr = getattr(item, name)
-                if callable(attr):
-                    try:
-                        return attr()
-                    except TypeError:
-                        raise ValueError(f"item method <{name}()> exists, but is not zero-arg method") from None
-                else:
-                    return attr
-            else:
-                raise ValueError(f"item does not have property or zero-arg method <{name}>")
+            if hasattr(item, name):
+                return _attr_value(item, name)
+            raise ValueError(f"item does not have property or zero-arg method <{name}>")
 
         def _filter(item):
             if "filter" in kwargs:
@@ -209,4 +214,4 @@ class ExtractingMixin(_MixinBase):
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
         # chain on with _extracted_ list (don't chain to self!)
-        return self.builder(extracted, self.description, self.kind)
+        return self.builder(extracted, self.description, self.kind, logger=self.logger)

@@ -7,6 +7,7 @@ the comparison path in ``snapshot.py`` is a plain equality check that needs none
 
 from __future__ import annotations
 
+import math
 import pprint
 from typing import TYPE_CHECKING
 
@@ -37,6 +38,8 @@ def is_literalable(value: object) -> bool:
         return all(is_literalable(key) and is_literalable(item) for key, item in value.items())
     if isinstance(value, (list, tuple, set, frozenset)):
         return all(is_literalable(item) for item in value)
+    if isinstance(value, float):
+        return math.isfinite(value)  # nan/inf/-inf render as bare names, invalid as source literals
     return isinstance(value, _LITERAL_TYPES)
 
 
@@ -85,11 +88,13 @@ def apply_inline_records() -> list[str]:
     for filename, edits in by_file.items():
         with open(filename, encoding="utf-8") as handle:
             content = handle.read()
+            source_newline = handle.newlines  # the file's own line ending, detected while reading
         for start, end, text in sorted(edits, reverse=True):
             content = content[:start] + text + content[end:]
-        with open(filename, "w", encoding="utf-8", newline="") as handle:
-            # newline="" writes the (universal-newline-normalized) content verbatim, so an LF source
-            # file stays LF instead of being rewritten to the platform ending on Windows
+        # content is universal-newline-normalized (LF); re-expand to the file's original ending so an
+        # untouched CRLF file is not silently rewritten to LF (and an LF file stays LF)
+        write_newline = source_newline if isinstance(source_newline, str) else "\n"
+        with open(filename, "w", encoding="utf-8", newline=write_newline) as handle:
             handle.write(content)
         touched.append(filename)
     _RECORDS.clear()

@@ -72,16 +72,33 @@ class DataFrameMixin(_MixinBase):
             ImportError: if the owning library is not installed
         """
         actual = self.val
-        root = type(actual).__module__.split(".", 1)[0]
+        # walk the MRO so a user subclass (whose own __module__ is its app, not pandas/polars) still
+        # resolves to the owning library through its DataFrame/Series base
+        root = next(
+            (
+                base.__module__.split(".", 1)[0]
+                for base in type(actual).__mro__
+                if base.__module__.split(".", 1)[0] in _FRAME_ROOTS
+            ),
+            type(actual).__module__.split(".", 1)[0],
+        )
         if root not in _FRAME_ROOTS:
             raise TypeError(
                 f"is_frame_equal() expects a pandas or polars DataFrame/Series, but was <{type(actual).__name__}>."
             )
         library, testing = _load(root)
-        if isinstance(actual, library.Series):
+        class_name = type(actual).__name__
+        # isinstance handles real subclasses; the class-name check handles duck-typed frames (a test may
+        # inject a fake library, so the value is not an instance of that fake DataFrame/Series class)
+        if isinstance(actual, library.Series) or class_name == "Series":
             assert_equal, label = testing.assert_series_equal, "Series"
-        else:
+        elif isinstance(actual, library.DataFrame) or class_name == "DataFrame":
             assert_equal, label = testing.assert_frame_equal, "DataFrame"
+        else:
+            # a pandas/polars object that is neither a DataFrame nor a Series (Index, Categorical, ...)
+            raise TypeError(
+                f"is_frame_equal() expects a pandas or polars DataFrame/Series, but was <{type(actual).__name__}>."
+            )
         try:
             assert_equal(actual, expected, **options)
         except AssertionError as exc:

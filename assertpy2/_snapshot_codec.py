@@ -26,6 +26,34 @@ class _Serializer(NamedTuple):
 # user-registered serializers, checked before the built-in codec (last registered wins)
 _SERIALIZERS: list[_Serializer] = []
 
+# keys that mark a codec envelope; a user dict carrying any of them is escaped so it is not mistaken
+# for one on load
+_RESERVED_MARKERS = frozenset({"__type__", "__data__", "__tag__", "__class__", "__module__"})
+
+
+def _prepare(value):
+    """Pre-process a value so ``json`` round-trips dicts that it otherwise mangles: dicts with a
+    non-string key (which ``json`` coerces to a string) and dicts that collide with the codec's markers
+    (which the decoder would misread).  Both are wrapped in a ``{"__type__": "dict", "__data__": [[k,
+    v], ...]}`` envelope; a plain string-keyed dict without markers is left as an ordinary object so
+    existing snapshots stay byte-identical."""
+    if isinstance(value, dict):
+        if all(isinstance(key, str) for key in value) and not _RESERVED_MARKERS.intersection(value):
+            return {key: _prepare(item) for key, item in value.items()}
+        items = sorted(value.items(), key=lambda pair: repr(pair[0]))  # deterministic order for mixed keys
+        return {"__type__": "dict", "__data__": [[_prepare(key), _prepare(item)] for key, item in items]}
+    if isinstance(value, (list, tuple)):
+        return [_prepare(item) for item in value]
+    return value
+
+
+def _rehash_key(key):
+    """Restore a hashable dict key from its json form: a list can only be a re-encoded tuple (a list is
+    not hashable and so could never have been a key), so convert it back to a tuple recursively."""
+    if isinstance(key, list):
+        return tuple(_rehash_key(item) for item in key)
+    return key
+
 
 class _Encoder(json.JSONEncoder):
     def default(self, o):
@@ -76,7 +104,9 @@ class _Decoder(json.JSONDecoder):
 
     def _object_hook(self, decoded):
         if "__type__" in decoded and "__data__" in decoded:
-            if decoded["__type__"] == "set":
+            if decoded["__type__"] == "dict":
+                return {_rehash_key(key): item for key, item in decoded["__data__"]}
+            elif decoded["__type__"] == "set":
                 return set(decoded["__data__"])
             elif decoded["__type__"] == "complex":
                 return complex(decoded["__data__"][0], decoded["__data__"][1])
@@ -129,7 +159,7 @@ def _resolve_class(module_name, class_name):
 def _save(name, val):
     tmp = f"{name}.{os.getpid()}.tmp"
     with open(tmp, "w") as file_handle:
-        json.dump(val, file_handle, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
+        json.dump(_prepare(val), file_handle, indent=2, separators=(",", ": "), sort_keys=True, cls=_Encoder)
     os.replace(tmp, name)
 
 

@@ -182,6 +182,8 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
         return False
     if isinstance(expected, float) and math.isnan(expected):
         return False
+    if actual == expected:  # equal values (including inf == inf) are within any tolerance
+        return True
     return abs(actual - expected) <= tolerance
 
 

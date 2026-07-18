@@ -33,6 +33,19 @@ def _multiset_diff_entries(val_items, given_items):
     return entries
 
 
+def _has_duplicates(values: list) -> bool:
+    """Whether ``values`` contains a repeated element, tolerating unhashable items (dicts, lists)."""
+    try:
+        return len(values) != len(set(values))
+    except TypeError:  # unhashable items: quadratic duplicate check via == instead of a set
+        seen: list = []
+        for value in values:
+            if value in seen:
+                return True
+            seen.append(value)
+        return False
+
+
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
 
@@ -303,10 +316,11 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val does **not** contain any duplicates
         """
         try:
-            if len(self.val) != len(set(self.val)):
-                return self
+            values = list(self.val)
         except TypeError:
             raise TypeError("val is not iterable") from None
+        if _has_duplicates(values):
+            return self
         return self.error(f"Expected <{self.val}> to contain duplicates, but did not.")
 
     def does_not_contain_duplicates(self) -> Self:
@@ -326,10 +340,11 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val **does** contain duplicates
         """
         try:
-            if len(self.val) == len(set(self.val)):
-                return self
+            values = list(self.val)
         except TypeError:
             raise TypeError("val is not iterable") from None
+        if not _has_duplicates(values):
+            return self
         return self.error(f"Expected <{self.val}> to not contain duplicates, but did.")
 
     def is_empty(self) -> Self:
@@ -530,12 +545,14 @@ class ContainsMixin(_MixinBase):
             val_list = list(self.val)
         except TypeError:
             raise TypeError("val is not iterable") from None
-        counts = Counter(val_list)
-        missing = [item for item in items if counts[item] == 0]
-        duplicated = [item for item in items if counts[item] > 1]
+        # list.count compares with == so unhashable items (dicts, lists) work, unlike Counter/hashing
+        missing = [item for item in items if val_list.count(item) == 0]
+        duplicated = [item for item in items if val_list.count(item) > 1]
         if missing or duplicated:
             entries = [DiffEntry(path="missing", actual=None, expected=item) for item in missing]
-            entries.extend(DiffEntry(path="duplicated", actual=counts[item], expected=item) for item in duplicated)
+            entries.extend(
+                DiffEntry(path="duplicated", actual=val_list.count(item), expected=item) for item in duplicated
+            )
             problems = []
             if missing:
                 problems.append(f"did not contain {self._fmt_items(missing)}")
