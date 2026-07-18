@@ -311,10 +311,30 @@ class TestContainsDiff:
         assert_that(missing).is_length(1)
         assert_that(missing[0].expected).is_equal_to("d")
 
-    def test_contains_exactly_order_only_no_structured_diff(self):
+    def test_contains_exactly_order_only_points_at_the_first_disagreeing_index(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_exactly(3, 2, 1)
-        assert_that(hasattr(exc_info.value, "diff")).is_false()
+        exc = exc_info.value
+        assert_that(str(exc)).contains("Same items, but the order differs at index 0.")
+        assert_that(exc.diff.kind).is_equal_to("sequence")
+        assert_that(exc.diff.entries).is_length(1)
+        assert_that(exc.diff.entries[0].path).is_equal_to("[0]")
+        assert_that(exc.diff.entries[0].actual).is_equal_to(1)
+        assert_that(exc.diff.entries[0].expected).is_equal_to(3)
+
+    def test_contains_exactly_order_only_skips_the_matching_prefix(self):
+        # the first index is the one worth naming, not index 0 by default
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(["GET", "POST", "PUT"]).contains_exactly("GET", "PUT", "POST")
+        assert_that(str(exc_info.value)).contains("the order differs at index 1.")
+
+    def test_contains_exactly_wrong_items_still_reports_extra_and_missing(self):
+        # the guard: only an equal multiset may take the ordering path
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_exactly(1, 2, 4)
+        exc = exc_info.value
+        assert_that(str(exc)).does_not_contain("order differs")
+        assert_that(exc.diff.kind).is_equal_to("contains")
 
 
 class TestIsEqualToWithDiff:

@@ -425,13 +425,23 @@ class ContainsMixin(_MixinBase):
             val_list = list(self.val)
         except TypeError:
             raise TypeError("val is not iterable") from None
-        if val_list != list(items):
-            entries = _multiset_diff_entries(val_list, list(items))
-            diff = DiffResult(kind="contains", entries=entries) if entries else None
-            return self.error(
-                f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not.",
-                diff=diff,
-            )
+        expected_list = list(items)
+        if val_list != expected_list:
+            message = f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not."
+            entries = _multiset_diff_entries(val_list, expected_list)
+            if entries:
+                diff = DiffResult(kind="contains", entries=entries)
+            else:
+                # equal multisets, so only the order differs: name the first position that disagrees,
+                # which is the one the reader has to look at anyway
+                pairs = enumerate(zip(val_list, expected_list, strict=True))  # equal multisets, equal lengths
+                index = next(i for i, (found, wanted) in pairs if found != wanted)
+                message += f" Same items, but the order differs at index {index}."
+                diff = DiffResult(
+                    kind="sequence",
+                    entries=[DiffEntry(path=f"[{index}]", actual=val_list[index], expected=expected_list[index])],
+                )
+            return self.error(message, diff=diff)
         return self
 
     def contains_exactly_in_any_order(self, *items: object) -> Self:
