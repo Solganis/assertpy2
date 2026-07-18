@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import difflib
 import math
 from dataclasses import dataclass, field
 
@@ -20,6 +21,11 @@ def _safe_str(value: object) -> str:
         return _safe_repr(value)
 
 
+def _callable_name(value: object) -> str:
+    """A display name for a callable, tolerating those without ``__name__`` (partials, instances)."""
+    return getattr(value, "__name__", None) or _safe_repr(value)
+
+
 def _truncated(text: str, limit: int = 4000) -> str:
     """Cap *text* for embedding into a failure message; normal-sized values stay byte-identical.
 
@@ -37,7 +43,7 @@ def _disambiguated(actual: object, other: object) -> tuple[str, str]:
     So ``is_equal_to`` on ``"1"`` vs ``1`` reads ``<1:str>`` / ``<1:int>`` instead of a baffling
     ``<1>`` / ``<1>``, ``but was not`` - the difference is the type, and now the message says so.
     """
-    actual_str, other_str = _truncated(str(actual)), _truncated(str(other))
+    actual_str, other_str = _truncated(_safe_str(actual)), _truncated(_safe_str(other))
     if actual_str == other_str:
         return f"{actual_str}:{type(actual).__name__}", f"{other_str}:{type(other).__name__}"
     return actual_str, other_str
@@ -94,7 +100,9 @@ class DiffEntry:
     expected: object = None
 
     def __str__(self) -> str:
-        return f"  at {self.path}: actual=<{_truncated(str(self.actual))}>, expected=<{_truncated(str(self.expected))}>"
+        actual = _truncated(_safe_str(self.actual))
+        expected = _truncated(_safe_str(self.expected))
+        return f"  at {self.path}: actual=<{actual}>, expected=<{expected}>"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -113,13 +121,103 @@ class DiffResult:
     entries: list[DiffEntry] = field(default_factory=list)
 
     def __str__(self) -> str:
-        if not self.entries:
-            return ""
-        lines = [f"diff ({self.kind}):"]
-        lines.extend(str(entry) for entry in self.entries[:50])
-        if len(self.entries) > 50:
-            lines.append(f"  ... and {len(self.entries) - 50} more entries")
-        return "\n".join(lines)
+        return _render_diff(self)
+
+
+def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green: str, reset: str) -> None:
+    """Render one string line-pair with difflib's intra-line caret guides, the way pytest does.
+
+    A one-token change in a long line shows the exact span (``? ^^^``) instead of dumping both whole
+    lines and leaving the reader to spot the difference.
+    """
+    if entry.expected is None:
+        lines.append(f"  {red}{entry.path}: - {entry.actual!r}{reset}")
+        return
+    if entry.actual is None:
+        lines.append(f"  {green}{entry.path}: + {entry.expected!r}{reset}")
+        return
+    actual_line, expected_line = _safe_str(entry.actual), _safe_str(entry.expected)
+    lines.append(f"  {entry.path}:")
+    # ndiff is O(len_a * len_b); on long lines skip the carets and show a plain pair instead
+    if len(actual_line) <= 200 and len(expected_line) <= 200:
+        for guide in difflib.ndiff([actual_line], [expected_line]):
+            text = guide.rstrip("\n")
+            if guide.startswith("-"):
+                lines.append(f"    {red}{text}{reset}")
+            elif guide.startswith("+"):
+                lines.append(f"    {green}{text}{reset}")
+            else:  # the "? ^^^" caret guide row (ndiff emits nothing else for a changed single line)
+                lines.append(f"    {text}")
+    else:
+        lines.append(f"    {red}- {actual_line!r}{reset}")
+        lines.append(f"    {green}+ {expected_line!r}{reset}")
+
+
+def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) -> str:
+    """Render a `DiffResult` as aligned ``- actual`` / ``+ expected`` lines, optionally colored.
+
+    Single source of truth for every place a diff surfaces: the pytest report section, the plain-text
+    `AssertionFailure` message off pytest, and ``str(DiffResult)``.  So the diff reads identically wherever
+    it is shown.
+    """
+    entries = getattr(diff, "entries", None)
+    if not entries:
+        return ""
+    kind = getattr(diff, "kind", "unknown")
+
+    red = "\033[31m" if color else ""
+    green = "\033[32m" if color else ""
+    cyan = "\033[36m" if color else ""
+    reset = "\033[0m" if color else ""
+
+    truncated = 0
+    visible = entries
+    if max_entries > 0 and len(entries) > max_entries:
+        truncated = len(entries) - max_entries
+        visible = entries[:max_entries]
+
+    lines = [f"{cyan}diff ({kind}):{reset}"]
+
+    if kind == "string":
+        for entry in visible:
+            _append_string_entry(lines, entry, red=red, green=green, reset=reset)
+    elif kind == "match":
+        lines.extend(
+            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
+            for entry in visible
+        )
+    elif kind in {"set", "contains"}:
+        extra = ", ".join(repr(entry.actual) for entry in visible if entry.path == "extra")
+        missing = ", ".join(repr(entry.expected) for entry in visible if entry.path == "missing")
+        if extra:
+            lines.append(f"  {red}extra:   {{{extra}}}{reset}")
+        if missing:
+            lines.append(f"  {green}missing: {{{missing}}}{reset}")
+    else:
+        for entry in visible:
+            path = entry.path
+            if entry.expected is None:
+                lines.append(f"  {red}{path}: - {entry.actual!r}{reset}")
+            elif entry.actual is None:
+                lines.append(f"  {green}{path}: + {entry.expected!r}{reset}")
+            else:
+                lines.append(f"  {path}:")
+                lines.append(f"    {red}- {entry.actual!r}{reset}")
+                lines.append(f"    {green}+ {entry.expected!r}{reset}")
+
+    if truncated:
+        lines.append(f"  ... and {truncated} more entries")
+
+    return "\n".join(lines)
+
+
+_RENDER_DIFF_IN_MESSAGE: bool = True
+"""Whether `AssertionFailure.__str__` appends the rendered diff to its message.
+
+The pytest plugin renders the diff itself as a dedicated colored report section, so it turns this off at
+configure time to avoid showing the diff twice.  Off pytest (unittest, plain scripts, CI logs) it stays on,
+so the structured diff travels with ``str(exc)`` instead of being lost.
+"""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -177,7 +275,15 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         trace: PollTrace | None = None,
     ):
         super().__init__(message)
+        self._message = message
         self.actual = actual
         self.expected = expected
         self.diff = diff
         self.trace = trace
+
+    def __str__(self) -> str:
+        if _RENDER_DIFF_IN_MESSAGE and self.diff is not None:
+            rendered = _render_diff(self.diff)
+            if rendered:
+                return f"{self._message}\n{rendered}"
+        return self._message
