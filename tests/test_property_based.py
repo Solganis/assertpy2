@@ -9,6 +9,7 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 import copy
 import datetime
 import json
+import re
 from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
 from itertools import pairwise
@@ -944,3 +945,101 @@ def test_is_after_is_the_exact_complement_of_is_before_or_equal_to(left, right):
     after = _holds(lambda: assert_that(left).is_after(right))
     before_or_equal = _holds(lambda: assert_that(left).is_before_or_equal_to(right))
     assert_that(after).is_not_equal_to(before_or_equal)
+
+
+# --- the parts of a failure message this library composes itself ---
+#
+# Not "no message ever shows an address": rendering the value's own repr is inherited behaviour, and
+# `is_equal_to` on a plain object does print `<Foo object at 0x...>`. The invariant covers the text
+# assertpy2 writes around that value, which is where a leak is ours to prevent.
+
+_ADDRESS = re.compile(r"0x[0-9a-fA-F]{6,}")
+
+
+class _Opaque:
+    """No ``__repr__`` of its own, so ``repr()`` falls back to the address form."""
+
+
+class _SelfIdentifying:
+    def __repr__(self):
+        return f"<Session {id(self):#x}>"  # a hand-written repr can leak an address just as well
+
+
+@dataclass
+class _Wrapper:
+    payload: object
+
+
+_leaky_items = st.recursive(
+    st.sampled_from([_Opaque, _SelfIdentifying]).map(lambda factory: factory()),
+    lambda children: st.builds(_Wrapper, payload=children),
+    max_leaves=3,
+)
+
+
+@settings(deadline=None)
+@given(item=_leaky_items, name=st.text(alphabet="abc", min_size=1, max_size=4))
+def test_the_extracting_item_label_never_leaks_a_memory_address(item, name):
+    """Whatever the item's repr does, the label assertpy2 writes for it stays reproducible.
+
+    A message that differs between runs cannot be asserted on, cannot be diffed in CI, and sends the
+    reader chasing a number that means nothing.
+    """
+    assume(not hasattr(item, name))
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([item]).extracting(name)
+    assert_that(_ADDRESS.search(str(exc_info.value))).is_none()
+
+
+@settings(deadline=None)
+@given(
+    error_type=st.sampled_from([ValueError, RuntimeError, KeyError, ZeroDivisionError, LookupError]),
+    message=st.text(alphabet="abc 123", min_size=1, max_size=20),
+)
+def test_an_error_raised_by_user_code_reaches_the_caller_unchanged(error_type, message):
+    """``extracting()`` annotates its own failures with an index, so it must not repackage anyone else's.
+
+    ``AttributeError`` is deliberately absent from the sample: that one assertpy2 does intercept, to
+    tell a broken accessor from a missing name.
+    """
+
+    class Failing:
+        @property
+        def name(self):
+            raise error_type(message)
+
+    with pytest.raises(error_type) as exc_info:
+        assert_that([Failing()]).extracting("name")
+    assert_that(type(exc_info.value)).is_equal_to(error_type)
+    assert_that(str(exc_info.value)).is_equal_to(str(error_type(message)))
+
+
+def _unavailable(_self):
+    raise AttributeError("unavailable")
+
+
+@settings(deadline=None)
+@given(
+    attributes=st.lists(st.text(alphabet="abcdef", min_size=3, max_size=8), min_size=1, max_size=5, unique=True),
+    requested=st.text(alphabet="abcdef", min_size=3, max_size=8),
+    declared_but_raising=st.booleans(),
+)
+def test_a_suggestion_is_a_real_attribute_and_never_the_one_that_was_asked_for(
+    attributes, requested, declared_but_raising
+):
+    """Suggesting the name the reader just typed is worse than saying nothing: it reads as a bug.
+
+    ``declared_but_raising`` is the case that produced exactly that. A property that raises is invisible
+    to ``hasattr()``, so the name lands in ``dir()`` as its own closest match.
+    """
+    assume(requested not in attributes)
+    namespace = dict.fromkeys(attributes, 0)
+    if declared_but_raising:
+        namespace[requested] = property(_unavailable)
+    item = type("Generated", (), namespace)()
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([item]).extracting(requested)
+    suggested = re.search(r"did you mean '([^']*)'\?", str(exc_info.value))
+    if suggested:
+        assert_that(suggested.group(1)).is_not_equal_to(requested)
+        assert_that(attributes).contains(suggested.group(1))
