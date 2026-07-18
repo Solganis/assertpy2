@@ -38,7 +38,7 @@ assert_that("foo").does_not_match(r"\d+")
 
 !!! note "Regex matching"
     Use raw strings (`r"..."`) for patterns. `matches()` passes on **partial** matches (like the
-    underlying `re.match`); anchor the pattern (`^...$`) to match the whole string. Inline flags such as
+    underlying `re.match`). Anchor the pattern (`^...$`) to match the whole string. Inline flags such as
     `(?m)` and `(?s)` work, even though `matches()` takes no flags argument.
 
     <!-- docs-guard: skip -->
@@ -118,7 +118,7 @@ assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_b
 
 The exact-pairing and multiset assertions:
 
-- `satisfies_exactly` - pairs the i-th item with the i-th matcher (equal length required);
+- `satisfies_exactly` - pairs the i-th item with the i-th matcher (equal length required).
   `satisfies_exactly_in_any_order` - any one-to-one pairing instead.
 - `zip_satisfies` - checks a two-arg predicate over items zipped with another iterable.
 - `contains_only_once` - each given item must occur exactly once.
@@ -185,7 +185,7 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 Pydantic models, attrs, and plain objects (for sequences, each element is compared pairwise with the
 same filters).
 
-The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those; any other
+The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those. Any other
 iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
 
 <!-- docs-guard: skip -->
@@ -261,7 +261,7 @@ assert_that(order).is_equal_to(
 )
 ```
 
-Use `comparators` to change *how* a field or type is compared; to drop a field from the comparison
+Use `comparators` to change *how* a field or type is compared. To drop a field from the comparison
 entirely, use `ignore` (above) rather than an always-true comparator (`ignore` also handles fields missing
 on one side or with incomparable types).
 
@@ -277,7 +277,7 @@ assert_that(user).is_equal_to(User(name="Alice"), ignore_null=True)
 ```
 
 Sequence elements have no field name, so a `comparators` field-name key does not apply to them (use a type
-key or `tolerance`); sets compare by standard equality.
+key or `tolerance`). Sets compare by standard equality.
 
 ### Dict flattening
 
@@ -540,6 +540,6 @@ assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
 
 See [Errors & Reporting](errors.md) for the full set:
 
-- [expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings);
-- the cause chain (`caused_by()`, `has_root_cause()`) and `ExceptionGroup` matching (`contains_error()`);
+- [expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings)
+- the cause chain (`caused_by()`, `has_root_cause()`) and `ExceptionGroup` matching (`contains_error()`)
 - pivoting to the raised exception (`raised()`) or the call's return value (`returned()`).

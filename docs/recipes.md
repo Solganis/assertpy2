@@ -1,6 +1,6 @@
 # Patterns & recipes
 
-Task-oriented recipes for common testing jobs. Each one is a small, copy-pasteable pattern; follow the
+Task-oriented recipes for common testing jobs. Each one is a small, copy-pasteable pattern. Follow the
 links into the guides and [API reference](reference/overview.md) for the full surface.
 
 ## Test an HTTP API response
@@ -32,7 +32,7 @@ assert_that(body).matches_structure({
 ```
 
 When you have an OpenAPI spec, assert the whole body against the operation's response schema with
-[`conforms_to_openapi()`](guides/data.md#conforms_to_openapi); with a Pydantic model, reach for
+[`conforms_to_openapi()`](guides/data.md#conforms_to_openapi). With a Pydantic model, reach for
 [`assert_conforms()`](concepts/type-safety.md#contract-narrowing-with-assert_conforms), which also
 narrows the chain to the model's type.
 
@@ -69,7 +69,7 @@ def test_report():
     assert_that(build_summary()).matches_inline()
 ```
 
-Use inline for small, literal-able values you want to read next to the test; use file snapshots for
+Use inline for small, literal-able values you want to read next to the test. Use file snapshots for
 large payloads or values that need a custom serializer (`datetime`, `Decimal`, a domain object). Inline
 snapshots need the `[inline]` extra (`pip install assertpy2[inline]`). See
 [Snapshot testing](guides/testing.md#snapshot-testing).
@@ -90,7 +90,7 @@ assert_that(orders).filtered_on(lambda order: order["status"] == "paid").mapped(
 ).contains_only(100, 200)
 ```
 
-`first()`, `last()`, `single()`, and `element(i)` pivot to one element; `flat_mapped()` flattens. See
+`first()`, `last()`, `single()`, and `element(i)` pivot to one element. `flat_mapped()` flattens. See
 [Collection pipeline](guides/fluent.md#collection-pipeline).
 
 ## Collect every failure in one run
@@ -132,7 +132,7 @@ assert_that(load).raises(RuntimeError).when_called_with("x").caused_by(ValueErro
 ## Wait for eventual consistency
 
 When a value settles asynchronously (a queue drains, a cache warms), poll with `eventually()` (async) or
-`eventually_sync()` (blocking) instead of `sleep`; a timeout reports a convergence trace:
+`eventually_sync()` (blocking) instead of `sleep`. A timeout reports a convergence trace:
 
 <!-- docs-guard: skip -->
 ```python
@@ -151,7 +151,7 @@ value = assert_that("hello world").is_not_none().is_instance_of(str).value
 assert_that(value.upper()).is_equal_to("HELLO WORLD")
 ```
 
-`is_not_none()` strips `None`, `is_instance_of()` narrows to the class; the returned `.value` carries the
+`is_not_none()` strips `None`, `is_instance_of()` narrows to the class. The returned `.value` carries the
 narrowed type. See [Typed narrowing](concepts/type-safety.md#typed-narrowing-with-value).
 
 ## Add a project-specific assertion
@@ -189,7 +189,7 @@ assert_that(response).has_json_path("$.meta.total")
 assert_that(response["meta"]["total"]).is_equal_to(2)
 ```
 
-`extracting()` pulls a field or JSON path off every element of a collection; `has_json_path()` and
+`extracting()` pulls a field or JSON path off every element of a collection. `has_json_path()` and
 `at_json_path()` navigate into a nested payload. This keeps the failure focused on the field that broke.
 
 ## Migrate an assertion from plain `assert`

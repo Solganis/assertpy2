@@ -126,7 +126,7 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.ends_with(suffix)` | a string ending with `suffix` |
 | `match.is_uuid()` | a string parseable as a UUID |
 | `match.is_non_empty_string()` | a non-empty string |
-| `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`) of now; handles naive and tz-aware values |
+| `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`) of now. Handles naive and tz-aware values |
 | `match.is_before(dt)` | a `datetime` strictly before `dt` (a non-comparable value never matches) |
 | `match.is_after(dt)` | a `datetime` strictly after `dt` (a non-comparable value never matches) |
 | `match.ignore()` | anything (placeholder for structural matching) |
@@ -137,7 +137,7 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.not_(matcher)` | a value not matching `matcher` |
 
 `all_of()`, `any_of()`, and `not_()` are named function equivalents of the `&`, `|`, and `~`
-operators from [Composition](#composition); use whichever reads better.
+operators from [Composition](#composition). Use whichever reads better.
 
 ## Structural matching
 
@@ -203,7 +203,7 @@ assert_that(Address("Paris", "EU")).matches_structure(
     A model is matched in its `model_dump()` form: nested models become dicts, `@field_serializer` and
     `@computed_field` outputs are applied, and spec keys are the model's field names (not aliases). The
     spec is matched against this serialized shape, not the live attributes. This is a runtime structural
-    check; the spec keys and values are not type-checked against the model's schema.
+    check. The spec keys and values are not type-checked against the model's schema.
 
 ### Nested structures
 
@@ -224,7 +224,7 @@ assert_that({
 
 ### Ignoring and collections
 
-`match.ignore()` skips a field; `match.each_item()` checks every element of a nested collection:
+`match.ignore()` skips a field. `match.each_item()` checks every element of a nested collection:
 
 ```python
 assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure({
@@ -299,5 +299,5 @@ assert_that(response).matches_structure({
     ```
 
     `unregister_matcher(name)` removes one matcher by name (and raises `KeyError` if it is not
-    registered); `clear_custom_matchers()` removes every custom matcher at once, handy for test
+    registered). `clear_custom_matchers()` removes every custom matcher at once, handy for test
     teardown.

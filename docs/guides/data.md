@@ -94,7 +94,7 @@ body = {"id": 42, "total": 19.99, "email": None}
 assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 ```
 
-`status` defaults to `200`, then `201`, then `default`; pass `status=` to pick another. When the body does
+`status` defaults to `200`, then `201`, then `default`. Pass `status=` to pick another. When the body does
 not conform, the message names the operation and counts the failures (`found 3 violations`), then reports
 each with its JSON path and the expected constraint - all of them, not just the first:
 

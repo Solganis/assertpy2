@@ -102,8 +102,8 @@ total = assert_that(orders).first().value.total
 mapped = assert_that(orders).mapped(lambda o: o.total).value
 ```
 
-Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime;
-here the narrowing is purely static - checked by ty, mypy, and Pyright - with zero runtime cost
+Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime.
+Here the narrowing is purely static - checked by ty, mypy, and Pyright - with zero runtime cost
 beyond returning the value.
 
 !!! note "The narrowing is sound in every mode"
@@ -142,7 +142,7 @@ paid = assert_that(order).is_not_none().satisfies(is_paid).value
 paid.refund()
 ```
 
-The runtime behavior of `satisfies()` is unchanged (it just runs the predicate); the narrowing is
+The runtime behavior of `satisfies()` is unchanged (it just runs the predicate). The narrowing is
 purely static.
 
 !!! warning "Checker support: not yet in PyCharm"
@@ -150,19 +150,19 @@ purely static.
     CI. **PyCharm does not yet solve type variables through `TypeIs`**: there the result stays the
     un-narrowed type, and accessing a narrowed-only member reports a false *Unresolved attribute
     reference*. It is tracked upstream in
-    [JetBrains PY-89124](https://youtrack.jetbrains.com/issue/PY-89124); when that ships, the narrowing
+    [JetBrains PY-89124](https://youtrack.jetbrains.com/issue/PY-89124). When that ships, the narrowing
     lights up in PyCharm with no change here.
 
     Until then, on PyCharm:
 
-    - prefer `is_instance_of()` for class narrowing (which PyCharm *does* narrow);
-    - treat `satisfies()`-based refinement narrowing as advanced / checker-dependent;
+    - prefer `is_instance_of()` for class narrowing (which PyCharm *does* narrow)
+    - treat `satisfies()`-based refinement narrowing as advanced / checker-dependent
     - don't disable the *Unresolved attribute reference* inspection to work around it - it is a core
-      check; scope any workaround to the specific line.
+      check. Scope any workaround to the specific line.
 
 ### Contract narrowing with assert_conforms
 
-`is_instance_of()` narrows a value that is *already* an instance; `assert_conforms()` goes one step
+`is_instance_of()` narrows a value that is *already* an instance. `assert_conforms()` goes one step
 further - it **validates a raw payload against a pydantic v2 model and continues over the validated
 instance**, narrowing the chain to that model. It is the capstone for API-response testing: parse,
 validate, and type in one step.
@@ -182,7 +182,7 @@ assert_that(order.total).is_greater_than(0)
 ```
 
 `assert_conforms(payload, Order)` runs `Order.model_validate(payload)`: on failure the assertion fails
-with pydantic's validation errors; on success it returns a builder over the validated, coerced
+with pydantic's validation errors. On success it returns a builder over the validated, coerced
 instance, so `.value` hands back a typed `Order`. It needs pydantic installed.
 
 `assert_conforms` is a **function**, not a method on the builder, and that is deliberate. A method
@@ -227,9 +227,9 @@ the model does not declare: ['customer.loyalty_tier', 'promo_code']
 A few refinements keep it precise:
 
 - it is **alias-aware** - an aliased payload key is not mistaken for drift - and respects a model that
-  opts into extras (`model_config = ConfigDict(extra="allow")`);
+  opts into extras (`model_config = ConfigDict(extra="allow")`)
 - it reports only **structural** drift (undeclared fields), not type coercions: a `datetime` field
-  legitimately arrives as a JSON string, so flagging coercions would be noise;
+  legitimately arrives as a JSON string, so flagging coercions would be noise
 - it is stricter and more informative than pydantic's model-level `extra="forbid"` - per-call, and it
   names every drifted path.
 
@@ -252,7 +252,7 @@ typeCheckingMode = "strict"
 ```
 
 `ty` needs no configuration - it reads the types out of the box. All three pick up `assertpy2`'s types
-automatically via the `py.typed` marker below; there is no stub package to install.
+automatically via the `py.typed` marker below. There is no stub package to install.
 
 ## py.typed and PEP 561
 

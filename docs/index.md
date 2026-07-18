@@ -57,7 +57,7 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     ---
 
-    Collect multiple failures in one run; poll for eventual consistency with `eventually()` (async) or
+    Collect multiple failures in one run. Poll for eventual consistency with `eventually()` (async) or
     `eventually_sync()` (blocking).
 
     [:octicons-arrow-right-24: Testing](guides/testing.md)
@@ -75,8 +75,8 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     ---
 
-    Failures carry machine-readable `.actual`, `.expected`, and `.diff`, and the pytest plugin renders
-    recursive diffs for dicts, dataclasses, attrs, and Pydantic models.
+    Failures carry machine-readable `.actual`, `.expected`, and `.diff`. The diff renders into the message
+    itself and, under pytest, as colored sections for dicts, dataclasses, attrs, and Pydantic models.
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
 

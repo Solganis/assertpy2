@@ -209,7 +209,7 @@ whole differing container. assertpy2 keeps a path-level diff on either.
       inline-snapshot offers.
 
     The first two are not category-leading engines, and do not try to be. **Rule of thumb:** reach for a
-    specialist when snapshots are the point; reach for assertpy2's when you want a snapshot inline with
+    specialist when snapshots are the point. Reach for assertpy2's when you want a snapshot inline with
     everything else, or structural (contract) regression rather than value-exact.
 
 ## What only assertpy2 does here
@@ -217,19 +217,19 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 Across the columns above, assertpy2 is the only option that:
 
 - covers the fluent, matcher, and `==` styles in a single import, mixable in one suite, so there is no
-  juggling of libraries;
+  juggling of libraries
 - is statically typed: `@overload` protocols and `py.typed` give autocomplete filtered by the value's
-  type and usage verified by a type checker before the test runs;
+  type and usage verified by a type checker before the test runs
 - **returns the value it checked, statically narrowed** (`.value` after `is_not_none()` / `is_instance_of()`),
   and validates *and* narrows a whole payload against a Pydantic model with `assert_conforms()` - neither of
-  which any other tool here does;
+  which any other tool here does
 - has soft assertions that are both **thread-safe and async-safe** (independent state per thread and per
   `asyncio.Task` via `contextvars`). The original assertpy's soft assertions are not thread-safe, and
-  the other tools have no soft assertions at all;
+  the other tools have no soft assertions at all
 - polls for eventual consistency with `eventually()` (async) and `eventually_sync()` (blocking), for async
-  operations and reactive systems;
+  operations and reactive systems
 - attaches structured failure data (`.actual` / `.expected` / `.diff`) and renders rich, recursive
-  diffs in pytest reports;
+  diffs in pytest reports
 - adds exception cause-chain and group assertions, a collection pipeline, regex group extraction, dynamic
   `has_<name>()` assertions, snapshot testing, JSON Path and Schema validation, file/date/bytes assertions,
   and Allure/Behave integrations.
