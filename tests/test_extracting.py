@@ -69,13 +69,24 @@ def test_extracting_empty_args_failure():
 def test_extracting_bad_property_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting("foo")
-    assert_that(str(exc_info.value)).is_equal_to("item does not have property or zero-arg method <foo>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "item does not have property or zero-arg method <foo> (at index 0, item is <Person>)"
+    )
 
 
 def test_extracting_too_many_args_method_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting("say_hello")
-    assert_that(str(exc_info.value)).is_equal_to("item method <say_hello()> exists, but is not zero-arg method")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "item method <say_hello()> exists, but is not zero-arg method (at index 0, item is <Person>)"
+    )
+
+
+def test_extracting_reports_the_index_of_the_failing_item():
+    # the whole point of the localization: one bad item in a long list must not send the reader hunting
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([{"name": "a"}, {"name": "b"}, 42]).extracting("name")
+    assert_that(str(exc_info.value)).ends_with("(at index 2, item is <int>)")
 
 
 def test_extracting_dict_missing_key_failure():
@@ -295,7 +306,9 @@ def test_extracting_model_dump_object_multiple_fields():
 def test_extracting_model_dump_object_missing_field_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(_duck_users).extracting("foo")
-    assert_that(str(exc_info.value)).is_equal_to("item does not have property or zero-arg method <foo>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "item does not have property or zero-arg method <foo> (at index 0, item is <_DuckModel>)"
+    )
 
 
 def test_extracting_real_pydantic_model():

@@ -56,7 +56,9 @@ def test_namedtuple_extracting_by_name():
 def test_namedtuple_extracting_by_name_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(foos).extracting("missing").is_equal_to("x")
-    assert_that(str(exc_info.value)).is_equal_to("item attributes ('bar', 'baz') did not contain attribute <missing>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "item attributes ('bar', 'baz') did not contain attribute <missing> (at index 0, item is <Foo>)"
+    )
 
 
 def test_namedtuple_diff_field_colliding_with_tuple_method_absent_on_expected():

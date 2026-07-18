@@ -208,9 +208,12 @@ class ExtractingMixin(_MixinBase):
         # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
         extracted = []
-        for item in source:
+        for index, item in enumerate(source):
             if _filter(item):
-                extracted_values = [_extract(item, name) for name in names]
+                try:
+                    extracted_values = [_extract(item, name) for name in names]
+                except ValueError as exc:
+                    raise ValueError(f"{exc} (at index {index}, item is <{type(item).__name__}>)") from None
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
         # chain on with _extracted_ list (don't chain to self!)
