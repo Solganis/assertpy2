@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import collections.abc
+import difflib
 import inspect
 from typing import TYPE_CHECKING
 
@@ -173,7 +174,15 @@ class ExtractingMixin(_MixinBase):
                 return item[name]
             if hasattr(item, name):
                 return _attr_value(item, name)
-            raise ValueError(f"item does not have property or zero-arg method <{name}>")
+            try:
+                available = sorted(attr for attr in dir(item) if not attr.startswith("_"))
+            except Exception:  # a broken __dir__ must not replace the real diagnostic with its own error
+                available = []
+            # one suggestion, not a list: measured typos score ~0.9 while wrong neighbours sit at ~0.65,
+            # so extra candidates are noise that costs the hint its credibility
+            close = difflib.get_close_matches(str(name), available, n=1)
+            hint = f"; did you mean {close[0]!r}?" if close else ""
+            raise ValueError(f"item does not have property or zero-arg method <{name}>{hint}")
 
         def _filter(item):
             if "filter" in kwargs:
