@@ -101,6 +101,32 @@ class TestNotSoftAssertions:
             assert_that(-5).not_.is_positive()
             assert_that(5).not_.is_none()
 
+    def test_soft_passing_negation_returns_value(self):
+        with soft_assertions():
+            builder = assert_that(5).not_.is_equal_to(6)  # negation passes
+            value = builder.value  # must not raise on a passing negation
+        assert_that(value).is_equal_to(5)
+
+    def test_soft_failing_negation_taints_value(self):
+        with pytest.raises(AssertionError), soft_assertions():
+            builder = assert_that(5).not_.is_equal_to(5)  # negation fails, error collected
+            with pytest.raises(TypeError):
+                _ = builder.value
+
+    def test_soft_prior_failure_taint_survives_passing_negation(self):
+        with pytest.raises(AssertionError), soft_assertions():
+            builder = assert_that(5).is_equal_to(6)  # prior real failure taints .value
+            passed = builder.not_.is_equal_to(7)  # a later passing negation keeps the taint
+            with pytest.raises(TypeError):
+                _ = passed.value
+
+    def test_soft_prior_failure_then_failing_negation_keeps_first_taint(self):
+        with pytest.raises(AssertionError), soft_assertions():
+            builder = assert_that(5).is_equal_to(6)  # prior failure already taints .value
+            failed = builder.not_.is_equal_to(5)  # failing negation: taint already set, guard skips
+            with pytest.raises(TypeError):
+                _ = failed.value
+
 
 class TestNotWarnMode:
     def test_warn_not_logs_warning(self):
@@ -115,6 +141,20 @@ class TestNotWarnMode:
         out = capture.getvalue()
         capture.close()
         assert_that(out).contains("to NOT satisfy: is_alpha()")
+
+    def test_warn_passing_negation_returns_value(self):
+        assert_that(assert_warn(5).not_.is_equal_to(6).value).is_equal_to(5)
+
+    def test_warn_failing_negation_taints_value(self):
+        builder = assert_warn(5).not_.is_equal_to(5)  # negation fails, warning logged
+        with pytest.raises(TypeError):
+            _ = builder.value
+
+    def test_warn_prior_failure_then_failing_negation_keeps_first_taint(self):
+        builder = assert_warn(5).is_equal_to(6)  # prior warn failure already taints .value
+        failed = builder.not_.is_equal_to(5)  # failing negation: taint already set, guard skips
+        with pytest.raises(TypeError):
+            _ = failed.value
 
     def test_warn_not_success_does_not_log(self):
         capture = StringIO()

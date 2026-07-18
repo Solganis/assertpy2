@@ -428,3 +428,11 @@ class TestDictErrorSurvivesBrokenRepr:
         with pytest.raises(AssertionError) as exc_info:
             assert_that({_BadRepr(): 1, "b": 1}).is_equal_to({_BadRepr(): 1, "b": 2})
         assert_that(str(exc_info.value)).contains("to be equal to")
+
+
+def test_ignore_include_applies_to_dict_elements_in_a_list():
+    # ignore/include must reach plain dict elements of a list, not just top-level dicts
+    assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 1, "b": 999}], ignore="b")
+    assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 1, "b": 999}], include="a")
+    with pytest.raises(AssertionError):
+        assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 9, "b": 2}], ignore="b")

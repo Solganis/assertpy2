@@ -1,4 +1,5 @@
 import dataclasses
+import threading
 from collections import namedtuple
 
 import pytest
@@ -72,6 +73,47 @@ class TestDataclassIgnore:
     def test_equal_objects_with_ignore_passes(self):
         user = User(id=1, name="Alice", email="a@x.com")
         assert_that(user).is_equal_to(user, ignore="id")
+
+    def test_ignore_un_deepcopyable_field(self):
+        # asdict deep-copied every leaf, so ignoring an un-copyable field (a lock) still crashed
+        @dataclasses.dataclass
+        class Resource:
+            name: str
+            lock: object
+
+        actual = Resource("db", threading.Lock())
+        expected = Resource("db", threading.Lock())
+        assert_that(actual).is_equal_to(expected, ignore="lock")
+
+    def test_shared_identity_field_not_deepcopied(self):
+        # a shared reference in a compared field must stay identity-equal (asdict deep-copied it into
+        # two distinct objects and reported a false difference)
+        class Handle:
+            def __init__(self, token):
+                self.token = token
+
+        @dataclasses.dataclass
+        class Config:
+            version: int
+            handle: object
+
+        shared = Handle("s")
+        assert_that(Config(1, shared)).is_equal_to(Config(1, shared))
+
+    def test_ignore_with_nested_namedtuple_dict_and_list_fields(self):
+        # exercises the shallow-asdict recursion over namedtuple / dict / list field values
+        point = namedtuple("Point", ["x", "y"])
+
+        @dataclasses.dataclass
+        class Shape:
+            id: int
+            corner: object
+            meta: dict
+            tags: list
+
+        actual = Shape(1, point(1, 2), {"k": "v"}, ["a", "b"])
+        expected = Shape(99, point(1, 2), {"k": "v"}, ["a", "b"])
+        assert_that(actual).is_equal_to(expected, ignore="id")
 
 
 # --- dataclass: include ---

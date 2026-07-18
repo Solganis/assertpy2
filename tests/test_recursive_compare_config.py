@@ -53,6 +53,13 @@ class TestToleranceScalar:
         with pytest.raises(AssertionFailure):
             assert_that(True).is_equal_to(False, tolerance=5)
 
+    def test_equal_infinities_within_tolerance(self):
+        # inf == inf must be within any tolerance (abs(inf - inf) is NaN, which broke the check)
+        assert_that(float("inf")).is_equal_to(float("inf"), tolerance=0.001)
+        assert_that(float("-inf")).is_equal_to(float("-inf"), tolerance=0.001)
+        with pytest.raises(AssertionFailure):
+            assert_that(float("inf")).is_equal_to(float("-inf"), tolerance=0.001)
+
 
 class TestToleranceNested:
     def test_dict_all_within_tolerance(self):

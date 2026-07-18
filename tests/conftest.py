@@ -1,6 +1,19 @@
 import pytest
 
+from assertpy2 import errors as _errors
 from assertpy2 import snapshot as _snapshot
+
+
+@pytest.fixture(autouse=True)
+def _plain_messages(monkeypatch):
+    """Pin the diff off the failure message for the suite.
+
+    The suite runs with the plugin disabled (``-p no:assertpy2``), so the diff-in-message default (on)
+    would append the structured diff to every ``str(exc)`` and break the exact-message assertions.  Off
+    here it mirrors what plugin-on users see, where the plugin renders the diff as its own report section
+    instead; the off-pytest diff-in-message path has its own targeted tests that opt back in.
+    """
+    monkeypatch.setattr(_errors, "_RENDER_DIFF_IN_MESSAGE", False)
 
 
 @pytest.fixture(autouse=True)

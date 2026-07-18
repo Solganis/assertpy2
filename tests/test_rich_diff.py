@@ -436,6 +436,38 @@ class TestDiffResultStr:
         assert_that(str(entry)).contains("expected=<b>")
 
 
+class TestStringDiffCarets:
+    """String diffs point at the intra-line change with difflib carets instead of dumping whole lines."""
+
+    def test_carets_mark_the_changed_span(self):
+        diff = DiffResult(
+            kind="string",
+            entries=[DiffEntry(path="line 1", actual="the quick fox", expected="the quick cat")],
+        )
+        output = _format_diff(diff)
+        assert_that(output).contains("- the quick fox")
+        assert_that(output).contains("+ the quick cat")
+        assert_that(output).contains("^")  # the ndiff caret guide row
+
+    def test_long_lines_skip_the_carets(self):
+        diff = DiffResult(
+            kind="string",
+            entries=[DiffEntry(path="line 1", actual="a" * 300, expected="b" * 300)],
+        )
+        output = _format_diff(diff)
+        assert_that(output).contains("- 'aaa")
+        assert_that(output).contains("+ 'bbb")
+        assert_that(output).does_not_contain("^")
+
+    def test_removed_line_renders_minus_only(self):
+        diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual="gone", expected=None)])
+        assert_that(_format_diff(diff)).contains("line 2: - 'gone'")
+
+    def test_added_line_renders_plus_only(self):
+        diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual=None, expected="new")])
+        assert_that(_format_diff(diff)).contains("line 2: + 'new'")
+
+
 class TestPytestPluginDiffRendering:
     def test_diff_appears_in_report(self, tmp_path):
         test_file = tmp_path / "test_sample.py"

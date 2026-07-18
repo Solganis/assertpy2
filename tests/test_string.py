@@ -95,6 +95,17 @@ def test_contains_ignoring_case_list():
     assert_that(["foo", "bar", "baz"]).contains_ignoring_case("Foo", "bAr", "baZ")
 
 
+def test_contains_ignoring_case_generator_not_exhausted():
+    # a one-shot iterable must be materialized so every arg is checked, not just the first
+    assert_that(value for value in ["foo", "bar", "baz"]).contains_ignoring_case("Foo", "bAr", "baZ")
+
+
+def test_contains_ignoring_case_list_elem_type_failure_order_independent():
+    # a non-string element must raise regardless of whether a matching item is found before it
+    with pytest.raises(TypeError, match="val items must all be strings"):
+        assert_that(["OK", 200]).contains_ignoring_case("ok")
+
+
 def test_contains_ignoring_case_list_elem_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that([123]).contains_ignoring_case("f")

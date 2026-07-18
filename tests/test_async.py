@@ -307,23 +307,28 @@ class TestTraceSummary:
         base.update(overrides)
         return PollSample(**base)
 
+    def _summary(self, samples, total_polls, elapsed):
+        fail_polls = sum(sample.repeats for sample in samples if sample.outcome == "fail")
+        error_polls = sum(sample.repeats for sample in samples if sample.outcome == "error")
+        return _summarize(samples, total_polls, elapsed, fail_polls, error_polls)
+
     def test_all_errors_single_type(self):
         samples = [self._sample(outcome="error", detail="ConnectionError('boot')", value=None)]
-        assert_that(_summarize(samples, 7, 5.0)).is_equal_to("probe raised ConnectionError on all 7 polls")
+        assert_that(self._summary(samples, 7, 5.0)).is_equal_to("probe raised ConnectionError on all 7 polls")
 
     def test_all_errors_mixed_types(self):
         samples = [
             self._sample(outcome="error", detail="ConnectionError('boot')", value=None),
             self._sample(outcome="error", detail="TimeoutError('slow')", value=None, elapsed=0.5),
         ]
-        assert_that(_summarize(samples, 4, 5.0)).is_equal_to("probe raised exceptions on all 4 polls")
+        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("probe raised exceptions on all 4 polls")
 
     def test_recovered_then_stable(self):
         samples = [
             self._sample(outcome="error", detail="ConnectionError('boot')", value=None, repeats=3),
             self._sample(elapsed=1.5, value={"s": 1}),
         ]
-        assert_that(_summarize(samples, 5, 5.0)).is_equal_to(
+        assert_that(self._summary(samples, 5, 5.0)).is_equal_to(
             "probe recovered after 3 raising polls; value then never changed"
         )
 
@@ -333,13 +338,13 @@ class TestTraceSummary:
             self._sample(elapsed=1.0, value={"s": 1}),
             self._sample(elapsed=2.0, value={"s": 2}),
         ]
-        assert_that(_summarize(samples, 3, 5.0)).is_equal_to(
+        assert_that(self._summary(samples, 3, 5.0)).is_equal_to(
             "probe recovered after 1 raising poll; value then changed 1 time"
         )
 
     def test_value_never_changed(self):
         samples = [self._sample(repeats=9)]
-        assert_that(_summarize(samples, 9, 5.0)).is_equal_to("value unchanged across 9 polls")
+        assert_that(self._summary(samples, 9, 5.0)).is_equal_to("value unchanged across 9 polls")
 
     def test_value_changed_reports_last_change(self):
         samples = [
@@ -347,9 +352,17 @@ class TestTraceSummary:
             self._sample(elapsed=1.0, value=2),
             self._sample(elapsed=3.5, value=3),
         ]
-        assert_that(_summarize(samples, 3, 5.0)).is_equal_to(
+        assert_that(self._summary(samples, 3, 5.0)).is_equal_to(
             "value changed 2 times; last change 1.5s before the deadline"
         )
+
+    def test_dropped_fail_samples_not_reported_as_all_raised(self):
+        # fail_polls counts every poll, so even when the retained window holds only error samples the
+        # summary must not claim the probe raised on all polls (some polls returned a value and failed)
+        error_only = [self._sample(outcome="error", detail="ConnectionError('x')", value=None)]
+        summary = _summarize(error_only, 30, 5.0, fail_polls=4, error_polls=26)
+        assert_that(summary).does_not_contain("on all")
+        assert_that(summary).contains("recovered after 26 raising polls")
 
 
 class TestEventuallyTrace:

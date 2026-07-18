@@ -101,3 +101,39 @@ class TestDynamicDictAccess:
     def test_dict_value_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
             assert_that({"n": 5}).has_n(3)
+
+    def test_method_name_key_absent_reports_key_not_keyerror(self):
+        # "items"/"get" are dict methods (hasattr is True) but absent as keys here; the presence gate
+        # must report a clean key failure instead of raising KeyError on the subscript
+        with pytest.raises(AssertionError, match="Expected key <items>"):
+            assert_that({"status": "ok"}).has_items([1, 2, 3])
+        with pytest.raises(AssertionError, match="Expected key <get>"):
+            assert_that({"total": 5}).has_get("x")
+
+    def test_method_name_key_present_compares_value(self):
+        assert_that({"items": [1, 2]}).has_items([1, 2])
+
+    def test_has_name_on_list_fails_cleanly(self):
+        # has_<name>() on a list has no such key: a clean AssertionError, not a raw TypeError
+        with pytest.raises(AssertionError):
+            assert_that([1, 2, 3]).has_count(1)
+
+
+def test_has_zero_arg_method_body_typeerror_not_masked():
+    class Order:
+        prices = None
+
+        def total(self):
+            return sum(self.prices)  # raises a genuine TypeError inside the body
+
+    # the real TypeError must propagate, not be masked as "does not have zero-arg method"
+    with pytest.raises(TypeError, match="not iterable"):
+        assert_that(Order()).has_total(0)
+
+
+def test_has_method_without_introspectable_signature():
+    # a zero-arg builtin (int() -> 0) whose inspect.signature raises ValueError must still be called
+    class Obj:
+        action = staticmethod(int)
+
+    assert_that(Obj()).has_action(0)

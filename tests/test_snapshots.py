@@ -211,6 +211,37 @@ class TestSnapshotTypedCodec:
         raw = json.loads((tmp_path / "snap-codec-date-raw.json").read_text())
         assert_that(raw).is_equal_to({"__type__": "date", "__data__": "2026-07-04"})
 
+    def test_non_string_key_dict_roundtrip(self, tmp_path):
+        # json coerces non-string keys to strings; the codec must round-trip int/None/tuple keys intact
+        value = {1: "a", 2: "b", None: "c", (3, 4): "d"}
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(value).snapshot(id="codec-intkeys", path=str(tmp_path))
+        assert_that(value).snapshot(id="codec-intkeys", path=str(tmp_path))
+        with pytest.raises(AssertionError):
+            assert_that({1: "a", 2: "CHANGED"}).snapshot(id="codec-intkeys", path=str(tmp_path))
+
+    def test_marker_key_dict_is_not_mistaken_for_an_envelope(self, tmp_path):
+        # a user dict that happens to carry the codec's marker keys must round-trip as a plain dict
+        value = {"__type__": "date", "__data__": "not-a-date"}
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(value).snapshot(id="codec-collide", path=str(tmp_path))
+        assert_that(value).snapshot(id="codec-collide", path=str(tmp_path))
+
+    def test_normal_string_dict_stored_without_envelope(self, tmp_path):
+        # a plain string-keyed dict must stay an ordinary JSON object (no envelope), so existing
+        # snapshots remain byte-identical
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1, "b": 2}).snapshot(id="codec-plain", path=str(tmp_path))
+        raw = json.loads((tmp_path / "snap-codec-plain.json").read_text())
+        assert_that(raw).is_equal_to({"a": 1, "b": 2})
+
+    def test_unknown_type_marker_decodes_as_is(self, tmp_path):
+        # a snapshot written by a future version with an unknown type marker must decode to the raw
+        # dict (forward-compatible), not error
+        snap = tmp_path / "snap-future.json"
+        snap.write_text(json.dumps({"__type__": "future_type", "__data__": [1, 2]}))
+        assert_that(_load(str(snap))).is_equal_to({"__type__": "future_type", "__data__": [1, 2]})
+
     def test_time_roundtrip(self, tmp_path):
         value = datetime.time(12, 34, 56, 789012)
         with pytest.warns(SnapshotCreatedWarning):

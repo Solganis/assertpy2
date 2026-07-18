@@ -116,6 +116,71 @@ class TestConformant:
         body = {"id": 1, "status": "placed", "payment": CARD}
         assert_that(body).conforms_to_openapi(SPEC_30, "/orders/{id}", "get")
 
+    def test_property_literally_named_nullable_is_validated(self):
+        # a property whose NAME is "nullable" must not be mistaken for the OpenAPI nullable keyword
+        schema = {
+            "type": "object",
+            "properties": {"nullable": {"type": "string"}, "name": {"type": "string"}},
+            "required": ["nullable", "name"],
+        }
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/c": {"get": {"responses": {"200": {"content": {"application/json": {"schema": schema}}}}}}},
+        }
+        assert_that({"nullable": "x", "name": "y"}).conforms_to_openapi(spec, "/c", "get")
+        with pytest.raises(AssertionError):
+            assert_that({"nullable": 123, "name": 456}).conforms_to_openapi(spec, "/c", "get")
+
+    def test_nullable_false_does_not_allow_null(self):
+        # nullable: false must drop the keyword without permitting null
+        schema = {"type": "object", "properties": {"name": {"type": "string", "nullable": False}}, "required": ["name"]}
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/c": {"get": {"responses": {"200": {"content": {"application/json": {"schema": schema}}}}}}},
+        }
+        assert_that({"name": "x"}).conforms_to_openapi(spec, "/c", "get")
+        with pytest.raises(AssertionError):
+            assert_that({"name": None}).conforms_to_openapi(spec, "/c", "get")
+
+    def test_yaml_integer_status_key_is_matched(self):
+        # PyYAML parses an unquoted status code (200:) as an int; it must still resolve and match
+        schema = {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/x": {"get": {"responses": {200: {"content": {"application/json": {"schema": schema}}}}}}},
+        }
+        assert_that({"id": 5}).conforms_to_openapi(spec, "/x", "get")
+        assert_that({"id": 5}).conforms_to_openapi(spec, "/x", "get", status=200)
+        with pytest.raises(AssertionError):
+            assert_that({"id": "bad"}).conforms_to_openapi(spec, "/x", "get")
+
+    def test_dangling_response_ref_raises(self):
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/y": {"get": {"responses": {"200": {"$ref": "#/components/responses/Nope"}}}}},
+        }
+        with pytest.raises(ValueError, match="unresolvable"):
+            assert_that({"id": 5}).conforms_to_openapi(spec, "/y", "get")
+
+    def test_external_response_ref_raises(self):
+        spec = {"openapi": "3.0.3", "paths": {"/y": {"get": {"responses": {"200": {"$ref": "other.yaml#/x"}}}}}}
+        with pytest.raises(ValueError, match="unresolvable"):
+            assert_that({"id": 5}).conforms_to_openapi(spec, "/y", "get")
+
+    def test_response_level_ref_is_resolved(self):
+        # a Response Object given as a local $ref into components must resolve, not report "no schema"
+        schema = {"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"]}
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/x": {"get": {"responses": {"200": {"$ref": "#/components/responses/Ok"}}}}},
+            "components": {
+                "responses": {"Ok": {"description": "ok", "content": {"application/json": {"schema": schema}}}}
+            },
+        }
+        assert_that({"id": 5}).conforms_to_openapi(spec, "/x", "get")
+        with pytest.raises(AssertionError):
+            assert_that({"id": "bad"}).conforms_to_openapi(spec, "/x", "get")
+
     def test_array_response_conformant(self):
         assert_that([CONFORMANT, {**CONFORMANT, "id": 2}]).conforms_to_openapi(SPEC_30, "/orders", "get")
 
