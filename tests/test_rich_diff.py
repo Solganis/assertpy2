@@ -311,6 +311,24 @@ class TestContainsDiff:
         assert_that(missing).is_length(1)
         assert_that(missing[0].expected).is_equal_to("d")
 
+    def test_contains_only_reports_both_halves_at_once(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(["a", "b", "x"]).contains_only("a", "b", "c")
+        exc = exc_info.value
+        assert_that(str(exc)).contains("but did contain <x> and did not contain <c>.")
+        assert_that(exc.diff.kind).is_equal_to("contains")
+        assert_that([entry.actual for entry in exc.diff.entries if entry.path == "extra"]).is_equal_to(["x"])
+        assert_that([entry.expected for entry in exc.diff.entries if entry.path == "missing"]).is_equal_to(["c"])
+
+    def test_contains_only_keeps_the_single_fault_wording(self):
+        # the compat guard: only the both-at-once case may change how the message reads
+        with pytest.raises(AssertionError) as extra_info:
+            assert_that(["a", "b", "x"]).contains_only("a", "b")
+        assert_that(str(extra_info.value)).ends_with("to contain only <'a', 'b'>, but did contain <x>.")
+        with pytest.raises(AssertionError) as missing_info:
+            assert_that(["a", "b"]).contains_only("a", "b", "c")
+        assert_that(str(missing_info.value)).ends_with("to contain only <'a', 'b', 'c'>, but did not contain <c>.")
+
     def test_contains_exactly_order_only_points_at_the_first_disagreeing_index(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_exactly(3, 2, 1)

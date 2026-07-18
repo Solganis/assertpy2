@@ -169,7 +169,9 @@ def test_contains_only_failure():
 def test_contains_only_multi_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_only(1, 4)
-    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain only <1, 4>, but did contain <2, 3>.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3]> to contain only <1, 4>, but did contain <2, 3> and did not contain <4>."
+    )
 
 
 def test_contains_only_superlist_failure():

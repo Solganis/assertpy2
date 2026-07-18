@@ -236,20 +236,23 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        else:
-            extra = [item for item in self.val if item not in items]
+        extra = [item for item in self.val if item not in items]
+        missing = [item for item in items if item not in self.val]
+        if extra or missing:
+            # both halves at once: reporting only the extras sends the reader to fix one problem and
+            # rerun into the other, and the message wording of each half alone is unchanged
+            faults = []
+            entries = []
             if extra:
-                return self.error(
-                    f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
-                    f" but did contain {self._fmt_items(extra)}."
-                )
-
-            missing = [item for item in items if item not in self.val]
+                faults.append(f"did contain {self._fmt_items(extra)}")
+                entries += [DiffEntry(path="extra", actual=item, expected=None) for item in extra]
             if missing:
-                return self.error(
-                    f"Expected <{self.val}> to contain only {self._fmt_items(items)},"
-                    f" but did not contain {self._fmt_items(missing)}."
-                )
+                faults.append(f"did not contain {self._fmt_items(missing)}")
+                entries += [DiffEntry(path="missing", actual=None, expected=item) for item in missing]
+            return self.error(
+                f"Expected <{self.val}> to contain only {self._fmt_items(items)}, but {' and '.join(faults)}.",
+                diff=DiffResult(kind="contains", entries=entries),
+            )
         return self
 
     def contains_sequence(self, *items: object) -> Self:
