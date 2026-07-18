@@ -14,6 +14,21 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
+_OURS = "_assertpy2_extracting"
+
+
+def _extraction_error(message: str) -> ValueError:
+    """A ``ValueError`` tagged as this module's own.
+
+    The localization wrapper re-raises only tagged errors, so a ``ValueError`` raised by user code (a
+    property that fails, say) keeps its own traceback instead of being swallowed. The visible type
+    stays ``ValueError``, exactly as before.
+    """
+    error = ValueError(message)
+    setattr(error, _OURS, True)
+    return error
+
+
 class ExtractingMixin(_MixinBase):
     """Collection flattening mixin.
 
@@ -153,7 +168,7 @@ class ExtractingMixin(_MixinBase):
             try:
                 inspect.signature(attr).bind()
             except TypeError:  # the callable needs arguments, so it is not a zero-arg method
-                raise ValueError(f"item method <{name}()> exists, but is not zero-arg method") from None
+                raise _extraction_error(f"item method <{name}()> exists, but is not zero-arg method") from None
             except ValueError:  # some builtins expose no introspectable signature; fall back to calling
                 pass
             return attr()  # a TypeError from here comes from the method body, not an arity mismatch
@@ -162,27 +177,34 @@ class ExtractingMixin(_MixinBase):
             if self._is_dict_like(item, check_values=False):
                 if name in item:
                     return item[name]
-                raise ValueError(f"item keys {list(item.keys())} did not contain key <{name}>")
+                raise _extraction_error(f"item keys {list(item.keys())} did not contain key <{name}>")
             if is_namedtuple(item) and type(name) is str:
                 if name in item._fields:
                     return getattr(item, name)
                 if hasattr(item, name):  # a property or zero-arg method on the NamedTuple subclass
                     return _attr_value(item, name)
-                raise ValueError(f"item attributes {item._fields} did not contain attribute <{name}>")
+                raise _extraction_error(f"item attributes {item._fields} did not contain attribute <{name}>")
             if isinstance(item, collections.abc.Iterable) and not is_model_dump_object(item):
                 self._check_iterable(item, name="item")
                 return item[name]
-            if hasattr(item, name):
-                return _attr_value(item, name)
             try:
-                available = sorted(attr for attr in dir(item) if not attr.startswith("_"))
-            except Exception:  # a broken __dir__ must not replace the real diagnostic with its own error
-                available = []
-            # one suggestion, not a list: measured typos score ~0.9 while wrong neighbours sit at ~0.65,
-            # so extra candidates are noise that costs the hint its credibility
-            close = difflib.get_close_matches(str(name), available, n=1)
-            hint = f"; did you mean {close[0]!r}?" if close else ""
-            raise ValueError(f"item does not have property or zero-arg method <{name}>{hint}")
+                return _attr_value(item, name)
+            except AttributeError as exc:
+                # hasattr() reports a raising accessor as a missing one, so telling the two apart is the
+                # difference between "you typed the wrong name" and "your property is broken"
+                if hasattr(type(item), name):
+                    raise _extraction_error(
+                        f"item has property or zero-arg method <{name}>, but reading it raised AttributeError: {exc}"
+                    ) from exc
+                try:
+                    available = sorted(attr for attr in dir(item) if not attr.startswith("_"))
+                except Exception:  # a broken __dir__ must not replace the real diagnostic with its own
+                    available = []
+                # one suggestion, not a list: measured typos score ~0.9 while wrong neighbours sit at
+                # ~0.65, so extra candidates are noise that costs the hint its credibility
+                close = difflib.get_close_matches(str(name), available, n=1)
+                hint = f"; did you mean {close[0]!r}?" if close else ""
+                raise _extraction_error(f"item does not have property or zero-arg method <{name}>{hint}") from None
 
         def _filter(item):
             if "filter" in kwargs:
@@ -222,7 +244,10 @@ class ExtractingMixin(_MixinBase):
                 try:
                     extracted_values = [_extract(item, name) for name in names]
                 except ValueError as exc:
-                    raise ValueError(f"{exc} (at index {index}, item is <{type(item).__name__}>)") from None
+                    if not getattr(exc, _OURS, False):
+                        raise
+                    localized = f"{exc} (at index {index}, item is <{type(item).__name__}>)"
+                    raise _extraction_error(localized) from exc.__cause__
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
         # chain on with _extracted_ list (don't chain to self!)
