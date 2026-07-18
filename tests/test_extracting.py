@@ -1,4 +1,5 @@
 import sys
+import traceback
 from collections import namedtuple
 
 import pytest
@@ -93,6 +94,46 @@ def test_extracting_suggests_a_close_attribute_name():
     with pytest.raises(ValueError) as exc_info:
         assert_that(people).extracting("frist_name")
     assert_that(str(exc_info.value)).contains("did you mean 'first_name'?")
+
+
+def test_extracting_tells_a_broken_property_from_a_missing_one():
+    # hasattr() reports a raising accessor as missing, which used to produce the absurd
+    # "does not have property <total>; did you mean 'total'?"
+    class Order:
+        @property
+        def total(self):
+            raise AttributeError("price table not loaded")
+
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([Order()]).extracting("total")
+    message = str(exc_info.value)
+    assert_that(message).contains("has property or zero-arg method <total>, but reading it raised")
+    assert_that(message).contains("price table not loaded")
+    assert_that(message).does_not_contain("did you mean")
+    assert_that(exc_info.value.__cause__).is_instance_of(AttributeError)
+
+
+def test_extracting_reports_an_unset_slot_as_a_broken_read():
+    class Slotted:
+        __slots__ = ("name",)
+
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([Slotted()]).extracting("name")
+    assert_that(str(exc_info.value)).contains("but reading it raised")
+
+
+def test_extracting_lets_a_user_value_error_through_untouched():
+    # the localization wrapper must re-raise only this module's own errors, or a failing property
+    # loses the traceback that points at the user's code
+    class Flaky:
+        @property
+        def name(self):
+            raise ValueError("bad state from user code")
+
+    with pytest.raises(ValueError) as exc_info:
+        assert_that([Flaky()]).extracting("name")
+    assert_that(str(exc_info.value)).is_equal_to("bad state from user code")
+    assert_that([frame.name for frame in traceback.extract_tb(exc_info.tb)]).contains("name")
 
 
 def test_extracting_survives_an_item_with_a_broken_dir():
