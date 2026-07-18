@@ -25,12 +25,28 @@ except AssertionError as e:
     # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
 ```
 
+The diff is also rendered into the failure **message**, so it travels with `str(e)` wherever the
+exception surfaces - `unittest`, a plain script, an `AssertionError` in a CI log:
+
+```python
+try:
+    assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
+except AssertionError as e:
+    print(e)
+    # Expected <{.., 'b': 2}> to be equal to <{.., 'b': 99}>, but was not.
+    # diff (dict):
+    #   b:
+    #     - 2
+    #     + 99
+```
+
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
-When the pytest plugin is active (auto-registered via the `pytest11` entry point, no configuration
-needed), this data is rendered as extra report sections. See [Rich pytest diffs](#rich-pytest-diffs)
-for supported types and configuration.
+Under pytest the plugin (auto-registered via the `pytest11` entry point, no configuration needed) renders
+this same diff as a dedicated colored report section instead, keeping the message itself to a single line
+so the diff is never shown twice. See [Rich pytest diffs](#rich-pytest-diffs) for supported types and
+configuration.
 
 ## Rich pytest diffs
 
@@ -41,7 +57,7 @@ rendered by the plugin as colored diff sections.
 |---|---|---|
 | `list`, `tuple` | `sequence` | Element-by-element, recursive into nested dicts, lists, dataclasses, namedtuples, attrs classes, and models |
 | `set`, `frozenset` | `set` | Extra and missing items |
-| `str` | `string` | Line-by-line comparison |
+| `str` | `string` | Line-by-line, with difflib carets marking the exact intra-line change |
 | `dict` | `dict` | Key-by-key, recursive into nested dicts, lists, dataclasses, namedtuples, attrs classes, and models |
 | `dataclass` | `dataclass` | Field-by-field, handles differing types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
@@ -70,6 +86,11 @@ of comparing the whole thing - it is faster and the failure stays focused. See
 show the path with the removal in red and the addition in green - this is the diff for the example above:
 
 ![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)
+
+String values go finer than line-by-line: each changed line is diffed *within the line*, with difflib
+carets (`? ^^^`) pointing at the exact span - the same guides pytest's own assertion rewriting uses:
+
+![Colored string diff: the changed word marked with difflib carets, removal in red and addition in green](../assets/diff-string.svg)
 
 **Set and contains** show extra items in red and missing items in green:
 
@@ -232,7 +253,7 @@ To also assert on the value the call returned (alongside the warning, or after `
 ```
 
 `returned()` exposes the type-agnostic core assertions (`is_equal_to`, `is_instance_of`, `satisfies`,
-...); it raises `TypeError` if the call raised (there is no return value to inspect).
+...). It raises `TypeError` if the call raised (there is no return value to inspect).
 
 !!! warning "Not thread-safe"
     `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global

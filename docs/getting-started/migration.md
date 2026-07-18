@@ -10,7 +10,7 @@ the switch is a single import.
 
 ## Before you start
 
-- **Python 3.10+ is required.** The original assertpy ran on Python 2.7 and 3.x; assertpy2 targets
+- **Python 3.10+ is required.** The original assertpy ran on Python 2.7 and 3.x. assertpy2 targets
   3.10 through 3.15. If you are on an older interpreter, upgrade Python first - this is the only hard
   requirement of the migration.
 - **No runtime dependencies on Python 3.11+.** On 3.10 a single tiny backport (`typing_extensions`) is
@@ -56,16 +56,16 @@ entire migration.
 assertpy2 is a superset of the original, so the assertions you already use are present and produce the
 same results:
 
-- the `assert_that()` entry point and fluent (`return self`) chaining;
-- strings, numbers, lists, tuples, dicts, sets, booleans, `None`, dates, files, and objects;
-- dynamic `has_<name>()` assertions and `extracting()` with `filter` and `sort`;
+- the `assert_that()` entry point and fluent (`return self`) chaining
+- strings, numbers, lists, tuples, dicts, sets, booleans, `None`, dates, files, and objects
+- dynamic `has_<name>()` assertions and `extracting()` with `filter` and `sort`
 - soft assertions, expected exceptions (`raises().when_called_with()`), `fail()`, `assert_warn()`,
-  snapshot testing, and `add_extension()`;
+  snapshot testing, and `add_extension()`
 - the existing failure messages.
 
 !!! note "Backward-compatible failures"
     Failing assertions now raise `AssertionFailure`, a **subclass of `AssertionError`**. Existing
-    `except AssertionError` handlers keep working unchanged; the subclass simply carries extra
+    `except AssertionError` handlers keep working unchanged. The subclass simply carries extra
     structured data.
 
 ## What improves automatically
@@ -75,9 +75,11 @@ You get these the moment you switch, without touching any test code:
 - **Thread-safe and async-safe soft assertions.** State is isolated per thread and per `asyncio.Task`
   via `contextvars`, so soft assertions are safe under `pytest-xdist` and `asyncio`. The original's soft
   assertions were not thread-safe.
-- **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the
-  auto-registered pytest plugin renders recursive diffs for lists, dicts, dataclasses, namedtuples, attrs
-  classes, and Pydantic models. Set `assertpy2_diff = "off"` if you prefer the plain message.
+- **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the diff
+  is rendered into the message itself (so it shows in `unittest`, plain scripts, and CI logs). Under pytest
+  the auto-registered plugin renders it as a colored report section instead - recursive for lists, dicts,
+  dataclasses, namedtuples, attrs classes, and Pydantic models. Set `assertpy2_diff = "off"` to turn that
+  section off.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
   value's type, and a type checker flags misuse before the tests run - see [Type Safety](../concepts/type-safety.md).
 

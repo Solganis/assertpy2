@@ -25,7 +25,7 @@ with soft_assertions():
 
 !!! note
     Only assertion failures are collected. Errors like `TypeError`/`ValueError` and an explicit `fail()`
-    halt immediately; use `soft_fail()` to collect a forced failure. Soft state is thread-safe and
+    halt immediately. Use `soft_fail()` to collect a forced failure. Soft state is thread-safe and
     async-safe (independent per thread and per `asyncio.Task` via `contextvars`).
 
 ## Grouped soft assertions
@@ -52,7 +52,7 @@ with soft_assertions() as sa:
 !!! note
     Soft mode collects *assertion* failures only. After a failed `raises()` / `warns()` +
     `when_called_with()` inside a soft context there is no captured value to assert on, so the rest
-    of that one chain becomes inert and is skipped silently; independent assertions that follow are
+    of that one chain becomes inert and is skipped silently. Independent assertions that follow are
     collected as usual.
 
 ### assert_all
@@ -80,7 +80,7 @@ async def test_status_converges():
     await assert_that(get_status).eventually().is_equal_to("ready")
 ```
 
-By default it polls for 5 seconds every 0.5 seconds; tune with `within()` and `every()`:
+By default it polls for 5 seconds every 0.5 seconds. Tune with `within()` and `every()`:
 
 ```python
 await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
@@ -110,7 +110,7 @@ await assert_that(get_order).eventually().within(10).ignoring(
 ```
 
 !!! note
-    Only `AssertionError` (plus any `ignoring` types) is retried; other exceptions propagate
+    Only `AssertionError` (plus any `ignoring` types) is retried. Other exceptions propagate
     immediately. On timeout the last failure is chained for context. `ignoring` accepts only
     `Exception` subclasses, so `KeyboardInterrupt` and friends can never be swallowed.
 
@@ -143,8 +143,8 @@ difference: the probe must be a sync callable - a probe that returns an awaitabl
 Every poll is recorded, so a timeout failure diagnoses itself instead of just reporting that time ran
 out. The message opens with a one-line trend that pins the failure mode:
 
-- `probe raised ConnectionError on all 12 polls` - the service never came up;
-- `value unchanged across 12 polls` - it converged to the wrong value;
+- `probe raised ConnectionError on all 12 polls` - the service never came up
+- `value unchanged across 12 polls` - it converged to the wrong value
 - `value changed 3 times; last change 0.4s before the deadline` - the timeout is too short.
 
 The raised `AssertionFailure` carries the full timeline as `.trace` (a
@@ -164,12 +164,12 @@ consecutive distinct samples. Sample values are point-in-time snapshots - safe e
 mutates and returns the same object - capped by the same limits as other attachments, so long polls
 keep the first 5 and last 20 samples.
 
-In soft/warn modes the message keeps the trend line; the full trace object travels only with the
+In soft/warn modes the message keeps the trend line. The full trace object travels only with the
 strict `AssertionFailure`.
 
 The recorder can be switched off per assertion with `trace=False` (on both `eventually()` and
 `eventually_sync()`) for the rare case where a near-zero interval meets a heavy probed value and
-even point-in-time snapshots cost too much; the timeout failure then reports just the last failure.
+even point-in-time snapshots cost too much. The timeout failure then reports just the last failure.
 
 ## Snapshot testing
 
@@ -235,7 +235,7 @@ assertpy2 snapshots:
   obsolete snapshot file: __snapshots/snap-test_legacy.json
 ```
 
-Each line carries a short hint on how to remove it. Reporting is always safe; removal is deliberately
+Each line carries a short hint on how to remove it. Reporting is always safe. Removal is deliberately
 conservative. An obsolete sub-snapshot (a line-number key in a file whose module still ran) is pruned
 only under update mode on a *full* run, so a run narrowed by `-k`, `-m`, `--lf`, or `--ff` never deletes
 a snapshot that only looks unused because its test was deselected.
@@ -272,7 +272,7 @@ assert_that(order).matches_inline(
 A recorded literal holds the value captured on that run, so a placeholder field shows the captured `id`
 rather than the `0` above - the placeholder governs the comparison, not what is written.
 
-Recording needs the `[inline]` extra (`pip install assertpy2[inline]`); the **comparison** does not -
+Recording needs the `[inline]` extra (`pip install assertpy2[inline]`). The **comparison** does not -
 it is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting.
 
@@ -312,7 +312,7 @@ assert_that(response.json()).matches_contract_snapshot()
 ```
 
 It is value-tolerant by construction, so dynamic ids, timestamps, and amounts (and `5` vs `5.0`) change
-freely; a real contract change fails with the drifted paths:
+freely. A real contract change fails with the drifted paths:
 
 ```text
 Expected <{...}> to match contract snapshot <...>, but the structure drifted:
@@ -326,7 +326,7 @@ same storage, update mode, and CI mode as `snapshot()`. The model-driven counter
 for that when you already have a pydantic model.
 
 Because a contract is inferred from a single observation it cannot know which fields are optional, so a
-legitimately sometimes-absent field reads as `removed`; re-record with update mode when the contract
+legitimately sometimes-absent field reads as `removed`. Re-record with update mode when the contract
 really changed.
 
 ### Shape placeholders
@@ -356,7 +356,7 @@ apply to top-level keys of a *dict-like* value and combine with `ignore`.
 
 ### Parameters
 
-Snapshots are keyed by test filename plus line number by default; override with `id` or `path`:
+Snapshots are keyed by test filename plus line number by default. Override with `id` or `path`:
 
 ```python
 assert_that({"a": 1}).snapshot(id="my-custom-id")
@@ -367,7 +367,7 @@ assert_that({"a": 1}).snapshot(path="my-custom-folder")
 
 The comparison accepts the same selective options as `is_equal_to()` - `ignore`, `include`,
 `tolerance`, and `comparators` - so timestamps, generated ids, or float jitter don't break snapshots.
-The snapshot file always stores the full value; the options only shape the comparison:
+The snapshot file always stores the full value. The options only shape the comparison:
 
 ```python
 assert_that(api_response).snapshot(
@@ -391,4 +391,4 @@ assert_that(payload).snapshot(
 - **Snapshot ids are case-insensitive**: filenames are lower-cased, so ids differing only by case
   collide in one file.
 - **The write lock is not crash-safe**: a process killed mid-write leaves a stale `.lock` file next
-  to the snapshot; delete it if snapshot writes start timing out.
+  to the snapshot. Delete it if snapshot writes start timing out.

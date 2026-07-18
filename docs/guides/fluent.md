@@ -50,8 +50,8 @@ assert_that([1, -2, 3]).not_.each(match.is_positive())
     Only assertions can be negated. Steps that configure or transform - not assert - raise a
     `TypeError` under `.not_`:
 
-    - `described_as()`, `decoded_as()`, `at_json_path()`;
-    - the collection pipeline (`extracting()`, `filtered_on()`, `mapped()`, `first()`, ...);
+    - `described_as()`, `decoded_as()`, `at_json_path()`
+    - the collection pipeline (`extracting()`, `filtered_on()`, `mapped()`, `first()`, ...)
     - `eventually()` / `eventually_sync()`.
 
     Place them before `.not_` (or negate the assertion that follows them) instead:
@@ -107,7 +107,7 @@ assert_that([42]).single().is_equal_to(42)
 
 !!! warning
     `first()`, `last()`, and `single()` raise `ValueError` on an empty collection (`single()` also on
-    more than one element); `element(index)` raises `IndexError` when the index is out of range.
+    more than one element). `element(index)` raises `IndexError` when the index is out of range.
 
 ### Chaining pipeline steps
 

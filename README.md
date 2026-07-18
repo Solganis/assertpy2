@@ -58,8 +58,7 @@ assert "admin" in items
 assert_that(items).is_instance_of(list).is_length(3).contains("admin")
 ```
 
-The real difference shows up when a test fails. Here a nested response has two wrong fields.<br>
-Plain `assert` dumps both structures and leaves you to find them:
+The real difference shows up on failure. Plain `assert` dumps both structures and leaves you to find the two wrong fields:
 
 ```text
 assert response == expected
@@ -80,7 +79,7 @@ assert_that(response).is_equal_to(expected)
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
 </p>
 
-Recursive diffs cover dicts, dataclasses, namedtuples, attrs classes, and Pydantic models - and lists, sets, and matcher predicates get the same path-level treatment. For dynamic fields (IDs, timestamps), validate a subset with [`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
+The diff recurses through nested containers, and matcher predicates get the same path-level treatment. For dynamic fields like IDs or timestamps, assert a subset with [`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
@@ -102,9 +101,8 @@ Works in PyCharm, VS Code, and any LSP-compatible editor.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
-An assertion doesn't just check a value - it hands it back, statically narrowed. `is_not_none()` strips
-`None`, `is_instance_of()` narrows to the class, and `.value` returns the result with no `cast` and no
-bare `assert`:
+An assertion hands the value back, statically narrowed. `is_not_none()` strips `None`,
+`is_instance_of()` narrows to the class, and `.value` returns it with no `cast` and no bare `assert`:
 
 ```python
 order = assert_that(repo.find(42)).is_not_none().is_instance_of(PaidOrder).value
@@ -118,46 +116,42 @@ with `exact=True` catching silent contract drift:
 data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 ```
 
-Returning the value it verified, statically narrowed,<br>
-lets you assert and use the result in a single step.
-
 <h2 align="center">Features</h2>
 
 **Fluent API**
 
-- [**Composable matchers**](https://solganis.github.io/assertpy2/guides/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`. Also work with plain `assert ==`.
-- [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation, reporting the exact path on failure.
-- [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph, reporting the exact path.
-- [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion without dedicated `is_not_*` methods.
+- [**Composable matchers**](https://solganis.github.io/assertpy2/guides/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`, usable in plain `assert ==`.
+- [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation.
+- [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph.
+- [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion, no dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/guides/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 - [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/guides/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants.
-- [**Fluent chaining**](https://solganis.github.io/assertpy2/guides/fluent/#chaining): write assertions as readable one-liners that chain naturally.
+- [**Fluent chaining**](https://solganis.github.io/assertpy2/guides/fluent/#chaining): chain assertions into readable one-liners.
 
 **Type safety**
 
 - [**Type-aware autocomplete**](https://solganis.github.io/assertpy2/concepts/type-safety/): 9 Protocols, IDE shows only relevant methods per type.
-- [**Typed narrowing**](https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value): `.value` hands the checked value back; `is_not_none()`, `is_instance_of()`, and a [`satisfies()` `TypeIs` predicate](https://solganis.github.io/assertpy2/concepts/type-safety/#refinement-narrowing-with-a-typeis-predicate-advanced) narrow its static type - no casts.
-- [**Contract testing**](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms): `assert_conforms()` validates a raw payload against a Pydantic model and narrows the chain to it - the capstone for API-response tests; [`exact=True`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-drift-with-exacttrue) catches silent contract drift (undeclared fields), `each=True` validates list endpoints.
-- **py.typed**: `Self` return types, PEP 561 compliant ([PEP 561](https://peps.python.org/pep-0561/)).
+- [**Typed narrowing**](https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value): `.value` hands the checked value back, statically narrowed by `is_not_none()`, `is_instance_of()`, and a [`satisfies()` `TypeIs` predicate](https://solganis.github.io/assertpy2/concepts/type-safety/#refinement-narrowing-with-a-typeis-predicate-advanced).
+- [**Contract testing**](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms): `assert_conforms()` validates a raw payload against a Pydantic model and narrows to it. [`exact=True`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-drift-with-exacttrue) catches contract drift, `each=True` validates list endpoints.
 
 **Built-in types**
 
 - [Strings](https://solganis.github.io/assertpy2/guides/assertions/#strings), [numbers](https://solganis.github.io/assertpy2/guides/assertions/#numbers), [lists](https://solganis.github.io/assertpy2/guides/assertions/#lists), [tuples](https://solganis.github.io/assertpy2/guides/assertions/#tuples), [sets](https://solganis.github.io/assertpy2/guides/assertions/#sets), [dicts](https://solganis.github.io/assertpy2/guides/assertions/#dicts), [dates](https://solganis.github.io/assertpy2/guides/assertions/#dates), [booleans](https://solganis.github.io/assertpy2/guides/assertions/#booleans), [objects](https://solganis.github.io/assertpy2/guides/assertions/#objects), [bytes](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray), [files](https://solganis.github.io/assertpy2/guides/assertions/#files), [exceptions](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions).
 - [**Bytes assertions**](https://solganis.github.io/assertpy2/guides/assertions/#bytes--bytearray): `is_valid_utf8()`, `starts_with_bytes()`, `is_hex_equal_to()`, `decoded_as()` for `bytes`/`bytearray`.
 - [**Dynamic assertions**](https://solganis.github.io/assertpy2/guides/assertions/#dynamic-assertions-on-objects): `has_<name>()` for any attribute, property, or zero-argument method.
-- [**Dict comparison**](https://solganis.github.io/assertpy2/guides/assertions/#selective-comparison-ignore--include): `is_equal_to(ignore=..., include=...)` for selective key/field matching across dicts, dataclasses, namedtuples, Pydantic models, attrs, and plain objects - by name, regex, or type.
+- [**Dict comparison**](https://solganis.github.io/assertpy2/guides/assertions/#selective-comparison-ignore--include): `is_equal_to(ignore=..., include=...)` for selective key/field matching by name, regex, or type.
 - [**Recursive comparison**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance`, `comparators`, or `ignore_null` for nested structures.
 - [**Extracting**](https://solganis.github.io/assertpy2/guides/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
 
 **Testing**
 
-- [**Soft assertions**](https://solganis.github.io/assertpy2/guides/testing/#soft-assertions): thread-safe, async-safe via `contextvars`; each collected failure is reported with its `file:line`. Group errors with `sa.group()`, or use `assert_all()`.
-- [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace pinpointing why a timeout never settled.
-- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()` then assert on the message, walk the cause chain (`caused_by()`, `has_root_cause()`), match an `ExceptionGroup` (`contains_error()`), or pivot to the exception object (`raised()`).
-- [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` with `.actual`, `.expected`, `.diff` attributes.
-- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive structural diffs across lists, sets, dicts, dataclasses, namedtuples, attrs classes, Pydantic models, and matchers, with circular-reference protection.
-- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): three modes under one selective, typed API, all updated with `--assertpy2-snapshot-update` - `snapshot()` stores to an external JSON file, [`matches_inline()`](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) records straight into the test source (a plain equality check, so it runs under `pytest-xdist` with no assertion rewriting), and [`matches_contract_snapshot()`](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots) catches structural regressions, value-tolerant.
-- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi(spec, path, method)` validates a JSON response body against an operation's response schema (OpenAPI 3.0/3.1, `$ref`, `oneOf`, `enum`, `format`), reporting every violation with its JSON path.
+- [**Soft assertions**](https://solganis.github.io/assertpy2/guides/testing/#soft-assertions): thread-safe and async-safe via `contextvars`, each failure reported with its `file:line`. Group with `sa.group()` or `assert_all()`.
+- [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace on timeout.
+- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), match `ExceptionGroup` (`contains_error()`), or pivot to the object (`raised()`).
+- [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected`, `.diff`, and the diff renders into the message itself, so it shows off pytest too.
+- [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive structural diffs across containers, dataclasses, attrs, and Pydantic models, with intra-line carets for strings and circular-reference protection.
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): three modes under one typed API, all updated with `--assertpy2-snapshot-update`: `snapshot()` (external JSON file), [`matches_inline()`](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) (recorded into the test source), and [`matches_contract_snapshot()`](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots) (value-tolerant structural regressions).
+- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi(spec, path, method)` validates a JSON response body against an operation's response schema (OpenAPI 3.0/3.1), reporting every violation with its JSON path.
 
 **Extensibility**
 

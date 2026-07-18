@@ -45,7 +45,7 @@ renders them as a collapsible tree and downstream tooling can parse them.
 
 Anything JSON cannot express degrades to a marked fallback instead of failing the attachment:
 
-- `{"__repr__": "..."}` for arbitrary objects, datetimes, non-finite floats, and circular references;
+- `{"__repr__": "..."}` for arbitrary objects, datetimes, non-finite floats, and circular references
 - `{"__type__": "set", "__data__": [...]}` for sets.
 
 Oversized values are capped: strings at 4000 chars, containers at 100 items.
@@ -81,7 +81,7 @@ between consecutive distinct values:
 }
 ```
 
-The `format` field versions the attachment schema (`2` = typed values; attachments without the field
+The `format` field versions the attachment schema (`2` = typed values, while attachments without the field
 are the older repr-string format), so downstream tooling can branch explicitly.
 
 Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
@@ -98,7 +98,7 @@ diff (dict):
 ```
 
 !!! note
-    If Allure is not installed or `allure.attach()` fails, the plugin silently continues; test results
+    If Allure is not installed or `allure.attach()` fails, the plugin silently continues. Test results
     are never affected. An invalid mode value falls back to `diff` with a warning.
 
 ## Behave
@@ -206,7 +206,7 @@ On failure the library's own detailed diff is carried in the assertion message.
 
 Two array assertions, both accepting any array-like numpy can coerce:
 
-- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`;
+- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`
 - `is_array_close_to()` - float-tolerant, via `numpy.testing.assert_allclose`, for comparing computed
   arrays.
 
