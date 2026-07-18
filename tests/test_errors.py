@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, soft_assertions
+from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, errors, soft_assertions
 
 
 class TestAssertionFailure:
@@ -55,6 +55,17 @@ class TestDiffEntry:
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_none()
 
+    def test_str_survives_raising_str(self):
+        # a contained value whose __str__ raises must not crash the diff rendering (uses _safe_str)
+        class Bad:
+            def __str__(self):
+                raise ValueError("boom")
+
+            def __repr__(self):
+                return "Bad()"
+
+        assert_that(str(DiffEntry(path="a", actual=Bad(), expected=1))).contains("Bad()")
+
 
 class TestDiffResult:
     def test_str_empty(self):
@@ -71,8 +82,37 @@ class TestDiffResult:
         )
         result = str(diff)
         assert_that(result).starts_with("diff (dict):")
-        assert_that(result).contains("at root.a")
-        assert_that(result).contains("at root.b")
+        assert_that(result).contains("root.a")
+        assert_that(result).contains("root.b")
+
+
+class TestDiffInMessage:
+    """Off pytest (no plugin to render a report section), the structured diff rides on ``str(exc)``."""
+
+    def _failure(self):
+        entries = [DiffEntry(path="a", actual=1, expected=2)]
+        return AssertionFailure("boom", diff=DiffResult(kind="dict", entries=entries))
+
+    def test_message_carries_the_diff_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+        rendered = str(self._failure())
+        assert_that(rendered).starts_with("boom\n")
+        assert_that(rendered).contains("diff (dict):")
+        assert_that(rendered).contains("- 1")
+        assert_that(rendered).contains("+ 2")
+
+    def test_message_is_bare_when_disabled(self, monkeypatch):
+        monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", False)
+        assert_that(str(self._failure())).is_equal_to("boom")
+
+    def test_no_diff_leaves_the_message_untouched(self, monkeypatch):
+        monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+        assert_that(str(AssertionFailure("boom"))).is_equal_to("boom")
+
+    def test_empty_diff_adds_no_trailing_newline(self, monkeypatch):
+        monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+        exc = AssertionFailure("boom", diff=DiffResult(kind="dict", entries=[]))
+        assert_that(str(exc)).is_equal_to("boom")
 
 
 class TestStructuredErrorFromAssertions:
@@ -195,15 +235,30 @@ class TestMessageTruncation:
         entries = [DiffEntry(path=str(index), actual=index, expected=index + 1) for index in range(60)]
         rendered = str(DiffResult(kind="dict", entries=entries))
         assert_that(rendered).contains("... and 10 more entries")
-        assert_that(rendered.splitlines()).is_length(52)
+        # header + 50 visible entries (3 lines each: path, -actual, +expected) + the truncation line
+        assert_that(rendered.splitlines()).is_length(152)
 
     def test_diff_str_at_fifty_entries_is_not_truncated(self):
         entries = [DiffEntry(path=str(index), actual=index, expected=index + 1) for index in range(50)]
         rendered = str(DiffResult(kind="dict", entries=entries))
         assert_that(rendered).does_not_contain("more entries")
-        assert_that(rendered.splitlines()).is_length(51)
+        assert_that(rendered.splitlines()).is_length(151)
 
     def test_diff_entry_huge_leaf_is_capped(self):
         entry = DiffEntry(path="k", actual="x" * 10_000, expected="y")
         assert_that(len(str(entry))).is_less_than(6_000)
         assert_that(str(entry)).contains("more chars")
+
+
+def test_is_equal_to_error_survives_raising_str_operand():
+    # the failure message renders operands via _safe_str, so an operand whose __str__ raises yields a
+    # clean AssertionError instead of that operand's exception
+    class Bad:
+        def __str__(self):
+            raise ValueError("boom")
+
+        def __repr__(self):
+            return "Bad()"
+
+    with pytest.raises(AssertionError):
+        assert_that(Bad()).is_equal_to(42)

@@ -329,6 +329,25 @@ def test_does_not_contain_duplicates_bad_val_failure():
     assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
 
 
+def test_contains_duplicates_unhashable_items():
+    # a list of dicts (unhashable) must use an == based fallback, not raise "val is not iterable"
+    assert_that([{"a": 1}, {"b": 2}, {"a": 1}]).contains_duplicates()
+    with pytest.raises(AssertionError):
+        assert_that([{"a": 1}, {"b": 2}]).contains_duplicates()
+
+
+def test_does_not_contain_duplicates_unhashable_items():
+    assert_that([{"a": 1}, {"b": 2}]).does_not_contain_duplicates()
+    with pytest.raises(AssertionError):
+        assert_that([{"a": 1}, {"a": 1}]).does_not_contain_duplicates()
+
+
+def test_contains_only_once_unhashable_items():
+    assert_that([{"a": 1}, {"b": 2}]).contains_only_once({"a": 1})
+    with pytest.raises(AssertionError):
+        assert_that([{"a": 1}, {"a": 1}]).contains_only_once({"a": 1})
+
+
 def test_is_empty():
     assert_that([]).is_empty()
     assert_that(()).is_empty()

@@ -99,6 +99,14 @@ class TestIsFrameEqualDuckTyped:
             frame = type("DataFrame", (), {"__module__": "pandas.core.frame"})()
             assert_that(frame).is_frame_equal(frame)
 
+    def test_non_frame_pandas_object_raises_type_error(self):
+        # a pandas object that is neither DataFrame nor Series (an Index, Categorical, ...) must be
+        # rejected, not mis-routed to assert_frame_equal
+        with _fake_frame_lib("pandas", fail=False):
+            index = type("Index", (), {"__module__": "pandas.core.indexes.base"})()
+            with pytest.raises(TypeError, match="pandas or polars"):
+                assert_that(index).is_frame_equal(index)
+
 
 class TestArrayAssertionsDuckTyped:
     def test_is_array_equal_passes(self):
@@ -163,6 +171,25 @@ class TestRealLibraries:
     def test_pandas_series(self):
         pandas = pytest.importorskip("pandas")
         assert_that(pandas.Series([1, 2, 3])).is_frame_equal(pandas.Series([1, 2, 3]))
+
+    def test_pandas_dataframe_subclass_is_accepted(self):
+        pandas = pytest.importorskip("pandas")
+
+        class MyFrame(pandas.DataFrame):
+            @property
+            def _constructor(self):
+                return MyFrame
+
+        assert_that(MyFrame({"a": [1, 2]})).is_frame_equal(MyFrame({"a": [1, 2]}))
+        with pytest.raises(AssertionError):
+            assert_that(MyFrame({"a": [1, 2]})).is_frame_equal(MyFrame({"a": [1, 9]}))
+
+    def test_pandas_index_is_rejected(self):
+        pandas = pytest.importorskip("pandas")
+        # an Index is a real pandas object but neither a DataFrame nor a Series
+        frame = pandas.DataFrame({"a": [1, 2]})
+        with pytest.raises(TypeError, match="pandas or polars"):
+            assert_that(frame.index).is_frame_equal(frame.index)
 
     def test_polars_frame_equal_and_diff(self):
         polars = pytest.importorskip("polars")

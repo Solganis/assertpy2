@@ -197,3 +197,23 @@ class CustomDictNoGetitem:
 
     def values(self):
         return "bar"
+
+
+def test_dict_repr_survives_mapping_without_items():
+    # the failure-message renderer must build entries from keys()+[]; a minimal mapping-like value may
+    # lack items(), and rendering the diff must not crash with AttributeError
+    class MinimalMapping:
+        def __init__(self, data):
+            self._data = data
+
+        def keys(self):
+            return self._data.keys()
+
+        def __getitem__(self, key):
+            return self._data[key]
+
+        def __iter__(self):
+            return iter(self._data)
+
+    with pytest.raises(AssertionError):
+        assert_that(MinimalMapping({"a": 1, "b": 2})).is_equal_to(MinimalMapping({"a": 1, "b": 3}))

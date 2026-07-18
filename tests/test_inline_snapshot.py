@@ -1,7 +1,9 @@
 import pytest
 
+import assertpy2._inline as _inline
 import assertpy2.snapshot as _snap
 from assertpy2 import assert_that
+from assertpy2._inline import is_literalable
 
 
 class TestCompare:
@@ -56,3 +58,25 @@ class TestEmpty:
         monkeypatch.setattr(_snap, "_CI_MODE", True)
         with pytest.raises(AssertionError, match="CI mode forbids"):
             assert_that(1).matches_inline()
+
+
+class TestLiteralable:
+    def test_non_finite_floats_rejected(self):
+        # nan/inf render as bare names (invalid source), so they must not be recordable as literals
+        assert_that(is_literalable(float("nan"))).is_false()
+        assert_that(is_literalable(float("inf"))).is_false()
+        assert_that(is_literalable(float("-inf"))).is_false()
+        assert_that(is_literalable({"r": float("nan")})).is_false()
+
+    def test_finite_values_literalable(self):
+        assert_that(is_literalable({"a": [1, 2.5], "b": "x", "c": True, "d": None})).is_true()
+
+    def test_apply_records_preserves_crlf(self, tmp_path):
+        source = tmp_path / "c.py"
+        source.write_bytes(b"a = matches_inline()\r\nb = 1\r\n")
+        normalized = "a = matches_inline()\nb = 1\n"
+        insert_at = normalized.index("matches_inline(") + len("matches_inline(")
+        _inline._RECORDS.clear()
+        _inline._RECORDS.append((str(source), insert_at, insert_at, "42"))
+        _inline.apply_inline_records()
+        assert_that(source.read_bytes()).is_equal_to(b"a = matches_inline(42)\r\nb = 1\r\n")

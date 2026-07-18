@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timedelta, timezone
 from math import inf, nan
 
@@ -49,6 +50,39 @@ class TestTemporalMatchers:
     def test_is_before_after_describe(self):
         assert_that(match.is_before(datetime(2020, 1, 1)).describe()).contains("before")
         assert_that(match.is_after(datetime(2020, 1, 1)).describe()).contains("after")
+
+
+class TestNumericMatchersRejectNonComparable:
+    def test_is_positive_negative_no_raise_on_non_comparable(self):
+        # a non-comparable operand must yield a non-match, never a raw TypeError
+        assert_that(match.is_positive().matches("hello")).is_false()
+        assert_that(match.is_negative().matches("hello")).is_false()
+        assert_that(match.is_positive().matches(None)).is_false()
+
+    def test_is_positive_no_typeerror_leak_via_combinator_and_pipeline(self):
+        # a non-comparable element must not leak TypeError out of satisfies/any_satisfy/each
+        assert_that("hello").satisfies(match.is_positive() | match.equal_to("hello"))
+        assert_that(["two", 1]).any_satisfy(match.is_positive())
+        with pytest.raises(AssertionError):
+            assert_that(["a", "b"]).each(match.is_negative())
+
+    def test_matches_structure_with_combinator_matcher_is_clean(self):
+        # describe_mismatch re-evaluates every sub-matcher of an AllOf; a guarded sub-matcher
+        # (is_positive on a str) must not leak TypeError out of matches_structure/satisfies/each
+        with pytest.raises(AssertionError):
+            assert_that({"n": "x"}).matches_structure({"n": match.is_instance_of(int) & match.is_positive()})
+
+
+class TestMatchesRegex:
+    def test_invalid_pattern_raises_at_construction(self):
+        # an invalid pattern must fail fast at the call site, not later inside matches()/==/a combinator
+        with pytest.raises(re.error):
+            match.matches_regex("(")
+
+    def test_valid_regex_used_in_combinator_renders_mismatch_cleanly(self):
+        assert_that("foo").satisfies(match.matches_regex("^f"))
+        with pytest.raises(AssertionError):
+            assert_that("x").satisfies(match.is_non_empty_string() & match.matches_regex("zzz"))
 
 
 class TestBaseMatcherAbstract:

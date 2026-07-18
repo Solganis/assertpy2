@@ -25,6 +25,13 @@ def test_contents_of_path_ascii(tmpfile):
     assert_that(contents).is_equal_to("foobar").starts_with("foo").ends_with("bar")
 
 
+def test_contents_of_path_respects_encoding(tmp_path):
+    # the encoding arg must apply when reading a path, not only when decoding a bytes result
+    path = tmp_path / "data.txt"
+    path.write_bytes(b"caf\xe9")  # 0xE9 is 'é' in latin-1, invalid as utf-8
+    assert_that(contents_of(path, encoding="latin-1")).is_equal_to("café")
+
+
 def test_contents_of_return_type(tmpfile):
     contents = contents_of(tmpfile.name)
     assert_that(contents).is_type_of(str)
@@ -133,6 +140,12 @@ def test_is_directory_file_failure(tmpfile):
 def test_is_named(tmpfile):
     basename = os.path.basename(tmpfile.name)
     assert_that(tmpfile.name).is_named(basename)
+
+
+def test_is_named_pathlike_arg(tmpfile):
+    # the filename arg may be an os.PathLike, not just a str (it was compared raw and never matched)
+    basename = os.path.basename(tmpfile.name)
+    assert_that(tmpfile.name).is_named(Path(basename))
 
 
 def test_is_named_failure(tmpfile):

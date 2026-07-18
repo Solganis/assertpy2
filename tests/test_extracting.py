@@ -362,3 +362,41 @@ def test_extracting_single_name_returns_bare_values():
 
 def test_extracting_multiple_names_returns_tuples():
     assert_that([{"a": 1, "b": 2}]).extracting("a", "b").is_equal_to([(1, 2)])
+
+
+def test_extracting_namedtuple_property_and_zero_arg_method():
+    base = namedtuple("Base", ["x", "y"])
+
+    class Point(base):
+        @property
+        def total(self):
+            return self.x + self.y
+
+        def label(self):
+            return f"pt{self.x}"
+
+    points = [Point(1, 2), Point(3, 4)]
+    assert_that(points).extracting("total").is_equal_to([3, 7])
+    assert_that(points).extracting("label").is_equal_to(["pt1", "pt3"])
+    assert_that(points).extracting("x").is_equal_to([1, 3])
+    with pytest.raises(ValueError, match="did not contain attribute"):
+        assert_that(points).extracting("missing").is_equal_to("x")
+
+
+def test_extracting_zero_arg_method_body_typeerror_not_masked():
+    class Obj:
+        prices = None
+
+        def total(self):
+            return sum(self.prices)  # raises a genuine TypeError inside the body
+
+    with pytest.raises(TypeError, match="not iterable"):
+        assert_that([Obj()]).extracting("total").is_equal_to([0])
+
+
+def test_extracting_method_without_introspectable_signature():
+    # a zero-arg builtin (int() -> 0) whose inspect.signature raises ValueError must still be called
+    class Obj:
+        action = staticmethod(int)
+
+    assert_that([Obj()]).extracting("action").is_equal_to([0])

@@ -1,5 +1,6 @@
 import logging
 import warnings
+from functools import partial
 from io import StringIO
 
 import pytest
@@ -201,3 +202,27 @@ def test_warns_returned_after_message_assertion():
 
 def test_does_not_warn_returned_pivots_to_return_value():
     assert_that(quiet_return_ok).does_not_warn(DeprecationWarning).when_called_with().returned().is_equal_to("ok")
+
+
+def test_warns_partial_without_name_fails_cleanly():
+    # a callable lacking __name__ (functools.partial) must fail cleanly, not raise AttributeError
+    def emit(level):
+        if level > 5:
+            warnings.warn("hi", UserWarning, stacklevel=2)
+
+    with pytest.raises(AssertionError):
+        assert_that(partial(emit, 3)).warns(UserWarning).when_called_with()
+    with pytest.raises(AssertionError):
+        assert_that(partial(emit, 9)).does_not_warn(UserWarning).when_called_with()
+
+
+def test_custom_logger_survives_collection_transform():
+    # a transform (filtered_on/mapped/first/...) must forward the caller's logger, so a warning from a
+    # failing assertion after it still reaches the custom logger, not the library default
+    capture = StringIO()
+    logger = logging.getLogger("test_transform_logger")
+    logger.addHandler(logging.StreamHandler(capture))
+    adapted = WarningLoggingAdapter(logger, None)
+
+    assert_warn([1, -2, 3], logger=adapted).filtered_on(lambda item: item > 0).contains(999)
+    assert_that(capture.getvalue()).contains("to contain")

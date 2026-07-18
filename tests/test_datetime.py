@@ -577,3 +577,18 @@ class TestIsAfterOrEqualTo:
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.date(2020, 1, 1)).is_after_or_equal_to(datetime.datetime.now())
         assert_that(str(exc_info.value)).contains("val must be datetime")
+
+
+def test_naive_vs_aware_comparison_raises_clear_type_error():
+    # mixing a tz-naive and a tz-aware datetime is a programming error; all four relational methods must
+    # raise a clear, actionable TypeError instead of Python's raw "can't compare offset-naive..." one
+    naive = datetime.datetime(2020, 1, 1, 12)
+    aware = datetime.datetime(2020, 1, 1, 12, tzinfo=datetime.timezone.utc)
+    for call in (
+        lambda: assert_that(naive).is_before(aware),
+        lambda: assert_that(naive).is_after(aware),
+        lambda: assert_that(naive).is_before_or_equal_to(aware),
+        lambda: assert_that(naive).is_after_or_equal_to(aware),
+    ):
+        with pytest.raises(TypeError, match="timezone-naive datetime with a timezone-aware"):
+            call()

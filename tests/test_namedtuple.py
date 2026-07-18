@@ -57,3 +57,21 @@ def test_namedtuple_extracting_by_name_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(foos).extracting("missing").is_equal_to("x")
     assert_that(str(exc_info.value)).is_equal_to("item attributes ('bar', 'baz') did not contain attribute <missing>")
+
+
+def test_namedtuple_diff_field_colliding_with_tuple_method_absent_on_expected():
+    item = collections.namedtuple("Item", ["name", "count"])
+    bare = collections.namedtuple("Bare", ["name"])
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(item("x", 3)).is_equal_to(bare("x"))
+    # the missing 'count' field must report expected=None, not the bound tuple.count method
+    assert_that(str(exc_info.value)).does_not_contain("method")
+
+
+def test_namedtuple_diff_field_colliding_with_tuple_method_only_on_expected():
+    no_idx = collections.namedtuple("NoIdx", ["value"])
+    row = collections.namedtuple("Row", ["value", "index"])
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(no_idx(1)).is_equal_to(row(1, 7))
+    # the 'index' field present only on expected must not be dropped from the diff
+    assert_that(str(exc_info.value)).contains("index")

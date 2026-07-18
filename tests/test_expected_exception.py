@@ -1,5 +1,6 @@
 import logging
 import sys
+from functools import partial
 from io import StringIO
 
 import pytest
@@ -409,3 +410,15 @@ class TestContainsError:
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(_raise_config).raises(_ConfigError).when_called_with().contains_error(ValueError)
         assert_that(str(exc_info.value)).contains("to be an exception group")
+
+
+def test_raises_partial_without_name_fails_cleanly():
+    # a callable lacking __name__ (functools.partial) must fail cleanly, not raise AttributeError
+    def boom(x):
+        if x > 5:
+            raise ValueError("big")
+
+    with pytest.raises(AssertionError):
+        assert_that(partial(boom, 3)).raises(ValueError).when_called_with()
+    with pytest.raises(AssertionError):
+        assert_that(partial(boom, 9)).raises(KeyError).when_called_with()

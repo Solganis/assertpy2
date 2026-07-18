@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from assertpy2 import assert_that
@@ -42,6 +44,39 @@ def test_is_not_zero_bad_type_failure():
 def test_is_nan():
     assert_that(float("NaN")).is_nan()
     assert_that(float("Inf") - float("Inf")).is_nan()
+
+
+def test_bignum_int_does_not_overflow_nan_inf_guards():
+    # math.isnan/isinf raise OverflowError on an int too large for float; the guards must tolerate it
+    big = math.factorial(200)
+    assert_that(big).is_close_to(big, 1)
+    assert_that(big).is_not_nan()
+    assert_that(big).is_not_inf()
+    with pytest.raises(AssertionError):
+        assert_that(big).is_nan()
+    with pytest.raises(AssertionError):
+        assert_that(big).is_inf()
+
+
+def test_nan_fails_relational_assertions():
+    # NaN is unordered: it must FAIL relational assertions (diverges from assertpy, where it passes)
+    nan = float("nan")
+    for call in (
+        lambda: assert_that(nan).is_positive(),
+        lambda: assert_that(nan).is_negative(),
+        lambda: assert_that(nan).is_between(0, 100),
+        lambda: assert_that(nan).is_greater_than(0),
+        lambda: assert_that(nan).is_greater_than_or_equal_to(0),
+        lambda: assert_that(nan).is_less_than(0),
+        lambda: assert_that(nan).is_less_than_or_equal_to(0),
+    ):
+        with pytest.raises(AssertionError):
+            call()
+
+
+def test_nan_passes_is_not_between():
+    # NaN is not within any range, so is_not_between holds
+    assert_that(float("nan")).is_not_between(0, 100)
 
 
 def test_is_nan_failure():

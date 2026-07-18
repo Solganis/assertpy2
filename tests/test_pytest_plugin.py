@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2 import errors as errors_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
@@ -244,8 +245,9 @@ class TestFormatDiff:
         _run_hook(report, _make_call(exc=exc))
         body = dict(report.sections)["Structured Diff"]
         assert_that(body).contains("line 1:")
-        assert_that(body).contains("'foo'")
-        assert_that(body).contains("'bar'")
+        # string diffs now render the raw line (with intra-line carets), not its repr
+        assert_that(body).contains("foo")
+        assert_that(body).contains("bar")
 
     def test_set_extra_only(self):
         diff = DiffResult(kind="set", entries=[DiffEntry(path="extra", actual=5, expected=None)])
@@ -633,6 +635,16 @@ class TestPytestConfigure:
         assert_that(caught).is_length(1)
         assert_that(str(caught[0].message)).contains("unknown")
 
+    def test_configure_disables_diff_in_message_and_unconfigure_restores(self, monkeypatch):
+        # under a real session the plugin renders the diff itself, so it keeps it out of the message; the
+        # prior value is saved and restored so nested/direct hook calls stay balanced
+        monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", True)
+        config = _make_config()
+        pytest_configure(config)
+        assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_false()
+        pytest_unconfigure(config)
+        assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_true()
+
 
 class TestSnapshotUpdateOption:
     def test_addoption_registers_flag(self):
@@ -705,7 +717,7 @@ class TestSnapshotOrphans:
 
     def test_is_full_run_variants(self):
         def config(**opt):
-            base = {"keyword": "", "markexpr": "", "last_failed": False, "failed_first": False}
+            base = {"keyword": "", "markexpr": "", "last_failed": False, "failed_first": False, "file_or_dir": []}
             return SimpleNamespace(option=SimpleNamespace(**{**base, **opt}))
 
         assert_that(_is_full_run(config())).is_true()
@@ -713,6 +725,10 @@ class TestSnapshotOrphans:
         assert_that(_is_full_run(config(markexpr="m"))).is_false()
         assert_that(_is_full_run(config(last_failed=True))).is_false()
         assert_that(_is_full_run(config(failed_first=True))).is_false()
+        # a nodeid selection (path::test) runs only a subset of a file's tests
+        assert_that(_is_full_run(config(file_or_dir=["tests/test_x.py::test_a"]))).is_false()
+        # a whole-file or directory selection still runs all of that file's tests
+        assert_that(_is_full_run(config(file_or_dir=["tests/test_x.py"]))).is_true()
 
     def test_sessionfinish_no_touches_is_quiet(self, monkeypatch):
         monkeypatch.setattr(snapshot_module, "_TOUCHED", set())
@@ -763,6 +779,23 @@ class TestSnapshotOrphans:
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
         reporter = MagicMock()
         pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=False)), 0)
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+
+    def test_no_prune_on_nodeid_selected_run(self, tmp_path, monkeypatch):
+        # nodeid selection (path::test) runs only a subset of a file's tests, so a live but un-run
+        # sibling sub-snap must not be pruned as obsolete even under update mode
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
+        reporter = MagicMock()
+        option = SimpleNamespace(
+            keyword="", markexpr="", last_failed=False, failed_first=False, file_or_dir=["tests/test_mod.py::test_a"]
+        )
+        pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
+        config = SimpleNamespace(option=option, pluginmanager=pluginmanager)
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
         assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
 
     def test_whole_file_orphan_is_report_only_even_under_update(self, tmp_path, monkeypatch):
