@@ -33,21 +33,22 @@ def _ensure_jsonschema():
     return jsonschema
 
 
-def _openapi_nullable_to_null(node: Any) -> Any:
+def _openapi_nullable_to_null(node: Any, keyword: str = "nullable") -> Any:
     """Rewrite OpenAPI 3.0 ``nullable: true`` into standard JSON Schema (jsonschema ignores it).
 
     For the common scalar-typed field, ``"null"`` is added to ``type`` (and to ``enum`` if present),
     which keeps per-keyword error paths precise - a bad ``format``/``type`` on a nullable field still
     reports ``format``/``type``, not a vague union. Only a nullable schema with no scalar ``type``
-    (nullable beside ``$ref``/``oneOf``) falls back to an ``anyOf`` null union.
+    (nullable beside ``$ref``/``oneOf``) falls back to an ``anyOf`` null union. Swagger 2.0 spells the
+    same idea ``x-nullable``, so it is handled by passing ``keyword="x-nullable"``.
     """
     if isinstance(node, dict):
-        rewritten = {key: _openapi_nullable_to_null(value) for key, value in node.items()}
-        nullable = rewritten.get("nullable")
+        rewritten = {key: _openapi_nullable_to_null(value, keyword) for key, value in node.items()}
+        nullable = rewritten.get(keyword)
         if not isinstance(nullable, bool):
-            # a non-boolean "nullable" is a property literally named "nullable", not the OpenAPI keyword
+            # a non-boolean value is a property literally named that, not the OpenAPI nullable keyword
             return rewritten
-        del rewritten["nullable"]
+        del rewritten[keyword]
         if not nullable:  # nullable: false - drop the keyword, add no null
             return rewritten
         node_type = rewritten.get("type")
@@ -59,7 +60,7 @@ def _openapi_nullable_to_null(node: Any) -> Any:
             return rewritten
         return {"anyOf": [rewritten, {"type": "null"}]}
     if isinstance(node, list):
-        return [_openapi_nullable_to_null(item) for item in node]
+        return [_openapi_nullable_to_null(item, keyword) for item in node]
     return node
 
 
@@ -98,7 +99,8 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
     """
     method_key = method.lower()
     try:
-        responses = spec["paths"][path][method_key]["responses"]
+        operation = spec["paths"][path][method_key]
+        responses = operation["responses"]
     except (KeyError, TypeError):
         raise ValueError(f"OpenAPI spec has no operation <{method.upper()} {path}>.") from None
     if status is not None:
@@ -116,10 +118,25 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         response, response_segments = _resolve_local_ref(spec, response["$ref"])
         if response is None:
             raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> has an unresolvable $ref.")
-    content = response.get("content", {}) if isinstance(response, dict) else {}
-    if content_type not in content or "schema" not in content[content_type]:
-        raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> declares no <{content_type}> schema.")
-    segments = [*response_segments, "content", content_type, "schema"]
+    if str(spec.get("swagger", "")).startswith("2"):
+        # Swagger 2.0 puts the response-body schema directly under the response, with no content-type
+        # layer, and lists the media types in `produces` instead. Check that list so a content_type the
+        # operation does not produce is rejected here, exactly as the 3.x content lookup rejects it.
+        produces = operation.get("produces") or spec.get("produces")
+        if produces and content_type not in produces:
+            raise ValueError(
+                f"Response <{status_key}> of <{method.upper()} {path}> declares no <{content_type}> schema."
+            )
+        if not (isinstance(response, dict) and "schema" in response):
+            raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> declares no schema.")
+        segments = [*response_segments, "schema"]
+    else:
+        content = response.get("content", {}) if isinstance(response, dict) else {}
+        if content_type not in content or "schema" not in content[content_type]:
+            raise ValueError(
+                f"Response <{status_key}> of <{method.upper()} {path}> declares no <{content_type}> schema."
+            )
+        segments = [*response_segments, "content", content_type, "schema"]
     pointer = "#/" + "/".join(segment.replace("~", "~0").replace("/", "~1") for segment in segments)
     return status_key, pointer
 
@@ -287,7 +304,8 @@ class JsonMixin(_MixinBase):
         ``method``/``path`` operation in ``spec``. This checks only the response body of that one
         operation - not request bodies, parameters, headers, or the spec as a whole.
 
-        Both OpenAPI 3.0 (its ``nullable`` keyword is honoured) and 3.1 are supported. ``$ref``,
+        OpenAPI 3.0 (its ``nullable`` keyword is honoured), 3.1, and Swagger 2.0 (schema declared directly
+        on the response, its ``x-nullable`` extension honoured) are all supported. ``$ref``,
         ``oneOf``/``allOf``/``anyOf``, ``enum``, and ``format`` all validate with full JSON-Schema
         semantics, and every violation is reported with its JSON path.
 
@@ -297,7 +315,9 @@ class JsonMixin(_MixinBase):
             method: the HTTP method, e.g. ``"get"`` (case-insensitive).
             status: response status to validate against; defaults to ``200``, then ``201``, then
                 ``default``.
-            content_type: response content type; defaults to ``"application/json"``.
+            content_type: response content type; defaults to ``"application/json"``. Swagger 2.0 has no
+                content-type layer, so it is checked against the operation's ``produces`` list instead
+                (and skipped when the spec declares none).
 
         Examples:
             Usage:
@@ -318,8 +338,12 @@ class JsonMixin(_MixinBase):
 
         spec = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
         is_openapi_31 = str(spec.get("openapi", "")).startswith("3.1")
+        is_swagger_2 = str(spec.get("swagger", "")).startswith("2")
         status_key, pointer = _openapi_resolve(spec, path, method, status, content_type)
-        document = spec if is_openapi_31 else _openapi_nullable_to_null(spec)
+        if is_openapi_31:
+            document = spec  # 3.1 is JSON Schema 2020-12 already, no nullable rewrite
+        else:
+            document = _openapi_nullable_to_null(spec, "x-nullable" if is_swagger_2 else "nullable")
         specification = DRAFT202012 if is_openapi_31 else DRAFT4
         validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
 

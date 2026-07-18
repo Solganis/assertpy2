@@ -287,3 +287,88 @@ class TestStructuralErrors:
             },
         }
         assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/vnd.api+json")
+
+
+# --- Swagger 2.0: schema declared directly on the response, $ref -> #/definitions, x-nullable extension ---
+SPEC_20 = {
+    "swagger": "2.0",
+    "info": {"title": "Orders", "version": "1.0"},
+    "paths": {
+        "/orders/{id}": {
+            "get": {
+                "produces": ["application/json"],
+                "responses": {
+                    "200": {"schema": {"$ref": "#/definitions/Order"}},
+                    "204": {"description": "no content, no schema"},
+                },
+            }
+        }
+    },
+    "definitions": {
+        "Order": {
+            "type": "object",
+            "required": ["id", "status"],
+            "properties": {
+                "id": {"type": "integer"},
+                "status": {"type": "string", "enum": ["placed", "approved"]},
+                "note": {"type": "string", "x-nullable": True},
+            },
+        }
+    },
+}
+
+
+class TestSwagger20:
+    PATH, METHOD = "/orders/{id}", "get"
+
+    def test_conformant_body_with_definitions_ref_passes_and_chains(self):
+        result = assert_that({"id": 1, "status": "placed"}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD)
+        assert_that(result).is_not_none()
+
+    def test_x_nullable_null_is_conformant(self):
+        assert_that({"id": 1, "status": "placed", "note": None}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD)
+
+    def test_x_nullable_wrong_type_reports_path(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"id": 1, "status": "placed", "note": 5}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD)
+        assert_that(_entries(exc_info.value)).contains_key("$.note")
+
+    def test_wrong_type_reports_path(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"id": "x", "status": "placed"}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD)
+        assert_that(_entries(exc_info.value)).contains_key("$.id")
+
+    def test_bad_enum_reports_path(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"id": 1, "status": "unknown"}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD)
+        assert_that(_entries(exc_info.value)).contains_key("$.status")
+
+    def test_response_without_schema_raises(self):
+        with pytest.raises(ValueError, match="declares no schema"):
+            assert_that({"x": 1}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD, status=204)
+
+    def test_content_type_outside_produces_raises(self):
+        # 2.0 has no content-type layer, so the check falls to the operation's `produces` list
+        with pytest.raises(ValueError, match="no <application/xml> schema"):
+            assert_that({"id": 1, "status": "placed"}).conforms_to_openapi(
+                SPEC_20, self.PATH, self.METHOD, content_type="application/xml"
+            )
+
+    def test_content_type_inside_produces_passes(self):
+        assert_that({"id": 1, "status": "placed"}).conforms_to_openapi(
+            SPEC_20, self.PATH, self.METHOD, content_type="application/json"
+        )
+
+    def test_global_produces_is_honoured(self):
+        spec = {
+            "swagger": "2.0",
+            "produces": ["application/json"],
+            "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "object"}}}}}},
+        }
+        with pytest.raises(ValueError, match="no <application/xml> schema"):
+            assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/xml")
+
+    def test_absent_produces_skips_the_content_type_check(self):
+        # nothing declared to check against, so any content_type still validates the single schema
+        spec = {"swagger": "2.0", "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "object"}}}}}}}
+        assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/xml")
