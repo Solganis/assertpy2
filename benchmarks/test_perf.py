@@ -80,3 +80,44 @@ def test_contains_exactly_large(benchmark):
     # the contains engine: exact membership over a sizeable list
     items = list(range(300))
     benchmark(lambda: assert_that(items).contains_exactly(*items))
+
+
+def test_string_diff_with_carets(benchmark):
+    # difflib.ndiff costs ~175x a plain pair of prints, and is guarded by a length cutoff. Rendering is
+    # lazy, so str() has to be called or the carets never run and the benchmark guards nothing.
+    left = "the quick brown fox jumps over the lazy dog " * 3
+    right = left.replace("brown", "brawn", 1)
+
+    def run():
+        try:
+            assert_that(left).is_equal_to(right)
+        except AssertionFailure as failure:
+            return str(failure)
+        return None
+
+    benchmark(run)
+
+
+def test_wide_dict_diff(benchmark):
+    # _dict_repr over a wide mapping where nearly every key differs, so there is little to collapse and
+    # every entry is rendered. (The cap on how many are named is free at runtime, so nothing guards it.)
+    left = {f"k{i}": i for i in range(200)}
+    right = {f"k{i}": -i for i in range(200)}
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)
+
+
+def test_extracting_large(benchmark):
+    # the success path of the collection pipeline, the common shape of an API assertion
+    records = _records(300)
+    benchmark(lambda: assert_that(records).extracting("id", "name").is_not_empty())
+
+
+def test_contains_only_large(benchmark):
+    # membership both ways over a sizeable list, the multiset engine rather than the ordered one
+    items = list(range(300))
+    benchmark(lambda: assert_that(items).contains_only(*items))
