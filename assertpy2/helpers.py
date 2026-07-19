@@ -91,10 +91,14 @@ def _elided_seq_repr(seq, counterpart) -> str:
     A one-element change in a forty-element list reads as ``[.., 999]`` instead of dumping the list
     twice into a message the reader then has to diff by eye.
     """
-    if len(_safe_repr(seq)) <= 60:
-        # short enough to read whole: collapsing it would hide context to save a few characters, and on
-        # a two-element list the ".." form is actually the longer of the two
-        return _safe_repr(seq)
+    # past 20 elements the rendering is over budget by construction (one char each plus separators), so
+    # the value is never rendered just to be measured: on the failure path that render is the whole value
+    if len(seq) <= 20:
+        rendered = _safe_repr(seq)
+        if len(rendered) <= 60:
+            # short enough to read whole: collapsing it would hide context to save a few characters, and
+            # on a two-element list the ".." form is actually the longer of the two
+            return rendered
     parts = []
     elided = False
     for index, value in enumerate(seq):
