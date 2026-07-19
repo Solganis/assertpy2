@@ -53,7 +53,7 @@ from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
 
-__version__ = "2.16.0"
+__version__ = "2.17.0"
 
 # the tracked value type of the generic AssertionBuilder fallback (_U appears only in narrowing stubs)
 _T = TypeVar("_T")
