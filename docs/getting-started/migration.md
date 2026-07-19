@@ -61,12 +61,19 @@ same results:
 - dynamic `has_<name>()` assertions and `extracting()` with `filter` and `sort`
 - soft assertions, expected exceptions (`raises().when_called_with()`), `fail()`, `assert_warn()`,
   snapshot testing, and `add_extension()`
-- the existing failure messages.
+- the existing failure messages, apart from the extra detail noted below.
 
 !!! note "Backward-compatible failures"
     Failing assertions now raise `AssertionFailure`, a **subclass of `AssertionError`**. Existing
     `except AssertionError` handlers keep working unchanged. The subclass simply carries extra
     structured data.
+
+!!! note "If your tests assert on message text"
+    assertpy2 writes more into some failures than the original did, usually by adding to the end of the
+    message. A `pytest.raises(match=...)` or a substring check keeps passing. Comparing a whole message
+    with `==` is the one thing that can break, both on the switch and between assertpy2 versions. Prefer
+    matching a substring, or skip the text entirely and assert on the structured data the failure
+    carries: `AssertionFailure.actual`, `.expected`, and `.diff`.
 
 ## What improves automatically
 
