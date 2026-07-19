@@ -89,9 +89,9 @@ def _summarize(samples, total_polls, elapsed, fail_polls, error_polls) -> str:
         if not any(sample.value == seen for seen in distinct):
             distinct.append(sample.value)
     # a simple path through k values takes k-1 changes, so any surplus means the probe came back to a
-    # value it already reported: flapping, which reads nothing like steady progress that ran out of time
+    # value it already reported: a cycle, which reads nothing like steady progress that ran out of time
     if len(changes) >= len(distinct):
-        return f"value oscillates between {len(distinct)} states across {total_polls} polls"
+        return f"value cycles between {len(distinct)} states across {total_polls} polls"
     last_change = elapsed - changes[-1].elapsed
     return f"value changed {len(changes)} {change_word}; last change {last_change:.1f}s before the deadline"
 

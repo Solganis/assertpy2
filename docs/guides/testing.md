@@ -145,7 +145,9 @@ out. The message opens with a one-line trend that pins the failure mode:
 
 - `probe raised ConnectionError on all 12 polls` - the service never came up
 - `value unchanged across 12 polls` - it converged to the wrong value
-- `value changed 3 times; last change 0.4s before the deadline` - the timeout is too short.
+- `value changed 3 times; last change 0.4s before the deadline` - the timeout is too short
+- `value cycles between 2 states across 12 polls` - it keeps returning to earlier values, so waiting
+  longer will not help.
 
 The raised `AssertionFailure` carries the full timeline as `.trace` (a
 [`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples, identical consecutive polls collapsed).
