@@ -51,6 +51,19 @@ def _both_list_like(left: object, right: object) -> bool:
     )
 
 
+def _joined_parts(parts: list[str], *, elided: bool, opener: str = "", closer: str = "") -> str:
+    """Assemble a collapsed repr, capping how many differing parts are spelled out.
+
+    Collapsing only removes what matched, so a value where nearly everything differs still prints in
+    full. The cap is what keeps that case from becoming a wall of text on one line.
+    """
+    hidden = len(parts) - 5
+    if hidden > 0:
+        parts = [*parts[:5], f"... and {hidden} more"]
+    prefix = ".." if elided and not parts else ".., " if elided else ""
+    return f"{opener}{prefix}{', '.join(parts)}{closer}"
+
+
 def _elided_text_repr(text: str, counterpart: str) -> str:
     """Collapse lines equal to their counterpart into ``..`` so only the changed ones are printed.
 
@@ -69,9 +82,7 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
             elided = True
             continue
         parts.append(f"line {index + 1}: {line}")
-    if not parts:
-        return ".."
-    return (".., " if elided else "") + ", ".join(parts)
+    return _joined_parts(parts, elided=elided)
 
 
 def _elided_seq_repr(seq, counterpart) -> str:
@@ -92,8 +103,7 @@ def _elided_seq_repr(seq, counterpart) -> str:
             continue
         parts.append(_safe_repr(value))
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
-    prefix = ".." if elided and not parts else ".., " if elided else ""
-    return f"{opener}{prefix}{', '.join(parts)}{closer}"
+    return _joined_parts(parts, elided=elided, opener=opener, closer=closer)
 
 
 class HelpersMixin(_MixinBase):
@@ -373,9 +383,7 @@ class HelpersMixin(_MixinBase):
                         else:
                             value_repr = _safe_repr(value)
                         parts.append(f"{_safe_repr(key)}: {value_repr}")
-            out = ", ".join(parts)
-            ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
-            return f"{{{ellip_prefix}{out}}}"
+            return _joined_parts(parts, elided=ellip, opener="{", closer="}")
 
         def _list_repr(seq, counterpart, _seen):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
@@ -406,8 +414,7 @@ class HelpersMixin(_MixinBase):
                 else:
                     parts.append(_safe_repr(value))
             opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
-            ellip_prefix = ".." if ellip and not parts else ".., " if ellip else ""
-            return f"{opener}{ellip_prefix}{', '.join(parts)}{closer}"
+            return _joined_parts(parts, elided=ellip, opener=opener, closer=closer)
 
         ignore_err = include_err = ""
         if ignore:

@@ -96,12 +96,23 @@ def test_is_equal_multiline_failure_with_a_shorter_counterpart():
 
 
 def test_is_equal_long_list_without_any_match_shows_everything():
-    # nothing equal to collapse, so nothing is hidden even past the budget
-    actual = [f"item{i}" for i in range(12)]
-    expected = [f"other{i}" for i in range(12)]
+    # nothing equal to collapse and few enough to stay under the cap, so nothing is hidden
+    actual = [f"itemAAAAAAAAAA{i}" for i in range(4)]
+    expected = [f"otherBBBBBBBBB{i}" for i in range(4)]
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected)
     assert_that(str(exc_info.value)).does_not_contain("..")
+
+
+def test_is_equal_caps_how_many_differing_parts_are_named():
+    # collapsing only removes what matched, so an all-different value needs a cap of its own
+    actual = {f"k{index}": index for index in range(60)}
+    expected = {f"k{index}": -index for index in range(60)}
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    message = str(exc_info.value)
+    assert_that(message).contains("... and 54 more")
+    assert_that(len(message.splitlines()[0])).is_less_than(250)
 
 
 def test_is_equal_type_collision_annotates_types():
