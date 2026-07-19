@@ -89,11 +89,13 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
 
 def _array_equality_error(method: str, operand: object) -> TypeError:
     """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
+    # point at the assertion that delegates to the library's own comparison: it reports the differing
+    # column or index, where wrapping `.equals()` in is_true() would report a bare False
+    dedicated = "is_frame_equal(expected)" if hasattr(operand, "equals") else "is_array_equal(expected)"
     return TypeError(
         f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
-        " no single truth value. Compare the value's own equality (e.g."
-        " assert_that(actual.equals(expected)).is_true()), assert on extracted scalars (columns, shape,"
-        " length), or use satisfies(...) with an explicit predicate."
+        f" no single truth value. Use {dedicated}, assert on extracted scalars (columns, shape, length),"
+        " or use satisfies(...) with an explicit predicate."
     )
 
 
