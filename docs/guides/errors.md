@@ -57,7 +57,18 @@ except AssertionError as e:
     #     + 999
 ```
 
-Short sequences are printed whole, since collapsing them would hide context to save a few characters.
+A multi-line value is collapsed by line, which matters most: every line of it costs a row of terminal,
+and the message carries the value twice.
+
+```python
+try:
+    assert_that("line 1\nline 2\nline 3\nline 4").is_equal_to("line 1\nline 2\nline THREE\nline 4")
+except AssertionError as e:
+    print(e)
+    # Expected <.., line 3: line 3> to be equal to <.., line 3: line THREE>, but was not.
+```
+
+Short values are printed whole, since collapsing them would hide context to save a few characters.
 Either way the exact position stays in the diff, so nothing is lost by the shorter message.
 
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
