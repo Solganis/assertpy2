@@ -61,6 +61,40 @@ def test_is_equal_long_tuple_failure_keeps_tuple_brackets():
     assert_that(str(exc_info.value)).is_equal_to("Expected <(.., 27)> to be equal to <(.., 999)>, but was not.")
 
 
+def test_is_equal_multiline_failure_elides_the_matching_lines():
+    # a value spanning many lines costs a terminal row per line, and the message prints it twice
+    actual = "\n".join(f"line {index}" for index in range(8))
+    expected = actual.replace("line 5", "line five")
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <.., line 6: line 5> to be equal to <.., line 6: line five>, but was not."
+    )
+
+
+def test_is_equal_multiline_failure_lists_every_changed_line():
+    actual = "\n".join(f"line {index}" for index in range(8))
+    expected = actual.replace("line 1", "L1").replace("line 6", "L6")
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    assert_that(str(exc_info.value)).contains("line 2: line 1, line 7: line 6")
+
+
+def test_is_equal_short_multiline_failure_is_printed_whole():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that("a\nb\nc").is_equal_to("a\nX\nc")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <a\nb\nc> to be equal to <a\nX\nc>, but was not.")
+
+
+def test_is_equal_multiline_failure_with_a_shorter_counterpart():
+    # every line of the shorter side matched, so it has nothing of its own left to print
+    actual = "\n".join(f"line {index}" for index in range(8))
+    expected = "\n".join(f"line {index}" for index in range(5))
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    assert_that(str(exc_info.value)).ends_with("to be equal to <..>, but was not.")
+
+
 def test_is_equal_long_list_without_any_match_shows_everything():
     # nothing equal to collapse, so nothing is hidden even past the budget
     actual = [f"item{i}" for i in range(12)]

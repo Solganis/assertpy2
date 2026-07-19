@@ -14,7 +14,7 @@ from ._engine._diff import _build_equality_diff
 from ._engine._introspection import is_namedtuple
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
-from .helpers import _both_list_like, _elided_seq_repr
+from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -173,7 +173,11 @@ class BaseMixin(SatisfiesMixin):
             if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
                 # atomic scalars: no array/dict-likeness, == yields a real bool - skip config/guards entirely
                 if self.val != other:
-                    actual_repr, expected_repr = _disambiguated(self.val, other)
+                    if isinstance(self.val, str) and isinstance(other, str):
+                        actual_repr = _truncated(_elided_text_repr(self.val, other))
+                        expected_repr = _truncated(_elided_text_repr(other, self.val))
+                    else:
+                        actual_repr, expected_repr = _disambiguated(self.val, other)
                     return self.error(
                         f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
                         actual=self.val,
