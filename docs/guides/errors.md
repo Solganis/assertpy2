@@ -40,6 +40,26 @@ except AssertionError as e:
     #     + 99
 ```
 
+The `..` in that message stands for the parts that matched. Only what differs is spelled out, so a
+one-field change in a wide object reads as `{.., 'b': 2}` rather than as both objects printed in full.
+Sequences are collapsed the same way once they grow past a line or so, which keeps a single changed
+element out of a forty-item dump:
+
+```python
+try:
+    assert_that(list(range(40))).is_equal_to([*range(27), 999, *range(28, 40)])
+except AssertionError as e:
+    print(e)
+    # Expected <[.., 27]> to be equal to <[.., 999]>, but was not.
+    # diff (sequence):
+    #   [27]:
+    #     - 27
+    #     + 999
+```
+
+Short sequences are printed whole, since collapsing them would hide context to save a few characters.
+Either way the exact position stays in the diff, so nothing is lost by the shorter message.
+
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
