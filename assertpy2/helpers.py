@@ -51,6 +51,29 @@ def _both_list_like(left: object, right: object) -> bool:
     )
 
 
+def _elided_text_repr(text: str, counterpart: str) -> str:
+    """Collapse lines equal to their counterpart into ``..`` so only the changed ones are printed.
+
+    Mirrors `_elided_seq_repr` for multi-line values: a one-line change in a long block should not put
+    the whole block into the message twice.
+    """
+    # the cost of a multi-line value is vertical: every line takes a terminal row, and the message
+    # prints the value twice. Character budgets miss that, so this one counts rows.
+    if len(text.splitlines()) <= 3:
+        return text
+    other_lines = counterpart.splitlines()
+    parts = []
+    elided = False
+    for index, line in enumerate(text.splitlines()):
+        if index < len(other_lines) and line == other_lines[index]:
+            elided = True
+            continue
+        parts.append(f"line {index + 1}: {line}")
+    if not parts:
+        return ".."
+    return (".., " if elided else "") + ", ".join(parts)
+
+
 def _elided_seq_repr(seq, counterpart) -> str:
     """Collapse elements equal to their counterpart into ``..`` so only the differing ones are printed.
 
