@@ -171,6 +171,13 @@ class _FakeScalarArray:
     __hash__ = object.__hash__
 
 
+class _FakeFrame(_FakeArray):
+    """Frame-like: an array-like that also carries the ``equals()`` a DataFrame or Series would."""
+
+    def equals(self, other):
+        return False
+
+
 class TestArrayLikeEqualityGuard:
     """is_equal_to/is_not_equal_to reject element-wise array/frame-likes with a clear, actionable error."""
 
@@ -178,6 +185,18 @@ class TestArrayLikeEqualityGuard:
         with pytest.raises(TypeError) as exc_info:
             assert_that(_FakeArray()).is_equal_to(_FakeArray())
         assert_that(str(exc_info.value)).contains("is_equal_to").contains("_FakeArray").contains("element-wise")
+
+    def test_the_guard_points_an_array_at_is_array_equal(self):
+        # the point of the message: send the reader to the assertion that reports the differing index,
+        # not to one that wraps a bare False
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_FakeArray()).is_equal_to(_FakeArray())
+        assert_that(str(exc_info.value)).contains("is_array_equal(expected)").does_not_contain("is_frame_equal")
+
+    def test_the_guard_points_a_frame_at_is_frame_equal(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_FakeFrame()).is_equal_to(_FakeFrame())
+        assert_that(str(exc_info.value)).contains("is_frame_equal(expected)").does_not_contain("is_array_equal")
 
     def test_is_not_equal_to_rejects_array_like(self):
         with pytest.raises(TypeError) as exc_info:
