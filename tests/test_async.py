@@ -312,15 +312,15 @@ class TestSummaryUnderWindowOverflow:
         assert_that(trace.dropped).is_greater_than(0)  # the guard: without a drop this proves nothing
         return trace.summary
 
-    def test_a_long_monotonic_walk_is_not_mistaken_for_oscillation(self):
-        assert_that(self._summary_of([f"step{i}" for i in range(40)])).does_not_contain("oscillates")
+    def test_a_long_monotonic_walk_is_not_mistaken_for_a_cycle(self):
+        assert_that(self._summary_of([f"step{i}" for i in range(40)])).does_not_contain("cycles")
 
-    def test_a_long_monotonic_walk_with_plateaus_is_not_mistaken_for_oscillation(self):
-        assert_that(self._summary_of([f"step{i // 4}" for i in range(120)])).does_not_contain("oscillates")
+    def test_a_long_monotonic_walk_with_plateaus_is_not_mistaken_for_a_cycle(self):
+        assert_that(self._summary_of([f"step{i // 4}" for i in range(120)])).does_not_contain("cycles")
 
-    def test_oscillation_is_still_detected_after_samples_are_dropped(self):
+    def test_a_cycle_is_still_detected_after_samples_are_dropped(self):
         values = ["up" if i % 2 else "down" for i in range(40)]
-        assert_that(self._summary_of(values)).is_equal_to("value oscillates between 2 states across 40 polls")
+        assert_that(self._summary_of(values)).is_equal_to("value cycles between 2 states across 40 polls")
 
 
 class TestTraceSummary:
@@ -378,21 +378,21 @@ class TestTraceSummary:
             "value changed 2 times; last change 1.5s before the deadline"
         )
 
-    def test_value_flapping_is_reported_as_oscillation(self):
+    def test_a_repeating_value_is_reported_as_a_cycle(self):
         # "changed 4 times" reads like slow progress; the probe is really stuck alternating
         samples = [self._sample(elapsed=float(i), value="up" if i % 2 else "down") for i in range(5)]
-        assert_that(self._summary(samples, 5, 5.0)).is_equal_to("value oscillates between 2 states across 5 polls")
+        assert_that(self._summary(samples, 5, 5.0)).is_equal_to("value cycles between 2 states across 5 polls")
 
-    def test_returning_to_an_earlier_value_once_is_oscillation(self):
+    def test_returning_to_an_earlier_value_once_is_a_cycle(self):
         samples = [
             self._sample(elapsed=0.0, value=1),
             self._sample(elapsed=1.0, value=2),
             self._sample(elapsed=2.0, value=3),
             self._sample(elapsed=3.0, value=1),
         ]
-        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("value oscillates between 3 states across 4 polls")
+        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("value cycles between 3 states across 4 polls")
 
-    def test_steady_progress_is_not_reported_as_oscillation(self):
+    def test_steady_progress_is_not_reported_as_a_cycle(self):
         # the guard that matters: a value walking through new states must keep the last-change wording
         samples = [self._sample(elapsed=float(i), value=i) for i in range(4)]
         assert_that(self._summary(samples, 4, 5.0)).is_equal_to(
