@@ -37,6 +37,39 @@ def test_is_equal_list_failure():
     assert_that(str(exc_info.value)).is_equal_to("Expected <['a', 'b']> to be equal to <['a', 'b', 'c']>, but was not.")
 
 
+def test_is_equal_long_list_failure_elides_the_matching_elements():
+    # the whole point: a one-element change must not dump forty elements into the message twice
+    actual, expected = list(range(40)), list(range(40))
+    expected[27] = 999
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[.., 27]> to be equal to <[.., 999]>, but was not.")
+
+
+def test_is_equal_few_but_long_elements_still_elides():
+    # the budget is the rendered length, not the element count: three long strings flood a message too
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(["x" * 30, "y" * 30]).is_equal_to(["x" * 30, "z" * 30])
+    assert_that(str(exc_info.value)).starts_with("Expected <[.., 'yyy")
+
+
+def test_is_equal_long_tuple_failure_keeps_tuple_brackets():
+    actual, expected = tuple(range(40)), list(range(40))
+    expected[27] = 999
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(tuple(expected))
+    assert_that(str(exc_info.value)).is_equal_to("Expected <(.., 27)> to be equal to <(.., 999)>, but was not.")
+
+
+def test_is_equal_long_list_without_any_match_shows_everything():
+    # nothing equal to collapse, so nothing is hidden even past the budget
+    actual = [f"item{i}" for i in range(12)]
+    expected = [f"other{i}" for i in range(12)]
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(actual).is_equal_to(expected)
+    assert_that(str(exc_info.value)).does_not_contain("..")
+
+
 def test_is_equal_type_collision_annotates_types():
     # when the two reprs collide, the message tags each with its type so it does not read as "1 != 1"
     with pytest.raises(AssertionError) as exc_info:

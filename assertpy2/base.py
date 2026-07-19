@@ -14,6 +14,7 @@ from ._engine._diff import _build_equality_diff
 from ._engine._introspection import is_namedtuple
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
+from .helpers import _both_list_like, _elided_seq_repr
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -218,7 +219,11 @@ class BaseMixin(SatisfiesMixin):
                 )
         else:
             if _guarded_not_equal(self.val, other):
-                actual_repr, expected_repr = _disambiguated(self.val, other)
+                if _both_list_like(self.val, other):
+                    actual_repr = _truncated(_elided_seq_repr(self.val, other))
+                    expected_repr = _truncated(_elided_seq_repr(other, self.val))
+                else:
+                    actual_repr, expected_repr = _disambiguated(self.val, other)
                 diff = _build_equality_diff(self.val, other)
                 return self.error(
                     f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",

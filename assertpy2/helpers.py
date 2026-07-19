@@ -51,6 +51,28 @@ def _both_list_like(left: object, right: object) -> bool:
     )
 
 
+def _elided_seq_repr(seq, counterpart) -> str:
+    """Collapse elements equal to their counterpart into ``..`` so only the differing ones are printed.
+
+    A one-element change in a forty-element list reads as ``[.., 999]`` instead of dumping the list
+    twice into a message the reader then has to diff by eye.
+    """
+    if len(_safe_repr(seq)) <= 60:
+        # short enough to read whole: collapsing it would hide context to save a few characters, and on
+        # a two-element list the ".." form is actually the longer of the two
+        return _safe_repr(seq)
+    parts = []
+    elided = False
+    for index, value in enumerate(seq):
+        if index < len(counterpart) and not _guarded_not_equal(value, counterpart[index]):
+            elided = True
+            continue
+        parts.append(_safe_repr(value))
+    opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
+    prefix = ".." if elided and not parts else ".., " if elided else ""
+    return f"{opener}{prefix}{', '.join(parts)}{closer}"
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
