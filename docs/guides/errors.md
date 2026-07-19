@@ -126,6 +126,10 @@ carets (`? ^^^`) pointing at the exact span - the same guides pytest's own asser
 
 ![Colored string diff: the changed word marked with difflib carets, removal in red and addition in green](../assets/diff-string.svg)
 
+The carets appear only when the two lines still resemble each other, at difflib's own 0.75 similarity
+cutoff. Past that the two lines are printed plainly: a guide that underlines most of the line says
+nothing the pair of values does not already say.
+
 **Set and contains** show extra items in red and missing items in green:
 
 ![Colored set diff: extra items in red, missing items in green](../assets/diff-set.svg)
