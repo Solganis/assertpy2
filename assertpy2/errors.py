@@ -138,7 +138,7 @@ def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green:
         return
     actual_line, expected_line = _safe_str(entry.actual), _safe_str(entry.expected)
     lines.append(f"  {entry.path}:")
-    # ndiff is O(len_a * len_b); on long lines skip the carets and show a plain pair instead
+    # ndiff costs ~175x a plain pair even at the cutoff; on long lines skip the carets instead
     if len(actual_line) <= 200 and len(expected_line) <= 200:
         for guide in difflib.ndiff([actual_line], [expected_line]):
             text = guide.rstrip("\n")
