@@ -118,6 +118,20 @@ class TestBuildEqualityDiffString:
         assert_that(result.entries[0].actual).is_none()
         assert_that(result.entries[0].expected).is_equal_to("b")
 
+    def test_str_subclass_against_plain_str(self):
+        # StrEnum members are str subclasses and get compared to plain strings constantly, so the text
+        # path must not turn on an exact type match
+        class _Tag(str):
+            pass
+
+        result = _build_equality_diff(_Tag("hello"), "world")
+        assert_that(result.kind).is_equal_to("string")
+
+    def test_bytes_are_diffed_as_text_but_never_mixed_with_str(self):
+        assert_that(_build_equality_diff(b"abc", b"aXc").kind).is_equal_to("string")
+        assert_that(_build_equality_diff(bytearray(b"abc"), b"aXc").kind).is_equal_to("string")
+        assert_that(_build_equality_diff(b"abc", "abc").kind).is_equal_to("scalar")
+
     def test_identical_content_different_object(self):
         left = "hello"
         right = "".join(["h", "e", "l", "l", "o"])

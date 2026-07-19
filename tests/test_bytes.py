@@ -165,3 +165,27 @@ class TestBytesBoundaryCases:
     def test_is_hex_equal_to_actual_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
             assert_that(b"\xff").is_hex_equal_to("01")
+
+
+def test_bytes_equality_failure_points_at_the_changed_span():
+    # bytes render as their b'...' literal, so difflib can point into them the way it does for text
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(b"hello world payload").is_equal_to(b"hello WORLD payload")
+    diff = exc_info.value.diff
+    assert_that(diff.kind).is_equal_to("string")
+    assert_that(diff.entries).is_length(1)
+    assert_that(diff.entries[0].actual).is_equal_to(b"hello world payload")
+    assert_that(diff.entries[0].expected).is_equal_to(b"hello WORLD payload")
+
+
+def test_bytearray_equality_failure_uses_the_same_path():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(bytearray(b"abc")).is_equal_to(bytearray(b"aXc"))
+    assert_that(exc_info.value.diff.kind).is_equal_to("string")
+
+
+def test_bytes_against_str_is_not_treated_as_text():
+    # different types, so the text path must not claim them
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(b"abc").is_equal_to("abc")
+    assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
