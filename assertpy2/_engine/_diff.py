@@ -183,7 +183,11 @@ def _build_equality_diff(
         for item in sorted(expected - actual, key=_safe_repr):
             entries.append(DiffEntry(path="missing", actual=None, expected=item))
         return DiffResult(kind="set", entries=entries)
-    if isinstance(actual, str) and isinstance(expected, str):
+    # bytes render as their b'...' literal, which difflib can point into exactly like text, and both
+    # kinds expose splitlines(), so one branch serves them
+    both_text = isinstance(actual, str) and isinstance(expected, str)
+    both_bytes = isinstance(actual, (bytes, bytearray)) and isinstance(expected, (bytes, bytearray))
+    if both_text or both_bytes:
         entries = []
         actual_lines = actual.splitlines()
         expected_lines = expected.splitlines()
