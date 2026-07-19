@@ -68,8 +68,10 @@ except AssertionError as e:
     # Expected <.., line 3: line 3> to be equal to <.., line 3: line THREE>, but was not.
 ```
 
-Short values are printed whole, since collapsing them would hide context to save a few characters.
-Either way the exact position stays in the diff, so nothing is lost by the shorter message.
+Short values are printed whole, since collapsing them would hide context to save a few characters. When
+almost nothing matches there is little to collapse, so the message names the first few differences and
+counts the rest as `... and N more`. Either way every difference stays in the diff, so nothing is lost by
+the shorter message.
 
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
@@ -119,7 +121,8 @@ show the path with the removal in red and the addition in green - this is the di
 ![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)
 
 String values go finer than line-by-line: each changed line is diffed *within the line*, with difflib
-carets (`? ^^^`) pointing at the exact span - the same guides pytest's own assertion rewriting uses:
+carets (`? ^^^`) pointing at the exact span - the same guides pytest's own assertion rewriting uses.
+`bytes` and `bytearray` take the same path, pointed at through their `b'...'` form:
 
 ![Colored string diff: the changed word marked with difflib carets, removal in red and addition in green](../assets/diff-string.svg)
 

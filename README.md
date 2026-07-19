@@ -151,7 +151,7 @@ data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 - [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected`, `.diff`, and the diff renders into the message itself, so it shows off pytest too.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive structural diffs across containers, dataclasses, attrs, and Pydantic models, with intra-line carets for strings and circular-reference protection.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): three modes under one typed API, all updated with `--assertpy2-snapshot-update`: `snapshot()` (external JSON file), [`matches_inline()`](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) (recorded into the test source), and [`matches_contract_snapshot()`](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots) (value-tolerant structural regressions).
-- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi(spec, path, method)` validates a JSON response body against an operation's response schema (OpenAPI 3.0/3.1), reporting every violation with its JSON path.
+- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi(spec, path, method)` validates a JSON response body against an operation's response schema (OpenAPI 3.0/3.1 and Swagger 2.0), reporting every violation with its JSON path.
 
 **Extensibility**
 
