@@ -122,3 +122,26 @@ def test_failure_without_locatable_caller_frame():
         assert_warn("foo", logger=adapted).is_equal_to("bar")
 
     assert_that(capture.getvalue()).starts_with("Expected <foo> to be equal to <bar>, but was not.")
+
+
+def _captured_warn(subject, expected):
+    """Run one warn-mode comparison against a private logger and return what it wrote."""
+    capture = StringIO()
+    logger = logging.getLogger("capture_diff")
+    logger.handlers.clear()
+    logger.addHandler(logging.StreamHandler(capture))
+    assert_warn(subject, logger=WarningLoggingAdapter(logger, None)).is_equal_to(expected)
+    return capture.getvalue()
+
+
+def test_warn_carries_the_diff_paths():
+    # warn never fails the test, so this line is the only thing the reader ever sees: dropping the
+    # paths here costs more than it does in a failing mode
+    out = _captured_warn({"a": {"b": 1}}, {"a": {"b": 2}})
+    assert_that(out).contains("a.b: 1 != 2")
+
+
+def test_warn_on_a_scalar_stays_a_single_line():
+    # the header already carries both values, so a path of "." would only repeat them
+    out = _captured_warn(1, 2)
+    assert_that(out.strip().splitlines()).is_length(1)

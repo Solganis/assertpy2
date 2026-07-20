@@ -662,22 +662,50 @@ def test_disambiguated_distinguishes_colliding_reprs(left, right):
 
 
 _soft_groups = st.none() | st.sampled_from(["Headers", "Body"])
-_soft_specs = st.lists(st.tuples(_soft_groups, st.booleans()), min_size=1, max_size=8)
+_soft_specs = st.lists(st.tuples(_soft_groups, st.booleans(), st.booleans()), min_size=1, max_size=8)
 
 
 @settings(deadline=None)
 @given(specs=_soft_specs)
 def test_soft_report_numbers_every_failure_sequentially(specs):
-    # the aggregated report carries every message once, numbered 1..N across any grouping
+    # the aggregated report carries every message once, numbered 1..N across any grouping, and the
+    # numbering must survive the diff lines that a structured failure adds under its entry
     entries = [
-        (group, (f"file{i}.py", i) if located else None, f"failure message {i}")
-        for i, (group, located) in enumerate(specs)
+        (
+            group,
+            (f"file{index}.py", index) if located else None,
+            f"failure message {index}",
+            DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
+            if diffed
+            else None,
+        )
+        for index, (group, located, diffed) in enumerate(specs)
     ]
     report = _format_soft_errors(entries)
-    for _, _, message in entries:
+    for _, _, message, _diff in entries:
         assert_that(report).contains(message)
     for number in range(1, len(entries) + 1):
         assert_that(report).contains(f"{number}. ")
+
+
+@settings(deadline=None)
+@given(specs=_soft_specs)
+def test_soft_report_shows_each_diff_path_under_its_own_entry(specs):
+    entries = [
+        (
+            group,
+            None,
+            f"failure message {index}",
+            DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
+            if diffed
+            else None,
+        )
+        for index, (group, located, diffed) in enumerate(specs)
+    ]
+    report = _format_soft_errors(entries)
+    for index, (_, _, _, diff) in enumerate(entries):
+        if diff is not None:
+            assert_that(report).contains(f"field{index}: {index} != {-index}")
 
 
 _field = st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6)

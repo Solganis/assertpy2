@@ -186,3 +186,42 @@ def test_recursive_nesting():
         assert_that(out).contains("4. Expected <4> to be equal to <7>, but was not.")
         assert_that(out).contains("5. Expected <5> to be equal to <7>, but was not.")
         assert_that(out).contains("6. Expected <6> to be equal to <7>, but was not.")
+
+
+class TestSoftFailuresCarryTheirDiff:
+    """A collected failure keeps the paths its hard counterpart would have shown."""
+
+    def test_nested_difference_names_its_path(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that({"a": {"b": 1}}).is_equal_to({"a": {"b": 2}})
+        assert_that(str(exc_info.value)).contains("a.b: 1 != 2")
+
+    def test_missing_item_is_named_without_its_empty_counterpart(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that([1, 2]).contains(3)
+        message = str(exc_info.value)
+        assert_that(message).contains("missing: 3")
+        assert_that(message).does_not_contain("None")
+
+    def test_extra_item_is_named_without_its_empty_counterpart(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that({1, 2, 3}).is_equal_to({1, 2})
+        message = str(exc_info.value)
+        assert_that(message).contains("extra: 3")
+        assert_that(message).does_not_contain("None")
+
+    def test_many_differences_are_capped(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that({f"k{i}": i for i in range(9)}).is_equal_to({f"k{i}": -i for i in range(9)})
+        # asserted on the indented diff lines, not on a substring: the headline carries a cap of its
+        # own whose wording is identical, so a plain contains() would pass without this code running
+        diff_lines = [line for line in str(exc_info.value).splitlines() if line.startswith("   ")]
+        # k0 matches (0 == -0), so eight paths differ: five are named and three stay counted
+        assert_that(diff_lines).is_length(6)
+        assert_that(diff_lines[-1].strip()).is_equal_to("... and 3 more")
+
+    def test_a_scalar_failure_adds_no_line(self):
+        # the header already carries both values, so a path of "." would only repeat them
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(1).is_equal_to(2)
+        assert_that(str(exc_info.value).splitlines()).is_length(2)
