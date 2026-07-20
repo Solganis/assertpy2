@@ -80,3 +80,19 @@ class TestLiteralable:
         _inline._RECORDS.append((str(source), insert_at, insert_at, "42"))
         _inline.apply_inline_records()
         assert_that(source.read_bytes()).is_equal_to(b"a = matches_inline(42)\r\nb = 1\r\n")
+
+
+def test_inline_mismatch_names_its_kind_and_the_update_flag():
+    # the file-backed branch says which snapshot it measured against; the inline one must not stay
+    # silent, or the reader sees the same failure worded two different ways
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that({"id": 7, "status": "paid"}).matches_inline({"id": 7, "status": "pending"})
+    message = str(exc_info.value)
+    assert_that(message).contains("Inline snapshot")
+    assert_that(message).contains("--assertpy2-snapshot-update")
+
+
+def test_inline_mismatch_keeps_the_diff():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that({"a": {"b": 1}}).matches_inline({"a": {"b": 2}})
+    assert_that(exc_info.value.diff.entries[0].path).is_equal_to("a.b")
