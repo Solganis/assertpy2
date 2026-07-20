@@ -38,6 +38,7 @@ class _MixinBase:
             kind: str | None = ...,
             expected: type[BaseException] | None = ...,
             logger: logging.LoggerAdapter | None = ...,
+            origin: str | None = ...,
         ) -> Self: ...
 
         # WarningMixin (terminals dispatched from ExceptionMixin.when_called_with)

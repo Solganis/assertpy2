@@ -251,4 +251,10 @@ class ExtractingMixin(_MixinBase):
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
         # chain on with _extracted_ list (don't chain to self!)
-        return self.builder(extracted, self.description, self.kind, logger=self.logger)
+        return self.builder(
+            extracted,
+            self.description,
+            self.kind,
+            logger=self.logger,
+            origin=f"extracting() produced {len(extracted)} of {len(list(source))} items",
+        )

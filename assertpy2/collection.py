@@ -332,7 +332,13 @@ class CollectionMixin(_MixinBase):
             filtered = [item for item in self.val if predicate.matches(item)]
         else:
             filtered = [item for item in self.val if predicate(item)]
-        return self.builder(filtered, self.description, self.kind, logger=self.logger)
+        return self.builder(
+            filtered,
+            self.description,
+            self.kind,
+            logger=self.logger,
+            origin=f"filtered_on() kept {len(filtered)} of {len(list(self.val))} items",
+        )
 
     def mapped(self, func: Callable[[Any], Any]) -> Self:
         """Returns a new builder with each element transformed by func.

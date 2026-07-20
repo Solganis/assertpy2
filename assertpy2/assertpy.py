@@ -839,6 +839,7 @@ class AssertionBuilder(
         # refuse to hand back an unverified value and surface that root failure instead of silently
         # breaking its narrowed type
         self._value_taint_reason: str | None = None
+        self._value_origin: str | None = None
 
     @property
     def not_(self) -> NegatedBuilder:
@@ -926,7 +927,7 @@ class AssertionBuilder(
         def satisfies(self, matcher: Any) -> Any:  # overload impl stub, never executed
             ...
 
-    def builder(self, val, description="", kind=None, expected=None, logger=None):
+    def builder(self, val, description="", kind=None, expected=None, logger=None, origin=None):
         """Helper to build a new `AssertionBuilder` instance. Use this only if not chaining to ``self``.
 
         Args:
@@ -939,7 +940,9 @@ class AssertionBuilder(
             expected (Error, optional): the expected exception.  Defaults to ``None``
             logger (Logger, optional): the logger for warning messages.  Defaults to ``None``
         """
-        return _builder(val, description, kind, expected, logger)
+        pivoted = _builder(val, description, kind, expected, logger)
+        pivoted._value_origin = origin
+        return pivoted
 
     def error(self, msg, *, actual=None, expected=None, diff=None) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
@@ -964,6 +967,9 @@ class AssertionBuilder(
                 ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
         """
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
+        if self._value_origin and not len(self.val):
+            # an empty derived value carries no context of its own, so name the step that produced it
+            out = f"{out} The value is empty because {self._value_origin}."
         if self.kind == "warn":
             if self._value_taint_reason is None:
                 self._value_taint_reason = out
