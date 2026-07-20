@@ -8,12 +8,13 @@ than left as an accident that a rewrite could flip in silence.
 """
 
 import inspect
+import warnings
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import assert_that
+from assertpy2 import VacuousAssertionWarning, _satisfies, assert_that
 
 
 def _vararg_assertions() -> list[str]:
@@ -95,3 +96,65 @@ def test_an_existential_quantifier_fails_on_an_empty_subject(subject):
     # the counterpart that proves the rows above are a contract and not an "always passes" defect
     with pytest.raises(AssertionError):
         assert_that(subject).any_satisfy(_never)
+
+
+# Only the positive half of the table above: an empty subject is the expected pass for the negatives
+# ("no errors were logged" is exactly what such a test wanted), so warning there would be noise.
+_POSITIVE_QUANTIFIERS = {
+    name: call for name, call in _VACUOUSLY_TRUE.items() if name not in {"none_satisfy", "does_not_contain_duplicates"}
+}
+
+
+class TestVacuousGuard:
+    """The opt-in guard that names a universal assertion which checked nothing."""
+
+    @pytest.fixture
+    def guarded(self, monkeypatch):
+        monkeypatch.setattr(_satisfies, "_VACUOUS_GUARD", True)
+
+    @pytest.mark.parametrize("call", list(_POSITIVE_QUANTIFIERS.values()), ids=list(_POSITIVE_QUANTIFIERS))
+    def test_every_positive_quantifier_warns_on_an_empty_subject(self, guarded, call):
+        with pytest.warns(VacuousAssertionWarning):
+            call([])
+
+    def test_the_warning_names_the_method_the_caller_used(self, guarded):
+        # the guard sits in each entry point, not in the shared one they delegate to: a message saying
+        # "each()" for an all_satisfy() call would send the reader to the wrong docs
+        with pytest.warns(VacuousAssertionWarning, match=r"^all_satisfy\(\)"):
+            assert_that([]).all_satisfy(lambda item: item > 0)
+
+    def test_the_warning_points_at_the_caller(self, guarded):
+        with pytest.warns(VacuousAssertionWarning) as caught:
+            assert_that([]).all_satisfy(lambda item: item > 0)
+        assert_that(caught[0].filename).ends_with("test_vacuity_contract.py")
+
+    def test_allow_empty_is_honoured(self, guarded):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that([]).all_satisfy(lambda item: item > 0, allow_empty=True)
+        assert_that([]).each(lambda item: item > 0, allow_empty=True)
+        assert_that([]).all_fields_satisfy(lambda item: item > 0, allow_empty=True)
+        assert_that([]).has_no_none_fields(allow_empty=True)
+        assert_that([]).zip_satisfies([], lambda left, right: False, allow_empty=True)
+        assert_that([]).is_sorted(allow_empty=True)
+        assert_that([]).is_subset_of(9, allow_empty=True)
+
+    def test_negative_quantifiers_stay_silent(self, guarded):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that([]).none_satisfy(_never)
+        assert_that([]).does_not_contain(1)
+        assert_that([]).does_not_contain_duplicates()
+
+    def test_a_non_empty_subject_never_warns(self, guarded):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that([1, 2]).all_satisfy(lambda item: item > 0)
+        assert_that([1, 2]).is_sorted()
+
+    def test_an_unsized_subject_is_never_drained_to_check(self, guarded):
+        # a one-shot iterable has no len(): consuming it to answer the question would break the assertion
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that(iter([])).each(lambda item: item > 0)
+
+    def test_the_guard_is_off_by_default(self):
+        # a suite running filterwarnings = ["error"] must not break on upgrade
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that([]).all_satisfy(lambda item: item > 0)

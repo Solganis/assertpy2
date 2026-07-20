@@ -91,6 +91,16 @@ def _json_safe(value, _depth=0, _seen=None):
     return {"__repr__": _truncated(_safe_repr(value))}
 
 
+class VacuousAssertionWarning(UserWarning):
+    """Emitted when a universal assertion passes because there was nothing to check.
+
+    ``all_satisfy`` over an empty collection is true the way ``all([])`` is true, so a query that
+    returned no rows makes the assertion pass without examining anything.  That is the most common
+    silent false pass in a test suite, and the one a green run never reveals.  Raise it to a failure
+    with ``-W error::assertpy2.VacuousAssertionWarning`` or silence it per call with ``allow_empty``.
+    """
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DiffEntry:
     """Single difference between actual and expected values at a specific path."""

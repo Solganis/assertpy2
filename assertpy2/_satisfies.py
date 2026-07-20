@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import collections.abc
+import os
+import warnings
 from typing import TYPE_CHECKING, Any
 
 from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_model_dump_object
 from ._engine._mixin_base import _MixinBase
-from .errors import DiffEntry, DiffResult
+from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
@@ -47,10 +49,45 @@ def _max_bipartite_assignment(satisfied: list[list[bool]]) -> list[int | None]:
     return assignment
 
 
+_VACUOUS_GUARD: bool = False
+"""Whether a universal assertion over an empty value warns.
+
+Off by default: a suite running ``filterwarnings = ["error"]`` would otherwise fail on upgrade, and a
+property-based test generates empty collections as a matter of course.  Turn it on with the pytest
+``--assertpy2-vacuous`` flag or the ``ASSERTPY2_VACUOUS`` environment variable for other runners.
+"""
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _guard_enabled() -> bool:
+    return _VACUOUS_GUARD or os.environ.get("ASSERTPY2_VACUOUS", "").strip().lower() in _TRUTHY
+
+
+def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
+    """Warn when a universal assertion is about to pass because there is nothing to quantify over.
+
+    Called from each public entry point rather than from the shared implementation, so the name in the
+    message is the one the caller used and ``stacklevel`` lands on their line rather than ours.
+    """
+    if allow_empty or not _guard_enabled():
+        return
+    try:
+        empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the TypeError below
+    except TypeError:
+        return  # not sized: assume it has items rather than draining a one-shot iterable to find out
+    if empty:
+        warnings.warn(
+            f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
+            VacuousAssertionWarning,
+            stacklevel=3,
+        )
+
+
 class SatisfiesMixin(_MixinBase):
     """Predicate and matcher-application assertions: satisfies / each / *_satisfy / matches_structure."""
 
-    def all_fields_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def all_fields_satisfy(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that every scalar leaf in val's object graph satisfies the given matcher.
 
         Walks val recursively (mappings, dataclasses, namedtuples, Pydantic models, lists, tuples) and
@@ -75,6 +112,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if any leaf does **not** satisfy the matcher
             TypeError: if matcher is neither a Matcher nor callable
         """
+        _warn_if_vacuous("all_fields_satisfy", self.val, allow_empty)
         if not _is_matcher(matcher) and not callable(matcher):
             raise TypeError("given arg must be a Matcher or callable")
         description = _describe_matcher(matcher)
@@ -94,7 +132,7 @@ class SatisfiesMixin(_MixinBase):
             )
         return self
 
-    def has_no_none_fields(self) -> Self:
+    def has_no_none_fields(self, *, allow_empty: bool = False) -> Self:
         """Asserts that no scalar leaf in val's object graph is ``None``.
 
         Convenience wrapper over `all_fields_satisfy()` with a not-``None`` matcher; reports the path
@@ -111,7 +149,8 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any leaf **is** ``None``
         """
-        return self.all_fields_satisfy(IsNotNoneMatcher())
+        _warn_if_vacuous("has_no_none_fields", self.val, allow_empty)
+        return self.all_fields_satisfy(IsNotNoneMatcher(), allow_empty=True)
 
     def satisfies(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that val satisfies the given matcher.
@@ -159,7 +198,7 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def each(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def each(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that every item in val satisfies the given matcher.
 
         Args:
@@ -184,6 +223,7 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any item does **not** satisfy the matcher
         """
+        _warn_if_vacuous("each", self.val, allow_empty)
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if _is_matcher(matcher):
@@ -332,7 +372,7 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def all_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def all_satisfy(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that all items in val satisfy the given matcher.
 
         Semantic alias for [`each()`][assertpy2.base.BaseMixin.each].
@@ -354,7 +394,8 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any item does **not** satisfy the matcher
         """
-        return self.each(matcher)
+        _warn_if_vacuous("all_satisfy", self.val, allow_empty)
+        return self.each(matcher, allow_empty=True)
 
     def none_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
         """Asserts that no item in val satisfies the given matcher.
@@ -533,7 +574,9 @@ class SatisfiesMixin(_MixinBase):
             )
         return self
 
-    def zip_satisfies(self, other: Iterable[object], predicate: Callable[..., bool]) -> Self:
+    def zip_satisfies(
+        self, other: Iterable[object], predicate: Callable[..., bool], *, allow_empty: bool = False
+    ) -> Self:
         """Asserts that each pair from zipping val with other satisfies the two-arg predicate.
 
         Pairs the i-th item of val with the i-th item of ``other`` and checks ``predicate(a, b)``.
@@ -556,6 +599,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if the lengths differ, or any pair does **not** satisfy the predicate
             TypeError: if val or other is not iterable, or predicate is not callable
         """
+        _warn_if_vacuous("zip_satisfies", self.val, allow_empty)
         if not callable(predicate):
             raise TypeError("given predicate must be callable")
         if not isinstance(self.val, collections.abc.Iterable):

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from ._engine._introspection import is_mapping_like
 from ._engine._mixin_base import _MixinBase
+from ._satisfies import _warn_if_vacuous
 from .matchers import BaseMatcher
 
 if TYPE_CHECKING:
@@ -65,7 +66,7 @@ class CollectionMixin(_MixinBase):
             return self.error("Expected not iterable, but was.")
         return self
 
-    def is_subset_of(self, *supersets) -> Self:
+    def is_subset_of(self, *supersets, allow_empty: bool = False) -> Self:
         """Asserts that val is iterable and a subset of the given superset (or supersets).
 
         Args:
@@ -93,6 +94,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** subset of given superset (or supersets)
         """
+        _warn_if_vacuous("is_subset_of", self.val, allow_empty)
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if len(supersets) == 0:
@@ -134,7 +136,7 @@ class CollectionMixin(_MixinBase):
 
         return self
 
-    def is_sorted(self, key=lambda item: item, reverse=False) -> Self:
+    def is_sorted(self, key=lambda item: item, reverse=False, *, allow_empty: bool = False) -> Self:
         """Asserts that val is iterable and is sorted.
 
         Args:
@@ -164,6 +166,7 @@ class CollectionMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** sorted
         """
+        _warn_if_vacuous("is_sorted", self.val, allow_empty)
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
 
