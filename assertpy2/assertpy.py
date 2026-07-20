@@ -42,7 +42,7 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure, _truncated
+from .errors import AssertionFailure, _safe_repr, _truncated
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -96,9 +96,8 @@ def _caller_location() -> tuple[str, int] | None:
 # soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
 # each entry is (group label, caller location, message)
-_soft_err: contextvars.ContextVar[list[tuple[str | None, tuple[str, int] | None, str]]] = contextvars.ContextVar(
-    "assertpy2_soft_err"
-)
+_SoftFailure = tuple[str | None, tuple[str, int] | None, str, object]
+_soft_err: contextvars.ContextVar[list[_SoftFailure]] = contextvars.ContextVar("assertpy2_soft_err")
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
 
@@ -133,22 +132,41 @@ def _located(location: tuple[str, int] | None, msg: str) -> str:
     return f"{msg}  [{os.path.basename(location[0])}:{location[1]}]"
 
 
-def _format_soft_errors(errs: list[tuple[str | None, tuple[str, int] | None, str]]) -> str:
-    has_groups = any(group is not None for group, _, _ in errs)
-    if not has_groups:
-        return "soft assertion failures:\n" + "\n".join(
-            f"{i + 1}. {_located(loc, msg)}" for i, (_, loc, msg) in enumerate(errs)
-        )
+def _indented_diff(diff: object, indent: str) -> list[str]:
+    """Render a collected failure's diff under its entry, or nothing when it carries none."""
+    # one line per differing path: the full block form repeats its header on every collected failure,
+    # and a soft run exists precisely to show many of them at once
+    lines = []
+    entries = getattr(diff, "entries", None) or []
+    if len(entries) == 1 and entries[0].path in {".", "line 1"}:
+        # a scalar or a one-line string: the header already carries both values, so a path of "." would
+        # only repeat them
+        return lines
+    shown = entries[:5]  # bound once: a slice and a separate threshold would drift apart
+    for entry in shown:
+        if entry.expected is None:  # an extra item, which has no counterpart to contrast with
+            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)}")
+        elif entry.actual is None:  # a missing one
+            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.expected)}")
+        else:
+            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)} != {_safe_repr(entry.expected)}")
+    if len(entries) > len(shown):
+        lines.append(f"{indent}... and {len(entries) - len(shown)} more")
+    return lines
 
+
+def _format_soft_errors(errs: list[_SoftFailure]) -> str:
+    has_groups = any(group is not None for group, _, _, _ in errs)
     lines = ["soft assertion failures:"]
     current_group: str | None = None
-    for counter, (group, loc, msg) in enumerate(errs, 1):
-        if group != current_group:
+    for counter, (group, loc, msg, diff) in enumerate(errs, 1):
+        if has_groups and group != current_group:
             current_group = group
             if group is not None:
                 lines.append(f"  [{group}]")
-        indent = "    " if group is not None else "  "
+        indent = ("    " if group is not None else "  ") if has_groups else ""
         lines.append(f"{indent}{counter}. {_located(loc, msg)}")
+        lines.extend(_indented_diff(diff, indent + "   "))
     return "\n".join(lines)
 
 
@@ -539,7 +557,7 @@ def soft_fail(msg=""):
 
     """
     if _soft_ctx.get():
-        _soft_err.get().append((_soft_group.get(), _caller_location(), f"Fail: {msg}!" if msg else "Fail!"))
+        _soft_err.get().append((_soft_group.get(), _caller_location(), f"Fail: {msg}!" if msg else "Fail!", None))
         return
     fail(msg)
 
@@ -730,7 +748,7 @@ class NegatedBuilder:
         msg = self._make_msg(name)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
-        err_list.append((_soft_group.get(), _caller_location(), msg))
+        err_list.append((_soft_group.get(), _caller_location(), msg, None))
         return self._builder
 
     def _negated_warn(
@@ -929,12 +947,13 @@ class AssertionBuilder(
         if self.kind == "warn":
             if self._value_taint_reason is None:
                 self._value_taint_reason = out
-            self.logger.warning(out)
+            detail = _indented_diff(diff, "   ")
+            self.logger.warning("\n".join([out, *detail]) if detail else out)
             return self
         elif self.kind == "soft":
             if self._value_taint_reason is None:
                 self._value_taint_reason = out
-            _soft_err.get().append((_soft_group.get(), _caller_location(), out))
+            _soft_err.get().append((_soft_group.get(), _caller_location(), out, diff))
             return self
         else:
             if expected is not None or diff is not None:
