@@ -154,6 +154,19 @@ class TestVacuousGuard:
         warnings.simplefilter("error", VacuousAssertionWarning)
         assert_that(iter([])).each(lambda item: item > 0)
 
+    def test_a_broken_len_does_not_crash_the_assertion(self, guarded):
+        # the guard calls len() to decide whether to warn; a value whose __len__ raises must pass
+        # through untouched, not have its error surfaced as ours (same rule as the hostile __dir__)
+        class BrokenLen:
+            def __len__(self):
+                raise ValueError("len exploded")
+
+            def __iter__(self):
+                return iter([])
+
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that(BrokenLen()).each(lambda item: item > 0)
+
     def test_the_guard_is_off_by_default(self):
         # a suite running filterwarnings = ["error"] must not break on upgrade
         warnings.simplefilter("error", VacuousAssertionWarning)
