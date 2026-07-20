@@ -8,7 +8,7 @@ from typing import Final
 
 import pytest
 
-from . import _inline, _satisfies, errors
+from . import _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from .errors import _json_safe, _render_diff
@@ -120,6 +120,9 @@ def pytest_testnodedown(node, error):
     touched = getattr(node, "workeroutput", {}).get("assertpy2_touched")
     if touched:
         _controller_touched.update(tuple(item) for item in touched)
+    retried = getattr(node, "workeroutput", {}).get("assertpy2_retried")
+    if retried:
+        _retried.extend(tuple(row) for row in retried)
     inline = getattr(node, "workeroutput", {}).get("assertpy2_inline")
     if inline:
         _controller_inline.extend(tuple(record) for record in inline)
@@ -140,13 +143,46 @@ def _is_full_run(config) -> bool:
     )
 
 
+_retried: list[tuple[str, int, float, float]] = []
+
+
+def _drain_retries(nodeid: str) -> None:
+    """Move any retried polls this test performed onto the run-level list, tagged with the test."""
+    for attempts, elapsed, budget in async_assertions._RETRIES:
+        _retried.append((nodeid, attempts, elapsed, budget))
+    async_assertions._RETRIES.clear()
+
+
+def _report_retries(config) -> None:
+    """Name the polls that converged against their deadline: that run passed, the next one may not.
+
+    Retrying is what ``eventually()`` is for, so a retry on its own says nothing.  Spending most of the
+    budget before converging is what turns into a failure on a slower machine.
+    """
+    reporter = config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None:  # pragma: no cover - the terminal reporter is always present under pytest
+        return
+    late = [row for row in _retried if row[3] and row[2] / row[3] >= 0.7]
+    if not late:
+        return
+    reporter.write_line("")
+    reporter.write_line("assertpy2 polls that nearly timed out:")
+    for nodeid, attempts, elapsed, budget in late:
+        reporter.write_line(
+            f"  {nodeid}: converged on attempt {attempts} at {elapsed:.2f}s of {budget:.1f}s"
+            f" ({elapsed / budget:.0%} of the budget)"
+        )
+
+
 def pytest_sessionfinish(session, exitstatus):
     config = session.config
     if hasattr(config, "workeroutput"):  # xdist worker: ship recorded work to the controller, defer the rest
         config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
         config.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
+        config.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
         return
     # controller / single process: apply inline edits (workers' plus any recorded here) into source
+    _report_retries(config)
     _inline._RECORDS.extend(_controller_inline)
     _controller_inline.clear()
     _inline.apply_inline_records()
@@ -188,6 +224,8 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
+    if report.when == "call":
+        _drain_retries(report.nodeid)
     if report.when != "call" or not report.failed:
         return
     if call.excinfo is None:
