@@ -1057,3 +1057,37 @@ class TestMismatchNamesItsSnapshot:
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"a": {"b": 2}}).snapshot(id="diff-snap", path=str(tmp_path))
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("a.b")
+
+
+class TestContractSnapshotNamesItself:
+    """The drift report says which contract it measured against, like both sibling snapshot kinds."""
+
+    def test_named_contract_is_identified(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": 1, "tags": ["a"]}).matches_contract_snapshot(id="ct-named", path=str(tmp_path))
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"id": "one", "extra": 2}).matches_contract_snapshot(id="ct-named", path=str(tmp_path))
+        message = str(exc_info.value)
+        assert_that(message).contains("ct-named")
+        assert_that(message).contains("--assertpy2-snapshot-update")
+        # the purpose-built drift notation stays: the generic diff renderer reads worse here
+        assert_that(message).contains("+ extra")
+        assert_that(message).contains("~ id number -> str")
+
+    def test_line_keyed_contracts_are_told_apart(self, tmp_path):
+        def first(value):
+            assert_that(value).matches_contract_snapshot(path=str(tmp_path))
+
+        def second(value):
+            assert_that(value).matches_contract_snapshot(path=str(tmp_path))
+
+        with pytest.warns(SnapshotCreatedWarning):
+            first({"a": 1})
+        with pytest.warns(SnapshotCreatedWarning):
+            second({"b": 1})
+        with pytest.raises(AssertionError) as first_failure:
+            first({"a": "one"})
+        with pytest.raises(AssertionError) as second_failure:
+            second({"b": "one"})
+        assert_that(str(first_failure.value)).contains("::")
+        assert_that(str(first_failure.value)).is_not_equal_to(str(second_failure.value))

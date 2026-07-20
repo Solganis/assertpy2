@@ -742,9 +742,11 @@ class SnapshotMixin(_MixinBase):
         if stored is not _UNSET:
             drift = shape_diff(stored, contract)
             if drift:
+                located = snapname if id else f"{snapname}::{lineno}"
                 return self.error(
-                    f"Expected <{_truncated(str(self.val))}> to match contract snapshot <{snapname}>, but the structure"
-                    f" drifted:\n{_format_shape_drift(drift)}",
+                    f"Expected <{_truncated(str(self.val))}> to match contract snapshot, but the structure"
+                    f" drifted:\n{_format_shape_drift(drift)}\n"
+                    f"{_update_hint(f'Contract snapshot <{located}>', 'accept the new shape')}",
                     actual=self.val,
                 )
             return self
