@@ -20,6 +20,15 @@ __tracebackhide__ = True
 _PROBE_UNSET = object()
 
 
+_RETRIES: list[tuple[int, float, float]] = []
+"""Polls that only passed after retrying, as ``(attempts, elapsed)``.
+
+The recorder already samples every failed poll, so a probe that converges on its third attempt has
+already paid for the first two: collecting them costs a list append on a path that has just spent
+several sleeps.  Drained by the pytest plugin, which knows which test they belong to.
+"""
+
+
 class _PollRecorder:
     """Collects per-poll samples, collapsing identical runs and keeping the first and last polls."""
 
@@ -205,6 +214,10 @@ class AsyncAssertionBuilder:
                         builder = self._builder_func(val, self._description)
                         method = getattr(builder, name)
                         method(*args, **kwargs)
+                        if recorder is not None and recorder.total_polls:
+                            # it passed, but not on the first look: a probe that only converges after
+                            # retrying is the one that goes flaky in CI
+                            _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
                         return builder
                     except (
                         AssertionError,
@@ -326,6 +339,8 @@ class SyncAssertionBuilder:
                     builder = self._builder_func(val, self._description)
                     method = getattr(builder, name)
                     method(*args, **kwargs)
+                    if recorder is not None and recorder.total_polls:
+                        _RETRIES.append((recorder.total_polls + 1, time.monotonic() - start, self._timeout))
                     return builder
                 except (
                     AssertionError,

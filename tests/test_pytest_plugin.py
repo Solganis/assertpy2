@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from assertpy2 import assert_that, match
+from assertpy2 import assert_that, async_assertions, match
 from assertpy2 import errors as errors_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
@@ -843,3 +843,52 @@ class TestAllureNotAvailable:
         _run_hook(report, _make_call(exc=exc))
         assert_that(report.sections).is_length(1)
         assert_that(report.sections[0][0]).is_equal_to("AssertionFailure")
+
+
+class TestNearTimeoutReport:
+    """Retrying is what eventually() is for, so only a poll that burned its budget is worth naming."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        pytest_plugin._retried.clear()
+        yield
+        pytest_plugin._retried.clear()
+
+    @staticmethod
+    def _lines(rows):
+        pytest_plugin._retried.extend(rows)
+        reporter = MagicMock()
+        config = SimpleNamespace(pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter))
+        pytest_plugin._report_retries(config)
+        return [call.args[0] for call in reporter.write_line.call_args_list]
+
+    def test_a_poll_against_the_deadline_is_named(self):
+        lines = self._lines([("t.py::test_x", 41, 0.81, 1.0)])
+        assert_that("\n".join(lines)).contains("t.py::test_x").contains("81% of the budget")
+
+    def test_a_healthy_retry_is_not_named(self):
+        # converging at 2% of the budget is eventually() working, not a test about to go flaky
+        assert_that(self._lines([("t.py::test_x", 3, 0.04, 2.0)])).is_empty()
+
+    def test_nothing_collected_stays_quiet(self):
+        assert_that(self._lines([])).is_empty()
+
+    def test_a_zero_budget_is_not_divided_by(self):
+        assert_that(self._lines([("t.py::test_x", 2, 0.0, 0.0)])).is_empty()
+
+    def test_draining_tags_each_poll_with_its_test(self):
+        async_assertions._RETRIES.append((41, 0.81, 1.0))
+        pytest_plugin._drain_retries("t.py::test_x")
+        assert_that(pytest_plugin._retried).is_equal_to([("t.py::test_x", 41, 0.81, 1.0)])
+        assert_that(async_assertions._RETRIES).is_empty()
+
+    def test_worker_ships_retries_to_controller(self):
+        pytest_plugin._retried.append(("t.py::test_x", 41, 0.81, 1.0))
+        config = SimpleNamespace(workeroutput={})
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_retried"]).is_equal_to([["t.py::test_x", 41, 0.81, 1.0]])
+
+    def test_testnodedown_collects_worker_retries(self):
+        node = SimpleNamespace(workeroutput={"assertpy2_retried": [["t.py::test_x", 41, 0.81, 1.0]]})
+        pytest_testnodedown(node, None)
+        assert_that(pytest_plugin._retried).contains(("t.py::test_x", 41, 0.81, 1.0))

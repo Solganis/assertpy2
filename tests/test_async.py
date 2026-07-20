@@ -1,4 +1,5 @@
 import asyncio
+import itertools
 import logging
 import threading
 from io import StringIO
@@ -14,7 +15,7 @@ from assertpy2 import (
     soft_assertions,
     soft_fail,
 )
-from assertpy2.async_assertions import AsyncAssertionBuilder, _PollRecorder, _summarize
+from assertpy2.async_assertions import _RETRIES, AsyncAssertionBuilder, _PollRecorder, _summarize
 
 
 class TestEventuallyBasic:
@@ -536,3 +537,37 @@ class TestContextVarsIsolation:
             with soft_assertions():
                 assert_that(3).is_equal_to(4)
             assert_that(5).is_equal_to(6)
+
+
+class TestRetryCollection:
+    """A poll that converged late is recorded, so the plugin can name it after the run."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        _RETRIES.clear()
+        yield
+        _RETRIES.clear()
+
+    def test_a_retried_poll_is_recorded_with_its_budget(self):
+        states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
+        assert_that(lambda: next(states)).eventually_sync(timeout=2, interval=0.02).is_equal_to("READY")
+        assert_that(_RETRIES).is_length(1)
+        attempts, elapsed, budget = _RETRIES[0]
+        assert_that(attempts).is_equal_to(3)
+        assert_that(budget).is_equal_to(2)
+        assert_that(elapsed).is_greater_than(0)
+
+    def test_a_first_attempt_pass_records_nothing(self):
+        assert_that(lambda: "READY").eventually_sync(timeout=2, interval=0.02).is_equal_to("READY")
+        assert_that(_RETRIES).is_empty()
+
+    def test_the_async_path_records_too(self):
+        states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
+        asyncio.run(assert_that(lambda: next(states)).eventually(timeout=2, interval=0.02).is_equal_to("READY"))
+        assert_that(_RETRIES).is_length(1)
+
+    def test_a_timeout_records_nothing(self):
+        # it never converged, so it is a failure with a trace, not a poll that nearly made it
+        with pytest.raises(AssertionError):
+            assert_that(lambda: "PENDING").eventually_sync(timeout=0.1, interval=0.02).is_equal_to("READY")
+        assert_that(_RETRIES).is_empty()
