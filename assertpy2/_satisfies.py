@@ -73,9 +73,11 @@ def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
     if allow_empty or not _guard_enabled():
         return
     try:
-        empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the TypeError below
-    except TypeError:
-        return  # not sized: assume it has items rather than draining a one-shot iterable to find out
+        empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the except below
+    except Exception:  # a diagnostic must never crash the assertion it is watching
+        # no usable len(): an unsized value (a one-shot iterable) or a broken __len__.  Either way,
+        # stay out of the way rather than draining the value or surfacing its error as our own.
+        return
     if empty:
         warnings.warn(
             f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
