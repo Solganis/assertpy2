@@ -247,6 +247,11 @@ def _format_shape_drift(drift):
     return "\n".join(f"  {glyph[kind]} {where} {detail}".rstrip() for kind, where, detail in drift)
 
 
+def _update_hint(descriptor: str, action: str) -> str:
+    """One sentence naming the snapshot and how to accept the new value, shared by both kinds."""
+    return f"{descriptor}; rerun with --assertpy2-snapshot-update to {action}."
+
+
 class SnapshotMixin(_MixinBase):
     """Assertions that compare a value against a stored snapshot, recording it on the first run.
 
@@ -526,8 +531,7 @@ class SnapshotMixin(_MixinBase):
                 # not say which of them was compared
                 located = snapname if id else f"{snapname}::{lineno}"
                 raise AssertionFailure(
-                    f"{mismatch._message} Snapshot <{located}>;"
-                    " rerun with --assertpy2-snapshot-update to accept the new value.",
+                    f"{mismatch._message} {_update_hint(f'Snapshot <{located}>', 'accept the new value')}",
                     actual=mismatch.actual,
                     expected=mismatch.expected,
                     diff=mismatch.diff,
@@ -629,9 +633,19 @@ class SnapshotMixin(_MixinBase):
             return self
         if placeholders:
             self._check_placeholders(placeholders)
-        return self.is_equal_to(
-            expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
-        )
+        try:
+            return self.is_equal_to(
+                expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
+            )
+        except AssertionFailure as mismatch:
+            # the stored snapshot lives in this very call, and updating rewrites it in place: saying so
+            # is what the file-backed branch already does for its own kind
+            raise AssertionFailure(
+                f"{mismatch._message} {_update_hint('Inline snapshot', 'rewrite the literal here')}",
+                actual=mismatch.actual,
+                expected=mismatch.expected,
+                diff=mismatch.diff,
+            ) from None
 
     def matches_contract_snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter
         """Asserts that val's *structure* matches a contract snapshot stored previously.
