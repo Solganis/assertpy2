@@ -333,3 +333,14 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
     ```python
     assert_warn("foo", logger=my_logger).is_length(4)
     ```
+
+    The `assertpy2` logger carries its own handler and also propagates, so if your suite calls
+    `logging.basicConfig()` each warning is printed twice. Turning propagation off silences the
+    duplicate:
+
+    ```python
+    logging.getLogger("assertpy2").propagate = False
+    ```
+
+    That trade is yours to make: propagation is also how pytest's `caplog` fixture receives these
+    records, so turning it off stops you asserting on them.
