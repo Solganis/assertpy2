@@ -8,7 +8,7 @@ from typing import Final
 
 import pytest
 
-from . import _inline, errors
+from . import _inline, _satisfies, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from .errors import _json_safe, _render_diff
@@ -29,6 +29,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Overwrite failing assertpy2 snapshots with the current values instead of failing",
+    )
+    parser.addoption(
+        "--assertpy2-vacuous",
+        action="store_true",
+        default=False,
+        help="Warn when a universal assertion passes over an empty value, having checked nothing",
     )
     parser.addoption(
         "--assertpy2-snapshot-ci",
@@ -80,6 +86,8 @@ def pytest_configure(config):
     # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
+    if config.getoption("assertpy2_vacuous"):
+        _satisfies._VACUOUS_GUARD = True
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = True
     if config.getoption("assertpy2_snapshot_ci"):
@@ -90,6 +98,8 @@ def pytest_configure(config):
 
 def pytest_unconfigure(config):
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
+    if config.getoption("assertpy2_vacuous"):
+        _satisfies._VACUOUS_GUARD = False
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = False
     if config.getoption("assertpy2_snapshot_ci") or config.getoption("assertpy2_snapshot_no_ci"):

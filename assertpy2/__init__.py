@@ -14,7 +14,7 @@ from .assertpy import (
     soft_fail,
 )
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
-from .errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
+from .errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace, VacuousAssertionWarning
 from .file import contents_of
 from .matchers import Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
 from .snapshot import SnapshotCreatedWarning, SnapshotUpdatedWarning, register_snapshot_serializer
@@ -32,6 +32,7 @@ __all__ = [
     "SnapshotUpdatedWarning",
     "SoftAssertionCollector",
     "SyncAssertionBuilder",
+    "VacuousAssertionWarning",
     "WarningLoggingAdapter",
     "__version__",
     "add_extension",
