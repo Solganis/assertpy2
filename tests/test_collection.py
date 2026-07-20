@@ -176,3 +176,23 @@ def test_is_sorted_failure_bad_val():
 
 def test_chaining():
     assert_that(["a", "b", "c"]).is_iterable().is_type_of(list).is_sorted().is_length(3)
+
+
+def test_filter_that_empties_the_subject_says_so():
+    # an empty derived value carries no context of its own: without the origin the failure reads the
+    # same whether the input was empty or the filter removed every element
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([{"n": 1}, {"n": 2}]).filtered_on(lambda item: False).is_not_empty()
+    assert_that(str(exc_info.value)).contains("filtered_on() kept 0 of 2 items")
+
+
+def test_a_filter_that_keeps_something_adds_no_note():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([{"n": 1}, {"n": 2}]).filtered_on(lambda item: item["n"] == 1).is_length(5)
+    assert_that(str(exc_info.value)).does_not_contain("filtered_on() kept")
+
+
+def test_extracting_that_empties_the_subject_says_so():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([]).extracting("name").is_not_empty()
+    assert_that(str(exc_info.value)).contains("extracting() produced 0 of 0 items")
