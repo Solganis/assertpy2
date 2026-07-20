@@ -871,3 +871,44 @@ class TestShapeDiff:
         assert_that(shape_diff("number", "str")).is_equal_to([("retyped", "", "number -> str")])
         assert_that(shape_diff({"a": "number"}, "str")).is_equal_to([("retyped", "", "object -> str")])
         assert_that(shape_diff("str", ["number"])).is_equal_to([("retyped", "", "str -> list")])
+
+
+class TestContractFailuresCarryPaths:
+    """A validation failure exposes the same structured channel every other comparison does."""
+
+    @staticmethod
+    def _models():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Address(BaseModel):
+            city: str
+            zip: str
+
+        class User(BaseModel):
+            id: int
+            address: Address
+
+        return User
+
+    def test_paths_and_inputs_reach_the_diff(self):
+        user_cls = self._models()
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms({"id": "seven", "address": {"city": "Paris"}}, user_cls)
+        diff = exc_info.value.diff
+        assert_that(diff.kind).is_equal_to("match")
+        assert_that([entry.path for entry in diff.entries]).contains("id", "address.zip")
+        assert_that(next(entry for entry in diff.entries if entry.path == "id").actual).is_equal_to("seven")
+
+    def test_each_names_the_element_that_failed(self):
+        # without the index a hundred-element payload says which field broke but not which item
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Item(BaseModel):
+            sku: str
+            qty: int
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms([{"sku": "A", "qty": 2}, {"sku": "B", "qty": "two"}], Item, each=True)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[1].qty"])

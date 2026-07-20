@@ -42,7 +42,7 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure, _safe_repr, _truncated
+from .errors import AssertionFailure, DiffEntry, DiffResult, _safe_repr, _truncated
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -346,6 +346,24 @@ def assert_that(val: object, description="") -> _CoreAssertion:
     return _builder(val, description)
 
 
+def _contract_entries(exc: object, prefix: str = "") -> list[DiffEntry]:
+    """Turn a pydantic ``ValidationError`` into diff rows, mirroring the OpenAPI path in `json_mixin`.
+
+    ``errors()`` already carries the location, the message and the offending input, so the structured
+    channel costs a reshape rather than a second walk of the payload.  Under ``each=True`` the caller
+    passes the element's ``[i]`` prefix, the way ``contract_drift`` labels its own paths.
+    """
+    # duck-typed pydantic call, guarded by the hasattr check
+    errors = exc.errors() if hasattr(exc, "errors") else []  # ty: ignore[call-non-callable]
+    entries = []
+    for error in errors:
+        path = prefix
+        for segment in error.get("loc", ()):
+            path += f"[{segment}]" if isinstance(segment, int) else f".{segment}" if path else str(segment)
+        entries.append(DiffEntry(path=path or ".", actual=error.get("input"), expected=error.get("msg", "")))
+    return entries
+
+
 @overload
 def assert_conforms(
     val: object, model: type[_U], description: str = ..., *, exact: bool = ..., each: Literal[False] = ...
@@ -423,6 +441,7 @@ def assert_conforms(
                     f"Expected item [{index}] to conform to <{model.__name__}>, but it did not:\n{exc}",
                     actual=val,
                     expected=model,
+                    diff=DiffResult(kind="match", entries=_contract_entries(exc, f"[{index}]")),
                 )
         if exact:
             drift = [f"[{index}].{path}" for index, item in enumerate(val) for path in contract_drift(item, model)]
@@ -442,6 +461,7 @@ def assert_conforms(
             f"Expected <{_truncated(str(val))}> to conform to <{model.__name__}>, but it did not:\n{exc}",
             actual=val,
             expected=model,
+            diff=DiffResult(kind="match", entries=_contract_entries(exc)),
         )
     if exact:
         drift = contract_drift(val, model)
