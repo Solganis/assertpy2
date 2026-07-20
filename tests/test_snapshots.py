@@ -1017,3 +1017,43 @@ class TestContractSnapshot:
         monkeypatch.setattr(_snapshot, "_CI_MODE", True)
         with pytest.raises(AssertionError, match="CI mode forbids"):
             assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-ci", path=str(tmp_path))
+
+
+class TestMismatchNamesItsSnapshot:
+    """A mismatch must say which stored value it measured against, and how to accept the new one."""
+
+    def test_named_snapshot_is_identified(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).snapshot(id="named-snap", path=str(tmp_path))
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": 99}).snapshot(id="named-snap", path=str(tmp_path))
+        message = str(exc_info.value)
+        assert_that(message).contains("named-snap")
+        assert_that(message).contains("--assertpy2-snapshot-update")
+
+    def test_line_keyed_snapshots_are_told_apart(self, tmp_path):
+        # without an id the file holds one entry per line of the calling code, so each call site needs
+        # to run twice: once to record, once to compare
+        def first(value):
+            assert_that(value).snapshot(path=str(tmp_path))
+
+        def second(value):
+            assert_that(value).snapshot(path=str(tmp_path))
+
+        with pytest.warns(SnapshotCreatedWarning):
+            first({"a": 1})
+        with pytest.warns(SnapshotCreatedWarning):
+            second({"b": 1})
+        with pytest.raises(AssertionError) as first_failure:
+            first({"a": 99})
+        with pytest.raises(AssertionError) as second_failure:
+            second({"b": 99})
+        assert_that(str(first_failure.value)).contains("::")
+        assert_that(str(first_failure.value)).is_not_equal_to(str(second_failure.value))
+
+    def test_the_diff_survives_the_added_identity(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": {"b": 1}}).snapshot(id="diff-snap", path=str(tmp_path))
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": {"b": 2}}).snapshot(id="diff-snap", path=str(tmp_path))
+        assert_that(exc_info.value.diff.entries[0].path).is_equal_to("a.b")

@@ -12,7 +12,7 @@ from ._engine._compare import _build_compare_config
 from ._engine._contract import shape, shape_diff
 from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
-from .errors import _truncated
+from .errors import AssertionFailure, _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
@@ -511,9 +511,27 @@ class SnapshotMixin(_MixinBase):
         if snapshot_value is not _UNSET:
             if placeholders:
                 self._check_placeholders(placeholders)
-            return self.is_equal_to(
-                snapshot_value, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
-            )
+            try:
+                return self.is_equal_to(
+                    snapshot_value,
+                    ignore=effective_ignore,
+                    include=include,
+                    tolerance=tolerance,
+                    comparators=comparators,
+                )
+            except AssertionFailure as mismatch:
+                # name the snapshot the value was compared against: without it the failure is
+                # indistinguishable from a plain is_equal_to, and the reader has no file to open
+                # without a custom id the file holds one entry per line number, so the file alone does
+                # not say which of them was compared
+                located = snapname if id else f"{snapname}::{lineno}"
+                raise AssertionFailure(
+                    f"{mismatch._message} Snapshot <{located}>;"
+                    " rerun with --assertpy2-snapshot-update to accept the new value.",
+                    actual=mismatch.actual,
+                    expected=mismatch.expected,
+                    diff=mismatch.diff,
+                ) from None
         warnings.warn(
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
             " subsequent runs compare against it (delete the file to re-capture)",
