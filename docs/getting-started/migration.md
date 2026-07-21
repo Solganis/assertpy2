@@ -11,15 +11,15 @@ the switch is a single import.
 ## Before you start
 
 - **Python 3.10+ is required.** The original assertpy ran on Python 2.7 and 3.x. assertpy2 targets
-  3.10 through 3.15. If you are on an older interpreter, upgrade Python first - this is the only hard
+  3.10 through 3.15. If you are on an older interpreter, upgrade Python first. That is the only hard
   requirement of the migration.
 - **No runtime dependencies on Python 3.11+.** On 3.10 a single tiny backport (`typing_extensions`) is
   pulled in automatically. The extras (`[json]`, `[data]`, `[allure]`, `[behave]`) stay opt-in.
 
 ## Switch the import
 
-Swap the dependency first - uninstall `assertpy`, install `assertpy2`, and update your
-`requirements`/`pyproject` - then switch the imports:
+Swap the dependency first. Uninstall `assertpy`, install `assertpy2`, update your
+`requirements`/`pyproject`, then switch the imports:
 
 === "Before"
 
@@ -69,11 +69,14 @@ same results:
     structured data.
 
 !!! note "If your tests assert on message text"
-    assertpy2 writes more into some failures than the original did, usually by adding to the end of the
-    message. A `pytest.raises(match=...)` or a substring check keeps passing. Comparing a whole message
-    with `==` is the one thing that can break, both on the switch and between assertpy2 versions. Prefer
-    matching a substring, or skip the text entirely and assert on the structured data the failure
-    carries: `AssertionFailure.actual`, `.expected`, and `.diff`.
+    assertpy2 writes more into some failures than the original did, usually by adding to the end of
+    the message. A `pytest.raises(match=...)` or a substring check keeps passing.
+
+    Comparing a whole message with `==` is the one thing that can break, both on the switch and
+    between assertpy2 versions.
+
+    Prefer matching a substring. Better still, skip the text and assert on the structured data the
+    failure carries: `AssertionFailure.actual`, `.expected` and `.diff`.
 
 ## What improves automatically
 
@@ -82,13 +85,14 @@ You get these the moment you switch, without touching any test code:
 - **Thread-safe and async-safe soft assertions.** State is isolated per thread and per `asyncio.Task`
   via `contextvars`, so soft assertions are safe under `pytest-xdist` and `asyncio`. The original's soft
   assertions were not thread-safe.
-- **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the diff
-  is rendered into the message itself (so it shows in `unittest`, plain scripts, and CI logs). Under pytest
-  the auto-registered plugin renders it as a colored report section instead - recursive for lists, dicts,
-  dataclasses, namedtuples, attrs classes, and Pydantic models. Set `assertpy2_diff = "off"` to turn that
-  section off.
+- **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the
+  diff is rendered into the message itself, so it shows in `unittest`, plain scripts and CI logs.
+  Under pytest the auto-registered plugin renders it as a colored report section instead, recursive
+  for lists, dicts, dataclasses, namedtuples, attrs classes and Pydantic models. Set
+  `assertpy2_diff = "off"` to turn that section off.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
-  value's type, and a type checker flags misuse before the tests run - see [Type Safety](../concepts/type-safety.md).
+  value's type, and a type checker flags misuse before the tests run. See
+  [Type Safety](../concepts/type-safety.md).
 
 ## What you can now adopt
 

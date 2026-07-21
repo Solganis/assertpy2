@@ -123,6 +123,7 @@ data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 - [**Composable matchers**](https://solganis.github.io/assertpy2/guides/matchers/): `match.greater_than(5)`, `match.is_uuid()`, combine with `&`, `|`, `~`, usable in plain `assert ==`.
 - [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation.
 - [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph.
+- [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing.
 - [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion, no dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/guides/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 - [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/guides/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants.
