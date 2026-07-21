@@ -49,6 +49,19 @@ def test_is_subset_of():
     assert_that({"a": 1, "b": 2}).is_subset_of({"a": 3}, {"b": 2}, {"a": 1})
 
 
+def test_is_subset_of_accepts_unhashable_items():
+    # the contains family handles dicts and lists via == comparison; is_subset_of used to build a set
+    # and crash with a raw TypeError on the very same input
+    assert_that([{"a": 1}]).is_subset_of([{"a": 1}, {"b": 2}])
+    assert_that([[1]]).is_subset_of([[1], [2]])
+
+
+def test_is_subset_of_unhashable_failure_is_a_clean_assertion():
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([{"a": 1}, {"z": 9}]).is_subset_of([{"a": 1}, {"b": 2}])
+    assert_that(str(exc_info.value)).contains("was missing")
+
+
 def test_is_subset_of_single_item_superset():
     assert_that(["a"]).is_subset_of(["a"])
     assert_that((1,)).is_subset_of((1,))

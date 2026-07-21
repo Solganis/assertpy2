@@ -119,15 +119,19 @@ class CollectionMixin(_MixinBase):
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
                 )
         else:
-            superset_values = set()
+            collected = []
             for superset in supersets:
                 try:
-                    for key in superset:
-                        superset_values.add(key)
-                except TypeError:  # noqa: PERF203  # per-item fallback: a non-iterable superset is treated as a single value
-                    superset_values.add(superset)
-
-            missing.extend(item for item in self.val if item not in superset_values)
+                    collected.extend(superset)
+                except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
+                    collected.append(superset)
+            try:
+                allowed = set(collected)
+                missing.extend(item for item in self.val if item not in allowed)
+                superset_values: object = allowed
+            except TypeError:  # unhashable items (dicts, lists): linear == membership instead of a set
+                missing.extend(item for item in self.val if item not in collected)
+                superset_values = collected
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to be subset of {self._fmt_items(superset_values)}, "
