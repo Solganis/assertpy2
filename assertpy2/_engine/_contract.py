@@ -86,7 +86,7 @@ def contract_drift(payload: object, model: Any, path: str = "") -> list[str]:
     return drift
 
 
-def shape(value: object) -> object:
+def shape(value: object, _seen: frozenset[int] = frozenset()) -> object:
     """The structural shape of a value: paths and type *categories*, never values.
 
     Numbers collapse to one category (so ``5`` and ``5.0`` do not read as drift) and ``None`` becomes
@@ -101,10 +101,15 @@ def shape(value: object) -> object:
         return "number"
     if isinstance(value, str):
         return "str"
-    if isinstance(value, dict):
-        return {key: shape(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        element_shapes = [shape(item) for item in value]
+    if isinstance(value, (dict, list, tuple)):
+        if id(value) in _seen:
+            # a self-referential graph (an ORM backref, a tree with parent pointers) would otherwise
+            # recurse until the interpreter gives up; every sibling walker marks the cycle instead
+            return "<circular ref>"
+        nested = _seen | {id(value)}
+        if isinstance(value, dict):
+            return {key: shape(item, nested) for key, item in value.items()}
+        element_shapes = [shape(item, nested) for item in value]
         return [reduce(_merge, element_shapes)] if element_shapes else []
     return type(value).__name__
 

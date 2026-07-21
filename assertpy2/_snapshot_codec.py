@@ -31,19 +31,27 @@ _SERIALIZERS: list[_Serializer] = []
 _RESERVED_MARKERS = frozenset({"__type__", "__data__", "__tag__", "__class__", "__module__"})
 
 
-def _prepare(value):
+def _prepare(value, _seen: frozenset[int] = frozenset()):
     """Pre-process a value so ``json`` round-trips dicts that it otherwise mangles: dicts with a
     non-string key (which ``json`` coerces to a string) and dicts that collide with the codec's markers
     (which the decoder would misread).  Both are wrapped in a ``{"__type__": "dict", "__data__": [[k,
     v], ...]}`` envelope; a plain string-keyed dict without markers is left as an ordinary object so
     existing snapshots stay byte-identical."""
-    if isinstance(value, dict):
-        if all(isinstance(key, str) for key in value) and not _RESERVED_MARKERS.intersection(value):
-            return {key: _prepare(item) for key, item in value.items()}
-        items = sorted(value.items(), key=lambda pair: repr(pair[0]))  # deterministic order for mixed keys
-        return {"__type__": "dict", "__data__": [[_prepare(key), _prepare(item)] for key, item in items]}
-    if isinstance(value, (list, tuple)):
-        return [_prepare(item) for item in value]
+    if isinstance(value, (dict, list, tuple)):
+        if id(value) in _seen:
+            # json cannot represent a cycle at all, so the only question is how this fails: naming the
+            # cycle beats a thousand frames of RecursionError from an unguarded walk
+            raise ValueError("cannot snapshot a value that contains a circular reference")
+        nested = _seen | {id(value)}
+        if isinstance(value, dict):
+            if all(isinstance(key, str) for key in value) and not _RESERVED_MARKERS.intersection(value):
+                return {key: _prepare(item, nested) for key, item in value.items()}
+            items = sorted(value.items(), key=lambda pair: repr(pair[0]))  # deterministic for mixed keys
+            return {
+                "__type__": "dict",
+                "__data__": [[_prepare(key, nested), _prepare(item, nested)] for key, item in items],
+            }
+        return [_prepare(item, nested) for item in value]
     return value
 
 
