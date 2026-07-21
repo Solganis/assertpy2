@@ -1091,3 +1091,19 @@ class TestContractSnapshotNamesItself:
             second({"b": "one"})
         assert_that(str(first_failure.value)).contains("::")
         assert_that(str(first_failure.value)).is_not_equal_to(str(second_failure.value))
+
+
+class TestCyclicValues:
+    """Every other walker in the library marks a cycle; these two used to recurse until the stack gave out."""
+
+    def test_snapshot_names_the_cycle_instead_of_recursing(self, tmp_path):
+        node = {"id": 1}
+        node["self"] = node
+        with pytest.raises(ValueError, match="circular reference"):
+            assert_that(node).snapshot(id="cyc", path=str(tmp_path))
+
+    def test_contract_snapshot_records_a_cycle_marker(self, tmp_path):
+        node = {"id": 1}
+        node["self"] = node
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that(node).matches_contract_snapshot(id="cyc-shape", path=str(tmp_path))
