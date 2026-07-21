@@ -6,6 +6,7 @@ from io import StringIO
 
 import pytest
 
+import assertpy2.async_assertions as aa
 from assertpy2 import (
     AssertionFailure,
     PollSample,
@@ -543,10 +544,19 @@ class TestRetryCollection:
     """A poll that converged late is recorded, so the plugin can name it after the run."""
 
     @pytest.fixture(autouse=True)
-    def _clean(self):
+    def _clean(self, monkeypatch):
+        monkeypatch.setattr(aa, "_COLLECT_RETRIES", True)
         _RETRIES.clear()
         yield
         _RETRIES.clear()
+
+    def test_nothing_is_collected_without_the_plugin(self, monkeypatch):
+        # the plugin is the only consumer: off pytest (unittest, a script) the list would grow for the
+        # whole life of the process with nobody to drain it
+        monkeypatch.setattr(aa, "_COLLECT_RETRIES", False)
+        states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
+        assert_that(lambda: next(states)).eventually_sync(timeout=2, interval=0.02).is_equal_to("READY")
+        assert_that(_RETRIES).is_empty()
 
     def test_a_retried_poll_is_recorded_with_its_budget(self):
         states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))

@@ -86,6 +86,7 @@ def pytest_configure(config):
     # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
+    async_assertions._COLLECT_RETRIES = True
     if config.getoption("assertpy2_vacuous"):
         _satisfies._VACUOUS_GUARD = True
     if config.getoption("assertpy2_snapshot_update"):
@@ -98,6 +99,8 @@ def pytest_configure(config):
 
 def pytest_unconfigure(config):
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
+    async_assertions._COLLECT_RETRIES = False
+    async_assertions._RETRIES.clear()
     if config.getoption("assertpy2_vacuous"):
         _satisfies._VACUOUS_GUARD = False
     if config.getoption("assertpy2_snapshot_update"):
@@ -224,8 +227,9 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
 
-    if report.when == "call":
-        _drain_retries(report.nodeid)
+    # every phase, not just "call": a fixture that polls in teardown runs after the call report, so
+    # draining only there would tag its retries with the next test that happens to run
+    _drain_retries(report.nodeid)
     if report.when != "call" or not report.failed:
         return
     if call.excinfo is None:

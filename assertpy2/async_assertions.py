@@ -20,8 +20,16 @@ __tracebackhide__ = True
 _PROBE_UNSET = object()
 
 
+_COLLECT_RETRIES: bool = False
+"""Whether retried polls are collected at all.
+
+Turned on by the pytest plugin, which is the only consumer: it drains the list per test and reports at
+session end.  Off everywhere else (unittest, a plain script, ``-p no:assertpy2``) so nothing accumulates
+in a process that would never read it.
+"""
+
 _RETRIES: list[tuple[int, float, float]] = []
-"""Polls that only passed after retrying, as ``(attempts, elapsed)``.
+"""Polls that only passed after retrying, as ``(attempts, elapsed, budget)``.
 
 The recorder already samples every failed poll, so a probe that converges on its third attempt has
 already paid for the first two: collecting them costs a list append on a path that has just spent
@@ -214,7 +222,7 @@ class AsyncAssertionBuilder:
                         builder = self._builder_func(val, self._description)
                         method = getattr(builder, name)
                         method(*args, **kwargs)
-                        if recorder is not None and recorder.total_polls:
+                        if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                             # it passed, but not on the first look: a probe that only converges after
                             # retrying is the one that goes flaky in CI
                             _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
@@ -339,7 +347,7 @@ class SyncAssertionBuilder:
                     builder = self._builder_func(val, self._description)
                     method = getattr(builder, name)
                     method(*args, **kwargs)
-                    if recorder is not None and recorder.total_polls:
+                    if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                         _RETRIES.append((recorder.total_polls + 1, time.monotonic() - start, self._timeout))
                     return builder
                 except (

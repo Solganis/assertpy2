@@ -882,6 +882,16 @@ class TestNearTimeoutReport:
         assert_that(pytest_plugin._retried).is_equal_to([("t.py::test_x", 41, 0.81, 1.0)])
         assert_that(async_assertions._RETRIES).is_empty()
 
+    def test_a_teardown_phase_retry_keeps_its_own_test(self):
+        # teardown runs after the call report, so draining only on "call" would leave the retry sitting
+        # in the list until the NEXT test's call phase claimed it
+        async_assertions._RETRIES.append((41, 0.81, 1.0))
+        report = _make_report(when="teardown", failed=False)
+        report.nodeid = "t.py::test_owner"
+        _run_hook(report, _make_call())
+        assert_that([row[0] for row in pytest_plugin._retried]).is_equal_to(["t.py::test_owner"])
+        assert_that(async_assertions._RETRIES).is_empty()
+
     def test_worker_ships_retries_to_controller(self):
         pytest_plugin._retried.append(("t.py::test_x", 41, 0.81, 1.0))
         config = SimpleNamespace(workeroutput={})
