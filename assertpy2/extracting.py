@@ -225,8 +225,8 @@ class ExtractingMixin(_MixinBase):
             return True
 
         def _sort(item):
-            # only called when "sort" is in kwargs (the caller guards); 0 is a stable no-op for a sort
-            # arg that is not a str, iterable, or callable (e.g. an explicit sort=None)
+            # only called when "sort" is in kwargs (the caller guards); an explicit sort=None means
+            # "no ordering", and 0 is a stable no-op for it
             sort = kwargs["sort"]
             if isinstance(sort, str):
                 return _extract(item, sort)
@@ -234,7 +234,11 @@ class ExtractingMixin(_MixinBase):
                 return tuple(_extract(item, key) for key in sort if isinstance(key, str))
             if callable(sort):
                 return sort(item)
-            return 0
+            if sort is None:
+                return 0
+            # anything else is a mistake: silently returning unsorted items would be answered by a
+            # confusing order mismatch further down the chain, the way `filter` used to behave
+            raise TypeError(f"given sort arg must be a str, iterable, or callable, but was <{type(sort).__name__}>")
 
         # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val

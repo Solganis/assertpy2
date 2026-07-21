@@ -260,8 +260,15 @@ def test_extracting_sort_none():
     assert_that(users).extracting("user", sort=None).is_equal_to(["Fred", "Bob", "Johnny"])
 
 
-def test_extracting_sort_ignore_bad_type():
-    assert_that(users).extracting("user", sort=123).is_equal_to(["Fred", "Bob", "Johnny"])
+def test_extracting_sort_bad_type():
+    # mirrors filter: a wrong whole arg is a mistake, not a request for no ordering. Silently returning
+    # unsorted items surfaces later as a baffling order mismatch, or passes by luck.
+    with pytest.raises(TypeError, match="must be a str, iterable, or callable"):
+        assert_that(users).extracting("user", sort=123)
+
+
+def test_extracting_sort_none_means_no_ordering():
+    assert_that(users).extracting("user", sort=None).is_equal_to(["Fred", "Bob", "Johnny"])
 
 
 def test_extracting_sort_ignore_bad_key_types():
