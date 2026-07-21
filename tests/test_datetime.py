@@ -592,3 +592,34 @@ def test_naive_vs_aware_comparison_raises_clear_type_error():
     ):
         with pytest.raises(TypeError, match=r"timezone-aware one\. Make both aware or both naive first"):
             call()
+
+
+class TestNaiveAwareGuardCoversEqualityToo:
+    """The relational half already refuses the mix; comparing wall-clock fields hides it silently."""
+
+    @staticmethod
+    def _pair():
+        naive = datetime.datetime(2020, 1, 2, 3, 4, 5)
+        moscow = datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=datetime.timezone(datetime.timedelta(hours=3)))
+        return naive, moscow
+
+    def test_ignoring_milliseconds_refuses_a_mixed_pair(self):
+        naive, aware = self._pair()
+        with pytest.raises(TypeError, match="timezone-naive"):
+            assert_that(naive).is_equal_to_ignoring_milliseconds(aware)
+
+    def test_ignoring_seconds_refuses_a_mixed_pair(self):
+        # these two read equal to the minute yet stand three hours apart
+        naive, aware = self._pair()
+        with pytest.raises(TypeError, match="timezone-naive"):
+            assert_that(naive).is_equal_to_ignoring_seconds(aware)
+
+    def test_ignoring_time_refuses_a_mixed_pair(self):
+        naive, aware = self._pair()
+        with pytest.raises(TypeError, match="timezone-naive"):
+            assert_that(naive).is_equal_to_ignoring_time(aware)
+
+    def test_a_uniform_pair_still_compares(self):
+        naive, aware = self._pair()
+        assert_that(naive).is_equal_to_ignoring_seconds(naive)
+        assert_that(aware).is_equal_to_ignoring_seconds(aware)

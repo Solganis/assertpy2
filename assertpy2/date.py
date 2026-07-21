@@ -18,8 +18,12 @@ def _require_datetime(value: object, label: str) -> None:
 
 
 def _require_comparable_datetimes(first: datetime.datetime, second: datetime.datetime) -> None:
-    """Reject a naive-vs-aware pair with a clear message, instead of the raw ``TypeError`` the ``<``/``>``
-    comparison would otherwise leak (both operands are already validated as `datetime.datetime`)."""
+    """Reject a naive-vs-aware pair with a clear message.
+
+    The relational assertions would otherwise leak the raw ``TypeError`` from ``<``/``>``.  The
+    ``ignoring_*`` ones compare wall-clock fields, which silently answers a different question: two
+    instants hours apart read equal.  Both operands are already validated as `datetime.datetime`.
+    """
     if (first.utcoffset() is None) != (second.utcoffset() is None):
         raise TypeError(
             "cannot compare a timezone-naive datetime with a timezone-aware one. Make both aware or both naive first"
@@ -195,6 +199,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if (
             self.val.date() != other.date()
             or self.val.hour != other.hour
@@ -231,6 +236,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
@@ -262,6 +268,7 @@ class DateMixin(_MixinBase):
         """
         _require_datetime(self.val, "val")
         _require_datetime(other, "given arg")
+        _require_comparable_datetimes(self.val, other)
         if self.val.date() != other.date():
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
