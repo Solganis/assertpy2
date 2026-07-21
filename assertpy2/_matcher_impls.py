@@ -48,6 +48,16 @@ def _is_matcher(obj: object) -> TypeIs[Matcher]:
     return isinstance(obj, Matcher)
 
 
+def _require_matcher(operand: object, operator: str) -> None:
+    """Reject a non-matcher operand where the combinator is built, not where it is later applied.
+
+    Combining silently would hand back a matcher that raises ``AttributeError: 'int' object has no
+    attribute 'matches'`` at assertion time, far from the line that built it.
+    """
+    if not _is_matcher(operand):
+        raise TypeError(f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'")
+
+
 class BaseMatcher:
     """Abstract base for all matchers with operator support."""
 
@@ -61,11 +71,13 @@ class BaseMatcher:
         return f"was <{value}>"
 
     def __and__(self, other: Matcher) -> AllOfMatcher:
+        _require_matcher(other, "&")
         left = list(self.matchers) if isinstance(self, AllOfMatcher) else [self]
         right = list(other.matchers) if isinstance(other, AllOfMatcher) else [other]
         return AllOfMatcher(*left, *right)
 
     def __or__(self, other: Matcher) -> AnyOfMatcher:
+        _require_matcher(other, "|")
         left = list(self.matchers) if isinstance(self, AnyOfMatcher) else [self]
         right = list(other.matchers) if isinstance(other, AnyOfMatcher) else [other]
         return AnyOfMatcher(*left, *right)

@@ -1044,3 +1044,19 @@ class TestHasPropertyMatcher:
 
     def test_repr(self):
         assert_that(repr(match.has_property("name"))).is_equal_to("an object with property <name>")
+
+
+class TestCombinatorOperands:
+    """A non-matcher operand fails where the expression is written, not where it is later applied."""
+
+    def test_and_rejects_a_non_matcher(self):
+        with pytest.raises(TypeError, match=r"cannot combine a Matcher with <int> using '&'"):
+            match.is_positive() & 5
+
+    def test_or_rejects_a_non_matcher(self):
+        with pytest.raises(TypeError, match=r"cannot combine a Matcher with <str> using '\|'"):
+            match.is_positive() | "x"
+
+    def test_matcher_operands_still_combine(self):
+        assert_that(5).satisfies(match.is_positive() & match.less_than(10))
+        assert_that(5).satisfies(match.is_positive() | match.greater_than(99))
