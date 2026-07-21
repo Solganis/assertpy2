@@ -229,7 +229,9 @@ def test_contains_sequence_string_advances_past_match():
 def test_contains_sequence_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(4, 5)
-    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <4, 5>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3]> to contain sequence <4, 5>, but did not. No run started with <4>."
+    )
 
 
 def test_contains_sequence_tail_prefix_absent_fails_cleanly():
@@ -237,7 +239,9 @@ def test_contains_sequence_tail_prefix_absent_fails_cleanly():
     # the scan must fail cleanly (AssertionError), never walk off the end into IndexError (loop-bound guard)
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(3, 9)
-    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3]> to contain sequence <3, 9>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <[1, 2, 3]> to contain sequence <3, 9>, but did not. No run started with <3>."
+    )
 
 
 def test_contains_sequence_bad_val_failure():
@@ -266,13 +270,17 @@ def test_contains_sequence_string_substrings():
 def test_contains_sequence_string_substrings_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_sequence("bar", "foo")
-    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain sequence <'bar', 'foo'>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foobar> to contain sequence <'bar', 'foo'>, but <foo> was not found after <bar>."
+    )
 
 
 def test_contains_sequence_string_substrings_not_found():
     with pytest.raises(AssertionError) as exc_info:
         assert_that("foobar").contains_sequence("foo", "xyz")
-    assert_that(str(exc_info.value)).is_equal_to("Expected <foobar> to contain sequence <'foo', 'xyz'>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <foobar> to contain sequence <'foo', 'xyz'>, but <xyz> was not found after <foo>."
+    )
 
 
 def test_contains_sequence_string_bad_arg_type():
@@ -322,7 +330,9 @@ def test_does_not_contain_duplicates():
 def test_does_not_contain_duplicates_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3, 3]).does_not_contain_duplicates()
-    assert_that(str(exc_info.value)).is_equal_to("Expected <[1, 2, 3, 3]> to not contain duplicates, but did.")
+    assert_that(str(exc_info.value)).starts_with(
+        "Expected <[1, 2, 3, 3]> to not contain duplicates, but <3> was repeated."
+    )
 
 
 def test_does_not_contain_duplicates_bad_val_failure():
@@ -654,12 +664,12 @@ class TestContainsInOrder:
     def test_wrong_order_failure(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_in_order(3, 1)
-        assert_that(str(exc_info.value)).contains("in order, but did not")
+        assert_that(str(exc_info.value)).contains("in order, but")
 
     def test_missing_item_failure(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_in_order(1, 4)
-        assert_that(str(exc_info.value)).contains("in order, but did not")
+        assert_that(str(exc_info.value)).contains("in order, but")
 
     def test_empty_args_failure(self):
         with pytest.raises(ValueError) as exc_info:
@@ -670,3 +680,43 @@ class TestContainsInOrder:
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_in_order(1)
         assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+
+
+class TestOrderingFailuresNameTheBreakPoint:
+    """ "but did not" makes the reader re-derive where the run stopped; the loops already know."""
+
+    def test_sequence_names_the_longest_matching_run(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_sequence(1, 2, 9)
+        assert_that(str(exc_info.value)).contains("The longest run that matched was <1, 2>")
+
+    def test_sequence_with_no_matching_start_says_so_without_overclaiming(self):
+        # 3 IS in the list, just never where a two-element run still fits: the wording must not
+        # claim the element is absent
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_sequence(3, 4)
+        message = str(exc_info.value)
+        assert_that(message).contains("No run started with <3>")
+        assert_that(message).does_not_contain("No element equals")
+
+    def test_string_sequence_names_the_substring_that_broke_the_chain(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that("foobar").contains_sequence("foo", "xyz")
+        assert_that(str(exc_info.value)).contains("<xyz> was not found after <foo>")
+
+    def test_in_order_names_the_item_that_did_not_follow(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3]).contains_in_order(1, 2, 9)
+        assert_that(str(exc_info.value)).contains("<9> did not follow after <1, 2>")
+
+    def test_duplicates_name_the_repeated_values(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 1, 2, 2, 3]).does_not_contain_duplicates()
+        exc = exc_info.value
+        assert_that(str(exc)).contains("<1, 2> were repeated")
+        assert_that([entry.expected for entry in exc.diff.entries]).is_equal_to([1, 2])
+
+    def test_duplicates_work_on_unhashable_items(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([{"a": 1}, {"a": 1}]).does_not_contain_duplicates()
+        assert_that(str(exc_info.value)).contains("was repeated")

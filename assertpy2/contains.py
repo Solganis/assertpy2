@@ -286,21 +286,35 @@ class ContainsMixin(_MixinBase):
                     raise TypeError("given args must be strings when val is a string")
                 found_index = self.val.find(item, search_start)
                 if found_index == -1:
+                    # name where the chain broke: "but did not" makes the reader re-derive it by eye
+                    matched = items[: items.index(item)]
+                    trail = f" after {self._fmt_items(matched)}" if matched else ""
                     return self.error(
-                        f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not."
+                        f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but <{item}>"
+                        f" was not found{trail}."
                     )
                 search_start = found_index + len(item)
             return self
+        best_prefix = 0
         try:
             for i in range(len(self.val) - len(items) + 1):
                 for j in range(len(items)):
                     if self.val[i + j] != items[j]:
+                        best_prefix = max(best_prefix, j)
                         break
                 else:
                     return self
         except TypeError:
             raise TypeError("val is not iterable") from None
-        return self.error(f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not.")
+        # the longest run that lined up says where the sequence broke down
+        detail = (
+            f" The longest run that matched was {self._fmt_items(items[:best_prefix])}."
+            if best_prefix
+            # not "no element equals X": X may well be present, just never at a position where the
+            # whole sequence still fits
+            else f" No run started with <{items[0]}>."
+        )
+        return self.error(f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not.{detail}")
 
     def contains_duplicates(self) -> Self:
         """Asserts that val is iterable and *does* contain duplicates.
@@ -348,7 +362,22 @@ class ContainsMixin(_MixinBase):
             raise TypeError("val is not iterable") from None
         if not _has_duplicates(values):
             return self
-        return self.error(f"Expected <{self.val}> to not contain duplicates, but did.")
+        # name them: "but did" leaves the reader to scan the value for the repeat, and the sibling
+        # contains_only_once already reports exactly this shape
+        repeated = []
+        for value in values:
+            if values.count(value) > 1 and not any(value == seen for seen in repeated):
+                repeated.append(value)
+        return self.error(
+            f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(repeated)}"
+            f" {'was' if len(repeated) == 1 else 'were'} repeated.",
+            diff=DiffResult(
+                kind="contains",
+                entries=[
+                    DiffEntry(path="duplicated", actual=values.count(value), expected=value) for value in repeated
+                ],
+            ),
+        )
 
     def is_empty(self) -> Self:
         """Asserts that val is empty.
@@ -523,7 +552,13 @@ class ContainsMixin(_MixinBase):
             if item_index < len(items) and element == items[item_index]:
                 item_index += 1
         if item_index != len(items):
-            return self.error(f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but did not.")
+            # item_index counts how many lined up before the run stopped, so the next one is the culprit
+            matched = items[:item_index]
+            trail = f" after {self._fmt_items(matched)}" if matched else ""
+            return self.error(
+                f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but <{items[item_index]}>"
+                f" did not follow{trail}."
+            )
         return self
 
     def contains_only_once(self, *items: object) -> Self:

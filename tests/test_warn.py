@@ -70,7 +70,7 @@ def test_chained_failure():
 
     assert_that(out).contains("[test_warn.py:65]: Expected <foo> to be of length <4>, but was <3>.")
     assert_that(out).contains("[test_warn.py:65]: Expected <foo> to be in <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to not contain duplicates, but did.")
+    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to not contain duplicates, but <o> was repeated.")
 
 
 def test_failures_with_renamed_import():
