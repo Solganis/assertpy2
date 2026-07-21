@@ -116,6 +116,49 @@ assert_that([1, 2, 3]).has_size_greater_than(2).has_size_less_than(4).has_size_b
 
 `any_satisfy`, `all_satisfy`, and `none_satisfy` accept both callables and [matchers](matchers.md).
 
+#### Assertions that checked nothing
+
+`all_satisfy` over an empty collection passes, the way `all([])` is true: no item failed.
+
+That is the correct answer to the question asked. It is also the most common silent false pass in a
+suite, because a query that returned no rows leaves the assertion with nothing to examine.
+
+Turn the guard on and those cases say so:
+
+```bash
+pytest --assertpy2-vacuous
+```
+
+```text
+VacuousAssertionWarning: all_satisfy() passed over an empty value, so nothing
+was checked. Pass allow_empty=True if that is intended.
+```
+
+The warning points at your line, not at library code. To escalate or relocate it:
+
+- `-W error::assertpy2.VacuousAssertionWarning` turns it into a failure
+- `ASSERTPY2_VACUOUS=1` enables it for runners other than pytest
+
+It is off by default for two reasons. A suite running `filterwarnings = ["error"]` would start failing
+on upgrade, and a property-based test generates empty collections as a matter of course.
+
+When emptiness is the point of the test, say so per call and the guard stays quiet:
+
+```python
+archived_orders = []  # a fixture that yields nothing on a clean database
+
+assert_that(archived_orders).all_satisfy(lambda o: o["closed"], allow_empty=True)
+```
+
+`allow_empty` is accepted by the universal assertions:
+
+- `each`, `all_satisfy`, `all_fields_satisfy`, `has_no_none_fields`
+- `zip_satisfies`, `is_sorted`, `is_subset_of`
+
+The negative ones never warn. For `none_satisfy`, `does_not_contain` and
+`does_not_contain_duplicates` an empty subject is the expected pass, since "no errors were logged" is
+exactly what such a test wanted to hear.
+
 The exact-pairing and multiset assertions:
 
 - `satisfies_exactly` - pairs the i-th item with the i-th matcher (equal length required).
@@ -181,9 +224,9 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 
 ### Selective comparison (ignore / include)
 
-`is_equal_to()` can ignore or include specific keys or fields - across dicts, dataclasses, namedtuples,
-Pydantic models, attrs, and plain objects (for sequences, each element is compared pairwise with the
-same filters).
+`is_equal_to()` can ignore or include specific keys or fields. It works across dicts, dataclasses,
+namedtuples, Pydantic models, attrs classes, and plain objects. For a sequence, each element is
+compared pairwise under the same filters.
 
 The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those. Any other
 iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
@@ -342,6 +385,25 @@ assert_that(today).is_before_or_equal_to(today)
 assert_that(today).is_after_or_equal_to(yesterday)
 ```
 
+Both operands must agree on awareness.
+
+Comparing a timezone-naive datetime with an aware one raises a `TypeError` rather than answering. The
+naive value carries no zone, so there is no instant to compare it by.
+
+This holds for the `ignoring_*` assertions too. They would otherwise compare wall-clock fields and call
+two moments hours apart equal.
+
+<!-- docs-guard: skip -->
+```python
+naive = datetime.datetime(2020, 1, 2, 3, 4, 5)
+aware = datetime.datetime(2020, 1, 2, 3, 4, 5, tzinfo=datetime.UTC)
+
+assert_that(naive).is_before(aware)                      # TypeError
+assert_that(naive).is_equal_to_ignoring_seconds(aware)   # TypeError
+```
+
+Make both aware or both naive first, then the comparison is well defined.
+
 Equality can ignore units of time, and the numeric comparisons work on dates too:
 
 <!-- docs-guard: skip -->
@@ -492,7 +554,8 @@ assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_t
 #### Sorting
 
 `sort` orders the extracted items. It may be a key/attribute name, an iterable of names (tie-breaking
-left to right), or a key function:
+left to right), or a key function. `None` means no ordering; anything else is a mistake and raises a
+`TypeError`, rather than quietly handing back unsorted items for a later assertion to trip over:
 
 <!-- docs-guard: skip -->
 ```python

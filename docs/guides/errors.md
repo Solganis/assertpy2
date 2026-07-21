@@ -41,9 +41,10 @@ except AssertionError as e:
 ```
 
 The `..` in that message stands for the parts that matched. Only what differs is spelled out, so a
-one-field change in a wide object reads as `{.., 'b': 2}` rather than as both objects printed in full.
-Sequences are collapsed the same way once they grow past a line or so, which keeps a single changed
-element out of a forty-item dump:
+one-field change in a wide object reads as `{.., 'b': 2}` rather than as both objects in full.
+
+Sequences collapse the same way once they grow past a line or so, which keeps a single changed element
+out of a forty-item dump:
 
 ```python
 try:
@@ -68,18 +69,21 @@ except AssertionError as e:
     # Expected <.., line 3: line 3> to be equal to <.., line 3: line THREE>, but was not.
 ```
 
-Short values are printed whole, since collapsing them would hide context to save a few characters. When
-almost nothing matches there is little to collapse, so the message names the first few differences and
-counts the rest as `... and N more`. Either way every difference stays in the diff, so nothing is lost by
-the shorter message.
+Short values are printed whole, since collapsing them would hide context to save a few characters.
+
+When almost nothing matches there is little to collapse, so the message names the first few differences
+and counts the rest as `... and N more`.
+
+Either way every difference stays in the diff, so the shorter message loses nothing.
 
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
-Under pytest the plugin (auto-registered via the `pytest11` entry point, no configuration needed) renders
-this same diff as a dedicated colored report section instead, keeping the message itself to a single line
-so the diff is never shown twice. See [Rich pytest diffs](#rich-pytest-diffs) for supported types and
-configuration.
+Under pytest the plugin renders this same diff as a dedicated colored report section instead, keeping
+the message itself to a single line so the diff is never shown twice. It is auto-registered through the
+`pytest11` entry point and needs no configuration.
+
+See [Rich pytest diffs](#rich-pytest-diffs) for supported types and configuration.
 
 ## Rich pytest diffs
 
@@ -97,8 +101,8 @@ rendered by the plugin as colored diff sections.
 | Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
 | attrs class | `attrs` | Field-by-field, recursive into nested fields |
 | other | `scalar` | Single actual-vs-expected entry |
-| `contains` family | `contains` | Missing and extra items |
-| matcher mismatch | `match` | `matches_structure()` / `satisfies()` / `each()`: path + failed predicate |
+| `contains` family | `contains` | Missing and extra items, plus the repeat counts for a duplicate failure |
+| matcher mismatch | `match` | `satisfies()`, `each()`, `all_satisfy()`, `any_satisfy()`, `satisfies_exactly()`, `zip_satisfies()`, `matches_structure()`, `all_fields_satisfy()`: path + failed predicate |
 
 ```text
 --- AssertionFailure ---
@@ -106,52 +110,65 @@ rendered by the plugin as colored diff sections.
   expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
 ```
 
-The diff for that failure - and the other diff shapes - renders like this.
+The diff for that failure, and the other diff shapes, render like this.
 
 The comparison is recursive, so for a very large or deeply nested value it walks the whole object graph.
-When the payload is huge and you only care about a few fields, extract those and assert on them instead
-of comparing the whole thing - it is faster and the failure stays focused. See
+
+When the payload is huge and you care about a few fields, extract those and assert on them instead. It
+is faster and the failure stays focused. See
 [When full structural comparison is too much](../recipes.md#when-full-structural-comparison-is-too-much).
 
 ### What each diff kind looks like
 
-**Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, `attrs`, Pydantic `model`, `string`, `scalar`)
-show the path with the removal in red and the addition in green - this is the diff for the example above:
+**Value diffs** (`sequence`, `dict`, `dataclass`, `namedtuple`, `attrs`, Pydantic `model`, `string`,
+`scalar`) show the path with the removal in red and the addition in green. This is the diff for the
+example above:
 
 ![Colored sequence diff: [1].name with the removal in red and the addition in green](../assets/diff-sequence.svg)
 
-String values go finer than line-by-line: each changed line is diffed *within the line*, with difflib
-carets (`? ^^^`) pointing at the exact span - the same guides pytest's own assertion rewriting uses.
-`bytes` and `bytearray` take the same path, pointed at through their `b'...'` form:
+String values go finer than line-by-line. Each changed line is diffed *within the line*, with difflib
+carets (`? ^^^`) pointing at the exact span, the same guides pytest's own assertion rewriting uses.
+
+`bytes` and `bytearray` take that path too, pointed at through their `b'...'` form:
 
 ![Colored string diff: the changed word marked with difflib carets, removal in red and addition in green](../assets/diff-string.svg)
 
 The carets appear only when the two lines still resemble each other, at difflib's own 0.75 similarity
-cutoff. Past that the two lines are printed plainly: a guide that underlines most of the line says
-nothing the pair of values does not already say.
+cutoff.
+
+Past that the two lines are printed plainly. A guide underlining most of the line says nothing the pair
+of values does not already say.
 
 **Set and contains** show extra items in red and missing items in green:
 
 ![Colored set diff: extra items in red, missing items in green](../assets/diff-set.svg)
 
-**Match** (`matches_structure()`, `satisfies()`, `each()`) shows each field's path and the predicate that
-failed, with the actual value in red - every mismatch, not just the first (no green: a predicate has no
-"addition"):
+**Match** (the matcher-driven assertions listed in the table above) shows each field's path and the
+predicate that failed, with the actual value in red.
+
+Every mismatch is listed, not just the first. There is no green, since a predicate has no "addition".
 
 ![Colored match diff: each field's path, the failed predicate, and the actual value in red](../assets/diff-match.svg)
 
 Nested structures are diffed recursively and report the exact path to the differing value (for example
 `[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
 
-When two values render to the same text but are not equal - most often because they differ only in type -
-the message tags each with its type, so `assert_that("1").is_equal_to(1)` reads
+Two values can render to the same text and still not be equal, most often because they differ only in
+type.
+
+The message then tags each with its type, so `assert_that("1").is_equal_to(1)` reads
 `Expected <1:str> to be equal to <1:int>, but was not.` rather than a baffling `<1>` / `<1>`.
 
 !!! note
-    Cycle detection applies to the diff rendering and to the selective-comparison path
-    (`ignore` / `include`), which treats a revisited pair as equal rather than recursing. The bare
-    equality check itself follows Python's own `==` semantics, so comparing two structurally equal
-    *cyclic* graphs raises `RecursionError` - exactly as a plain `assert a == b` would.
+    Cycle detection covers every walker this library owns:
+
+    - the diff rendering, and the selective-comparison path (`ignore` / `include`), which treat a
+      revisited pair as equal rather than recursing
+    - a contract snapshot, which records a revisited node as `<circular ref>`
+    - a value snapshot, which fails with a message naming the cycle, since json cannot represent one
+
+    The bare equality check is not ours: it follows Python's own `==`, so two structurally equal
+    *cyclic* graphs raise `RecursionError` exactly as a plain `assert a == b` would.
 
 ### Polling failures carry a trace
 
@@ -193,6 +210,16 @@ assertpy2_diff_max_entries = "100"  # max entries to show (default 50, 0 = unlim
 
 With `--color=yes`, diffs are colored: red removals, green additions, cyan headers. Entries beyond
 the limit are hidden behind a `... and N more entries` summary.
+
+The plugin also adds `assertpy2_allure` (see [Allure](../extending/integrations.md#allure)) and these
+command-line flags, each documented where it is used:
+
+| Flag | What it does |
+|---|---|
+| [`--assertpy2-vacuous`](assertions.md#assertions-that-checked-nothing) | Warn when a universal assertion passes over an empty value |
+| [`--assertpy2-snapshot-update`](testing.md#snapshot-testing) | Overwrite failing snapshots with the current values |
+| [`--assertpy2-snapshot-ci`](testing.md#snapshot-testing) | Fail instead of creating a missing snapshot (auto-enabled on CI) |
+| `--assertpy2-snapshot-no-ci` | Disable CI mode and its autodetection |
 
 ## Failure and expected exceptions
 
@@ -237,9 +264,11 @@ err = assert_that(load).raises(ConfigError).when_called_with("bad.toml").raised(
 assert_that(err.code).is_equal_to(42)
 ```
 
-**The cause chain** - `caused_by()` asserts the exception was chained from a given cause (an explicit
-`raise ... from`, or an exception raised during handling), and `has_root_cause()` walks to the root of
-the chain. Both pivot to that cause's message so the chain continues:
+**The cause chain.** `caused_by()` asserts the exception was chained from a given cause, either an
+explicit `raise ... from` or one raised during handling.
+
+`has_root_cause()` walks to the root of the chain. Both pivot to that cause's message, so the chain
+continues:
 
 ```python
 # def save(row): ... raise ServiceError("save failed") from TimeoutError("db timeout")
@@ -295,9 +324,11 @@ To also assert on the value the call returned (alongside the warning, or after `
 
 !!! warning "Not thread-safe"
     `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global
-    state. They are safe within a single thread (including multiple `asyncio` tasks on one event
-    loop), but concurrent use across OS threads can interfere - the same limitation as
-    `pytest.warns` and `unittest.assertWarns`.
+    state.
+
+    They are safe within a single thread, including multiple `asyncio` tasks on one event loop.
+    Concurrent use across OS threads can interfere, the same limitation `pytest.warns` and
+    `unittest.assertWarns` carry.
 
 ### Custom error messages
 
@@ -318,10 +349,13 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
 ```
 
 !!! note "`assert_warn()` vs `warns()`"
-    These are unrelated despite the similar names. `assert_warn(...)` is a *soft* entry point: the
-    assertion still checks your value, but logs a warning instead of raising on failure.
-    `assert_that(func).warns(...)` is the opposite direction - it asserts that calling `func`
-    *emits* a Python warning.
+    These are unrelated despite the similar names.
+
+    `assert_warn(...)` is a *soft* entry point. The assertion still checks your value, but logs a
+    warning instead of raising on failure.
+
+    `assert_that(func).warns(...)` goes the opposite way. It asserts that calling `func` *emits* a
+    Python warning.
 
 ??? note "Warning output and custom logger"
     ```

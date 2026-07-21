@@ -1,17 +1,18 @@
 # Comparison
 
-The tables below compare assertpy2 side-by-side with the common alternatives - pytest's `assert`,
+The tables below compare assertpy2 side-by-side with the common alternatives: pytest's `assert`,
 PyHamcrest, the original assertpy, and dirty-equals.
 
 !!! success "In short"
-    assertpy2 unifies the fluent, matcher, and `==` styles in one typed package,
-    then adds thread- and async-safe soft assertions, async polling, structured failures, and rich
-    pytest diffs. It ships **39 composable matchers** and **over 100 assertion methods** across **12 value types**,
+    assertpy2 unifies the fluent, matcher, and `==` styles in one typed package, then adds thread-
+    and async-safe soft assertions, async polling, structured failures, and rich pytest diffs.
+
+    It ships **39 composable matchers** and **over 100 assertion methods** across **12 value types**,
     with no runtime dependencies on Python 3.11+.
 
 ## All three styles, one import
 
-assertpy2's fluent, matcher, and `==` styles are not mutually exclusive - a single import gives you all
+assertpy2's fluent, matcher, and `==` styles are not mutually exclusive. A single import gives you all
 three, mixable in the same test suite:
 
 ```python
@@ -42,7 +43,7 @@ assert_that(value).satisfies(match.greater_than(0) & match.less_than(100))
 
 ## In code
 
-The same check - `id` is a positive integer and `name` is a non-empty string - in each library:
+The same check, that `id` is a positive integer and `name` a non-empty string, in each library:
 
 === "assertpy2"
 
@@ -128,14 +129,16 @@ A nested response, after `role` comes back as `"superadmin"`. What each library 
     E   {'user': {'name': IsStr, 'role': IsOneOf('admin', 'user'), 'age': IsInt}}
     ```
 
-Only assertpy2 prints the path (`user.role`) and the exact predicate that failed. dirty-equals and the
-assertpy2 `==` form both hand rendering to pytest, which dumps the whole differing container for you to
-scan. The fluent form trades the zero-import convenience of `==` for a path-level diff.
+Only assertpy2 prints the path (`user.role`) and the exact predicate that failed.
+
+dirty-equals and the assertpy2 `==` form both hand rendering to pytest, which dumps the whole differing
+container for you to scan. The fluent form trades the zero-import convenience of `==` for a path-level
+diff.
 
 ### With a Pydantic model or attrs instance
 
-When the value is a Pydantic model - or an `attrs` instance - `matches_structure()` accepts it directly,
-with no `.model_dump()` / `attrs.asdict()` step: it is normalized to its fields and printed with a
+When the value is a Pydantic model or an `attrs` instance, `matches_structure()` accepts it directly,
+with no `.model_dump()` / `attrs.asdict()` step. It is normalized to its fields and printed with a
 path-level diff just like the one above:
 
 ```python
@@ -186,6 +189,8 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 | Soft assertions thread-safe **and** async-safe | n/a | n/a | No | n/a | **[Yes](../guides/testing.md#soft-assertions)** |
 | Grouped soft assertions (`sa.group`) | No | No | No | No | **[Yes](../guides/testing.md#grouped-soft-assertions)** |
 | Async / sync polling (`eventually()` / `eventually_sync()`) | No | No | No | No | **[Yes](../guides/testing.md#async-assertions)** |
+| Convergence trace on a timed-out poll | No | No | No | No | **[Yes](../guides/testing.md#polling-trace)** |
+| Guard against an assertion that checked nothing | No | No | No | No | **[Yes](../guides/assertions.md#assertions-that-checked-nothing)** |
 | Structured failure data (`.actual` / `.expected` / `.diff`) | No | No | No | No | **[Yes](../guides/errors.md#structured-errors)** |
 | Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](../guides/errors.md#rich-pytest-diffs)** |
 | Snapshot testing | plugin | No | **Yes** | No | **[Yes](../guides/testing.md#snapshot-testing)** |
@@ -193,13 +198,15 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 | Allure / Behave integrations | No | No | No | No | **[Yes](../extending/integrations.md)** |
 
 !!! note "On snapshot testing: where assertpy2 does and does not lead"
-    That row compares assertion libraries, not the dedicated snapshot tools - and it is worth being
-    straight about the difference. If snapshots are central to your workflow, the specialists lead that
-    niche: [syrupy](https://github.com/syrupy-project/syrupy) for external-file snapshots, and
+    That row compares assertion libraries, not the dedicated snapshot tools, and the difference is
+    worth being straight about.
+
+    If snapshots are central to your workflow, the specialists lead that niche:
+    [syrupy](https://github.com/syrupy-project/syrupy) for external-file snapshots, and
     [inline-snapshot](https://15r10nk.github.io/inline-snapshot/) for in-source snapshots.
 
-    assertpy2 gives you three snapshot styles bundled with the rest of your assertions - no extra tool,
-    no extra dependency:
+    assertpy2 gives you three snapshot styles bundled with the rest of your assertions, with no extra
+    tool and no extra dependency:
 
     - [`snapshot()`](../guides/testing.md#snapshot-testing) - external-file, syrupy-family.
     - [`matches_inline()`](../guides/testing.md#inline-snapshots) - in-source literal. Records correctly
@@ -208,9 +215,10 @@ whole differing container. assertpy2 keeps a path-level diff on either.
       *structural* snapshot (paths and type categories, not values), which neither syrupy nor
       inline-snapshot offers.
 
-    The first two are not category-leading engines, and do not try to be. **Rule of thumb:** reach for a
-    specialist when snapshots are the point. Reach for assertpy2's when you want a snapshot inline with
-    everything else, or structural (contract) regression rather than value-exact.
+    The first two are not category-leading engines, and do not try to be.
+
+    **Rule of thumb:** reach for a specialist when snapshots are the point. Reach for assertpy2's when
+    you want a snapshot inline with everything else, or structural regression rather than value-exact.
 
 ## What only assertpy2 does here
 
@@ -226,8 +234,11 @@ Across the columns above, assertpy2 is the only option that:
 - has soft assertions that are both **thread-safe and async-safe** (independent state per thread and per
   `asyncio.Task` via `contextvars`). The original assertpy's soft assertions are not thread-safe, and
   the other tools have no soft assertions at all
-- polls for eventual consistency with `eventually()` (async) and `eventually_sync()` (blocking), for async
-  operations and reactive systems
+- polls for eventual consistency with `eventually()` (async) and `eventually_sync()` (blocking), and a
+  timed-out poll [diagnoses itself](../guides/testing.md#polling-trace): the failure says whether the
+  value never moved, cycled between states, or was still converging when time ran out
+- [warns when a universal assertion passed over an empty collection](../guides/assertions.md#assertions-that-checked-nothing),
+  the silent false pass that a green run never reveals
 - attaches structured failure data (`.actual` / `.expected` / `.diff`) and renders rich, recursive
   diffs in pytest reports
 - adds exception cause-chain and group assertions, a collection pipeline, regex group extraction, dynamic

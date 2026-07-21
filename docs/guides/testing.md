@@ -3,8 +3,9 @@
 ## Soft assertions
 
 By default a failure halts the test immediately. Soft assertions collect failures and raise them
-together at the end, so one run reports every problem - and each collected failure carries its
-`file:line`, so you can jump straight to the assertion that failed:
+together at the end, so one run reports every problem.
+
+Each collected failure carries its `file:line`, so you can jump straight to the assertion that failed:
 
 ```python
 from assertpy2 import assert_that, soft_assertions
@@ -50,10 +51,11 @@ with soft_assertions() as sa:
     ```
 
 !!! note
-    Soft mode collects *assertion* failures only. After a failed `raises()` / `warns()` +
-    `when_called_with()` inside a soft context there is no captured value to assert on, so the rest
-    of that one chain becomes inert and is skipped silently. Independent assertions that follow are
-    collected as usual.
+    Soft mode collects *assertion* failures only.
+
+    After a failed `raises()` / `warns()` + `when_called_with()` there is no captured value left to
+    assert on, so the rest of that one chain goes inert and is skipped silently. Independent
+    assertions that follow are collected as usual.
 
 ### assert_all
 
@@ -94,9 +96,11 @@ await assert_that(get_name).eventually().starts_with("Al")
 await assert_that(get_count).eventually().is_between(10, 20)
 ```
 
-By default only a failing assertion is retried: any exception raised by the probe itself propagates
-immediately. When "not ready yet" manifests as an exception (a connection refused while a service
-boots, a record not yet visible), list those exception types in `ignoring`:
+By default only a failing assertion is retried. Any exception raised by the probe itself propagates
+immediately.
+
+When "not ready yet" arrives as an exception, such as a refused connection while a service boots,
+list those exception types in `ignoring`:
 
 ```python
 await assert_that(get_order).eventually(timeout=10, ignoring=ConnectionError).has_status(
@@ -114,7 +118,7 @@ await assert_that(get_order).eventually().within(10).ignoring(
     immediately. On timeout the last failure is chained for context. `ignoring` accepts only
     `Exception` subclasses, so `KeyboardInterrupt` and friends can never be swallowed.
 
-    Polling itself is always strict - retrying requires hard failures - but the final timeout
+    Polling itself is always strict, since retrying requires hard failures. Only the final timeout
     failure honors the builder's mode: inside `soft_assertions()` it is collected instead of
     raised, and under `assert_warn()` it is logged.
 
@@ -134,26 +138,30 @@ assert_that(get_order).eventually_sync().within(10).ignoring(ConnectionError).ha
 )
 ```
 
-Retry rules, soft/warn behavior, and the polling trace are identical to `eventually()`. The one
-difference: the probe must be a sync callable - a probe that returns an awaitable raises
-`TypeError` (poll async probes with `eventually()` and `await`).
+Retry rules, soft/warn behavior, and the polling trace are identical to `eventually()`.
+
+The one difference is that the probe must be a sync callable. One that returns an awaitable raises
+`TypeError`, so poll async probes with `eventually()` and `await`.
 
 ### Polling trace
 
 Every poll is recorded, so a timeout failure diagnoses itself instead of just reporting that time ran
 out. The message opens with a one-line trend that pins the failure mode:
 
-- `probe raised ConnectionError on all 12 polls` - the service never came up
-- `value unchanged across 12 polls` - it converged to the wrong value
-- `value changed 3 times; last change 0.4s before the deadline` - the timeout is too short
-- `value cycles between 2 states across 12 polls` - it keeps returning to earlier values, so waiting
-  longer will not help.
+| Trend line | What it means |
+|---|---|
+| `probe raised ConnectionError on all 12 polls` | the service never came up |
+| `value unchanged across 12 polls` | it converged to the wrong value |
+| `value changed 3 times; last change 0.4s before the deadline` | the timeout is too short |
+| `value cycles between 2 states across 12 polls` | it keeps returning to earlier values, so waiting longer will not help |
 
-The raised `AssertionFailure` carries the full timeline as `.trace` (a
-[`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples, identical consecutive polls collapsed).
-In the pytest report, a `Polling Trace` section leads with that one-line summary - total polls, elapsed
-time, how the value moved - and then lists every distinct poll: its offset, the repeat count, and the
-error or failure it produced:
+The raised `AssertionFailure` carries the full timeline as `.trace`, a
+[`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples with identical consecutive polls
+collapsed.
+
+In the pytest report a `Polling Trace` section leads with that one-line summary, covering total polls,
+elapsed time and how the value moved. It then lists every distinct poll with its offset, repeat count
+and the error or failure it produced:
 
 ```text
   t=+0.0s error x2: ConnectionError('boot')
@@ -162,16 +170,39 @@ error or failure it produced:
 ```
 
 Allure receives the same timeline as a typed `Polling Trace` JSON attachment, with diffs between
-consecutive distinct samples. Sample values are point-in-time snapshots - safe even when the probe
-mutates and returns the same object - capped by the same limits as other attachments, so long polls
-keep the first 5 and last 20 samples.
+consecutive distinct samples.
+
+Sample values are point-in-time snapshots, so they stay correct even when the probe mutates and
+returns the same object. They are capped like other attachments: long polls keep the first 5 and last
+20 samples.
 
 In soft/warn modes the message keeps the trend line. The full trace object travels only with the
 strict `AssertionFailure`.
 
-The recorder can be switched off per assertion with `trace=False` (on both `eventually()` and
-`eventually_sync()`) for the rare case where a near-zero interval meets a heavy probed value and
-even point-in-time snapshots cost too much. The timeout failure then reports just the last failure.
+The recorder can be switched off per assertion with `trace=False`, on both `eventually()` and
+`eventually_sync()`.
+
+That is for the rare case where a near-zero interval meets a heavy probed value and even point-in-time
+snapshots cost too much. The timeout failure then reports just the last failure.
+
+#### Polls that nearly timed out
+
+A poll that converges on its fifth attempt is `eventually()` doing its job, so a retry on its own says
+nothing.
+
+Burning most of the budget before converging says a great deal. That run passed, and the next one on a
+slower machine will not. Under pytest those are collected across the run and listed at the end:
+
+```text
+assertpy2 polls that nearly timed out:
+  tests/test_orders.py::test_status: converged on attempt 41 at 0.81s of 1.0s (81% of the budget)
+```
+
+Only polls past 70% of their timeout are named, so a healthy suite prints nothing. The report is
+advisory and never fails a run.
+
+Polls are attributed to the test that made them, including those a fixture makes in setup or teardown.
+Under `pytest-xdist` the workers ship their findings to the controller, which prints the combined list.
 
 ## Snapshot testing
 
@@ -189,9 +220,11 @@ Most Python structures are supported: `dict`, `list`, `set`, objects, numbers, `
 folder) to source control.
 
 !!! note
-    The capture warning makes a first run visible - a wrong first capture would otherwise silently
-    become the reference. Under `-W error` (or `filterwarnings = ["error"]`) a new capture fails
-    explicitly, which is usually what you want in CI.
+    The capture warning makes a first run visible. Without it a wrong first capture would silently
+    become the reference.
+
+    Under `-W error` (or `filterwarnings = ["error"]`) a new capture fails explicitly, which is
+    usually what you want in CI.
 
 ### Updating snapshots
 
@@ -207,7 +240,7 @@ pytest --assertpy2-snapshot-update
 ```
 
 For runners other than pytest, set the `ASSERTPY2_SNAPSHOT_UPDATE=1` environment variable instead.
-Deleting the snapshot files and re-running the suite still works too - each fresh capture emits a
+Deleting the snapshot files and re-running the suite still works too, and each fresh capture emits a
 `SnapshotCreatedWarning`.
 
 ### CI mode
@@ -237,14 +270,16 @@ assertpy2 snapshots:
   obsolete snapshot file: __snapshots/snap-test_legacy.json
 ```
 
-Each line carries a short hint on how to remove it. Reporting is always safe. Removal is deliberately
-conservative. An obsolete sub-snapshot (a line-number key in a file whose module still ran) is pruned
-only under update mode on a *full* run, so a run narrowed by `-k`, `-m`, `--lf`, or `--ff` never deletes
-a snapshot that only looks unused because its test was deselected.
+Each line carries a short hint on how to remove it. Reporting is always safe.
 
-A whole obsolete file is only ever reported, never auto-deleted. Under `pytest-xdist` the
-touched-snapshot sets from all workers are aggregated on the controller first, so a snapshot exercised
-on another worker is never mistaken for an orphan.
+Removal is deliberately conservative. An obsolete sub-snapshot, meaning a line-number key in a file
+whose module still ran, is pruned only under update mode on a *full* run.
+
+That way a run narrowed by `-k`, `-m`, `--lf` or `--ff` never deletes a snapshot that merely looks
+unused because its test was deselected. A whole obsolete file is only ever reported, never deleted.
+
+Under `pytest-xdist` the touched-snapshot sets from all workers are aggregated on the controller
+first, so a snapshot exercised on another worker is never mistaken for an orphan.
 
 ### Inline snapshots
 
@@ -262,8 +297,8 @@ assert_that(client.get("/orders/1").json()).matches_inline(
 )
 ```
 
-Later runs compare against the literal, and update mode overwrites it on drift - just like `snapshot()`.
-The same selective knobs apply, so volatile fields never make the snapshot brittle:
+Later runs compare against the literal, and update mode overwrites it on drift, just as `snapshot()`
+does. The same selective knobs apply, so volatile fields never make the snapshot brittle:
 
 ```python
 assert_that(order).matches_inline(
@@ -272,18 +307,21 @@ assert_that(order).matches_inline(
 ```
 
 A recorded literal holds the value captured on that run, so a placeholder field shows the captured `id`
-rather than the `0` above - the placeholder governs the comparison, not what is written.
+rather than the `0` above. The placeholder governs the comparison, not what is written.
 
-Recording needs the `[inline]` extra (`pip install assertpy2[inline]`). The **comparison** does not -
-it is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
+Recording needs the `[inline]` extra (`pip install assertpy2[inline]`). The **comparison** does not.
+
+It is a plain equality check, so it runs under `pytest-xdist` and needs no source introspection or
 assertion rewriting.
 
 Under xdist the recorded edits are shipped to the controller and applied once, never written by
 workers in parallel.
 
-Inline snapshots hold source **literals**, so only JSON-ish values work (a `dict`/`list`/`tuple`/`set`
-of scalars). For a `datetime`, `Decimal`, `UUID`, or a custom object use `snapshot()` instead - the two
-are complementary, sharing the same update flag, CI mode, selective comparison, and structured diff.
+Inline snapshots hold source **literals**, so only JSON-ish values work: a `dict`, `list`, `tuple` or
+`set` of scalars.
+
+For a `datetime`, `Decimal`, `UUID` or a custom object use `snapshot()` instead. The two are
+complementary and share the same update flag, CI mode, selective comparison and structured diff.
 
 ### Custom types
 
@@ -298,16 +336,20 @@ import pathlib
 register_snapshot_serializer(pathlib.PurePath, str, pathlib.PurePath)
 ```
 
-Matching is by `isinstance` (subclasses included), the registry is consulted before the built-ins, and
-a later registration wins. The `decode` half runs your own code on load, so it is a trusted, explicit
-opt-in - unlike the automatic instance decode, which never imports.
+Matching is by `isinstance`, subclasses included. The registry is consulted before the built-ins, and
+a later registration wins.
+
+The `decode` half runs your own code on load, so it is a trusted, explicit opt-in. The automatic
+instance decode never imports anything.
 
 ### Contract snapshots
 
 `snapshot()` compares exact values, so a response full of generated ids and timestamps needs `ignore`
-or `placeholders` to stay stable. When you care about the response's *shape* rather than its values,
-reach for `matches_contract_snapshot()`: it records the structure - paths and type categories, never
-values - and on later runs fails only on **structural** drift (a field added, removed, or retyped).
+or `placeholders` to stay stable.
+
+When you care about the response's *shape* rather than its values, reach for
+`matches_contract_snapshot()`. It records paths and type categories, never values, and on later runs
+fails only on **structural** drift: a field added, removed, or retyped.
 
 ```python
 assert_that(response.json()).matches_contract_snapshot()
@@ -322,9 +364,11 @@ Expected <{...}> to match contract snapshot <...>, but the structure drifted:
   ~ id number -> str
 ```
 
-No hand-written model is needed - the contract is inferred from the first response, and it shares the
-same storage, update mode, and CI mode as `snapshot()`. The model-driven counterpart is
-[`assert_conforms(..., exact=True)`](../concepts/type-safety.md#contract-drift-with-exacttrue): reach
+No hand-written model is needed. The contract is inferred from the first response, and it shares the
+same storage, update mode and CI mode as `snapshot()`.
+
+The model-driven counterpart is
+[`assert_conforms(..., exact=True)`](../concepts/type-safety.md#contract-drift-with-exacttrue). Reach
 for that when you already have a pydantic model.
 
 Because a contract is inferred from a single observation it cannot know which fields are optional, so a
@@ -367,7 +411,7 @@ assert_that({"a": 1}).snapshot(path="my-custom-folder")
 
 ### Volatile fields and float noise
 
-The comparison accepts the same selective options as `is_equal_to()` - `ignore`, `include`,
+The comparison accepts the same selective options as `is_equal_to()`: `ignore`, `include`,
 `tolerance`, and `comparators` - so timestamps, generated ids, or float jitter don't break snapshots.
 The snapshot file always stores the full value. The options only shape the comparison:
 
@@ -383,14 +427,26 @@ assert_that(payload).snapshot(
 
 ### Known limitations
 
-- **Tuples round-trip as lists** (JSON has no tuple), so a snapshot of `(1, 2)` compares as `[1, 2]`
-  on the next run and fails. Convert tuples before snapshotting.
-- **Supported types** are the JSON natives plus `set`, `complex`, `datetime`/`date`/`time`
-  (microseconds and timezone-aware included), `Decimal`, `bytes`/`bytearray` (base64-encoded, compared
-  as `bytes`), `uuid.UUID`, `Enum` members, and any object with a `__dict__`. Anything else needs
-  [`register_snapshot_serializer()`](#custom-types) - a value with no JSON form (e.g. `frozenset`)
-  raises `TypeError` on capture.
-- **Snapshot ids are case-insensitive**: filenames are lower-cased, so ids differing only by case
-  collide in one file.
-- **The write lock is not crash-safe**: a process killed mid-write leaves a stale `.lock` file next
-  to the snapshot. Delete it if snapshot writes start timing out.
+Beyond the JSON natives, these types survive a round-trip:
+
+| Type | Stored as |
+|---|---|
+| `set` | a tagged list |
+| `complex` | a tagged pair |
+| `datetime` / `date` / `time` | ISO text, microseconds and timezone kept |
+| `Decimal` | exact text, never a float |
+| `bytes` / `bytearray` | base64, both compared as `bytes` |
+| `uuid.UUID`, `Enum` members | their canonical text form |
+| any object with a `__dict__` | its attributes |
+
+Anything else raises `TypeError` on capture. Teach the codec with
+[`register_snapshot_serializer()`](#custom-types), which is what a `frozenset` or a domain class needs.
+
+Three more things worth knowing:
+
+- **A tuple comes back as a list**, since JSON has no tuple. A snapshot of `(1, 2)` compares as
+  `[1, 2]` on the next run and fails, so convert tuples before snapshotting.
+- **Snapshot ids are case-insensitive.** Filenames are lower-cased, so two ids differing only by case
+  land in one file.
+- **The write lock is not crash-safe.** A process killed mid-write leaves a stale `.lock` beside the
+  snapshot. Delete it if snapshot writes start timing out.
