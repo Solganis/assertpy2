@@ -364,12 +364,24 @@ class SatisfiesMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        if _is_matcher(matcher):
-            if not any(matcher.matches(item) for item in self.val):
-                return self.error(f"Expected any item to satisfy {matcher.describe()}, but none did.")
-        elif callable(matcher):
-            if not any(matcher(item) for item in self.val):
-                return self.error(f"Expected any item to satisfy {_describe_matcher(matcher)}, but none did.")
+        description = _describe_matcher(matcher)
+        if _is_matcher(matcher) or callable(matcher):
+            if not any(_apply_matcher(matcher, item) for item in self.val):
+                # "none did" alone leaves the reader to fetch the items themselves; the universal
+                # sibling already lists every one that failed
+                items = list(self.val)
+                return self.error(
+                    f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
+                    actual=self.val,
+                    expected=description,
+                    diff=DiffResult(
+                        kind="match",
+                        entries=[
+                            DiffEntry(path=f"[{index}]", actual=item, expected=description)
+                            for index, item in enumerate(items[:5])
+                        ],
+                    ),
+                )
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self

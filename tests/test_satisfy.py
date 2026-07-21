@@ -91,3 +91,25 @@ class TestNoneSatisfy:
 
     def test_none_satisfy_empty_iterable(self):
         assert_that([]).none_satisfy(match.is_positive())
+
+
+class TestAnySatisfyShowsWhatItExamined:
+    """The universal sibling lists every failure; "none did" left the reader to fetch the items."""
+
+    def test_the_examined_items_reach_the_message(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2]).any_satisfy(match.greater_than(9))
+        exc = exc_info.value
+        assert_that(str(exc)).contains("none of the 2 did")
+        assert_that([entry.path for entry in exc.diff.entries]).is_equal_to(["[0]", "[1]"])
+        assert_that([entry.actual for entry in exc.diff.entries]).is_equal_to([1, 2])
+
+    def test_a_callable_predicate_is_described_too(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2]).any_satisfy(lambda item: item > 9)
+        assert_that(str(exc_info.value)).contains("a lambda predicate")
+
+    def test_an_empty_subject_still_reports_cleanly(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([]).any_satisfy(lambda item: True)
+        assert_that(str(exc_info.value)).contains("none of the 0 did")
