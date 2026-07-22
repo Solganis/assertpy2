@@ -183,7 +183,9 @@ class FileMixin(_MixinBase):
         if not isinstance(parent, (str, os.PathLike)):
             raise TypeError("given parent directory arg must be a path")
         val_abspath = os.path.abspath(self.val)
-        parent_abspath = os.path.abspath(parent)
+        # isinstance against bare os.PathLike narrows to PathLike[Unknown], which cannot bind
+        # AnyStr; abspath calls os.fspath itself, so the runtime path is correct either way
+        parent_abspath = os.path.abspath(parent)  # ty: ignore[no-matching-overload]
         try:
             is_child = os.path.commonpath([val_abspath, parent_abspath]) == parent_abspath
         except ValueError:  # pragma: no cover - Windows-only: paths on different drives share no common path
