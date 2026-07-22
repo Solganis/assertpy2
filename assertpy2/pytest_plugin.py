@@ -63,6 +63,32 @@ def pytest_addoption(parser):
         help="Max diff entries to show (0 = unlimited, default 50)",
         default="50",
     )
+    parser.addini(
+        "assertpy2_poll_report",
+        help="Name polls that converged this close to their deadline: off, or a fraction (default 0.7)",
+        default="0.7",
+    )
+
+
+def _poll_threshold(raw: object) -> float | None:
+    """Parse the near-timeout reporting bar: ``off`` silences the report, a fraction moves it.
+
+    A slow CI box converges late on every poll, where the default bar turns a signal into a line of
+    noise per run.  ``None`` means the report is off, and collection is skipped with it.
+    """
+    if str(raw).strip().lower() == "off":
+        return None
+    try:
+        value = float(raw)  # ty: ignore[invalid-argument-type]  # guarded by the except below
+    except (ValueError, TypeError):
+        value = 0.0
+    if not 0.0 < value <= 1.0:
+        warnings.warn(
+            f"assertpy2_poll_report={raw!r} is not 'off' or a fraction in (0, 1], falling back to 0.7",
+            stacklevel=1,
+        )
+        return 0.7
+    return value
 
 
 def pytest_configure(config):
@@ -86,7 +112,9 @@ def pytest_configure(config):
     # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
-    async_assertions._COLLECT_RETRIES = True
+    config._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
+    # nothing reads the samples once the report is off, so stop paying for them at the poll site
+    async_assertions._COLLECT_RETRIES = config._assertpy2_poll_threshold is not None
     # save/restore rather than force False back: the environment variable may have turned the guard on
     # before import, and unconfigure must not silently undo that
     config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
@@ -164,10 +192,13 @@ def _report_retries(config) -> None:
     Retrying is what ``eventually()`` is for, so a retry on its own says nothing.  Spending most of the
     budget before converging is what turns into a failure on a slower machine.
     """
+    threshold = getattr(config, "_assertpy2_poll_threshold", 0.7)
+    if threshold is None:
+        return
     reporter = config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:  # pragma: no cover - the terminal reporter is always present under pytest
         return
-    late = [row for row in _retried if row[3] and row[2] / row[3] >= 0.7]
+    late = [row for row in _retried if row[3] and row[2] / row[3] >= threshold]
     if not late:
         return
     reporter.write_line("")

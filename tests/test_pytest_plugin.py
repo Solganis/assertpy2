@@ -81,7 +81,7 @@ class TestPluginLoaded:
     def test_addoption_registers_ini(self):
         parser = MagicMock()
         pytest_addoption(parser)
-        assert_that(parser.addini.call_count).is_equal_to(3)
+        assert_that(parser.addini.call_count).is_equal_to(4)
         names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
@@ -607,11 +607,12 @@ class TestAllureOffMode:
         mock.attach.assert_not_called()
 
 
-def _make_config(*, ini="diff", snapshot_update=False):
+def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7"):
     # a bare MagicMock returns a truthy mock from getoption(), which would flip the snapshot-update
     # module flag and leak update mode into unrelated tests
     config = MagicMock()
-    config.getini.return_value = ini
+    # dispatch per key: a single return value would feed the allure mode to every other ini reader
+    config.getini.side_effect = lambda name: poll_report if name == "assertpy2_poll_report" else ini
     config.getoption.return_value = snapshot_update
     return config
 
@@ -903,6 +904,67 @@ class TestNearTimeoutReport:
         node = SimpleNamespace(workeroutput={"assertpy2_retried": [["t.py::test_x", 41, 0.81, 1.0]]})
         pytest_testnodedown(node, None)
         assert_that(pytest_plugin._retried).contains(("t.py::test_x", 41, 0.81, 1.0))
+
+
+class TestPollReportIni:
+    """The report prints on its own; without a bar to move or an off switch it cannot be lived with."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        pytest_plugin._retried.clear()
+        yield
+        pytest_plugin._retried.clear()
+
+    @staticmethod
+    def _lines(rows, threshold):
+        pytest_plugin._retried.extend(rows)
+        reporter = MagicMock()
+        config = SimpleNamespace(
+            pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter),
+            _assertpy2_poll_threshold=threshold,
+        )
+        pytest_plugin._report_retries(config)
+        return [call.args[0] for call in reporter.write_line.call_args_list]
+
+    def test_addini_registers_the_key(self):
+        parser = MagicMock()
+        pytest_addoption(parser)
+        assert_that([call[0][0] for call in parser.addini.call_args_list]).contains("assertpy2_poll_report")
+
+    def test_off_silences_the_report(self):
+        assert_that(self._lines([("t.py::test_x", 41, 0.81, 1.0)], None)).is_empty()
+
+    def test_off_also_stops_collecting(self):
+        config = _make_config(poll_report="off")
+        try:
+            pytest_configure(config)
+            assert_that(config._assertpy2_poll_threshold).is_none()
+            assert_that(async_assertions._COLLECT_RETRIES).is_false()
+        finally:
+            pytest_unconfigure(config)
+
+    def test_a_lower_bar_names_a_poll_the_default_would_not(self):
+        rows = [("t.py::test_x", 5, 0.4, 1.0)]
+        assert_that(self._lines(rows, 0.7)).is_empty()
+        pytest_plugin._retried.clear()
+        assert_that("\n".join(self._lines(rows, 0.3))).contains("t.py::test_x")
+
+    def test_a_fraction_is_parsed_from_the_ini(self):
+        config = _make_config(poll_report="0.95")
+        try:
+            pytest_configure(config)
+            assert_that(config._assertpy2_poll_threshold).is_equal_to(0.95)
+            assert_that(async_assertions._COLLECT_RETRIES).is_true()
+        finally:
+            pytest_unconfigure(config)
+
+    @pytest.mark.parametrize("raw", ["loud", "0", "-0.5", "1.5"])
+    def test_an_unusable_value_warns_and_falls_back(self, raw):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            threshold = pytest_plugin._poll_threshold(raw)
+        assert_that(threshold).is_equal_to(0.7)
+        assert_that(str(caught[0].message)).contains("falling back to 0.7")
 
 
 class TestVacuityGuardSwitch:

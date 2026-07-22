@@ -206,6 +206,7 @@ own dict comparison without the path.
 [tool.pytest.ini_options]
 assertpy2_diff = "off"              # disable structured diff sections entirely
 assertpy2_diff_max_entries = "100"  # max entries to show (default 50, 0 = unlimited)
+assertpy2_poll_report = "off"       # silence the near-timeout poll report (default 0.7)
 ```
 
 With `--color=yes`, diffs are colored: red removals, green additions, cyan headers. Entries beyond
