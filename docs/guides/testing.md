@@ -201,6 +201,16 @@ assertpy2 polls that nearly timed out:
 Only polls past 70% of their timeout are named, so a healthy suite prints nothing. The report is
 advisory and never fails a run.
 
+Move that bar or turn the report off with `assertpy2_poll_report`. A slow CI box converges late on
+every poll, where the default turns a signal into a line of noise per run.
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_poll_report = "0.9"  # only polls past 90% of their timeout, or "off" to say nothing
+```
+
+Setting it to `off` also stops the samples being collected, so nothing is measured at the poll site.
+
 Polls are attributed to the test that made them, including those a fixture makes in setup or teardown.
 Under `pytest-xdist` the workers ship their findings to the controller, which prints the combined list.
 
