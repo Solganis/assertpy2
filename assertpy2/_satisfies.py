@@ -49,19 +49,25 @@ def _max_bipartite_assignment(satisfied: list[list[bool]]) -> list[int | None]:
     return assignment
 
 
-_VACUOUS_GUARD: bool = False
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _env_enabled() -> bool:
+    """Read the environment switch, at import and from the pytest plugin rather than per assertion.
+
+    The switch cannot change within a process, and the lookup with its two string operations costs
+    around 300ns: more than the emptiness check it decides to skip, on every quantifier call.
+    """
+    return os.environ.get("ASSERTPY2_VACUOUS", "").strip().lower() in _TRUTHY
+
+
+_VACUOUS_GUARD: bool = _env_enabled()
 """Whether a universal assertion over an empty value warns.
 
 Off by default: a suite running ``filterwarnings = ["error"]`` would otherwise fail on upgrade, and a
 property-based test generates empty collections as a matter of course.  Turn it on with the pytest
 ``--assertpy2-vacuous`` flag or the ``ASSERTPY2_VACUOUS`` environment variable for other runners.
 """
-
-_TRUTHY = frozenset({"1", "true", "yes", "on"})
-
-
-def _guard_enabled() -> bool:
-    return _VACUOUS_GUARD or os.environ.get("ASSERTPY2_VACUOUS", "").strip().lower() in _TRUTHY
 
 
 def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
@@ -70,7 +76,7 @@ def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
     Called from each public entry point rather than from the shared implementation, so the name in the
     message is the one the caller used and ``stacklevel`` lands on their line rather than ours.
     """
-    if allow_empty or not _guard_enabled():
+    if allow_empty or not _VACUOUS_GUARD:
         return
     try:
         empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the except below
