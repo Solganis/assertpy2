@@ -87,6 +87,9 @@ def pytest_configure(config):
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
     async_assertions._COLLECT_RETRIES = True
+    # save/restore rather than force False back: the environment variable may have turned the guard on
+    # before import, and unconfigure must not silently undo that
+    config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
     if config.getoption("assertpy2_vacuous"):
         _satisfies._VACUOUS_GUARD = True
     if config.getoption("assertpy2_snapshot_update"):
@@ -101,8 +104,7 @@ def pytest_unconfigure(config):
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
-    if config.getoption("assertpy2_vacuous"):
-        _satisfies._VACUOUS_GUARD = False
+    _satisfies._VACUOUS_GUARD = getattr(config, "_assertpy2_prev_vacuous", _satisfies._env_enabled())
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = False
     if config.getoption("assertpy2_snapshot_ci") or config.getoption("assertpy2_snapshot_no_ci"):

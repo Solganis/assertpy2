@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from assertpy2 import _satisfies as _satisfies_module
 from assertpy2 import assert_that, async_assertions, match
 from assertpy2 import errors as errors_module
 from assertpy2 import pytest_plugin as pytest_plugin
@@ -902,3 +903,41 @@ class TestNearTimeoutReport:
         node = SimpleNamespace(workeroutput={"assertpy2_retried": [["t.py::test_x", 41, 0.81, 1.0]]})
         pytest_testnodedown(node, None)
         assert_that(pytest_plugin._retried).contains(("t.py::test_x", 41, 0.81, 1.0))
+
+
+class TestVacuityGuardSwitch:
+    """The environment is read once, so the plugin must not leave the module flag where it found it."""
+
+    def test_env_switch_reads_truthy_spellings(self, monkeypatch):
+        for raw in ("1", "true", "YES", " on "):
+            monkeypatch.setenv("ASSERTPY2_VACUOUS", raw)
+            assert_that(_satisfies_module._env_enabled()).described_as(raw).is_true()
+
+    def test_env_switch_rejects_anything_else(self, monkeypatch):
+        monkeypatch.setenv("ASSERTPY2_VACUOUS", "maybe")
+        assert_that(_satisfies_module._env_enabled()).is_false()
+        monkeypatch.delenv("ASSERTPY2_VACUOUS")
+        assert_that(_satisfies_module._env_enabled()).is_false()
+
+    def test_flag_sets_the_guard_and_unconfigure_restores_it(self, monkeypatch):
+        monkeypatch.setattr(_satisfies_module, "_VACUOUS_GUARD", False)
+        config = _make_config()
+        config.getoption.side_effect = lambda name: name == "assertpy2_vacuous"
+        pytest_configure(config)
+        assert_that(_satisfies_module._VACUOUS_GUARD).is_true()
+        pytest_unconfigure(config)
+        assert_that(_satisfies_module._VACUOUS_GUARD).is_false()
+
+    def test_unconfigure_keeps_a_guard_the_environment_turned_on(self, monkeypatch):
+        # without the flag the plugin changes nothing, so restoring must not clear an env-set guard
+        monkeypatch.setattr(_satisfies_module, "_VACUOUS_GUARD", True)
+        config = _make_config()
+        pytest_configure(config)
+        pytest_unconfigure(config)
+        assert_that(_satisfies_module._VACUOUS_GUARD).is_true()
+
+    def test_unconfigure_without_configure_falls_back_to_the_environment(self, monkeypatch):
+        monkeypatch.setattr(_satisfies_module, "_VACUOUS_GUARD", True)
+        monkeypatch.delenv("ASSERTPY2_VACUOUS", raising=False)
+        pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+        assert_that(_satisfies_module._VACUOUS_GUARD).is_false()
