@@ -722,7 +722,7 @@ class NegatedBuilder:
     def __init__(self, builder: AssertionBuilder) -> None:
         self._builder = builder
 
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> Callable[..., AssertionBuilder]:
         if name in _NON_NEGATABLE:
             raise TypeError(_NON_NEGATABLE[name])
         attr = getattr(self._builder, name)
