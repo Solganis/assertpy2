@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])
+    assert_type(assert_that(42).not_.is_equal_to(43), AssertionBuilder[Any])
 
     # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
