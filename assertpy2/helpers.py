@@ -13,7 +13,7 @@ except ImportError:  # pragma: no cover - optional dependency; the attrs branch 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated
 
 from ._engine._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
-from ._engine._diff import _sub_diff_entries
+from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
 
@@ -90,6 +90,11 @@ def _elided_seq_repr(seq, counterpart) -> str:
 
     A one-element change in a forty-element list reads as ``[.., 999]`` instead of dumping the list
     twice into a message the reader then has to diff by eye.
+
+    Matched elements are found by the same alignment the diff uses
+    (`assertpy2._engine._diff._aligned_match_indices()`), so an element inserted at the head does not
+    shift every later element out of the elision; positional comparison is the fallback for the
+    sequences difflib cannot align.
     """
     # past 20 elements the rendering is over budget by construction (one char each plus separators), so
     # the value is never rendered just to be measured: on the failure path that render is the whole value
@@ -99,10 +104,15 @@ def _elided_seq_repr(seq, counterpart) -> str:
             # short enough to read whole: collapsing it would hide context to save a few characters, and
             # on a two-element list the ".." form is actually the longer of the two
             return rendered
+    aligned = _aligned_match_indices(seq, counterpart)
     parts = []
     elided = False
     for index, value in enumerate(seq):
-        if index < len(counterpart) and not _guarded_not_equal(value, counterpart[index]):
+        if (
+            index in aligned
+            if aligned is not None
+            else index < len(counterpart) and not _guarded_not_equal(value, counterpart[index])
+        ):
             elided = True
             continue
         parts.append(_safe_repr(value))

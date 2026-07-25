@@ -13,6 +13,7 @@ diff builders.
 from __future__ import annotations
 
 import dataclasses
+import difflib
 
 from ..errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 from ._compare import _node_decision
@@ -28,13 +29,107 @@ def _field_dict(obj, is_model):
     return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__}
 
 
-def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
-    """Diff two sequences element-by-element, recursing into nested containers.
+_ALIGN_MAX_ELEMENTS = 1000
+"""Longest sequence `_alignment_opcodes()` will align.
 
-    ``seen`` must already include the ids of ``actual``/``expected`` so a self-referential element
-    is caught.  Shared by the top-level (`_build_equality_diff()`) and nested
-    (`_sub_diff_entries()`) paths so both decompose sequences identically.  Elements have no field
-    name, so a ``config`` applies only type comparators and tolerance to them.
+difflib's search is quadratic (~33ms at this cap, ~130ms at twice it), and a diff is only ever built
+after an assertion has already failed, so the cap buys a bounded worst case at the price of an
+unaligned - never wrong, only longer - diff for the rare huge sequence.
+"""
+
+
+def _alignment_opcodes(actual, expected):
+    """difflib opcodes aligning two sequences, or ``None`` when the caller must fall back to indices.
+
+    Aligning first is what keeps an inserted or deleted element from re-reporting every element after
+    it: ``[0, 1, 2]`` against ``[1, 2]`` is one extra element, not three changed ones.  ``None`` means
+    difflib cannot help - either sequence is over `_ALIGN_MAX_ELEMENTS`, or its elements are unhashable
+    (dicts, lists, numpy arrays), which difflib needs them to be to build its index.  ``autojunk`` is
+    off because the heuristic treats any value filling more than 1% of a 200+ element sequence as junk,
+    which is exactly the repeated value an alignment has to match on.
+    """
+    if max(len(actual), len(expected)) > _ALIGN_MAX_ELEMENTS:
+        return None
+    try:
+        return difflib.SequenceMatcher(None, actual, expected, autojunk=False).get_opcodes()
+    except (TypeError, ValueError):
+        return None
+
+
+def _aligned_match_indices(seq, counterpart) -> set[int] | None:
+    """Indices of ``seq`` that align with an equal element of ``counterpart``, or ``None`` if unaligned.
+
+    Lets the failure message elide a matched run that positional comparison would miss, so a shifted
+    sequence collapses in the message the same way it collapses in the diff
+    (`assertpy2.helpers._elided_seq_repr()`).
+    """
+    opcodes = _alignment_opcodes(seq, counterpart)
+    if opcodes is None:
+        return None
+    matched: set[int] = set()
+    for tag, start, stop, _, _ in opcodes:
+        if tag == "equal":
+            matched.update(range(start, stop))
+    return matched
+
+
+def _element_entries(actual_item, expected_item, path, seen, config) -> list[DiffEntry]:
+    """Entries for one paired element: none when equal, one leaf, or the nested sub-diff."""
+    decision = _node_decision(actual_item, expected_item, config)
+    if decision == "equal":
+        return []
+    if decision == "recurse":
+        sub_entries = _sub_diff_entries(actual_item, expected_item, path, _seen=seen, config=config)
+        if sub_entries is not None:
+            return sub_entries
+    return [DiffEntry(path=path, actual=actual_item, expected=expected_item)]
+
+
+def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
+    """Diff two sequences over their difflib alignment, recursing into nested containers.
+
+    Aligning first means an inserted or deleted element is reported as itself rather than as a
+    mismatch at every index after it.  Each opcode block pairs its two ranges positionally, and
+    whatever one side runs out of becomes an actual-only / expected-only entry at its own index.
+    Unaligned pairs go through `_element_entries()` exactly as the positional walk does, so nested
+    containers still decompose and a ``config`` still owns the leaves it matches.
+
+    An ``equal`` block is skipped only when there is no ``config``: difflib matched it on ``==``,
+    which is the whole test in that case, but a comparator is free to disagree and must still be
+    consulted.  When alignment is unavailable, `_indexwise_diff_entries()` takes over.
+
+    ``seen`` must already include the ids of ``actual``/``expected`` so a self-referential element is
+    caught.  Shared by the top-level (`_build_equality_diff()`) and nested (`_sub_diff_entries()`)
+    paths so both decompose sequences identically.  Elements have no field name, so a ``config``
+    applies only type comparators and tolerance to them.
+    """
+    opcodes = _alignment_opcodes(actual, expected)
+    if opcodes is None:
+        return _indexwise_diff_entries(actual, expected, prefix, seen, config)
+    entries: list[DiffEntry] = []
+    for tag, actual_start, actual_stop, expected_start, expected_stop in opcodes:
+        if tag == "equal" and config is None:
+            continue
+        for offset in range(max(actual_stop - actual_start, expected_stop - expected_start)):
+            actual_index = actual_start + offset
+            expected_index = expected_start + offset
+            if actual_index >= actual_stop:
+                path = f"{prefix}[{expected_index}]" if prefix else f"[{expected_index}]"
+                entries.append(DiffEntry(path=path, actual=None, expected=expected[expected_index]))
+                continue
+            path = f"{prefix}[{actual_index}]" if prefix else f"[{actual_index}]"
+            if expected_index >= expected_stop:
+                entries.append(DiffEntry(path=path, actual=actual[actual_index], expected=None))
+            else:
+                entries.extend(_element_entries(actual[actual_index], expected[expected_index], path, seen, config))
+    return entries
+
+
+def _indexwise_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
+    """Diff two sequences position-by-position, for the pairs difflib cannot align.
+
+    The fallback of `_sequence_diff_entries()`: every index up to the longer length is compared
+    against the same index on the other side, and a trailing surplus is reported one element at a time.
     """
     entries: list[DiffEntry] = []
     max_len = max(len(actual), len(expected))
@@ -45,15 +140,7 @@ def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[
         elif i >= len(expected):
             entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
         else:
-            decision = _node_decision(actual[i], expected[i], config)
-            if decision == "leaf":
-                entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
-            elif decision == "recurse":
-                sub_entries = _sub_diff_entries(actual[i], expected[i], path, _seen=seen, config=config)
-                if sub_entries is not None:
-                    entries.extend(sub_entries)
-                else:
-                    entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
+            entries.extend(_element_entries(actual[i], expected[i], path, seen, config))
     return entries
 
 

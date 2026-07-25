@@ -46,6 +46,13 @@ def test_is_equal_long_list_failure_elides_the_matching_elements():
     assert_that(str(exc_info.value)).is_equal_to("Expected <[.., 27]> to be equal to <[.., 999]>, but was not.")
 
 
+def test_is_equal_shifted_long_list_elides_the_matching_run():
+    # one extra element at the head shifts every index: elided by position, nothing would collapse
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(list(range(40))).is_equal_to(list(range(1, 40)))
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[.., 0]> to be equal to <[..]>, but was not.")
+
+
 def test_is_equal_few_but_long_elements_still_elides():
     # the budget is the rendered length, not the element count: three long strings flood a message too
     with pytest.raises(AssertionError) as exc_info:

@@ -58,6 +58,23 @@ except AssertionError as e:
     #     + 999
 ```
 
+Sequences are aligned before they are compared, so an inserted or deleted element is reported as
+itself instead of as a mismatch at every index after it:
+
+```python
+try:
+    assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
+except AssertionError as e:
+    print(e)
+    # Expected <[.., 0]> to be equal to <[..]>, but was not.
+    # diff (sequence):
+    #   [0]: - 0
+```
+
+Comparing position by position would have called all forty elements different. Very long sequences
+(over a thousand elements) and sequences of unhashable elements cannot be aligned, and fall back to
+the positional comparison.
+
 A multi-line value is collapsed by line, which matters most: every line of it costs a row of terminal,
 and the message carries the value twice.
 

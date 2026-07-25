@@ -6,7 +6,8 @@ from dataclasses import dataclass
 import pytest
 
 from assertpy2 import assert_that, match
-from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
+from assertpy2._engine._compare import _build_compare_config
+from assertpy2._engine._diff import _ALIGN_MAX_ELEMENTS, _build_equality_diff, _sub_diff_entries
 from assertpy2.errors import DiffEntry, DiffResult
 from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
@@ -54,6 +55,101 @@ class TestBuildEqualityDiffSequence:
         assert_that(result.entries).is_length(2)
         assert_that(result.entries[0].actual).is_none()
         assert_that(result.entries[0].expected).is_equal_to(1)
+
+
+class TestBuildEqualityDiffSequenceAlignment:
+    """A shifted sequence must report the inserted/deleted elements, not every index past the shift."""
+
+    def test_one_extra_element_at_the_head_is_one_entry(self):
+        result = _build_equality_diff([0, 1, 2, 3], [1, 2, 3])
+        assert_that(result.kind).is_equal_to("sequence")
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[0]")
+        assert_that(result.entries[0].actual).is_equal_to(0)
+        assert_that(result.entries[0].expected).is_none()
+
+    def test_one_missing_element_at_the_head_is_one_entry(self):
+        result = _build_equality_diff([1, 2, 3], [0, 1, 2, 3])
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[0]")
+        assert_that(result.entries[0].actual).is_none()
+        assert_that(result.entries[0].expected).is_equal_to(0)
+
+    def test_extra_element_in_the_middle_is_one_entry(self):
+        result = _build_equality_diff([1, 2, 9, 3], [1, 2, 3])
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[2]")
+        assert_that(result.entries[0].actual).is_equal_to(9)
+        assert_that(result.entries[0].expected).is_none()
+
+    def test_missing_element_in_the_middle_is_one_entry(self):
+        result = _build_equality_diff([1, 2], [1, 5, 2])
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[1]")
+        assert_that(result.entries[0].actual).is_none()
+        assert_that(result.entries[0].expected).is_equal_to(5)
+
+    def test_multi_element_run_at_the_head_reports_only_that_run(self):
+        result = _build_equality_diff([7, 8, 1, 2, 3], [1, 2, 3])
+        assert_that(result.entries).is_length(2)
+        assert_that([entry.path for entry in result.entries]).is_equal_to(["[0]", "[1]"])
+        assert_that([entry.actual for entry in result.entries]).is_equal_to([7, 8])
+        assert_that([entry.expected for entry in result.entries]).each(match.is_none())
+
+    def test_long_shifted_list_stays_one_entry(self):
+        # the payoff case: without alignment every index past the head would be reported
+        result = _build_equality_diff(list(range(40)), list(range(1, 40)))
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[0]")
+        assert_that(result.entries[0].actual).is_equal_to(0)
+
+    def test_shift_and_substitution_report_separately(self):
+        result = _build_equality_diff([0, 1, 9, 3], [1, 2, 3])
+        paths = [entry.path for entry in result.entries]
+        assert_that(paths).is_equal_to(["[0]", "[2]"])
+        assert_that(result.entries[0].actual).is_equal_to(0)
+        assert_that(result.entries[0].expected).is_none()
+        assert_that(result.entries[1].actual).is_equal_to(9)
+        assert_that(result.entries[1].expected).is_equal_to(2)
+
+    def test_nested_sequence_is_aligned_too(self):
+        # the nested walker shares the same sequence engine, so a list inside a dict collapses too
+        entries = _sub_diff_entries({"xs": [0, 1, 2]}, {"xs": [1, 2]}, "")
+        assert_that(entries).is_length(1)
+        assert_that(entries[0].path).is_equal_to("xs[0]")
+        assert_that(entries[0].actual).is_equal_to(0)
+        assert_that(entries[0].expected).is_none()
+
+    def test_unhashable_elements_fall_back_to_the_index_wise_walk(self):
+        # difflib cannot align what it cannot hash; the index-wise diff still has to report the change
+        actual = [{"id": 0}, {"id": 1}]
+        expected = [{"id": 1}]
+        result = _build_equality_diff(actual, expected)
+        assert_that(result.kind).is_equal_to("sequence")
+        assert_that(result.entries).is_not_empty()
+        assert_that([entry.path for entry in result.entries]).contains("[0].id")
+
+    def test_alignment_is_skipped_past_the_size_cap(self):
+        # above the cap the quadratic opcode search is not worth it on a failure path
+        size = _ALIGN_MAX_ELEMENTS + 1
+        result = _build_equality_diff(list(range(size)), list(range(1, size)))
+        assert_that(len(result.entries)).is_greater_than(1)
+
+    def test_comparator_disagreeing_with_eq_still_reports_the_element(self):
+        # difflib aligns on ==; a comparator that calls == equal elements different must not be hidden
+        config = _build_compare_config(None, {int: lambda actual, expected: False})
+        result = _build_equality_diff([0, 1, 2], [1, 2], config=config)
+        paths = [entry.path for entry in result.entries]
+        assert_that(paths).is_equal_to(["[0]", "[1]", "[2]"])
+
+    def test_tolerance_still_tolerates_aligned_elements(self):
+        # the extra head element and the 2.2/2.0 pair, then only the head element once 2.2 is tolerated
+        assert_that(_build_equality_diff([0.0, 1.0, 2.2], [1.0, 2.0]).entries).is_length(2)
+        config = _build_compare_config(0.5, None)
+        result = _build_equality_diff([0.0, 1.0, 2.2], [1.0, 2.0], config=config)
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[0]")
+        assert_that(result.entries[0].actual).is_equal_to(0.0)
 
 
 class TestBuildEqualityDiffSet:
