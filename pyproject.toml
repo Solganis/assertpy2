@@ -58,11 +58,11 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "hypothesis>=6.155.7",
+    "hypothesis>=6.165.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
-    "ruff>=0.15.22",
-    "ty>=0.0.63",
+    "ruff>=0.16.1",
+    "ty>=0.0.65",
     "typing_extensions>=4.0",
 ]
 docs = [
@@ -78,7 +78,7 @@ integrations = [
     "requests>=2.32",
 ]
 typecheck = [
-    "mypy>=2.1.0",
+    "mypy>=2.3.0",
     "pyright>=1.1.411",
 ]
 mutation = [
@@ -116,6 +116,15 @@ omit = ["tests/*", "assertpy2/__init__.py", "assertpy2/_typing.py", "assertpy2/_
 # just a formatter hint, so the formatter and the linter agree at 120.
 line-length = 120
 target-version = "py310"  # lowest Python we support; UP rewrites target this floor
+# Ruff 0.16 prints rule names instead of codes under preview. Keep the codes: they are what a
+# `# noqa` needs, and looking one up from a name is a detour on every suppression.
+output-prefer-rule-codes = true
+
+[tool.ruff.format]
+# Ruff 0.16 reformats python blocks inside Markdown. Docs code is hand-wrapped to 90 characters so
+# it fits the theme's 0.8em code font without a horizontal scrollbar, and reflowing it at the 120
+# above pushes eight pages past that. Snippets stay gated by tests/test_docs_examples.py.
+exclude = ["*.md"]
 
 [tool.ruff.lint]
 # Enable preview rules, but ONLY the ones named explicitly in `select`
@@ -137,7 +146,11 @@ select = [
     "A",     # flake8-builtins - don't shadow builtins
     "ASYNC", # flake8-async - async footguns (blocking calls, missing await) in async assertions/polling
     "C4",    # flake8-comprehensions - drop redundant list()/dict()/set() wrappers
+    "FA",    # flake8-future-annotations - `X | Y` in a runtime-evaluated annotation needs the
+             # `from __future__ import annotations` our 3.10 floor depends on
+    "FURB",  # refurb - idiom simplifications in the same family as SIM/PIE/C4
     "PIE",   # flake8-pie - small idiom simplifications
+    "RSE",   # flake8-raise - no empty parens on a bare `raise SomeError()`
     "PGH",   # pygrep-hooks - forbid blanket `noqa`/`type: ignore` (must name a rule code)
     "PLE",   # Pylint errors - real-error subset (not style)
     "SIM",   # flake8-simplify - collapse redundant constructs
