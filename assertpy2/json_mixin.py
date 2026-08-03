@@ -266,7 +266,13 @@ class JsonMixin(_MixinBase):
         try:
             jsonschema_mod.validate(self.val, schema)
         except jsonschema_mod.ValidationError as exc:
-            return self.error(f"Expected val to match JSON schema, but validation failed: {exc.message}")
+            # carry the path ourselves: it is the only part of jsonschema's own text the message does
+            # not already have, and without it the caught error has to stay in the traceback to say
+            # which field failed
+            return self.error(
+                f"Expected val to match JSON schema, but validation failed at {exc.json_path}: {exc.message}",
+                suppress_context=True,
+            )
         return self
 
     def matches_json_schema_from_file(self, path: str | Path) -> Self:

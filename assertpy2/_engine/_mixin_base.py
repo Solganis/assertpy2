@@ -29,6 +29,7 @@ class _MixinBase:
             actual: object = ...,
             expected: object = ...,
             diff: DiffResult | None = ...,
+            suppress_context: bool = ...,
         ) -> Self: ...
 
         def builder(

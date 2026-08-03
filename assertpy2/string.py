@@ -614,7 +614,9 @@ class StringMixin(_MixinBase):
         try:
             extracted = match_obj.group(group)
         except IndexError:
-            return self.error(f"Expected pattern <{pattern}> to have group <{group}>, but it does not.")
+            return self.error(
+                f"Expected pattern <{pattern}> to have group <{group}>, but it does not.", suppress_context=True
+            )
         if extracted is None:
             return self.error(
                 f"Expected group <{group}> of pattern <{pattern}> to be matched in <{self.val}>, but it was not."

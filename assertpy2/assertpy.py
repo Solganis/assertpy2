@@ -442,6 +442,7 @@ def assert_conforms(
                     actual=val,
                     expected=model,
                     diff=DiffResult(kind="match", entries=_contract_entries(exc, f"[{index}]")),
+                    suppress_context=True,
                 )
         if exact:
             drift = [f"[{index}].{path}" for index, item in enumerate(val) for path in contract_drift(item, model)]
@@ -462,6 +463,7 @@ def assert_conforms(
             actual=val,
             expected=model,
             diff=DiffResult(kind="match", entries=_contract_entries(exc)),
+            suppress_context=True,
         )
     if exact:
         drift = contract_drift(val, model)
@@ -944,7 +946,7 @@ class AssertionBuilder(
         pivoted._value_origin = origin
         return pivoted
 
-    def error(self, msg, *, actual=None, expected=None, diff=None) -> Self:
+    def error(self, msg, *, actual=None, expected=None, diff=None, suppress_context=False) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
         If an error description is set by [`described_as()`][assertpy2.base.BaseMixin.described_as], then that
@@ -958,6 +960,10 @@ class AssertionBuilder(
             actual: the actual value (for structured error reporting)
             expected: the expected value (for structured error reporting)
             diff: a [`DiffResult`][assertpy2.errors.DiffResult] instance (for structured error reporting)
+            suppress_context: raise ``from None``, dropping the exception currently being handled from
+                the traceback.  Pass it when the caught exception is your own plumbing and its text is
+                already folded into ``msg``, so the reader is not shown the same failure twice.  Leave
+                it alone when the caught exception is the caller's, which is context they want.
 
         Raises:
             AssertionError: always raised unless ``kind`` is ``warn`` or ``soft``.
@@ -983,8 +989,12 @@ class AssertionBuilder(
             return self
         else:
             if expected is not None or diff is not None:
-                raise AssertionFailure(out, actual=actual, expected=expected, diff=diff)
-            raise AssertionError(out)
+                failure: AssertionError = AssertionFailure(out, actual=actual, expected=expected, diff=diff)
+            else:
+                failure = AssertionError(out)
+            if suppress_context:
+                raise failure from None
+            raise failure
 
     def eventually(
         self,

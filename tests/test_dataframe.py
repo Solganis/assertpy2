@@ -56,6 +56,27 @@ def _fake_numpy(*, fail):
         yield
 
 
+class TestLibraryFailureIsNotChained:
+    """The library's own AssertionError is folded into our message, so it must not also head the
+    traceback: pytest would print the same diff twice, once under "During handling of the above
+    exception".  See TestExceptionContext in test_traceback.py for where the line is drawn."""
+
+    def test_frame_failure_drops_the_library_exception(self):
+        with _fake_frame_lib("polars", fail=True) as (_, dataframe), pytest.raises(AssertionError) as exc_info:
+            assert_that(dataframe()).is_frame_equal(dataframe())
+        assert_that(exc_info.value.__suppress_context__).is_true()
+
+    def test_array_equal_failure_drops_the_library_exception(self):
+        with _fake_numpy(fail=True), pytest.raises(AssertionError) as exc_info:
+            assert_that([1]).is_array_equal([2])
+        assert_that(exc_info.value.__suppress_context__).is_true()
+
+    def test_array_close_failure_drops_the_library_exception(self):
+        with _fake_numpy(fail=True), pytest.raises(AssertionError) as exc_info:
+            assert_that([1.0]).is_array_close_to([2.0])
+        assert_that(exc_info.value.__suppress_context__).is_true()
+
+
 class TestIsFrameEqualDuckTyped:
     def test_non_frame_value_raises_type_error(self):
         with pytest.raises(TypeError, match="pandas or polars"):
