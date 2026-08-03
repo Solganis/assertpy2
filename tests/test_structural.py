@@ -563,6 +563,15 @@ class TestAssertConforms:
         assert_that(str(exc_info.value)).contains("conform to <Order>").contains("int_parsing")
         assert_that(exc_info.value.actual).is_equal_to({"id": "notint", "total": "x"})
         assert_that(exc_info.value.expected).is_equal_to(order_cls)
+        # pydantic's ValidationError text is already in the message above, so it must not also head
+        # the traceback (TestExceptionContext in test_traceback.py draws the line)
+        assert_that(exc_info.value.__suppress_context__).is_true()
+
+    def test_invalid_item_fails_without_chaining_pydantic(self):
+        order_cls = self._order_model()
+        with pytest.raises(AssertionError) as exc_info:
+            assert_conforms([{"id": "notint", "total": "x"}], order_cls, each=True)
+        assert_that(exc_info.value.__suppress_context__).is_true()
 
     def test_description_is_prepended_on_failure(self):
         order_cls = self._order_model()
