@@ -662,5 +662,5 @@ class StringMixin(_MixinBase):
         if match_obj is None:
             return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
         groupdict = match_obj.groupdict()
-        result = groupdict if groupdict else match_obj.groups()
+        result = groupdict or match_obj.groups()
         return self.builder(result, self.description, self.kind)

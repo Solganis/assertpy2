@@ -829,7 +829,7 @@ class AssertionBuilder(
         self.description = description
         self.kind = kind
         self.expected = expected
-        self.logger = logger if logger else _default_logger
+        self.logger = logger or _default_logger
         self._not_expected = False
         self._expected_warning = None
         self._return_value = _UNSET
