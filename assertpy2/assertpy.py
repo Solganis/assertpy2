@@ -57,6 +57,8 @@ __version__ = "2.18.0"
 
 # the tracked value type of the generic AssertionBuilder fallback (_U appears only in narrowing stubs)
 _T = TypeVar("_T")
+# the assertion type `not_` was reached from, so an inverted step hands the same narrowed type back
+_S = TypeVar("_S")
 if TYPE_CHECKING:
     _U = TypeVar("_U")
     _E = TypeVar("_E")  # element type of a collection, so first()/element()/... narrow to it
@@ -718,13 +720,28 @@ _NON_NEGATABLE: Final = {
 }
 
 
-class NegatedBuilder:
-    """Proxy that inverts the next assertion. Created by ``assert_that(val).not_``."""
+class NegatedBuilder(Generic[_S]):
+    """Proxy that inverts the next assertion. Created by ``assert_that(val).not_``.
+
+    Generic over the assertion type it was reached from, so inverting a step returns what the
+    un-inverted step would have: ``assert_that("x").not_.starts_with("y")`` stays a string assertion
+    rather than collapsing to the untyped builder and letting a numeric assertion follow it.
+    """
+
+    if TYPE_CHECKING:
+        # the builder's data attributes are handed back unchanged by the fallback below; declaring
+        # them here (checkers prefer a declared attribute over __getattr__) keeps `not_.val` typed as
+        # the value it is, instead of as the negated *method* the fallback describes
+        val: Any
+        description: str
+        kind: str | None
+        expected: type[BaseException] | None
+        logger: logging.LoggerAdapter
 
     def __init__(self, builder: AssertionBuilder) -> None:
         self._builder = builder
 
-    def __getattr__(self, name: str) -> Callable[..., AssertionBuilder]:
+    def __getattr__(self, name: str) -> Callable[..., _S]:
         if name in _NON_NEGATABLE:
             raise TypeError(_NON_NEGATABLE[name])
         attr = getattr(self._builder, name)
@@ -738,7 +755,10 @@ class NegatedBuilder:
                 return self._negated_warn(name, attr, *args, **kwargs)
             return self._negated_strict(name, attr, *args, **kwargs)
 
-        return _negated
+        # every branch of _negated hands back the very builder this proxy wraps, which is `_S` by
+        # construction of `not_`.  That cannot be stated without declaring `_builder: _S`, and an
+        # unbound TypeVar has no attributes, so the code above could not read `kind` off it.
+        return _negated  # ty: ignore[invalid-return-type]  # see above
 
     def _make_msg(self, name: str) -> str:
         desc = f"[{self._builder.description}] " if self._builder.description else ""
@@ -844,7 +864,7 @@ class AssertionBuilder(
         self._value_origin: str | None = None
 
     @property
-    def not_(self) -> NegatedBuilder:
+    def not_(self) -> NegatedBuilder[Self]:
         """Invert the next assertion in the chain."""
         return NegatedBuilder(self)
 

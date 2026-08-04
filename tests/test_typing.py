@@ -53,7 +53,13 @@ if TYPE_CHECKING:
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])
-    assert_type(assert_that(42).not_.is_equal_to(43), AssertionBuilder[Any])
+
+    # not_ hands back the assertion it was reached from, so inverting a step does not end the
+    # narrowing: the value type survives it and a wrong-domain assertion is still rejected after it.
+    assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])
+    assert_type(assert_that("text").not_.starts_with("x"), _StringAssertion)
+    assert_type(assert_that([1, 2]).not_.contains(3), _IterableAssertion[int])
+    assert_type(assert_that(42).not_.is_equal_to(43).value, int)
 
     # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
