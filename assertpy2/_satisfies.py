@@ -235,15 +235,12 @@ class SatisfiesMixin(_MixinBase):
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if _is_matcher(matcher):
-            # declared name, as in _apply_matcher: the narrowed union is an intersection whose
-            # `matches` parameter ty materializes to `Never`
-            checked: Matcher = matcher
-            description = checked.describe()
+            description = matcher.describe()
             for i, item in enumerate(self.val):
-                if not checked.matches(item):
+                if not matcher.matches(item):
                     return self.error(
                         f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
-                        f" {checked.describe_mismatch(item)}.",
+                        f" {matcher.describe_mismatch(item)}.",
                         actual=item,
                         expected=description,
                         diff=DiffResult(
@@ -447,11 +444,10 @@ class SatisfiesMixin(_MixinBase):
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if _is_matcher(matcher):
-            checked: Matcher = matcher
             for i, item in enumerate(self.val):
-                if checked.matches(item):
+                if matcher.matches(item):
                     return self.error(
-                        f"Expected no item to satisfy {checked.describe()}, but item at index {i} <{item}> did."
+                        f"Expected no item to satisfy {matcher.describe()}, but item at index {i} <{item}> did."
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
