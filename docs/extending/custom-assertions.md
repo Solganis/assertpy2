@@ -84,3 +84,26 @@ def is_multiple_of(self, other):
         )
     return self
 ```
+
+### Wrapping a library that raises
+
+When the assertion delegates to a library, the failure is usually caught and folded into the message.
+Doing that inside `except` leaves the caught exception in the traceback, and the reader sees the same
+diagnostic twice, once under "During handling of the above exception". Pass `suppress_context=True`
+to drop it:
+
+```python
+def is_valid_config(self):
+    try:
+        some_library.validate(self.val)
+    except some_library.ValidationError as exc:
+        return self.error(
+            f"Expected a valid config, but it was rejected:\n{exc}",
+            suppress_context=True,
+        )
+    return self
+```
+
+Only pass it when the caught exception's text is already in your message, or carries nothing. Leave it
+off when the caught exception is the caller's own, as in an assertion about a callable they gave you:
+there its traceback is the point of the failure, not noise.
