@@ -68,10 +68,7 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
     ``matches``, a callable via its return value, and anything else raises ``TypeError``.
     """
     if _is_matcher(matcher):
-        # bind through a declared name: narrowing the union leaves an intersection with the callable
-        # arm, and ty materializes the protocol's `Any` parameter there to `Never`
-        checked: Matcher = matcher
-        return checked.matches(value)
+        return matcher.matches(value)
     if callable(matcher):
         return bool(matcher(value))
     raise TypeError("given arg must be a Matcher or callable")
