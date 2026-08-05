@@ -501,15 +501,57 @@ class TestStringDiffCarets:
         assert_that(output).contains("+ the quick cat")
         assert_that(output).contains("^")  # the ndiff caret guide row
 
-    def test_long_lines_skip_the_carets(self):
+    def test_long_lines_are_windowed(self):
         diff = DiffResult(
             kind="string",
             entries=[DiffEntry(path="line 1", actual="a" * 300, expected="b" * 300)],
         )
         output = _format_diff(diff)
-        assert_that(output).contains("- 'aaa")
-        assert_that(output).contains("+ 'bbb")
-        assert_that(output).does_not_contain("^")
+        assert_that(output).contains("...")
+        assert_that(max(len(line) for line in output.splitlines())).is_less_than(200)
+
+    def test_a_line_that_is_a_prefix_of_the_other(self):
+        # no index of the shared prefix differs, so the search for the first change finds nothing; the
+        # sentinel it falls back to has to be a position, since the window arithmetic subtracts from it
+        diff = DiffResult(
+            kind="string",
+            entries=[DiffEntry(path="line 1", actual="x" * 300, expected="x" * 100)],
+        )
+        output = _format_diff(diff)
+        assert_that(output).contains("- ").contains("+ ")
+
+    def test_a_change_deep_inside_a_long_line_keeps_its_carets(self):
+        # a plain prefix cut would show 300 identical characters and hide the only difference; the
+        # window centres on it, and bounding ndiff's input is what lets the carets survive the length
+        diff = DiffResult(
+            kind="string",
+            entries=[
+                DiffEntry(
+                    path="line 1",
+                    actual="x" * 300 + "NEEDLE" + "y" * 50,
+                    expected="x" * 300 + "HAYSTK" + "y" * 50,
+                )
+            ],
+        )
+        output = _format_diff(diff)
+        assert_that(output).contains("NEEDLE").contains("HAYSTK").contains("^")
+
+    def test_a_windowed_string_block_stays_small(self):
+        diff = DiffResult(
+            kind="string",
+            entries=[DiffEntry(path=f"line {i}", actual="a" * 500_000, expected="b" * 500_000) for i in range(50)],
+        )
+        assert_that(len(_format_diff(diff))).is_less_than(25_000)
+
+    def test_many_long_entries_hit_the_block_budget(self):
+        # the per-row cap alone leaves fifty rows of 400 characters, which is still unreadable
+        diff = DiffResult(
+            kind="sequence",
+            entries=[DiffEntry(path=f"[{i}]", actual="a" * 5_000, expected="b" * 5_000) for i in range(50)],
+        )
+        output = _format_diff(diff)
+        assert_that(len(output)).is_less_than(21_000)
+        assert_that(output).contains("more diff lines")
 
     def test_removed_line_renders_minus_only(self):
         diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual="gone", expected=None)])
