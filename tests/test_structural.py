@@ -339,6 +339,13 @@ class TestMatchesStructureMethod:
         with pytest.raises(AssertionError, match="at <age>"):
             assert_that({"age": -5}).matches_structure({"age": match.is_positive()})
 
+    def test_the_mismatch_names_the_offending_value(self):
+        # every assertion here matched on the path, never on the value, so the detail was free to
+        # describe None and the reader would be told which key failed but not what was in it
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"age": 10}).matches_structure({"age": match.greater_than(18)})
+        assert_that(str(failure.value)).contains("but was <10>").does_not_contain("but was <None>")
+
     def test_nested(self):
         data = {"user": {"name": "Alice", "settings": {"theme": "dark"}}}
         assert_that(data).matches_structure(

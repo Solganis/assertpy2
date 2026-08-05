@@ -686,3 +686,11 @@ class TestConfigSurvivesTheFilteredPaths:
             assert_that([1]).is_equal_to([Point(1.0, 2.0)], ignore="id")
         with pytest.raises(AssertionFailure, match="index"):
             assert_that([Point(1.0, 2.0)]).is_equal_to([1], ignore="id")
+
+    def test_a_length_mismatch_carries_both_sides_on_the_exception(self):
+        # the message names both sequences, so dropping the structured `actual` changed no text: only
+        # the report attachment and any programmatic consumer lost it
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([{"a": 1}]).is_equal_to([{"a": 1}, {"b": 2}], ignore="x")
+        assert_that(failure.value.actual).is_equal_to([{"a": 1}])
+        assert_that(failure.value.expected).is_equal_to([{"a": 1}, {"b": 2}])
