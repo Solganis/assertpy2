@@ -77,6 +77,22 @@ class SnapshotCreatedWarning(UserWarning):
     """
 
 
+class SnapshotKeyReusedWarning(UserWarning):
+    """Emitted when one snapshot key was reached by more than one test.
+
+    The default key is the line of the ``snapshot()`` call, so every case of a parametrised test shares
+    it: the first case stores its value and the rest compare against that one.  Where the values differ
+    the run fails with a message that names two unrelated cases, and where they agree it passes while
+    checking one case out of however many - the second is the reason this warning exists, because
+    nothing else reports it.
+
+    Two calls inside one test are not this: a helper that snapshots twice asserts both values, so the
+    metric is distinct tests rather than accesses.
+
+    Its own category, so it can be raised to an error with a single ``filterwarnings`` entry.
+    """
+
+
 class SnapshotUpdatedWarning(UserWarning):
     """Emitted when `snapshot()` overwrites a stored snapshot in update mode.
 
@@ -99,6 +115,105 @@ _CI_MODE: bool | None = None
 # whole-file custom-id snapshot. The pytest plugin reads this at session finish to report obsolete
 # snapshots (xdist workers ship their sets to the controller).
 _TOUCHED: set[tuple[str, str]] = set()
+
+_ACCESS_NODES: dict[tuple[str, str], set[str]] = {}
+"""Which tests reached each ``(snapname, key)``, by node id.
+
+Counting *tests* rather than accesses is what separates the defect from the legitimate case.  Two
+parametrised cases share a line, so they share the default key: the first stores its value and the
+rest compare against it, and only one of them is ever asserted.  A helper that snapshots twice inside
+one test also reaches a key twice, and asserts both times - counting accesses cannot tell those apart
+and accuses the second.  Distinct node ids can.
+
+Values, writes and differences are all useless as the metric: when the reused key happens to hold the
+same value there is one write, no difference, and nothing fails.
+"""
+
+_CURRENT_NODE: str | None = None
+"""Node id of the running test, set by the pytest plugin.  ``None`` off pytest, where there is no test
+to attribute a reuse to and the sweep that would report it does not run either."""
+
+_SCOPE: str | None = None
+"""Whose keys ``_SCOPE_SEEN`` currently holds, so they can be dropped when the test changes.
+
+Off pytest ``_CURRENT_NODE`` never moves, which makes the whole process one scope - the right reading
+where there are no test boundaries to draw.
+"""
+
+_SCOPE_SEEN: set[tuple[str, str]] = set()
+"""Keys the running test has already reached, which is how a repeat is spotted."""
+
+_SCOPE_REPEATS: set[tuple[str, str]] = set()
+"""Keys the running test reached more than once.
+
+Two reaches inside one test are legitimate and deliberately unwarned, but when the second comparison
+*fails*, the reader is looking at two unrelated values with nothing saying why they were compared.
+This is the diagnostic for that message, not a second detection metric: it is read only on failure.
+"""
+
+_ACCESS_SITES: dict[tuple[str, str], str] = {}
+"""Where each key was first reached, so the warning can name a source location rather than a key."""
+
+_WARNED: set[tuple[str, str]] = set()
+"""Keys already reported from inside a test, so the end-of-session sweep does not report them twice."""
+
+
+def _reuse_message(snapname: str, key: str, tests: int, site: str) -> str:
+    return (
+        f"snapshot key <{snapname}::{key or '<whole file>'}>"
+        f"{f' from {site}' if site else ''} is shared by {tests} tests."
+        " Only the first value is stored, so the others are compared against it and their own values"
+        " are never asserted. Give each test its own snapshot(id=...)."
+    )
+
+
+def _shared_key_hint(snapname: str, key: str) -> str:
+    """Say that this test reached the key before, when a comparison against it fails.
+
+    Reuse inside one test is legitimate, so it raises no warning - but the failure it can produce
+    reads as two unrelated values compared for no reason, and the reason is that both calls landed on
+    one key.  Nothing else in the message carries that.
+    """
+    if (snapname, key) not in _SCOPE_REPEATS:
+        return ""
+    return (
+        f" This test reached <{f'{snapname}::{key}' if key else snapname}> more than once, so the value"
+        " above was compared against what an earlier call in the same test stored."
+        " Give each call its own snapshot(id=...)."
+    )
+
+
+def _record_access(snapname: str, key: str, site: str) -> None:
+    """Record which test reached ``key``, and report the second distinct one from here.
+
+    Warning from inside the assertion is what makes it usable: pytest attributes it to the test that
+    triggered it, it lands in the normal warnings summary, and under ``-W error`` it fails that test
+    with a traceback pointing at the test rather than aborting a session-finish hook.  The end-of-run
+    sweep still exists for the case this cannot see - parametrised cases split across xdist workers,
+    where no single process sees two node ids and only the union does.
+    """
+    global _SCOPE
+    _TOUCHED.add((snapname, key))
+    _ACCESS_SITES.setdefault((snapname, key), site)
+    if _SCOPE != _CURRENT_NODE:  # a new test: its predecessor's repeats say nothing about this one
+        _SCOPE = _CURRENT_NODE
+        _SCOPE_REPEATS.clear()
+        _SCOPE_SEEN.clear()
+    if (snapname, key) in _SCOPE_SEEN:
+        _SCOPE_REPEATS.add((snapname, key))
+    _SCOPE_SEEN.add((snapname, key))
+    if _CURRENT_NODE is None:  # off pytest: nothing to attribute a reuse to, and no sweep to report it
+        return
+    nodes = _ACCESS_NODES.setdefault((snapname, key), set())
+    nodes.add(_CURRENT_NODE)
+    if len(nodes) == 2 and (snapname, key) not in _WARNED:
+        _WARNED.add((snapname, key))
+        warnings.warn(
+            _reuse_message(snapname, key, 2, _ACCESS_SITES[snapname, key]),
+            SnapshotKeyReusedWarning,
+            stacklevel=3,
+        )
+
 
 _TRUTHY: Final = frozenset({"1", "true", "yes", "on"})
 _FALSY: Final = frozenset({"0", "false", "no", "off"})
@@ -460,7 +575,7 @@ class SnapshotMixin(_MixinBase):
             lineno = str(caller.f_lineno)
             snapname = _name(path, file_name)
 
-        _TOUCHED.add((snapname, "" if id else lineno))
+        _record_access(snapname, "" if id else lineno, f"id={id!r}" if id else f"{file_path}:{lineno}")
         os.makedirs(path, exist_ok=True)
 
         # Serialize read-modify-write so parallel workers (pytest-xdist) sharing a snap file don't lose
@@ -531,7 +646,8 @@ class SnapshotMixin(_MixinBase):
                 # not say which of them was compared
                 located = snapname if id else f"{snapname}::{lineno}"
                 raise AssertionFailure(
-                    f"{mismatch._message} {_update_hint(f'Snapshot <{located}>', 'accept the new value')}",
+                    f"{mismatch._message}{_shared_key_hint(snapname, '' if id else lineno)}"
+                    f" {_update_hint(f'Snapshot <{located}>', 'accept the new value')}",
                     actual=mismatch.actual,
                     expected=mismatch.expected,
                     diff=mismatch.diff,
@@ -699,11 +815,12 @@ class SnapshotMixin(_MixinBase):
             caller = frame.f_back if frame is not None else None
             if caller is None:  # pragma: no cover - frame introspection always available in CPython
                 raise RuntimeError("cannot determine caller frame")
-            file_name = os.path.splitext(os.path.basename(caller.f_code.co_filename))[0]
+            file_path = os.path.basename(caller.f_code.co_filename)
+            file_name = os.path.splitext(file_path)[0]
             lineno = str(caller.f_lineno)
             snapname = _name(path, file_name)
 
-        _TOUCHED.add((snapname, "" if id else lineno))
+        _record_access(snapname, "" if id else lineno, f"id={id!r}" if id else f"{file_path}:{lineno}")
         os.makedirs(path, exist_ok=True)
 
         stored = _UNSET

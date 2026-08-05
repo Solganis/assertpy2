@@ -17,7 +17,12 @@ from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
 from .errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace, VacuousAssertionWarning
 from .file import contents_of
 from .matchers import Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
-from .snapshot import SnapshotCreatedWarning, SnapshotUpdatedWarning, register_snapshot_serializer
+from .snapshot import (
+    SnapshotCreatedWarning,
+    SnapshotKeyReusedWarning,
+    SnapshotUpdatedWarning,
+    register_snapshot_serializer,
+)
 
 __all__ = [
     "AssertionFailure",
@@ -29,6 +34,7 @@ __all__ = [
     "PollSample",
     "PollTrace",
     "SnapshotCreatedWarning",
+    "SnapshotKeyReusedWarning",
     "SnapshotUpdatedWarning",
     "SoftAssertionCollector",
     "SyncAssertionBuilder",

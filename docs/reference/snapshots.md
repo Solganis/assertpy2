@@ -10,6 +10,12 @@ Compare a value against a stored snapshot, recording it on first run.
       show_root_full_path: false
       show_root_toc_entry: true
 
+::: assertpy2.snapshot.SnapshotKeyReusedWarning
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
 ::: assertpy2.snapshot.SnapshotCreatedWarning
     options:
       show_root_heading: true

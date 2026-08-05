@@ -146,6 +146,15 @@ _controller_touched: set = set()
 # rewrite shared source files in parallel)
 _controller_inline: list = []
 
+# node ids that reached each snapshot key, shipped by xdist workers and unioned on the controller
+_controller_accesses: dict = {}
+
+
+def pytest_runtest_setup(item):
+    """Name the running test, so a snapshot key reached by two of them can be told from a helper that
+    snapshots twice inside one."""
+    _snapshot._CURRENT_NODE = item.nodeid
+
 
 @pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed
 def pytest_testnodedown(node, error):
@@ -159,6 +168,15 @@ def pytest_testnodedown(node, error):
     inline = getattr(node, "workeroutput", {}).get("assertpy2_inline")
     if inline:
         _controller_inline.extend(tuple(record) for record in inline)
+    accesses = getattr(node, "workeroutput", {}).get("assertpy2_accesses")
+    if accesses:
+        # unioned here rather than judged in the worker: two parametrised cases on two workers are one
+        # node id each locally, so no worker sees a second and only the union does
+        for snapname, key, nodes, site in accesses:
+            _controller_accesses.setdefault((snapname, key), set()).update(nodes)
+            _snapshot._ACCESS_SITES.setdefault((snapname, key), site)
+    # keys a worker already reported from inside the test that hit them: the sweep must not repeat those
+    _snapshot._WARNED.update(tuple(item) for item in getattr(node, "workeroutput", {}).get("assertpy2_warned") or ())
 
 
 def _is_full_run(config) -> bool:
@@ -210,15 +228,48 @@ def _report_retries(config) -> None:
         )
 
 
+def _warn_on_reused_snapshot_keys() -> None:
+    """Sweep for reused snapshot keys that no single process could see on its own.
+
+    `assertpy2.snapshot._record_access()` reports the second reach from inside the test, which is where
+    a warning is worth having: attributed to a nodeid, in the warnings summary, and under ``-W error``
+    failing that test rather than this hook.  It cannot see parametrised cases split across xdist
+    workers, though - one access each, no second reach anywhere - so the summed total is checked here
+    and anything a worker already reported is skipped.
+    """
+    totals: dict = {key: set(nodes) for key, nodes in _snapshot._ACCESS_NODES.items()}
+    for key, nodes in _controller_accesses.items():
+        totals.setdefault(key, set()).update(nodes)
+    already = set(_snapshot._WARNED)
+    _snapshot._ACCESS_NODES.clear()
+    _controller_accesses.clear()
+    _snapshot._WARNED.clear()
+    for (snapname, key), nodes in sorted(totals.items()):
+        if len(nodes) < 2 or (snapname, key) in already:
+            continue
+        warnings.warn(
+            _snapshot._reuse_message(snapname, key, len(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")),
+            _snapshot.SnapshotKeyReusedWarning,
+            stacklevel=1,
+        )
+    _snapshot._ACCESS_SITES.clear()
+
+
 def pytest_sessionfinish(session, exitstatus):
     config = session.config
     if hasattr(config, "workeroutput"):  # xdist worker: ship recorded work to the controller, defer the rest
         config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
         config.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
         config.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
+        config.workeroutput["assertpy2_accesses"] = [
+            [snapname, key, sorted(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")]
+            for (snapname, key), nodes in _snapshot._ACCESS_NODES.items()
+        ]
+        config.workeroutput["assertpy2_warned"] = [list(item) for item in _snapshot._WARNED]
         return
     # controller / single process: apply inline edits (workers' plus any recorded here) into source
     _report_retries(config)
+    _warn_on_reused_snapshot_keys()
     _inline._RECORDS.extend(_controller_inline)
     _controller_inline.clear()
     _inline.apply_inline_records()
