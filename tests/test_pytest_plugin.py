@@ -676,15 +676,24 @@ class TestSnapshotUpdateOption:
         names = [call[0][0] for call in parser.addoption.call_args_list]
         assert_that(names).contains("--assertpy2-snapshot-update")
 
-    def test_every_flag_is_opt_in(self):
+    def test_the_boolean_flags_are_opt_in(self):
         # nothing pinned the defaults, so each of these flipped to default=True unnoticed: update mode
-        # would silently rewrite a changed snapshot, and CI mode would fail a first local capture
+        # would silently rewrite a changed snapshot, and CI mode would fail a first local capture.
+        # named one by one rather than swept over every registered option, which would also forbid ever
+        # adding one that takes a value
         parser = MagicMock()
         pytest_addoption(parser)
-        for call in parser.addoption.call_args_list:
-            name = call[0][0]
-            assert_that(call[1]).described_as(name).contains_entry({"action": "store_true"})
-            assert_that(call[1]).described_as(name).contains_entry({"default": False})
+        registered = {call[0][0]: call[1] for call in parser.addoption.call_args_list}
+        for name in (
+            "--assertpy2-snapshot-update",
+            "--assertpy2-vacuous",
+            "--assertpy2-snapshot-ci",
+            "--assertpy2-snapshot-no-ci",
+        ):
+            assert_that(registered).contains_key(name)
+            assert_that(registered[name]).described_as(name).contains_entry(
+                {"action": "store_true"}, {"default": False}
+            )
 
     def test_flag_toggles_module_state_and_unconfigure_resets(self):
         config = _make_config(snapshot_update=True)
