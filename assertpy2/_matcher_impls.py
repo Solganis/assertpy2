@@ -6,7 +6,8 @@ import uuid as _uuid_mod
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
-from ._engine._compare import _guarded_not_equal
+from ._engine._compare import _CompareConfig, _guarded_not_equal
+from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object
 
 if TYPE_CHECKING:
@@ -155,14 +156,39 @@ class NotMatcher(BaseMatcher):
 
 
 class EqualToMatcher(BaseMatcher):
-    def __init__(self, expected: object):
+    """Equality, optionally requiring the same type.
+
+    ``strict_types`` is the same relation ``is_equal_to(..., strict_types=True)`` applies, spelled for a
+    structural spec: one matcher covering value and type, rather than an `IsTypeOfMatcher` combined with
+    a second matcher on every field that needs both.
+    """
+
+    def __init__(self, expected: object, strict_types: bool = False):
         self.expected = expected
+        self.strict_types = strict_types
 
     def matches(self, value: Any) -> bool:
-        return bool(value == self.expected)
+        if not self.strict_types:
+            return bool(value == self.expected)
+        if type(value) is not type(self.expected):
+            return False
+        # the flag walks to the leaves, so this has to as well: a composite expected value whose own
+        # `==` is true says nothing about the types inside it, and one spelling of a relation that
+        # disagrees with the other on nested data is worse than not offering it
+        entries = _sub_diff_entries(value, self.expected, "", config=_CompareConfig(strict_types=True))
+        if entries is None:  # a leaf the walker does not decompose
+            return bool(value == self.expected)
+        return not entries
 
     def describe(self) -> str:
+        if self.strict_types:
+            return f"a value equal to <{self.expected}> of type <{type(self.expected).__name__}>"
         return f"a value equal to <{self.expected}>"
+
+    def describe_mismatch(self, value: Any) -> str:
+        if self.strict_types and type(value) is not type(self.expected):
+            return f"was <{value}> of type <{type(value).__name__}>"
+        return f"was <{value}>"
 
 
 class GreaterThanMatcher(BaseMatcher):
@@ -291,6 +317,27 @@ class IsInstanceOfMatcher(BaseMatcher):
 
     def describe(self) -> str:
         return f"an instance of <{self.expected_type.__name__}>"
+
+    def describe_mismatch(self, value: Any) -> str:
+        return f"was <{value}> of type <{type(value).__name__}>"
+
+
+class IsTypeOfMatcher(BaseMatcher):
+    """Exact type, mirroring the ``is_type_of`` assertion.
+
+    `IsInstanceOfMatcher` accepts a subclass, which makes it unable to say "an ``int``, not a ``bool``"
+    - the distinction a structural spec needs most, since ``bool`` subclasses ``int`` and JSON turns
+    one into the other.
+    """
+
+    def __init__(self, expected_type: type):
+        self.expected_type = expected_type
+
+    def matches(self, value: Any) -> bool:
+        return type(value) is self.expected_type
+
+    def describe(self) -> str:
+        return f"exactly type <{self.expected_type.__name__}>"
 
     def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}> of type <{type(value).__name__}>"

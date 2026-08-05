@@ -3,14 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._engine._compare import (
+    _EQ_ATOMIC,
     _ambiguous_array_operand,
     _array_equality_error,
     _build_compare_config,
     _guarded_equal,
     _guarded_not_equal,
     _node_decision,
+    _types_differ,
 )
-from ._engine._diff import _build_equality_diff
+from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._introspection import is_namedtuple
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
@@ -20,11 +22,6 @@ if TYPE_CHECKING:
     from ._engine._compat import Self
 
 __tracebackhide__ = True
-
-# Atomic scalar types whose ``==`` yields a real bool and which cannot contain an array/frame-like:
-# for these, ``is_equal_to`` skips the compare-config, array-operand guard, and dict-like dispatch.
-# Containers (dict/list/tuple/set) are excluded - they may nest a numpy operand and need the guarded path.
-_EQ_ATOMIC = frozenset({int, float, bool, complex, str, bytes, bytearray, type(None)})
 
 
 class BaseMixin(SatisfiesMixin):
@@ -76,6 +73,16 @@ class BaseMixin(SatisfiesMixin):
             ignore_null (bool): when ``True``, skip any named field the *expected* side leaves ``None``
                 (a partial expected/template), at any depth.  Only the expected side is skipped, so an
                 unexpectedly ``None`` actual field is still reported.  Defaults to ``False``.
+            strict_types (bool): when ``True``, both sides of every node must be the same type, at any
+                depth.  Plain ``==`` does not require this: ``True == 1``, ``Decimal("1") == 1`` and
+                ``[True] == [1]`` are all true, so a boolean read from JSON compares equal to an
+                integer without a word.  Opting in also rejects pairs some callers consider equal
+                (``IntEnum`` against ``int``, a ``dict`` subclass against ``dict``, ``float`` against
+                ``int``), and it wins over ``tolerance``, which says how far apart two numbers may be
+                and not that they may be different types.  A ``comparators`` entry still owns its
+                leaves, and a `Matcher` on the expected side is exempt, so composed matchers keep
+                working.  Dictionary *keys* are not covered: ``{True: "a"}`` and ``{1: "a"}`` match by
+                hash, and the recursion never sees the key pair.  Defaults to ``False``.
 
         Examples:
             Usage:
@@ -140,6 +147,11 @@ class BaseMixin(SatisfiesMixin):
                 assert_that(payload).is_equal_to(expected, ignore=re.compile(r"^_"))  # ignore private-ish keys
                 assert_that(payload).is_equal_to(expected, ignore=float)               # ignore all float fields
 
+            Require the same type at every level, which plain ``==`` does not:
+
+                assert_that({"active": True}).is_equal_to({"active": 1})                     # passes
+                assert_that({"active": True}).is_equal_to({"active": 1}, strict_types=True)  # fails
+
             Failure produces a nice error message:
 
                 assert_that(1).is_equal_to(2)  # fails
@@ -190,12 +202,26 @@ class BaseMixin(SatisfiesMixin):
             ignore = kwargs.get("ignore")
             include = kwargs.get("include")
             config = _build_compare_config(
-                kwargs.get("tolerance"), kwargs.get("comparators"), kwargs.get("ignore_null", False)
+                kwargs.get("tolerance"),
+                kwargs.get("comparators"),
+                kwargs.get("ignore_null", False),
+                kwargs.get("strict_types", False),
             )
 
         operand = _ambiguous_array_operand(self.val, other)
         if operand is not None:
             raise _array_equality_error("is_equal_to", operand)
+
+        if config is not None and config.strict_types and _types_differ(self.val, other):
+            # the dispatch below routes two dict-likes straight into the key walk, which never sees the
+            # pair itself, so an OrderedDict against a dict would otherwise pass a strict comparison
+            actual_repr, expected_repr = _disambiguated(self.val, other)
+            return self.error(
+                f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
+                actual=self.val,
+                expected=other,
+                diff=_build_equality_diff(self.val, other, config=config),
+            )
 
         if self._is_dict_like(self.val, check_values=False) and self._is_dict_like(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
@@ -269,12 +295,22 @@ class BaseMixin(SatisfiesMixin):
             if actual_dict is not None and expected_dict is not None:
                 if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
                     self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
-            elif _node_decision(actual_item, expected_item, config) != "equal":
-                return self.error(
-                    f"Expected item at index <{index}> to be equal to <{expected_item}>, but was <{actual_item}>.",
-                    actual=actual_item,
-                    expected=expected_item,
-                )
+            else:
+                decision = _node_decision(actual_item, expected_item, config)
+                if decision == "strict":
+                    # equal so far, but strict types has to look inside the item; a value the walker
+                    # does not take apart has nothing left to check and is equal
+                    decision = (
+                        "leaf"
+                        if _child_entries(actual_item, expected_item, "", descended_for="strict", config=config)
+                        else "equal"
+                    )
+                if decision != "equal":
+                    return self.error(
+                        f"Expected item at index <{index}> to be equal to <{expected_item}>, but was <{actual_item}>.",
+                        actual=actual_item,
+                        expected=expected_item,
+                    )
 
     def is_not_equal_to(self, other: object) -> Self:
         """Asserts that val is not equal to other.

@@ -1060,3 +1060,72 @@ class TestCombinatorOperands:
     def test_matcher_operands_still_combine(self):
         assert_that(5).satisfies(match.is_positive() & match.less_than(10))
         assert_that(5).satisfies(match.is_positive() | match.greater_than(99))
+
+
+class TestIsTypeOfMatcher:
+    """`is_instance_of` accepts a subclass, so a spec could not say "an int, not a bool" until now."""
+
+    def test_rejects_a_subclass(self):
+        assert_that(match.is_type_of(int).matches(True)).is_false()
+        assert_that(match.is_instance_of(int).matches(True)).is_true()
+
+    def test_matches_the_exact_type(self):
+        assert_that(match.is_type_of(int).matches(1)).is_true()
+        assert_that(match.is_type_of(bool).matches(True)).is_true()
+
+    def test_describe(self):
+        assert_that(match.is_type_of(int).describe()).is_equal_to("exactly type <int>")
+
+    def test_describe_mismatch_names_the_actual_type(self):
+        assert_that(match.is_type_of(int).describe_mismatch(True)).contains("bool")
+
+    def test_gives_matches_structure_a_strict_type_check(self):
+        assert_that({"n": 1}).matches_structure({"n": match.is_type_of(int)})
+        with pytest.raises(AssertionError):
+            assert_that({"n": True}).matches_structure({"n": match.is_type_of(int)})
+
+    def test_composes_with_the_operators(self):
+        assert_that({"n": 5}).matches_structure({"n": match.is_type_of(int) & match.greater_than(0)})
+
+
+class TestEqualToStrictTypes:
+    """`match.equal_to(x, strict_types=True)` is the same relation the is_equal_to flag applies."""
+
+    def test_rejects_a_type_change(self):
+        assert_that(match.equal_to(1).matches(True)).is_true()
+        assert_that(match.equal_to(1, strict_types=True).matches(True)).is_false()
+
+    def test_still_matches_the_same_type(self):
+        assert_that(match.equal_to(1, strict_types=True).matches(1)).is_true()
+        assert_that(match.equal_to(True, strict_types=True).matches(True)).is_true()
+
+    def test_describe_names_the_type(self):
+        assert_that(match.equal_to(1, strict_types=True).describe()).contains("of type <int>")
+        assert_that(match.equal_to(1).describe()).does_not_contain("of type")
+
+    def test_describe_mismatch_names_the_actual_type(self):
+        assert_that(match.equal_to(1, strict_types=True).describe_mismatch(True)).contains("bool")
+        assert_that(match.equal_to(1, strict_types=True).describe_mismatch(2)).does_not_contain("of type")
+
+    def test_one_matcher_covers_value_and_type_in_a_spec(self):
+        assert_that({"active": True}).matches_structure({"active": match.equal_to(True, strict_types=True)})
+        with pytest.raises(AssertionError):
+            assert_that({"active": 1}).matches_structure({"active": match.equal_to(True, strict_types=True)})
+
+    def test_the_strict_walk_reaches_inside_a_composite(self):
+        # the cases above all compare scalars, which never reach the recursive walk: without it the
+        # matcher quietly falls back to plain `==` and the flag stops meaning anything for containers
+        assert_that(match.equal_to([1], strict_types=True).matches([True])).is_false()
+        assert_that(match.equal_to([1], strict_types=True).matches([1])).is_true()
+        assert_that(match.equal_to({"a": 1}, strict_types=True).matches({"a": True})).is_false()
+        assert_that(match.equal_to({"a": 1}, strict_types=True).matches({"a": 1})).is_true()
+
+    def test_agrees_with_the_is_equal_to_flag(self):
+        # the two spellings of one relation must not drift
+        for value, expected in ((True, 1), (1, 1.0), (1, 1)):
+            spec_ok = match.equal_to(expected, strict_types=True).matches(value)
+            try:
+                assert_that(value).is_equal_to(expected, strict_types=True)
+                flag_ok = True
+            except AssertionError:
+                flag_ok = False

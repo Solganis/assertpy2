@@ -8,6 +8,21 @@ differ deliberately; a shared type classifier was investigated and rejected, bec
 precedence changes behavior for values that quack like several container shapes at once.
 `_sequence_diff_entries()` and `_dataclass_diff_entries()` are the pieces genuinely shared by the
 diff builders.
+
+The three ladders are not the same width, and the reason is worth stating because it has already cost
+two bugs.  They answer different questions.  `_build_equality_diff()` asks *how should a difference
+here be shown*, so it carries steps that are renderers rather than decompositions: a set diffs by
+membership, a string or bytes goes through ``difflib``.  `_sub_diff_entries()` asks *does this value
+break into path-addressed entries*, which a set does not, because its members have no stable position
+to name.  They agree on mappings and sequences and disagree at both ends: the top has sets, strings and
+bytes that the nested walker refuses, and the nested one has mappings that the top never sees, since a
+top-level dict is routed to `HelpersMixin._dict_err()` before it gets here.
+
+So do **not** write a predicate that answers "will this decompose".  Two attempts have been made and
+both produced a false failure on values that were equal, because the predicate drifted from one ladder
+or answered for the wrong one.  Ask the walker and read its answer instead: ``None`` from
+`_sub_diff_entries()`, or the ladder falling through to the scalar case in `_build_equality_diff()`.
+`_child_entries()` is where that reading is interpreted.
 """
 
 from __future__ import annotations
@@ -26,6 +41,30 @@ def _field_dict(obj, is_model):
     if is_model:
         return obj.model_dump()
     return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__}
+
+
+def _child_entries(actual, expected, path, *, descended_for, _seen=None, config=None) -> list[DiffEntry]:
+    """Walk a child node and turn the walker's answer into entries, given *why* it was descended into.
+
+    `_sub_diff_entries()` answers ``None`` for a value it does not take apart, and that answer means
+    two different things depending on the reason for the descent.  Descending because the two sides
+    differ, ``None`` is a differing leaf and must be reported.  Descending because ``strict_types`` has
+    to look past a container whose own ``==`` was true, ``None`` is a value that is already equal and
+    must not be.  Reading it wrong is where the false failure on two equal sets came from, so the two
+    readings live here and nowhere else: every caller names its reason and gets entries back.
+
+    Scope, because this is easy to over-read: it owns ``None`` for *building entries*, not for every
+    use of the walker.  Two other readings exist and are both correct for their own job -
+    `assertpy2.helpers._values_not_equal()` treats ``None`` as "ask ``==`` instead", and
+    `HelpersMixin._dict_err()` treats it as "nothing to render".  A new caller still has to decide what
+    ``None`` means for what it is doing; it just must not invent a fourth answer for this one.
+    """
+    sub_entries = _sub_diff_entries(actual, expected, path, _seen=_seen, config=config)
+    if sub_entries is not None:
+        return sub_entries
+    if descended_for == "strict":
+        return []
+    return [DiffEntry(path=path, actual=actual, expected=expected)]
 
 
 def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
@@ -48,12 +87,10 @@ def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[
             decision = _node_decision(actual[i], expected[i], config)
             if decision == "leaf":
                 entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
-            elif decision == "recurse":
-                sub_entries = _sub_diff_entries(actual[i], expected[i], path, _seen=seen, config=config)
-                if sub_entries is not None:
-                    entries.extend(sub_entries)
-                else:
-                    entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
+            elif decision != "equal":
+                entries.extend(
+                    _child_entries(actual[i], expected[i], path, descended_for=decision, _seen=seen, config=config)
+                )
     return entries
 
 
@@ -79,12 +116,12 @@ def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list
             decision = _node_decision(actual_value, expected_value, config, field=field)
             if decision == "leaf":
                 entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
-            elif decision == "recurse":
-                sub_entries = _sub_diff_entries(actual_value, expected_value, path, _seen=seen, config=config)
-                if sub_entries is not None:
-                    entries.extend(sub_entries)
-                else:
-                    entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+            elif decision != "equal":
+                entries.extend(
+                    _child_entries(
+                        actual_value, expected_value, path, descended_for=decision, _seen=seen, config=config
+                    )
+                )
     return entries
 
 
@@ -101,18 +138,20 @@ def _build_equality_diff(
         )
     _seen = _seen | {pair_key[0], pair_key[1]}
 
+    strict_descent = False
     if config is not None:
         decision = _node_decision(actual, expected, config)
         if decision == "equal":
             return DiffResult(kind="scalar", entries=[])
         if decision == "leaf":
             return DiffResult(kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)])
+        # descended only to check the types inside; the ladder below decides whether there is an inside
+        strict_descent = decision == "strict"
 
-    def _field_entries(field_actual: object, field_expected: object, field_path: str) -> list[DiffEntry]:
-        nested = _sub_diff_entries(field_actual, field_expected, field_path, _seen=_seen, config=config)
-        if nested is not None:
-            return nested
-        return [DiffEntry(path=field_path, actual=field_actual, expected=field_expected)]
+    def _field_entries(field_actual: object, field_expected: object, field_path: str, descended_for) -> list[DiffEntry]:
+        return _child_entries(
+            field_actual, field_expected, field_path, descended_for=descended_for, _seen=_seen, config=config
+        )
 
     if is_namedtuple(actual) and is_namedtuple(expected):
         entries: list[DiffEntry] = []
@@ -128,8 +167,8 @@ def _build_equality_diff(
                 decision = _node_decision(actual_value, expected_value, config, field=field)
                 if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
-                elif decision == "recurse":
-                    entries.extend(_field_entries(actual_value, expected_value, path))
+                elif decision != "equal":
+                    entries.extend(_field_entries(actual_value, expected_value, path, decision))
         entries.extend(
             DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
             for field in expected._fields
@@ -162,14 +201,17 @@ def _build_equality_diff(
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
-                elif decision == "recurse":
-                    sub_entries = _sub_diff_entries(
-                        actual_dict[key], expected_dict[key], path, _seen=_seen, config=config
+                elif decision != "equal":
+                    entries.extend(
+                        _child_entries(
+                            actual_dict[key],
+                            expected_dict[key],
+                            path,
+                            descended_for=decision,
+                            _seen=_seen,
+                            config=config,
+                        )
                     )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
         return DiffResult(kind="model" if both_model else "attrs", entries=entries)
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
         return DiffResult(
@@ -202,6 +244,10 @@ def _build_equality_diff(
         if not entries:
             entries.append(DiffEntry(path=".", actual=actual, expected=expected))
         return DiffResult(kind="string", entries=entries)
+    # the ladder ran out: this value has no inside. Reached under a strict descent that means the two
+    # sides were already equal and there was nothing further to check, not that they differ
+    if strict_descent:
+        return DiffResult(kind="scalar", entries=[])
     return DiffResult(kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)])
 
 
@@ -239,12 +285,12 @@ def _sub_diff_entries(
                 decision = _node_decision(actual[key], expected[key], config, field=key)
                 if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
-                elif decision == "recurse":
-                    sub_entries = _sub_diff_entries(actual[key], expected[key], path, _seen=child_seen, config=config)
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
+                elif decision != "equal":
+                    entries.extend(
+                        _child_entries(
+                            actual[key], expected[key], path, descended_for=decision, _seen=child_seen, config=config
+                        )
+                    )
         return entries
     if (
         dataclasses.is_dataclass(actual)
@@ -268,16 +314,17 @@ def _sub_diff_entries(
                     entries.append(
                         DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
                     )
-                elif decision == "recurse":
-                    sub_entries = _sub_diff_entries(
-                        actual_value, expected_value, f"{prefix}.{field_name}", _seen=child_seen, config=config
-                    )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(
-                            DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
+                elif decision != "equal":
+                    entries.extend(
+                        _child_entries(
+                            actual_value,
+                            expected_value,
+                            f"{prefix}.{field_name}",
+                            descended_for=decision,
+                            _seen=child_seen,
+                            config=config,
                         )
+                    )
         for field_name in expected._fields:
             if field_name not in actual._fields:  # _fields, not hasattr (count/index collide)
                 entries.append(
@@ -301,14 +348,17 @@ def _sub_diff_entries(
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":
                     entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
-                elif decision == "recurse":
-                    sub_entries = _sub_diff_entries(
-                        actual_dict[key], expected_dict[key], path, _seen=child_seen, config=config
+                elif decision != "equal":
+                    entries.extend(
+                        _child_entries(
+                            actual_dict[key],
+                            expected_dict[key],
+                            path,
+                            descended_for=decision,
+                            _seen=child_seen,
+                            config=config,
+                        )
                     )
-                    if sub_entries is not None:
-                        entries.extend(sub_entries)
-                    else:
-                        entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
         return entries
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
         child_seen = _seen | {id(actual), id(expected)}

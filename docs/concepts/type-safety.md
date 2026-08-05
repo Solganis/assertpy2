@@ -67,6 +67,32 @@ broadens or changes a return type fails the build. `ty` additionally type-checks
     message, and `returned()` pivots to the type-agnostic core assertions for the call's return value -
     never advertising methods that may not apply. See [Errors & Reporting](../guides/errors.md#expected-exceptions).
 
+### Where the typed surface ends
+
+[Dynamic assertions](../guides/assertions.md#dynamic-assertions-on-objects) (`has_<attribute>()`) are
+resolved at runtime from the value itself, so no overload can declare them ahead of time. A checker
+therefore accepts them on exactly one kind of value: the ones that land on the generic
+`AssertionBuilder`, which carries a `__getattr__`. Values with an overload of their own - `str`, `int`,
+`dict`, `list`, `set`, `date`, `Path`, `bytes`, callables - do not.
+
+<!-- docs-guard: untyped -->
+```python
+assert_that(person).has_first_name("Fred")   # clean: a user class falls to the generic builder
+assert_that(payload).has_first_name("Fred")  # type error: _DictAssertion has no attribute has_first_name
+```
+
+The runtime behaves identically in both lines; only the checker differs. On a value with its own
+overload the choice is between `# type: ignore[attr-defined]` and the typed equivalent, which for a
+dict is [`contains_entry()`](../guides/assertions.md#dicts):
+
+```python
+assert_that({"first_name": "Fred"}).contains_entry({"first_name": "Fred"})
+```
+
+This is the deliberate cost of keeping the original assertpy API working unchanged. The two are not
+mutually satisfiable: for a checker to accept `has_first_name` on a dict, `_DictAssertion` would need a
+`__getattr__`, and that same declaration would stop it reporting `contins_key` as a typo.
+
 ## Typed narrowing with .value
 
 Assertions don't just check a value - they can hand it back, typed. The `value` property ends a chain

@@ -36,9 +36,9 @@ def test_user():
     user = {"name": "Alice", "age": 30, "roles": ["viewer", "editor"]}
 
     assert_that(user).contains_key("name", "age")
+    assert_that(user).contains_entry({"name": "Alice"})
     assert_that(user["age"]).is_between(18, 120)
     assert_that(user["roles"]).contains("viewer").does_not_contain("admin")
-    assert_that(user).has_name("Alice")
 ```
 
 The [full documentation](https://solganis.github.io/assertpy2/) covers every assertion, matcher, and integration.
@@ -48,6 +48,7 @@ The [full documentation](https://solganis.github.io/assertpy2/) covers every ass
 A fluent chain reads as one intent and replaces several bare asserts -<br>
 and your IDE offers only the [methods that fit the value's type](https://solganis.github.io/assertpy2/concepts/type-safety/):
 
+<!-- docs-guard: skip -->
 ```python
 # bare - three statements, no autocomplete help
 assert isinstance(items, list)
@@ -71,6 +72,7 @@ E     {'status': 'active'} != {'status': 'disabled'}
 
 assertpy2 reports the [exact path to every difference](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs), in color:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(response).is_equal_to(expected)
 ```
@@ -80,6 +82,23 @@ assert_that(response).is_equal_to(expected)
 </p>
 
 The diff recurses through nested containers, and matcher predicates get the same path-level treatment. For dynamic fields like IDs or timestamps, assert a subset with [`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
+
+Matchers are ordinary values, so they also compose inside the expected structure itself, at any depth,
+with or without the fluent chain:
+
+```python
+response = {"id": 7, "user": {"name": "Alice", "age": 30}, "tags": ["a", "b"]}
+
+assert_that(response).is_equal_to(
+    {"id": match.greater_than(0), "user": {"name": "Alice", "age": match.between(18, 120)}, "tags": ["a", "b"]}
+)
+
+# or keep the bare `assert`, and pytest's own rewriting reports it
+assert response == {"id": match.greater_than(0), "user": match.ignore(), "tags": ["a", "b"]}
+```
+
+The fluent form keeps the path-level diff, the bare form keeps pytest's. There are
+[39 matchers](https://solganis.github.io/assertpy2/guides/matchers/), and they combine with `&`, `|` and `~`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
@@ -104,6 +123,7 @@ Works in PyCharm, VS Code, and any LSP-compatible editor.
 An assertion hands the value back, statically narrowed. `is_not_none()` strips `None`,
 `is_instance_of()` narrows to the class, and `.value` returns it with no `cast` and no bare `assert`:
 
+<!-- docs-guard: skip -->
 ```python
 order = assert_that(repo.find(42)).is_not_none().is_instance_of(PaidOrder).value
 order.refund()  # statically PaidOrder - verified by ty, mypy, and pyright
@@ -112,6 +132,7 @@ order.refund()  # statically PaidOrder - verified by ty, mypy, and pyright
 For API tests, [`assert_conforms()`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms) validates a raw payload against a Pydantic model and narrows the chain to it,<br>
 with `exact=True` catching silent contract drift:
 
+<!-- docs-guard: skip -->
 ```python
 data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 ```

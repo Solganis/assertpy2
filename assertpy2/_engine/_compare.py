@@ -26,30 +26,39 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
+_EQ_ATOMIC = frozenset({int, float, bool, complex, str, bytes, bytearray, type(None)})
+"""Types whose ``==`` is a plain bool and which have nothing inside to walk into."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _CompareConfig:
     """Tolerance and custom comparators for a single ``is_equal_to`` call.
 
     ``tolerance`` is an absolute tolerance applied to real-number leaves; ``comparators`` maps a ``type`` or
     an immediate field name to a ``(actual, expected) -> bool`` predicate that owns matching leaves;
-    ``ignore_null`` skips a named field whenever the *expected* side leaves it ``None``.
+    ``ignore_null`` skips a named field whenever the *expected* side leaves it ``None``;
+    ``strict_types`` additionally requires both sides of every node to be the same type, which plain
+    ``==`` does not (``True == 1``, ``Decimal("1") == 1``, and so on all the way down a payload).
     """
 
     tolerance: float | None = None
     comparators: dict[object, Callable[[object, object], bool]] | None = None
     ignore_null: bool = False
+    strict_types: bool = False
 
 
-def _build_compare_config(tolerance, comparators, ignore_null=False) -> _CompareConfig | None:
-    """Validate the ``is_equal_to`` ``tolerance``/``comparators``/``ignore_null`` kwargs and build a config.
+def _build_compare_config(tolerance, comparators, ignore_null=False, strict_types=False) -> _CompareConfig | None:
+    """Validate the ``is_equal_to`` comparison kwargs and build a config.
 
     Returns ``None`` when none are set.  ``tolerance`` must be a non-negative real number (not
     ``bool``/``complex``/``NaN``); ``comparators`` must be a dict of ``(actual, expected) -> bool`` callables
-    keyed by ``type`` or field name; ``ignore_null`` must be a bool.
+    keyed by ``type`` or field name; ``ignore_null`` and ``strict_types`` must be bools.
     """
     if ignore_null is not False and ignore_null is not True:
         raise TypeError("given ignore_null arg must be a bool")
-    if tolerance is None and comparators is None and not ignore_null:
+    if strict_types is not False and strict_types is not True:
+        raise TypeError("given strict_types arg must be a bool")
+    if tolerance is None and comparators is None and not ignore_null and not strict_types:
         return None
     if tolerance is not None:
         if isinstance(tolerance, bool) or not isinstance(tolerance, numbers.Number) or isinstance(tolerance, complex):
@@ -64,7 +73,9 @@ def _build_compare_config(tolerance, comparators, ignore_null=False) -> _Compare
         for comparator in comparators.values():
             if not callable(comparator):
                 raise TypeError("each comparator must be callable")
-    return _CompareConfig(tolerance=tolerance, comparators=comparators, ignore_null=ignore_null)
+    return _CompareConfig(
+        tolerance=tolerance, comparators=comparators, ignore_null=ignore_null, strict_types=strict_types
+    )
 
 
 def _ambiguous_array_operand(value: object, other: object) -> object | None:
@@ -208,13 +219,35 @@ def _resolve_comparator(actual, config: _CompareConfig, *, field):
     return None
 
 
+def _types_differ(actual, expected) -> bool:
+    """Whether ``strict_types`` should reject this pair.
+
+    A matcher standing in for a value is not a value, so it is exempt: the expected side of
+    ``is_equal_to({"id": match.greater_than(0)})`` is a ``GreaterThanMatcher`` by construction, and
+    comparing its type against an ``int`` would break every composed matcher rather than catch a bug.
+
+    ``_is_matcher`` is imported here rather than at module scope because ``_matcher_impls`` imports
+    ``_guarded_not_equal`` from this module, so the module-level import would be a cycle.
+    """
+    if type(actual) is type(expected):
+        return False
+    from .._matcher_impls import _is_matcher
+
+    return not _is_matcher(expected) and not _is_matcher(actual)
+
+
 def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None) -> str:
-    """Classify a node as ``"equal"``, ``"leaf"`` or ``"recurse"``.
+    """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"`` or ``"strict"``.
 
     With ``config is None`` this is exactly the engine's historical behavior: differing values ``"recurse"``
     (to decompose into a sub-diff), equal values are ``"equal"`` (skipped); ``"leaf"`` never occurs.  With a
     config, a matching comparator or tolerance owns the node - it is classified ``"equal"`` or ``"leaf"`` and
     never recursed into.
+
+    ``"strict"`` is the fourth: the two sides are equal and the same type, but ``strict_types`` still has
+    to look inside, because a container's ``==`` says nothing about the types of its members.  It differs
+    from ``"recurse"`` only in what an undecomposable value means, which
+    `assertpy2._engine._diff._child_entries()` is the single place to know.
     """
     if config is not None:
         if config.ignore_null and field is not None and expected is None:
@@ -222,6 +255,24 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
         comparator = _resolve_comparator(actual, config, field=field)
         if comparator is not None:
             return "equal" if comparator(actual, expected) else "leaf"
+        if config.strict_types:
+            if actual is expected:
+                # what `PyObject_RichCompareBool` hands a container for free, and what forcing the walk
+                # below would otherwise take away: one object is equal to itself without consulting
+                # `__eq__`, which is why a shared subnode is cheap and why `[nan] == [nan]` is true when
+                # both elements are the same float
+                return "equal"
+            if _types_differ(actual, expected):
+                # ahead of tolerance on purpose: a tolerance says how far apart two numbers may be, it
+                # does not say they may be different types, and a strict run that quietly accepted int
+                # vs float inside its own tolerance would be the surprise, not the rule
+                return "leaf"
+            if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
+                # a container's own `==` says nothing about the types inside it: `[True] == [1]`.  The
+                # walk normally stops here, so under strict types it has to keep going.  Whether the
+                # walker can actually take this value apart is not predicted here: `"strict"` tells the
+                # caller that a value it cannot decompose is one that is already equal
+                return "strict"
         if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
             return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"
     return "recurse" if _guarded_not_equal(actual, expected) else "equal"

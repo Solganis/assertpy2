@@ -36,6 +36,7 @@ from ._matcher_impls import (
     IsOddMatcher,
     IsPositiveMatcher,
     IsTruthyMatcher,
+    IsTypeOfMatcher,
     IsUuidMatcher,
     IsZeroMatcher,
     LessThanMatcher,
@@ -178,9 +179,15 @@ class _MatchNamespace:
     """
 
     @staticmethod
-    def equal_to(expected: object) -> EqualToMatcher:
-        """Matcher for a value equal to ``expected``."""
-        return EqualToMatcher(expected)
+    def equal_to(expected: object, strict_types: bool = False) -> EqualToMatcher:
+        """Matcher for a value equal to ``expected``.
+
+        Args:
+            expected: the value to compare against
+            strict_types: also require the same type, so ``True`` no longer matches ``1``.  The same
+                relation ``is_equal_to(..., strict_types=True)`` applies, spelled for a spec.
+        """
+        return EqualToMatcher(expected, strict_types)
 
     @staticmethod
     def greater_than(val: object) -> GreaterThanMatcher:
@@ -231,6 +238,11 @@ class _MatchNamespace:
     def is_instance_of(expected_type: type) -> IsInstanceOfMatcher:
         """Matcher for an instance of ``expected_type`` (via ``isinstance``)."""
         return IsInstanceOfMatcher(expected_type)
+
+    @staticmethod
+    def is_type_of(expected_type: type) -> IsTypeOfMatcher:
+        """Matcher for exactly ``expected_type``, rejecting subclasses (``int`` but not ``bool``)."""
+        return IsTypeOfMatcher(expected_type)
 
     @staticmethod
     def is_truthy() -> IsTruthyMatcher:
