@@ -370,10 +370,30 @@ class TestJsonSafe:
         assert_that(_json_safe({2, 1})).is_equal_to({"__type__": "set", "__data__": [1, 2]})
         assert_that(_json_safe(frozenset({"a"}))).is_equal_to({"__type__": "set", "__data__": ["a"]})
 
+    def test_a_set_of_composites_still_recurses(self):
+        # the members above are all int/str, which return at the fast path; a tuple member is the only
+        # thing that makes the recursive call, and its arguments, observable
+        assert_that(_json_safe({(1, 2)})).is_equal_to({"__type__": "set", "__data__": [[1, 2]]})
+
+    def test_a_heterogeneous_set_sorts_by_repr(self):
+        # sorting a mixed set is only possible through the repr key, and dropping the key is silent on
+        # a homogeneous one, so both halves need pinning
+        assert_that(_json_safe({1, "a"})).is_equal_to({"__type__": "set", "__data__": ["a", 1]})
+        assert_that(_json_safe({2, 10})["__data__"]).is_equal_to([10, 2])
+
     def test_depth_cap_degrades_to_repr_marker(self):
         nested = {"level": 1}
         for _ in range(8):
             nested = {"level": nested}
+        blob = json.dumps(_json_safe(nested))
+        assert_that(blob).contains("__repr__")
+
+    def test_the_depth_cap_holds_for_sequences_too(self):
+        # only the dict branch was pinned, so a sequence walker that counted the wrong way stayed
+        # invisible: nesting kept expanding and a deep enough structure would recurse until it blew up
+        nested = [1]
+        for _ in range(8):
+            nested = [nested]
         blob = json.dumps(_json_safe(nested))
         assert_that(blob).contains("__repr__")
 
@@ -655,6 +675,16 @@ class TestSnapshotUpdateOption:
         pytest_addoption(parser)
         names = [call[0][0] for call in parser.addoption.call_args_list]
         assert_that(names).contains("--assertpy2-snapshot-update")
+
+    def test_every_flag_is_opt_in(self):
+        # nothing pinned the defaults, so each of these flipped to default=True unnoticed: update mode
+        # would silently rewrite a changed snapshot, and CI mode would fail a first local capture
+        parser = MagicMock()
+        pytest_addoption(parser)
+        for call in parser.addoption.call_args_list:
+            name = call[0][0]
+            assert_that(call[1]).described_as(name).contains_entry({"action": "store_true"})
+            assert_that(call[1]).described_as(name).contains_entry({"default": False})
 
     def test_flag_toggles_module_state_and_unconfigure_resets(self):
         config = _make_config(snapshot_update=True)

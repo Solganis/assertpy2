@@ -1501,3 +1501,52 @@ class TestNestedSubDiffDecomposition:
         entry = next(entry for entry in result.entries if entry.path == ".tags")
         assert_that(entry.actual).is_equal_to({1, 2})
         assert_that(entry.expected).is_equal_to({1, 9})
+
+
+class TestMixedKindPairsStayAssertions:
+    """A structured value compared against a plain one still fails as an assertion, not as a crash.
+
+    Each guard here is a conjunction: both sides must be a namedtuple, both a dataclass, both a model.
+    The suite only ever compared like with like, so nothing held the guards to `and` - and reading
+    `_fields`, `dataclasses.fields()` or `model_dump()` off the other side turns a verdict into an
+    AttributeError or TypeError that no caller expects.
+    """
+
+    def test_namedtuple_against_a_plain_tuple(self):
+        Point = namedtuple("Point", ["x", "y"])
+        with pytest.raises(AssertionError):
+            assert_that(Point(1, 2)).is_equal_to((1, 3))
+        assert_that(_build_equality_diff(Point(1, 2), (1, 3)).kind).is_equal_to("sequence")
+        assert_that(_build_equality_diff((1, 3), Point(1, 2)).kind).is_equal_to("sequence")
+
+    def test_dataclass_against_a_dict(self):
+        @dataclass
+        class Plain:
+            x: int
+
+        with pytest.raises(AssertionError):
+            assert_that(Plain(1)).is_equal_to({"x": 1})
+        assert_that(_build_equality_diff(Plain(1), {"x": 1}).kind).is_equal_to("scalar")
+        assert_that(_build_equality_diff({"x": 1}, Plain(1)).kind).is_equal_to("scalar")
+
+    def test_dataclass_against_a_scalar(self):
+        @dataclass
+        class Plain:
+            x: int
+
+        with pytest.raises(AssertionError):
+            assert_that(Plain(1)).is_equal_to(5)
+        assert_that(_build_equality_diff(Plain(1), 5).kind).is_equal_to("scalar")
+
+    def test_model_dump_object_against_a_dict(self):
+        class Model:
+            def __init__(self, a):
+                self.a = a
+
+            def model_dump(self):
+                return {"a": self.a}
+
+        with pytest.raises(AssertionError):
+            assert_that(Model(1)).is_equal_to({"a": 1})
+        assert_that(_build_equality_diff(Model(1), {"a": 1}).kind).is_equal_to("scalar")
+        assert_that(_build_equality_diff({"a": 1}, Model(1)).kind).is_equal_to("scalar")
