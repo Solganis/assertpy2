@@ -23,7 +23,7 @@ from assertpy2 import (
     soft_assertions,
 )
 from assertpy2 import snapshot as _snapshot
-from assertpy2.snapshot import _ci_mode_enabled, _file_lock, _load
+from assertpy2.snapshot import _ci_mode_enabled, _file_lock, _load, _save
 
 
 class Color(enum.Enum):
@@ -175,6 +175,44 @@ class TestSnapshotCreatedWarning:
         with pytest.warns(SnapshotCreatedWarning), pytest.raises(AssertionError):
             for _ in range(2):
                 assert_that(next(values)).snapshot(path=str(tmp_path))
+
+
+class TestSharedKeyHint:
+    """Reuse inside one test raises no warning, so the failure it causes has to explain itself."""
+
+    def test_a_second_call_in_one_test_says_why_the_values_are_compared(self, tmp_path):
+        def check(value):
+            assert_that(value).snapshot(id="helper", path=str(tmp_path))
+
+        with pytest.warns(SnapshotCreatedWarning):
+            check({"user": "alice"})
+        with pytest.raises(AssertionError) as failure:
+            check({"user": "bob"})
+        # without this the reader sees two unrelated values compared for no stated reason
+        assert_that(str(failure.value)).contains("reached").contains("more than once")
+        assert_that(str(failure.value)).contains("earlier call in the same test").contains("snapshot(id=...)")
+
+    def test_a_default_key_names_its_line(self, tmp_path):
+        values = iter([7, 8])
+        with pytest.warns(SnapshotCreatedWarning), pytest.raises(AssertionError) as failure:
+            for _ in range(2):
+                assert_that(next(values)).snapshot(path=str(tmp_path))
+        assert_that(str(failure.value)).matches(r"reached <.*snap-test_snapshots\.json::\d+> more than once")
+
+    def test_a_first_and_only_call_says_nothing(self, tmp_path):
+        # the ordinary failure: the value was stored by an earlier run, not by an earlier call here
+        _save(str(tmp_path / "snap-once.json"), {"a": 1})
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 2}).snapshot(id="once", path=str(tmp_path))
+        assert_that(str(failure.value)).does_not_contain("more than once")
+
+    def test_the_scope_is_dropped_when_the_test_changes(self, monkeypatch, tmp_path):
+        _snapshot._record_access(str(tmp_path / "s.json"), "9", "s:9")
+        _snapshot._record_access(str(tmp_path / "s.json"), "9", "s:9")
+        assert_that(_snapshot._SCOPE_REPEATS).is_not_empty()
+        monkeypatch.setattr(_snapshot, "_CURRENT_NODE", "test_mod.py::somewhere_else")
+        _snapshot._record_access(str(tmp_path / "s.json"), "9", "s:9")
+        assert_that(_snapshot._SCOPE_REPEATS).is_empty()
 
 
 class TestSnapshotDatetimeMicroseconds:

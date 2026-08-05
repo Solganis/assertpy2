@@ -22,6 +22,7 @@ from assertpy2.pytest_plugin import (
     pytest_addoption,
     pytest_configure,
     pytest_runtest_makereport,
+    pytest_runtest_setup,
     pytest_sessionfinish,
     pytest_testnodedown,
     pytest_unconfigure,
@@ -1003,3 +1004,107 @@ class TestVacuityGuardSwitch:
         monkeypatch.delenv("ASSERTPY2_VACUOUS", raising=False)
         pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
         assert_that(_satisfies_module._VACUOUS_GUARD).is_false()
+
+
+class TestSnapshotKeyReuseWarning:
+    """One key reached by two tests means only the first one's value was ever asserted."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_registries(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_ACCESS_NODES", {})
+        monkeypatch.setattr(snapshot_module, "_ACCESS_SITES", {})
+        monkeypatch.setattr(snapshot_module, "_WARNED", set())
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", set())
+        monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_a")
+        pytest_plugin._controller_accesses.clear()
+
+    def test_runtest_setup_names_the_running_test(self, monkeypatch):
+        pytest_runtest_setup(SimpleNamespace(nodeid="test_mod.py::test_z"))
+        assert_that(snapshot_module._CURRENT_NODE).is_equal_to("test_mod.py::test_z")
+
+    def test_a_second_test_on_one_key_warns_where_it_happened(self, monkeypatch):
+        snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_b")
+            snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        assert_that(caught).is_length(1)
+        assert_that(caught[0].category).is_equal_to(snapshot_module.SnapshotKeyReusedWarning)
+        # the message has to carry the cause, not just the fact: a key alone is not actionable
+        assert_that(str(caught[0].message)).contains("test_mod.py:17").contains("shared by 2 tests")
+        assert_that(str(caught[0].message)).contains("snapshot(id=...)")
+
+    def test_one_test_reaching_a_key_twice_is_left_alone(self):
+        # the legitimate case: a helper that snapshots twice inside one test asserts both values
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for _ in range(4):
+                snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        assert_that(caught).is_empty()
+        assert_that(snapshot_module._ACCESS_NODES["/x/snap.json", "17"]).is_length(1)
+
+    def test_a_third_test_does_not_warn_again(self, monkeypatch):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for node in ("test_a", "test_b", "test_c"):
+                monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", node)
+                snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        assert_that(caught).is_length(1)
+
+    def test_off_pytest_nothing_is_recorded(self, monkeypatch):
+        monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", None)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+            snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        assert_that(caught).is_empty()
+        assert_that(snapshot_module._ACCESS_NODES).is_empty()
+        assert_that(snapshot_module._TOUCHED).contains(("/x/snap.json", "17"))  # orphan tracking is unaffected
+
+    def test_a_custom_id_reads_as_a_whole_file(self, monkeypatch):
+        snapshot_module._record_access("/x/snap.json", "", "id='payload'")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_b")
+            snapshot_module._record_access("/x/snap.json", "", "id='payload'")
+        assert_that(str(caught[0].message)).contains("<whole file>").contains("id='payload'")
+
+    def test_worker_ships_node_ids_and_the_controller_unions_them(self):
+        # two parametrised cases on two workers are one node id each locally, so only the union sees it
+        config = SimpleNamespace(workeroutput={})
+        snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_accesses"]).is_equal_to(
+            [["/x/snap.json", "17", ["test_mod.py::test_a"], "test_mod.py:17"]]
+        )
+        for node in ("test_mod.py::test_a", "test_mod.py::test_b"):
+            pytest_testnodedown(
+                SimpleNamespace(workeroutput={"assertpy2_accesses": [["/x/s.json", "9", [node], "s:9"]]}), None
+            )
+        assert_that(pytest_plugin._controller_accesses["/x/s.json", "9"]).is_length(2)
+
+    def test_the_sweep_reports_what_no_worker_could_see(self):
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        snapshot_module._ACCESS_SITES["/x/s.json", "9"] = "test_mod.py:9"
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        assert_that(
+            [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
+        ).is_length(1)
+
+    def test_the_sweep_does_not_repeat_a_worker_warning(self):
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        pytest_testnodedown(SimpleNamespace(workeroutput={"assertpy2_warned": [["/x/s.json", "9"]]}), None)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        assert_that([w for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]).is_empty()
+
+    def test_the_registries_are_drained(self):
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a"}
+        snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        assert_that(snapshot_module._ACCESS_NODES).is_empty()
+        assert_that(snapshot_module._ACCESS_SITES).is_empty()
+        assert_that(pytest_plugin._controller_accesses).is_empty()

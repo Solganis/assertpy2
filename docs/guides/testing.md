@@ -236,6 +236,41 @@ folder) to source control.
     Under `-W error` (or `filterwarnings = ["error"]`) a new capture fails explicitly, which is
     usually what you want in CI.
 
+### One id per case
+
+Without an `id`, the snapshot is keyed by the line of the `snapshot()` call. Every case of a
+parametrised test shares that line, so they share one key: the first case stores its value and the
+rest are compared against it.
+
+```python
+@pytest.mark.parametrize("name", ["alice", "bob", "carol"])
+def test_user(name):
+    assert_that(load(name)).snapshot(id=f"user-{name}")  # without the id, all three share one key
+```
+
+Sharing a key fails loudly when the values differ, naming two cases that look unrelated. It passes
+silently when they agree, asserting one case out of however many, which is the worse half and the
+reason a `SnapshotKeyReusedWarning` names the key and the source line as soon as a second test
+reaches it. Raise it to an error if you would rather not rely on reading warnings:
+
+```toml
+[tool.pytest.ini_options]
+filterwarnings = ["error::assertpy2.SnapshotKeyReusedWarning"]
+```
+
+What counts is two *tests* on one key, not two calls. A helper that snapshots twice inside one test
+asserts both values and stays silent. Should its second call then fail, the failure says so, since
+otherwise it reads as two unrelated values compared for no reason:
+
+```text
+Expected <{'user': 'bob'}> to be equal to <{'user': 'alice'}>, but was not. This test reached
+<__snapshots/snap-helper.json> more than once, so the value above was compared against what an
+earlier call in the same test stored. Give each call its own snapshot(id=...).
+```
+
+Under `pytest-xdist` the cases of one parametrised test may land on different workers, where no single
+process sees the second one, so that split is caught by a sweep at the end of the run instead.
+
 ### Updating snapshots
 
 Run pytest with `--assertpy2-snapshot-update` and every failing snapshot comparison overwrites the
