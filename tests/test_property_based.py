@@ -10,16 +10,20 @@ import copy
 import datetime
 import json
 import re
+import warnings
 from collections import Counter, namedtuple
 from dataclasses import dataclass, replace
 from itertools import pairwise
 
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import assume, find, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_conforms, assert_that, match
+from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
+from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
+from assertpy2._engine._introspection import is_mapping_like
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
@@ -1071,3 +1075,131 @@ def test_a_suggestion_is_a_real_attribute_and_never_the_one_that_was_asked_for(
     if suggested:
         assert_that(suggested.group(1)).is_not_equal_to(requested)
         assert_that(attributes).contains(suggested.group(1))
+
+
+# --- strict_types: the two spellings of one relation must not drift ---
+
+
+class _Money:
+    """A value object the walker does not take apart: deliberately **not** a dataclass.
+
+    The gap between the eight atomic types and the five decomposable shapes is where a whole class of
+    bugs lives, and a domain object with its own ``__eq__`` is its most common inhabitant - far more so
+    than the set that led us here. A dataclass would not reach it: the dispatcher keys on
+    ``is_dataclass``, not on who wrote ``__eq__``, so ``_Inner`` above already covers that branch.
+    """
+
+    def __init__(self, amount):
+        self.amount = amount
+
+    def __eq__(self, other):
+        return isinstance(other, _Money) and self.amount == other.amount
+
+    def __hash__(self):
+        return hash(self.amount)
+
+    def __repr__(self):
+        return f"_Money({self.amount})"
+
+
+# Every type the walker dispatches on, not just the JSON-shaped subset `_values` covers. Only a property
+# comparing a value against a copy of itself may use this. `_values` grows no sets on purpose, and a
+# property that compares two *different* generated values would otherwise trip over the documented
+# hash-matching gap, where a set element or dict key of a different type but the same hash is matched
+# before anything looks at its type. Against a copy the values are identical, so the gap cannot arise.
+_wide_atoms = (
+    _atoms
+    | st.binary()
+    | st.decimals(allow_nan=False, allow_infinity=False)
+    | st.dates()
+    | st.uuids()
+    | st.builds(_Money, amount=st.integers())
+)
+_wide_values = st.recursive(
+    _wide_atoms,
+    lambda children: (
+        st.lists(children)
+        | st.dictionaries(st.text(), children)
+        | st.tuples(children, children)
+        | st.sets(_wide_atoms)
+        | st.frozensets(_wide_atoms)
+        | st.builds(_Pair, first=children, second=children)
+        | st.builds(_Inner, a=st.integers(), b=st.text())
+    ),
+    max_leaves=20,
+)
+
+
+def _reachable(predicate):
+    """The minimal value in `_wide_values` satisfying *predicate*, or ``NoSuchExample``.
+
+    ``find`` is not deprecated; the filter is for one unrelated ``DeprecationWarning`` about a missing
+    ``__spec__.loader``, which hypothesis's module introspection raises on 3.15 and this suite's
+    ``filterwarnings = error`` would otherwise turn into a failure.  Matched by message rather than by
+    category, so a real deprecation raised in here still fails the run, and scoped to this helper
+    rather than the project config, so it never covers the library itself.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Module globals is missing", category=DeprecationWarning)
+        return find(_wide_values, predicate)
+
+
+def test_the_wide_lattice_reaches_a_value_the_nested_walker_cannot_decompose():
+    """`test_a_value_is_strictly_equal_to_itself` earns its keep only while the lattice grows values
+    the walkers cannot take apart.  Narrowing it for speed would leave that property green and
+    disarmed, so the reach is asserted rather than assumed - once per ladder, because the two answer
+    different questions and disagree (see the module docstring of ``assertpy2._engine._diff``)."""
+    found = _reachable(lambda value: type(value) not in _EQ_ATOMIC and _sub_diff_entries(value, value, "") is None)
+    assert_that(type(found) in _EQ_ATOMIC).is_false()
+
+
+def test_the_wide_lattice_reaches_a_value_the_top_level_ladder_runs_out_on():
+    """The nested guard above is satisfied by a set, which the *top-level* builder does handle - and
+    the top-level fall-through is the branch the `UUID` regression actually lived in.  Mappings are
+    excluded because their ``"scalar"`` kind means "routed to _dict_err before reaching the ladder",
+    not "the ladder ran out"."""
+    found = _reachable(
+        lambda value: (
+            type(value) not in _EQ_ATOMIC
+            and not is_mapping_like(value)
+            and _build_equality_diff(value, value).kind == "scalar"
+        )
+    )
+    assert_that(type(found) in _EQ_ATOMIC).is_false()
+
+
+def _passes(callable_):
+    try:
+        callable_()
+    except AssertionError:
+        return False
+    return True
+
+
+@settings(deadline=None)
+@given(left=_values, right=_values)
+def test_the_flag_and_the_matcher_agree(left, right):
+    # a scalar-only check cannot see this: on a composite expected value the matcher used to stop at
+    # the top-level type and hand the rest to `==`, which is permissive inside
+    by_flag = _passes(lambda: assert_that(left).is_equal_to(right, strict_types=True))
+    by_matcher = match.equal_to(right, strict_types=True).matches(left)
+    assert_that(by_matcher).is_equal_to(by_flag)
+
+
+@settings(deadline=None)
+@given(left=_values, right=_values)
+def test_strictness_only_ever_refines_equality(left, right):
+    # strictness may reject what `==` accepts, never the reverse
+    if _passes(lambda: assert_that(left).is_equal_to(right, strict_types=True)):
+        assert_that(left).is_equal_to(right)
+
+
+@settings(deadline=None)
+@given(value=_wide_values)  # must stay the same symbol the two reach guards above assert on
+def test_a_value_is_strictly_equal_to_itself(value):
+    # the first line pins the identity shortcut forced descent would otherwise take away; the second
+    # pins that strictness does not depend on it, since a deep copy keeps every type and no identity.
+    # The wide strategy belongs to this property in particular: a copy is type-identical, so widening
+    # it costs nothing and covers the shapes nobody thought to write down - a set inside a list was one
+    assert_that(value).is_equal_to(value, strict_types=True)
+    assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)

@@ -1,10 +1,14 @@
+import copy
+import datetime
+import decimal
 import re
-from collections import namedtuple
+import uuid
+from collections import OrderedDict, namedtuple
 from dataclasses import dataclass
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that
+from assertpy2 import AssertionFailure, assert_that, match
 
 Pair = namedtuple("Pair", ["a", "b"])
 
@@ -474,3 +478,211 @@ class TestConfigThroughNestedContainers:
     def test_plain_difference_without_config_still_fails(self):
         with pytest.raises(AssertionError):
             assert_that({"d": [1, 2], "k": 1}).is_equal_to({"d": [1, 9], "k": 2}, ignore="k")
+
+
+class TestStrictTypes:
+    """`==` alone lets a type change pass at any depth, so `strict_types` closes it."""
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            (True, 1),
+            (0, False),
+            (1, 1.0),
+            (decimal.Decimal(1), 1),
+            ([True], [1]),
+            ({"active": True}, {"active": 1}),
+            ({"a": {"b": [{"c": True}]}}, {"a": {"b": [{"c": 1}]}}),
+            (OrderedDict(a=1), {"a": 1}),
+            ((1, True), (1, 1)),
+            (Point(1, 2), Point(1.0, 2)),
+        ],
+        ids=str,
+    )
+    def test_a_type_change_is_caught_at_any_depth(self, actual, expected):
+        assert_that(actual).is_equal_to(expected)  # plain equality accepts all of these
+        with pytest.raises(AssertionError):
+            assert_that(actual).is_equal_to(expected, strict_types=True)
+
+    def test_equal_payload_still_passes(self):
+        payload = {"id": 1, "tags": ["a"], "meta": {"ok": True, "n": None}}
+        assert_that(payload).is_equal_to(dict(payload), strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ({1, 2}, {1, 2}),
+            ({"s": {1, 2}}, {"s": {1, 2}}),
+            ({"s": frozenset({1})}, {"s": frozenset({1})}),
+            ([{1}], [{1}]),
+            ({"s": {"a": {1}}}, {"s": {"a": {1}}}),
+        ],
+        ids=str,
+    )
+    def test_an_equal_set_is_not_read_as_a_difference(self, actual, expected):
+        # forcing the walk must only ever enter what the walker takes apart. A set is a container it
+        # does not, so entering one hands the caller a value it reads as a difference
+        assert_that(actual).is_equal_to(expected, strict_types=True)
+        assert_that(match.equal_to(expected, strict_types=True).matches(actual)).is_true()
+
+    def test_a_differing_set_is_still_reported(self):
+        with pytest.raises(AssertionError):
+            assert_that({"s": {1}}).is_equal_to({"s": {2}}, strict_types=True)
+
+    def test_an_undecomposable_item_survives_the_filtered_sequence_path(self):
+        # ignore/include on a list routes items through their own comparison, which has to read a
+        # forced descent the same way the diff walker does
+        assert_that([{1}]).is_equal_to([{1}], strict_types=True, ignore="absent")
+        with pytest.raises(AssertionError):
+            assert_that([{1}]).is_equal_to([{2}], strict_types=True, ignore="absent")
+
+    @pytest.mark.parametrize(
+        "value",
+        [uuid.UUID(int=1), decimal.Decimal(3), datetime.date(2026, 1, 1), {1, 2}, frozenset({1}), "abc", b"ab"],
+        ids=str,
+    )
+    def test_an_undecomposable_value_at_the_top_level_is_equal_to_its_copy(self, value):
+        # the top-level builder has its own ladder, wider than the nested walker's: it knows sets,
+        # strings and bytes. A forced descent has to read "the ladder ran out" as equality there too
+        assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            (uuid.UUID(int=1), uuid.UUID(int=2)),
+            (datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)),
+            ("abc", "abd"),
+        ],
+        ids=str,
+    )
+    def test_a_differing_undecomposable_value_is_still_reported(self, actual, expected):
+        with pytest.raises(AssertionError):
+            assert_that(actual).is_equal_to(expected, strict_types=True)
+
+    def test_an_undecomposable_field_of_a_namedtuple_survives(self):
+        # the namedtuple walker has its own descent helper, and it must carry the reason through
+        pair = namedtuple("pair", ["first", "second"])
+        assert_that(pair(1, {2})).is_equal_to(pair(1, {2}), strict_types=True)
+        with pytest.raises(AssertionError):
+            assert_that(pair(1, {2})).is_equal_to(pair(1, {3}), strict_types=True)
+
+    def test_matchers_stay_exempt(self):
+        # the expected leaf is a Matcher, not a value, so comparing its type would break composition
+        assert_that({"id": 7}).is_equal_to({"id": match.greater_than(0)}, strict_types=True)
+        assert_that({"u": {"age": 30}}).is_equal_to({"u": {"age": match.between(18, 120)}}, strict_types=True)
+        assert_that([1, 5]).is_equal_to([1, match.greater_than(4)], strict_types=True)
+
+    def test_a_comparator_still_owns_its_leaves(self):
+        assert_that({"a": True}).is_equal_to({"a": 1}, strict_types=True, comparators={bool: lambda x, y: True})
+
+    def test_strictness_wins_over_tolerance(self):
+        # a tolerance says how far apart two numbers may be, not that they may be different types
+        assert_that(1).is_equal_to(1.0, tolerance=0.5)
+        with pytest.raises(AssertionError):
+            assert_that(1).is_equal_to(1.0, tolerance=0.5, strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ({True: "a"}, {1: "a"}),
+            ({1: "a"}, {1.0: "a"}),
+            ({1}, {1.0}),
+            ({True}, {1}),
+            (frozenset({1}), frozenset({True})),
+            ({"s": {1}}, {"s": {1.0}}),
+        ],
+        ids=str,
+    )
+    def test_hash_matched_positions_are_a_known_gap(self, actual, expected):
+        # a dict key and a set element are found by hash, and 1, 1.0 and True hash alike, so the pair
+        # is matched before anything looks at its type. Documented, not fixed.
+        assert_that(actual).is_equal_to(expected, strict_types=True)
+        assert_that(match.equal_to(expected, strict_types=True).matches(actual)).is_true()
+
+    @pytest.mark.parametrize("bad", ["yes", 1, None])
+    def test_non_bool_is_rejected(self, bad):
+        with pytest.raises(TypeError, match="strict_types arg must be a bool"):
+            assert_that(1).is_equal_to(1, strict_types=bad)
+
+    def test_a_self_referential_pair_behaves_the_same_either_way(self):
+        # forcing the walk into a container whose own `==` was true raises the question of what happens
+        # on a cycle. Nothing new: two distinct self-referential structures already exhaust the stack
+        # without the flag, and so does bare `==` (CPython's guard covers `a is b`, not this)
+        actual = {"x": 1}
+        actual["self"] = actual
+        expected = {"x": 1}
+        expected["self"] = expected
+        with pytest.raises(RecursionError):
+            assert_that(actual).is_equal_to(expected)
+        with pytest.raises(RecursionError):
+            assert_that(actual).is_equal_to(expected, strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ({"cfg": OrderedDict(a=1)}, {"cfg": {"a": 1}}),
+            ({"o": {"cfg": OrderedDict(a=1)}}, {"o": {"cfg": {"a": 1}}}),
+            ([OrderedDict(a=1)], [{"a": 1}]),
+            ({"t": (1, 2)}, {"t": [1, 2]}),
+        ],
+        ids=str,
+    )
+    def test_a_container_type_change_is_caught_below_the_top_level(self, actual, expected):
+        # the top-level guard sits before the dict-like dispatch; these prove the node check covers the rest
+        with pytest.raises(AssertionError):
+            assert_that(actual).is_equal_to(expected, strict_types=True)
+
+    def test_a_shared_subnode_is_not_walked_twice(self):
+        # forcing the walk gives up the identity shortcut CPython applies inside a container, and a
+        # shared subnode is where that shortcut is doing real work: here it is also cyclic
+        shared = {"k": 1}
+        shared["self"] = shared
+        assert_that({"cfg": shared, "n": 1}).is_equal_to({"cfg": shared, "n": 1}, strict_types=True)
+
+    def test_the_same_nan_object_still_compares_equal(self):
+        # `nan != nan`, so a container holding one is equal to itself only through that same shortcut.
+        # Without it a strict run would disagree with a plain one over something unrelated to types.
+        nan = float("nan")
+        assert_that([nan]).is_equal_to([nan])
+        assert_that([nan]).is_equal_to([nan], strict_types=True)
+        assert_that({"v": nan}).is_equal_to({"v": nan}, strict_types=True)
+
+    def test_negation_goes_through_not_(self):
+        # is_not_equal_to takes no comparison kwargs; `.not_` is how the whole family is inverted
+        assert_that({"a": True}).not_.is_equal_to({"a": 1}, strict_types=True)
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            assert_that(True).is_not_equal_to(1, strict_types=True)
+
+
+class TestConfigSurvivesTheFilteredPaths:
+    """`ignore` / `include` route the comparison through a separate walk, which must carry the config.
+
+    Every knob was only ever tested on the plain path or on scalar elements, so dropping the config on
+    the filtered list and object paths changed nothing the suite looked at: tolerance stopped being
+    applied to dict-valued elements and to object fields, silently turning a pass into a failure.
+    """
+
+    def test_tolerance_reaches_dict_valued_list_elements(self):
+        assert_that([{"value": 1.0, "id": 1}]).is_equal_to([{"value": 1.05, "id": 99}], ignore="id", tolerance=0.1)
+        with pytest.raises(AssertionFailure):
+            assert_that([{"value": 1.0, "id": 1}]).is_equal_to([{"value": 1.5, "id": 99}], ignore="id", tolerance=0.1)
+
+    def test_tolerance_reaches_object_fields(self):
+        assert_that(Point(1.0, 1.0)).is_equal_to(Point(1.05, 99.0), ignore="y", tolerance=0.1)
+        with pytest.raises(AssertionFailure):
+            assert_that(Point(1.0, 1.0)).is_equal_to(Point(1.5, 99.0), ignore="y", tolerance=0.1)
+
+    def test_strict_types_reaches_a_nested_list_element(self):
+        assert_that([[1]]).is_equal_to([[1]], strict_types=True, ignore="absent")
+        with pytest.raises(AssertionFailure):
+            assert_that([[1]]).is_equal_to([[True]], strict_types=True, ignore="absent")
+        with pytest.raises(AssertionFailure):
+            assert_that([(1, 2)]).is_equal_to([(True, 2)], strict_types=True, ignore="absent")
+
+    def test_an_element_pair_where_only_one_side_introspects(self):
+        # the pair guard is a conjunction: with a dataclass on one side and an int on the other, taking
+        # either side alone walks a None as if it were a mapping
+        with pytest.raises(AssertionFailure, match="index"):
+            assert_that([1]).is_equal_to([Point(1.0, 2.0)], ignore="id")
+        with pytest.raises(AssertionFailure, match="index"):
+            assert_that([Point(1.0, 2.0)]).is_equal_to([1], ignore="id")

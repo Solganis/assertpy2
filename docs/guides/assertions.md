@@ -322,6 +322,86 @@ assert_that(user).is_equal_to(User(name="Alice"), ignore_null=True)
 Sequence elements have no field name, so a `comparators` field-name key does not apply to them (use a type
 key or `tolerance`). Sets compare by standard equality.
 
+#### Requiring the same type
+
+Python's `==` compares across types, and a payload keeps that property all the way down. A JSON `true`
+read back as a `bool` equals `1`, a `Decimal` from a database column equals an `int`, and neither says a
+word:
+
+```python
+from decimal import Decimal
+
+assert_that({"active": True}).is_equal_to({"active": 1})  # passes
+assert_that({"n": Decimal(1)}).is_equal_to({"n": 1})      # passes
+assert_that({"a": {"b": [{"c": True}]}}).is_equal_to({"a": {"b": [{"c": 1}]}})  # passes, three levels down
+```
+
+`strict_types=True` requires both sides of every node to be the same type, at any depth:
+
+<!-- docs-guard: skip -->
+```python
+assert_that({"active": True}).is_equal_to({"active": 1}, strict_types=True)  # fails
+```
+
+Because it is opt-in it can afford to be blunt, but the bluntness is worth knowing before you turn it
+on. It also rejects pairs some callers read as equal: `IntEnum` against `int`, a `dict` subclass
+against `dict`, `float` against `int`.
+
+When several comparison options meet on one leaf, they resolve in a fixed order:
+
+**`ignore_null` &rarr; `comparators` &rarr; identity &rarr; `strict_types` &rarr; `tolerance`.**
+
+It reads as two groups. The first two decide whether the leaf is compared at all (`ignore_null`) and
+whether your own code replaces the comparison (`comparators`). The rest then compute equality itself,
+from the most decisive test to the most forgiving: the same object, then the same type, then a numeric
+allowance. Two consequences follow that are worth saying out loud:
+
+- `tolerance` and `strict_types` only ever combine within one type, `float` against `float`. The
+  classic tolerance case, a `Decimal` from a database column against a `float` from JSON, fails on the
+  type before the tolerance is consulted.
+- a matcher on the expected side is exempt, so composed matchers keep working, and a spec that mixes
+  literals with matchers gets strictness on its literal half only.
+
+```python
+assert_that({"id": 7}).is_equal_to({"id": match.greater_than(0)}, strict_types=True)
+```
+
+Identity sits in that chain because forcing the walk would otherwise take it away. A subnode shared by
+both sides is matched by identity and not walked again, exactly as Python does inside a container, so
+a config object placed in two expected blocks stays cheap and a container holding the same `NaN` on
+both sides keeps comparing equal.
+
+Two limits. Anything matched **by hash** is outside it, which means dictionary keys and set elements:
+`1`, `1.0` and `True` hash alike and compare equal, so the pair is found before anything looks at its
+type, and the walk never sees it. `{True: "a"}` against `{1: "a"}` and `{1}` against `{1.0}` both pass
+a strict comparison. Values, list elements and object fields are all covered normally. And strictness
+turns off the fast path, because a container's own
+`==` says nothing about the types inside it, so every comparison walks the whole structure in Python.
+On a list of 20 000 dicts that is about 0.3 ms against 29 ms, which matters only if you are comparing
+large dumps in a loop.
+
+Inside a [structural spec](matchers.md#structural-matching) the same relation is spelled
+`match.equal_to(value, strict_types=True)`, one matcher covering value and type together:
+
+```python
+assert_that({"active": True}).matches_structure({"active": match.equal_to(True, strict_types=True)})
+```
+
+To assert the type alone, `match.is_type_of()` rejects a subclass where `match.is_instance_of()`
+accepts one:
+
+```python
+assert_that({"n": 1}).matches_structure({"n": match.is_type_of(int)})         # passes
+assert_that({"n": True}).matches_structure({"n": match.is_instance_of(int)})  # passes: bool is an int
+```
+
+To negate it, invert the whole assertion with `.not_` rather than looking for the flag on
+`is_not_equal_to`, which takes no comparison options:
+
+```python
+assert_that({"active": True}).not_.is_equal_to({"active": 1}, strict_types=True)
+```
+
 ### Dict flattening
 
 Lists of dicts can be flattened on a key with `extracting` (see
@@ -337,6 +417,7 @@ assert_that(people).extracting("first_name").is_equal_to(["Fred", "Bob"])
 Assert against the value of a key by prepending `has_` to the key name (see
 [dynamic assertions](#dynamic-assertions-on-objects)):
 
+<!-- docs-guard: untyped -->
 ```python
 fred = {"first_name": "Fred", "last_name": "Smith", "shoe_size": 12}
 assert_that(fred).has_first_name("Fred").has_shoe_size(12)
@@ -420,6 +501,7 @@ assert_that(yesterday).is_close_to(today, datetime.timedelta(hours=24))
 Date properties can be asserted dynamically with `has_<property>` (see
 [dynamic assertions](#dynamic-assertions-on-objects)):
 
+<!-- docs-guard: untyped -->
 ```python
 x = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
 assert_that(x).has_year(1980).has_month(1).has_day(2)
@@ -584,6 +666,7 @@ assert_that(fred).has_say_hello("Hello, Fred!")  # zero-arg method
 
 Dynamic assertions also work on dicts, keyed by entry name:
 
+<!-- docs-guard: untyped -->
 ```python
 assert_that(
     {"first_name": "Fred", "last_name": "Smith"}
