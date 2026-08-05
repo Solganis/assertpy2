@@ -134,6 +134,37 @@ class DiffResult:
         return _render_diff(self)
 
 
+def _diff_side(value: object, limit: int = 400) -> str:
+    """Repr of one side of a diff entry, capped.
+
+    A diff row is the detail beneath a message that already carries the elided value, so it is read on
+    a terminal line and never needs the whole payload.  Uncapped it is the whole payload: two 500 KB
+    strings used to render a megabyte per entry, and the structured `DiffEntry` still holds the
+    untouched values for anything that wants them.
+    """
+    return _truncated(_safe_repr(value), limit)
+
+
+def _windowed(actual: str, expected: str, width: int = 160) -> tuple[str, str]:
+    """Both lines cut to a window around their first difference.
+
+    Cutting a long line at its start hides the very thing being reported when the change is deep
+    inside it, which is the common shape for a page source or a response body.
+    """
+    if len(actual) <= width and len(expected) <= width:
+        return actual, expected
+    shared = min(len(actual), len(expected))
+    first_change = next((index for index in range(shared) if actual[index] != expected[index]), shared)
+    start = max(0, first_change - width // 2)
+
+    def cut(text: str) -> str:
+        head = "..." if start else ""
+        tail = "..." if start + width < len(text) else ""
+        return f"{head}{text[start : start + width]}{tail}"
+
+    return cut(actual), cut(expected)
+
+
 def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green: str, reset: str) -> None:
     """Render one string line-pair with difflib's intra-line caret guides, the way pytest does.
 
@@ -141,26 +172,39 @@ def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green:
     lines and leaving the reader to spot the difference.
     """
     if entry.expected is None:
-        lines.append(f"  {red}{entry.path}: - {entry.actual!r}{reset}")
+        lines.append(f"  {red}{entry.path}: - {_diff_side(entry.actual)}{reset}")
         return
     if entry.actual is None:
-        lines.append(f"  {green}{entry.path}: + {entry.expected!r}{reset}")
+        lines.append(f"  {green}{entry.path}: + {_diff_side(entry.expected)}{reset}")
         return
-    actual_line, expected_line = _safe_str(entry.actual), _safe_str(entry.expected)
+    # ndiff costs ~175x a plain pair, which is why it used to be skipped past 200 characters.  The
+    # window bounds its input instead, so the carets now survive on a long line rather than being
+    # traded away exactly where they help most.
+    actual_line, expected_line = _windowed(_safe_str(entry.actual), _safe_str(entry.expected))
     lines.append(f"  {entry.path}:")
-    # ndiff costs ~175x a plain pair even at the cutoff; on long lines skip the carets instead
-    if len(actual_line) <= 200 and len(expected_line) <= 200:
-        for guide in difflib.ndiff([actual_line], [expected_line]):
-            text = guide.rstrip("\n")
-            if guide.startswith("-"):
-                lines.append(f"    {red}{text}{reset}")
-            elif guide.startswith("+"):
-                lines.append(f"    {green}{text}{reset}")
-            else:  # the "? ^^^" caret guide row (ndiff emits nothing else for a changed single line)
-                lines.append(f"    {text}")
-    else:
-        lines.append(f"    {red}- {actual_line!r}{reset}")
-        lines.append(f"    {green}+ {expected_line!r}{reset}")
+    for guide in difflib.ndiff([actual_line], [expected_line]):
+        text = guide.rstrip("\n")
+        if guide.startswith("-"):
+            lines.append(f"    {red}{text}{reset}")
+        elif guide.startswith("+"):
+            lines.append(f"    {green}{text}{reset}")
+        else:  # the "? ^^^" caret guide row (ndiff emits nothing else for a changed single line)
+            lines.append(f"    {text}")
+
+
+def _within_budget(lines: list[str], limit: int = 20_000) -> str:
+    """Join *lines*, dropping whole rows once the block would outgrow a screenful of scrollback.
+
+    The per-row cap in `_diff_side()` bounds one row, this bounds their sum: fifty rows of capped
+    values still add up to more than anyone reads, and the block travels into CI logs and report
+    attachments where the cost is paid again.
+    """
+    total = 0
+    for index, line in enumerate(lines):
+        total += len(line) + 1
+        if total > limit:
+            return "\n".join([*lines[:index], f"  ... and {len(lines) - index} more diff lines"])
+    return "\n".join(lines)
 
 
 def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) -> str:
@@ -193,12 +237,12 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
             _append_string_entry(lines, entry, red=red, green=green, reset=reset)
     elif kind == "match":
         lines.extend(
-            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{entry.actual!r}{reset}"
+            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{_diff_side(entry.actual)}{reset}"
             for entry in visible
         )
     elif kind in {"set", "contains"}:
-        extra = ", ".join(repr(entry.actual) for entry in visible if entry.path == "extra")
-        missing = ", ".join(repr(entry.expected) for entry in visible if entry.path == "missing")
+        extra = ", ".join(_diff_side(entry.actual) for entry in visible if entry.path == "extra")
+        missing = ", ".join(_diff_side(entry.expected) for entry in visible if entry.path == "missing")
         if extra:
             lines.append(f"  {red}extra:   {{{extra}}}{reset}")
         if missing:
@@ -207,18 +251,18 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
         for entry in visible:
             path = entry.path
             if entry.expected is None:
-                lines.append(f"  {red}{path}: - {entry.actual!r}{reset}")
+                lines.append(f"  {red}{path}: - {_diff_side(entry.actual)}{reset}")
             elif entry.actual is None:
-                lines.append(f"  {green}{path}: + {entry.expected!r}{reset}")
+                lines.append(f"  {green}{path}: + {_diff_side(entry.expected)}{reset}")
             else:
                 lines.append(f"  {path}:")
-                lines.append(f"    {red}- {entry.actual!r}{reset}")
-                lines.append(f"    {green}+ {entry.expected!r}{reset}")
+                lines.append(f"    {red}- {_diff_side(entry.actual)}{reset}")
+                lines.append(f"    {green}+ {_diff_side(entry.expected)}{reset}")
 
     if truncated:
         lines.append(f"  ... and {truncated} more entries")
 
-    return "\n".join(lines)
+    return _within_budget(lines)
 
 
 _RENDER_DIFF_IN_MESSAGE: bool = True

@@ -11,7 +11,7 @@ import pytest
 from . import _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
-from .errors import _json_safe, _render_diff
+from .errors import _diff_side, _json_safe, _render_diff
 
 try:
     import allure  # ty: ignore[unresolved-import]  # optional dependency
@@ -332,11 +332,13 @@ def pytest_runtest_makereport(item, call):
         return
 
     if actual is not None or expected is not None:
+        # capped like the diff rows: this section is read on a terminal, and the untouched values stay
+        # on the exception for anything that wants them
         lines = []
         if actual is not None:
-            lines.append(f"  actual:   {actual!r}")
+            lines.append(f"  actual:   {_diff_side(actual)}")
         if expected is not None:
-            lines.append(f"  expected: {expected!r}")
+            lines.append(f"  expected: {_diff_side(expected)}")
         report.sections.append(("AssertionFailure", "\n".join(lines)))
 
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
