@@ -202,3 +202,16 @@ if TYPE_CHECKING:
     assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., object])
+
+    # A type with no overload of its own falls through to the full surface rather than to a narrowed
+    # view.  This is what lets the DataFrame and ndarray assertions carry no Protocol: they are
+    # reachable because the fallback returns the concrete class.  tests/test_protocol_parity.py
+    # exempts them from its reverse check on exactly this premise, so it is pinned here.
+    class _FakeFrame:  # stands in for a DataFrame / ndarray: a type no assert_that overload keys on
+        pass
+
+    frame = cast("_FakeFrame", None)
+    assert_type(assert_that(frame), AssertionBuilder[_FakeFrame])
+    assert_type(assert_that(frame).is_frame_equal(frame), AssertionBuilder[_FakeFrame])
+    assert_type(assert_that(frame).is_array_equal(frame), AssertionBuilder[_FakeFrame])
+    assert_type(assert_that(frame).is_array_close_to(frame, rtol=0.1), AssertionBuilder[_FakeFrame])
