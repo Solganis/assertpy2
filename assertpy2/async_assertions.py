@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import inspect
 import time
@@ -207,6 +206,11 @@ class AsyncAssertionBuilder:
 
         def _make_coroutine(*args, **kwargs):
             async def _poll():
+                # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms
+                # import, dragging in socket/ssl/select, and only the async polling path needs it.
+                # Anyone reaching this line is already inside a running loop, so it is a dict lookup.
+                import asyncio
+
                 loop = asyncio.get_running_loop()
                 start = loop.time()
                 deadline = start + self._timeout
