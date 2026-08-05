@@ -370,6 +370,24 @@ class TestFindAmbiguousOperand:
         found = _find_ambiguous_operand(_ArrayField(arr), _EmptyDataclass())
         assert_that(found).is_same_as(arr)
 
+    def test_an_array_only_on_the_expected_side_is_found(self):
+        # every case above puts the array on the actual side, so nothing held the search to looking at
+        # both: an array reachable only through expected fell through and its raw ValueError escaped
+        arr = _FakeArray()
+        assert_that(_find_ambiguous_operand([1], [arr])).is_same_as(arr)
+        assert_that(_find_ambiguous_operand(_ArrayField(1), _ArrayField(arr))).is_same_as(arr)
+        assert_that(_find_ambiguous_operand({"k": 1}, {"k": arr})).is_same_as(arr)
+
+    def test_an_array_inside_an_expected_list_reports_the_actionable_error(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"k": [1, 2]}).is_equal_to({"k": [_FakeArray(), 2]})
+        assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
+
+    def test_an_array_inside_an_expected_dataclass_field_reports_the_actionable_error(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_ArrayField(1)).is_equal_to(_ArrayField(_FakeArray()))
+        assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
+
     def test_dataclass_without_array_returns_none(self):
         assert_that(_find_ambiguous_operand(_ArrayField(1), _ArrayField(2))).is_none()
 

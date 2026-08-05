@@ -16,6 +16,12 @@ class TestTemporalMatchers:
         assert_that(datetime.now() - timedelta(seconds=1)).satisfies(match.is_now(3))
         assert_that(match.is_now(3).matches(datetime.now() - timedelta(seconds=30))).is_false()
 
+    def test_is_now_default_window_is_two_seconds(self):
+        # every other case either passes an explicit delta or uses an unshifted now(), both of which
+        # hold under any positive default, so the default itself was pinned by nothing
+        assert_that(match.is_now().matches(datetime.now() - timedelta(seconds=1.5))).is_true()
+        assert_that(match.is_now().matches(datetime.now() - timedelta(seconds=2.5))).is_false()
+
     def test_is_now_accepts_timedelta_delta(self):
         assert_that(datetime.now()).satisfies(match.is_now(timedelta(seconds=5)))
 
@@ -1129,3 +1135,4 @@ class TestEqualToStrictTypes:
                 flag_ok = True
             except AssertionError:
                 flag_ok = False
+            assert_that(spec_ok).is_equal_to(flag_ok)

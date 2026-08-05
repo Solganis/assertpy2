@@ -540,6 +540,35 @@ class TestContextVarsIsolation:
             assert_that(5).is_equal_to(6)
 
 
+class TestRealPollTimings:
+    """The recorder unit tests hand-feed `elapsed`, so the live poll never had its clock pinned.
+
+    Every sample and the trace total come from the same `time.monotonic()` reading. If it stops
+    arriving, nothing fails until the summary reaches its "value changed N times" branch and subtracts
+    one timestamp from another, and the assertion turns into a TypeError.
+    """
+
+    def test_a_mutating_sync_probe_times_out_with_real_timings(self):
+        counter = itertools.count()
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(lambda: next(counter)).eventually_sync(timeout=0.12, interval=0.02).is_equal_to(-1)
+        trace = exc_info.value.trace
+        assert_that(str(exc_info.value)).contains("last change")
+        assert_that(trace.elapsed).is_instance_of(float).is_greater_than_or_equal_to(0)
+        for sample in trace.samples:
+            assert_that(sample.elapsed).is_instance_of(float).is_between(0, 5)
+
+    def test_a_mutating_async_probe_times_out_with_real_timings(self):
+        counter = itertools.count()
+        with pytest.raises(AssertionError) as exc_info:
+            asyncio.run(assert_that(lambda: next(counter)).eventually(timeout=0.12, interval=0.02).is_equal_to(-1))
+        trace = exc_info.value.trace
+        assert_that(str(exc_info.value)).contains("last change")
+        assert_that(trace.elapsed).is_instance_of(float).is_greater_than_or_equal_to(0)
+        for sample in trace.samples:
+            assert_that(sample.elapsed).is_instance_of(float).is_between(0, 5)
+
+
 class TestRetryCollection:
     """A poll that converged late is recorded, so the plugin can name it after the run."""
 
@@ -575,6 +604,22 @@ class TestRetryCollection:
         states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
         asyncio.run(assert_that(lambda: next(states)).eventually(timeout=2, interval=0.02).is_equal_to("READY"))
         assert_that(_RETRIES).is_length(1)
+
+    def test_the_async_first_attempt_pass_records_nothing(self):
+        # the sync mirror of this existed, the async one did not, so the async gate could go from a
+        # conjunction to a disjunction and report every clean poll as a retry
+        asyncio.run(assert_that(lambda: "READY").eventually(timeout=2, interval=0.02).is_equal_to("READY"))
+        assert_that(_RETRIES).is_empty()
+
+    def test_the_async_path_collects_nothing_without_the_plugin(self, monkeypatch):
+        monkeypatch.setattr(aa, "_COLLECT_RETRIES", False)
+        states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
+        asyncio.run(assert_that(lambda: next(states)).eventually(timeout=2, interval=0.02).is_equal_to("READY"))
+        assert_that(_RETRIES).is_empty()
+
+    def test_an_untraced_async_poll_still_passes(self):
+        # with trace off there is no recorder at all, and the gate has to stop before it reads one
+        asyncio.run(assert_that(lambda: 7).eventually(timeout=1, interval=0.02, trace=False).is_equal_to(7))
 
     def test_a_timeout_records_nothing(self):
         # it never converged, so it is a failure with a trace, not a poll that nearly made it
