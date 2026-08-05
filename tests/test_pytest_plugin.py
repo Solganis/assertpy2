@@ -757,6 +757,20 @@ class TestSnapshotOrphans:
         pytest_testnodedown(SimpleNamespace(workeroutput={}), None)
         assert_that(pytest_plugin._controller_touched).is_empty()
 
+    def test_the_prune_locks_the_file_it_rewrites(self, tmp_path, monkeypatch):
+        # nothing asserted which path the lock was taken on, so it could be taken on a constant and
+        # stop excluding a concurrent write of the same snapshot, littering the cwd on the way
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        locked = []
+        real_lock = snapshot_module._file_lock
+        monkeypatch.setattr(
+            snapshot_module, "_file_lock", lambda target, **kw: locked.append(target) or real_lock(target, **kw)
+        )
+        snapshot_module._prune_sub_key_orphans([(snapname, "30")])
+        assert_that(locked).is_equal_to([snapname])
+
     def test_is_full_run_variants(self):
         def config(**opt):
             base = {"keyword": "", "markexpr": "", "last_failed": False, "failed_first": False, "file_or_dir": []}
@@ -1072,6 +1086,20 @@ class TestSnapshotKeyReuseWarning:
         # the message has to carry the cause, not just the fact: a key alone is not actionable
         assert_that(str(caught[0].message)).contains("test_mod.py:17").contains("shared by 2 tests")
         assert_that(str(caught[0].message)).contains("snapshot(id=...)")
+
+    def test_the_warning_points_at_the_line_that_reused_the_key(self, monkeypatch, tmp_path):
+        # catch_warnings records the message but not where pytest will attribute it, so the stack
+        # level was free to drift onto our own frame or into pytest internals, where a module-scoped
+        # filterwarnings rule would stop matching it. driven through snapshot() because the depth is
+        # only right on the real call path
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert_that({"u": 1}).snapshot(id="shared", path=str(tmp_path))
+            monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_b")
+            assert_that({"u": 1}).snapshot(id="shared", path=str(tmp_path))
+        reuse = [w for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
+        assert_that(reuse).is_length(1)
+        assert_that(reuse[0].filename).is_equal_to(__file__)
 
     def test_one_test_reaching_a_key_twice_is_left_alone(self):
         # the legitimate case: a helper that snapshots twice inside one test asserts both values

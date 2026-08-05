@@ -510,6 +510,19 @@ class TestStringDiffCarets:
         assert_that(output).contains("...")
         assert_that(max(len(line) for line in output.splitlines())).is_less_than(200)
 
+    def test_the_window_marks_a_cut_head_with_an_ellipsis(self):
+        # contains("...") alone is satisfied by the tail marker, so the head was free to render as
+        # anything at all, including the literal "None"
+        diff = DiffResult(
+            kind="string",
+            entries=[DiffEntry(path="line 1", actual="x" * 300 + "a", expected="x" * 300 + "b")],
+        )
+        output = _format_diff(diff)
+        assert_that(output).does_not_contain("None")
+        for line in output.splitlines():
+            if line.strip().startswith(("-", "+")):
+                assert_that(line.strip()[2:]).starts_with("...")
+
     def test_a_line_that_is_a_prefix_of_the_other(self):
         # no index of the shared prefix differs, so the search for the first change finds nothing; the
         # sentinel it falls back to has to be a position, since the window arithmetic subtracts from it
@@ -552,6 +565,13 @@ class TestStringDiffCarets:
         output = _format_diff(diff)
         assert_that(len(output)).is_less_than(21_000)
         assert_that(output).contains("more diff lines")
+
+    def test_the_block_budget_counts_one_separator_per_line(self):
+        # the existing case is far past the limit, so charging each row an extra character changed
+        # nothing there; sized to sit just under it, the miscount is what decides elision
+        entries = [DiffEntry(path=f"[{index}]", actual="a" * 90, expected="b" * 90) for index in range(97)]
+        output = _format_diff(DiffResult(kind="sequence", entries=entries), max_entries=0)
+        assert_that(output).does_not_contain("more diff lines")
 
     def test_removed_line_renders_minus_only(self):
         diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual="gone", expected=None)])
@@ -1057,6 +1077,23 @@ class TestBuildEqualityDiffCircularRef:
         result = _build_equality_diff(mapping, mapping, _seen={id(mapping)})
         assert_that(result.kind).is_equal_to("scalar")
         assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
+
+    def test_a_circular_entry_keeps_both_sides(self):
+        # only .actual was ever asserted, so dropping the expected side rendered the row as a pure
+        # deletion and shipped "expected": null into the Allure attachment
+        mapping = {"x": 1}
+        entry = _build_equality_diff(mapping, mapping, _seen={id(mapping)}).entries[0]
+        assert_that(entry.actual).is_equal_to("<circular ref>")
+        assert_that(entry.expected).is_equal_to("<circular ref>")
+
+    def test_a_nested_circular_entry_keeps_both_sides(self):
+        # the nested walk has its own cycle guard, and it was pinned by nothing at all
+        circular = [1]
+        circular.append(circular)
+        entries = _sub_diff_entries(circular, circular, "x", _seen={id(circular)})
+        assert_that(entries).is_length(1)
+        assert_that(entries[0].actual).is_equal_to("<circular ref>")
+        assert_that(entries[0].expected).is_equal_to("<circular ref>")
 
     def test_seen_passed_through(self):
         result = _build_equality_diff([1, 2], [1, 3], _seen=set())
