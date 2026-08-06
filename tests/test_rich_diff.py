@@ -7,6 +7,7 @@ import pytest
 
 from assertpy2 import assert_that, match
 from assertpy2._engine import _diff as _diff_module
+from assertpy2._engine._compare import _build_compare_config
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
 from assertpy2.errors import DiffEntry, DiffResult
 from assertpy2.helpers import HelpersMixin
@@ -1655,10 +1656,51 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].path).is_equal_to("[199].id")
 
     def test_a_sequence_past_the_cap_stays_positional(self):
+        # lengths must differ, or the cheaper gate answers first and this branch is never reached
         size = _diff_module._ALIGN_MAX_ELEMENTS + 1
-        result = _build_equality_diff(list(range(size)), list(range(1, size + 1)))
+        result = _build_equality_diff(list(range(size)), list(range(1, size)))
         assert_that(result.entries).is_length(size)
         assert_that(result.entries[0].path).is_equal_to("[0]")
+
+    def test_an_equal_length_pair_is_never_aligned(self):
+        # a rotation would read shorter aligned, and is given up so that the common failure - two
+        # equal-length sequences of records - pays nothing for an alignment that cannot help it
+        result = _build_equality_diff([1, 2, 3, 4], [2, 3, 4, 1])
+        assert_that([entry.path for entry in result.entries]).is_equal_to(["[0]", "[1]", "[2]", "[3]"])
+
+    def test_an_aligned_block_still_pairs_its_elements(self):
+        # a shift at one end and a substitution at the other: the aligned walk has to report the pair
+        # as a leaf, not as one deletion and one insertion
+        result = _build_equality_diff([0, 1, 2, 3, 9], [1, 2, 3, 8])
+        rows = [(entry.path, entry.actual, entry.expected) for entry in result.entries]
+        assert_that(rows).contains(("actual[0]", 0, None), ("[4]", 9, 8))
+
+    def test_an_aligned_pair_beyond_tolerance_is_one_leaf(self):
+        # without a config a differing pair is walked; a tolerance decides it outright, and the aligned
+        # walk has to report that verdict as a single row
+        with pytest.raises(AssertionError):
+            assert_that([0.0, 1.0, 2.0, 9.0]).is_equal_to([1.0, 2.0, 8.0], tolerance=0.5)
+        result = _build_equality_diff(
+            [0.0, 1.0, 2.0, 9.0],
+            [1.0, 2.0, 8.0],
+            config=_build_compare_config(0.5, None),
+        )
+        rows = [(entry.path, entry.actual, entry.expected) for entry in result.entries]
+        assert_that(rows).contains(("[3]", 9.0, 8.0))
+
+    def test_an_aligned_equal_block_is_still_offered_to_the_config(self):
+        # difflib matched the block on ==, which is the whole test only when nothing narrows it: a
+        # comparator is free to disagree and has to be asked
+        called = []
+
+        def picky(left, right):
+            called.append((left, right))
+            return left == right
+
+        with pytest.raises(AssertionError):
+            assert_that([0, 1.0, 2.0]).is_equal_to([1.0, 2.0], comparators={float: picky})
+        # 1.0 and 2.0 are the aligned equal block; the comparator saw them
+        assert_that(called).contains((1.0, 1.0), (2.0, 2.0))
 
     def test_the_verdict_still_belongs_to_the_config(self):
         # alignment picks the pairing, never whether a pair is equal
