@@ -85,10 +85,6 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
     return _joined_parts(parts, elided=elided)
 
 
-def _matches_positionally(seq, counterpart, index) -> bool:
-    return index < len(counterpart) and not _guarded_not_equal(seq[index], counterpart[index])
-
-
 def _elided_seq_repr(seq, counterpart) -> str:
     """Collapse elements equal to their counterpart into ``..`` so only the differing ones are printed.
 
@@ -112,7 +108,13 @@ def _elided_seq_repr(seq, counterpart) -> str:
     parts = []
     elided = False
     for index, value in enumerate(seq):
-        if index in aligned if aligned is not None else _matches_positionally(seq, counterpart, index):
+        # two loops rather than a per-element branch: this runs once per element of every rendered
+        # sequence, and the test is the same for all of them
+        if aligned is not None:
+            matched = index in aligned
+        else:
+            matched = index < len(counterpart) and not _guarded_not_equal(value, counterpart[index])
+        if matched:
             elided = True
             continue
         parts.append(_safe_repr(value))

@@ -75,9 +75,10 @@ Comparing position by position would have called all forty elements different. A
 the sequence its index belongs to, because once the two sides have shifted their index spaces no longer
 agree.
 
-The alignment is used only where it reads shorter than the plain index comparison, so a reversal, a
-coordinate pair and any other sequence that did not shift keep the positional reading. Sequences over a
-thousand elements are not aligned at all.
+The alignment is used only where a sequence changed length, and then only where it reads shorter than
+the plain index comparison. A reversal, a coordinate pair and anything else of unchanged length keep
+the positional reading, so a comparison that could not benefit does not pay for the attempt. Sequences
+over a thousand elements are not aligned at all.
 
 A multi-line value is collapsed by line, which matters most: every line of it costs a row of terminal,
 and the message carries the value twice.
