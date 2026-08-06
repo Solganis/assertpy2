@@ -121,3 +121,68 @@ def test_contains_only_large(benchmark):
     # membership both ways over a sizeable list, the multiset engine rather than the ordered one
     items = list(range(300))
     benchmark(lambda: assert_that(items).contains_only(*items))
+
+
+def test_shifted_list_diff(benchmark):
+    # the alignment path: one element inserted at the head, which positional pairing would report as a
+    # difference at every later index. difflib runs on the failure path only, so this is where it costs
+    left, right = list(range(500)), list(range(1, 500))
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)
+
+
+def test_shifted_records_diff(benchmark):
+    # the same shift over unhashable elements, which difflib cannot index directly: the alignment falls
+    # back to keying on reprs, and rendering 500 dict reprs is the price
+    left = _records(500)
+    right = _records(500)[1:]
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)
+
+
+def test_unshifted_list_diff(benchmark):
+    # the alignment loses here and the walk stays positional, so this measures what the losing branch
+    # costs everyone whose sequence did not shift: no common run exists, and the opcodes are computed
+    # and thrown away
+    left = [value * 2 for value in range(500)]
+    right = [value * 2 + 1 for value in range(500)]
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)
+
+
+def test_long_records_one_field_diff(benchmark):
+    # the common QA failure: a long list of records with one field changed. Pairing by index already
+    # yields the single entry an alignment could, so this is the case that must not pay for difflib
+    left = _records(200)
+    right = _records(200)
+    right[199]["profile"]["city"] = "changed"
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)
+
+
+def test_over_cap_list_diff(benchmark):
+    # past _ALIGN_MAX_ELEMENTS the alignment is skipped entirely, which is the branch that keeps a
+    # quadratic search off a very large failure
+    left, right = list(range(2000)), list(range(1, 2000))
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(left).is_equal_to(right)
+
+    benchmark(run)

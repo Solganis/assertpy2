@@ -396,3 +396,11 @@ class TestFindAmbiguousOperand:
 
     def test_plain_scalars_return_none(self):
         assert_that(_find_ambiguous_operand(1, 2)).is_none()
+
+
+def test_is_equal_shifted_list_failure_elides_the_aligned_run():
+    # the message elides on the same alignment the diff pairs on: eliding by position would shift every
+    # later element out of the elision and dump both sequences whole
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
+    assert_that(str(exc_info.value)).contains("Expected <[.., 0]> to be equal to <[..]>")
