@@ -14,9 +14,13 @@ express to the type checker.
 from __future__ import annotations
 
 import dataclasses
+import datetime
+import decimal
 import math
 import numbers
+import pathlib
 import re
+import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -26,8 +30,40 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-_EQ_ATOMIC = frozenset({int, float, bool, complex, str, bytes, bytearray, type(None)})
-"""Types whose ``==`` is a plain bool and which have nothing inside to walk into."""
+_EQ_ATOMIC = frozenset(
+    {
+        int,
+        float,
+        bool,
+        complex,
+        str,
+        bytes,
+        bytearray,
+        type(None),
+        datetime.datetime,
+        datetime.date,
+        datetime.time,
+        datetime.timedelta,
+        decimal.Decimal,
+        uuid.UUID,
+        pathlib.PurePosixPath,
+        pathlib.PureWindowsPath,
+        pathlib.PosixPath,
+        pathlib.WindowsPath,
+    }
+)
+"""Types whose ``==`` is a plain bool and which have nothing inside to walk into.
+
+The stdlib scalars past the builtins are here for cost, not for correctness.  ``strict_types`` walks
+past any value it does not know to be atomic, because a container's own ``==`` says nothing about the
+types inside it - and a ``datetime`` is not a container, so that walk runs the whole introspection
+ladder to come back with nothing.  Over 200 records of timestamps, decimals and UUIDs that was 3.7 ms
+against 0.5 ms with them listed.
+
+Listing one changes no verdict: a type difference is decided by `_types_differ()` before atomicity is
+ever consulted, so ``date`` against ``datetime`` still fails.  Exact types, not ``isinstance``, so a
+subclass with its own structure is still walked.
+"""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

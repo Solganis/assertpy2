@@ -480,6 +480,21 @@ class TestConfigThroughNestedContainers:
             assert_that({"d": [1, 2], "k": 1}).is_equal_to({"d": [1, 9], "k": 2}, ignore="k")
 
 
+class _Opaque:
+    """A value the diff ladder cannot take apart and no atomic list will ever name."""
+
+    def __init__(self, amount):
+        self.amount = amount
+
+    def __eq__(self, other):
+        return isinstance(other, _Opaque) and self.amount == other.amount
+
+    __hash__ = None
+
+    def __repr__(self):
+        return f"_Opaque({self.amount})"
+
+
 class TestStrictTypes:
     """`==` alone lets a type change pass at any depth, so `strict_types` closes it."""
 
@@ -538,7 +553,16 @@ class TestStrictTypes:
 
     @pytest.mark.parametrize(
         "value",
-        [uuid.UUID(int=1), decimal.Decimal(3), datetime.date(2026, 1, 1), {1, 2}, frozenset({1}), "abc", b"ab"],
+        [
+            uuid.UUID(int=1),
+            decimal.Decimal(3),
+            datetime.date(2026, 1, 1),
+            {1, 2},
+            frozenset({1}),
+            "abc",
+            b"ab",
+            _Opaque(1),
+        ],
         ids=str,
     )
     def test_an_undecomposable_value_at_the_top_level_is_equal_to_its_copy(self, value):
@@ -552,6 +576,7 @@ class TestStrictTypes:
             (uuid.UUID(int=1), uuid.UUID(int=2)),
             (datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)),
             ("abc", "abd"),
+            (_Opaque(1), _Opaque(2)),
         ],
         ids=str,
     )
@@ -652,6 +677,45 @@ class TestStrictTypes:
         assert_that({"a": True}).not_.is_equal_to({"a": 1}, strict_types=True)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             assert_that(True).is_not_equal_to(1, strict_types=True)
+
+
+class TestStrictTypesOnStdlibScalars:
+    """A timestamp, a decimal or a UUID is a value, not a container, and is treated as one.
+
+    They are listed as atomic for cost - walking past them ran the whole introspection ladder to come
+    back with nothing - so what needs pinning is that listing them changed no verdict.
+    """
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            (datetime.date(2026, 1, 1), datetime.datetime(2026, 1, 1)),
+            (decimal.Decimal(1), 1.0),
+            (decimal.Decimal(1), 1),
+            (uuid.uuid5(uuid.NAMESPACE_DNS, "x"), str(uuid.uuid5(uuid.NAMESPACE_DNS, "x"))),
+            (datetime.timedelta(0), 0),
+        ],
+        ids=str,
+    )
+    def test_a_type_difference_is_still_caught(self, actual, expected):
+        with pytest.raises(AssertionFailure):
+            assert_that({"v": actual}).is_equal_to({"v": expected}, strict_types=True)
+
+    def test_the_same_type_still_passes(self):
+        moment = datetime.datetime(2026, 1, 1, 12, 30)
+        assert_that({"at": moment, "amount": decimal.Decimal("1.5")}).is_equal_to(
+            {"at": moment, "amount": decimal.Decimal("1.5")}, strict_types=True
+        )
+
+    def test_a_subclass_with_structure_is_still_walked(self):
+        # exact types, not isinstance: a subclass that carries fields of its own is not a scalar
+        class Stamped(datetime.datetime):
+            pass
+
+        moment = Stamped(2026, 1, 1)
+        assert_that({"at": moment}).is_equal_to({"at": moment}, strict_types=True)
+        with pytest.raises(AssertionFailure):
+            assert_that({"at": moment}).is_equal_to({"at": datetime.datetime(2026, 1, 1)}, strict_types=True)
 
 
 class TestConfigSurvivesTheFilteredPaths:
