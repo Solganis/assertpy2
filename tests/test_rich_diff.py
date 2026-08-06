@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._engine import _diff as _diff_module
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
 from assertpy2.errors import DiffEntry, DiffResult
 from assertpy2.helpers import HelpersMixin
@@ -1587,3 +1588,80 @@ class TestMixedKindPairsStayAssertions:
             assert_that(Model(1)).is_equal_to({"a": 1})
         assert_that(_build_equality_diff(Model(1), {"a": 1}).kind).is_equal_to("scalar")
         assert_that(_build_equality_diff({"a": 1}, Model(1)).kind).is_equal_to("scalar")
+
+
+class TestSequenceAlignment:
+    """A shifted sequence is paired by alignment, so one insertion reads as one entry."""
+
+    def test_an_element_inserted_at_the_head(self):
+        result = _build_equality_diff([0, *range(1, 40)], list(range(1, 40)))
+        assert_that(result.kind).is_equal_to("sequence")
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("actual[0]")
+        assert_that(result.entries[0].actual).is_equal_to(0)
+        assert_that(result.entries[0].expected).is_none()
+
+    def test_an_element_missing_from_the_middle(self):
+        result = _build_equality_diff([1, 2, 4, 5], [1, 2, 3, 4, 5])
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("expected[2]")
+        assert_that(result.entries[0].expected).is_equal_to(3)
+
+    def test_a_one_sided_entry_names_the_sequence_it_indexes(self):
+        # after a shift the two index spaces disagree, and numbering both as [i] put two unrelated
+        # entries on one path
+        entries = _build_equality_diff([9, 1, 2, 3, 9], [1, 2, 3]).entries
+        paths = [entry.path for entry in entries]
+        assert_that(paths).is_equal_to(sorted(set(paths), key=paths.index))  # no path repeats
+        assert_that(paths).contains("actual[0]", "actual[4]")
+
+    def test_unhashable_elements_are_aligned_on_their_reprs(self):
+        # difflib cannot index dicts, which is the shape of most API payloads, so the alignment keys
+        # on reprs instead of falling back to position
+        actual = [{"id": index} for index in range(20)]
+        result = _build_equality_diff(actual, actual[1:])
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("actual[0]")
+
+    def test_a_substitution_stays_positional(self):
+        result = _build_equality_diff([1, 2, 3], [1, 9, 3])
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
+            [("[1]", 2, 9)]
+        )
+
+    def test_a_reversal_keeps_the_index_reading(self):
+        # aligned this reads as four insertions and deletions, positionally as two substitutions, and
+        # the shorter reading wins
+        result = _build_equality_diff([1, 2, 3], [3, 2, 1])
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
+            [("[0]", 1, 3), ("[2]", 3, 1)]
+        )
+
+    def test_a_tuple_pair_reads_as_a_record(self):
+        # a coordinate pair is never shorter aligned, so the tie keeps the positional reading without
+        # a special case for the type
+        result = _build_equality_diff((1, 2), (2, 3))
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
+            [("[0]", 1, 2), ("[1]", 2, 3)]
+        )
+
+    def test_a_single_difference_never_asks_for_an_alignment(self):
+        # one differing position cannot be beaten, and asking would render every element's repr first
+        actual = [{"id": index} for index in range(200)]
+        expected = [dict(item) for item in actual]
+        expected[199]["id"] = -1
+        result = _build_equality_diff(actual, expected)
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("[199].id")
+
+    def test_a_sequence_past_the_cap_stays_positional(self):
+        size = _diff_module._ALIGN_MAX_ELEMENTS + 1
+        result = _build_equality_diff(list(range(size)), list(range(1, size + 1)))
+        assert_that(result.entries).is_length(size)
+        assert_that(result.entries[0].path).is_equal_to("[0]")
+
+    def test_the_verdict_still_belongs_to_the_config(self):
+        # alignment picks the pairing, never whether a pair is equal
+        assert_that([1.0, 2.0, 3.0]).is_equal_to([1.001, 2.0, 3.0], tolerance=0.01)
+        with pytest.raises(AssertionError):
+            assert_that([1.0, 2.0, 3.0]).is_equal_to([1.5, 2.0, 3.0], tolerance=0.01)

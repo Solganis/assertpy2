@@ -58,6 +58,27 @@ except AssertionError as e:
     #     + 999
 ```
 
+Sequences are aligned before they are compared, so an element inserted or removed is reported as
+itself rather than as a mismatch at every index after it:
+
+```python
+try:
+    assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
+except AssertionError as e:
+    print(e)
+    # Expected <[.., 0]> to be equal to <[..]>, but was not.
+    # diff (sequence):
+    #   actual[0]: - 0
+```
+
+Comparing position by position would have called all forty elements different. A one-sided entry names
+the sequence its index belongs to, because once the two sides have shifted their index spaces no longer
+agree.
+
+The alignment is used only where it reads shorter than the plain index comparison, so a reversal, a
+coordinate pair and any other sequence that did not shift keep the positional reading. Sequences over a
+thousand elements are not aligned at all.
+
 A multi-line value is collapsed by line, which matters most: every line of it costs a row of terminal,
 and the message carries the value twice.
 

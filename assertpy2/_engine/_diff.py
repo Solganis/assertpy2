@@ -28,6 +28,7 @@ or answered for the wrong one.  Ask the walker and read its answer instead: ``No
 from __future__ import annotations
 
 import dataclasses
+import difflib
 
 from ..errors import DiffEntry, DiffResult, _safe_repr, _safe_str
 from ._compare import _node_decision
@@ -67,14 +68,119 @@ def _child_entries(actual, expected, path, *, descended_for, _seen=None, config=
     return [DiffEntry(path=path, actual=actual, expected=expected)]
 
 
+_ALIGN_MAX_ELEMENTS = 1000
+"""Longest sequence `_alignment_opcodes()` will align.
+
+difflib's search is quadratic, and the alignment buys nothing a reader of a thousand-element failure
+was going to use anyway, so past this the diff stays positional: never wrong, only longer.
+"""
+
+
+def _alignment_opcodes(actual, expected):
+    """difflib opcodes pairing two sequences, or ``None`` when only positions are available.
+
+    Alignment decides *which elements to pair*, never whether a pair is equal - that stays with
+    `_node_decision()`, which is what keeps a comparator, a tolerance and ``strict_types`` in charge of
+    the verdict no matter how the pairing was found.
+
+    Elements difflib cannot hash - dicts, lists, arrays, which is the shape of most API payloads - are
+    aligned on their reprs instead.  A repr stands in for structural identity here, and standing in
+    badly costs only a worse pairing, not a wrong answer.  ``autojunk`` is off because the heuristic
+    calls any value filling more than 1% of a 200+ element sequence junk, which is exactly the repeated
+    value an alignment has to match on.
+
+    The length cap lives in the caller, which reaches it before paying for anything here.
+    """
+    try:
+        return difflib.SequenceMatcher(None, actual, expected, autojunk=False).get_opcodes()
+    except (TypeError, ValueError):
+        pass
+    try:
+        keyed_actual = [_safe_repr(item) for item in actual]
+        keyed_expected = [_safe_repr(item) for item in expected]
+        return difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
+    except (TypeError, ValueError):  # pragma: no cover - a repr that is neither hashable nor comparable
+        return None
+
+
+def _aligned_match_indices(seq, counterpart) -> set[int] | None:
+    """Indices of ``seq`` that align with an equal element of ``counterpart``, or ``None`` if unaligned.
+
+    Lets the failure message collapse a matched run the way the diff collapses it: without this the
+    message elides on position and an element inserted at the head shifts every later element out of
+    the elision, so the message dumps both sequences whole while the diff below it shows one entry.
+    """
+    opcodes = _alignment_opcodes_if_useful(seq, counterpart)
+    if opcodes is None:
+        return None
+    matched: set[int] = set()
+    for tag, start, stop, _, _ in opcodes:
+        if tag == "equal":
+            matched.update(range(start, stop))
+    return matched
+
+
+def _positional_difference_count(actual, expected) -> int:
+    """How many positions the two sequences differ at when paired by index."""
+    return sum(
+        1
+        for index in range(max(len(actual), len(expected)))
+        if index >= len(actual) or index >= len(expected) or actual[index] != expected[index]
+    )
+
+
+def _aligned_difference_count(opcodes) -> int:
+    """How many positions the alignment reports, which is what an aligned walk would emit."""
+    return sum(
+        max(actual_stop - actual_start, expected_stop - expected_start)
+        for tag, actual_start, actual_stop, expected_start, expected_stop in opcodes
+        if tag != "equal"
+    )
+
+
+def _alignment_opcodes_if_useful(actual, expected):
+    """Alignment opcodes, or ``None`` when pairing by index already reads at least as short.
+
+    The order matters for cost, not just for the answer.  A long list of records with one field changed
+    is the common failure, and pairing it by index already yields the one entry an alignment could -
+    but the elements are unhashable, so asking difflib means rendering every element's repr first.  One
+    differing position cannot be beaten, so that case never asks: measured on 200 records, it is the
+    difference between 0.09 ms and 0.75 ms.
+
+    Alignment is a large win when a sequence shifted and a loss when it did not: a reversal reads as
+    two substitutions positionally and as four insertions and deletions aligned.  Counting both, and
+    keeping the index reading on a tie, is what lets one rule serve both - and it answers whether a
+    tuple should align without a special case, since a coordinate pair is never shorter aligned.
+
+    Counted on ``==`` alone rather than on the built entries: the walkers recurse, so building both to
+    compare them would double the work at every level of nesting.  Measured over 13 600 random pairs,
+    this count picks the same winner as the exact one every time.
+    """
+    if max(len(actual), len(expected)) > _ALIGN_MAX_ELEMENTS:
+        return None  # asked before counting: over the cap nothing here can be used anyway
+    positional = _positional_difference_count(actual, expected)
+    if positional <= 1:
+        return None  # nothing to win: an alignment would have to report zero positions to beat it
+    opcodes = _alignment_opcodes(actual, expected)
+    if opcodes is None or _aligned_difference_count(opcodes) >= positional:
+        return None
+    return opcodes
+
+
 def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
-    """Diff two sequences element-by-element, recursing into nested containers.
+    """Diff two sequences, pairing their elements by alignment where that reads shorter.
+
+    An element inserted or removed shifts everything after it, and pairing by index then calls every
+    later element different.  Pairing by `difflib` alignment reports the one insertion instead.
 
     ``seen`` must already include the ids of ``actual``/``expected`` so a self-referential element
     is caught.  Shared by the top-level (`_build_equality_diff()`) and nested
     (`_sub_diff_entries()`) paths so both decompose sequences identically.  Elements have no field
     name, so a ``config`` applies only type comparators and tolerance to them.
     """
+    opcodes = _alignment_opcodes_if_useful(actual, expected)
+    if opcodes is not None:
+        return _aligned_diff_entries(actual, expected, prefix, seen, config, opcodes)
     entries: list[DiffEntry] = []
     max_len = max(len(actual), len(expected))
     for i in range(max_len):
@@ -84,14 +190,44 @@ def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[
         elif i >= len(expected):
             entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
         else:
-            decision = _node_decision(actual[i], expected[i], config)
-            if decision == "leaf":
-                entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
-            elif decision != "equal":
-                entries.extend(
-                    _child_entries(actual[i], expected[i], path, descended_for=decision, _seen=seen, config=config)
-                )
+            entries.extend(_element_entries(actual[i], expected[i], path, seen, config))
     return entries
+
+
+def _aligned_diff_entries(actual, expected, prefix, seen, config, opcodes) -> list[DiffEntry]:
+    """Entries for a pair the alignment reports as shifted.
+
+    A one-sided entry names the sequence its index belongs to (``actual[2]``, ``expected[1]``).  Once
+    the two sides have shifted apart their index spaces no longer agree, and numbering both as ``[i]``
+    put two unrelated entries on one path - the reader cannot tell which sequence the number indexes,
+    and a consumer reading entries by path sees a collision.
+    """
+    entries: list[DiffEntry] = []
+    for tag, actual_start, actual_stop, expected_start, expected_stop in opcodes:
+        if tag == "equal" and config is None:
+            continue  # difflib matched these on ``==``, which is the whole test when no config narrows it
+        for offset in range(max(actual_stop - actual_start, expected_stop - expected_start)):
+            actual_index, expected_index = actual_start + offset, expected_start + offset
+            if actual_index >= actual_stop:
+                path = f"{prefix}expected[{expected_index}]" if prefix else f"expected[{expected_index}]"
+                entries.append(DiffEntry(path=path, actual=None, expected=expected[expected_index]))
+            elif expected_index >= expected_stop:
+                path = f"{prefix}actual[{actual_index}]" if prefix else f"actual[{actual_index}]"
+                entries.append(DiffEntry(path=path, actual=actual[actual_index], expected=None))
+            else:
+                path = f"{prefix}[{actual_index}]" if prefix else f"[{actual_index}]"
+                entries.extend(_element_entries(actual[actual_index], expected[expected_index], path, seen, config))
+    return entries
+
+
+def _element_entries(actual_item, expected_item, path, seen, config) -> list[DiffEntry]:
+    """Entries for one paired element: none when equal, one leaf, or the nested sub-diff."""
+    decision = _node_decision(actual_item, expected_item, config)
+    if decision == "equal":
+        return []
+    if decision == "leaf":
+        return [DiffEntry(path=path, actual=actual_item, expected=expected_item)]
+    return _child_entries(actual_item, expected_item, path, descended_for=decision, _seen=seen, config=config)
 
 
 def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
