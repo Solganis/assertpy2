@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("jsonpath_ng", reason="jsonpath-ng not installed")
 pytest.importorskip("jsonschema", reason="jsonschema not installed")
 
-from assertpy2 import assert_that, soft_assertions
+from assertpy2 import assert_that, json_mixin, soft_assertions
 from assertpy2.json_mixin import _ensure_jsonpath_ng, _ensure_jsonschema
 
 DATA = {
@@ -139,6 +139,32 @@ class TestMatchesJsonSchemaFromFile:
         schema_file.write_text(json.dumps({"type": "string"}), encoding="utf-8")
         with pytest.raises(AssertionError, match="validation failed"):
             assert_that(42).matches_json_schema_from_file(schema_file)
+
+
+class TestJsonPathIsCompiledOnce:
+    """Parsing a path is the whole cost of a path assertion; the lookup is a rounding error."""
+
+    def test_the_same_path_is_parsed_once(self):
+        json_mixin._parsed_json_path.cache_clear()
+        parse = _ensure_jsonpath_ng().parse
+        with patch.object(_ensure_jsonpath_ng(), "parse", side_effect=parse) as spy:
+            for _ in range(5):
+                assert_that(DATA).at_json_path("$.meta.total").is_equal_to(2)
+                assert_that(DATA).has_json_path("$.meta.total")
+        assert_that(spy.call_count).is_equal_to(1)
+
+    def test_a_different_path_is_parsed_again(self):
+        json_mixin._parsed_json_path.cache_clear()
+        parse = _ensure_jsonpath_ng().parse
+        with patch.object(_ensure_jsonpath_ng(), "parse", side_effect=parse) as spy:
+            assert_that(DATA).has_json_path("$.meta.total")
+            assert_that(DATA).has_json_path("$.meta.page")
+        assert_that(spy.call_count).is_equal_to(2)
+
+    def test_the_cache_is_bounded(self):
+        # a path built from test data is a fresh string every time, so an unbounded cache would grow
+        # with the suite
+        assert_that(json_mixin._parsed_json_path.cache_info().maxsize).is_not_none()
 
 
 class TestJsonImportErrors:
