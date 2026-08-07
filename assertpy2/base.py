@@ -81,8 +81,11 @@ class BaseMixin(SatisfiesMixin):
                 ``int``), and it wins over ``tolerance``, which says how far apart two numbers may be
                 and not that they may be different types.  A ``comparators`` entry still owns its
                 leaves, and a `Matcher` on the expected side is exempt, so composed matchers keep
-                working.  Dictionary *keys* are not covered: ``{True: "a"}`` and ``{1: "a"}`` match by
-                hash, and the recursion never sees the key pair.  Defaults to ``False``.
+                working.  Anything matched *by hash* is outside it, which means both dictionary keys
+                and set elements: ``{True: "a"}`` against ``{1: "a"}`` and ``{1}`` against ``{1.0}``
+                both pass, because the pair is found before anything looks at its type and the
+                recursion never sees it.  The same values inside a list are covered normally, so
+                ``[True]`` against ``[1]`` does fail.  Defaults to ``False``.
 
         Examples:
             Usage:
