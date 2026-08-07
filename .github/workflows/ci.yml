@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   test:
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -78,6 +79,7 @@ jobs:
           files: coverage.xml
 
   lint:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,6 +113,7 @@ jobs:
         run: uv run pyright tests/test_typing.py
 
   ci-ok:
+    timeout-minutes: 5
     needs: [test, lint]
     if: always()
     runs-on: ubuntu-latest
