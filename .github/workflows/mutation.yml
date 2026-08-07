@@ -1,5 +1,19 @@
 name: Mutation
 
+# Coverage says a line ran; mutation testing asks whether anything would have NOTICED had it been
+# wrong. It is a review tool, not a gate: most survivors are equivalent mutants (message text no test
+# asserts on, formatting, `__repr__`), so the job stays green on survivors and publishes the list to
+# triage. Weekly, not nightly - the score only moves when assertpy2/ or tests/ move, and a recurring
+# red that means nothing is a red people learn to ignore.
+#
+# It does go red when the RUN itself is broken. mutmut runs the unmutated suite once to learn which
+# tests cover which function, and exits 1 if that fails, so a test the trampoline breaks stops the
+# whole run instead of quietly leaving mutants unjudged. That red is never routine: it means the
+# config rotted, which is the failure the previous cosmic-ray setup hid for five weeks behind a
+# stale module path.
+#
+# Linux only: mutmut forks and calls os.wait, and does not run on Windows.
+
 on:
   schedule:
     - cron: "0 4 * * 1" # weekly, Monday 04:00 UTC
@@ -15,11 +29,10 @@ concurrency:
 jobs:
   mutation:
     runs-on: ubuntu-latest
+    # 10 060 mutants over the whole package. Measured on four pinned cores with `--max-children 4`,
+    # which is this runner's shape: 41m15s. Slower runner cores put the real figure somewhere
+    # around an hour, so this leaves comfortable headroom without letting a hang burn two hours.
     timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        module: [base, numeric, string, contains, collection, dict, date, matchers, helpers, _compare, dataframe, json_mixin, snapshot, bytes_mixin, dynamic, extracting, warning, exception, async_assertions, file, behave_matchers]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -34,33 +47,32 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --extra json --extra behave --group mutation
+        # Every optional integration, matching the full-deps cell of ci.yml. A skipped test cannot
+        # kill a mutant, so mutating dataframe.py or json_mixin.py without pandas/polars/jsonschema
+        # installed reports its whole surface as untested.
+        run: uv sync --extra json --extra data --extra inline --group integrations --group mutation
 
-      - name: Run mutation testing
-        env:
-          MODULE: ${{ matrix.module }}
+      - name: Run the mutants
+        # Exits non-zero when it cannot collect stats, which is what a baseline failure looks like.
+        # Survivors alone do not fail it.
+        #
+        # `--no-sync` on every `uv run` below: without it uv re-resolves the environment to the
+        # project's default groups and uninstalls the extras the step above just installed, so the
+        # mutants would be judged by a suite that skips pandas, polars and jsonschema.
+        run: uv run --no-sync mutmut run
+
+      - name: Report
+        if: always()
         run: |
-          cat > cosmic-ray.toml <<EOF
-          [cosmic-ray]
-          module-path = "assertpy2/${MODULE}.py"
-          # Bounds each test run, including the baseline that runs the whole suite once.
-          # Must exceed the full-suite runtime under 21-way matrix contention, or the baseline
-          # spuriously times out and the module's job dies before mutating anything.
-          timeout = 120.0
-          excluded-modules = []
-          test-command = ".venv/bin/python -m pytest tests/ -x -q -p no:cacheprovider"
+          uv run --no-sync python scripts/mutation_report.py >> "$GITHUB_STEP_SUMMARY"
+          uv run --no-sync mutmut results > not-killed.txt
 
-          [cosmic-ray.distributor]
-          name = "local"
-          EOF
-          uv run cosmic-ray baseline cosmic-ray.toml
-          uv run cosmic-ray init cosmic-ray.toml session.sqlite
-          uv run cosmic-ray exec cosmic-ray.toml session.sqlite
-          {
-            echo "### Mutation: ${MODULE}.py"
-            echo ""
-            echo "Surviving mutants: $(uv run cr-rate session.sqlite)%"
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "::group::Surviving mutants (${MODULE}.py)"
-          uv run cr-report session.sqlite
-          echo "::endgroup::"
+      - name: Upload the mutants that lived
+        # `mutmut results` lists every mutant that was not killed, which is survivors plus timeouts
+        # plus the ones no test covered. Each line carries its own status, so the file is named for
+        # what it holds rather than for survivors alone - reading it as a survivor list overcounts.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutants-not-killed
+          path: not-killed.txt

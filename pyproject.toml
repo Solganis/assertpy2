@@ -81,8 +81,10 @@ typecheck = [
     "mypy>=2.3.0",
     "pyright>=1.1.411",
 ]
+# Mutation testing. Its own group because mutmut forks and calls os.wait: it does not run on
+# Windows at all, so it must not sit in the dev group every contributor installs.
 mutation = [
-    "cosmic-ray>=8.4.6",
+    "mutmut>=3.7",
 ]
 docs-examples = [
     "pytest-examples>=0.0.18",
@@ -91,6 +93,53 @@ docs-examples = [
 # manual `pytest benchmarks/ --codspeed`, not by the suite every contributor runs.
 benchmark = [
     "pytest-codspeed>=5",
+]
+
+[tool.mutmut]
+source_paths = ["assertpy2/"]
+# mutmut's trampoline renames every function of the mutated module to `xǁClassǁnameǁ__mutmut_orig`
+# and adds a frame to the stack. A test that asserts on the *shape of execution* rather than on the
+# result therefore fails against the unmutated baseline as well, and mutmut reads a red baseline as
+# "failed to collect stats" and leaves every mutant of that module `not checked` - which reads in
+# the report as a clean run rather than as a broken one.
+#
+# Everything listed here is in that class: a line number or a `file:line` location, the shape of a
+# traceback, a function name quoted inside a Python error message, an enumeration of a module's
+# public methods (the mangled names show up in it), a hypothesis `differing_executors` health check,
+# or a global extension registry. Any new test about a stack frame, a function name or a line
+# number belongs here too.
+#
+# The doc-example guard is excluded for a different reason: it reads `docs/*.md` at runtime, which
+# `also_copy` would have to carry into the mutants tree, and it asserts about documentation rather
+# than about library behaviour.
+pytest_add_cli_args = [
+    "-k",
+    """\
+    not TestPytestPluginDiffRendering \
+    and not test_the_warning_points_at_the_line_that_reused_the_key \
+    and not test_no_vararg_assertion_passes_with_nothing_to_assert \
+    and not snapshot_roundtrip_all_types \
+    and not test_new_line_in_existing_file_warns \
+    and not test_a_default_key_names_its_line \
+    and not test_update_preserves_sibling_subsnaps \
+    and not test_ci_fails_on_missing_lineno_subsnap \
+    and not test_new_line_in_existing_file_creates \
+    and not test_line_keyed_snapshots_are_told_apart \
+    and not test_line_keyed_contracts_are_told_apart \
+    and not test_starts_with_bad_prefix_failure \
+    and not test_ends_with_bad_prefix_failure \
+    and not test_the_warning_points_at_the_caller\
+    """,
+    "--ignore=tests/test_docs_examples.py",
+    "--ignore=tests/test_exception_context.py",
+    "--ignore=tests/test_extensions.py",
+    "--ignore=tests/test_grouped_soft.py",
+    "--ignore=tests/test_property_based.py",
+    "--ignore=tests/test_protocol_parity.py",
+    "--ignore=tests/test_recursive_compare_attrs.py",
+    "--ignore=tests/test_recursive_compare_pydantic.py",
+    "--ignore=tests/test_traceback.py",
+    "--ignore=tests/test_warn.py",
 ]
 
 [tool.pytest.ini_options]
