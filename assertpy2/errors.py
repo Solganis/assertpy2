@@ -192,6 +192,39 @@ def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green:
             lines.append(f"    {text}")
 
 
+def _both_texts(actual: object, expected: object) -> bool:
+    """Whether a diff entry pairs two text-like leaves, so a caret guide would mean something.
+
+    A caret points at the character that moved.  That only reads as an answer when both sides are the
+    same kind of text; against a number or a list it would point into a repr the reader is not
+    comparing character by character.
+    """
+    return isinstance(actual, (str, bytes, bytearray)) and isinstance(expected, (str, bytes, bytearray))
+
+
+def _append_text_leaf(lines: list[str], entry: DiffEntry, *, red: str, green: str, reset: str) -> None:
+    """Render a text leaf nested inside a container with the same caret guide a bare string gets.
+
+    Without this, a one-character change deep inside a URL or a token printed as two near-identical
+    rows and left the reader to spot it.  pytest only reaches this at ``-vv``, and then by diffing the
+    whole pretty-printed structure, which loses the path; naming the path *and* the character is the
+    reason to do it here.
+
+    The reprs are what gets compared, not the raw values, so the quoting that separates ``"1"`` from
+    ``1`` survives and the row still reads like every other row of the block.
+    """
+    actual_line, expected_line = _windowed(_diff_side(entry.actual), _diff_side(entry.expected))
+    lines.append(f"  {entry.path}:")
+    for guide in difflib.ndiff([actual_line], [expected_line]):
+        text = guide.rstrip("\n")
+        if guide.startswith("-"):
+            lines.append(f"    {red}{text}{reset}")
+        elif guide.startswith("+"):
+            lines.append(f"    {green}{text}{reset}")
+        else:  # the "? ^^^" caret row
+            lines.append(f"    {text}")
+
+
 def _within_budget(lines: list[str], limit: int = 20_000) -> str:
     """Join *lines*, dropping whole rows once the block would outgrow a screenful of scrollback.
 
@@ -254,6 +287,8 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
                 lines.append(f"  {red}{path}: - {_diff_side(entry.actual)}{reset}")
             elif entry.actual is None:
                 lines.append(f"  {green}{path}: + {_diff_side(entry.expected)}{reset}")
+            elif _both_texts(entry.actual, entry.expected):
+                _append_text_leaf(lines, entry, red=red, green=green, reset=reset)
             else:
                 lines.append(f"  {path}:")
                 lines.append(f"    {red}- {_diff_side(entry.actual)}{reset}")
