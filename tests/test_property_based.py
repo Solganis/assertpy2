@@ -1203,3 +1203,120 @@ def test_a_value_is_strictly_equal_to_itself(value):
     # it costs nothing and covers the shapes nobody thought to write down - a set inside a list was one
     assert_that(value).is_equal_to(value, strict_types=True)
     assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
+
+
+# --- rendering invariants: the one place a property test has paid for itself here ---
+#
+# A wide oracle over comparison *semantics* was measured net-negative: 12800 generated pairs found no
+# bug the example suite had missed, because semantics is densely covered by examples. Rendering is the
+# opposite. There is no natural example for "a caret row with nothing above it" or "a block that grew
+# past its budget" - the case has to be invented before it can be written down, which is exactly what
+# generation does for free.
+
+# ESC is excluded from every generated string on purpose, paths included: a `kind="string"` diff
+# prints its values raw and a path is echoed verbatim, so data carrying an escape puts one in the
+# output legitimately. The colour invariants below are about what the renderer *adds*.
+_NO_ESC = st.text(alphabet=st.characters(exclude_characters="\x1b"), max_size=200)
+_TEXT_LEAVES = _NO_ESC | st.binary(max_size=200)
+_ANY_LEAF = _TEXT_LEAVES | st.integers() | st.floats(allow_nan=True) | st.none() | st.booleans()
+_DIFF_KINDS = st.sampled_from(["dict", "sequence", "string", "scalar", "model", "attrs", "set", "contains", "match"])
+
+
+@st.composite
+def _diffs(draw):
+    """A `DiffResult` of any kind, whose entries may be one-sided, text-on-text, or mixed."""
+    kind = draw(_DIFF_KINDS)
+    entries = draw(
+        st.lists(
+            st.builds(
+                DiffEntry,
+                path=_NO_ESC,
+                actual=_ANY_LEAF,
+                expected=_ANY_LEAF,
+            ),
+            max_size=8,
+        )
+    )
+    return DiffResult(kind=kind, entries=entries)
+
+
+@settings(deadline=None)
+@given(diff=_diffs(), color=st.booleans())
+def test_rendering_a_diff_never_raises(diff, color):
+    # the renderer runs while a failure is being reported, so an exception here replaces the failure
+    # the reader was chasing with one of ours
+    assert_that(_format_diff(diff, color=color)).is_instance_of(str)
+
+
+@settings(deadline=None)
+@given(diff=_diffs())
+def test_a_caret_row_always_annotates_the_row_above_it(diff):
+    # the guide points at a span of the line before it; alone it points at nothing
+    rows = _format_diff(diff).splitlines()
+    for previous, row in pairwise(rows):
+        if row.strip().startswith("?"):
+            assert_that(previous.strip().startswith(("-", "+"))).is_true()
+    if rows:
+        assert_that(rows[0].strip().startswith("?")).is_false()
+
+
+@settings(deadline=None)
+@given(count=st.integers(min_value=1, max_value=200), kind=_DIFF_KINDS, one_sided=st.booleans())
+def test_the_block_never_outgrows_its_budget(count, kind, one_sided):
+    # the filler is fixed rather than generated: hypothesis rightly objects to drawing forty
+    # three-thousand-character strings per example, and its content is irrelevant - only the size is.
+    # Sized so the budget is the binding constraint, otherwise the invariant holds for the wrong reason.
+    filler = "x" * 3_000
+    entries = [DiffEntry(path="k", actual=filler, expected=None if one_sided else filler[:-1]) for _ in range(count)]
+    rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0)
+    assert_that(len(rendered)).is_less_than(21_000)
+
+
+@settings(deadline=None)
+@given(count=st.integers(min_value=30, max_value=200), kind=st.sampled_from(["set", "contains"]))
+def test_a_clipped_block_still_shows_something(count, kind):
+    # `set` and `contains` join every item into a single row, so dropping the row that crosses the
+    # limit erased the whole diff: the reader got a header and a count and not one item
+    filler = "x" * 3_000
+    entries = [DiffEntry(path="extra", actual=filler, expected=None) for _ in range(count)]
+    rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0)
+    assert_that(len(rendered)).is_greater_than(1_000)
+    assert_that(rendered).contains("xxx")
+
+
+@settings(deadline=None)
+@given(diff=_diffs())
+def test_an_uncoloured_render_adds_no_escape_sequences(diff):
+    # the same renderer feeds the plain-text message, where an escape would be printed literally
+    assert_that(_format_diff(diff, color=False)).does_not_contain("\033")
+
+
+@settings(deadline=None)
+@given(diff=_diffs())
+def test_every_colour_opened_is_closed(diff):
+    rendered = _format_diff(diff, color=True)
+    assert_that(rendered.count("\033[0m")).is_equal_to(
+        rendered.count("\033[31m") + rendered.count("\033[32m") + rendered.count("\033[36m")
+    )
+
+
+@settings(deadline=None)
+@given(
+    entries=st.lists(
+        st.builds(DiffEntry, path=st.text(min_size=1, max_size=8), actual=st.integers(), expected=st.integers()),
+        min_size=1,
+        max_size=12,
+    ),
+    limit=st.integers(min_value=1, max_value=12),
+)
+def test_the_entry_cap_is_honoured_and_the_remainder_counted(entries, limit):
+    rendered = _format_diff(DiffResult(kind="dict", entries=entries), max_entries=limit)
+    # counting the rendered value rows, not the summary line: the summary is emitted from the entry
+    # count alone, so it still appears when nothing was actually dropped. Rows are counted by their
+    # `- ` marker, which no generated path can forge.
+    shown = sum(1 for row in rendered.splitlines() if row.startswith("    - "))
+    assert_that(shown).is_equal_to(min(len(entries), limit))
+    if len(entries) > limit:
+        assert_that(rendered).contains(f"... and {len(entries) - limit} more entries")
+    else:
+        assert_that(rendered).does_not_contain("more entries")
