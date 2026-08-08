@@ -11,7 +11,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency; the attrs branch runs only when present
     attrs = None  # ty: ignore[invalid-assignment]  # sentinel for the absent optional module
 
-from assertpy2.errors import DiffResult, _safe_repr, _truncated
+from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
 
 from ._engine._compare import _CompareConfig, _config_note, _guarded_not_equal, _node_decision, _spec_matches
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
@@ -98,7 +98,10 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
     # the cost of a multi-line value is vertical: every line takes a terminal row, and the message
     # prints the value twice. Character budgets miss that, so this one counts rows.
     if len(text.splitlines()) <= 3:
-        return text
+        # a long *single* line has no rows to collapse, and capping it from the start printed four
+        # thousand characters of prefix per side: on a five-kilobyte string that was 96% of the
+        # message, none of it near the change. The diff rows are already windowed; so is this now.
+        return _windowed(text, counterpart, width=320)[0] if len(text) > 320 else text
     other_lines = counterpart.splitlines()
     parts = []
     elided = False
