@@ -1,3 +1,5 @@
+import collections.abc
+import types
 import typing
 
 import pytest
@@ -353,7 +355,7 @@ class TestMatchesStructureMethod:
         )
 
     def test_non_dict_val(self):
-        with pytest.raises(TypeError, match="val must be a dict"):
+        with pytest.raises(TypeError, match="val must be a mapping"):
             assert_that("not a dict").matches_structure({"a": 1})
 
     def test_non_dict_spec(self):
@@ -1125,3 +1127,44 @@ class TestStructureWalkPathsAndCycles:
         assert_that(described).is_equal_to(
             "at <a>: expected an even integer, but was <'x'> of type <str>, not an integer"
         )
+
+
+class TestMatchesStructureAcceptsAnyMapping:
+    """Every other dict assertion accepts a mapping that is not a `dict` subclass; this one refused
+    them.  `MappingProxyType`, a `collections.abc.Mapping`, and 3.15's `frozendict` all landed on the
+    same `isinstance(..., dict)` gate while `is_equal_to` and `contains_key` walked them happily."""
+
+    class _Mapping(collections.abc.Mapping):
+        def __init__(self, data):
+            self._data = data
+
+        def __getitem__(self, key):
+            return self._data[key]
+
+        def __iter__(self):
+            return iter(self._data)
+
+        def __len__(self):
+            return len(self._data)
+
+    def test_a_mapping_proxy_is_matched(self):
+        assert_that(types.MappingProxyType({"a": 1})).matches_structure({"a": match.is_positive()})
+
+    def test_a_custom_mapping_is_matched(self):
+        assert_that(self._Mapping({"a": 1})).matches_structure({"a": match.is_positive()})
+
+    def test_a_nested_mapping_is_walked(self):
+        value = types.MappingProxyType({"outer": self._Mapping({"inner": 1})})
+        assert_that(value).matches_structure({"outer": {"inner": match.is_positive()}})
+
+    def test_a_mismatch_inside_a_mapping_keeps_its_path(self):
+        value = types.MappingProxyType({"outer": self._Mapping({"inner": -1})})
+        mismatches = StructureMatcher({"outer": {"inner": match.is_positive()}}).collect_mismatches(value)
+        assert_that([path for path, _, _ in mismatches]).is_equal_to(["outer.inner"])
+
+    def test_a_non_mapping_is_still_refused(self):
+        with pytest.raises(TypeError, match="mapping, a pydantic-style model, or an attrs instance"):
+            assert_that([1, 2]).matches_structure({"a": 1})
+
+    def test_the_matcher_form_declines_a_non_mapping(self):
+        assert_that(match.structure({"a": 1}).matches(5)).is_false()
