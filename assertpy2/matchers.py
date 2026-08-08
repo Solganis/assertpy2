@@ -26,7 +26,6 @@ from ._matcher_impls import (
     IsEvenMatcher,
     IsFalsyMatcher,
     IsInMatcher,
-    IsInstanceOfMatcher,
     IsNegativeMatcher,
     IsNoneMatcher,
     IsNonEmptyStringMatcher,
@@ -36,7 +35,6 @@ from ._matcher_impls import (
     IsOddMatcher,
     IsPositiveMatcher,
     IsTruthyMatcher,
-    IsTypeOfMatcher,
     IsUuidMatcher,
     IsZeroMatcher,
     LessThanMatcher,
@@ -51,11 +49,19 @@ from ._matcher_impls import (
     BaseMatcher as BaseMatcher,
 )
 from ._matcher_impls import (
+    IsInstanceOfMatcher as IsInstanceOfMatcher,
+)
+from ._matcher_impls import (
+    IsTypeOfMatcher as IsTypeOfMatcher,
+)
+from ._matcher_impls import (
     Matcher as Matcher,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from ._matcher_impls import ClassInfo
 
 
 # --- Matcher application helpers ---
@@ -235,8 +241,14 @@ class _MatchNamespace:
         return IsNotNoneMatcher()
 
     @staticmethod
-    def is_instance_of(expected_type: type) -> IsInstanceOfMatcher:
-        """Matcher for an instance of ``expected_type`` (via ``isinstance``)."""
+    def is_instance_of(expected_type: ClassInfo) -> IsInstanceOfMatcher:
+        """Matcher for an instance of ``expected_type`` (via ``isinstance``).
+
+        Accepts whatever ``isinstance`` accepts: a class, a union (``int | str``), or a tuple of
+        either.  The builder assertion of the same name stays narrower on purpose - its overloads
+        refine the tracked value to the given class, and a union has no single class to refine to.
+        Reach for `is_instance_of_any` there.
+        """
         return IsInstanceOfMatcher(expected_type)
 
     @staticmethod
