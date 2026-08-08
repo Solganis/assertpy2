@@ -141,6 +141,42 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
     def test_a_single_difference_is_never_a_rearrangement(self):
         assert_that(_message([1, 2], [1, 3])).does_not_contain("different order")
 
+    def test_elements_that_cannot_be_hashed_take_the_slower_route(self):
+        # counting is the fast path and needs hashable values. driven through built entries because
+        # the diff decomposes a reordered list of dicts into per-key entries, so the pairs that do
+        # reach here holding an unhashable value come from a leaf the walk stopped at
+        entries = [
+            DiffEntry(path="[0]", actual={"a": 1}, expected={"b": 2}),
+            DiffEntry(path="[1]", actual={"b": 2}, expected={"a": 1}),
+        ]
+        assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).contains("in a different order")
+
+    def test_a_hash_that_raises_something_other_than_type_error_is_left_alone(self):
+        # an unhashable value raises TypeError and has a slower route waiting for it. anything else
+        # coming out of a user __hash__ is not a shape this understands, so it says nothing
+        class Hostile:
+            def __hash__(self):
+                raise ValueError("boom")
+
+        entries = [
+            DiffEntry(path="[0]", actual=Hostile(), expected=1),
+            DiffEntry(path="[1]", actual=2, expected=Hostile()),
+        ]
+        assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
+
+    def test_elements_that_can_be_neither_hashed_nor_reprd_are_left_alone(self):
+        class Awkward:
+            __hash__ = None
+
+            def __repr__(self):
+                raise ValueError("boom")
+
+        entries = [
+            DiffEntry(path="[0]", actual=Awkward(), expected=1),
+            DiffEntry(path="[1]", actual=2, expected=Awkward()),
+        ]
+        assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
+
 
 class TestNaNIsSaidBeforeAnythingElse:
     def test_a_comparison_that_can_never_pass(self):
