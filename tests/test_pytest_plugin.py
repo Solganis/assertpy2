@@ -1286,6 +1286,10 @@ class TestSnapshotKeyReuseUnderXdist:
                 str(tmp_path / "test_reuse.py"),
                 "-q",
                 "--no-header",
+                # the generated module writes a throwaway snapshot into tmp_path, so the first call has
+                # to create one. CI mode forbids exactly that, and it turns itself on whenever `CI` is
+                # set, which is every run on a build machine and no run on a developer's
+                "--assertpy2-snapshot-no-ci",
                 "-n",
                 "3",
                 "--dist",
@@ -1320,4 +1324,7 @@ class TestSnapshotKeyReuseUnderXdist:
         result = self._run(tmp_path, '"one-key"', "-W", "error::assertpy2.SnapshotKeyReusedWarning")
         assert_that(result.stdout).does_not_contain("INTERNALERROR")
         assert_that(result.stdout).contains("ERROR: snapshot key").contains("shared by 3 tests")
+        # the tests themselves have to pass: without this the check below is happy with a run that went
+        # red for any other reason, which is how a broken environment reads as a working sweep
+        assert_that(result.stdout).contains("3 passed")
         assert_that(result.returncode).is_equal_to(1)
