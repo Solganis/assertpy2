@@ -232,17 +232,31 @@ def _append_text_leaf(lines: list[str], entry: DiffEntry, *, red: str, green: st
 
 
 def _within_budget(lines: list[str], limit: int = 20_000) -> str:
-    """Join *lines*, dropping whole rows once the block would outgrow a screenful of scrollback.
+    """Join *lines*, cutting the block once it would outgrow a screenful of scrollback.
 
     The per-row cap in `_diff_side()` bounds one row, this bounds their sum: fifty rows of capped
     values still add up to more than anyone reads, and the block travels into CI logs and report
     attachments where the cost is paid again.
+
+    The row that crosses the limit is truncated rather than dropped.  Dropping it whole is invisible
+    on a block of many rows and catastrophic on a block of few: the ``set`` and ``contains`` kinds
+    join every item into a single row, so a large set difference used to render as the header and a
+    count, with not one item shown.
     """
     total = 0
     for index, line in enumerate(lines):
+        remaining = limit - total
         total += len(line) + 1
         if total > limit:
-            return "\n".join([*lines[:index], f"  ... and {len(lines) - index} more diff lines"])
+            dropped = len(lines) - index - 1
+            head = [*lines[:index]]
+            if remaining > 1:
+                head.append(f"{line[: remaining - 1]}...")
+            else:
+                dropped += 1
+            if not dropped:
+                return "\n".join(head)  # the trailing `...` already says where it was cut
+            return "\n".join([*head, f"  ... and {dropped} more diff lines"])
     return "\n".join(lines)
 
 
