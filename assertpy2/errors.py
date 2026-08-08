@@ -212,8 +212,14 @@ def _append_text_leaf(lines: list[str], entry: DiffEntry, *, red: str, green: st
 
     The reprs are what gets compared, not the raw values, so the quoting that separates ``"1"`` from
     ``1`` survives and the row still reads like every other row of the block.
+
+    The window is taken over the *whole* repr rather than a capped one.  Capping first cuts at a fixed
+    offset, and a difference past that offset leaves two identical strings: ndiff then reports them as
+    one common row, and a failure renders as though nothing differed.  Windowing first puts the
+    difference inside the window by construction, and the window is already short enough to bound the
+    cost of the ndiff below.
     """
-    actual_line, expected_line = _windowed(_diff_side(entry.actual), _diff_side(entry.expected))
+    actual_line, expected_line = _windowed(_safe_repr(entry.actual), _safe_repr(entry.expected))
     lines.append(f"  {entry.path}:")
     for guide in difflib.ndiff([actual_line], [expected_line]):
         text = guide.rstrip("\n")
