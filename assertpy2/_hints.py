@@ -22,7 +22,7 @@ from __future__ import annotations
 import dataclasses
 import enum
 import json
-import math
+from collections import Counter
 from typing import TYPE_CHECKING, Final
 
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object
@@ -110,10 +110,6 @@ _STEPS: list[tuple[Callable[[object], object], _Label]] = [
 ]
 
 
-def _is_nan(value: object) -> bool:
-    return isinstance(value, float) and math.isnan(value)
-
-
 def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[object], object]]) -> bool:
     """Whether applying ``steps`` to both sides of every pair leaves nothing differing.
 
@@ -148,10 +144,32 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
         return None
     entries = diff.entries
 
-    # first, and regardless of what else differs: with a NaN in the comparison there is no value the
-    # other side could hold that would make it pass, so it is the thing to fix before anything else
-    if any(_is_nan(entry.actual) or _is_nan(entry.expected) for entry in entries):
-        return _NAN_FACT
+    # One pass over the entries for everything that needs one, written flat rather than as four
+    # comprehensions.  A failure over a two-thousand element sequence has two thousand entries, and
+    # this is the only part of the layer whose cost grows with them, so it is worth the plainness:
+    # `value != value` in place of `math.isnan` keeps two function calls per entry out of the loop.
+    pairs: list[tuple[object, object]] = []
+    absent_seen = False
+    absent_expected_only = True
+    positional = True
+    for entry in entries:
+        left, right = entry.actual, entry.expected
+        # isinstance first on purpose: `value != value` on a user object calls its ``__ne__``, and one
+        # that raises would take the whole failure down with it
+        if (isinstance(left, float) and left != left) or (isinstance(right, float) and right != right):
+            # regardless of what else differs: with a NaN in the comparison there is no value the
+            # other side could hold that would make it pass, so it is what to fix before anything else
+            return _NAN_FACT
+        absent = entry.absent
+        if absent is None:
+            pairs.append((left, right))
+            absent_expected_only = False
+        else:
+            absent_seen = True
+            if absent != "expected":
+                absent_expected_only = False
+        if positional and not entry.path.endswith("]"):
+            positional = False
 
     if diff.kind == "string":
         # a string diff is built line by line, and `splitlines()` treats "\r\n" and "\n" as the same
@@ -161,19 +179,17 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
         # two strings themselves are the complete account, and comparing them costs nothing
         if not isinstance(actual, str) or not isinstance(expected, str):
             return None
-        pairs = [(actual, expected)]
-        return _named(pairs)
+        return _named([(actual, expected)])
 
     # keys on the left that the right does not have at all, and nothing else. restricted to plain
     # mappings because that is where "key" is the right word: a sequence reports its extras the same
     # way, and telling someone their list carries extra keys helps nobody
-    if diff.kind == "dict" and all(entry.absent == "expected" for entry in entries):
+    if diff.kind == "dict" and absent_seen and absent_expected_only:
         return "every shared key matches, and actual carries keys the expected side does not"
 
     # a mixture of absent sides and differing values has no single statement that covers it
-    if any(entry.absent is not None for entry in entries):
+    if absent_seen:
         return None
-    pairs = [(entry.actual, entry.expected) for entry in entries]
 
     # a DTO against the payload it was built from: the fields all agree and only the wrapper differs.
     # said before the leaf steps because it explains the shape, which is the narrower claim
@@ -186,21 +202,9 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
 
     # last, because it is the broadest thing that can be said and the easiest to reach by accident.
     # one differing value can never be a rearrangement, which also keeps the sort off the common case
-    if len(pairs) >= 2 and _all_positional(entries) and _same_values(pairs):
+    if len(pairs) >= 2 and positional and _same_values(pairs):
         return "both sides hold the same elements, in a different order"
     return None
-
-
-def _all_positional(entries: Sequence) -> bool:
-    """Whether every difference is at a position in a sequence rather than at a named field.
-
-    Order is a property of sequences, so a rearrangement is a real and actionable thing to report
-    there.  Across the fields of a mapping it is mostly a coincidence: with two boolean fields, any
-    failure where both flip holds "the same values in different places", and measured over generated
-    boolean payloads that was one failure in five.  Every one of those statements was true, and not
-    one of them told the reader anything, which is the surest way to teach people to skip the line.
-    """
-    return all(entry.path.endswith("]") for entry in entries)
 
 
 def _fields_of(value: object) -> dict | None:
@@ -227,11 +231,22 @@ def _fields_match(left: object, right: object) -> bool:
 
 
 def _same_values(pairs: Sequence[tuple[object, object]]) -> bool:
-    """Whether the differing values are the same on both sides, sitting in different places."""
+    """Whether the differing values are the same on both sides, sitting in different places.
+
+    Counted rather than sorted wherever the values are hashable, which is the common case and the one
+    that used to be expensive: sorting by ``repr`` calls ``repr`` on every value on both sides, and a
+    failure over a two-thousand element sequence paid four thousand of them for an answer that is
+    almost always no.  The sort stays as the fallback, since it is what handles values that are
+    unhashable or not orderable against each other.
+    """
     try:
-        left = sorted((value for value, _ in pairs), key=repr)
-        right = sorted((value for _, value in pairs), key=repr)
-        return left == right
+        return Counter(value for value, _ in pairs) == Counter(value for _, value in pairs)
+    except TypeError:  # unhashable values, which only the slower route can compare
+        pass
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return False
+    try:
+        return sorted((value for value, _ in pairs), key=repr) == sorted((value for _, value in pairs), key=repr)
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return False
 
