@@ -102,6 +102,11 @@ def test_an_existential_quantifier_fails_on_an_empty_subject(subject):
 # ("no errors were logged" is exactly what such a test wanted), so warning there would be noise.
 _POSITIVE_QUANTIFIERS = {
     name: call for name, call in _VACUOUSLY_TRUE.items() if name not in {"none_satisfy", "does_not_contain_duplicates"}
+} | {
+    # not in the table above, which runs every entry against every empty subject: `all_fields_satisfy`
+    # treats a set or a string as one leaf by design, so it is vacuous only on a container that walks
+    # to nothing. The guard still has to name it, which is what it is here for.
+    "all_fields_satisfy": lambda subject: assert_that(subject).all_fields_satisfy(_never),
 }
 
 
@@ -117,11 +122,13 @@ class TestVacuousGuard:
         with pytest.warns(VacuousAssertionWarning):
             call([])
 
-    def test_the_warning_names_the_method_the_caller_used(self, guarded):
+    @pytest.mark.parametrize(("name", "call"), list(_POSITIVE_QUANTIFIERS.items()), ids=list(_POSITIVE_QUANTIFIERS))
+    def test_the_warning_names_the_method_the_caller_used(self, guarded, name, call):
         # the guard sits in each entry point, not in the shared one they delegate to: a message saying
-        # "each()" for an all_satisfy() call would send the reader to the wrong docs
-        with pytest.warns(VacuousAssertionWarning, match=r"^all_satisfy\(\)"):
-            assert_that([]).all_satisfy(lambda item: item > 0)
+        # "each()" for an all_satisfy() call would send the reader to the wrong docs. Checking one
+        # entry point left every other one free to pass whatever name it liked.
+        with pytest.warns(VacuousAssertionWarning, match=rf"^{name}\(\)"):
+            call([])
 
     def test_the_warning_points_at_the_caller(self, guarded):
         with pytest.warns(VacuousAssertionWarning) as caught:
