@@ -758,3 +758,95 @@ class TestConfigSurvivesTheFilteredPaths:
             assert_that([{"a": 1}]).is_equal_to([{"a": 1}, {"b": 2}], ignore="x")
         assert_that(failure.value.actual).is_equal_to([{"a": 1}])
         assert_that(failure.value.expected).is_equal_to([{"a": 1}, {"b": 2}])
+
+
+class TestConfigEchoedOnFailure:
+    """The settings that were in force are named in the message, which is what a reader is asking
+    when a field they thought was tolerated or ignored still failed the comparison."""
+
+    def test_a_plain_failure_says_nothing_about_config(self):
+        # the note is the whole point only when something non-default is on: on the ordinary failure
+        # it would be noise, and `_build_compare_config()` returns None there
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1}).is_equal_to({"a": 2})
+        assert_that(str(exc_info.value)).does_not_contain("compared with")
+
+    @pytest.mark.parametrize(
+        ("kwargs", "expected"),
+        [
+            ({"tolerance": 0.001}, "compared with tolerance=0.001"),
+            ({"ignore_null": True}, "compared with ignore_null=True"),
+            ({"strict_types": True}, "compared with strict_types=True"),
+        ],
+    )
+    def test_each_setting_names_itself(self, kwargs, expected):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1.0, "b": 2}).is_equal_to({"a": 9.0, "b": 3}, **kwargs)
+        assert_that(str(exc_info.value)).contains(expected)
+
+    def test_comparators_are_named_by_key(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"n": "A", "b": 2}).is_equal_to(
+                {"n": "bb", "b": 3}, comparators={"n": lambda a, e: a.lower() == e.lower(), float: lambda a, e: True}
+            )
+        assert_that(str(exc_info.value)).contains("comparators for float, n")
+
+    def test_several_settings_read_as_one_list(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1.0, "b": 2}).is_equal_to({"a": 9.0, "b": 3}, tolerance=0.1, strict_types=True)
+        assert_that(str(exc_info.value)).contains("compared with tolerance=0.1, strict_types=True")
+
+    def test_it_reaches_a_scalar_failure_too(self):
+        # the strict-types short circuit fires before the dict walk and has its own error() call
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(True).is_equal_to(1, strict_types=True)
+        assert_that(str(exc_info.value)).contains("compared with strict_types=True")
+
+    def test_it_coexists_with_the_ignore_clause(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2.0}).is_equal_to({"a": 9, "b": 5.0}, ignore="a", tolerance=0.1)
+        message = str(exc_info.value)
+        assert_that(message).contains("ignoring keys <a>")
+        assert_that(message).contains("compared with tolerance=0.1")
+
+    def test_the_original_sentence_stays_a_prefix(self):
+        # what keeps an existing `match=` or `startswith` written against the old text working: the note
+        # is appended on its own line and never rewrites the sentence
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1.0}).is_equal_to({"a": 9.0}, tolerance=0.1)
+        first_line = str(exc_info.value).splitlines()[0]
+        assert_that(first_line).is_equal_to("Expected <{'a': 1.0}> to be equal to <{'a': 9.0}>, but was not.")
+
+
+class TestDecisionSentinelsReachTheDiff:
+    """`_node_decision` answers with a sentinel string the walkers branch on.  A leaf verdict that
+    does not arrive as `"leaf"` is read as "descend", and descending into a scalar yields nothing, so
+    the difference disappears from the diff instead of being reported."""
+
+    def test_a_value_outside_tolerance_is_reported_as_a_leaf(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1.0}).is_equal_to({"a": 9.0}, tolerance=0.1)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
+
+    def test_a_comparator_rejecting_a_pair_is_reported_as_a_leaf(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1}).is_equal_to({"a": 2}, comparators={"a": lambda actual, expected: False})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
+
+    def test_a_comparator_keyed_by_type_owns_its_leaves(self):
+        # keyed by type rather than by field name: nothing reached the type branch of the lookup
+        assert_that({"a": 1.4, "b": 2.4}).is_equal_to(
+            {"a": 1.0, "b": 2.0}, comparators={float: lambda actual, expected: round(actual) == round(expected)}
+        )
+        with pytest.raises(AssertionFailure):
+            assert_that({"a": 1.4}).is_equal_to(
+                {"a": 9.0}, comparators={float: lambda actual, expected: round(actual) == round(expected)}
+            )
+
+    def test_a_comparator_owning_a_container_field_stops_the_descent(self):
+        # a scalar leaf reads the same either way, because descending into it finds nothing and the
+        # caller falls back to plain inequality. A container is where "this leaf differs" and "walk
+        # inside it" part company: the path is the field, not a key underneath it.
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": {"x": 1}}).is_equal_to({"a": {"x": 2}}, comparators={"a": lambda actual, expected: False})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])

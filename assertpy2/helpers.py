@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - optional dependency; the attrs branch 
 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated
 
-from ._engine._compare import _CompareConfig, _guarded_not_equal, _node_decision, _spec_matches
+from ._engine._compare import _CompareConfig, _config_note, _guarded_not_equal, _node_decision, _spec_matches
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
@@ -454,7 +454,8 @@ class HelpersMixin(_MixinBase):
         ignore_part = ignore_err if ignore else ""
         include_part = include_err if include else ""
         self.error(
-            f"Expected <{val_repr}> to be equal to <{other_repr}>{ignore_part}{include_part}, but was not.",
+            f"Expected <{val_repr}> to be equal to <{other_repr}>{ignore_part}{include_part}, but was not."
+            f"{_config_note(config)}",
             actual=val,
             expected=other,
             diff=diff,
