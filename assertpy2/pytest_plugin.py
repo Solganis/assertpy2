@@ -175,8 +175,6 @@ def pytest_testnodedown(node, error):
         for snapname, key, nodes, site in accesses:
             _controller_accesses.setdefault((snapname, key), set()).update(nodes)
             _snapshot._ACCESS_SITES.setdefault((snapname, key), site)
-    # keys a worker already reported from inside the test that hit them: the sweep must not repeat those
-    _snapshot._WARNED.update(tuple(item) for item in getattr(node, "workeroutput", {}).get("assertpy2_warned") or ())
 
 
 def _is_full_run(config) -> bool:
@@ -229,25 +227,28 @@ def _report_retries(config) -> None:
 
 
 def _warn_on_reused_snapshot_keys(session) -> None:
-    """Sweep for reused snapshot keys that no single process could see on its own.
+    """Report every reused snapshot key, with the number of tests that reached it.
 
-    `assertpy2.snapshot._record_access()` reports the second reach from inside the test, which is where
-    a warning is worth having: attributed to a nodeid, in the warnings summary, and under ``-W error``
-    failing that test rather than this hook.  It cannot see parametrised cases split across xdist
-    workers, though - one access each, no second reach anywhere - so the summed total is checked here
-    and anything a worker already reported is skipped.
+    `assertpy2.snapshot._record_access()` raises the warning that is worth reading, from inside the
+    assertion: pytest attributes it to a nodeid, puts it in the normal summary, and under ``-W error``
+    fails that test rather than this hook.  What it cannot do is count.  It fires when the second test
+    arrives, with more still to come, and it never sees the other xdist workers - parametrised cases
+    split across them are one access each, so no worker sees a second reach and only the union does.
+
+    The count therefore lives here, where every access has been collected, and this runs for every
+    reused key rather than only for the ones no worker reported.  Two messages about one key is the
+    price: the first says where it happened, this one says how big it is.
     """
     totals: dict = {key: set(nodes) for key, nodes in _snapshot._ACCESS_NODES.items()}
     for key, nodes in _controller_accesses.items():
         totals.setdefault(key, set()).update(nodes)
-    already = set(_snapshot._WARNED)
     _snapshot._ACCESS_NODES.clear()
     _controller_accesses.clear()
     _snapshot._WARNED.clear()
     for (snapname, key), nodes in sorted(totals.items()):
-        if len(nodes) < 2 or (snapname, key) in already:
+        if len(nodes) < 2:
             continue
-        message = _snapshot._reuse_message(snapname, key, len(nodes), _snapshot._ACCESS_SITES.get((snapname, key), ""))
+        message = _snapshot._reuse_message(snapname, key, _snapshot._ACCESS_SITES.get((snapname, key), ""), len(nodes))
         try:
             warnings.warn(message, _snapshot.SnapshotKeyReusedWarning, stacklevel=1)
         except _snapshot.SnapshotKeyReusedWarning:
@@ -261,9 +262,6 @@ def _fail_on_reused_key(session, message: str) -> None:
     An ``error`` entry in the warning filters raises here rather than at a test, and an exception out
     of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
     message the reader needs under a stack that points at the wrong place.  Print it and go red.
-
-    The guide recommends exactly that filter entry, so this is the documented path rather than a
-    corner: without it, the one configuration we tell people to use is the one that breaks.
     """
     # only a run that otherwise succeeded. this hook is reached from a ``finally``, so it also runs
     # after Ctrl-C, an internal error and a usage error, and each of those carries an exit code that
@@ -288,7 +286,6 @@ def pytest_sessionfinish(session, exitstatus):
             [snapname, key, sorted(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")]
             for (snapname, key), nodes in _snapshot._ACCESS_NODES.items()
         ]
-        config.workeroutput["assertpy2_warned"] = [list(item) for item in _snapshot._WARNED]
         return
     # controller / single process: apply inline edits (workers' plus any recorded here) into source
     _report_retries(config)
