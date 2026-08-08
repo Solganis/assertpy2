@@ -1251,13 +1251,15 @@ def test_rendering_a_diff_never_raises(diff, color):
 @settings(deadline=None)
 @given(diff=_diffs())
 def test_a_caret_row_always_annotates_the_row_above_it(diff):
-    # the guide points at a span of the line before it; alone it points at nothing
+    # the guide points at a span of the line before it; alone it points at nothing.
+    # Matched on the unindented prefix, not on a stripped one: a generated *path* of "?" renders as
+    # `  ?: - ''` and would otherwise be mistaken for a guide row.
     rows = _format_diff(diff).splitlines()
     for previous, row in pairwise(rows):
-        if row.strip().startswith("?"):
-            assert_that(previous.strip().startswith(("-", "+"))).is_true()
+        if row.startswith("    ?"):
+            assert_that(previous.startswith(("    - ", "    + "))).is_true()
     if rows:
-        assert_that(rows[0].strip().startswith("?")).is_false()
+        assert_that(rows[0].startswith("    ?")).is_false()
 
 
 @settings(deadline=None)
@@ -1291,13 +1293,26 @@ def test_an_uncoloured_render_adds_no_escape_sequences(diff):
     assert_that(_format_diff(diff, color=False)).does_not_contain("\033")
 
 
+def _colour_is_balanced(rendered):
+    opens = sum(rendered.count(code) for code in ("\033[31m", "\033[32m", "\033[36m"))
+    return rendered.count("\033[0m") == opens
+
+
 @settings(deadline=None)
 @given(diff=_diffs())
 def test_every_colour_opened_is_closed(diff):
-    rendered = _format_diff(diff, color=True)
-    assert_that(rendered.count("\033[0m")).is_equal_to(
-        rendered.count("\033[31m") + rendered.count("\033[32m") + rendered.count("\033[36m")
-    )
+    assert_that(_colour_is_balanced(_format_diff(diff, color=True))).is_true()
+
+
+@settings(deadline=None)
+@given(count=st.integers(min_value=1, max_value=200), kind=_DIFF_KINDS)
+def test_colour_stays_balanced_when_the_block_is_clipped(count, kind):
+    # the generated diffs above never reach the budget, so they never exercised the clip: a row cut
+    # blind loses the reset that closed its colour and stains every line the terminal prints after it
+    filler = "x" * 3_000
+    entries = [DiffEntry(path="k", actual=filler, expected=None) for _ in range(count)]
+    rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0, color=True)
+    assert_that(_colour_is_balanced(rendered)).is_true()
 
 
 @settings(deadline=None)

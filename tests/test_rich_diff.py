@@ -9,7 +9,7 @@ from assertpy2 import assert_that, match
 from assertpy2._engine import _diff as _diff_module
 from assertpy2._engine._compare import _build_compare_config
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
-from assertpy2.errors import DiffEntry, DiffResult, _within_budget
+from assertpy2.errors import DiffEntry, DiffResult, _cut, _within_budget
 from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
 
@@ -1838,3 +1838,21 @@ class TestTheBlockBudgetCutsRatherThanDrops:
         rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0)
         assert_that(len(rendered)).is_less_than(21_000)
         assert_that(rendered).contains("xxx")
+
+    def test_a_clipped_coloured_row_keeps_its_reset(self):
+        # the reset closes the colour at the end of the row; cutting it off stains everything the
+        # terminal prints after the diff block
+        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None) for _ in range(60)]
+        rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0, color=True)
+        opens = sum(rendered.count(code) for code in ("\033[31m", "\033[32m", "\033[36m"))
+        assert_that(rendered.count("\033[0m")).is_equal_to(opens)
+
+    def test_a_cut_never_leaves_half_an_escape_sequence(self):
+        # the terminal completes a truncated escape with whatever bytes follow it
+        assert_that(_cut("abc\033[31mdef", 6)).is_equal_to("abc...")
+
+    def test_a_cut_that_closes_nothing_adds_no_reset(self):
+        assert_that(_cut("plain text here", 6)).is_equal_to("plain ...")
+
+    def test_a_cut_past_a_reset_adds_no_second_one(self):
+        assert_that(_cut("\033[31mabc\033[0mdef", 30)).is_equal_to("\033[31mabc\033[0mdef...")
