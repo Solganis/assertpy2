@@ -182,7 +182,7 @@ class TestStructureMatcher:
     def test_describe_mismatch_non_dict(self):
         matcher = match.structure({"a": 1})
         result = matcher.describe_mismatch("not a dict")
-        assert_that(result).contains("was not a dict")
+        assert_that(result).contains("was not a mapping")
 
     def test_describe_mismatch_nested_path(self):
         matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
@@ -303,7 +303,7 @@ class TestCollectMismatches:
         matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
         path, _actual, description = matcher.collect_mismatches({"user": "not a dict"})[0]
         assert_that(path).is_equal_to("user")
-        assert_that(description).is_equal_to("a dict")
+        assert_that(description).is_equal_to("a mapping")
 
     def test_plain_nested_dict_recurses(self):
         matcher = match.structure({"user": {"role": "admin"}})
@@ -1085,7 +1085,7 @@ class TestStructureWalkPathsAndCycles:
         assert_that([path for path, _, _ in mismatches]).is_equal_to(["a", "b"])
 
     def test_a_non_dict_where_a_dict_was_specified_reports_the_value(self):
-        assert_that(StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": 5})).is_equal_to([("a", 5, "a dict")])
+        assert_that(StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": 5})).is_equal_to([("a", 5, "a mapping")])
 
     def test_a_matcher_whose_probe_raises_counts_as_a_mismatch(self):
         class Boom:
