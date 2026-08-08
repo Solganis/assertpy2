@@ -1,6 +1,7 @@
 import contextlib
 import json
 import os
+import subprocess
 import warnings
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -1175,3 +1176,89 @@ class TestSnapshotKeyReuseWarning:
         assert_that(snapshot_module._ACCESS_NODES).is_empty()
         assert_that(snapshot_module._ACCESS_SITES).is_empty()
         assert_that(pytest_plugin._controller_accesses).is_empty()
+
+
+_SHARED_KEY_MODULE = """\
+import pathlib
+
+import pytest
+from assertpy2 import assert_that
+
+SNAPS = pathlib.Path(__file__).parent / "snaps"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param("alice", marks=pytest.mark.xdist_group("g1")),
+        pytest.param("bob", marks=pytest.mark.xdist_group("g2")),
+        pytest.param("carol", marks=pytest.mark.xdist_group("g3")),
+    ],
+)
+def test_case(name):
+    SNAPS.mkdir(exist_ok=True)
+    assert_that({{"user": name}}).matches_contract_snapshot(id={id}, path=str(SNAPS))
+"""
+
+
+class TestSnapshotKeyReuseUnderXdist:
+    """The reuse gate across real worker processes, rather than at the seam.
+
+    Every other test here drives the hooks directly with a fake node, which pins the logic but takes
+    the plumbing on trust: the ``workeroutput`` key names matching on both sides, the payload
+    surviving xdist's serialisation, the controller sweep running late enough to have every worker's
+    numbers and early enough for pytest to still collect the warning.  None of that is reachable
+    without spawning workers, and all of it is what silently stops a cross-process guarantee from
+    ever firing again.
+
+    Three cases in three ``xdist_group``s over three workers puts exactly one case on each, so no
+    worker sees a second reach and the warning can only come from the union on the controller.  That
+    split is guaranteed rather than lucky: with as many groups as workers, xdist's scheduler hands out
+    one work unit per node and the queue is empty afterwards.
+
+    Deliberately not guarded by a skip on pytest-xdist being importable.  It is a dev dependency like
+    hypothesis, and a guard here would turn "the dependency went missing" into a silently skipped
+    check, which is the same blindness this class exists to remove.
+    """
+
+    def _run(self, tmp_path, snapshot_id, *extra):
+        # written under tmp_path on purpose: pytest would otherwise find the repository's own ini and
+        # apply its `-p no:assertpy2`, disabling the very plugin under test
+        (tmp_path / "test_reuse.py").write_text(_SHARED_KEY_MODULE.format(id=snapshot_id), encoding="utf-8")
+        return subprocess.run(
+            [
+                "uv",
+                "run",
+                # --no-sync: this runs in the middle of the suite, and a re-resolve here would rebuild
+                # the environment the remaining tests are using
+                "--no-sync",
+                "pytest",
+                str(tmp_path / "test_reuse.py"),
+                "-q",
+                "--no-header",
+                "-n",
+                "3",
+                "--dist",
+                "loadgroup",
+                "-p",
+                "no:cacheprovider",
+                *extra,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+
+    def test_one_key_split_across_workers_still_warns(self, tmp_path):
+        output = self._run(tmp_path, '"one-key"').stdout
+        assert_that(output).contains("3 passed")
+        assert_that(output).contains("SnapshotKeyReusedWarning").contains("shared by 3 tests")
+        # the sweep's own frame: attribution to the test module would mean a single worker saw both
+        # reaches, which is the case this test exists to rule out
+        assert_that(output).contains("pytest_plugin.py")
+
+    def test_a_key_per_case_stays_silent(self, tmp_path):
+        # without this the check above passes just as well against a gate that warns unconditionally
+        output = self._run(tmp_path, 'f"key-{name}"').stdout
+        assert_that(output).contains("3 passed")
+        assert_that(output).does_not_contain("SnapshotKeyReusedWarning")

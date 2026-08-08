@@ -61,6 +61,9 @@ dev = [
     "hypothesis>=6.165.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
+    # not for running the suite in parallel, but so the xdist controller sweep can be tested against
+    # real worker processes instead of a fake node
+    "pytest-xdist>=3.8.0",
     "ruff>=0.16.1",
     "ty>=0.0.69",
     "typing_extensions>=4.0",
@@ -113,10 +116,16 @@ source_paths = ["assertpy2/"]
 # behaviour: the doc-example guard reads `docs/*.md` at runtime, which `also_copy` would have to carry
 # into the mutants tree, and the typing-claims guard scans the package's own `.py` files - which under
 # mutation are the trampoline's rewrite of them, not the source anybody ships.
+#
+# The two subprocess classes are excluded for a third: they re-invoke `uv run pytest`, and the child
+# starts from the `mutants/` tree, where there is no project for uv to run. It exits non-zero, the
+# assertions read an empty stdout, and the baseline goes red. A subprocess would carry the unmutated
+# installed package in any case, so nothing is lost by leaving them out.
 pytest_add_cli_args = [
     "-k",
     """\
     not TestPytestPluginDiffRendering \
+    and not TestSnapshotKeyReuseUnderXdist \
     and not test_the_warning_points_at_the_line_that_reused_the_key \
     and not test_no_vararg_assertion_passes_with_nothing_to_assert \
     and not snapshot_roundtrip_all_types \
