@@ -81,8 +81,15 @@ between consecutive distinct values:
 }
 ```
 
-The `format` field versions the attachment schema (`2` = typed values, while attachments without the field
-are the older repr-string format), so downstream tooling can branch explicitly.
+The `format` field versions the attachment schema, so downstream tooling can branch explicitly.
+Attachments without the field are the oldest repr-string form, `2` carries typed values, and the diff
+attachment is at `3`: an entry whose side is genuinely absent now says so with `"absent": "actual"` or
+`"absent": "expected"`. Under `2` both that and a field whose value really is `null` were written as a
+bare `null`, and nothing downstream could tell a missing field from a null one. The key appears only
+where a side is absent, so an entry that merely holds `null` reads the same as before.
+
+Each attachment is versioned on its own. The diff attachment is the one that moved to `3`, while the
+`AssertionFailure` and polling-trace attachments stay at `2` because nothing about them changed.
 
 Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
 
