@@ -355,6 +355,36 @@ class HelpersMixin(_MixinBase):
             for entry in HelpersMixin._normalize_key_specs(include, "include")
         ]
 
+    def _selected_keys_only(self, mapping: object, ignore: object, include: object) -> object:
+        """A copy of ``mapping`` holding only the keys the comparison actually looked at.
+
+        `_dict_not_equal()` picks those keys to reach its verdict, and both the repr and the diff used
+        to be built from the unfiltered pair.  A failure under ``include="b"`` then printed a diff
+        whose first entry was a key that had never been compared, and one under ``ignore="a"`` named
+        ``a`` as a difference in the same breath as saying it was ignored.
+
+        Returns ``mapping`` itself when no filter is set, so the ordinary path allocates nothing.
+        """
+        if not (ignore or include):
+            return mapping
+        ignores = self._dict_ignore(ignore)
+        includes = self._dict_include(include)
+        kept = {}
+        for key in mapping:  # ty: ignore[not-iterable]  # only ever called on the dict-like branch
+            value = mapping[key]  # ty: ignore[not-subscriptable]  # same
+            if ignore and _spec_matches(key, value, ignores):
+                continue
+            if include and not _spec_matches(key, value, includes):
+                continue
+            nested_ignore = [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] or None
+            nested_include = [
+                entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key
+            ] or None
+            if (nested_ignore or nested_include) and self._is_dict_like(value, check_values=False):
+                value = self._selected_keys_only(value, nested_ignore, nested_include)
+            kept[key] = value
+        return kept
+
     def _dict_err(
         self,
         val: object,
@@ -367,6 +397,7 @@ class HelpersMixin(_MixinBase):
 
         A compare ``config`` is routed through both the textual repr (a tolerated / comparator-equal leaf is
         ellipsized, never shown) and the structured diff, so the message and diff agree on what differs.
+        ``ignore`` / ``include`` are applied to both for the same reason.
         """
 
         def _dict_repr(mapping, counterpart, _seen=None):
@@ -446,11 +477,13 @@ class HelpersMixin(_MixinBase):
             )
             include_err = f" including keys {include_fmt}"
 
-        diff_entries = _sub_diff_entries(val, other, "", config=config) or []
+        reported_val = self._selected_keys_only(val, ignore, include)
+        reported_other = self._selected_keys_only(other, ignore, include)
+        diff_entries = _sub_diff_entries(reported_val, reported_other, "", config=config) or []
         diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
 
-        val_repr = _truncated(_dict_repr(val, other))
-        other_repr = _truncated(_dict_repr(other, val))
+        val_repr = _truncated(_dict_repr(reported_val, reported_other))
+        other_repr = _truncated(_dict_repr(reported_other, reported_val))
         ignore_part = ignore_err if ignore else ""
         include_part = include_err if include else ""
         self.error(
