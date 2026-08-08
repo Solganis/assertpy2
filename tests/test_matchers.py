@@ -1136,3 +1136,76 @@ class TestEqualToStrictTypes:
             except AssertionError:
                 flag_ok = False
             assert_that(spec_ok).is_equal_to(flag_ok)
+
+
+class TestMatcherDescriptionsNameTheRightValue:
+    """Every `describe_mismatch` interpolates the value it was handed.  Handing it something else
+    still yields a grammatical sentence, and no test read one, so the whole family could describe the
+    wrong thing and stay green."""
+
+    def test_all_of_lists_only_the_matchers_that_failed(self):
+        # the filter is negated: listing the ones that passed reads as a plausible sentence too
+        composed = match.is_positive() & match.is_even()
+        assert_that(composed.describe_mismatch(3)).is_equal_to("<3> did not satisfy: an even integer")
+
+    def test_all_of_lists_several_failures(self):
+        composed = match.is_even() & match.greater_than(10)
+        assert_that(composed.describe_mismatch(3)).contains("an even integer").contains("greater than <10>")
+
+    def test_any_of_lists_every_alternative(self):
+        composed = match.is_even() | match.greater_than(10)
+        assert_that(composed.describe_mismatch(-1)).is_equal_to(
+            "<-1> satisfied none of: an even integer, a value greater than <10>"
+        )
+
+    def test_has_property_delegates_the_property_value_not_the_object(self):
+        holder = type("Holder", (), {"x": -1})()
+        assert_that(match.has_property("x", match.is_positive()).describe_mismatch(holder)).is_equal_to(
+            "property <x> was <-1>, was <-1>"
+        )
+
+    @pytest.mark.parametrize("matcher", [match.is_even(), match.is_odd(), match.is_divisible_by(2)])
+    def test_the_integer_matchers_name_the_type_they_were_given(self, matcher):
+        assert_that(matcher.describe_mismatch("a")).is_equal_to("was <'a'> of type <str>, not an integer")
+
+
+class TestTemporalMatcherBoundaries:
+    """`is_after` and `is_before` are strict, `is_now` is inclusive.  Only a value sitting exactly on
+    the boundary tells a strict comparison from a loose one."""
+
+    _MOMENT = datetime(2020, 1, 1, tzinfo=timezone.utc)
+
+    def test_is_after_rejects_the_boundary_itself(self):
+        assert_that(match.is_after(self._MOMENT).matches(self._MOMENT)).is_false()
+        assert_that(match.is_after(self._MOMENT).matches(self._MOMENT + timedelta(microseconds=1))).is_true()
+
+    def test_is_before_rejects_the_boundary_itself(self):
+        assert_that(match.is_before(self._MOMENT).matches(self._MOMENT)).is_false()
+        assert_that(match.is_before(self._MOMENT).matches(self._MOMENT - timedelta(microseconds=1))).is_true()
+
+    def test_is_now_accepts_a_value_exactly_delta_away(self):
+        delta = timedelta(seconds=30)
+        assert_that(match.is_now(delta).matches(datetime.now(timezone.utc) - delta + timedelta(seconds=1))).is_true()
+
+
+class TestMatcherComposition:
+    def test_combining_two_all_of_matchers_flattens_them(self):
+        composed = (match.is_positive() & match.is_even()) & (match.greater_than(1) & match.less_than(9))
+        assert_that(composed.matchers).is_length(4)
+        assert_that(composed.matches(4)).is_true()
+        assert_that(composed.matches(10)).is_false()
+
+    def test_combining_two_any_of_matchers_flattens_them(self):
+        composed = (match.is_even() | match.greater_than(100)) | (match.less_than(-100) | match.is_odd())
+        assert_that(composed.matchers).is_length(4)
+        assert_that(composed.matches(3)).is_true()
+
+    def test_equal_to_is_not_strict_about_types_by_default(self):
+        # the flag defaults to off, so a bool still matches the int it equals
+        assert_that(match.equal_to(1).matches(True)).is_true()
+        assert_that(match.equal_to(1, strict_types=True).matches(True)).is_false()
+
+    def test_a_regex_matcher_keeps_the_pattern_it_was_given(self):
+        matcher = match.matches_regex(r"^a\d+$")
+        assert_that(matcher.pattern).is_equal_to(r"^a\d+$")
+        assert_that(matcher.describe()).contains(r"^a\d+$")

@@ -784,6 +784,8 @@ class StructureMatcher(BaseMatcher):
     ) -> list[_SpecMismatch]:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
+            # `path` is empty only on the outermost call, where `seen` is still empty and no cycle can
+            # be reported, so the fallback label is unreachable and kept purely as a guard
             return [_SpecMismatch(path or "root", "<circular ref>", "<circular ref>", None)]
         seen = seen | {pair_id}
         mismatches: list[_SpecMismatch] = []
