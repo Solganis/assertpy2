@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import difflib
 import math
+import re
 from dataclasses import dataclass, field
 
 
@@ -251,13 +252,34 @@ def _within_budget(lines: list[str], limit: int = 20_000) -> str:
             dropped = len(lines) - index - 1
             head = [*lines[:index]]
             if remaining > 1:
-                head.append(f"{line[: remaining - 1]}...")
+                head.append(_cut(line, remaining - 1))
             else:
                 dropped += 1
             if not dropped:
                 return "\n".join(head)  # the trailing `...` already says where it was cut
             return "\n".join([*head, f"  ... and {dropped} more diff lines"])
     return "\n".join(lines)
+
+
+_SGR = re.compile("\x1b\\[[0-9;]*m")
+_RESET = "\x1b[0m"
+
+
+def _cut(line: str, width: int) -> str:
+    """``line`` truncated to ``width`` characters, left safe to print.
+
+    A colored row carries its reset at the end, so cutting one blind ends the block mid-color and
+    stains everything printed after it.  The cut can also land inside an escape sequence, which the
+    terminal then completes by swallowing whatever follows it.
+    """
+    kept = line[:width]
+    last_escape = kept.rfind("\x1b")
+    if last_escape != -1 and not _SGR.match(kept, last_escape):
+        kept = kept[:last_escape]  # a half-written escape is worse than none
+    sequences = _SGR.findall(kept)
+    if sum(1 for sequence in sequences if sequence != _RESET) > sequences.count(_RESET):
+        return f"{kept}...{_RESET}"
+    return f"{kept}..."
 
 
 def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) -> str:
