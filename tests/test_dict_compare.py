@@ -2,7 +2,7 @@ import collections
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 
 
 def test_ignore_key():
@@ -172,7 +172,7 @@ def test_failure_deep_int_keys():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({1: "a", 2: {3: "b", 4: "c"}}).is_equal_to({1: "a", 2: {3: "b", 5: "c"}}, ignore=(2, 3))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 2: {.., 4: 'c'}}> to be equal to <{.., 2: {.., 5: 'c'}}> ignoring keys <2.3>, but was not."
+        "Expected <{.., 2: {4: 'c'}}> to be equal to <{.., 2: {5: 'c'}}> ignoring keys <2.3>, but was not."
     )
 
 
@@ -188,7 +188,7 @@ def test_failure_tuple_keys_ignore():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({(1, 2): "a", (3, 4): "b"}).is_equal_to({(1, 2): "a", (3, 4): "c"}, ignore=(1, 2))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., (3, 4): 'b'}> to be equal to <{.., (3, 4): 'c'}> ignoring keys <1.2>, but was not."
+        "Expected <{(3, 4): 'b'}> to be equal to <{(3, 4): 'c'}> ignoring keys <1.2>, but was not."
     )
 
 
@@ -198,8 +198,8 @@ def test_failure_deep_tuple_keys_ignore():
             {(1, 2): "a", (3, 4): {(5, 6): "b", (7, 8): "d"}}, ignore=((3, 4), (5, 6))
         )
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., (3, 4): {.., (7, 8): 'c'}}> to be equal to "
-        "<{.., (3, 4): {.., (7, 8): 'd'}}> ignoring keys <(3, 4).(5, 6)>, but was not."
+        "Expected <{.., (3, 4): {(7, 8): 'c'}}> to be equal to <{.., (3, 4): {(7, 8): 'd'}}>"
+        " ignoring keys <(3, 4).(5, 6)>, but was not."
     )
 
 
@@ -365,8 +365,7 @@ def test_failure_deep_mismatch_when_ignoring_nested_deep_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'b': {'c': 2, 'd': {'e': 3}}}> to be equal to "
-        "<{.., 'b': {'c': 3, 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
+        "Expected <{.., 'b': {'c': 2}}> to be equal to <{.., 'b': {'c': 3}}> ignoring keys <b.d>, but was not."
     )
 
 
@@ -376,7 +375,7 @@ def test_failure_top_mismatch_when_ignoring_single_nested_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "c"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{'a': 1, 'b': {'c': 2}}> to be equal to <{'a': 2, 'b': {'c': 3}}> ignoring keys <b.c>, but was not."
+        "Expected <{.., 'a': 1}> to be equal to <{.., 'a': 2}> ignoring keys <b.c>, but was not."
     )
 
 
@@ -386,8 +385,7 @@ def test_failure_top_mismatch_when_ignoring_single_nested_sibling_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{'a': 1, 'b': {.., 'd': {'e': 3}}}> to be equal to "
-        "<{'a': 2, 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.d>, but was not."
+        "Expected <{.., 'a': 1}> to be equal to <{.., 'a': 2}> ignoring keys <b.d>, but was not."
     )
 
 
@@ -446,3 +444,41 @@ def test_cyclic_dict_under_ignore_is_treated_as_equal():
     expected = {"k": 2}
     expected["self"] = expected
     assert_that(actual).is_equal_to(expected, ignore="k")
+
+
+class TestTheDiffHonoursTheFilters:
+    """The verdict and the report must agree on which keys took part.  Before this, `ignore` and
+    `include` reached only the sentence: a failure said "including keys <b>" and then printed a diff
+    whose first entry was a key that had never been compared."""
+
+    def test_an_ignored_key_is_absent_from_the_diff(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3}, ignore="a")
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["b"])
+
+    def test_only_included_keys_reach_the_diff(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3}, include="b")
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["b"])
+
+    def test_a_nested_ignored_path_is_absent_from_the_diff(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"o": {"x": 1, "y": 2}}).is_equal_to({"o": {"x": 9, "y": 3}}, ignore=("o", "x"))
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["o.y"])
+
+    def test_an_ignored_key_is_absent_from_the_printed_values(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3}, ignore="a")
+        assert_that(str(exc_info.value)).does_not_contain("9")
+
+    def test_the_unfiltered_pair_is_still_what_the_failure_carries(self):
+        # the filter is a reporting concern: `actual` and `expected` stay the values the caller passed
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3}, ignore="a")
+        assert_that(exc_info.value.actual).is_equal_to({"a": 1, "b": 2})
+        assert_that(exc_info.value.expected).is_equal_to({"a": 9, "b": 3})
+
+    def test_filtering_leaves_an_unfiltered_comparison_alone(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a", "b"])
