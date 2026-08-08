@@ -1286,6 +1286,15 @@ class TestSnapshotKeyReuseUnderXdist:
                 str(tmp_path / "test_reuse.py"),
                 "-q",
                 "--no-header",
+                # keep the child inside tmp_path. without these it finds no ini file above the
+                # generated module, settles on the home directory as its rootdir, and then walks every
+                # directory from tmp_path up to there looking for conftest files. That walk crosses the
+                # shared temp directory, and anything else on the machine creating or removing a
+                # directory in it mid-walk makes two xdist workers collect different sets
+                "--rootdir",
+                str(tmp_path),
+                "--confcutdir",
+                str(tmp_path),
                 # the generated module writes a throwaway snapshot into tmp_path, so the first call has
                 # to create one. CI mode forbids exactly that, and it turns itself on whenever `CI` is
                 # set, which is every run on a build machine and no run on a developer's
