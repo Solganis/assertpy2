@@ -264,6 +264,62 @@ command-line flags, each documented where it is used:
 | [`--assertpy2-snapshot-ci`](testing.md#snapshot-testing) | Fail instead of creating a missing snapshot (auto-enabled on CI) |
 | `--assertpy2-snapshot-no-ci` | Disable CI mode and its autodetection |
 
+## What a failure exposes
+
+An assertion library's job is to put the values it compared in front of you, so a failing assertion is
+a deliberate disclosure. That output does not stay in your terminal: it reaches CI logs, report
+attachments and, for snapshots, files committed to the repository. This is what travels where, so you
+can decide what to hand the library in the first place.
+
+**assertpy2 caps size. It never redacts.** Nothing here inspects a value to decide whether it looks
+like a credential, and nothing ever will: a masker that guesses wrong in the safe direction hides the
+difference you were debugging, and one that guesses wrong in the other direction is worse than no
+masker at all.
+
+### The channels
+
+| Channel | Carries | Reaches |
+|---|---|---|
+| the message, `str(failure)` | the differing values, capped | pytest output, CI logs, anything catching `AssertionError` |
+| `failure.actual` / `failure.expected` | the **whole untouched values** | the pytest report section, Allure attachments, your own `except` block |
+| `failure.diff` | per-path actual and expected, capped when rendered | the same |
+| a snapshot file | the serialised value | `__snapshots/*.json`, normally committed |
+
+The caps are on rendering only: a row is cut at 400 characters and the whole diff block at 20 KB, and
+matching parts of a structure collapse to `..`. None of that shrinks what `failure.actual` holds, and
+`failure.actual` is what a reporting integration serialises.
+
+### Keeping a value out
+
+Excluding a key from the comparison also excludes it from the message and the diff:
+
+```python
+from assertpy2 import assert_that
+
+payload = {"user": "alice", "api_key": "sk-live-9f3b2a7c", "n": 1}
+expected = {"user": "alice", "api_key": "sk-live-different", "n": 2}
+
+try:
+    assert_that(payload).is_equal_to(expected, ignore="api_key")
+except AssertionError as failure:
+    print("sk-live" in str(failure))   # False: the key was never compared, so it is not reported
+    print("sk-live" in str(failure.actual))  # True: the object you passed is unchanged
+```
+
+`ignore` and `include` govern the report as well as the verdict, so the value stays out of the log.
+The exception still holds the original objects, because they are yours and the library does not copy
+them.
+
+For anything stronger, redact before asserting rather than after. Compare a filtered copy, or wrap the
+value in a type whose `__repr__` prints a placeholder: both put the decision where the meaning is
+known, which is your code and not ours.
+
+### Turning channels off
+
+`assertpy2_diff = "off"` drops the structured diff section from pytest reports, and
+`assertpy2_allure = "off"` stops attaching values to Allure. Both leave the message itself intact, so
+neither is a substitute for not passing the value in.
+
 ## Failure and expected exceptions
 
 ### fail()
