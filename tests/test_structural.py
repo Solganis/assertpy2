@@ -3,7 +3,7 @@ import typing
 import pytest
 
 from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
-from assertpy2._engine._contract import _submodel, contract_drift, shape, shape_diff
+from assertpy2._engine._contract import _declared_keys, _submodel, contract_drift, shape, shape_diff
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -865,6 +865,17 @@ class TestShape:
         assert_that(shape([[1], []])).is_equal_to([["number"]])  # nested list, empty element merged (right)
         assert_that(shape([[1], ["x"]])).is_equal_to([["mixed"]])  # two non-empty nested lists merged
 
+    def test_nested_dict_elements_are_merged_key_by_key(self):
+        # `[[1], ["x"]]` above cannot tell a real merge from "give up and say mixed": both answers are
+        # "mixed". Dict elements can, because merging them keeps a union rather than collapsing.
+        assert_that(shape([[{"a": 1}], [{"b": 2}]])).is_equal_to([[{"a": "number", "b": "number"}]])
+
+    def test_a_self_referential_list_is_marked_not_followed(self):
+        # the seen-set has to reach list elements too, or this recurses until the interpreter gives up
+        cyclic = [1]
+        cyclic.append(cyclic)
+        assert_that(shape(cyclic)).is_equal_to(["mixed"])
+
 
 class TestShapeDiff:
     def test_no_drift_and_null_wildcard(self):
@@ -928,3 +939,189 @@ class TestContractFailuresCarryPaths:
         with pytest.raises(AssertionError) as exc_info:
             assert_conforms([{"sku": "A", "qty": 2}, {"sku": "B", "qty": "two"}], Item, each=True)
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[1].qty"])
+
+
+class TestAliasResolution:
+    """Every top-level key a field can arrive under.  `Field(alias=...)` fills `validation_alias` too,
+    so a model built that way exercises both collectors at once and cannot tell them apart: breaking
+    either one still leaves the other supplying the key.  These separate them, and cover the two alias
+    objects nothing reached before."""
+
+    def test_a_serialization_only_alias_is_not_declared(self):
+        # drift is about what a payload may arrive under, and `serialization_alias` only renames a
+        # field on the way out; pydantic will not accept it as input, so neither do we
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Model(BaseModel):
+            user_id: int = Field(serialization_alias="userId")
+
+        assert_that(_declared_keys(Model)).is_equal_to({"user_id"})
+
+    def test_a_validation_only_alias_is_declared(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Model(BaseModel):
+            user_id: int = Field(validation_alias="incoming_id")
+
+        assert_that(_declared_keys(Model)).contains("incoming_id")
+
+    def test_every_choice_of_an_alias_choices_is_declared(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasChoices, BaseModel, Field
+
+        class Model(BaseModel):
+            user_id: int = Field(validation_alias=AliasChoices("userId", "user-id", "uid"))
+
+        assert_that(_declared_keys(Model)).contains("userId", "user-id", "uid")
+
+    def test_an_alias_path_declares_the_key_it_consumes(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasPath, BaseModel, Field
+
+        class Model(BaseModel):
+            # the payload carries {"meta": {"id": 1}}: the top-level key consumed is "meta"
+            user_id: int = Field(validation_alias=AliasPath("meta", "id"))
+
+        assert_that(_declared_keys(Model)).contains("meta")
+        assert_that(contract_drift({"meta": {"id": 1}}, Model)).is_empty()
+
+
+class TestSubmodelAnnotations:
+    def test_an_optional_submodel_is_still_walked(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Inner(BaseModel):
+            a: int
+
+        class Outer(BaseModel):
+            inner: Inner | None = None
+
+        assert_that(_submodel(Inner | None)).is_equal_to(Inner)
+        assert_that(contract_drift({"inner": {"a": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
+
+    def test_a_bare_container_annotation_resolves_to_nothing(self):
+        # `list` with no argument has an origin but no args, so there is no element type to peel
+        assert_that(_submodel(list)).is_none()
+        assert_that(_submodel(typing.List)).is_none()  # noqa: UP006  # the bare form is the point
+
+    def test_a_union_of_two_models_is_ambiguous_and_resolves_to_nothing(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class One(BaseModel):
+            a: int
+
+        class Two(BaseModel):
+            b: int
+
+        assert_that(_submodel(One | Two)).is_none()
+
+
+class TestAliasesOnDuckTypedModels:
+    """pydantic mirrors `Field(alias=...)` into `validation_alias`, so on a pydantic model the two
+    collectors always agree and neither can be tested apart from the other.  Duck-typed models can
+    carry one without the other, which is what the two `getattr` defaults exist for."""
+
+    @staticmethod
+    def _model(**field_attrs):
+        info = type("DuckField", (), {"annotation": int, **field_attrs})()
+        return type("DuckModel", (), {"model_fields": {"id": info}})
+
+    def test_a_serialization_alias_alone_is_declared(self):
+        model = self._model(alias="ID", validation_alias=None)
+        assert_that(_declared_keys(model)).is_equal_to({"id", "ID"})
+
+    def test_a_validation_alias_alone_is_declared(self):
+        model = self._model(alias=None, validation_alias="incoming")
+        assert_that(_declared_keys(model)).is_equal_to({"id", "incoming"})
+
+    def test_a_field_carrying_neither_attribute_is_accepted(self):
+        # the `getattr(..., None)` defaults: a duck-typed field info need not define either name
+        assert_that(_declared_keys(self._model())).is_equal_to({"id"})
+
+
+class TestDriftOnDuckTypedModels:
+    """The module is duck-typed on ``model_fields`` and never imports pydantic, so a class exposing
+    that attribute without pydantic's ``model_config`` is a supported input, not a broken one."""
+
+    def test_a_model_without_model_config_reports_drift(self):
+        class DuckField:
+            alias = None
+            validation_alias = None
+            annotation = int
+
+        class DuckModel:
+            model_fields: typing.ClassVar = {"id": DuckField()}
+
+        assert_that(contract_drift({"id": 1, "surprise": 2}, DuckModel)).is_equal_to(["surprise"])
+
+
+class TestStructureWalkPathsAndCycles:
+    """The walk builds a dotted path as it descends and refuses to follow a cycle.  Every mismatch
+    below was reachable but unasserted, so the path could be built wrong, the cycle guard keyed on one
+    side, or a `continue` turned into a `break`, without a test noticing."""
+
+    def test_a_cycle_on_both_sides_is_marked_not_followed(self):
+        value = {"a": 1}
+        value["self"] = value
+        spec = {"a": 1}
+        spec["self"] = spec
+        assert_that(StructureMatcher(spec).collect_mismatches(value)).is_equal_to(
+            [("self", "<circular ref>", "<circular ref>")]
+        )
+
+    def test_a_missing_nested_key_carries_its_full_path(self):
+        mismatches = StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": {}})
+        assert_that([path for path, _, _ in mismatches]).is_equal_to(["a.b"])
+
+    def test_every_missing_key_is_reported_not_just_the_first(self):
+        # the loop continues past a missing key; breaking instead would report one and hide the rest
+        mismatches = StructureMatcher({"a": 1, "b": 2}).collect_mismatches({})
+        assert_that([path for path, _, _ in mismatches]).is_equal_to(["a", "b"])
+
+    def test_a_non_dict_where_a_dict_was_specified_reports_the_value(self):
+        assert_that(StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": 5})).is_equal_to([("a", 5, "a dict")])
+
+    def test_a_matcher_whose_probe_raises_counts_as_a_mismatch(self):
+        class Boom:
+            def __eq__(self, other):
+                raise TypeError("boom")
+
+            __hash__ = object.__hash__
+
+        boom = Boom()
+        mismatches = StructureMatcher({"a": match.greater_than(1)}).collect_mismatches({"a": boom})
+        assert_that([(path, expected) for path, _, expected in mismatches]).is_equal_to(
+            [("a", "a value greater than <1>")]
+        )
+        assert_that(mismatches[0][1]).is_same_as(boom)
+
+    def test_a_cycle_needs_both_sides_to_repeat(self):
+        # the guard is keyed on the (value, spec) pair: keyed on one side alone, a spec that revisits a
+        # value it has already compared against a *different* sub-spec stops looking at it
+        inner = {"n": 1}
+        value = {"a": inner, "b": inner}
+        mismatches = StructureMatcher({"a": {"n": 1}, "b": {"n": 2}}).collect_mismatches(value)
+        assert_that([path for path, _, _ in mismatches]).is_equal_to(["b.n"])
+
+    def test_a_value_revisited_against_a_different_sub_spec_is_still_compared(self):
+        # the guard is keyed on the (value, spec) pair. Keyed on the value alone, a cyclic payload
+        # walked against a finite spec reports a false circular reference the second time the same
+        # sub-value comes up, and the real mismatch below it is never reached.
+        inner = {"n": 1}
+        inner["a"] = inner
+        mismatches = StructureMatcher({"a": {"a": {"n": 2}}}).collect_mismatches({"a": inner})
+        assert_that(mismatches).is_equal_to([("a.a.n", 1, "<2>")])
+
+    def test_the_mismatch_detail_comes_from_the_matcher(self):
+        # `describe_mismatch` renders the detail of the first mismatch; handing the matcher the wrong
+        # value still produces a sentence, so only reading it catches that
+        # a matcher whose own wording differs from the generic "was <...>" fallback, so the two
+        # branches are distinguishable: `greater_than` would render identically either way
+        described = StructureMatcher({"a": match.is_even()}).describe_mismatch({"a": "x"})
+        assert_that(described).is_equal_to(
+            "at <a>: expected an even integer, but was <'x'> of type <str>, not an integer"
+        )
