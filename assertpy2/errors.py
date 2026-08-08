@@ -160,7 +160,8 @@ def _windowed(actual: str, expected: str, width: int = 160) -> tuple[str, str]:
 
     def cut(text: str) -> str:
         head = "..." if start else ""
-        tail = "..." if start + width < len(text) else ""
+        hidden = len(text) - min(start + width, len(text)) + start
+        tail = f"... ({hidden} more chars)" if start + width < len(text) else ""
         return f"{head}{text[start : start + width]}{tail}"
 
     return cut(actual), cut(expected)
