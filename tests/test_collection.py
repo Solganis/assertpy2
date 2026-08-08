@@ -1,8 +1,9 @@
 import collections
+import logging
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import assert_that, assert_warn
 
 
 def test_is_iterable():
@@ -209,3 +210,72 @@ def test_extracting_that_empties_the_subject_says_so():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([]).extracting("name").is_not_empty()
     assert_that(str(exc_info.value)).contains("extracting() produced 0 of 0 items")
+
+
+def _navigations():
+    """The four hops that hand back a new builder, each of which must carry the context forward."""
+    return {
+        "first": lambda builder: builder.first(),
+        "element": lambda builder: builder.element(0),
+        "flat_mapped": lambda builder: builder.flat_mapped(lambda item: [item]),
+        "filtered_on": lambda builder: builder.filtered_on(lambda item: True),
+    }
+
+
+class TestNavigationKeepsTheBuilderContext:
+    """`first()`, `element()`, `flat_mapped()` and `filtered_on()` hand back a new builder, and each
+    has to carry the description, the kind and the logger forward.  Every test of them asserted on the
+    navigated value only, so a navigation could quietly drop a `described_as()` prefix, or turn a
+    warn-mode chain back into a raising one, without anything noticing.
+    """
+
+    @pytest.mark.parametrize("name", list(_navigations()))
+    def test_the_description_survives_the_hop(self, name):
+        navigate = _navigations()[name]
+        with pytest.raises(AssertionError) as exc_info:
+            navigate(assert_that([1]).described_as("my context")).is_equal_to(object())
+        assert_that(str(exc_info.value)).starts_with("[my context]")
+
+    @pytest.mark.parametrize("name", list(_navigations()))
+    def test_warn_mode_survives_the_hop(self, name, caplog):
+        # the kind is what decides raise-versus-warn: losing it turns a warning back into a failure
+        navigate = _navigations()[name]
+        navigate(assert_warn([1])).is_equal_to(object())
+        assert_that(caplog.text).contains("to be equal to")
+
+
+class TestSizeValidatorBoundaries:
+    """Zero is a legal size everywhere.  Rejecting it would be indistinguishable from rejecting a
+    negative one on any test that only ever passes a positive number."""
+
+    def test_greater_than_zero_is_a_legal_bound(self):
+        assert_that([1]).has_size_greater_than(0)
+
+    def test_a_negative_bound_is_refused(self):
+        with pytest.raises(ValueError, match="must be a positive int"):
+            assert_that([1]).has_size_greater_than(-1)
+
+    def test_between_zero_and_zero_is_a_legal_range(self):
+        assert_that([]).has_size_between(0, 0)
+
+    def test_a_negative_high_bound_is_refused(self):
+        with pytest.raises(ValueError, match="must be positive ints"):
+            assert_that([1]).has_size_between(0, -1)
+
+    def test_the_last_index_is_addressable(self):
+        assert_that([1, 2, 3]).element(2).is_equal_to(3)
+
+    def test_one_past_the_end_is_refused_by_our_own_message(self):
+        # a slack bound would let the list raise its own bare IndexError instead, which names neither
+        # the index nor the range the caller had to stay inside
+        with pytest.raises(IndexError, match=r"Expected index 3 to be in range \[0, 3\)"):
+            assert_that([1, 2, 3]).element(3)
+
+    @pytest.mark.parametrize("name", list(_navigations()))
+    def test_a_custom_logger_survives_the_hop(self, name, caplog):
+        # warn mode routes through the logger the caller handed in; losing it on any one hop sends the
+        # warning to a logger they are not watching
+        navigate = _navigations()[name]
+        custom = logging.getLogger("assertpy2.test.custom")
+        navigate(assert_warn([1], logger=custom)).is_equal_to(object())
+        assert_that([record.name for record in caplog.records]).contains("assertpy2.test.custom")

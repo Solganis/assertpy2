@@ -1,3 +1,5 @@
+import typing
+
 import pytest
 
 pytest.importorskip("jsonschema", reason="jsonschema not installed")
@@ -344,7 +346,8 @@ class TestSwagger20:
         assert_that(_entries(exc_info.value)).contains_key("$.status")
 
     def test_response_without_schema_raises(self):
-        with pytest.raises(ValueError, match="declares no schema"):
+        # the method is echoed upper case, as the spec spells it, not as the argument was written
+        with pytest.raises(ValueError, match=r"of <GET /orders/\{id\}> declares no schema"):
             assert_that({"x": 1}).conforms_to_openapi(SPEC_20, self.PATH, self.METHOD, status=204)
 
     def test_content_type_outside_produces_raises(self):
@@ -372,3 +375,135 @@ class TestSwagger20:
         # nothing declared to check against, so any content_type still validates the single schema
         spec = {"swagger": "2.0", "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "object"}}}}}}}
         assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/xml")
+
+
+class TestStatusAutoSelection:
+    """With no ``status=`` the first declared response among 200, 201 and ``default`` is used, in that
+    order.  Every test above either names a status or declares exactly one, so neither the order nor
+    the membership of that list was pinned."""
+
+    @staticmethod
+    def _spec(*status_codes):
+        responses = {
+            code: {"content": {"application/json": {"schema": {"type": "object", "required": [code]}}}}
+            for code in status_codes
+        }
+        return {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": responses}}}}
+
+    def test_two_hundred_wins_over_two_hundred_and_one(self):
+        # the schema of whichever response is picked demands a property named after its status code,
+        # so the failure names the one that was chosen
+        with pytest.raises(AssertionError, match="200"):
+            assert_that({}).conforms_to_openapi(self._spec("201", "200"), "/x", "get")
+
+    def test_two_hundred_and_one_wins_over_default(self):
+        with pytest.raises(AssertionError, match="201"):
+            assert_that({}).conforms_to_openapi(self._spec("default", "201"), "/x", "get")
+
+    def test_default_is_used_when_nothing_else_is_declared(self):
+        with pytest.raises(AssertionError, match="default"):
+            assert_that({}).conforms_to_openapi(self._spec("default"), "/x", "get")
+
+    def test_an_unpickable_set_names_what_was_declared(self):
+        with pytest.raises(ValueError, match=r"Specify status: <GET /x> declares responses \['418'\]"):
+            assert_that({}).conforms_to_openapi(self._spec("418"), "/x", "get")
+
+
+class TestStructuralErrorsNameTheMethodInUpperCase:
+    """The operation is echoed as the caller would find it in the spec, which is upper case: the
+    argument itself is lower case, so a message built from it unchanged reads as a different key."""
+
+    def test_an_unknown_operation_upper_cases_the_method(self):
+        with pytest.raises(ValueError, match=r"<POST /orders/\{id\}>"):
+            assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "post")
+
+    def test_an_unknown_status_upper_cases_the_method(self):
+        with pytest.raises(ValueError, match=r"<GET /orders/\{id\}>"):
+            assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "get", status=404)
+
+    def test_a_missing_content_type_upper_cases_the_method(self):
+        spec = {
+            "openapi": "3.0.3",
+            "paths": {"/x": {"get": {"responses": {"200": {"content": {"text/plain": {"schema": {}}}}}}}},
+        }
+        with pytest.raises(ValueError, match=r"<GET /x>"):
+            assert_that(CONFORMANT).conforms_to_openapi(spec, "/x", "get")
+
+    def test_a_response_without_a_schema_upper_cases_the_method(self):
+        spec = {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": {"200": {}}}}}}
+        with pytest.raises(ValueError, match=r"<GET /x>"):
+            assert_that(CONFORMANT).conforms_to_openapi(spec, "/x", "get")
+
+
+class TestNullableInsideArrays:
+    """``nullable: true`` is rewritten to a null-union before jsonschema sees it, and the rewrite has
+    to reach schemas nested inside a list.  Nothing put a nullable schema inside one."""
+
+    _SPEC: typing.ClassVar = {
+        "openapi": "3.0.3",
+        "paths": {
+            "/x": {
+                "get": {
+                    "responses": {
+                        "200": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "who": {
+                                                "oneOf": [
+                                                    {"type": "string", "nullable": True},
+                                                    {"type": "integer"},
+                                                ]
+                                            }
+                                        },
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    }
+
+    def test_a_null_inside_a_oneof_branch_is_conformant(self):
+        assert_that({"who": None}).conforms_to_openapi(self._SPEC, "/x", "get")
+
+    def test_a_non_null_value_still_has_to_match_a_branch(self):
+        with pytest.raises(AssertionError):
+            assert_that({"who": 1.5}).conforms_to_openapi(self._SPEC, "/x", "get")
+
+
+class TestSwagger20NullableInsideArrays:
+    """Swagger 2.0 spells nullability ``x-nullable``, and the rewrite carries that keyword down.
+    Losing it inside a list recursion falls back to the 3.0 spelling, which a 2.0 spec never uses."""
+
+    _SPEC: typing.ClassVar = {
+        "swagger": "2.0",
+        "paths": {
+            "/x": {
+                "get": {
+                    "produces": ["application/json"],
+                    "responses": {
+                        "200": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "who": {"allOf": [{"type": "string", "x-nullable": True}]},
+                                },
+                            }
+                        }
+                    },
+                }
+            }
+        },
+    }
+
+    def test_a_null_inside_an_allof_branch_is_conformant(self):
+        assert_that({"who": None}).conforms_to_openapi(self._SPEC, "/x", "get")
+
+    def test_a_wrong_type_inside_the_branch_still_fails(self):
+        with pytest.raises(AssertionError):
+            assert_that({"who": 1}).conforms_to_openapi(self._SPEC, "/x", "get")
