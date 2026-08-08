@@ -11,7 +11,15 @@ from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 
 if TYPE_CHECKING:
+    from types import UnionType
+    from typing import TypeAlias
+
     from typing_extensions import TypeIs
+
+    # what `isinstance()` itself accepts, which is what `is_instance_of` forwards to.  Spelled out
+    # rather than recursive (`tuple` may nest in principle): a recursive alias is not understood by
+    # every checker we gate on, and one level is the whole of the documented surface.
+    ClassInfo: TypeAlias = "type | UnionType | tuple[type | UnionType, ...]"
 
 
 @runtime_checkable
@@ -308,15 +316,39 @@ class IsNotNoneMatcher(BaseMatcher):
         return "a non-None value"
 
 
+def _type_expression_name(expected: object) -> str:
+    """A readable name for a type expression, on every Python this package supports.
+
+    ``__name__`` is absent on a union below 3.14 and on a tuple of types on every version, so reading
+    it directly turns a failure message into an ``AttributeError`` - raised on the failure path, which
+    is the worst place for it.  ``str()`` renders a union as ``int | str`` verbatim, which also reads
+    better than the bare ``Union`` that 3.14 started reporting.
+
+    A tuple is the third thing ``isinstance`` accepts, and its ``str()`` is a wall of ``<class '...'>``;
+    naming its members is what the reader is after.
+    """
+    if isinstance(expected, tuple):
+        return ", ".join(_type_expression_name(member) for member in expected)
+    return expected.__name__ if isinstance(expected, type) else str(expected)
+
+
 class IsInstanceOfMatcher(BaseMatcher):
-    def __init__(self, expected_type: type):
+    def __init__(self, expected_type: ClassInfo):
+        # Probed here rather than in `matches()`, for the reason `MatchesRegexMatcher` compiles its
+        # pattern eagerly: a matcher must not raise on use.  Without this, `list[int]` was accepted and
+        # blew up inside `matches()`, and a tuple of classes matched fine and then blew up inside
+        # `describe()` - only when a failure was being rendered.
+        try:
+            isinstance(None, expected_type)
+        except TypeError:
+            raise TypeError("given arg must be a class") from None
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:
         return isinstance(value, self.expected_type)
 
     def describe(self) -> str:
-        return f"an instance of <{self.expected_type.__name__}>"
+        return f"an instance of <{_type_expression_name(self.expected_type)}>"
 
     def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}> of type <{type(value).__name__}>"
@@ -331,13 +363,17 @@ class IsTypeOfMatcher(BaseMatcher):
     """
 
     def __init__(self, expected_type: type):
+        # the same check `is_type_of` applies, and for the same reason: `type(value) is <a union>` can
+        # never be true, so accepting one produces a matcher that silently never matches
+        if type(expected_type) is not type and not issubclass(type(expected_type), type):
+            raise TypeError("given arg must be a type")
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:
         return type(value) is self.expected_type
 
     def describe(self) -> str:
-        return f"exactly type <{self.expected_type.__name__}>"
+        return f"exactly type <{_type_expression_name(self.expected_type)}>"
 
     def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}> of type <{type(value).__name__}>"

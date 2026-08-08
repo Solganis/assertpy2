@@ -1209,3 +1209,66 @@ class TestMatcherComposition:
         matcher = match.matches_regex(r"^a\d+$")
         assert_that(matcher.pattern).is_equal_to(r"^a\d+$")
         assert_that(matcher.describe()).contains(r"^a\d+$")
+
+
+class TestTypeMatchersRefuseBadInputAtConstruction:
+    """`MatchesRegexMatcher` compiles eagerly so an invalid pattern raises at the call site rather
+    than inside `matches()`, because a matcher must not raise on use.  These two broke that contract:
+    `list[int]` was accepted and blew up inside `matches()`, and a tuple of classes matched fine and
+    then blew up inside `describe()` - only while a failure was being rendered.
+    """
+
+    @pytest.mark.parametrize("bad", [list[int], None, "int", 42])
+    def test_is_instance_of_refuses_what_isinstance_refuses(self, bad):
+        with pytest.raises(TypeError, match="given arg must be a class"):
+            match.is_instance_of(bad)
+
+    @pytest.mark.parametrize("bad", [list[int], None, "int", int | str, (int, str)])
+    def test_is_type_of_refuses_anything_but_a_type(self, bad):
+        # `type(value) is <a union>` can never hold, so accepting one yields a matcher that silently
+        # never matches
+        with pytest.raises(TypeError, match="given arg must be a type"):
+            match.is_type_of(bad)
+
+    @pytest.mark.parametrize("good", [int, int | str, (int, str), (int | str, float)])
+    def test_is_instance_of_accepts_everything_isinstance_accepts(self, good):
+        matcher = match.is_instance_of(good)
+        assert_that(matcher.matches(1)).is_true()
+        assert_that(matcher.describe()).starts_with("an instance of")
+
+    def test_the_error_matches_the_builder_assertion_word_for_word(self):
+        # one vocabulary for the same mistake, whichever surface the caller reached it through
+        with pytest.raises(TypeError) as from_matcher:
+            match.is_instance_of(None)
+        with pytest.raises(TypeError) as from_builder:
+            assert_that(1).is_instance_of(None)
+        assert_that(str(from_matcher.value)).is_equal_to(str(from_builder.value))
+
+
+class TestTypeMatcherDescriptionsSurviveEveryShape:
+    """`__name__` is absent on a union below 3.14 and on a tuple everywhere, and the description is
+    built on the failure path, so reading it directly turned a failure into an `AttributeError`."""
+
+    def test_a_class_is_named(self):
+        assert_that(match.is_instance_of(int).describe()).is_equal_to("an instance of <int>")
+
+    def test_a_union_is_spelled_out(self):
+        # `str()` gives `int | str` on every supported version; `__name__` gives `Union` on 3.14+ and
+        # raises below it
+        assert_that(match.is_instance_of(int | str).describe()).is_equal_to("an instance of <int | str>")
+
+    def test_a_tuple_names_its_members(self):
+        assert_that(match.is_instance_of((int, str)).describe()).is_equal_to("an instance of <int, str>")
+
+    def test_a_tuple_containing_a_union_names_both(self):
+        described = match.is_instance_of((int | str, float)).describe()
+        assert_that(described).is_equal_to("an instance of <int | str, float>")
+
+    def test_is_type_of_names_its_class(self):
+        assert_that(match.is_type_of(int).describe()).is_equal_to("exactly type <int>")
+
+    def test_a_union_reaches_the_rendered_failure(self):
+        # the whole point: the description is built while a mismatch is being rendered
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"v": 1.5}).matches_structure({"v": match.is_instance_of(int | str)})
+        assert_that(str(exc_info.value)).contains("int | str")
