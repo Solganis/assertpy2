@@ -331,3 +331,30 @@ def _spec_matches(key, value, specs) -> bool:
         elif spec == key:
             return True
     return False
+
+
+def _config_note(config: _CompareConfig | None) -> str:
+    """A newline plus an echo of the comparison settings that were in force, or ``""`` when none were.
+
+    ``is_equal_to`` already names ``ignore`` and ``include`` inside its sentence, but nothing reports
+    the rest, and they are what a reader is questioning when a field they thought was tolerated still
+    failed.  Rendered only for a non-default config: `_build_compare_config()` returns ``None`` when
+    every setting is at its default, so the check costs nothing and the line never appears on the
+    ordinary failure.
+
+    It goes on its own line rather than into the sentence, so the original message stays a prefix and
+    a `match=` or ``startswith`` written against it keeps working.
+    """
+    if config is None:
+        return ""
+    parts = []
+    if config.tolerance is not None:
+        parts.append(f"tolerance={config.tolerance!r}")
+    if config.comparators:
+        keys = ", ".join(sorted(key.__name__ if isinstance(key, type) else str(key) for key in config.comparators))
+        parts.append(f"comparators for {keys}")
+    if config.ignore_null:
+        parts.append("ignore_null=True")
+    if config.strict_types:
+        parts.append("strict_types=True")
+    return "\ncompared with " + ", ".join(parts) if parts else ""

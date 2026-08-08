@@ -192,6 +192,26 @@ The message then tags each with its type, so `assert_that("1").is_equal_to(1)` r
     The bare equality check is not ours: it follows Python's own `==`, so two structurally equal
     *cyclic* graphs raise `RecursionError` exactly as a plain `assert a == b` would.
 
+### The comparison settings are named back to you
+
+`ignore` and `include` appear inside the failure sentence. The rest of the comparison settings get a
+line of their own, so a failure under `tolerance`, `comparators`, `ignore_null` or `strict_types`
+says which of them were in force:
+
+```python
+from assertpy2 import assert_that
+
+try:
+    assert_that({"price": 1.0}).is_equal_to({"price": 9.0}, tolerance=0.001, strict_types=True)
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # compared with tolerance=0.001, strict_types=True
+```
+
+Nothing is added on an ordinary failure, where every setting sits at its default. The line goes
+below the sentence rather than into it, so the original text stays a prefix and a `match=` written
+against it keeps matching.
+
 ### Polling failures carry a trace
 
 An [`eventually()`](testing.md#async-assertions) timeout attaches its convergence telemetry as

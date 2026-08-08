@@ -7,6 +7,7 @@ from ._engine._compare import (
     _ambiguous_array_operand,
     _array_equality_error,
     _build_compare_config,
+    _config_note,
     _guarded_equal,
     _guarded_not_equal,
     _node_decision,
@@ -220,7 +221,7 @@ class BaseMixin(SatisfiesMixin):
             # pair itself, so an OrderedDict against a dict would otherwise pass a strict comparison
             actual_repr, expected_repr = _disambiguated(self.val, other)
             return self.error(
-                f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
+                f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.{_config_note(config)}",
                 actual=self.val,
                 expected=other,
                 diff=_build_equality_diff(self.val, other, config=config),
@@ -245,7 +246,8 @@ class BaseMixin(SatisfiesMixin):
             diff = _build_equality_diff(self.val, other, config=config)
             if diff.entries:
                 return self.error(
-                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not.",
+                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not."
+                    f"{_config_note(config)}",
                     actual=self.val,
                     expected=other,
                     diff=diff,
