@@ -84,6 +84,38 @@ jobs:
           # guard either way, so this cannot turn a real coverage drop into a green run.
           fail_ci_if_error: true
 
+  optional-integrations:
+    # allure and behave get their own job because installing them is incompatible with the coverage
+    # gate: with allure present the `except ImportError` fallback in pytest_plugin.py never runs, and
+    # without it the import itself never runs. The gating cell keeps the second state, this one holds
+    # the first. Everywhere else the two are tested against mocks, which accept any call and would
+    # wave through the renamed parameter or moved attribute a Dependabot bump can bring.
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: uv sync --extra json --extra allure --extra behave
+
+      - name: Contract tests against the real libraries
+        run: uv run pytest -v tests/test_optional_integration_contracts.py
+
+      - name: The rest of the suite must also pass with both installed
+        # Installing allure flips `_HAS_ALLURE`, so every failing assertion in the suite takes the
+        # real attach path. That must not change any other test's outcome.
+        run: uv run pytest -q --ignore=tests/test_docs_examples.py tests
+
   lint:
     timeout-minutes: 10
     runs-on: ubuntu-latest
@@ -120,12 +152,16 @@ jobs:
 
   ci-ok:
     timeout-minutes: 5
-    needs: [test, lint]
+    needs: [test, optional-integrations, lint]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
+          INTEGRATIONS_RESULT: ${{ needs.optional-integrations.result }}
           LINT_RESULT: ${{ needs.lint.result }}
-        run: '[ "$TEST_RESULT" = "success" ] && [ "$LINT_RESULT" = "success" ]'
+        run: |
+          [ "$TEST_RESULT" = "success" ] &&
+          [ "$INTEGRATIONS_RESULT" = "success" ] &&
+          [ "$LINT_RESULT" = "success" ]
