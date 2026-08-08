@@ -228,7 +228,7 @@ def _report_retries(config) -> None:
         )
 
 
-def _warn_on_reused_snapshot_keys() -> None:
+def _warn_on_reused_snapshot_keys(session) -> None:
     """Sweep for reused snapshot keys that no single process could see on its own.
 
     `assertpy2.snapshot._record_access()` reports the second reach from inside the test, which is where
@@ -247,12 +247,35 @@ def _warn_on_reused_snapshot_keys() -> None:
     for (snapname, key), nodes in sorted(totals.items()):
         if len(nodes) < 2 or (snapname, key) in already:
             continue
-        warnings.warn(
-            _snapshot._reuse_message(snapname, key, len(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")),
-            _snapshot.SnapshotKeyReusedWarning,
-            stacklevel=1,
-        )
+        message = _snapshot._reuse_message(snapname, key, len(nodes), _snapshot._ACCESS_SITES.get((snapname, key), ""))
+        try:
+            warnings.warn(message, _snapshot.SnapshotKeyReusedWarning, stacklevel=1)
+        except _snapshot.SnapshotKeyReusedWarning:
+            _fail_on_reused_key(session, message)
     _snapshot._ACCESS_SITES.clear()
+
+
+def _fail_on_reused_key(session, message: str) -> None:
+    """Turn an escalated sweep warning into a failed run instead of a broken hook.
+
+    An ``error`` entry in the warning filters raises here rather than at a test, and an exception out
+    of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
+    message the reader needs under a stack that points at the wrong place.  Print it and go red.
+
+    The guide recommends exactly that filter entry, so this is the documented path rather than a
+    corner: without it, the one configuration we tell people to use is the one that breaks.
+    """
+    # only a run that otherwise succeeded. this hook is reached from a ``finally``, so it also runs
+    # after Ctrl-C, an internal error and a usage error, and each of those carries an exit code that
+    # says more than "tests failed". overwriting one would report a run that never finished as one
+    # that did. anything already non-zero is red for its own reason and needs nothing from here
+    if session.exitstatus == pytest.ExitCode.OK:
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+    if reporter is None:  # pragma: no cover - the terminal reporter is always present under pytest
+        return
+    reporter.write_line("")
+    reporter.write_line(f"ERROR: {message}", red=True)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -269,7 +292,7 @@ def pytest_sessionfinish(session, exitstatus):
         return
     # controller / single process: apply inline edits (workers' plus any recorded here) into source
     _report_retries(config)
-    _warn_on_reused_snapshot_keys()
+    _warn_on_reused_snapshot_keys(session)
     _inline._RECORDS.extend(_controller_inline)
     _controller_inline.clear()
     _inline.apply_inline_records()
