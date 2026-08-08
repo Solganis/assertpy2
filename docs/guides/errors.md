@@ -363,6 +363,7 @@ neither is a substitute for not passing the value in.
 
 Force a test failure explicitly:
 
+<!-- docs-guard: skip -->
 ```python
 from assertpy2 import fail
 
@@ -373,6 +374,7 @@ fail("forced failure")
 
 For a called function, assert it raises and chain assertions on the message:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(some_func).raises(RuntimeError).when_called_with("foo")
 assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_equal_to(
@@ -382,6 +384,7 @@ assert_that(some_func).raises(RuntimeError).when_called_with("foo").is_equal_to(
 
 Or assert it does **not** raise a given exception:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(safe_func).does_not_raise(ValueError).when_called_with("foo")
 ```
@@ -395,6 +398,7 @@ Beyond the message, the caught exception can be inspected in three more ways.
 **The exception object** - `raised()` pivots to the caught exception itself, so you can assert on its
 type, `args`, or custom attributes, not only its message string:
 
+<!-- docs-guard: skip -->
 ```python
 err = assert_that(load).raises(ConfigError).when_called_with("bad.toml").raised().value
 assert_that(err.code).is_equal_to(42)
@@ -406,6 +410,7 @@ explicit `raise ... from` or one raised during handling.
 `has_root_cause()` walks to the root of the chain. Both pivot to that cause's message, so the chain
 continues:
 
+<!-- docs-guard: skip -->
 ```python
 # def save(row): ... raise ServiceError("save failed") from TimeoutError("db timeout")
 assert_that(save).raises(ServiceError).when_called_with(row).caused_by(TimeoutError)
@@ -417,6 +422,7 @@ assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(
 **Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`) - `contains_error()`
 asserts the caught group contains, recursively, an exception of each given type:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(
     ValueError, KeyError
@@ -427,6 +433,7 @@ assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(
 
 For a called function, assert it emits a warning and chain assertions on the warning message:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
 assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").matches(
@@ -437,6 +444,7 @@ assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo").m
 The category defaults to `Warning` (matches any warning) and matches subclasses. Or assert it does
 **not** emit a given category:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(safe_func).does_not_warn(DeprecationWarning).when_called_with("foo")
 ```
@@ -444,6 +452,7 @@ assert_that(safe_func).does_not_warn(DeprecationWarning).when_called_with("foo")
 To also assert on the value the call returned (alongside the warning, or after `does_not_warn` /
 `does_not_raise`), pivot with `returned()`:
 
+<!-- docs-guard: skip -->
 ```python
 (
     assert_that(make_client).warns(DeprecationWarning).when_called_with()
@@ -470,6 +479,7 @@ To also assert on the value the call returned (alongside the warning, or after `
 
 `described_as()` prepends a custom label to the failure message:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(1 + 2).described_as("adding stuff").is_equal_to(2)
 # [adding stuff] Expected <3> to be equal to <2>, but was not.
@@ -500,7 +510,8 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
 
     Pass your own logger for custom formatting:
 
-        ```python
+    <!-- docs-guard: skip -->
+    ```python
     assert_warn("foo", logger=my_logger).is_length(4)
     ```
 

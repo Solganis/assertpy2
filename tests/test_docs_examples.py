@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import pathlib
 import re
 import types
@@ -27,6 +28,7 @@ GUARDED_DOCS = [
     "docs/guides/matchers.md",
     "docs/guides/assertions.md",
     "docs/guides/data.md",
+    "docs/guides/errors.md",
     "docs/index.md",
     "docs/getting-started/migration.md",
     "docs/recipes.md",
@@ -39,7 +41,7 @@ DOC_NAMESPACE = {
     for name in dir(assertpy2)
     if not name.startswith("_") and not isinstance(getattr(assertpy2, name), types.ModuleType)
 }
-DOC_NAMESPACE.update(datetime=datetime, re=re, json=json, Path=pathlib.Path)
+DOC_NAMESPACE.update(datetime=datetime, re=re, json=json, logging=logging, Path=pathlib.Path)
 
 SKIP_MARKER = "docs-guard: skip"
 _EXAMPLES = [example for doc in GUARDED_DOCS for example in find_examples(doc)]
