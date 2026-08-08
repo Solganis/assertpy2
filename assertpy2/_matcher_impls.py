@@ -785,12 +785,12 @@ class StructureMatcher(BaseMatcher):
         return not self._walk(value, self._spec, "", set())
 
     def describe(self) -> str:
-        return f"a dict matching structure {_describe_spec_value(self._spec)}"
+        return f"a mapping matching structure {_describe_spec_value(self._spec)}"
 
     def describe_mismatch(self, value: Any) -> str:
         value = self._as_mapping(value)
         if not is_mapping_like(value):
-            return f"was not a dict: <{value}>"
+            return f"was not a mapping: <{value}>"
         mismatches = self._walk(value, self._spec, "", set())
         if not mismatches:
             return f"was <{value}>"
@@ -848,7 +848,7 @@ class StructureMatcher(BaseMatcher):
                 if is_mapping_like(normalized):
                     mismatches.extend(self._walk(normalized, expected, current_path, seen))
                 else:
-                    mismatches.append(_SpecMismatch(current_path, actual, "a dict", None))
+                    mismatches.append(_SpecMismatch(current_path, actual, "a mapping", None))
             elif _guarded_not_equal(actual, expected, method="matches_structure"):
                 mismatches.append(_SpecMismatch(current_path, actual, f"<{expected}>", None))
         return mismatches
