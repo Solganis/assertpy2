@@ -212,6 +212,43 @@ Nothing is added on an ordinary failure, where every setting sits at its default
 below the sentence rather than into it, so the original text stays a prefix and a `match=` written
 against it keeps matching.
 
+### Some failures say why, not only what
+
+A diff says what differs. There are failures where that leaves the hard part undone: two strings that
+render identically and differ in a trailing space, or a comparison that could never have passed
+because a NaN was in it. Where the whole difference has one explanation, it gets a line:
+
+```python
+from assertpy2 import assert_that
+
+try:
+    assert_that({"user": {"name": "bob "}}).is_equal_to({"user": {"name": "bob"}})
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # every difference here is one of surrounding whitespace
+```
+
+The line appears only when it accounts for **every** entry in the diff. A half-explanation is worse
+than none: you would act on it and land back at the same failure. So a value that is simply wrong
+gets nothing, and neither does a failure where one field differs by whitespace and another by its
+content.
+
+`NaN` is stated first whatever else differs, since no value on the other side could have made that
+comparison pass:
+
+```python
+from assertpy2 import assert_that
+
+try:
+    assert_that(float("nan")).is_equal_to(float("nan"))
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # a NaN takes part in this comparison, and a NaN is equal to nothing, not even itself
+```
+
+Like the settings echo above, it sits below the sentence, so anything written against the original
+message keeps working.
+
 ### Polling failures carry a trace
 
 An [`eventually()`](testing.md#async-assertions) timeout attaches its convergence telemetry as
@@ -463,7 +500,7 @@ assert_warn("foo").is_length(4)   # logs a warning, does not raise
 
     Pass your own logger for custom formatting:
 
-    ```python
+        ```python
     assert_warn("foo", logger=my_logger).is_length(4)
     ```
 

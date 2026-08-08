@@ -108,6 +108,7 @@ def test_failure_deep_dict_single_key():
         assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1, "b": {"x": 2}})
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{.., 'b': {.., 'y': 3}}> to be equal to <{.., 'b': {..}}>, but was not."
+        "\nevery shared key matches, and actual carries keys the expected side does not"
     )
 
 
@@ -212,6 +213,7 @@ def test_failure_single_item_tuple_keys_ignore():
         assert_that({(1,): "a", (2,): "b"}).is_equal_to({(1,): "a"}, ignore=(2,))
     assert_that(str(exc_info.value)).is_equal_to(
         "Expected <{.., (2,): 'b'}> to be equal to <{..}> ignoring keys <2>, but was not."
+        "\nevery shared key matches, and actual carries keys the expected side does not"
     )
 
 
