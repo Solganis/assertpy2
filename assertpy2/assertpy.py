@@ -355,8 +355,7 @@ def _contract_entries(exc: object, prefix: str = "") -> list[DiffEntry]:
     channel costs a reshape rather than a second walk of the payload.  Under ``each=True`` the caller
     passes the element's ``[i]`` prefix, the way ``contract_drift`` labels its own paths.
     """
-    # duck-typed pydantic call, guarded by the hasattr check
-    errors = exc.errors() if hasattr(exc, "errors") else []  # ty: ignore[call-non-callable]
+    errors = exc.errors() if hasattr(exc, "errors") else []  # ty: ignore[call-non-callable]  # duck-typed pydantic
     entries = []
     for error in errors:
         path = prefix
