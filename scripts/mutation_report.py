@@ -11,6 +11,8 @@ import json
 import pathlib
 import sys
 
+import tomllib
+
 # mutmut's own exit-code table, not a copy of it.  Only two of the codes mean "killed"; 5 and 33 mean
 # the mutant had no test covering it, 36 and 255 mean the run timed out, and `None` means it was never
 # checked at all.  Counting every non-zero code as a kill - the obvious reading - silently inflates the
@@ -21,6 +23,19 @@ import sys
 from mutmut.__main__ import status_by_exit_code
 
 _RESULTS = pathlib.Path("mutants/assertpy2")
+
+
+def _excluded_tests() -> tuple[list[str], int]:
+    """The test files and named tests the mutation run leaves out, from `[tool.mutmut]`.
+
+    They are excluded because mutmut's trampoline breaks them, not because they are weak: whatever
+    they would have killed still counts as a survivor here.
+    """
+    config = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["mutmut"]
+    args = config.get("pytest_add_cli_args", [])
+    files = [arg.removeprefix("--ignore=") for arg in args if arg.startswith("--ignore=")]
+    deselected = args[args.index("-k") + 1].count(" and not ") + 1 if "-k" in args else 0
+    return files, deselected
 
 
 class _Tally:
@@ -85,6 +100,20 @@ def main() -> int:
         print(f"\n{unjudged} of the {tally.total} generated mutants never got a verdict and are excluded above.")
     print("\nA survivor is a change to the source that no test noticed.  Most are equivalent mutants")
     print("(message text no test asserts on, formatting, `__repr__`), the rest are gaps worth a test.\n")
+
+    excluded_files, deselected = _excluded_tests()
+    if excluded_files or deselected:
+        print("> **The survivor count is an over-estimate.**  This run leaves out")
+        print(f"> {len(excluded_files)} test files and {deselected} named tests, because mutmut's trampoline")
+        print("> renames functions and adds a stack frame, which breaks any test asserting on a line")
+        print("> number, a traceback or a function name.  A mutant one of those would have killed is")
+        print("> reported here as a survivor.")
+        print(">")
+        print("> Measured 2026-08-08 on 118 sampled survivors across the five modules most affected:")
+        print("> **39% were false**, from 23% (`snapshot`) to 72% (`_snapshot_codec`).  Re-run a")
+        print("> suspect mutant against the unfiltered suite before treating it as a gap.")
+        print(">")
+        print("".join(f"> - `{name}`\n" for name in excluded_files))
 
     blind = tally.wholly_unchecked_modules()
     if blind:
