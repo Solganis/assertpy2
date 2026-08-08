@@ -16,6 +16,7 @@ from .errors import AssertionFailure, _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 
 if TYPE_CHECKING:
+    import types
     from collections.abc import Callable, Iterator
 
     from ._engine._compat import Self
@@ -23,6 +24,23 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _UNSET: Final = object()
+
+
+def _require_caller(frame: types.FrameType | None) -> types.FrameType:
+    """The frame one level above ``frame``, which is what keys a snapshot by line and drives an
+    inline rewrite.
+
+    The frame is taken at the call site rather than in here on purpose: a helper that walked the
+    stack itself would fix the number of hops, and both the callers and mutmut's trampoline change
+    that count.
+
+    Raises:
+        RuntimeError: if the interpreter exposes no calling frame.
+    """
+    caller = frame.f_back if frame is not None else None
+    if caller is None:  # pragma: no cover - frame introspection always available in CPython
+        raise RuntimeError("cannot determine caller frame")
+    return caller
 
 
 def register_snapshot_serializer(
@@ -566,10 +584,7 @@ class SnapshotMixin(_MixinBase):
             snapname = _name(path, id)
         else:
             # make id from filename and line number
-            frame = inspect.currentframe()
-            caller = frame.f_back if frame is not None else None
-            if caller is None:  # pragma: no cover - frame introspection always available in CPython
-                raise RuntimeError("cannot determine caller frame")
+            caller = _require_caller(inspect.currentframe())
             file_path = os.path.basename(caller.f_code.co_filename)
             file_name = os.path.splitext(file_path)[0]
             lineno = str(caller.f_lineno)
@@ -716,10 +731,7 @@ class SnapshotMixin(_MixinBase):
                 )
             if _update_enabled():
                 _inline_literal_or_raise(self.val)
-                frame = inspect.currentframe()
-                caller = frame.f_back if frame is not None else None
-                if caller is None:  # pragma: no cover - frame introspection always available in CPython
-                    raise RuntimeError("cannot determine caller frame")
+                caller = _require_caller(inspect.currentframe())
                 _inline.record_create(caller, self.val)
                 warnings.warn(
                     "recorded inline snapshot: this run captured the value into the test source;"
@@ -735,10 +747,7 @@ class SnapshotMixin(_MixinBase):
             expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
         ):
             _inline_literal_or_raise(self.val)
-            frame = inspect.currentframe()
-            caller = frame.f_back if frame is not None else None
-            if caller is None:  # pragma: no cover - frame introspection always available in CPython
-                raise RuntimeError("cannot determine caller frame")
+            caller = _require_caller(inspect.currentframe())
             _inline.record_update(caller, self.val)
             warnings.warn(
                 "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
@@ -811,10 +820,7 @@ class SnapshotMixin(_MixinBase):
         if id:
             snapname = _name(path, id)
         else:
-            frame = inspect.currentframe()
-            caller = frame.f_back if frame is not None else None
-            if caller is None:  # pragma: no cover - frame introspection always available in CPython
-                raise RuntimeError("cannot determine caller frame")
+            caller = _require_caller(inspect.currentframe())
             file_path = os.path.basename(caller.f_code.co_filename)
             file_name = os.path.splitext(file_path)[0]
             lineno = str(caller.f_lineno)

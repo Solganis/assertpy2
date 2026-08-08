@@ -99,7 +99,10 @@ def _alignment_opcodes(actual, expected):
         keyed_actual = [_safe_repr(item) for item in actual]
         keyed_expected = [_safe_repr(item) for item in expected]
         return difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
-    except (TypeError, ValueError):  # pragma: no cover - a repr that is neither hashable nor comparable
+    # pragma: no cover - not reachable through a broken __repr__: `_safe_repr` swallows everything and
+    # returns a str, and strs are always hashable. What is left is a value whose iteration fails after
+    # `len()` on it succeeded, so the guard keeps that degrading to a positional diff instead of raising.
+    except (TypeError, ValueError):  # pragma: no cover
         return None
 
 
