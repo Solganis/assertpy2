@@ -578,11 +578,15 @@ class TestStringDiffCarets:
         assert_that(output).does_not_contain("more diff lines")
 
     def test_removed_line_renders_minus_only(self):
-        diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual="gone", expected=None)])
+        diff = DiffResult(
+            kind="string", entries=[DiffEntry(path="line 2", actual="gone", expected=None, absent="expected")]
+        )
         assert_that(_format_diff(diff)).contains("line 2: - 'gone'")
 
     def test_added_line_renders_plus_only(self):
-        diff = DiffResult(kind="string", entries=[DiffEntry(path="line 2", actual=None, expected="new")])
+        diff = DiffResult(
+            kind="string", entries=[DiffEntry(path="line 2", actual=None, absent="actual", expected="new")]
+        )
         assert_that(_format_diff(diff)).contains("line 2: + 'new'")
 
 
@@ -1776,7 +1780,9 @@ class TestCaretsReachNestedTextLeaves:
 
     def test_a_one_sided_entry_is_unchanged(self):
         # nothing to compare against, so the row stays the single-sided form it always was
-        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="gone", actual="x", expected=None)]))
+        output = _format_diff(
+            DiffResult(kind="dict", entries=[DiffEntry(path="gone", actual="x", expected=None, absent="expected")])
+        )
         assert_that(self._caret_rows(output)).is_empty()
         assert_that(output).contains("gone: - 'x'")
 
@@ -1834,7 +1840,7 @@ class TestTheBlockBudgetCutsRatherThanDrops:
         assert_that(cut).contains("... and 2 more diff lines")
 
     def test_a_large_set_difference_still_shows_items(self):
-        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None) for _ in range(60)]
+        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None, absent="expected") for _ in range(60)]
         rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0)
         assert_that(len(rendered)).is_less_than(21_000)
         assert_that(rendered).contains("xxx")
@@ -1842,7 +1848,7 @@ class TestTheBlockBudgetCutsRatherThanDrops:
     def test_a_clipped_coloured_row_keeps_its_reset(self):
         # the reset closes the colour at the end of the row; cutting it off stains everything the
         # terminal prints after the diff block
-        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None) for _ in range(60)]
+        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None, absent="expected") for _ in range(60)]
         rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0, color=True)
         opens = sum(rendered.count(code) for code in ("\033[31m", "\033[32m", "\033[36m"))
         assert_that(rendered.count("\033[0m")).is_equal_to(opens)

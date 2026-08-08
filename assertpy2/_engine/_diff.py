@@ -195,9 +195,9 @@ def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[
     for i in range(max_len):
         path = f"{prefix}[{i}]" if prefix else f"[{i}]"
         if i >= len(actual):
-            entries.append(DiffEntry(path=path, actual=None, expected=expected[i]))
+            entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[i]))
         elif i >= len(expected):
-            entries.append(DiffEntry(path=path, actual=actual[i], expected=None))
+            entries.append(DiffEntry(path=path, actual=actual[i], expected=None, absent="expected"))
         else:
             # inlined rather than routed through `_element_entries()`: this runs once per element of
             # every sequence diff, and returning an empty list for an equal element cost 15% of the
@@ -228,10 +228,10 @@ def _aligned_diff_entries(actual, expected, prefix, seen, config, opcodes) -> li
             actual_index, expected_index = actual_start + offset, expected_start + offset
             if actual_index >= actual_stop:
                 path = f"{prefix}expected[{expected_index}]" if prefix else f"expected[{expected_index}]"
-                entries.append(DiffEntry(path=path, actual=None, expected=expected[expected_index]))
+                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[expected_index]))
             elif expected_index >= expected_stop:
                 path = f"{prefix}actual[{actual_index}]" if prefix else f"actual[{actual_index}]"
-                entries.append(DiffEntry(path=path, actual=actual[actual_index], expected=None))
+                entries.append(DiffEntry(path=path, actual=actual[actual_index], expected=None, absent="expected"))
             else:
                 path = f"{prefix}[{actual_index}]" if prefix else f"[{actual_index}]"
                 entries.extend(_element_entries(actual[actual_index], expected[expected_index], path, seen, config))
@@ -261,9 +261,9 @@ def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list
     for field in sorted(actual_names | expected_names):
         path = f"{prefix}.{field}"
         if field not in expected_names:
-            entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None))
+            entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None, absent="expected"))
         elif field not in actual_names:
-            entries.append(DiffEntry(path=path, actual=None, expected=getattr(expected, field)))
+            entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=getattr(expected, field)))
         else:
             actual_value = getattr(actual, field)
             expected_value = getattr(expected, field)
@@ -315,7 +315,7 @@ def _build_equality_diff(
             # use _fields membership, not getattr/hasattr: a field name colliding with an inherited
             # tuple method (count/index) would otherwise resolve to that bound method, not be "absent"
             if field not in expected._fields:
-                entries.append(DiffEntry(path=path, actual=actual_value, expected=None))
+                entries.append(DiffEntry(path=path, actual=actual_value, expected=None, absent="expected"))
             else:
                 expected_value = getattr(expected, field)
                 decision = _node_decision(actual_value, expected_value, config, field=field)
@@ -324,7 +324,7 @@ def _build_equality_diff(
                 elif decision != "equal":
                     entries.extend(_field_entries(actual_value, expected_value, path, decision))
         entries.extend(
-            DiffEntry(path=f"{_prefix}.{field}", actual=None, expected=getattr(expected, field))
+            DiffEntry(path=f"{_prefix}.{field}", actual=None, absent="actual", expected=getattr(expected, field))
             for field in expected._fields
             if field not in actual._fields
         )
@@ -348,9 +348,9 @@ def _build_equality_diff(
         for key in sorted(set(actual_dict) | set(expected_dict)):
             path = f"{_prefix}.{key}" if _prefix else f".{key}"
             if key not in expected_dict:
-                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
+                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
-                entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
+                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected_dict[key]))
             else:
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":
@@ -375,9 +375,9 @@ def _build_equality_diff(
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = []
         for item in sorted(actual - expected, key=_safe_repr):
-            entries.append(DiffEntry(path="extra", actual=item, expected=None))
+            entries.append(DiffEntry(path="extra", actual=item, expected=None, absent="expected"))
         for item in sorted(expected - actual, key=_safe_repr):
-            entries.append(DiffEntry(path="missing", actual=None, expected=item))
+            entries.append(DiffEntry(path="missing", actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
     # bytes render as their b'...' literal, which difflib can point into exactly like text, and both
     # kinds expose splitlines(), so one branch serves them
@@ -390,9 +390,13 @@ def _build_equality_diff(
         max_len = max(len(actual_lines), len(expected_lines))
         for i in range(max_len):
             if i >= len(actual_lines):
-                entries.append(DiffEntry(path=f"line {i + 1}", actual=None, expected=expected_lines[i]))
+                entries.append(
+                    DiffEntry(path=f"line {i + 1}", actual=None, absent="actual", expected=expected_lines[i])
+                )
             elif i >= len(expected_lines):
-                entries.append(DiffEntry(path=f"line {i + 1}", actual=actual_lines[i], expected=None))
+                entries.append(
+                    DiffEntry(path=f"line {i + 1}", actual=actual_lines[i], expected=None, absent="expected")
+                )
             elif actual_lines[i] != expected_lines[i]:
                 entries.append(DiffEntry(path=f"line {i + 1}", actual=actual_lines[i], expected=expected_lines[i]))
         if not entries:
@@ -432,9 +436,9 @@ def _sub_diff_entries(
         for key in sorted(actual_keys | expected_keys, key=_safe_repr):
             path = f"{prefix}.{_safe_str(key)}" if prefix else _safe_str(key)
             if key not in expected_keys:
-                entries.append(DiffEntry(path=path, actual=actual[key], expected=None))
+                entries.append(DiffEntry(path=path, actual=actual[key], expected=None, absent="expected"))
             elif key not in actual_keys:
-                entries.append(DiffEntry(path=path, actual=None, expected=expected[key]))
+                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[key]))
             else:
                 decision = _node_decision(actual[key], expected[key], config, field=key)
                 if decision == "leaf":
@@ -460,7 +464,9 @@ def _sub_diff_entries(
         for field_name in actual._fields:
             actual_value = getattr(actual, field_name)
             if field_name not in expected._fields:  # _fields, not getattr sentinel (count/index collide)
-                entries.append(DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None))
+                entries.append(
+                    DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None, absent="expected")
+                )
             else:
                 expected_value = getattr(expected, field_name)
                 decision = _node_decision(actual_value, expected_value, config, field=field_name)
@@ -482,7 +488,12 @@ def _sub_diff_entries(
         for field_name in expected._fields:
             if field_name not in actual._fields:  # _fields, not hasattr (count/index collide)
                 entries.append(
-                    DiffEntry(path=f"{prefix}.{field_name}", actual=None, expected=getattr(expected, field_name))
+                    DiffEntry(
+                        path=f"{prefix}.{field_name}",
+                        actual=None,
+                        absent="actual",
+                        expected=getattr(expected, field_name),
+                    )
                 )
         return entries
     both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
@@ -495,9 +506,9 @@ def _sub_diff_entries(
         for key in sorted(set(actual_dict) | set(expected_dict)):
             path = f"{prefix}.{key}"
             if key not in expected_dict:
-                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None))
+                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
-                entries.append(DiffEntry(path=path, actual=None, expected=expected_dict[key]))
+                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected_dict[key]))
             else:
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":

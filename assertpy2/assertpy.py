@@ -146,9 +146,9 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
         return lines
     shown = entries[:5]  # bound once: a slice and a separate threshold would drift apart
     for entry in shown:
-        if entry.expected is None:  # an extra item, which has no counterpart to contrast with
+        if entry.absent == "expected":  # an extra item, which has no counterpart to contrast with
             lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)}")
-        elif entry.actual is None:  # a missing one
+        elif entry.absent == "actual":  # a missing one
             lines.append(f"{indent}{entry.path}: {_safe_repr(entry.expected)}")
         else:
             lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)} != {_safe_repr(entry.expected)}")
