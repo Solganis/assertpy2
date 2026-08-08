@@ -209,7 +209,7 @@ class TestFormatDiff:
         assert_that(body).contains("+ 2")
 
     def test_sequence_actual_only(self):
-        diff = DiffResult(kind="sequence", entries=[DiffEntry(path="[1]", actual=99, expected=None)])
+        diff = DiffResult(kind="sequence", entries=[DiffEntry(path="[1]", actual=99, expected=None, absent="expected")])
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
@@ -217,7 +217,7 @@ class TestFormatDiff:
         assert_that(body).contains("[1]: - 99")
 
     def test_sequence_expected_only(self):
-        diff = DiffResult(kind="sequence", entries=[DiffEntry(path="[2]", actual=None, expected=42)])
+        diff = DiffResult(kind="sequence", entries=[DiffEntry(path="[2]", actual=None, absent="actual", expected=42)])
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
@@ -228,8 +228,8 @@ class TestFormatDiff:
         diff = DiffResult(
             kind="set",
             entries=[
-                DiffEntry(path="extra", actual=5, expected=None),
-                DiffEntry(path="missing", actual=None, expected=10),
+                DiffEntry(path="extra", actual=5, expected=None, absent="expected"),
+                DiffEntry(path="missing", actual=None, absent="actual", expected=10),
             ],
         )
         exc = AssertionFailure("fail", diff=diff)
@@ -253,7 +253,7 @@ class TestFormatDiff:
         assert_that(body).contains("bar")
 
     def test_set_extra_only(self):
-        diff = DiffResult(kind="set", entries=[DiffEntry(path="extra", actual=5, expected=None)])
+        diff = DiffResult(kind="set", entries=[DiffEntry(path="extra", actual=5, expected=None, absent="expected")])
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
@@ -262,7 +262,7 @@ class TestFormatDiff:
         assert_that(body).does_not_contain("missing")
 
     def test_set_missing_only(self):
-        diff = DiffResult(kind="set", entries=[DiffEntry(path="missing", actual=None, expected=10)])
+        diff = DiffResult(kind="set", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=10)])
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))

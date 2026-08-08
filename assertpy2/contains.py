@@ -28,8 +28,12 @@ def _multiset_diff_entries(val_items, given_items):
                 missing.remove(item)
             else:
                 extra.append(item)
-    entries = [DiffEntry(path="extra", actual=item, expected=None) for item in sorted(extra, key=repr)]
-    entries.extend(DiffEntry(path="missing", actual=None, expected=item) for item in sorted(missing, key=repr))
+    entries = [
+        DiffEntry(path="extra", actual=item, expected=None, absent="expected") for item in sorted(extra, key=repr)
+    ]
+    entries.extend(
+        DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in sorted(missing, key=repr)
+    )
     return entries
 
 
@@ -117,7 +121,8 @@ class ContainsMixin(_MixinBase):
             if _is_matcher(item):
                 if not any(item.matches(value) for value in self.val):
                     diff = DiffResult(
-                        kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item.describe())]
+                        kind="contains",
+                        entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item.describe())],
                     )
                     return self.error(
                         f"Expected <{self.val}> to contain item matching {item.describe()}, but did not.",
@@ -125,7 +130,10 @@ class ContainsMixin(_MixinBase):
                     )
             elif item not in self.val:
                 if self._is_dict_like(self.val):
-                    diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
+                    diff = DiffResult(
+                        kind="contains",
+                        entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)],
+                    )
                     return self.error(f"Expected <{self.val}> to contain key <{item}>, but did not.", diff=diff)
                 closest = self._closest_element(item)
                 if closest is not None:
@@ -135,7 +143,9 @@ class ContainsMixin(_MixinBase):
                         f" Closest element <{element}> differs at {self._fmt_closest(entries)}.",
                         diff=DiffResult(kind="contains", entries=entries),
                     )
-                diff = DiffResult(kind="contains", entries=[DiffEntry(path="missing", actual=None, expected=item)])
+                diff = DiffResult(
+                    kind="contains", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)]
+                )
                 return self.error(f"Expected <{self.val}> to contain item <{item}>, but did not.", diff=diff)
         else:
             missing = []
@@ -152,7 +162,8 @@ class ContainsMixin(_MixinBase):
                 diff = DiffResult(
                     kind="contains",
                     entries=[
-                        DiffEntry(path="missing", actual=None, expected=missing_item) for missing_item in missing_desc
+                        DiffEntry(path="missing", actual=None, absent="actual", expected=missing_item)
+                        for missing_item in missing_desc
                     ],
                 )
                 if self._is_dict_like(self.val):
@@ -245,10 +256,10 @@ class ContainsMixin(_MixinBase):
             entries = []
             if extra:
                 faults.append(f"did contain {self._fmt_items(extra)}")
-                entries += [DiffEntry(path="extra", actual=item, expected=None) for item in extra]
+                entries += [DiffEntry(path="extra", actual=item, expected=None, absent="expected") for item in extra]
             if missing:
                 faults.append(f"did not contain {self._fmt_items(missing)}")
-                entries += [DiffEntry(path="missing", actual=None, expected=item) for item in missing]
+                entries += [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
             return self.error(
                 f"Expected <{self.val}> to contain only {self._fmt_items(items)}, but {' and '.join(faults)}.",
                 diff=DiffResult(kind="contains", entries=entries),
@@ -597,7 +608,7 @@ class ContainsMixin(_MixinBase):
         missing = [item for item in items if val_list.count(item) == 0]
         duplicated = [item for item in items if val_list.count(item) > 1]
         if missing or duplicated:
-            entries = [DiffEntry(path="missing", actual=None, expected=item) for item in missing]
+            entries = [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
             entries.extend(
                 DiffEntry(path="duplicated", actual=val_list.count(item), expected=item) for item in duplicated
             )

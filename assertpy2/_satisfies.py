@@ -579,9 +579,17 @@ class SatisfiesMixin(_MixinBase):
         unpaired_items = [index for index, column in enumerate(assignment) if column is None]
         if unpaired_items:
             paired_columns = {column for column in assignment if column is not None}
-            entries = [DiffEntry(path="extra", actual=items[index], expected=None) for index in unpaired_items]
+            entries = [
+                DiffEntry(path="extra", actual=items[index], expected=None, absent="expected")
+                for index in unpaired_items
+            ]
             entries.extend(
-                DiffEntry(path="missing", actual=None, expected=_describe_unpaired(matcher, raised_counts[column]))
+                DiffEntry(
+                    path="missing",
+                    actual=None,
+                    absent="actual",
+                    expected=_describe_unpaired(matcher, raised_counts[column]),
+                )
                 for column, matcher in enumerate(matchers)
                 if column not in paired_columns
             )

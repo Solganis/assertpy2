@@ -4,6 +4,7 @@ import difflib
 import math
 import re
 from dataclasses import dataclass, field
+from typing import Literal
 
 
 def _safe_repr(value: object) -> str:
@@ -109,6 +110,17 @@ class DiffEntry:
     path: str
     actual: object = None
     expected: object = None
+    absent: Literal["actual", "expected"] | None = None
+    """Which side had no value here at all, as opposed to holding ``None``.
+
+    Without this the two are indistinguishable, since both leave the field at ``None``, and a
+    dictionary compared against one whose value is ``None`` renders exactly like a dictionary with an
+    extra key.  Readers of a diff have to be able to tell "this key is not there" from "this key is
+    there and its value is None", and so does anything reasoning about the diff afterwards.
+
+    Defaults to ``None``, so an entry built the old way keeps its old meaning and only the producers
+    that mean absence say so.
+    """
 
     def __str__(self) -> str:
         actual = _truncated(_safe_str(self.actual))
@@ -173,10 +185,10 @@ def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green:
     A one-token change in a long line shows the exact span (``? ^^^``) instead of dumping both whole
     lines and leaving the reader to spot the difference.
     """
-    if entry.expected is None:
+    if entry.absent == "expected":
         lines.append(f"  {red}{entry.path}: - {_diff_side(entry.actual)}{reset}")
         return
-    if entry.actual is None:
+    if entry.absent == "actual":
         lines.append(f"  {green}{entry.path}: + {_diff_side(entry.expected)}{reset}")
         return
     # ndiff costs ~175x a plain pair, which is why it used to be skipped past 200 characters.  The
@@ -326,9 +338,9 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
     else:
         for entry in visible:
             path = entry.path
-            if entry.expected is None:
+            if entry.absent == "expected":
                 lines.append(f"  {red}{path}: - {_diff_side(entry.actual)}{reset}")
-            elif entry.actual is None:
+            elif entry.absent == "actual":
                 lines.append(f"  {green}{path}: + {_diff_side(entry.expected)}{reset}")
             elif _both_texts(entry.actual, entry.expected):
                 _append_text_leaf(lines, entry, red=red, green=green, reset=reset)
