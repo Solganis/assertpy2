@@ -431,6 +431,26 @@ def _trace_to_json(trace):
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
 
 
+def _entry_to_json(entry):
+    """One diff entry, with the side that had no value at all named rather than left to inference.
+
+    ``format`` 2 wrote ``null`` for both an absent key and a key whose value really is ``None``, so a
+    consumer of the attachment could not tell "this field is missing" from "this field is null" - the
+    same ambiguity `assertpy2.errors.DiffEntry.absent` exists to remove inside the library.  The key
+    appears only where a side is genuinely absent, so an entry that simply holds ``None`` is
+    unchanged, and the format is bumped because the meaning of a bare ``null`` is what changed.
+    """
+    item = {
+        "path": str(getattr(entry, "path", "")),
+        "actual": _json_safe(getattr(entry, "actual", None)),
+        "expected": _json_safe(getattr(entry, "expected", None)),
+    }
+    absent = getattr(entry, "absent", None)
+    if absent is not None:
+        item["absent"] = absent
+    return item
+
+
 def _diff_to_json(diff, max_entries=50):
     entries = getattr(diff, "entries", None)
     if not entries:
@@ -438,15 +458,8 @@ def _diff_to_json(diff, max_entries=50):
     kind = getattr(diff, "kind", "unknown")
     visible = entries[:max_entries] if max_entries > 0 and len(entries) > max_entries else entries
     truncated = len(entries) - len(visible)
-    items = [
-        {
-            "path": str(getattr(entry, "path", "")),
-            "actual": _json_safe(getattr(entry, "actual", None)),
-            "expected": _json_safe(getattr(entry, "expected", None)),
-        }
-        for entry in visible
-    ]
-    payload = {"format": 2, "kind": kind, "entries": items}
+    items = [_entry_to_json(entry) for entry in visible]
+    payload = {"format": 3, "kind": kind, "entries": items}
     if truncated:
         payload["truncated"] = truncated
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)

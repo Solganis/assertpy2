@@ -285,9 +285,22 @@ class TestDiffToJson:
         assert_that(_diff_to_json(diff)).is_none()
 
     def test_payload_carries_format_version(self):
-        # consumers can branch on the attachment schema: 1 = repr-strings (implicit), 2 = typed values
+        # consumers can branch on the attachment schema: 1 = repr-strings (implicit), 2 = typed
+        # values, 3 = an absent side named rather than inferred from a null
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
-        assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(2)
+        assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(3)
+
+    def test_an_absent_side_is_named_in_the_payload(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="b", actual=2, expected=None, absent="expected")])
+        assert_that(json.loads(_diff_to_json(diff))["entries"][0]["absent"]).is_equal_to("expected")
+
+    def test_a_value_that_is_none_carries_no_absent_key(self):
+        # the reason for the bump: under format 2 this entry and the one above were byte-identical,
+        # so a consumer reading `"expected": null` could not tell a missing field from a null one
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=None)])
+        entry = json.loads(_diff_to_json(diff))["entries"][0]
+        assert_that(entry).does_not_contain_key("absent")
+        assert_that(entry["expected"]).is_none()
 
     def test_returns_valid_json(self):
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
