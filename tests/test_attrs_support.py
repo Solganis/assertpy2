@@ -151,5 +151,5 @@ class TestMatchesStructure:
             assert_that(Point(1, 2)).matches_structure({"x": 99})
 
     def test_non_mapping_value_rejected(self):
-        with pytest.raises(TypeError, match="dict, a pydantic-style model, or an attrs instance"):
+        with pytest.raises(TypeError, match="mapping, a pydantic-style model, or an attrs instance"):
             assert_that([1, 2]).matches_structure({"x": 1})

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_chec
 
 from ._engine._compare import _CompareConfig, _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
-from ._engine._introspection import is_attrs_instance, is_model_dump_object
+from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 
 if TYPE_CHECKING:
     from typing_extensions import TypeIs
@@ -744,7 +744,7 @@ class StructureMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         value = self._as_mapping(value)
-        if not isinstance(value, dict):
+        if not is_mapping_like(value):
             return False
         return not self._walk(value, self._spec, "", set())
 
@@ -753,7 +753,7 @@ class StructureMatcher(BaseMatcher):
 
     def describe_mismatch(self, value: Any) -> str:
         value = self._as_mapping(value)
-        if not isinstance(value, dict):
+        if not is_mapping_like(value):
             return f"was not a dict: <{value}>"
         mismatches = self._walk(value, self._spec, "", set())
         if not mismatches:
@@ -780,7 +780,7 @@ class StructureMatcher(BaseMatcher):
         ]
 
     def _walk(
-        self, value: dict[Any, Any], spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
+        self, value: MappingLike, spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
     ) -> list[_SpecMismatch]:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
@@ -795,7 +795,7 @@ class StructureMatcher(BaseMatcher):
                 mismatches.append(_SpecMismatch(current_path, _MISSING, _describe_spec_value(expected), None))
                 continue
             actual = value[key]
-            if isinstance(expected, StructureMatcher) and isinstance((normalized := self._as_mapping(actual)), dict):
+            if isinstance(expected, StructureMatcher) and is_mapping_like(normalized := self._as_mapping(actual)):
                 mismatches.extend(self._walk(normalized, expected._spec, current_path, seen))
             elif _is_matcher(expected):
                 # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match"
@@ -809,7 +809,7 @@ class StructureMatcher(BaseMatcher):
                     )
             elif isinstance(expected, dict):
                 normalized = self._as_mapping(actual)
-                if isinstance(normalized, dict):
+                if is_mapping_like(normalized):
                     mismatches.extend(self._walk(normalized, expected, current_path, seen))
                 else:
                     mismatches.append(_SpecMismatch(current_path, actual, "a dict", None))
