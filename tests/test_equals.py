@@ -404,3 +404,65 @@ def test_is_equal_shifted_list_failure_elides_the_aligned_run():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
     assert_that(str(exc_info.value)).contains("Expected <[.., 0]> to be equal to <[..]>")
+
+
+class TestFindAmbiguousOperandOnMismatchedShapes:
+    """Every branch of the walk gates on *both* operands having the shape.  Relaxing any of those
+    conjunctions to a disjunction sends a pair down a branch only one side can survive, which is a
+    crash rather than a wrong answer, and nothing above paired a shape with a different one."""
+
+    def test_a_dict_against_a_list_is_not_walked_as_a_mapping(self):
+        assert_that(_find_ambiguous_operand({"a": _FakeArray()}, ["a"])).is_none()
+
+    def test_a_list_against_a_scalar_is_not_zipped(self):
+        assert_that(_find_ambiguous_operand([_FakeArray()], 2)).is_none()
+
+    def test_a_model_against_a_dict_is_not_dumped(self):
+        assert_that(_find_ambiguous_operand(_ArrayModel(_FakeArray()), {"payload": 1})).is_none()
+
+    def test_a_dataclass_against_a_plain_object_is_not_walked_by_fields(self):
+        assert_that(_find_ambiguous_operand(_ArrayField(_FakeArray()), object())).is_none()
+
+    def test_a_plain_object_against_a_dataclass_is_not_walked_by_fields(self):
+        assert_that(_find_ambiguous_operand(object(), _ArrayField(_FakeArray()))).is_none()
+
+    def test_a_dataclass_type_is_not_mistaken_for_an_instance(self):
+        # `is_dataclass` answers True for the class object too, and `fields()` on it yields the
+        # declared fields with no values to read
+        assert_that(_find_ambiguous_operand(_ArrayField, _ArrayField)).is_none()
+
+    def test_a_longer_actual_stops_at_the_shorter_expected(self):
+        # the zip is deliberately non-strict: a length difference is the diff engine's business, and
+        # raising here would replace a reported difference with a crash
+        assert_that(_find_ambiguous_operand([1, _FakeArray()], [1])).is_none()
+
+
+class TestFindAmbiguousOperandCycleGuard:
+    """The seen-set has to survive every recursive hop.  Dropping it on any branch turns a
+    self-referential payload into unbounded recursion, and only the mapping hop was pinned."""
+
+    def test_a_cycle_through_a_list(self):
+        loop = [1]
+        loop.append(loop)
+        assert_that(_find_ambiguous_operand(loop, list(loop))).is_none()
+
+    def test_a_cycle_through_a_dataclass_field(self):
+        holder = _ArrayField(None)
+        holder.payload = holder
+        other = _ArrayField(None)
+        other.payload = other
+        assert_that(_find_ambiguous_operand(holder, other)).is_none()
+
+    def test_a_cycle_through_a_model_dump(self):
+        model = _ArrayModel(None)
+        model.payload = model
+        other = _ArrayModel(None)
+        other.payload = other
+        assert_that(_find_ambiguous_operand(model, other)).is_none()
+
+    def test_the_pair_identity_uses_both_sides(self):
+        # keyed on one side only, two different expected values behind the same actual collapse into
+        # one entry and the second is skipped, hiding the array it holds
+        shared = {"v": 1}
+        arr = _FakeArray()
+        assert_that(_find_ambiguous_operand([shared, shared], [{"v": 1}, {"v": arr}])).is_same_as(arr)
