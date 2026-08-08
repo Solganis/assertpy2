@@ -176,10 +176,18 @@ _WARNED: set[tuple[str, str]] = set()
 """Keys already reported from inside a test, so the end-of-session sweep does not report them twice."""
 
 
-def _reuse_message(snapname: str, key: str, tests: int, site: str) -> str:
+def _reuse_message(snapname: str, key: str, site: str, tests: int | None = None) -> str:
+    """Describe a reused key.  ``tests`` is the total, and only the end-of-run sweep ever has it.
+
+    The warning raised from inside an assertion fires the moment a second test arrives, with a third
+    and fourth still possible, and it cannot see the other xdist workers at all.  Any number it printed
+    would read as a total, and a reader who fixes the two they went looking for would leave the rest of
+    them sharing the key.  So it states the fact, and the sweep supplies the count.
+    """
+    reach = f" is shared by {tests} tests." if tests is not None else " is reached by more than one test."
     return (
         f"snapshot key <{snapname}::{key or '<whole file>'}>"
-        f"{f' from {site}' if site else ''} is shared by {tests} tests."
+        f"{f' from {site}' if site else ''}{reach}"
         " Only the first value is stored, so the others are compared against it and their own values"
         " are never asserted. Give each test its own snapshot(id=...)."
     )
@@ -224,10 +232,14 @@ def _record_access(snapname: str, key: str, site: str) -> None:
         return
     nodes = _ACCESS_NODES.setdefault((snapname, key), set())
     nodes.add(_CURRENT_NODE)
-    if len(nodes) == 2 and (snapname, key) not in _WARNED:
+    # `>= 2` with `_WARNED` doing the once-only work, rather than `== 2` catching the exact moment the
+    # second test arrives. Both warn once, but the equality is a knife-edge: it holds only because a
+    # set of node ids grows one at a time, and it would start dropping warnings the day anything
+    # cleared or repopulated the registry mid-run
+    if len(nodes) >= 2 and (snapname, key) not in _WARNED:
         _WARNED.add((snapname, key))
         warnings.warn(
-            _reuse_message(snapname, key, 2, _ACCESS_SITES[snapname, key]),
+            _reuse_message(snapname, key, _ACCESS_SITES[snapname, key]),
             SnapshotKeyReusedWarning,
             stacklevel=3,
         )

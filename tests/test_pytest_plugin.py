@@ -1085,7 +1085,10 @@ class TestSnapshotKeyReuseWarning:
         assert_that(caught).is_length(1)
         assert_that(caught[0].category).is_equal_to(snapshot_module.SnapshotKeyReusedWarning)
         # the message has to carry the cause, not just the fact: a key alone is not actionable
-        assert_that(str(caught[0].message)).contains("test_mod.py:17").contains("shared by 2 tests")
+        # no count here: this fires on the second reach, a third may follow, and the other xdist
+        # workers are invisible from inside a test. any number would read as a total
+        assert_that(str(caught[0].message)).contains("test_mod.py:17").contains("reached by more than one test")
+        assert_that(str(caught[0].message)).does_not_contain("shared by")
         assert_that(str(caught[0].message)).contains("snapshot(id=...)")
 
     def test_the_warning_points_at_the_line_that_reused_the_key(self, monkeypatch, tmp_path):
@@ -1157,25 +1160,37 @@ class TestSnapshotKeyReuseWarning:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
-        assert_that(
-            [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
-        ).is_length(1)
+        reported = [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
+        assert_that(reported).is_length(1)
+        # the sweep has counted every test that reached the key, so it states a total rather than the
+        # "at least" the in-test warning has to settle for
+        assert_that(reported[0]).contains("shared by 2 tests").does_not_contain("at least")
 
-    def test_the_sweep_does_not_repeat_a_worker_warning(self):
-        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
-        pytest_testnodedown(SimpleNamespace(workeroutput={"assertpy2_warned": [["/x/s.json", "9"]]}), None)
+    def test_the_sweep_counts_a_key_a_test_already_reported(self):
+        # the in-test warning says where it happened and cannot say how many, so the sweep runs for
+        # every reused key rather than only for the ones nobody reported. two messages about one key
+        # is the price of the count being right
+        snapshot_module._WARNED.add(("/x/s.json", "9"))
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b", "test_c"}
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
-        assert_that([w for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]).is_empty()
+        reported = [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
+        assert_that(reported).is_length(1)
+        assert_that(reported[0]).contains("shared by 3 tests")
 
-    def test_the_registries_are_drained(self):
-        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a"}
-        snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
-        pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
-        assert_that(snapshot_module._ACCESS_NODES).is_empty()
-        assert_that(snapshot_module._ACCESS_SITES).is_empty()
-        assert_that(pytest_plugin._controller_accesses).is_empty()
+    def test_a_key_reached_once_does_not_stop_the_sweep(self):
+        # the sweep walks the keys in sorted order and skips the ones reached by a single test. a
+        # `break` in place of that `continue` would report nothing after the first such key, and every
+        # other test here has exactly one key in play, where the two are indistinguishable
+        pytest_plugin._controller_accesses[("/x/a.json", "1")] = {"test_a"}
+        pytest_plugin._controller_accesses[("/x/b.json", "9")] = {"test_a", "test_b"}
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        reported = [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
+        assert_that(reported).is_length(1)
+        assert_that(reported[0]).contains("/x/b.json")
 
     def test_an_escalated_sweep_warning_fails_the_run_rather_than_the_hook(self):
         # under `-W error` the warning raises here instead of at a test, and an exception out of a
@@ -1203,6 +1218,14 @@ class TestSnapshotKeyReuseWarning:
         # the key is still worth naming: the exit code is about the run, the message about the snapshot
         printed = " ".join(str(call) for call in reporter.write_line.call_args_list)
         assert_that(printed).contains("shared by 2 tests")
+
+    def test_the_registries_are_drained(self):
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a"}
+        snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        assert_that(snapshot_module._ACCESS_NODES).is_empty()
+        assert_that(snapshot_module._ACCESS_SITES).is_empty()
+        assert_that(pytest_plugin._controller_accesses).is_empty()
 
 
 _SHARED_KEY_MODULE = """\
