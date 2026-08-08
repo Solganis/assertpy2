@@ -559,12 +559,14 @@ class TestStringDiffCarets:
         assert_that(len(_format_diff(diff))).is_less_than(25_000)
 
     def test_many_long_entries_hit_the_block_budget(self):
-        # the per-row cap alone leaves fifty rows of 400 characters, which is still unreadable
+        # Sixty rows, and the entry cap lifted so the byte budget is what has to stop it.  A text leaf
+        # is now windowed around its difference rather than cut at 400 characters from the start, so
+        # rows are shorter than they were and it takes more of them to reach the same ceiling.
         diff = DiffResult(
             kind="sequence",
-            entries=[DiffEntry(path=f"[{i}]", actual="a" * 5_000, expected="b" * 5_000) for i in range(50)],
+            entries=[DiffEntry(path=f"[{i}]", actual="a" * 5_000, expected="b" * 5_000) for i in range(60)],
         )
-        output = _format_diff(diff)
+        output = _format_diff(diff, max_entries=0)
         assert_that(len(output)).is_less_than(21_000)
         assert_that(output).contains("more diff lines")
 
@@ -1707,3 +1709,80 @@ class TestSequenceAlignment:
         assert_that([1.0, 2.0, 3.0]).is_equal_to([1.001, 2.0, 3.0], tolerance=0.01)
         with pytest.raises(AssertionError):
             assert_that([1.0, 2.0, 3.0]).is_equal_to([1.5, 2.0, 3.0], tolerance=0.01)
+
+
+class TestCaretsReachNestedTextLeaves:
+    """A text leaf inside a container gets the same caret guide a bare string does.
+
+    This is where the guide earns the most: a one-character change deep inside a URL, a token or an
+    id printed as two near-identical rows and left the reader to find it by eye.  pytest reaches this
+    only at ``-vv``, and then by diffing the whole pretty-printed structure, which drops the path;
+    naming the path *and* the character is the point of doing it per leaf.
+    """
+
+    _LEFT = "GET /api/v2/orders?status=shipped&page=3&limit=50"
+    _RIGHT = "GET /api/v2/orders?status=shipped&page=4&limit=50"
+
+    @staticmethod
+    def _caret_rows(output):
+        return [line.strip() for line in output.splitlines() if line.strip().startswith("?")]
+
+    def test_a_string_value_in_a_dict(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"url": self._LEFT}).is_equal_to({"url": self._RIGHT})
+        output = _format_diff(exc_info.value.diff)
+        assert_that(output).contains("url:")
+        assert_that(self._caret_rows(output)).is_length(2)
+
+    def test_a_string_element_in_a_list(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([self._LEFT]).is_equal_to([self._RIGHT])
+        output = _format_diff(exc_info.value.diff)
+        assert_that(output).contains("[0]:")
+        assert_that(self._caret_rows(output)).is_length(2)
+
+    def test_a_string_deep_in_a_nested_dict_keeps_its_path(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"req": {"url": self._LEFT}}).is_equal_to({"req": {"url": self._RIGHT}})
+        output = _format_diff(exc_info.value.diff)
+        assert_that(output).contains("req.url:")
+        assert_that(self._caret_rows(output)).is_not_empty()
+
+    def test_a_string_field_of_a_dataclass(self):
+        @dataclass
+        class Request:
+            url: str
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Request(self._LEFT)).is_equal_to(Request(self._RIGHT))
+        output = _format_diff(exc_info.value.diff)
+        assert_that(self._caret_rows(output)).is_not_empty()
+
+    def test_bytes_leaves_are_guided_too(self):
+        output = _format_diff(
+            DiffResult(kind="dict", entries=[DiffEntry(path="body", actual=b"tok-abc", expected=b"tok-abd")])
+        )
+        assert_that(self._caret_rows(output)).is_not_empty()
+
+    def test_a_number_pair_gets_no_caret(self):
+        # a caret points at a character that moved, which says nothing about two numbers
+        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="n", actual=1, expected=2)]))
+        assert_that(self._caret_rows(output)).is_empty()
+
+    def test_a_text_against_a_non_text_gets_no_caret(self):
+        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="v", actual="1", expected=1)]))
+        assert_that(self._caret_rows(output)).is_empty()
+        assert_that(output).contains("'1'").contains("+ 1")
+
+    def test_a_one_sided_entry_is_unchanged(self):
+        # nothing to compare against, so the row stays the single-sided form it always was
+        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="gone", actual="x", expected=None)]))
+        assert_that(self._caret_rows(output)).is_empty()
+        assert_that(output).contains("gone: - 'x'")
+
+    def test_a_long_leaf_is_windowed_around_its_difference(self):
+        # cutting from the start would hide the very change being reported
+        left, right = "z" * 300 + "abc", "z" * 300 + "abd"
+        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=left, expected=right)]))
+        assert_that(output).contains("...")
+        assert_that(self._caret_rows(output)).is_not_empty()
