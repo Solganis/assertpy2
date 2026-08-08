@@ -55,7 +55,13 @@ def _format_literal(value: object, column: int) -> str:
 
 def record_create(frame: FrameType, value: object) -> None:
     """Record an insertion of ``value`` as the literal argument of the empty ``matches_inline()`` call
-    at ``frame``'s current instruction, applied at session end."""
+    at ``frame``'s current instruction, applied at session end.
+
+    The offset and the column are covered by ``TestRecordedPosition``, which is in the mutmut
+    exclusion list: it resolves source through the caller's frame, and the trampoline points that at
+    its own wrapper. Mutants of the arithmetic below therefore read as survivors in a mutation report
+    while actually being caught by the suite.
+    """
     executing = _ensure_inline_tooling()
     source = executing.Source.for_frame(frame)
     node = source.executing(frame).node

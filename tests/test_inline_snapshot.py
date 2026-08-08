@@ -96,3 +96,80 @@ def test_inline_mismatch_keeps_the_diff():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": {"b": 1}}).matches_inline({"a": {"b": 2}})
     assert_that(exc_info.value.diff.entries[0].path).is_equal_to("a.b")
+
+
+class TestFormatLiteral:
+    """A value too wide for one line is wrapped and re-indented, which is what makes the rewritten
+    test source still readable.  Nothing else exercised the multi-line branch."""
+
+    def test_a_wide_value_wraps_and_keeps_its_first_line(self):
+        value = {f"key_{index}": f"value_{index}" for index in range(12)}
+        rendered = _inline._format_literal(value, column=0)
+        lines = rendered.split("\n")
+        assert_that(lines).is_not_empty()
+        assert_that(lines[0]).starts_with("{'key_0': 'value_0'")
+
+    def test_continuation_lines_are_indented_to_the_column(self):
+        value = {f"key_{index}": f"value_{index}" for index in range(12)}
+        rendered = _inline._format_literal(value, column=8)
+        continuations = rendered.split("\n")[1:]
+        assert_that(continuations).is_not_empty()
+        for line in continuations:
+            assert_that(line).starts_with(" " * 8)
+
+    def test_the_first_line_is_not_indented(self):
+        # it is spliced in where the call already sits, so padding it would double the indentation
+        value = {f"key_{index}": f"value_{index}" for index in range(12)}
+        assert_that(_inline._format_literal(value, column=8)[0]).is_equal_to("{")
+
+    def test_dict_order_is_the_value_order_not_sorted(self):
+        assert_that(_inline._format_literal({"b": 1, "a": 2}, column=0)).is_equal_to("{'b': 1, 'a': 2}")
+
+    def test_the_wrap_width_shrinks_with_the_column(self):
+        # 86 characters on one line: it fits the 116 budget at column 0 and not the 76 left at column 40
+        value = list(range(24))
+        assert_that(_inline._format_literal(value, column=0)).does_not_contain("\n")
+        assert_that(_inline._format_literal(value, column=40)).contains("\n")
+
+    def test_a_value_that_fits_stays_on_one_line(self):
+        assert_that(_inline._format_literal({"a": 1}, column=0)).does_not_contain("\n")
+
+
+class TestLiteralableKeys:
+    def test_a_key_that_is_not_a_literal_rejects_the_dict(self):
+        # the values are fine; only the key is not, and a dict is only rewritable when both are
+        assert_that(is_literalable({object(): 1})).is_false()
+
+    def test_literal_keys_are_accepted(self):
+        assert_that(is_literalable({("a", 1): "x", 2: "y"})).is_true()
+
+
+class TestApplyRecordsWithSeveralEdits:
+    """Two recordings in one file. Applied in ascending order the first edit shifts every offset after
+    it, so the second lands in the wrong place; they are applied highest-offset-first for that reason,
+    and one edit per file could never show it."""
+
+    def test_both_edits_land_where_they_were_recorded(self, tmp_path):
+        source = tmp_path / "two.py"
+        source.write_text("a = matches_inline()\nb = matches_inline()\n", encoding="utf-8", newline="")
+        text = source.read_text(encoding="utf-8")
+        first = text.index("matches_inline(") + len("matches_inline(")
+        second = text.index("matches_inline(", first) + len("matches_inline(")
+        _inline._RECORDS.clear()
+        _inline._RECORDS.append((str(source), first, first, "'first'"))
+        _inline._RECORDS.append((str(source), second, second, "'second'"))
+        _inline.apply_inline_records()
+        assert_that(source.read_text(encoding="utf-8")).is_equal_to(
+            "a = matches_inline('first')\nb = matches_inline('second')\n"
+        )
+
+    def test_a_non_ascii_literal_round_trips(self, tmp_path):
+        # the file is opened with an explicit encoding both ways; on a runner whose locale is not UTF-8
+        # the default would mangle this
+        source = tmp_path / "u.py"
+        source.write_text("a = matches_inline()\n", encoding="utf-8", newline="")
+        insert_at = source.read_text(encoding="utf-8").index("matches_inline(") + len("matches_inline(")
+        _inline._RECORDS.clear()
+        _inline._RECORDS.append((str(source), insert_at, insert_at, "'ключ'"))
+        _inline.apply_inline_records()
+        assert_that(source.read_bytes()).is_equal_to("a = matches_inline('ключ')\n".encode())
