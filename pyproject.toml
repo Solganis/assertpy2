@@ -128,7 +128,8 @@ pytest_add_cli_args = [
     and not test_line_keyed_contracts_are_told_apart \
     and not test_starts_with_bad_prefix_failure \
     and not test_ends_with_bad_prefix_failure \
-    and not test_the_warning_points_at_the_caller\
+    and not test_the_warning_points_at_the_caller \
+    and not TestRecordedPosition\
     """,
     "--ignore=tests/test_docs_examples.py",
     "--ignore=tests/test_exception_context.py",

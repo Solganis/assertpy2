@@ -4,6 +4,7 @@ temp files. The full end-to-end rewrite under real pytest is proven by the scrat
 """
 
 import datetime
+import pathlib
 import sys
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -124,3 +125,60 @@ class TestGuards:
     def test_missing_tooling(self):
         with patch.dict(sys.modules, {"executing": None}), pytest.raises(ImportError, match=r"assertpy2\[inline\]"):
             _inline._ensure_inline_tooling()
+
+
+class TestRecordedPosition:
+    """Where the rewrite lands, and at what indentation.  The tests above assert the recorded *text*
+    and never the offsets, so an off-by-one in either would rewrite the wrong characters and still
+    pass every one of them.  Each check reads this file back and compares against what the source
+    actually says, rather than restating the implementation's arithmetic.
+    """
+
+    @staticmethod
+    def _source_of(filename):
+        return pathlib.Path(filename).read_text(encoding="utf-8")
+
+    def test_a_create_inserts_just_inside_the_closing_paren(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+        with pytest.warns(_snap.SnapshotCreatedWarning):
+            assert_that(1).matches_inline()
+        filename, start, end, _text = _inline._RECORDS[0]
+        source = self._source_of(filename)
+        assert_that(start).is_equal_to(end)  # an insertion, so the range is empty
+        assert_that(source[start]).is_equal_to(")")
+        assert_that(source[start - len("matches_inline(") : start]).is_equal_to("matches_inline(")
+
+    def test_an_update_replaces_exactly_the_old_literal(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+        with pytest.warns(_snap.SnapshotUpdatedWarning):
+            assert_that({"a": 2}).matches_inline({"a": 1})
+        filename, start, end, _text = _inline._RECORDS[0]
+        assert_that(self._source_of(filename)[start:end]).is_equal_to('{"a": 1}')
+
+    def test_a_created_multiline_literal_is_indented_to_the_call(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+        wide = {"user": {"id": 1, "name": "Alice", "roles": ["admin", "editor", "viewer"]}, "meta": {"total": 3}}
+        with pytest.warns(_snap.SnapshotCreatedWarning):
+            assert_that(wide).matches_inline()
+        filename, start, _end, text = _inline._RECORDS[0]
+        source = self._source_of(filename)
+        column = start - (source.rfind("\n", 0, start) + 1)  # characters between the line start and here
+        assert_that(text).contains("\n")
+        # the column is read off this file, so an off-by-one in the recorder's own arithmetic surfaces
+        # as a different rendering here; `_format_literal` itself is pinned by TestFormatLiteral
+        assert_that(text).is_equal_to(_inline._format_literal(wide, column))
+
+    def test_an_updated_multiline_literal_is_indented_to_the_literal(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+        wide = {"user": {"id": 2, "name": "Alice", "roles": ["admin", "editor", "viewer"]}, "meta": {"total": 3}}
+        with pytest.warns(_snap.SnapshotUpdatedWarning):
+            assert_that(wide).matches_inline({"user": 1})
+        filename, start, _end, text = _inline._RECORDS[0]
+        source = self._source_of(filename)
+        column = start - (source.rfind("\n", 0, start) + 1)
+        assert_that(text).contains("\n")
+        assert_that(text).is_equal_to(_inline._format_literal(wide, column))
