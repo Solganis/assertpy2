@@ -109,9 +109,10 @@ source_paths = ["assertpy2/"]
 # or a global extension registry. Any new test about a stack frame, a function name or a line
 # number belongs here too.
 #
-# The doc-example guard is excluded for a different reason: it reads `docs/*.md` at runtime, which
-# `also_copy` would have to carry into the mutants tree, and it asserts about documentation rather
-# than about library behaviour.
+# Two guards are excluded for a different reason, being about source text rather than about library
+# behaviour: the doc-example guard reads `docs/*.md` at runtime, which `also_copy` would have to carry
+# into the mutants tree, and the typing-claims guard scans the package's own `.py` files - which under
+# mutation are the trampoline's rewrite of them, not the source anybody ships.
 pytest_add_cli_args = [
     "-k",
     """\
@@ -140,6 +141,7 @@ pytest_add_cli_args = [
     "--ignore=tests/test_recursive_compare_attrs.py",
     "--ignore=tests/test_recursive_compare_pydantic.py",
     "--ignore=tests/test_traceback.py",
+    "--ignore=tests/test_typing_claims.py",
     "--ignore=tests/test_warn.py",
 ]
 

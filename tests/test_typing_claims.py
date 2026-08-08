@@ -28,7 +28,7 @@ _PACKAGE_FILES = sorted((_ROOT / "assertpy2").rglob("*.py"))
 
 
 class TestThePinnedTypingSurfaceCarriesNoSuppressions:
-    """`tests/test_typing.py` is the file the badge is about: 105 `assert_type` calls pinning every
+    """`tests/test_typing.py` is the file the badge is about: an `assert_type` call pinning every
     public overload.  A suppression in it would hide the very regression it exists to catch."""
 
     _SURFACE = _ROOT / "tests" / "test_typing.py"
