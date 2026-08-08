@@ -109,9 +109,9 @@ def main() -> int:
         print("> number, a traceback or a function name.  A mutant one of those would have killed is")
         print("> reported here as a survivor.")
         print(">")
-        print("> Measured 2026-08-08 on 118 sampled survivors across the five modules most affected:")
-        print("> **39% were false**, from 23% (`snapshot`) to 72% (`_snapshot_codec`).  Re-run a")
-        print("> suspect mutant against the unfiltered suite before treating it as a gap.")
+        print("> The share that are false is large and moves with every test added, so no figure is")
+        print("> quoted here: one nobody re-measures is worse than none.  Measure it when it matters,")
+        print("> by re-running a suspect mutant against the unfiltered suite before calling it a gap.")
         print(">")
         print("".join(f"> - `{name}`\n" for name in excluded_files))
 
