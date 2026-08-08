@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     )
     from .matchers import Matcher
 
+from . import _hints
 from ._engine._contract import contract_drift
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
@@ -995,6 +996,11 @@ class AssertionBuilder(
         if self._value_origin and not len(self.val):
             # an empty derived value carries no context of its own, so name the step that produced it
             out = f"{out} The value is empty because {self._value_origin}."
+        hint = _hints.diagnose(diff, actual, expected)
+        if hint is not None:
+            # on its own line, like the comparison-settings echo, so the original message stays a
+            # prefix and a `match=` or `startswith` written against it keeps working
+            out = f"{out}\n{hint}"
         if self.kind == "warn":
             if self._value_taint_reason is None:
                 self._value_taint_reason = out
