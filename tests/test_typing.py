@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs, assert_type
 
-    from assertpy2 import assert_conforms, assert_that
+    from assertpy2 import assert_conforms, assert_that, match
     from assertpy2._engine._typing import (
         _BytesAssertion,
         _CallableAssertion,
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     )
     from assertpy2.assertpy import AssertionBuilder
     from assertpy2.async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
+    from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher
 
     # Each call is a static assertion: it fails type checking if assert_that stops returning the
     # documented Protocol for that value type. The mapping mirrors the table in docs/type-safety.md.
@@ -215,3 +216,14 @@ if TYPE_CHECKING:
     assert_type(assert_that(frame).is_frame_equal(frame), AssertionBuilder[_FakeFrame])
     assert_type(assert_that(frame).is_array_equal(frame), AssertionBuilder[_FakeFrame])
     assert_type(assert_that(frame).is_array_close_to(frame, rtol=0.1), AssertionBuilder[_FakeFrame])
+
+    # `match.is_instance_of` forwards straight to `isinstance`, so it accepts a class, a union, or a
+    # tuple of either.  The builder assertion of the same name stays narrow on purpose: its overloads
+    # refine the tracked value to the given class, and a union has no single class to refine to.  Both
+    # halves of that split are pinned here, because widening one without meaning to would silently
+    # cost the narrowing that is the whole point of the typed surface.
+    assert_type(match.is_instance_of(int), IsInstanceOfMatcher)
+    assert_type(match.is_instance_of(int | str), IsInstanceOfMatcher)
+    assert_type(match.is_instance_of((int, str)), IsInstanceOfMatcher)
+    assert_type(match.is_instance_of((int | str, float)), IsInstanceOfMatcher)
+    assert_type(match.is_type_of(int), IsTypeOfMatcher)
