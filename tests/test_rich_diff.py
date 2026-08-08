@@ -1786,3 +1786,25 @@ class TestCaretsReachNestedTextLeaves:
         output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=left, expected=right)]))
         assert_that(output).contains("...")
         assert_that(self._caret_rows(output)).is_not_empty()
+
+    def test_a_difference_past_the_row_cap_is_still_marked(self):
+        # windowing after capping cut both sides at the same offset, leaving two identical strings:
+        # ndiff called them a match and the row rendered with no `-`/`+` at all, so a failure looked
+        # like agreement. The window is taken over the whole repr for exactly this reason.
+        left, right = "z" * 600 + "abc", "z" * 600 + "abd"
+        output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=left, expected=right)]))
+        marked = [line.strip() for line in output.splitlines() if line.strip().startswith(("-", "+"))]
+        assert_that(marked).is_length(2)
+        assert_that(self._caret_rows(output)).is_length(2)
+
+    def test_two_non_text_values_with_the_same_repr_still_read_as_differing(self):
+        # they are not text, so they never reach the guide at all: `_both_texts` declining is what
+        # keeps a common row from claiming they match
+        class SameRepr:
+            def __repr__(self):
+                return "<obj>"
+
+        entry = DiffEntry(path="k", actual=SameRepr(), expected=SameRepr())
+        output = _format_diff(DiffResult(kind="dict", entries=[entry]))
+        assert_that(self._caret_rows(output)).is_empty()
+        assert_that(output).contains("- <obj>").contains("+ <obj>")
