@@ -211,7 +211,9 @@ if TYPE_CHECKING:
     class _FakeFrame:  # stands in for a DataFrame / ndarray: a type no assert_that overload keys on
         pass
 
-    frame = cast("_FakeFrame", None)
+    # cast from `object()` rather than `None`: the value is never read, and basedpyright rightly
+    # calls a `None` -> _FakeFrame cast a likely mistake since neither type overlaps the other
+    frame = cast("_FakeFrame", object())
     assert_type(assert_that(frame), AssertionBuilder[_FakeFrame])
     assert_type(assert_that(frame).is_frame_equal(frame), AssertionBuilder[_FakeFrame])
     assert_type(assert_that(frame).is_array_equal(frame), AssertionBuilder[_FakeFrame])
