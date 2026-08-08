@@ -7,6 +7,9 @@ from typing import TYPE_CHECKING
 
 from ._engine._introspection import is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
+from .helpers import _reject_unknown_kwargs
+
+_EXTRACTING_OPTIONS = frozenset({"filter", "sort"})
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -154,6 +157,7 @@ class ExtractingMixin(_MixinBase):
         Returns:
             AssertionBuilder: returns a new instance (extracted list as val) to chain the next assertion
         """
+        _reject_unknown_kwargs(kwargs, _EXTRACTING_OPTIONS, "extracting")
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
         if isinstance(self.val, str):
