@@ -1177,6 +1177,33 @@ class TestSnapshotKeyReuseWarning:
         assert_that(snapshot_module._ACCESS_SITES).is_empty()
         assert_that(pytest_plugin._controller_accesses).is_empty()
 
+    def test_an_escalated_sweep_warning_fails_the_run_rather_than_the_hook(self):
+        # under `-W error` the warning raises here instead of at a test, and an exception out of a
+        # session-finish hook is an INTERNALERROR whose traceback points at the plugin
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        reporter = MagicMock()
+        session = SimpleNamespace(config=_controller_config(reporter), exitstatus=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_sessionfinish(session, 0)
+        assert_that(session.exitstatus).is_equal_to(pytest.ExitCode.TESTS_FAILED)
+        printed = " ".join(str(call) for call in reporter.write_line.call_args_list)
+        assert_that(printed).contains("shared by 2 tests")
+
+    def test_a_run_that_died_for_another_reason_keeps_its_own_exit_status(self):
+        # this hook is reached from a `finally`, so Ctrl-C lands here too. rewriting that to
+        # TESTS_FAILED would report a run that never finished as one that ran and failed
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        reporter = MagicMock()
+        session = SimpleNamespace(config=_controller_config(reporter), exitstatus=pytest.ExitCode.INTERRUPTED)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_sessionfinish(session, 0)
+        assert_that(session.exitstatus).is_equal_to(pytest.ExitCode.INTERRUPTED)
+        # the key is still worth naming: the exit code is about the run, the message about the snapshot
+        printed = " ".join(str(call) for call in reporter.write_line.call_args_list)
+        assert_that(printed).contains("shared by 2 tests")
+
 
 _SHARED_KEY_MODULE = """\
 import pathlib
@@ -1262,3 +1289,12 @@ class TestSnapshotKeyReuseUnderXdist:
         output = self._run(tmp_path, 'f"key-{name}"').stdout
         assert_that(output).contains("3 passed")
         assert_that(output).does_not_contain("SnapshotKeyReusedWarning")
+
+    def test_the_filters_turning_it_into_an_error_fail_the_run_not_the_hook(self, tmp_path):
+        # `error` in the filters raises the sweep's warning inside session finish, and pytest renders an
+        # exception from there as an INTERNALERROR: exit code aside, the reader gets this plugin's
+        # traceback instead of the snapshot that needs fixing. only a real run shows which one it is
+        result = self._run(tmp_path, '"one-key"', "-W", "error::assertpy2.SnapshotKeyReusedWarning")
+        assert_that(result.stdout).does_not_contain("INTERNALERROR")
+        assert_that(result.stdout).contains("ERROR: snapshot key").contains("shared by 3 tests")
+        assert_that(result.returncode).is_equal_to(1)
