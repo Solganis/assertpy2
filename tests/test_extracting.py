@@ -1,5 +1,6 @@
 import sys
 import traceback
+import typing
 from collections import namedtuple
 
 import pytest
@@ -477,3 +478,23 @@ def test_extracting_method_without_introspectable_signature():
         action = staticmethod(int)
 
     assert_that([Obj()]).extracting("action").is_equal_to([0])
+
+
+class TestExtractingRefusesAMisspeltOption:
+    """`extracting` reads only `filter` and `sort`; anything else was accepted and dropped, so a
+    misspelt `sort` produced an unsorted result the caller believed was sorted."""
+
+    _ROWS: typing.ClassVar = [{"title": "b"}, {"title": "a"}]
+
+    def test_the_correct_spelling_still_sorts(self):
+        assert_that(assert_that(self._ROWS).extracting("title", sort="title").val).is_equal_to(["a", "b"])
+
+    @pytest.mark.parametrize(("typo", "suggestion"), [("sortt", "sort"), ("filtr", "filter"), ("sorted", "sort")])
+    def test_a_near_miss_names_the_option_it_meant(self, typo, suggestion):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(self._ROWS).extracting("title", **{typo: "title"})
+        assert_that(str(exc_info.value)).contains(typo).contains(f"did you mean {suggestion!r}?")
+
+    def test_both_documented_options_are_accepted(self):
+        extracted = assert_that(self._ROWS).extracting("title", filter=lambda row: True, sort="title").val
+        assert_that(extracted).is_equal_to(["a", "b"])

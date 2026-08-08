@@ -17,12 +17,14 @@ from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._introspection import is_namedtuple
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
-from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
+from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr, _reject_unknown_kwargs
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
 
 __tracebackhide__ = True
+
+_IS_EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "comparators", "ignore_null", "strict_types"})
 
 
 class BaseMixin(SatisfiesMixin):
@@ -203,6 +205,7 @@ class BaseMixin(SatisfiesMixin):
                 return self
             ignore = include = config = None
         else:
+            _reject_unknown_kwargs(kwargs, _IS_EQUAL_TO_OPTIONS, "is_equal_to")
             ignore = kwargs.get("ignore")
             include = kwargs.get("include")
             config = _build_compare_config(

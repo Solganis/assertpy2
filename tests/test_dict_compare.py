@@ -482,3 +482,55 @@ class TestTheDiffHonoursTheFilters:
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 3})
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a", "b"])
+
+
+class TestAMisspeltOptionIsRefused:
+    """A silently ignored option is the worst kind of green test: the reader is certain they tightened
+    the comparison, the comparison was never tightened, and nothing says so.  No error, no warning,
+    and no type error either, because a ``**kwargs`` signature makes every spelling legal to a checker.
+
+    The matcher spelling of the same option has always failed loudly, because a real parameter list
+    gets that from the interpreter for free.  These pin the same manners on the kwargs entry point.
+    """
+
+    def test_the_correct_spelling_still_takes_effect(self):
+        with pytest.raises(AssertionFailure):
+            assert_that({"c": 1}).is_equal_to({"c": True}, strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("typo", "suggestion"),
+        [
+            ("strict_type", "strict_types"),
+            ("tolerence", "tolerance"),
+            ("ignore_nul", "ignore_null"),
+            ("comparator", "comparators"),
+            ("includes", "include"),
+        ],
+    )
+    def test_a_near_miss_names_the_option_it_meant(self, typo, suggestion):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"c": 1}).is_equal_to({"c": True}, **{typo: True})
+        assert_that(str(exc_info.value)).contains(typo).contains(f"did you mean {suggestion!r}?")
+
+    def test_a_word_resembling_nothing_is_still_refused(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"c": 1}).is_equal_to({"c": 1}, nonsense=1)
+        assert_that(str(exc_info.value)).contains("nonsense").does_not_contain("did you mean")
+
+    def test_several_unknown_options_are_all_named(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"c": 1}).is_equal_to({"c": 1}, nonsense=1, drivel=2)
+        message = str(exc_info.value)
+        assert_that(message).contains("arguments").contains("nonsense").contains("drivel")
+
+    def test_every_documented_option_is_accepted(self):
+        # the guard is a list, and a list can fall behind the parameters it guards
+        assert_that({"a": 1.0, "b": 2}).is_equal_to(
+            {"a": 1.0, "b": 2},
+            ignore=[],
+            include=None,
+            tolerance=0.1,
+            comparators={},
+            ignore_null=False,
+            strict_types=False,
+        )
