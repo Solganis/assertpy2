@@ -9,7 +9,7 @@ from assertpy2 import assert_that, match
 from assertpy2._engine import _diff as _diff_module
 from assertpy2._engine._compare import _build_compare_config
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
-from assertpy2.errors import DiffEntry, DiffResult
+from assertpy2.errors import DiffEntry, DiffResult, _within_budget
 from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
 
@@ -1808,3 +1808,33 @@ class TestCaretsReachNestedTextLeaves:
         output = _format_diff(DiffResult(kind="dict", entries=[entry]))
         assert_that(self._caret_rows(output)).is_empty()
         assert_that(output).contains("- <obj>").contains("+ <obj>")
+
+
+class TestTheBlockBudgetCutsRatherThanDrops:
+    """The row that crosses the limit is truncated, not discarded.
+
+    Discarding it is invisible on a block of many rows and destroys the diff on a block of few: the
+    `set` and `contains` kinds join every item into a single row, so a large set difference rendered
+    as the header and a count with not one item shown.
+    """
+
+    def test_the_crossing_row_is_truncated_with_a_marker(self):
+        assert_that(_within_budget(["aaaaa", "b" * 40], limit=20)).is_equal_to("aaaaa\nbbbbbbbbbbbbb...")
+
+    def test_a_block_that_fits_is_untouched(self):
+        assert_that(_within_budget(["a", "b"], limit=20)).is_equal_to("a\nb")
+
+    def test_a_limit_reached_exactly_at_a_row_boundary_drops_the_next_row(self):
+        # no room left for even one character of the next row, so there is nothing to truncate and it
+        # is counted instead
+        assert_that(_within_budget(["a" * 19, "b"], limit=20)).is_equal_to("a" * 19 + "\n  ... and 1 more diff lines")
+
+    def test_rows_after_the_cut_are_counted(self):
+        cut = _within_budget(["aaaaa", "b" * 40, "c", "d"], limit=20)
+        assert_that(cut).contains("... and 2 more diff lines")
+
+    def test_a_large_set_difference_still_shows_items(self):
+        entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None) for _ in range(60)]
+        rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0)
+        assert_that(len(rendered)).is_less_than(21_000)
+        assert_that(rendered).contains("xxx")
