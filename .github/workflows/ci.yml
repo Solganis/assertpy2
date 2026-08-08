@@ -72,11 +72,17 @@ jobs:
         run: uv run pytest tests/test_docs_examples.py
 
       - name: Upload coverage to Codecov
-        if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
+        # Only the full-deps cell. The bare 3.14/ubuntu cell skips every integration test and used
+        # to upload too: Codecov merges reports so the number stayed right, but one of the two was
+        # always a partial report sent at a 100% target.
+        if: matrix.full-deps
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
+          # A failed upload is a broken report, not a passing build. The 100% gate above is the hard
+          # guard either way, so this cannot turn a real coverage drop into a green run.
+          fail_ci_if_error: true
 
   lint:
     timeout-minutes: 10
