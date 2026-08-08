@@ -186,3 +186,45 @@ def test_over_cap_list_diff(benchmark):
             assert_that(left).is_equal_to(right)
 
     benchmark(run)
+
+
+# Everything above hands the library a payload - 200 records, a wide dict, a 2000-element list - and
+# measures how well it walks it. The fixed price of a single assertion disappears into that. It is
+# also the only price most consuming suites ever pay: thousands of small assertions on small values,
+# where nothing is walked and the whole cost is getting in and out of the builder. A regression in
+# `assert_that()` itself, in the soft-mode ContextVar read, or in the per-link chaining overhead moves
+# nothing in the benchmarks above and everything in a real test run.
+#
+# One assertion is too small to read on its own, so these repeat a fixed count and are read as the
+# cost of that many assertions.
+_ASSERTIONS = 1000
+
+
+def test_builder_construction(benchmark):
+    # `assert_that(...)` with nothing asserted: the ContextVar lookup that decides soft mode, and the
+    # builder dispatch on the value's type. this is the floor every other assertion is charged
+    def run():
+        for index in range(_ASSERTIONS):
+            assert_that(index)
+
+    benchmark(run)
+
+
+def test_scalar_equality_pass(benchmark):
+    # the same construction plus the cheapest terminal assertion there is. read against the floor
+    # above, the difference is what a passing `is_equal_to` costs with no structure to walk
+    def run():
+        for index in range(_ASSERTIONS):
+            assert_that(index).is_equal_to(index)
+
+    benchmark(run)
+
+
+def test_short_chain_pass(benchmark):
+    # what assertions look like in a suite that is not testing assertpy2: several links on one small
+    # value, where the cost is per-link overhead rather than data
+    def run():
+        for _ in range(_ASSERTIONS):
+            assert_that("user-42").is_not_none().is_instance_of(str).starts_with("user").is_length(7)
+
+    benchmark(run)
