@@ -180,6 +180,16 @@ if TYPE_CHECKING:
     # a plain (non-TypeIs) predicate does not narrow: the chain keeps its type
     assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), AssertionBuilder[_Order])
 
+    # ... and refinement is not confined to the generic fallback. A concretely typed value reaches the
+    # per-type Protocol, and it narrows from there too: a JSON payload typed `dict[str, Any]` is where a
+    # domain predicate is most often applied, and it used to be the one place refinement stopped.
+    payload = cast("dict[str, Any]", {"id": 1})
+    assert_type(assert_that(payload).satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    assert_type(assert_that(payload).satisfies(_is_paid).value, _PaidOrder)
+    assert_type(assert_that("x").satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    # the non-narrowing overload still applies where the argument carries no refinement
+    assert_type(assert_that(payload).satisfies(lambda item: bool(item)), _DictAssertion[str, Any])
+
     # assert_conforms() narrows to the validated model for ANY input - the narrowing capstone. Because the
     # return type is driven by the model arg (not the value), even the `Any` a decoded JSON payload
     # carries and an explicitly dict-typed payload both narrow, where a method on the builder could not.
