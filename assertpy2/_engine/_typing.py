@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any, Protocol, TypeVar
 
-    from ..assertpy import AssertionBuilder, NegatedBuilder
+    from ..assertpy import AssertionBuilder, CheckBuilder, NegatedBuilder
     from ..async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from ..matchers import Matcher
     from ._compat import Self
@@ -86,6 +86,8 @@ if TYPE_CHECKING:
         # NegatedBuilder
         @property
         def not_(self) -> NegatedBuilder[Self]: ...
+        # CheckBuilder - run the next assertion for its verdict instead of for its failure
+        def check(self) -> CheckBuilder: ...
         # AssertionBuilder - typed extract-and-continue
         @property
         def value(self) -> object: ...

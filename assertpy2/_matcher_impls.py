@@ -3,18 +3,22 @@ from __future__ import annotations
 import math
 import re
 import uuid as _uuid_mod
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
 
 from ._engine._compare import _CompareConfig, _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._engine._path import _ROOT, _Path
 
 if TYPE_CHECKING:
     from types import UnionType
     from typing import TypeAlias
 
     from typing_extensions import TypeIs
+
+    from .errors import DiffResult
 
     # what `isinstance()` itself accepts, which is what `is_instance_of` forwards to.  Spelled out
     # rather than recursive (`tuple` may nest in principle): a recursive alias is not understood by
@@ -67,11 +71,69 @@ def _require_matcher(operand: object, operator: str) -> None:
         raise TypeError(f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'")
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class MatchResult:
+    """What a matcher decided about one value, in one object instead of three calls.
+
+    Deliberately not an [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome], which is the record of
+    a *failed assertion*.  A matcher is asked about every leaf of a structure and about every element of
+    a collection, so its result has to stay cheap: four fields, no location, no group, nothing that has
+    to be computed before it is known whether anyone will read it.
+    """
+
+    matched: bool
+    """Whether the value matched."""
+
+    description: str
+    """What the matcher requires, in the words it uses in a failure message: ``a positive value``."""
+
+    mismatch: str = ""
+    """Why this value did not match, in the words a failure message continues with: ``was <-1>``.
+
+    Empty when it matched.  There is nothing to say about a value that satisfied the matcher, and the
+    text would have to be invented.
+    """
+
+    diff: DiffResult | None = None
+    """A structured diff, from a matcher that compares rather than tests: equality has one, ``is_odd``
+    does not."""
+
+    def __bool__(self) -> bool:
+        """The verdict, so a result reads the same way the ``matches()`` it can replace did."""
+        return self.matched
+
+
 class BaseMatcher:
-    """Abstract base for all matchers with operator support."""
+    """Abstract base for all matchers with operator support.
+
+    A subclass implements either `matches()` or `evaluate()`, and gets the other one from here.
+    `matches()` is the cheap primitive: it is what ``==`` calls, and matchers are used as dict values in
+    `matches_structure` and as snapshot placeholders, so a comparison must not have to build a result
+    object.  `evaluate()` is the whole answer, for a caller that would otherwise ask the same value
+    three questions in a row.
+    """
 
     def matches(self, value: Any) -> bool:
-        raise NotImplementedError
+        if type(self).evaluate is BaseMatcher.evaluate:
+            raise NotImplementedError("a matcher must implement matches() or evaluate()")
+        return self.evaluate(value).matched
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """The verdict, the requirement and the reason, from one look at *value*.
+
+        The default composes the three older methods, so a matcher written before this existed answers
+        it without changing.  Overriding it is for a matcher whose reason costs what the verdict already
+        paid for: the alternative is `matches()` and `describe_mismatch()` walking the same value twice,
+        which is how a matcher over a one-shot iterator used to name the wrong element.
+        """
+        if type(self).matches is BaseMatcher.matches:
+            raise NotImplementedError("a matcher must implement matches() or evaluate()")
+        matched = self.matches(value)
+        return MatchResult(
+            matched=matched,
+            description=self.describe(),
+            mismatch="" if matched else self.describe_mismatch(value),
+        )
 
     def describe(self) -> str:
         raise NotImplementedError
@@ -183,7 +245,7 @@ class EqualToMatcher(BaseMatcher):
         # the flag walks to the leaves, so this has to as well: a composite expected value whose own
         # `==` is true says nothing about the types inside it, and one spelling of a relation that
         # disagrees with the other on nested data is worse than not offering it
-        entries = _sub_diff_entries(value, self.expected, "", config=_CompareConfig(strict_types=True))
+        entries = _sub_diff_entries(value, self.expected, _ROOT, config=_CompareConfig(strict_types=True))
         if entries is None:  # a leaf the walker does not decompose
             return bool(value == self.expected)
         return not entries
@@ -755,7 +817,7 @@ class _SpecMismatch(NamedTuple):
     detail without a second traversal.
     """
 
-    path: str
+    path: _Path
     actual: object
     expected_desc: str
     detail: str | None
@@ -782,7 +844,7 @@ class StructureMatcher(BaseMatcher):
         value = self._as_mapping(value)
         if not is_mapping_like(value):
             return False
-        return not self._walk(value, self._spec, "", set())
+        return not self._walk(value, self._spec, _ROOT, set())
 
     def describe(self) -> str:
         return f"a mapping matching structure {_describe_spec_value(self._spec)}"
@@ -791,48 +853,84 @@ class StructureMatcher(BaseMatcher):
         value = self._as_mapping(value)
         if not is_mapping_like(value):
             return f"was not a mapping: <{value}>"
-        mismatches = self._walk(value, self._spec, "", set())
-        if not mismatches:
-            return f"was <{value}>"
-        first = mismatches[0]
-        if first.actual is _MISSING:
-            return f"missing key <{first.path}>"
-        if first.expected_desc == "<circular ref>":  # cycle sentinel emitted by _walk
-            return f"circular reference detected at <{first.path}>"
-        if first.detail is not None:
-            return f"at <{first.path}>: expected {first.expected_desc}, but {first.detail}"
-        return f"at <{first.path}>: expected {first.expected_desc}, but was <{first.actual}>"
+        mismatches = self._walk(value, self._spec, _ROOT, set())
+        return self.render_mismatch(mismatches) if mismatches else f"was <{value}>"
 
-    def collect_mismatches(self, value: Any) -> list[tuple[str, object, str]]:
+    def evaluate(self, value: Any) -> MatchResult:
+        """One walk of the spec instead of two.
+
+        `matches()` walks it and `describe_mismatch()` walks it again, which is the whole cost of this
+        matcher on a payload of any size.  The rendering is shared with `describe_mismatch()` rather
+        than repeated, so the two cannot answer differently.
+
+        `matches_structure` does not go through here: it needs every mismatch for its diff, not only the
+        first one in words, so it walks once via `walk_mismatches()` and renders from that.
+        """
+        mapped = self._as_mapping(value)
+        if not is_mapping_like(mapped):
+            return MatchResult(matched=False, description=self.describe(), mismatch=f"was not a mapping: <{mapped}>")
+        mismatches = self._walk(mapped, self._spec, _ROOT, set())
+        return MatchResult(
+            matched=not mismatches,
+            description=self.describe(),
+            mismatch="" if not mismatches else self.render_mismatch(mismatches),
+        )
+
+    @staticmethod
+    def render_mismatch(mismatches: list[_SpecMismatch]) -> str:
+        """The first mismatch in words, from a walk the caller already paid for.
+
+        Requires a non-empty list.  "Nothing mismatched" is not a mismatch to render, and the two callers
+        disagree about what to say then: one has the mapped value to report, the other the raw one.
+        """
+        first = mismatches[0]
+        where = first.path.text
+        if first.actual is _MISSING:
+            return f"missing key <{where}>"
+        if first.expected_desc == "<circular ref>":  # cycle sentinel emitted by _walk
+            # the root is unreachable here (see _walk), so the label only ever names a nested cycle
+            return f"circular reference detected at <{where or 'root'}>"
+        if first.detail is not None:
+            return f"at <{where}>: expected {first.expected_desc}, but {first.detail}"
+        return f"at <{where}>: expected {first.expected_desc}, but was <{first.actual}>"
+
+    def collect_mismatches(self, value: Any) -> list[tuple[_Path, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
 
         Unlike `describe_mismatch()`, this does not stop at the first failure and joins nested
         paths, so callers can build a path-level [`DiffResult`][assertpy2.errors.DiffResult].
         """
-        value = self._as_mapping(value)
-        return [
-            (mismatch.path, mismatch.actual, mismatch.expected_desc)
-            for mismatch in self._walk(value, self._spec, "", set())
-        ]
+        return [(mismatch.path, mismatch.actual, mismatch.expected_desc) for mismatch in self.walk_mismatches(value)]
+
+    def walk_mismatches(self, value: Any) -> list[_SpecMismatch]:
+        """Every mismatch, once, for a caller that needs both the entries and the message.
+
+        `matches_structure` builds a diff entry per mismatch *and* names the first one in its message.
+        Asking `collect_mismatches()` and then `describe_mismatch()` walked the spec twice, and the walk
+        is the whole cost of this matcher on a payload of any size.
+        """
+        return self._walk(self._as_mapping(value), self._spec, _ROOT, set())
 
     def _walk(
-        self, value: MappingLike, spec: dict[Any, Any], path: str, seen: set[tuple[int, int]]
+        self, value: MappingLike, spec: dict[Any, Any], path: _Path, seen: set[tuple[int, int]]
     ) -> list[_SpecMismatch]:
         pair_id = (id(value), id(spec))
         if pair_id in seen:
             # `path` is empty only on the outermost call, where `seen` is still empty and no cycle can
             # be reported, so the fallback label is unreachable and kept purely as a guard
-            return [_SpecMismatch(path or "root", "<circular ref>", "<circular ref>", None)]
+            return [_SpecMismatch(path, "<circular ref>", "<circular ref>", None)]
         seen = seen | {pair_id}
         mismatches: list[_SpecMismatch] = []
         for key, expected in spec.items():
-            current_path = f"{path}.{key}" if path else str(key)
+            # the path is built where it is needed, not once per key: a spec that matches produces no
+            # mismatch and reads no path, and building one per key was the whole added cost of carrying
+            # machine-readable steps through this walk
             if key not in value:
-                mismatches.append(_SpecMismatch(current_path, _MISSING, _describe_spec_value(expected), None))
+                mismatches.append(_SpecMismatch(path.key(key), _MISSING, _describe_spec_value(expected), None))
                 continue
             actual = value[key]
             if isinstance(expected, StructureMatcher) and is_mapping_like(normalized := self._as_mapping(actual)):
-                mismatches.extend(self._walk(normalized, expected._spec, current_path, seen))
+                mismatches.extend(self._walk(normalized, expected._spec, path.key(key), seen))
             elif _is_matcher(expected):
                 # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match"
                 try:
@@ -841,14 +939,14 @@ class StructureMatcher(BaseMatcher):
                     matched = False
                 if not matched:
                     mismatches.append(
-                        _SpecMismatch(current_path, actual, expected.describe(), expected.describe_mismatch(actual))
+                        _SpecMismatch(path.key(key), actual, expected.describe(), expected.describe_mismatch(actual))
                     )
             elif isinstance(expected, dict):
                 normalized = self._as_mapping(actual)
                 if is_mapping_like(normalized):
-                    mismatches.extend(self._walk(normalized, expected, current_path, seen))
+                    mismatches.extend(self._walk(normalized, expected, path.key(key), seen))
                 else:
-                    mismatches.append(_SpecMismatch(current_path, actual, "a mapping", None))
+                    mismatches.append(_SpecMismatch(path.key(key), actual, "a mapping", None))
             elif _guarded_not_equal(actual, expected, method="matches_structure"):
-                mismatches.append(_SpecMismatch(current_path, actual, f"<{expected}>", None))
+                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{expected}>", None))
         return mismatches

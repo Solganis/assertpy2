@@ -30,9 +30,10 @@ from __future__ import annotations
 import dataclasses
 import difflib
 
-from ..errors import DiffEntry, DiffResult, _safe_repr, _safe_str
+from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _node_decision
 from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
+from ._path import _ROOT, _Path
 
 __tracebackhide__ = True
 
@@ -44,7 +45,7 @@ def _field_dict(obj, is_model):
     return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__}
 
 
-def _child_entries(actual, expected, path, *, descended_for, _seen=None, config=None) -> list[DiffEntry]:
+def _child_entries(actual, expected, path: _Path, *, descended_for, _seen=None, config=None) -> list[DiffEntry]:
     """Walk a child node and turn the walker's answer into entries, given *why* it was descended into.
 
     `_sub_diff_entries()` answers ``None`` for a value it does not take apart, and that answer means
@@ -65,7 +66,7 @@ def _child_entries(actual, expected, path, *, descended_for, _seen=None, config=
         return sub_entries
     if descended_for == "strict":
         return []
-    return [DiffEntry(path=path, actual=actual, expected=expected)]
+    return [path.entry(actual=actual, expected=expected)]
 
 
 _ALIGN_MAX_ELEMENTS = 1000
@@ -176,7 +177,7 @@ def _alignment_opcodes_if_useful(actual, expected):
     return opcodes
 
 
-def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
+def _sequence_diff_entries(actual, expected, prefix: _Path, seen, config=None) -> list[DiffEntry]:
     """Diff two sequences, pairing their elements by alignment where that reads shorter.
 
     An element inserted or removed shifts everything after it, and pairing by index then calls every
@@ -193,21 +194,23 @@ def _sequence_diff_entries(actual, expected, prefix, seen, config=None) -> list[
     entries: list[DiffEntry] = []
     max_len = max(len(actual), len(expected))
     for i in range(max_len):
-        path = f"{prefix}[{i}]" if prefix else f"[{i}]"
         if i >= len(actual):
-            entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[i]))
+            entries.append(prefix.index(i).entry(actual=None, absent="actual", expected=expected[i]))
         elif i >= len(expected):
-            entries.append(DiffEntry(path=path, actual=actual[i], expected=None, absent="expected"))
+            entries.append(prefix.index(i).entry(actual=actual[i], expected=None, absent="expected"))
         else:
             # inlined rather than routed through `_element_entries()`: this runs once per element of
             # every sequence diff, and returning an empty list for an equal element cost 15% of the
-            # walk in allocations alone
+            # walk in allocations alone.  the path is built after the decision for the same reason:
+            # an equal element is the common case and it has no path anyone will read
             decision = _node_decision(actual[i], expected[i], config)
             if decision == "leaf":
-                entries.append(DiffEntry(path=path, actual=actual[i], expected=expected[i]))
+                entries.append(prefix.index(i).entry(actual=actual[i], expected=expected[i]))
             elif decision != "equal":
                 entries.extend(
-                    _child_entries(actual[i], expected[i], path, descended_for=decision, _seen=seen, config=config)
+                    _child_entries(
+                        actual[i], expected[i], prefix.index(i), descended_for=decision, _seen=seen, config=config
+                    )
                 )
     return entries
 
@@ -227,28 +230,31 @@ def _aligned_diff_entries(actual, expected, prefix, seen, config, opcodes) -> li
         for offset in range(max(actual_stop - actual_start, expected_stop - expected_start)):
             actual_index, expected_index = actual_start + offset, expected_start + offset
             if actual_index >= actual_stop:
-                path = f"{prefix}expected[{expected_index}]" if prefix else f"expected[{expected_index}]"
-                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[expected_index]))
+                path = prefix.side_index("expected", expected_index)
+                entries.append(path.entry(actual=None, absent="actual", expected=expected[expected_index]))
             elif expected_index >= expected_stop:
-                path = f"{prefix}actual[{actual_index}]" if prefix else f"actual[{actual_index}]"
-                entries.append(DiffEntry(path=path, actual=actual[actual_index], expected=None, absent="expected"))
+                path = prefix.side_index("actual", actual_index)
+                entries.append(path.entry(actual=actual[actual_index], expected=None, absent="expected"))
             else:
-                path = f"{prefix}[{actual_index}]" if prefix else f"[{actual_index}]"
-                entries.extend(_element_entries(actual[actual_index], expected[expected_index], path, seen, config))
+                entries.extend(
+                    _element_entries(
+                        actual[actual_index], expected[expected_index], prefix.index(actual_index), seen, config
+                    )
+                )
     return entries
 
 
-def _element_entries(actual_item, expected_item, path, seen, config) -> list[DiffEntry]:
+def _element_entries(actual_item, expected_item, path: _Path, seen, config) -> list[DiffEntry]:
     """Entries for one paired element: none when equal, one leaf, or the nested sub-diff."""
     decision = _node_decision(actual_item, expected_item, config)
     if decision == "equal":
         return []
     if decision == "leaf":
-        return [DiffEntry(path=path, actual=actual_item, expected=expected_item)]
+        return [path.entry(actual=actual_item, expected=expected_item)]
     return _child_entries(actual_item, expected_item, path, descended_for=decision, _seen=seen, config=config)
 
 
-def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list[DiffEntry]:
+def _dataclass_diff_entries(actual, expected, prefix: _Path, seen, config=None) -> list[DiffEntry]:
     """Diff two dataclasses over the sorted union of field names, both directions, recursing.
 
     Reports fields present on only one side, and recurses into nested containers.  ``seen`` must
@@ -259,28 +265,32 @@ def _dataclass_diff_entries(actual, expected, prefix, seen, config=None) -> list
     actual_names = {field.name for field in dataclasses.fields(actual)}
     expected_names = {field.name for field in dataclasses.fields(expected)}
     for field in sorted(actual_names | expected_names):
-        path = f"{prefix}.{field}"
         if field not in expected_names:
-            entries.append(DiffEntry(path=path, actual=getattr(actual, field), expected=None, absent="expected"))
+            entries.append(prefix.attr(field).entry(actual=getattr(actual, field), expected=None, absent="expected"))
         elif field not in actual_names:
-            entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=getattr(expected, field)))
+            entries.append(prefix.attr(field).entry(actual=None, absent="actual", expected=getattr(expected, field)))
         else:
             actual_value = getattr(actual, field)
             expected_value = getattr(expected, field)
             decision = _node_decision(actual_value, expected_value, config, field=field)
             if decision == "leaf":
-                entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+                entries.append(prefix.attr(field).entry(actual=actual_value, expected=expected_value))
             elif decision != "equal":
                 entries.extend(
                     _child_entries(
-                        actual_value, expected_value, path, descended_for=decision, _seen=seen, config=config
+                        actual_value,
+                        expected_value,
+                        prefix.attr(field),
+                        descended_for=decision,
+                        _seen=seen,
+                        config=config,
                     )
                 )
     return entries
 
 
 def _build_equality_diff(
-    actual: object, expected: object, *, _prefix: str = "", _seen: set[int] | None = None, config=None
+    actual: object, expected: object, *, _prefix: _Path = _ROOT, _seen: set[int] | None = None, config=None
 ) -> DiffResult:
     if _seen is None:
         _seen = set()
@@ -288,7 +298,7 @@ def _build_equality_diff(
     if pair_key[0] in _seen or pair_key[1] in _seen:
         return DiffResult(
             kind="scalar",
-            entries=[DiffEntry(path=_prefix or ".", actual="<circular ref>", expected="<circular ref>")],
+            entries=[_prefix.leaf_entry(actual="<circular ref>", expected="<circular ref>")],
         )
     _seen = _seen | {pair_key[0], pair_key[1]}
 
@@ -298,11 +308,13 @@ def _build_equality_diff(
         if decision == "equal":
             return DiffResult(kind="scalar", entries=[])
         if decision == "leaf":
-            return DiffResult(kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)])
+            return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
         # descended only to check the types inside; the ladder below decides whether there is an inside
         strict_descent = decision == "strict"
 
-    def _field_entries(field_actual: object, field_expected: object, field_path: str, descended_for) -> list[DiffEntry]:
+    def _field_entries(
+        field_actual: object, field_expected: object, field_path: _Path, descended_for
+    ) -> list[DiffEntry]:
         return _child_entries(
             field_actual, field_expected, field_path, descended_for=descended_for, _seen=_seen, config=config
         )
@@ -311,20 +323,19 @@ def _build_equality_diff(
         entries: list[DiffEntry] = []
         for field in actual._fields:
             actual_value = getattr(actual, field)
-            path = f"{_prefix}.{field}"
             # use _fields membership, not getattr/hasattr: a field name colliding with an inherited
             # tuple method (count/index) would otherwise resolve to that bound method, not be "absent"
             if field not in expected._fields:
-                entries.append(DiffEntry(path=path, actual=actual_value, expected=None, absent="expected"))
+                entries.append(_prefix.attr(field).entry(actual=actual_value, expected=None, absent="expected"))
             else:
                 expected_value = getattr(expected, field)
                 decision = _node_decision(actual_value, expected_value, config, field=field)
                 if decision == "leaf":
-                    entries.append(DiffEntry(path=path, actual=actual_value, expected=expected_value))
+                    entries.append(_prefix.attr(field).entry(actual=actual_value, expected=expected_value))
                 elif decision != "equal":
-                    entries.extend(_field_entries(actual_value, expected_value, path, decision))
+                    entries.extend(_field_entries(actual_value, expected_value, _prefix.attr(field), decision))
         entries.extend(
-            DiffEntry(path=f"{_prefix}.{field}", actual=None, absent="actual", expected=getattr(expected, field))
+            _prefix.attr(field).entry(actual=None, absent="actual", expected=getattr(expected, field))
             for field in expected._fields
             if field not in actual._fields
         )
@@ -346,21 +357,20 @@ def _build_equality_diff(
         expected_dict = _field_dict(expected, both_model)
         entries = []
         for key in sorted(set(actual_dict) | set(expected_dict)):
-            path = f"{_prefix}.{key}" if _prefix else f".{key}"
             if key not in expected_dict:
-                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None, absent="expected"))
+                entries.append(_prefix.attr(key).entry(actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
-                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected_dict[key]))
+                entries.append(_prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":
-                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
+                    entries.append(_prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":
                     entries.extend(
                         _child_entries(
                             actual_dict[key],
                             expected_dict[key],
-                            path,
+                            _prefix.attr(key),
                             descended_for=decision,
                             _seen=_seen,
                             config=config,
@@ -375,9 +385,9 @@ def _build_equality_diff(
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = []
         for item in sorted(actual - expected, key=_safe_repr):
-            entries.append(DiffEntry(path="extra", actual=item, expected=None, absent="expected"))
+            entries.append(_prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected"))
         for item in sorted(expected - actual, key=_safe_repr):
-            entries.append(DiffEntry(path="missing", actual=None, absent="actual", expected=item))
+            entries.append(_prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
     # bytes render as their b'...' literal, which difflib can point into exactly like text, and both
     # kinds expose splitlines(), so one branch serves them
@@ -390,15 +400,11 @@ def _build_equality_diff(
         max_len = max(len(actual_lines), len(expected_lines))
         for i in range(max_len):
             if i >= len(actual_lines):
-                entries.append(
-                    DiffEntry(path=f"line {i + 1}", actual=None, absent="actual", expected=expected_lines[i])
-                )
+                entries.append(_prefix.line(i + 1).entry(actual=None, absent="actual", expected=expected_lines[i]))
             elif i >= len(expected_lines):
-                entries.append(
-                    DiffEntry(path=f"line {i + 1}", actual=actual_lines[i], expected=None, absent="expected")
-                )
+                entries.append(_prefix.line(i + 1).entry(actual=actual_lines[i], expected=None, absent="expected"))
             elif actual_lines[i] != expected_lines[i]:
-                entries.append(DiffEntry(path=f"line {i + 1}", actual=actual_lines[i], expected=expected_lines[i]))
+                entries.append(_prefix.line(i + 1).entry(actual=actual_lines[i], expected=expected_lines[i]))
         if not entries:
             entries.append(DiffEntry(path=".", actual=actual, expected=expected))
         return DiffResult(kind="string", entries=entries)
@@ -406,11 +412,11 @@ def _build_equality_diff(
     # sides were already equal and there was nothing further to check, not that they differ
     if strict_descent:
         return DiffResult(kind="scalar", entries=[])
-    return DiffResult(kind="scalar", entries=[DiffEntry(path=_prefix or ".", actual=actual, expected=expected)])
+    return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
 
 
 def _sub_diff_entries(
-    actual: object, expected: object, prefix: str, *, _seen: set[int] | None = None, config=None
+    actual: object, expected: object, prefix: _Path = _ROOT, *, _seen: set[int] | None = None, config=None
 ) -> list[DiffEntry] | None:
     """Canonical recursive diff for a value, returning path-level entries (or ``None`` for a leaf).
 
@@ -426,7 +432,7 @@ def _sub_diff_entries(
     if _seen is None:
         _seen = set()
     if id(actual) in _seen or id(expected) in _seen:
-        return [DiffEntry(path=prefix, actual="<circular ref>", expected="<circular ref>")]
+        return [prefix.entry(actual="<circular ref>", expected="<circular ref>")]
 
     if is_mapping_like(actual) and is_mapping_like(expected):
         child_seen = _seen | {id(actual), id(expected)}
@@ -434,19 +440,23 @@ def _sub_diff_entries(
         actual_keys = set(actual)
         expected_keys = set(expected)
         for key in sorted(actual_keys | expected_keys, key=_safe_repr):
-            path = f"{prefix}.{_safe_str(key)}" if prefix else _safe_str(key)
             if key not in expected_keys:
-                entries.append(DiffEntry(path=path, actual=actual[key], expected=None, absent="expected"))
+                entries.append(prefix.key(key).entry(actual=actual[key], expected=None, absent="expected"))
             elif key not in actual_keys:
-                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected[key]))
+                entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=expected[key]))
             else:
                 decision = _node_decision(actual[key], expected[key], config, field=key)
                 if decision == "leaf":
-                    entries.append(DiffEntry(path=path, actual=actual[key], expected=expected[key]))
+                    entries.append(prefix.key(key).entry(actual=actual[key], expected=expected[key]))
                 elif decision != "equal":
                     entries.extend(
                         _child_entries(
-                            actual[key], expected[key], path, descended_for=decision, _seen=child_seen, config=config
+                            actual[key],
+                            expected[key],
+                            prefix.key(key),
+                            descended_for=decision,
+                            _seen=child_seen,
+                            config=config,
                         )
                     )
         return entries
@@ -464,22 +474,18 @@ def _sub_diff_entries(
         for field_name in actual._fields:
             actual_value = getattr(actual, field_name)
             if field_name not in expected._fields:  # _fields, not getattr sentinel (count/index collide)
-                entries.append(
-                    DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=None, absent="expected")
-                )
+                entries.append(prefix.attr(field_name).entry(actual=actual_value, expected=None, absent="expected"))
             else:
                 expected_value = getattr(expected, field_name)
                 decision = _node_decision(actual_value, expected_value, config, field=field_name)
                 if decision == "leaf":
-                    entries.append(
-                        DiffEntry(path=f"{prefix}.{field_name}", actual=actual_value, expected=expected_value)
-                    )
+                    entries.append(prefix.attr(field_name).entry(actual=actual_value, expected=expected_value))
                 elif decision != "equal":
                     entries.extend(
                         _child_entries(
                             actual_value,
                             expected_value,
-                            f"{prefix}.{field_name}",
+                            prefix.attr(field_name),
                             descended_for=decision,
                             _seen=child_seen,
                             config=config,
@@ -488,12 +494,7 @@ def _sub_diff_entries(
         for field_name in expected._fields:
             if field_name not in actual._fields:  # _fields, not hasattr (count/index collide)
                 entries.append(
-                    DiffEntry(
-                        path=f"{prefix}.{field_name}",
-                        actual=None,
-                        absent="actual",
-                        expected=getattr(expected, field_name),
-                    )
+                    prefix.attr(field_name).entry(actual=None, absent="actual", expected=getattr(expected, field_name))
                 )
         return entries
     both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
@@ -504,21 +505,20 @@ def _sub_diff_entries(
         expected_dict = _field_dict(expected, both_model)
         entries = []
         for key in sorted(set(actual_dict) | set(expected_dict)):
-            path = f"{prefix}.{key}"
             if key not in expected_dict:
-                entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=None, absent="expected"))
+                entries.append(prefix.attr(key).entry(actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
-                entries.append(DiffEntry(path=path, actual=None, absent="actual", expected=expected_dict[key]))
+                entries.append(prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
                 decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
                 if decision == "leaf":
-                    entries.append(DiffEntry(path=path, actual=actual_dict[key], expected=expected_dict[key]))
+                    entries.append(prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":
                     entries.extend(
                         _child_entries(
                             actual_dict[key],
                             expected_dict[key],
-                            path,
+                            prefix.attr(key),
                             descended_for=decision,
                             _seen=child_seen,
                             config=config,
@@ -531,51 +531,54 @@ def _sub_diff_entries(
     return None
 
 
-def _walk_leaves(value, prefix="", _seen=None):
+def _walk_leaves(value, prefix: _Path = _ROOT, _seen=None):
     """Yield ``(path, leaf)`` for every scalar leaf of an object graph, depth-first.
 
     Recurses into the same containers as the rich-diff engine (`_sub_diff_entries()`): mappings,
     dataclasses, namedtuples, model-dump objects, attrs instances, lists and tuples.  Anything else -
     scalars, strings, sets, opaque objects - is yielded as a single leaf, so the paths match the diffs.
     A circular reference yields one ``(path, "<circular ref>")`` leaf and stops, mirroring the cycle guard.
+
+    A field of the value itself is named bare (``age``) where the diff walkers name it ``.age``: these
+    paths go into a message about the fields of the value under test, not into a diff between two of them.
     """
     if _seen is None:
         _seen = set()
     if id(value) in _seen:
-        yield (prefix or ".", "<circular ref>")
+        yield (prefix, "<circular ref>")
         return
     if is_mapping_like(value):
         child_seen = _seen | {id(value)}
         for key in value:
-            yield from _walk_leaves(value[key], f"{prefix}.{_safe_str(key)}" if prefix else _safe_str(key), child_seen)
+            yield from _walk_leaves(value[key], prefix.key(key), child_seen)
         return
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         child_seen = _seen | {id(value)}
         for field in dataclasses.fields(value):
-            path = f"{prefix}.{field.name}" if prefix else field.name
-            yield from _walk_leaves(getattr(value, field.name), path, child_seen)
+            child = prefix.attr(field.name, dotted_at_root=False)
+            yield from _walk_leaves(getattr(value, field.name), child, child_seen)
         return
     if is_namedtuple(value):
         child_seen = _seen | {id(value)}
         for field_name in value._fields:
-            path = f"{prefix}.{field_name}" if prefix else field_name
-            yield from _walk_leaves(getattr(value, field_name), path, child_seen)
+            child = prefix.attr(field_name, dotted_at_root=False)
+            yield from _walk_leaves(getattr(value, field_name), child, child_seen)
         return
     if is_model_dump_object(value):
         child_seen = _seen | {id(value)}
         dumped = value.model_dump()
         for key in dumped:
-            yield from _walk_leaves(dumped[key], f"{prefix}.{key}" if prefix else str(key), child_seen)
+            yield from _walk_leaves(dumped[key], prefix.attr(str(key), dotted_at_root=False), child_seen)
         return
     if is_attrs_instance(value):
         child_seen = _seen | {id(value)}
         for field in value.__attrs_attrs__:
-            path = f"{prefix}.{field.name}" if prefix else field.name
-            yield from _walk_leaves(getattr(value, field.name), path, child_seen)
+            child = prefix.attr(field.name, dotted_at_root=False)
+            yield from _walk_leaves(getattr(value, field.name), child, child_seen)
         return
     if isinstance(value, (list, tuple)):
         child_seen = _seen | {id(value)}
         for index, item in enumerate(value):
-            yield from _walk_leaves(item, f"{prefix}[{index}]" if prefix else f"[{index}]", child_seen)
+            yield from _walk_leaves(item, prefix.index(index), child_seen)
         return
-    yield (prefix or ".", value)
+    yield (prefix, value)

@@ -2,7 +2,7 @@ import pytest
 
 import assertpy2._inline as _inline
 import assertpy2.snapshot as _snap
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 from assertpy2._inline import is_literalable
 
 
@@ -173,3 +173,27 @@ class TestApplyRecordsWithSeveralEdits:
         _inline._RECORDS.append((str(source), insert_at, insert_at, "'ключ'"))
         _inline.apply_inline_records()
         assert_that(source.read_bytes()).is_equal_to("a = matches_inline('ключ')\n".encode())
+
+
+class TestASnapshotMismatchCarriesTheRecordTheComparisonComposed:
+    """A snapshot comparison is `is_equal_to` underneath, and it re-raises with a snapshot-aware
+    message. Building a fresh exception around that message used to drop the composed record, which
+    made a snapshot mismatch the only comparison failure without one."""
+
+    def test_the_record_survives_the_re_wrap(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).matches_inline({"a": 2})
+        outcome = failure.value._outcome
+        assert_that(outcome).is_not_none()
+        assert_that(outcome.actual_provided).is_true()
+        assert_that(outcome.has_expected).is_true()
+
+    def test_the_record_holds_the_snapshot_aware_message_not_the_inner_one(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).matches_inline({"a": 2})
+        # the same relationship a directly raised failure has: __str__ appends the rendered diff, the
+        # record holds the message that was composed
+        assert_that(failure.value._outcome.message).contains("Inline snapshot")
+        assert_that(str(failure.value)).starts_with(failure.value._outcome.message)

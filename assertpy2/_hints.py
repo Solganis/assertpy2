@@ -168,7 +168,9 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
             absent_seen = True
             if absent != "expected":
                 absent_expected_only = False
-        if positional and not entry.path.endswith("]"):
+        # a step, not the rendered text: a mapping key that happens to end in a bracket used to read
+        # as an index here, and the whole hint turns on whether every difference is positional
+        if positional and not (entry.steps and entry.steps[-1].kind == "index"):
             positional = False
 
     if diff.kind == "string":

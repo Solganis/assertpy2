@@ -5,6 +5,7 @@ import inspect
 import os
 import time
 import warnings
+from dataclasses import replace
 from typing import TYPE_CHECKING, Final
 
 from . import _inline
@@ -191,6 +192,27 @@ def _reuse_message(snapname: str, key: str, site: str, tests: int | None = None)
         " Only the first value is stored, so the others are compared against it and their own values"
         " are never asserted. Give each test its own snapshot(id=...)."
     )
+
+
+def _rewrapped(mismatch: AssertionFailure, message: str) -> AssertionFailure:
+    """The same failure with a snapshot-aware message, keeping everything the original carried.
+
+    A snapshot comparison is `is_equal_to` underneath, so the failure it raises already carries a
+    composed record.  Building a fresh exception around a new message used to drop that record, which
+    made a snapshot mismatch the only comparison failure without one: the flat ``actual``/``expected``/
+    ``diff`` came across, the diagnostic hint and the provenance of the values did not.
+
+    Assigned rather than guarded: both callers catch what `is_equal_to` raised, and every failure that
+    goes through the builder's delivery carries a record.  A guard here would be dead, and would turn a
+    future break of that invariant into a silently record-less failure instead of a loud one.
+    """
+    failure = AssertionFailure(
+        message, actual=mismatch.actual, expected=mismatch.expected, diff=mismatch.diff, trace=mismatch.trace
+    )
+    # ty: ignore[invalid-argument-type]  # the record is `| None` in general and never None here: both
+    # callers catch what `is_equal_to` raised, and delivery always attaches one (see the docstring)
+    failure._outcome = replace(mismatch._outcome, message=message)
+    return failure
 
 
 def _shared_key_hint(snapname: str, key: str) -> str:
@@ -672,12 +694,10 @@ class SnapshotMixin(_MixinBase):
                 # without a custom id the file holds one entry per line number, so the file alone does
                 # not say which of them was compared
                 located = snapname if id else f"{snapname}::{lineno}"
-                raise AssertionFailure(
+                raise _rewrapped(
+                    mismatch,
                     f"{mismatch._message}{_shared_key_hint(snapname, '' if id else lineno)}"
                     f" {_update_hint(f'Snapshot <{located}>', 'accept the new value')}",
-                    actual=mismatch.actual,
-                    expected=mismatch.expected,
-                    diff=mismatch.diff,
                 ) from None
         warnings.warn(
             f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
@@ -777,11 +797,8 @@ class SnapshotMixin(_MixinBase):
         except AssertionFailure as mismatch:
             # the stored snapshot lives in this very call, and updating rewrites it in place: saying so
             # is what the file-backed branch already does for its own kind
-            raise AssertionFailure(
-                f"{mismatch._message} {_update_hint('Inline snapshot', 'rewrite the literal here')}",
-                actual=mismatch.actual,
-                expected=mismatch.expected,
-                diff=mismatch.diff,
+            raise _rewrapped(
+                mismatch, f"{mismatch._message} {_update_hint('Inline snapshot', 'rewrite the literal here')}"
             ) from None
 
     def matches_contract_snapshot(self, id: str | None = None, path: str = "__snapshots") -> Self:  # noqa: A002  # `id` is the public snapshot-identifier parameter

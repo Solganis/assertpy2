@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs, assert_type
 
-    from assertpy2 import assert_conforms, assert_that, match
+    from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
     from assertpy2._engine._typing import (
         _BytesAssertion,
         _CallableAssertion,
@@ -61,6 +61,12 @@ if TYPE_CHECKING:
     assert_type(assert_that("text").not_.starts_with("x"), _StringAssertion)
     assert_type(assert_that([1, 2]).not_.contains(3), _IterableAssertion[int])
     assert_type(assert_that(42).not_.is_equal_to(43).value, int)
+
+    # check() ends the chain with the verdict, from every protocol and through the negation proxy.
+    assert_type(assert_that(42).check().is_positive(), AssertionOutcome)
+    assert_type(assert_that("text").check().starts_with("x"), AssertionOutcome)
+    assert_type(assert_that({"a": 1}).check().contains_key("a"), AssertionOutcome)
+    assert_type(assert_that(42).check().not_.is_positive(), AssertionOutcome)
 
     # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])

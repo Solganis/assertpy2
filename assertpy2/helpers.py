@@ -17,6 +17,7 @@ from ._engine._compare import _CompareConfig, _config_note, _guarded_not_equal, 
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
+from ._engine._path import _ROOT
 
 __tracebackhide__ = True
 
@@ -33,7 +34,7 @@ def _values_not_equal(value: object, other_value: object, config: _CompareConfig
         return False  # identity first, the way Python's own container comparison short-circuits
     if config is None:
         return _guarded_not_equal(value, other_value)
-    entries = _sub_diff_entries(value, other_value, "", config=config)
+    entries = _sub_diff_entries(value, other_value, _ROOT, config=config)
     if entries is None:  # a leaf the walker does not decompose
         return _guarded_not_equal(value, other_value)
     return bool(entries)
@@ -507,7 +508,7 @@ class HelpersMixin(_MixinBase):
 
         reported_val = self._selected_keys_only(val, ignore, include)
         reported_other = self._selected_keys_only(other, ignore, include)
-        diff_entries = _sub_diff_entries(reported_val, reported_other, "", config=config) or []
+        diff_entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
         diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
 
         val_repr = _truncated(_dict_repr(reported_val, reported_other))

@@ -8,8 +8,17 @@ from typing import TYPE_CHECKING, Any
 from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
 from ._engine._mixin_base import _MixinBase
+from ._engine._path import _ROOT
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
-from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
+from .matchers import (
+    IsNotNoneMatcher,
+    Matcher,
+    StructureMatcher,
+    _apply_matcher,
+    _describe_matcher,
+    _evaluate_matcher,
+    _is_matcher,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -125,7 +134,7 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         description = _describe_matcher(matcher)
         failures = [
-            DiffEntry(path=path, actual=leaf, expected=description)
+            path.leaf_entry(actual=leaf, expected=description)
             for path, leaf in _walk_leaves(self.val)
             if not _apply_matcher(matcher, leaf)
         ]
@@ -191,18 +200,22 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** satisfy the matcher
         """
         if _is_matcher(matcher):
-            # the matcher protocol is two calls with the same value, `matches()` then
-            # `describe_mismatch()`, and a matcher over an iterable walks it in both. On a one-shot
-            # iterator the second call sees what the first left, so `each_item` named the wrong item
-            # at the wrong index rather than merely losing detail
+            # the matcher is asked twice about the same value, and a matcher over an iterable walks it
+            # in both: on a one-shot iterator the second call saw what the first had left, so `each_item`
+            # named the wrong item at the wrong index rather than merely losing detail
             value = materialized(self.val)
+            # the cheap verdict first: a passing `satisfies` must not pay for a result nobody reads.
+            # the whole result is built only for the failure, which is also what lets a matcher that
+            # implements `evaluate()` alone answer here
             if not matcher.matches(value):
-                description = matcher.describe()
+                result = _evaluate_matcher(matcher, value)
                 return self.error(
-                    f"Expected {description}, but {matcher.describe_mismatch(value)}.",
+                    f"Expected {result.description}, but {result.mismatch}.",
                     actual=value,
-                    expected=description,
-                    diff=DiffResult(kind="match", entries=[DiffEntry(path=".", actual=value, expected=description)]),
+                    expected=result.description,
+                    diff=DiffResult(
+                        kind="match", entries=[_ROOT.leaf_entry(actual=value, expected=result.description)]
+                    ),
                 )
         elif callable(matcher):
             if not matcher(self.val):
@@ -242,6 +255,8 @@ class SatisfiesMixin(_MixinBase):
         if _is_matcher(matcher):
             description = matcher.describe()
             for i, item in enumerate(self.val):
+                # the cheap verdict per item, the whole result only for the one that failed: a matcher is
+                # asked about every element and a result nobody reads is an allocation per element
                 if not matcher.matches(item):
                     return self.error(
                         f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
@@ -249,7 +264,7 @@ class SatisfiesMixin(_MixinBase):
                         actual=item,
                         expected=description,
                         diff=DiffResult(
-                            kind="match", entries=[DiffEntry(path=f"[{i}]", actual=item, expected=description)]
+                            kind="match", entries=[_ROOT.index(i).entry(actual=item, expected=description)]
                         ),
                     )
         elif callable(matcher):
@@ -298,14 +313,15 @@ class SatisfiesMixin(_MixinBase):
         if not isinstance(spec, dict):
             raise TypeError("given arg must be a dict")
         matcher = StructureMatcher(spec)
-        mismatches = matcher.collect_mismatches(self.val)
+        # one walk, read twice: the entries want every mismatch, the message wants the first one in words
+        mismatches = matcher.walk_mismatches(self.val)
         if mismatches:
             entries = [
-                DiffEntry(path=path, actual=actual, expected=description) for path, actual, description in mismatches
+                mismatch.path.entry(actual=mismatch.actual, expected=mismatch.expected_desc) for mismatch in mismatches
             ]
             return self.error(
                 f"Expected <{self.val}> to match structure {matcher.describe()}, but"
-                f" {matcher.describe_mismatch(self.val)}.",
+                f" {matcher.render_mismatch(mismatches)}.",
                 actual=self.val,
                 expected=spec,
                 diff=DiffResult(kind="match", entries=entries),
@@ -391,7 +407,7 @@ class SatisfiesMixin(_MixinBase):
                     diff=DiffResult(
                         kind="match",
                         entries=[
-                            DiffEntry(path=f"[{index}]", actual=item, expected=description)
+                            _ROOT.index(index).entry(actual=item, expected=description)
                             for index, item in enumerate(items[:5])
                         ],
                     ),
@@ -509,7 +525,7 @@ class SatisfiesMixin(_MixinBase):
                 expected=[_describe_matcher(matcher) for matcher in matchers],
             )
         entries = [
-            DiffEntry(path=f"[{index}]", actual=item, expected=_describe_matcher(matcher))
+            _ROOT.index(index).entry(actual=item, expected=_describe_matcher(matcher))
             for index, (item, matcher) in enumerate(zip(items, matchers, strict=True))
             if not _apply_matcher(matcher, item)
         ]
@@ -587,7 +603,7 @@ class SatisfiesMixin(_MixinBase):
         if unpaired_items:
             paired_columns = {column for column in assignment if column is not None}
             entries = [
-                DiffEntry(path="extra", actual=items[index], expected=None, absent="expected")
+                _ROOT.member(items[index], "extra").entry(actual=items[index], expected=None, absent="expected")
                 for index in unpaired_items
             ]
             entries.extend(
@@ -651,7 +667,7 @@ class SatisfiesMixin(_MixinBase):
                 expected=other,
             )
         entries = [
-            DiffEntry(path=f"[{index}]", actual=val_item, expected=other_item)
+            _ROOT.index(index).entry(actual=val_item, expected=other_item)
             for index, (val_item, other_item) in enumerate(zip(val_items, other_items, strict=True))
             if not predicate(val_item, other_item)
         ]

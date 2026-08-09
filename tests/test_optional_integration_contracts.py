@@ -46,7 +46,7 @@ class TestAllureContract:
         from assertpy2.pytest_plugin import _attach_allure
 
         diff = _build_equality_diff({"name": "alice", "age": 30}, {"name": "alice", "age": 31})
-        _attach_allure({"age": 30}, {"age": 31}, diff, mode=mode)
+        _attach_allure({"age": 30}, {"age": 31}, diff, named_actual=True, named_expected=True, mode=mode)
 
     def test_attaching_a_polling_trace_does_not_raise(self):
         from assertpy2.pytest_plugin import _attach_allure
@@ -61,7 +61,7 @@ class TestAllureContract:
             elapsed=0.4,
             summary="probe recovered",
         )
-        _attach_allure(None, None, None, trace=trace)
+        _attach_allure(None, None, None, named_actual=False, named_expected=False, trace=trace)
 
 
 class TestBehaveContract:

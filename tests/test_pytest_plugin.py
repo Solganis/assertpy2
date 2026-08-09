@@ -152,6 +152,44 @@ class TestHookActualExpected:
         assert_that(body).does_not_contain("actual")
 
 
+class TestTheValuesSectionShowsOnlyValuesTheAssertionNamed:
+    """Every failure carries `actual` now, so "the attribute is set" stopped meaning "the reader has
+    not seen this value yet".
+
+    The section exists for values the message elided. A value filled in from the builder is the same
+    one the message opens with, so rendering it would put a repeat under every single failure. The
+    three tests above still construct the exception by hand, which is the case with no record at all,
+    and those keep the older behaviour.
+    """
+
+    def test_a_failure_that_never_named_actual_gets_no_values_section(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).contains_key("x")
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure.value))
+        titles = [title for title, _ in report.sections]
+        assert_that(failure.value.actual).is_equal_to({"a": 1})
+        assert_that(titles).does_not_contain("AssertionFailure")
+
+    def test_a_failure_that_named_its_values_still_gets_one(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).is_equal_to({"a": 2})
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure.value))
+        body = dict(report.sections)["AssertionFailure"]
+        assert_that(body).contains("actual")
+        assert_that(body).contains("expected")
+
+    def test_an_expected_of_none_is_shown_rather_than_read_as_unset(self):
+        # `expected is not None` cannot tell "compared against None" from "no expected at all"
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).is_equal_to(None)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure.value))
+        body = dict(report.sections)["AssertionFailure"]
+        assert_that(body).contains("expected: None")
+
+
 class TestHookDiff:
     def test_diff_section_added(self):
         diff = DiffResult(
@@ -618,6 +656,26 @@ class TestAllureFullMode:
         names = [call.kwargs["name"] for call in mock.attach.call_args_list]
         assert_that(names).contains("AssertionFailure")
         assert_that(names).contains("Structured Diff")
+
+    def test_a_failure_that_never_named_actual_attaches_no_values(self):
+        # the same rule as the terminal section: an Allure run and a pytest report have to agree on
+        # which values the assertion named, or full mode grows an attachment under every failure
+        mock = _mock_allure()
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).contains_key("x")
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure.value), mock, allure_mode="full")
+        names = [call.kwargs["name"] for call in mock.attach.call_args_list]
+        assert_that(names).does_not_contain("AssertionFailure")
+        assert_that(names).contains("Structured Diff")
+
+    def test_an_expected_of_none_is_attached_rather_than_read_as_unset(self):
+        mock = _mock_allure()
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).is_equal_to(None)
+        _run_hook_with_allure(_make_report(), _make_call(exc=failure.value), mock, allure_mode="full")
+        body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
+        assert_that(body).contains_key("expected")
+        assert_that(body["expected"]).is_none()
 
 
 class TestAllureOffMode:

@@ -10,6 +10,7 @@ import os
 import sys
 import threading
 import types
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Final, Generic, Literal, TypeVar, overload
 
 if TYPE_CHECKING:
@@ -31,11 +32,13 @@ if TYPE_CHECKING:
         _PathAssertion,
         _StringAssertion,
     )
+    from .errors import PollTrace
     from .matchers import Matcher
 
 from . import _hints
 from ._engine._contract import contract_drift
 from ._engine._introspection import is_same_implementation
+from ._engine._path import _ROOT, _Path
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
@@ -45,14 +48,14 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure, DiffEntry, DiffResult, _safe_repr, _truncated
+from .errors import AssertionFailure, DiffEntry, DiffResult, Step, _safe_repr, _truncated
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
 from .helpers import HelpersMixin
 from .json_mixin import JsonMixin
 from .numeric import NumericMixin
-from .outcome import AssertionOutcome
+from .outcome import MISSING, AssertionOutcome
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
@@ -101,9 +104,9 @@ def _caller_location() -> tuple[str, int] | None:
 
 # soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
-# each entry is (group label, caller location, message)
-_SoftFailure = tuple[str | None, tuple[str, int] | None, str, object]
-_soft_err: contextvars.ContextVar[list[_SoftFailure]] = contextvars.ContextVar("assertpy2_soft_err")
+# the composed record of each collected failure, group and caller location included: nothing about a
+# soft failure is flattened until the aggregate message is rendered, and the aggregate keeps them too
+_soft_err: contextvars.ContextVar[list[AssertionOutcome]] = contextvars.ContextVar("assertpy2_soft_err")
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
 
@@ -144,7 +147,11 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
     # and a soft run exists precisely to show many of them at once
     lines = []
     entries = getattr(diff, "entries", None) or []
-    if len(entries) == 1 and entries[0].path in {".", "line 1"}:
+    # the one entry that repeats its own header: the whole value, or the whole of a one-line string.
+    # "no steps and a root path" is what tells that from a mapping whose only differing key is
+    # spelled "." - that key is a step, and it used to be dropped from the report as a scalar
+    only = entries[0] if len(entries) == 1 else None
+    if only is not None and ((not only.steps and only.path == ".") or only.steps == (Step("line", 1),)):
         # a scalar or a one-line string: the header already carries both values, so a path of "." would
         # only repeat them
         return lines
@@ -161,18 +168,19 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
     return lines
 
 
-def _format_soft_errors(errs: list[_SoftFailure]) -> str:
-    has_groups = any(group is not None for group, _, _, _ in errs)
+def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
+    has_groups = any(outcome.group is not None for outcome in errs)
     lines = ["soft assertion failures:"]
     current_group: str | None = None
-    for counter, (group, loc, msg, diff) in enumerate(errs, 1):
+    for counter, outcome in enumerate(errs, 1):
+        group = outcome.group
         if has_groups and group != current_group:
             current_group = group
             if group is not None:
                 lines.append(f"  [{group}]")
         indent = ("    " if group is not None else "  ") if has_groups else ""
-        lines.append(f"{indent}{counter}. {_located(loc, msg)}")
-        lines.extend(_indented_diff(diff, indent + "   "))
+        lines.append(f"{indent}{counter}. {_located(outcome.location, outcome.message)}")
+        lines.extend(_indented_diff(outcome.diff, indent + "   "))
     return "\n".join(lines)
 
 
@@ -238,7 +246,9 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
     if errs and _soft_ctx.get() == 0:
         out = _format_soft_errors(errs)
         _soft_err.set([])
-        raise AssertionError(out)
+        # the same class as a single failure, so one `except AssertionFailure` covers a soft block too,
+        # and it hands back what it aggregated rather than only the text it rendered
+        raise AssertionFailure(out, failures=tuple(errs))
 
 
 def assert_all(*callables: Callable[[], object]) -> None:
@@ -352,20 +362,23 @@ def assert_that(val: object, description="") -> _CoreAssertion:
     return _builder(val, description)
 
 
-def _contract_entries(exc: object, prefix: str = "") -> list[DiffEntry]:
+def _contract_entries(exc: object, prefix: _Path = _ROOT) -> list[DiffEntry]:
     """Turn a pydantic ``ValidationError`` into diff rows, mirroring the OpenAPI path in `json_mixin`.
 
     ``errors()`` already carries the location, the message and the offending input, so the structured
     channel costs a reshape rather than a second walk of the payload.  Under ``each=True`` the caller
     passes the element's ``[i]`` prefix, the way ``contract_drift`` labels its own paths.
+
+    ``loc`` is already a tuple of keys and indices, so the machine half of the path comes straight
+    across rather than being parsed back out of the text.
     """
     errors = exc.errors() if hasattr(exc, "errors") else []  # ty: ignore[call-non-callable]  # duck-typed pydantic
     entries = []
     for error in errors:
         path = prefix
         for segment in error.get("loc", ()):
-            path += f"[{segment}]" if isinstance(segment, int) else f".{segment}" if path else str(segment)
-        entries.append(DiffEntry(path=path or ".", actual=error.get("input"), expected=error.get("msg", "")))
+            path = path.index(segment) if isinstance(segment, int) else path.key(segment)
+        entries.append(path.leaf_entry(actual=error.get("input"), expected=error.get("msg", "")))
     return entries
 
 
@@ -446,7 +459,7 @@ def assert_conforms(
                     f"Expected item [{index}] to conform to <{model.__name__}>, but it did not:\n{exc}",
                     actual=val,
                     expected=model,
-                    diff=DiffResult(kind="match", entries=_contract_entries(exc, f"[{index}]")),
+                    diff=DiffResult(kind="match", entries=_contract_entries(exc, _ROOT.index(index))),
                     suppress_context=True,
                 )
         if exact:
@@ -552,7 +565,9 @@ def fail(msg=""):
                 except TypeError as e:
                     assert_that(str(e)).contains('unsupported operand')
     """
-    raise AssertionError(f"Fail: {msg}!" if msg else "Fail!")
+    # no value under test and nothing compared, so the payload is empty. the class still matches every
+    # other failure, so a handler written against the library does not have to name two of them
+    raise AssertionFailure(f"Fail: {msg}!" if msg else "Fail!")
 
 
 def soft_fail(msg=""):
@@ -584,7 +599,13 @@ def soft_fail(msg=""):
 
     """
     if _soft_ctx.get():
-        _soft_err.get().append((_soft_group.get(), _caller_location(), f"Fail: {msg}!" if msg else "Fail!", None))
+        _soft_err.get().append(
+            AssertionOutcome(
+                message=f"Fail: {msg}!" if msg else "Fail!",
+                group=_soft_group.get(),
+                location=_caller_location(),
+            )
+        )
         return
     fail(msg)
 
@@ -791,6 +812,8 @@ class NegatedBuilder(Generic[_S]):
                 return self._negated_soft(name, attr, *args, **kwargs)
             if self._builder.kind == "warn":
                 return self._negated_warn(name, attr, *args, **kwargs)
+            if self._builder.kind == "check":
+                return self._negated_check(name, attr, *args, **kwargs)
             return self._negated_strict(name, attr, *args, **kwargs)
 
         # every branch of _negated hands back the very builder this proxy wraps, which is `_S` by
@@ -809,7 +832,9 @@ class NegatedBuilder(Generic[_S]):
             attr(*args, **kwargs)
         except (AssertionError, AssertionFailure):
             return self._builder
-        raise AssertionError(self._make_msg(name))
+        # the message is composed here rather than by `error()`, which would prefix the description a
+        # second time, but the exception is the builder's own: a negated failure is a failure
+        raise AssertionBuilder._failure(AssertionOutcome(message=self._make_msg(name), actual=self._builder.val))
 
     def _negated_soft(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
@@ -828,7 +853,27 @@ class NegatedBuilder(Generic[_S]):
         msg = self._make_msg(name)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
-        err_list.append((_soft_group.get(), _caller_location(), msg, None))
+        err_list.append(
+            AssertionOutcome(
+                message=msg,
+                actual=self._builder.val,
+                group=_soft_group.get(),
+                location=_caller_location(),
+            )
+        )
+        return self._builder
+
+    def _negated_check(
+        self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
+    ) -> AssertionBuilder:
+        # the underlying assertion is in verdict mode too, so it lands in the sink rather than raising,
+        # and reading the sink is how this tells which way it went
+        self._builder._check_sink = None
+        attr(*args, **kwargs)
+        if self._builder._check_sink is not None:
+            self._builder._check_sink = None  # it failed, so the negation held
+            return self._builder
+        self._builder._check_sink = AssertionOutcome(message=self._make_msg(name), actual=self._builder.val)
         return self._builder
 
     def _negated_warn(
@@ -847,6 +892,58 @@ class NegatedBuilder(Generic[_S]):
             self._builder._value_taint_reason = msg
         self._builder.logger.warning(msg)
         return self._builder
+
+
+class CheckBuilder:
+    """Proxy returned by [`check()`][assertpy2.assertpy.AssertionBuilder.check].
+
+    Runs one assertion with the builder in verdict mode and hands back what it decided.  The mode is
+    put on and taken off around the call rather than held, so a builder that is also used normally
+    afterwards is unaffected, and an assertion that raises for a bad argument still leaves it clean.
+
+    ``not_`` is proxied rather than refused, so a negated assertion can be asked for a verdict too.
+    Anything else that is not callable - ``val``, ``description`` - is handed straight back.
+    """
+
+    if TYPE_CHECKING:
+        # handed back unchanged by the fallback below; declared here because checkers prefer a declared
+        # attribute over __getattr__, which would otherwise type these as the callable it describes
+        val: Any
+        description: str
+
+        @property
+        def not_(self) -> CheckBuilder: ...
+
+    def __init__(self, target: object, builder: AssertionBuilder) -> None:
+        # two references, because `not_` moves the target to the negation proxy while the mode and the
+        # sink stay on the builder underneath it
+        self._target = target
+        self._builder = builder
+
+    def __getattr__(self, name: str) -> Callable[..., AssertionOutcome]:
+        attr = getattr(self._target, name)
+        if isinstance(attr, NegatedBuilder):
+            # ty: ignore[invalid-return-type]  # `not_` is declared above, where it types as a proxy;
+            # this fallback is the one runtime path the annotation cannot describe
+            return CheckBuilder(attr, self._builder)
+        if not callable(attr):
+            return attr
+
+        def _checked(*args: object, **kwargs: object) -> AssertionOutcome:
+            previous_kind = self._builder.kind
+            self._builder.kind = "check"
+            self._builder._check_sink = None
+            try:
+                attr(*args, **kwargs)
+            finally:
+                self._builder.kind = previous_kind
+            failure = self._builder._check_sink
+            self._builder._check_sink = None
+            if failure is not None:
+                return failure
+            return AssertionOutcome(passed=True, actual=self._builder.val)
+
+        return _checked
 
 
 class AssertionBuilder(
@@ -900,11 +997,40 @@ class AssertionBuilder(
         # breaking its narrowed type
         self._value_taint_reason: str | None = None
         self._value_origin: str | None = None
+        # where a failure lands while `check()` has this builder in verdict mode, instead of being
+        # raised, collected or logged
+        self._check_sink: AssertionOutcome | None = None
 
     @property
     def not_(self) -> NegatedBuilder[Self]:
         """Invert the next assertion in the chain."""
         return NegatedBuilder(self)
+
+    def check(self) -> CheckBuilder:
+        """Run the next assertion for its verdict instead of for its failure.
+
+        The assertion does not raise, collect or log.  It returns an
+        [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome], truthy when it held and carrying the
+        failure message, values and diff when it did not.
+
+        For asking a question about a value.  An assertion states a requirement, and a test that stops
+        at the first unmet one is the point; this is for the cases that are not that, like branching on
+        a precondition, or reporting a check into a system that is not pytest.
+
+        A bad argument still raises.  ``TypeError`` and ``ValueError`` mean the call itself is wrong,
+        which is not a verdict about the value and would be silenced by returning one.
+
+        Examples:
+            Usage:
+
+                outcome = assert_that(response).check().is_equal_to(expected)
+                if not outcome:
+                    logger.warning(outcome.message)
+
+                assert_that(5).check().is_positive().passed        # True
+                assert_that(5).check().not_.is_positive().passed   # False
+        """
+        return CheckBuilder(self, self)
 
     @property
     def value(self) -> _T:
@@ -1004,7 +1130,7 @@ class AssertionBuilder(
         pivoted._value_origin = origin
         return pivoted
 
-    def error(self, msg, *, actual=None, expected=None, diff=None, suppress_context=False) -> Self:
+    def error(self, msg, *, actual=MISSING, expected=MISSING, diff=None, trace=None, suppress_context=False) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
         If an error description is set by [`described_as()`][assertpy2.base.BaseMixin.described_as], then that
@@ -1018,6 +1144,7 @@ class AssertionBuilder(
             actual: the actual value (for structured error reporting)
             expected: the expected value (for structured error reporting)
             diff: a [`DiffResult`][assertpy2.errors.DiffResult] instance (for structured error reporting)
+            trace: a [`PollTrace`][assertpy2.errors.PollTrace] from a poll that timed out
             suppress_context: raise ``from None``, dropping the exception currently being handled from
                 the traceback.  Pass it when the caught exception is your own plumbing and its text is
                 already folded into ``msg``, so the reader is not shown the same failure twice.  Leave
@@ -1030,7 +1157,7 @@ class AssertionBuilder(
             AssertionBuilder: returns this instance to chain to the next assertion, but only when
                 ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
         """
-        failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff))
+        failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace))
         if failure is None:
             return self
         # the raise stays here rather than in _deliver: a failing assertion's traceback ends at
@@ -1039,8 +1166,14 @@ class AssertionBuilder(
             raise failure from None
         raise failure
 
-    def _compose(self, msg: str, *, actual: object, expected: object, diff: DiffResult | None) -> AssertionOutcome:
+    def _compose(
+        self, msg: str, *, actual: object, expected: object, diff: DiffResult | None, trace: PollTrace | None
+    ) -> AssertionOutcome:
         """Build the failure record.  Decides nothing about what happens to it."""
+        # every message in the library reads "Expected <val> to ...", so the subject of a failure is
+        # the value under test whether or not the assertion bothered to name it. filling it here is
+        # what puts it on all 163 failures instead of the 34 that pass it explicitly
+        provided = actual is not MISSING
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self._value_origin and not len(self.val):
             # an empty derived value carries no context of its own, so name the step that produced it
@@ -1050,7 +1183,15 @@ class AssertionBuilder(
             # on its own line, like the comparison-settings echo, so the original message stays a
             # prefix and a `match=` or `startswith` written against it keeps working
             out = f"{out}\n{hint}"
-        return AssertionOutcome(message=out, actual=actual, expected=expected, diff=diff, hint=hint)
+        return AssertionOutcome(
+            message=out,
+            actual=actual if provided else self.val,
+            actual_provided=provided,
+            expected=expected,
+            diff=diff,
+            trace=trace,
+            hint=hint,
+        )
 
     def _deliver(self, outcome: AssertionOutcome) -> AssertionError | None:
         """Act on a composed failure according to the builder's mode.
@@ -1067,13 +1208,36 @@ class AssertionBuilder(
         if self.kind == "soft":
             if self._value_taint_reason is None:
                 self._value_taint_reason = outcome.message
-            _soft_err.get().append((_soft_group.get(), _caller_location(), outcome.message, outcome.diff))
+            _soft_err.get().append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
             return None
-        if outcome.expected is not None or outcome.diff is not None:
-            return AssertionFailure(
-                outcome.message, actual=outcome.actual, expected=outcome.expected, diff=outcome.diff
-            )
-        return AssertionError(outcome.message)
+        if self.kind == "check":
+            # deliberately no taint: the caller asked for a verdict rather than asserting, so reading
+            # `.value` afterwards is not reading an unverified value, it is reading the value they asked
+            # a question about.  one assignment, not a first-wins guard: every `self.error(...)` in the
+            # package returns on the same line or the next, so one call composes at most one failure
+            self._check_sink = outcome
+            return None
+        return self._failure(outcome)
+
+    @staticmethod
+    def _failure(outcome: AssertionOutcome) -> AssertionFailure:
+        """Build the exception for a composed failure.
+
+        One class for every failure.  The older split raised a bare `AssertionError` whenever the
+        assertion had named no expected value and built no diff, which is most of them, so whether a
+        caught failure carried structure at all depended on which assertion had failed.
+
+        Separate from `_deliver` for the one caller that composes its own message: `NegatedBuilder`
+        inverts by catching, so its own failure is the case where nothing was caught.
+        """
+        failure = AssertionFailure(
+            outcome.message,
+            actual=outcome.actual,
+            expected=None if outcome.expected is MISSING else outcome.expected,
+            diff=outcome.diff,
+        )
+        failure._outcome = outcome
+        return failure
 
     def eventually(
         self,
