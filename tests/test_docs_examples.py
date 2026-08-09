@@ -15,6 +15,7 @@ both guards.
 from __future__ import annotations
 
 import datetime
+import inspect
 import json
 import logging
 import pathlib
@@ -31,6 +32,7 @@ import assertpy2
 from tests.docs_fixtures import PAGE_FIXTURES
 
 GUARDED_DOCS = [
+    "README.md",
     "docs/guides/matchers.md",
     "docs/guides/assertions.md",
     "docs/guides/data.md",
@@ -81,4 +83,10 @@ def test_doc_example_runs(example: CodeExample, eval_example: EvalExample) -> No
     reason = _skip_reason(example)
     if reason is not None:
         pytest.skip(reason)
-    eval_example.run(example, module_globals=_namespace(str(pathlib.Path(example.path).as_posix())))
+    namespace = _namespace(pathlib.Path(example.path).as_posix())
+    module = eval_example.run(example, module_globals=namespace)
+    # an example written as a pytest test only binds the function, so running the module never reaches
+    # the assertions in its body. Call the ones that ask for no fixtures, and the body is checked too
+    for name, value in module.items():
+        if name.startswith("test_") and callable(value) and not inspect.signature(value).parameters:
+            value()
