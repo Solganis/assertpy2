@@ -470,6 +470,25 @@ def _entry_to_json(entry):
     absent = getattr(entry, "absent", None)
     if absent is not None:
         item["absent"] = absent
+    steps = getattr(entry, "steps", ())
+    if steps:
+        # `path` is written for a person and cannot be read back: a mapping key goes through `str()`, so
+        # `{3: ...}` and `{"3": ...}` render alike.  A consumer that wants to walk back into the payload
+        # needs the keys themselves, which is what these are.  Absent where there is no location to
+        # give: the root, and a containment entry whose path is a label
+        item["steps"] = [_step_to_json(step) for step in steps]
+    return item
+
+
+def _step_to_json(step):
+    """One hop of a diff entry's machine-readable path.
+
+    ``side`` appears only where it means something: a sequence whose two sides have shifted apart, where
+    an index without a side names two different elements.
+    """
+    item = {"kind": step.kind, "value": _json_safe(step.value)}
+    if step.side is not None:
+        item["side"] = step.side
     return item
 
 
@@ -481,7 +500,7 @@ def _diff_to_json(diff, max_entries=50):
     visible = entries[:max_entries] if max_entries > 0 and len(entries) > max_entries else entries
     truncated = len(entries) - len(visible)
     items = [_entry_to_json(entry) for entry in visible]
-    payload = {"format": 3, "kind": kind, "entries": items}
+    payload = {"format": 4, "kind": kind, "entries": items}
     if truncated:
         payload["truncated"] = truncated
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
