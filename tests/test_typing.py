@@ -51,6 +51,13 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateAssertion)
     assert_type(assert_that(pathlib.Path("/tmp")), _PathAssertion)
     assert_type(assert_that(b"raw"), _BytesAssertion[bytes])
+    # the prefix/suffix pair handles bytes natively, so both spellings are reachable and typed
+    assert_type(assert_that(b"raw").starts_with(b"r"), _BytesAssertion[bytes])
+    assert_type(assert_that(b"raw").ends_with(b"w"), _BytesAssertion[bytes])
+    assert_type(assert_that(b"raw").starts_with_bytes(b"r"), _BytesAssertion[bytes])
+    # the quantifier under both its names, from the dict view as well as the sequence one
+    assert_type(assert_that({"a": 1}).each(lambda key: True), _DictAssertion[str, int])
+    assert_type(assert_that({"a": 1}).all_satisfy(lambda key: True), _DictAssertion[str, int])
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])

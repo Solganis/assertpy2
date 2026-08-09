@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import assert_that, soft_assertions
+from assertpy2 import AssertionFailure, assert_that, soft_assertions
 
 
 class TestIsValidUtf8:
@@ -50,8 +50,17 @@ class TestStartsWithBytes:
         with pytest.raises(AssertionError, match="start with"):
             assert_that(b"hello").starts_with_bytes(b"world")
 
-    def test_empty_prefix(self):
-        assert_that(b"hello").starts_with_bytes(b"")
+    def test_an_empty_prefix_is_refused_the_way_the_general_spelling_refuses_it(self):
+        # it used to hold, which is an assertion no value can fail. `starts_with` rejects an empty
+        # prefix for str and for bytes alike, and this is that same relation under a bytes-only name
+        with pytest.raises(ValueError, match="must not be empty"):
+            assert_that(b"hello").starts_with_bytes(b"")
+
+    def test_the_failure_now_names_the_value_under_test(self):
+        # its own implementation said only "Expected to start with <...>", omitting the subject
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(b"hello").starts_with_bytes(b"world")
+        assert_that(str(failure.value)).is_equal_to("Expected <b'hello'> to start with <b'world'>, but did not.")
 
     def test_non_bytes_raises(self):
         with pytest.raises(TypeError, match="not bytes"):
@@ -68,6 +77,14 @@ class TestContainsBytes:
 
     def test_single_byte(self):
         assert_that(b"\x00\x01\x02").contains_bytes(b"\x01")
+
+    def test_the_failure_now_carries_a_diff(self):
+        # its own implementation built none, so a bytes containment failure reported less than the
+        # general spelling did about the very same value
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(b"hello").contains_bytes(b"\x00\x01")
+        assert_that(failure.value.diff).is_not_none()
+        assert_that(failure.value.actual).is_equal_to(b"hello")
 
     def test_non_bytes_raises(self):
         with pytest.raises(TypeError, match="not bytes"):
