@@ -324,6 +324,17 @@ class _MatchNamespace:
         return HasLengthMatcher(length)
 
     @staticmethod
+    def is_length(length: int) -> HasLengthMatcher:
+        """Matcher for a value whose ``len()`` equals ``length``.
+
+        The same matcher as `has_length()`, under the name the fluent assertion uses
+        ([`is_length()`][assertpy2.base.BaseMixin.is_length]).  One relation was reachable as
+        ``has_length`` from the matcher namespace and as ``is_length`` from the builder, so which name
+        worked depended on which of the two a reader had seen first.  Both work from both now.
+        """
+        return HasLengthMatcher(length)
+
+    @staticmethod
     def is_empty() -> IsEmptyMatcher:
         """Matcher for an empty value (``len() == 0``)."""
         return IsEmptyMatcher()

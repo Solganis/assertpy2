@@ -55,6 +55,12 @@ class BytesMixin(_MixinBase):
     def starts_with_bytes(self, prefix: bytes) -> Self:
         """Assert that val starts with the given byte prefix.
 
+        The bytes-only spelling of [`starts_with()`][assertpy2.string.StringMixin.starts_with], which it
+        delegates to.  It carried its own implementation until `starts_with` learned to handle ``bytes``:
+        before that, a byte string fell through to the element-wise branch and ``b"foo"`` compared its
+        first element, the int ``102``, against ``b"f"``.  Two implementations of one relation is how they
+        drift, and these two already had: this one accepted an empty prefix, which asserts nothing.
+
         Args:
             prefix: the expected byte prefix.
 
@@ -62,15 +68,19 @@ class BytesMixin(_MixinBase):
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
+            TypeError: if val is not ``bytes``/``bytearray``
+            ValueError: if the prefix is empty, which no value can fail
             AssertionError: if val does not start with the prefix
         """
         self._check_bytes()
-        if not self.val.startswith(prefix):
-            return self.error(f"Expected to start with <{prefix!r}>, but did not.")
-        return self
+        return self.starts_with(prefix)
 
     def contains_bytes(self, sub: bytes) -> Self:
         """Assert that val contains the given byte subsequence.
+
+        The bytes-only spelling of [`contains()`][assertpy2.contains.ContainsMixin.contains], which it
+        delegates to.  Delegating is what gives the failure the value under test and a structured diff,
+        neither of which its own implementation produced.
 
         Args:
             sub: the byte subsequence to find.
@@ -79,12 +89,11 @@ class BytesMixin(_MixinBase):
             AssertionBuilder: returns this instance to chain to the next assertion
 
         Raises:
+            TypeError: if val is not ``bytes``/``bytearray``
             AssertionError: if val does not contain the subsequence
         """
         self._check_bytes()
-        if sub not in self.val:
-            return self.error(f"Expected to contain <{sub!r}>, but did not.")
-        return self
+        return self.contains(sub)
 
     def has_byte_at(self, index: int, expected: int) -> Self:
         """Assert that the byte at the given index equals the expected value.
