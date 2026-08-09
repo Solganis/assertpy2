@@ -21,9 +21,42 @@ For comparisons, a `DiffResult` with path-level entries is attached:
 try:
     assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
 except AssertionError as e:
-    print(repr(e.diff))
-    # DiffResult(kind='dict', entries=[DiffEntry(path='b', actual=2, expected=99)])
+    entry = e.diff.entries[0]
+    print(entry.path, entry.actual, entry.expected)   # b 2 99
 ```
+
+### Paths a program can follow
+
+`entry.path` is written for a person and cannot be read back. A mapping key goes through `str()`, so
+`{3: "a"}` and `{"3": "a"}` produce the same text, and a key holding a dot or a bracket has no grammar
+to parse it with. `entry.steps` is the same location in the form a program can act on: a tuple of
+[`Step`][assertpy2.errors.Step], each holding the key, index, field name, set member or line number
+itself, untouched.
+
+```python
+data = {"users": [{"roles": {7: "admin"}}]}
+
+try:
+    assert_that(data).is_equal_to({"users": [{"roles": {7: "guest"}}]})
+except AssertionError as e:
+    entry = e.diff.entries[0]
+    print(entry.path)                                  # users[0].roles.7
+    print([(s.kind, s.value) for s in entry.steps])
+    # [('key', 'users'), ('index', 0), ('key', 'roles'), ('key', 7)]
+
+    cursor = e.actual
+    for step in entry.steps:
+        cursor = cursor[step.value]
+    print(cursor)                                      # admin
+```
+
+An empty `steps` means the difference is the whole value, which is the entry whose `path` renders as
+`.`. It is also empty where the path is a label rather than a location: a containment failure reports
+`missing` and `extra`, and an item that is not in a collection has no position in it.
+
+A sequence whose two sides have shifted apart is the one case where an index alone is ambiguous, since
+the index spaces no longer agree. There the step names its `side` (`actual` or `expected`), matching
+the `actual[2]` / `expected[1]` the path renders.
 
 The diff is also rendered into the failure **message**, so it travels with `str(e)` wherever the
 exception surfaces - `unittest`, a plain script, an `AssertionError` in a CI log:
@@ -131,6 +164,10 @@ rendered by the plugin as colored diff sections.
   actual:   [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
   expected: [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Robert'}]
 ```
+
+That section carries the values the assertion named. Every failure holds the value under test on
+`failure.actual`, but most messages open with it, so a `contains_key()` failure shows the diff without
+repeating its subject above it.
 
 The diff for that failure, and the other diff shapes, render like this.
 
@@ -259,8 +296,9 @@ An [`eventually()`](testing.md#async-assertions) timeout attaches its convergenc
 ### Catching failures with their types intact
 
 `pytest.raises(AssertionError)` types the caught exception as plain `AssertionError`, so a type
-checker flags `.actual` / `.expected` / `.diff` access. Catch `AssertionFailure` instead - it is the
-subclass actually raised whenever structured data is attached:
+checker flags `.actual` / `.expected` / `.diff` access. Catch `AssertionFailure` instead. It is the
+subclass every failure is raised as, including a soft block's aggregate and `fail()`, so one handler
+covers the library:
 
 ```python
 import pytest
@@ -484,6 +522,58 @@ To also assert on the value the call returned (alongside the warning, or after `
 assert_that(1 + 2).described_as("adding stuff").is_equal_to(2)
 # [adding stuff] Expected <3> to be equal to <2>, but was not.
 ```
+
+### What a soft block hands back
+
+A [`soft_assertions()`](testing.md#soft-assertions) block renders its collected failures into one
+numbered message. That message is a rendering, not the only copy: the raised `AssertionFailure` also
+carries `failures`, one [`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] per collected failure,
+in the order they were collected.
+
+```python
+from assertpy2 import AssertionFailure, assert_that, soft_assertions
+
+try:
+    with soft_assertions():
+        assert_that({"role": "guest"}).is_equal_to({"role": "admin"})
+        assert_that("foo").is_length(4)
+except AssertionFailure as e:
+    print(len(e.failures))                       # 2
+    print(e.failures[0].diff.entries[0].path)    # role
+    print(e.failures[1].message)                 # Expected <foo> to be of length <4>, but was <3>.
+```
+
+Each record keeps what the text had flattened: the values, the diff, the `group` label it was collected
+under, and the `(file, line)` the message renders in brackets. A polling assertion that times out inside
+a soft block keeps its [`trace`](testing.md#polling-trace) there too.
+
+`failures` is empty on every other failure, which is about one value rather than a collection of them.
+
+### Asking instead of asserting
+
+`check()` runs the next assertion for its verdict and hands back an
+[`AssertionOutcome`][assertpy2.outcome.AssertionOutcome] instead of raising. It is truthy when the
+assertion held, and carries the message, values and diff when it did not.
+
+```python
+outcome = assert_that({"role": "guest"}).check().is_equal_to({"role": "admin"})
+
+print(bool(outcome))          # False
+print(outcome.message)        # Expected <{'role': 'guest'}> to be equal to <{'role': 'admin'}>, but was not.
+print(outcome.diff.entries[0].path)   # role
+```
+
+Use it where a test is not what you are writing: branching on a precondition, or reporting a check into
+something that is not pytest. An assertion states a requirement, and stopping at the first unmet one is
+the point of the other modes.
+
+Negation is proxied, so `assert_that(5).check().not_.is_positive()` answers too. A bad argument still
+raises: `TypeError` and `ValueError` mean the call itself is wrong, which is not a verdict about the
+value.
+
+Unlike a failure collected by `soft_assertions()` or logged by `assert_warn()`, a failed check does not
+mark the value as unverified: `.value` keeps working, because a question was asked, not an assertion
+made.
 
 ### Warnings instead of failures
 

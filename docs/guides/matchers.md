@@ -108,7 +108,7 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.is_instance_of(type)` | an instance of `type` |
 | `match.is_truthy()` | a truthy value |
 | `match.is_falsy()` | a falsy value |
-| `match.has_length(n)` | a value whose `len()` equals `n` |
+| `match.has_length(n)` | a value whose `len()` equals `n` (also `match.is_length(n)`, the name the fluent assertion uses) |
 | `match.is_empty()` | an empty collection or string |
 | `match.is_not_empty()` | a non-empty collection or string |
 | `match.is_positive()` | a number greater than zero |
@@ -284,6 +284,50 @@ composes the sentence from both. Only `matches()` and `describe()` are required:
 
 A subclass gets `&`, `|` and `~` for free, so it composes with the built-ins exactly like they compose
 with each other.
+
+### Answering in one call
+
+`evaluate()` is the same matcher answering with a [`MatchResult`][assertpy2.matchers.MatchResult]
+instead of with three separate calls. Every matcher has it, including one written before it existed:
+the default composes it from `matches()`, `describe()` and `describe_mismatch()`.
+
+```python
+from assertpy2 import match
+
+result = match.is_positive().evaluate(-5)
+print(result.matched)        # False
+print(result.description)    # a positive value
+print(result.mismatch)       # was <-5>
+print(bool(result))          # False
+```
+
+Implement it instead of the three when finding the reason costs what finding the verdict already paid
+for, which is any matcher that walks its value:
+
+```python
+from assertpy2 import BaseMatcher, MatchResult, assert_that
+
+class HasEvenLength(BaseMatcher):
+    def describe(self):
+        return "an even number of items"
+
+    def evaluate(self, value):
+        size = sum(1 for _ in value)
+        return MatchResult(
+            matched=size % 2 == 0,
+            description=self.describe(),
+            mismatch=f"had {size} items",
+        )
+
+assert_that([1, 2]).satisfies(HasEvenLength())
+```
+
+The bridge runs both ways: implement `matches()` and `evaluate()` comes for free, implement
+`evaluate()` and `matches()` comes for free. Implement neither and both say so, rather than recursing.
+
+`matches()` stays the cheap primitive and the library keeps using it wherever it only needs a verdict:
+it is what `==` calls, and a matcher is a dict value in `matches_structure()` and a snapshot
+placeholder, so a comparison must not have to build a result object.
 
 ### Registering one on the `match` namespace
 

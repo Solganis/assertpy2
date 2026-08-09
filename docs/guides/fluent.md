@@ -46,7 +46,7 @@ assert_that("x").not_.is_empty().is_greater_than(0)
 
 ```python
 assert_that(5).described_as("my check").not_.is_positive()
-# AssertionError: [my check] Expected <5> to NOT satisfy: is_positive()
+# assertpy2.AssertionFailure: [my check] Expected <5> to NOT satisfy: is_positive()
 
 with soft_assertions():
     assert_that(5).not_.is_positive()    # collected, not raised

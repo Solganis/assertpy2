@@ -171,6 +171,17 @@ paid.refund()
 The runtime behavior of `satisfies()` is unchanged (it just runs the predicate). The narrowing is
 purely static.
 
+`is_not_none()` in that example is part of the assertion, not a step needed to unlock narrowing. A
+concretely typed value refines just as well, which is where a domain predicate is usually applied:
+
+```python
+def is_paid_order(payload: object) -> TypeIs[PaidOrder]:
+    return isinstance(payload, PaidOrder)
+
+order: dict[str, Any] = response.json()
+paid = assert_that(order).satisfies(is_paid_order).value   # statically PaidOrder
+```
+
 !!! warning "Checker support: not yet in PyCharm"
     This narrowing is solved by **ty, Pyright, and mypy** today, so it works in VS Code / Pylance and in
     CI. **PyCharm does not yet solve type variables through `TypeIs`**: there the result stays the

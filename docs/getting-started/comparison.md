@@ -180,6 +180,7 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 | Exception cause chains / groups (`caused_by`, `contains_error`) | manual | No | No | No | **[Yes](../guides/errors.md#expected-exceptions)** |
 | Data frame / array equality (pandas/polars/numpy) | manual | No | No | No | **[Yes](../extending/integrations.md#data-frames-and-arrays)** |
 | Custom assertions or matchers | functions | **Yes** | **Yes** | **Yes** | **[Yes (both)](../extending/custom-assertions.md)** |
+| Matcher answers with a result, not a bool | n/a | No | n/a | No | **[Yes](../guides/matchers.md#answering-in-one-call)** |
 
 ## Reporting, safety and tooling
 
@@ -195,6 +196,7 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 | Rich, recursive pytest diffs | built-in | No | No | No | **[Yes](../guides/errors.md#rich-pytest-diffs)** |
 | Snapshot testing | plugin | No | **Yes** | No | **[Yes](../guides/testing.md#snapshot-testing)** |
 | Warn mode (non-failing assertions) | No | No | **Yes** | No | **[Yes](../guides/errors.md#warnings-instead-of-failures)** |
+| Assertion as a returned verdict (`check()`) | No | bool only | No | bool only | **[Yes](../guides/errors.md#asking-instead-of-asserting)** |
 | Allure / Behave integrations | No | No | No | No | **[Yes](../extending/integrations.md)** |
 
 !!! note "On snapshot testing: where assertpy2 does and does not lead"
