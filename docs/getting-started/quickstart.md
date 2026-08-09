@@ -46,6 +46,7 @@ name = assert_that("Alice").is_instance_of(str).is_not_empty().value
 A failing assertion raises an `AssertionFailure` with a precise message. It subclasses `AssertionError`,
 so `pytest.raises(AssertionError)` and any existing `except AssertionError` keep catching it:
 
+<!-- docs-guard: raises -->
 ```python
 assert_that(5).is_greater_than(10)
 # assertpy2.AssertionFailure: Expected <5> to be greater than <10>, but was not.
@@ -54,6 +55,7 @@ assert_that(5).is_greater_than(10)
 For dicts, dataclasses, and other structures, the pytest plugin renders a path-level diff that points
 straight at the differing field instead of dumping the whole value:
 
+<!-- docs-guard: skip -->
 ```python
 assert_that(actual).is_equal_to(expected)
 ```
@@ -67,6 +69,7 @@ The same path-level diff backs `matches_structure()`, `satisfies()`, and `each()
 
 Use soft assertions to report every failure at once instead of stopping at the first:
 
+<!-- docs-guard: raises -->
 ```python
 from assertpy2 import assert_that, soft_assertions
 

@@ -32,18 +32,23 @@ assert_that("hello").not_.is_empty().is_length(5).is_alpha()
 ```
 
 Static types survive the inversion too. A negated step hands back the same assertion type the
-un-negated one would, so the value type is kept and a wrong-domain assertion after it is still
-caught:
+un-negated one would, so the value type is kept:
 
 ```python
 value = assert_that(42).not_.is_equal_to(43).value  # int, not object
+```
 
+And a wrong-domain assertion after it is still caught:
+
+<!-- docs-guard: type-error -->
+```python
 # type error: is_greater_than is not a string assertion
 assert_that("x").not_.is_empty().is_greater_than(0)
 ```
 
 `.not_` works with descriptions, soft assertions, warn mode, and matchers:
 
+<!-- docs-guard: raises -->
 ```python
 assert_that(5).described_as("my check").not_.is_positive()
 # assertpy2.AssertionFailure: [my check] Expected <5> to NOT satisfy: is_positive()
