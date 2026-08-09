@@ -16,7 +16,7 @@ from .assertpy import (
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
 from .errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace, VacuousAssertionWarning
 from .file import contents_of
-from .matchers import Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
+from .matchers import BaseMatcher, Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
 from .snapshot import (
     SnapshotCreatedWarning,
     SnapshotKeyReusedWarning,
@@ -27,6 +27,7 @@ from .snapshot import (
 __all__ = [
     "AssertionFailure",
     "AsyncAssertionBuilder",
+    "BaseMatcher",
     "DiffEntry",
     "DiffResult",
     "Matcher",

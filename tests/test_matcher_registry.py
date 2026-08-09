@@ -205,3 +205,55 @@ class TestUnregisterMatcher:
             match.a()
         with pytest.raises(AttributeError):
             match.b()
+
+
+class TestBaseMatcherIsReachableFromThePackage:
+    """It is the documented way to write a matcher whose rule cannot be composed from the built-ins,
+    and until it was exported the only way to reach it was an import from a private module."""
+
+    def test_it_is_importable_from_the_top_level(self):
+        from assertpy2 import BaseMatcher
+
+        assert_that(BaseMatcher).is_not_none()
+
+    def test_a_subclass_works_everywhere_a_matcher_is_accepted(self):
+        from assertpy2 import BaseMatcher
+
+        class IsEven(BaseMatcher):
+            def matches(self, value):
+                return isinstance(value, int) and value % 2 == 0
+
+            def describe(self):
+                return "an even number"
+
+        assert_that(4).satisfies(IsEven())
+        assert_that([2, 4]).each(IsEven())
+        assert_that({"n": 2}).matches_structure({"n": IsEven()})
+        assert_that([1, 2]).contains(IsEven())
+
+    def test_a_subclass_composes_with_the_operators(self):
+        from assertpy2 import BaseMatcher, match
+
+        class IsEven(BaseMatcher):
+            def matches(self, value):
+                return isinstance(value, int) and value % 2 == 0
+
+            def describe(self):
+                return "an even number"
+
+        assert_that(4).satisfies(IsEven() & match.greater_than(2))
+        assert_that(3).satisfies(IsEven() | match.greater_than(2))
+        assert_that(3).satisfies(~IsEven())
+
+    def test_the_default_mismatch_description_is_enough_to_get_started(self):
+        from assertpy2 import BaseMatcher
+
+        class IsEven(BaseMatcher):
+            def matches(self, value):
+                return isinstance(value, int) and value % 2 == 0
+
+            def describe(self):
+                return "an even number"
+
+        with pytest.raises(AssertionError, match="was <3>"):
+            assert_that(3).satisfies(IsEven())

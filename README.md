@@ -177,7 +177,7 @@ data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 
 **Extensibility**
 
-- [**Custom matchers**](https://solganis.github.io/assertpy2/guides/matchers/#custom-matchers): `register_matcher()` for domain-specific matchers, composable with `&`, `|`, `~`.
+- [**Custom matchers**](https://solganis.github.io/assertpy2/guides/matchers/#custom-matchers): `register_matcher()` to compose existing ones, or subclass `BaseMatcher` for a rule that needs its own predicate. Both compose with `&`, `|`, `~`.
 - [**Regex group extraction**](https://solganis.github.io/assertpy2/guides/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
 - [**Extensions**](https://solganis.github.io/assertpy2/extending/custom-assertions/): `add_extension()` for custom assertion methods.
 
