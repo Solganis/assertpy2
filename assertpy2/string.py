@@ -188,6 +188,16 @@ class StringMixin(_MixinBase):
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(prefix):
                 return self.error(f"Expected <{self.val}> to start with <{prefix}>, but did not.")
+        elif isinstance(self.val, (bytes, bytearray)):
+            # bytes are iterable, so without this branch they fall through to the one below and get
+            # compared element-wise: `b"foo"` yields the int 102 first, and `102 != b"f"` fails an
+            # assertion that should pass. A prefix of a byte string is a byte string, same as for text
+            if not isinstance(prefix, (bytes, bytearray)):
+                raise TypeError("given prefix arg must be bytes")
+            if len(prefix) == 0:
+                raise ValueError("given prefix arg must not be empty")
+            if not self.val.startswith(prefix):
+                return self.error(f"Expected <{self.val!r}> to start with <{prefix!r}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             iterator = iter(self.val)
             try:
@@ -229,6 +239,15 @@ class StringMixin(_MixinBase):
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(suffix):
                 return self.error(f"Expected <{self.val}> to end with <{suffix}>, but did not.")
+        elif isinstance(self.val, (bytes, bytearray)):
+            # the mirror of the branch in starts_with, and broken the same way without it: the last
+            # element of `b"foo"` is the int 111, never equal to `b"o"`
+            if not isinstance(suffix, (bytes, bytearray)):
+                raise TypeError("given suffix arg must be bytes")
+            if len(suffix) == 0:
+                raise ValueError("given suffix arg must not be empty")
+            if not self.val.endswith(suffix):
+                return self.error(f"Expected <{self.val!r}> to end with <{suffix!r}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             items = list(self.val)
             if not items:
