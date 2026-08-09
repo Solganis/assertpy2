@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
 from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
+from ._engine._introspection import materialized
 from ._engine._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult
 from .matchers import _is_matcher
@@ -53,7 +55,7 @@ def _has_duplicates(values: list) -> bool:
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
 
-    def _closest_element(self, item):
+    def _closest_element(self, item, values=None):
         """The dict-like element of val most similar to a dict-like ``item``, with its diff entries, or
         ``None`` when nothing shares enough structure to be an actionable 'did you mean' hint.
 
@@ -63,7 +65,7 @@ class ContainsMixin(_MixinBase):
         if not self._is_dict_like(item, check_values=False):
             return None
         best = None
-        for element in self.val:
+        for element in self.val if values is None else values:
             if not self._is_dict_like(element, check_values=False):
                 continue
             if not any(key in item and not _guarded_not_equal(element[key], item[key]) for key in element):
@@ -116,44 +118,46 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        elif len(items) == 1:
+        # membership is tested once per argument, so a one-shot iterator has to be drained first
+        values = materialized(self.val)
+        if len(items) == 1:
             item = items[0]
             if _is_matcher(item):
-                if not any(item.matches(value) for value in self.val):
+                if not any(item.matches(value) for value in values):
                     diff = DiffResult(
                         kind="contains",
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item.describe())],
                     )
                     return self.error(
-                        f"Expected <{self.val}> to contain item matching {item.describe()}, but did not.",
+                        f"Expected <{values}> to contain item matching {item.describe()}, but did not.",
                         diff=diff,
                     )
-            elif item not in self.val:
-                if self._is_dict_like(self.val):
+            elif item not in values:
+                if self._is_dict_like(values):
                     diff = DiffResult(
                         kind="contains",
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)],
                     )
-                    return self.error(f"Expected <{self.val}> to contain key <{item}>, but did not.", diff=diff)
-                closest = self._closest_element(item)
+                    return self.error(f"Expected <{values}> to contain key <{item}>, but did not.", diff=diff)
+                closest = self._closest_element(item, values)
                 if closest is not None:
                     element, entries = closest
                     return self.error(
-                        f"Expected <{self.val}> to contain item <{item}>, but did not."
+                        f"Expected <{values}> to contain item <{item}>, but did not."
                         f" Closest element <{element}> differs at {self._fmt_closest(entries)}.",
                         diff=DiffResult(kind="contains", entries=entries),
                     )
                 diff = DiffResult(
                     kind="contains", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)]
                 )
-                return self.error(f"Expected <{self.val}> to contain item <{item}>, but did not.", diff=diff)
+                return self.error(f"Expected <{values}> to contain item <{item}>, but did not.", diff=diff)
         else:
             missing = []
             for item in items:
                 if _is_matcher(item):
-                    if not any(item.matches(value) for value in self.val):
+                    if not any(item.matches(value) for value in values):
                         missing.append(item)
-                elif item not in self.val:
+                elif item not in values:
                     missing.append(item)
             if missing:
                 missing_desc = [
@@ -166,15 +170,15 @@ class ContainsMixin(_MixinBase):
                         for missing_item in missing_desc
                     ],
                 )
-                if self._is_dict_like(self.val):
+                if self._is_dict_like(values):
                     return self.error(
-                        f"Expected <{self.val}> to contain keys {self._fmt_items(items)}, but did not contain"
+                        f"Expected <{values}> to contain keys {self._fmt_items(items)}, but did not contain"
                         f" key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}.",
                         diff=diff,
                     )
                 else:
                     return self.error(
-                        f"Expected <{self.val}> to contain items {self._fmt_items(items)},"
+                        f"Expected <{values}> to contain items {self._fmt_items(items)},"
                         f" but did not contain {self._fmt_items(missing_desc)}.",
                         diff=diff,
                     )
@@ -247,8 +251,10 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        extra = [item for item in self.val if item not in items]
-        missing = [item for item in items if item not in self.val]
+        # walked twice below and rendered a third time, so a one-shot iterator has to be drained
+        values = materialized(self.val)
+        extra = [item for item in values if item not in items]
+        missing = [item for item in items if item not in values]
         if extra or missing:
             # both halves at once: reporting only the extras sends the reader to fix one problem and
             # rerun into the other, and the message wording of each half alone is unchanged
@@ -261,7 +267,7 @@ class ContainsMixin(_MixinBase):
                 faults.append(f"did not contain {self._fmt_items(missing)}")
                 entries += [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
             return self.error(
-                f"Expected <{self.val}> to contain only {self._fmt_items(items)}, but {' and '.join(faults)}.",
+                f"Expected <{values}> to contain only {self._fmt_items(items)}, but {' and '.join(faults)}.",
                 diff=DiffResult(kind="contains", entries=entries),
             )
         return self
@@ -307,16 +313,22 @@ class ContainsMixin(_MixinBase):
                 search_start = found_index + len(item)
             return self
         best_prefix = 0
-        try:
-            for i in range(len(self.val) - len(items) + 1):
-                for j in range(len(items)):
-                    if self.val[i + j] != items[j]:
-                        best_prefix = max(best_prefix, j)
-                        break
-                else:
-                    return self
-        except TypeError:
-            raise TypeError("val is not iterable") from None
+        # this walk is by index, which a one-shot iterator does not support at all
+        values = materialized(self.val)
+        if not isinstance(values, Sequence):
+            # two different wrong inputs, and the old guard reported both as "not iterable": true for
+            # an int, plainly false for a set, which is iterable and simply has no order to hold a
+            # sequence in
+            if not isinstance(values, Iterable):
+                raise TypeError("val is not iterable")
+            raise TypeError("val must be a sequence to contain a sequence")
+        for i in range(len(values) - len(items) + 1):
+            for j in range(len(items)):
+                if values[i + j] != items[j]:
+                    best_prefix = max(best_prefix, j)
+                    break
+            else:
+                return self
         # the longest run that lined up says where the sequence broke down
         detail = (
             f" The longest run that matched was {self._fmt_items(items[:best_prefix])}."
@@ -325,7 +337,7 @@ class ContainsMixin(_MixinBase):
             # whole sequence still fits
             else f" No run started with <{items[0]}>."
         )
-        return self.error(f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but did not.{detail}")
+        return self.error(f"Expected <{values}> to contain sequence {self._fmt_items(items)}, but did not.{detail}")
 
     def contains_duplicates(self) -> Self:
         """Asserts that val is iterable and *does* contain duplicates.
@@ -601,7 +613,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         try:
-            val_list = list(self.val)
+            val_list = list(materialized(self.val))
         except TypeError:
             raise TypeError("val is not iterable") from None
         # list.count compares with == so unhashable items (dicts, lists) work, unlike Counter/hashing
@@ -618,7 +630,7 @@ class ContainsMixin(_MixinBase):
             if duplicated:
                 problems.append(f"contained {self._fmt_items(duplicated)} more than once")
             return self.error(
-                f"Expected <{self.val}> to contain {self._fmt_items(items)} only once, but {' and '.join(problems)}.",
+                f"Expected <{val_list}> to contain {self._fmt_items(items)} only once, but {' and '.join(problems)}.",
                 diff=DiffResult(kind="contains", entries=entries),
             )
         return self

@@ -6,7 +6,7 @@ import warnings
 from typing import TYPE_CHECKING, Any
 
 from ._engine._diff import _walk_leaves
-from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
 from ._engine._mixin_base import _MixinBase
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import IsNotNoneMatcher, Matcher, StructureMatcher, _apply_matcher, _describe_matcher, _is_matcher
@@ -191,13 +191,18 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** satisfy the matcher
         """
         if _is_matcher(matcher):
-            if not matcher.matches(self.val):
+            # the matcher protocol is two calls with the same value, `matches()` then
+            # `describe_mismatch()`, and a matcher over an iterable walks it in both. On a one-shot
+            # iterator the second call sees what the first left, so `each_item` named the wrong item
+            # at the wrong index rather than merely losing detail
+            value = materialized(self.val)
+            if not matcher.matches(value):
                 description = matcher.describe()
                 return self.error(
-                    f"Expected {description}, but {matcher.describe_mismatch(self.val)}.",
-                    actual=self.val,
+                    f"Expected {description}, but {matcher.describe_mismatch(value)}.",
+                    actual=value,
                     expected=description,
-                    diff=DiffResult(kind="match", entries=[DiffEntry(path=".", actual=self.val, expected=description)]),
+                    diff=DiffResult(kind="match", entries=[DiffEntry(path=".", actual=value, expected=description)]),
                 )
         elif callable(matcher):
             if not matcher(self.val):
@@ -373,13 +378,15 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("val is not iterable")
         description = _describe_matcher(matcher)
         if _is_matcher(matcher) or callable(matcher):
-            if not any(_apply_matcher(matcher, item) for item in self.val):
+            # counted again below to name how many were examined, so drain a one-shot iterator
+            values = materialized(self.val)
+            if not any(_apply_matcher(matcher, item) for item in values):
                 # "none did" alone leaves the reader to fetch the items themselves; the universal
                 # sibling already lists every one that failed
-                items = list(self.val)
+                items = list(values)
                 return self.error(
                     f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
-                    actual=self.val,
+                    actual=values,
                     expected=description,
                     diff=DiffResult(
                         kind="match",

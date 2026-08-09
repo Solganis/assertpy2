@@ -720,3 +720,88 @@ class TestOrderingFailuresNameTheBreakPoint:
         with pytest.raises(AssertionError) as exc_info:
             assert_that([{"a": 1}, {"a": 1}]).does_not_contain_duplicates()
         assert_that(str(exc_info.value)).contains("was repeated")
+
+
+class TestContainsOnAOneShotIterator:
+    """`contains` tests membership once per argument, and `in` consumes a generator up to the match.
+    Before the value was drained first, the second argument resumed from where the first stopped, so
+    `contains(3, 1)` reported 1 as missing while the same call on a list passed."""
+
+    @pytest.mark.parametrize(
+        "items",
+        [(1, 2, 3), (3, 1), (2, 1), (3, 2, 1)],
+        ids=["in order", "reversed pair", "out of order", "fully reversed"],
+    )
+    def test_the_order_of_the_arguments_does_not_decide_the_verdict(self, items):
+        assert_that(x for x in [1, 2, 3]).contains(*items)
+        assert_that([1, 2, 3]).contains(*items)  # the control: a list has always passed
+
+    def test_a_genuinely_missing_item_still_fails(self):
+        with pytest.raises(AssertionError, match="to contain item <9>"):
+            assert_that(x for x in [1, 2, 3]).contains(9)
+
+    def test_the_message_names_the_contents_rather_than_a_spent_generator(self):
+        # the repr of an exhausted generator tells the reader nothing about what was compared
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(x for x in [1, 2, 3]).contains(9)
+        assert_that(str(exc_info.value)).contains("[1, 2, 3]").does_not_contain("generator object")
+
+    def test_the_closest_element_hint_survives(self):
+        # it walks the value a second time, which used to find an exhausted iterator and say nothing
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(x for x in [{"id": 1, "name": "a"}]).contains({"id": 1, "name": "b"})
+        assert_that(str(exc_info.value)).contains("Closest element")
+
+    def test_a_re_iterable_value_is_handed_back_untouched(self):
+        # nothing is copied on the ordinary path: the list under test is the list that gets searched
+        values = [1, 2, 3]
+        assert_that(values).contains(1)
+        assert_that(values).is_equal_to([1, 2, 3])
+
+    def test_a_matcher_argument_works_on_a_generator_too(self):
+        from assertpy2 import match
+
+        assert_that(x for x in [1, 2, 3]).contains(match.greater_than(2), match.less_than(2))
+
+
+class TestOtherAssertionsOnAOneShotIterator:
+    """The same defect class as `contains`: an assertion that walks its subject twice, once to decide
+    and again to describe or to check a second condition, saw an empty value the second time."""
+
+    def test_contains_only_agrees_with_the_list_it_was_built_from(self):
+        assert_that(x for x in [1, 2, 3]).contains_only(1, 2, 3)
+        assert_that([1, 2, 3]).contains_only(1, 2, 3)
+
+    def test_contains_only_once_agrees_with_the_list(self):
+        assert_that(x for x in [1, 2, 3]).contains_only_once(1, 2, 3)
+        assert_that([1, 2, 3]).contains_only_once(1, 2, 3)
+
+    def test_any_satisfy_counts_what_it_actually_examined(self):
+        # the count comes from a second walk, so it used to read "none of the 0 did" on a generator
+        messages = []
+        for value in ((x for x in [1, 2, 3]), [1, 2, 3]):
+            with pytest.raises(AssertionError) as exc_info:
+                assert_that(value).any_satisfy(lambda item: item > 99)
+            messages.append(str(exc_info.value))
+        assert_that(messages[0]).contains("none of the 3 did").is_equal_to(messages[1])
+
+    def test_contains_sequence_walks_by_index_and_needs_a_real_sequence(self):
+        # a generator does not support indexing, so the guard used to fire and call it "not iterable"
+        assert_that(x for x in [1, 2, 3]).contains_sequence(1, 2)
+        assert_that([1, 2, 3]).contains_sequence(1, 2)
+
+    def test_a_failing_contains_sequence_names_the_contents(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(x for x in [1, 2, 3]).contains_sequence(3, 1)
+        assert_that(str(exc_info.value)).contains("[1, 2, 3]").does_not_contain("not iterable")
+
+    def test_a_set_is_refused_by_name_rather_than_called_not_iterable(self):
+        # a set is iterable and simply has no order to hold a sequence in. the old guard reported it
+        # as "not iterable", which is the one thing it is not
+        with pytest.raises(TypeError, match="must be a sequence"):
+            assert_that({1, 2, 3}).contains_sequence(1, 2)
+
+    def test_a_failing_contains_only_names_the_contents(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(x for x in [1, 2, 3]).contains_only(1, 2)
+        assert_that(str(exc_info.value)).contains("[1, 2, 3]").does_not_contain("generator object")
