@@ -324,9 +324,44 @@ class TestDiffToJson:
 
     def test_payload_carries_format_version(self):
         # consumers can branch on the attachment schema: 1 = repr-strings (implicit), 2 = typed
-        # values, 3 = an absent side named rather than inferred from a null
+        # values, 3 = an absent side named rather than inferred from a null, 4 = a machine-readable
+        # path beside the rendered one
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
-        assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(3)
+        assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(4)
+
+    def test_an_entry_carries_the_steps_that_reached_it(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"users": [{"roles": {7: "admin"}}]}).is_equal_to({"users": [{"roles": {7: "guest"}}]})
+        entry = json.loads(_diff_to_json(failure.value.diff))["entries"][0]
+        assert_that(entry["path"]).is_equal_to("users[0].roles.7")
+        assert_that(entry["steps"]).is_equal_to(
+            [
+                {"kind": "key", "value": "users"},
+                {"kind": "index", "value": 0},
+                {"kind": "key", "value": "roles"},
+                {"kind": "key", "value": 7},
+            ]
+        )
+
+    def test_a_step_names_its_side_only_where_the_two_have_shifted_apart(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 2, 3, 4]).is_equal_to([0, 1, 2, 3, 4])
+        entries = json.loads(_diff_to_json(failure.value.diff))["entries"]
+        sided = [step for entry in entries for step in entry.get("steps", []) if "side" in step]
+        assert_that(sided).is_not_empty()
+        assert_that({step["side"] for step in sided}).is_subset_of({"actual", "expected"})
+
+    def test_an_entry_with_no_location_carries_no_steps(self):
+        # the whole value differing, and a containment failure whose path is a label
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path=".", actual=1, expected=2)])
+        assert_that(json.loads(_diff_to_json(diff))["entries"][0]).does_not_contain_key("steps")
+
+    def test_a_step_value_that_json_cannot_express_degrades_rather_than_failing(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({(1, 2): "a"}).is_equal_to({(1, 2): "b"})
+        step = json.loads(_diff_to_json(failure.value.diff))["entries"][0]["steps"][0]
+        assert_that(step["kind"]).is_equal_to("key")
+        assert_that(step["value"]).is_equal_to([1, 2])
 
     def test_an_absent_side_is_named_in_the_payload(self):
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="b", actual=2, expected=None, absent="expected")])
