@@ -623,3 +623,28 @@ class TestNaiveAwareGuardCoversEqualityToo:
         naive, aware = self._pair()
         assert_that(naive).is_equal_to_ignoring_seconds(naive)
         assert_that(aware).is_equal_to_ignoring_seconds(aware)
+
+
+class TestDynamicComponentAssertions:
+    """`has_<attr>()` reaching a datetime's own fields.
+
+    A datetime has its own protocol, so the typed surface deliberately does not declare these and a
+    checker rejects them. The runtime resolves them from the value like any other attribute, and that
+    split is documented as the boundary of the typed surface, which makes it worth pinning.
+    """
+
+    def test_every_component_is_reachable(self):
+        moment = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
+        assert_that(moment).has_year(1980)
+        assert_that(moment).has_month(1)
+        assert_that(moment).has_day(2)
+        assert_that(moment).has_hour(3)
+        assert_that(moment).has_minute(4)
+        assert_that(moment).has_second(5)
+        assert_that(moment).has_microsecond(6)
+
+    def test_a_wrong_component_fails(self):
+        # without this the check above passes just as well against a resolver that asserts nothing
+        moment = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
+        with pytest.raises(AssertionError, match="year"):
+            assert_that(moment).has_year(1981)
