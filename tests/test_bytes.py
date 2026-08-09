@@ -189,3 +189,37 @@ def test_bytes_against_str_is_not_treated_as_text():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(b"abc").is_equal_to("abc")
     assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
+
+
+class TestStartsAndEndsWithOnBytes:
+    """`bytes` are iterable, so before this branch existed they fell through to the element-wise path:
+    the first element of `b"foo"` is the int 102, never equal to `b"f"`, and the assertion failed where
+    it had to pass. A prefix of a byte string is a byte string, the same way it is for text."""
+
+    @pytest.mark.parametrize("value", [b"foo", bytearray(b"foo")], ids=["bytes", "bytearray"])
+    def test_a_real_prefix_and_suffix_pass(self, value):
+        assert_that(value).starts_with(b"f")
+        assert_that(value).starts_with(b"fo")
+        assert_that(value).ends_with(b"o")
+        assert_that(value).ends_with(b"oo")
+
+    def test_a_wrong_prefix_still_fails(self):
+        with pytest.raises(AssertionError, match="to start with"):
+            assert_that(b"foo").starts_with(b"x")
+        with pytest.raises(AssertionError, match="to end with"):
+            assert_that(b"foo").ends_with(b"x")
+
+    def test_the_whole_value_is_a_valid_prefix(self):
+        assert_that(b"foo").starts_with(b"foo")
+        assert_that(b"foo").ends_with(b"foo")
+
+    @pytest.mark.parametrize("method", ["starts_with", "ends_with"])
+    def test_a_text_argument_is_refused(self, method):
+        # bytes.startswith("f") raises its own TypeError; this one names the expected type
+        with pytest.raises(TypeError, match="must be bytes"):
+            getattr(assert_that(b"foo"), method)("f")
+
+    @pytest.mark.parametrize("method", ["starts_with", "ends_with"])
+    def test_an_empty_argument_is_refused(self, method):
+        with pytest.raises(ValueError, match="must not be empty"):
+            getattr(assert_that(b"foo"), method)(b"")
