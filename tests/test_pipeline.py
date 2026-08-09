@@ -26,6 +26,21 @@ class TestFilteredOn:
     def test_with_matcher(self):
         assert_that([1, -2, 3, -4]).filtered_on(match.is_positive()).is_length(2)
 
+    def test_with_a_matcher_that_does_not_inherit_the_base_class(self):
+        # every other matcher-taking method resolves the documented `Matcher` protocol. this one
+        # tested for a `BaseMatcher` subclass, so a custom matcher was called as a plain function
+        class IsPositive:
+            def matches(self, item):
+                return item > 0
+
+            def describe(self):
+                return "is positive"
+
+            def describe_mismatch(self, item):
+                return f"was {item}"
+
+        assert_that([1, -2, 3, -4]).filtered_on(IsPositive()).is_length(2)
+
     def test_empty_result(self):
         assert_that([1, 2, 3]).filtered_on(lambda x: x > 10).is_empty()
 
