@@ -17,6 +17,12 @@ working unchanged. See [Errors & reporting](../guides/errors.md) for usage.
       show_root_full_path: false
       show_root_toc_entry: true
 
+::: assertpy2.errors.Step
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
 ::: assertpy2.errors.DiffEntry
     options:
       show_root_heading: true

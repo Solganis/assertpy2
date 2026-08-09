@@ -541,11 +541,21 @@ Assertions for `bytes` and `bytearray` values:
 ```python
 assert_that(b"hello world").is_valid_utf8()
 assert_that(b"hello").is_valid_encoding("ascii")
-assert_that(b"\x89PNG\r\n\x1a\n...").starts_with_bytes(b"\x89PNG")
-assert_that(b"hello world").contains_bytes(b"world")
 assert_that(b"\x89PNG").has_byte_at(0, 0x89)            # IndexError if out of range
 assert_that(b"\xab\xcd\xef").is_hex_equal_to("abcdef")
 ```
+
+`starts_with()`, `ends_with()` and `contains()` handle byte strings themselves, so a prefix, a suffix
+and a subsequence read the same way they do for text:
+
+```python
+assert_that(b"\x89PNG\r\n\x1a\n").starts_with(b"\x89PNG")
+assert_that(b"hello world").ends_with(b"world")
+assert_that(b"hello world").contains(b"world")
+```
+
+`starts_with_bytes()` and `contains_bytes()` are the bytes-only spellings of the first and the last, kept
+for the code that already uses them. They delegate, so all four report the same way.
 
 `decoded_as()` returns a new builder with the decoded string so string assertions can continue
 (`UnicodeDecodeError` is raised if decoding fails):

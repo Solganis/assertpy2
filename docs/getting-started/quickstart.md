@@ -43,11 +43,12 @@ name = assert_that("Alice").is_instance_of(str).is_not_empty().value
 
 ## When an assertion fails
 
-A failing assertion raises an `AssertionError` with a precise message:
+A failing assertion raises an `AssertionFailure` with a precise message. It subclasses `AssertionError`,
+so `pytest.raises(AssertionError)` and any existing `except AssertionError` keep catching it:
 
 ```python
 assert_that(5).is_greater_than(10)
-# AssertionError: Expected <5> to be greater than <10>, but was not.
+# assertpy2.AssertionFailure: Expected <5> to be greater than <10>, but was not.
 ```
 
 For dicts, dataclasses, and other structures, the pytest plugin renders a path-level diff that points

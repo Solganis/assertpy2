@@ -18,7 +18,7 @@ with soft_assertions():
 
 ??? failure "Collected failures raised at the end of the block"
     ```
-    AssertionError: soft assertion failures:
+    assertpy2.AssertionFailure: soft assertion failures:
     1. Expected <foo> to be of length <4>, but was <3>.  [test_str.py:12]
     2. Expected <foo> to be empty string, but was not.  [test_str.py:13]
     3. Expected <foo> to be equal to <bar>, but was not.  [test_str.py:14]
@@ -28,6 +28,11 @@ with soft_assertions():
     Only assertion failures are collected. Errors like `TypeError`/`ValueError` and an explicit `fail()`
     halt immediately. Use `soft_fail()` to collect a forced failure. Soft state is thread-safe and
     async-safe (independent per thread and per `asyncio.Task` via `contextvars`).
+
+The message is a rendering, not the only copy. The raised `AssertionFailure` carries `failures`, one
+record per collected failure, with everything the text had flattened: values, diff, group label and the
+`(file, line)` it was collected at. See
+[What a soft block hands back](errors.md#what-a-soft-block-hands-back).
 
 ## Grouped soft assertions
 
@@ -176,8 +181,9 @@ Sample values are point-in-time snapshots, so they stay correct even when the pr
 returns the same object. They are capped like other attachments: long polls keep the first 5 and last
 20 samples.
 
-In soft/warn modes the message keeps the trend line. The full trace object travels only with the
-strict `AssertionFailure`.
+In soft/warn modes the message keeps the trend line, and so does the trace object: a timeout collected
+by a soft block is reachable as `failures[i].trace` on the aggregate. Warn mode logs the message and
+keeps nothing, having nothing to keep it on.
 
 The recorder can be switched off per assertion with `trace=False`, on both `eventually()` and
 `eventually_sync()`.

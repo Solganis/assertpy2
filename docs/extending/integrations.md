@@ -50,7 +50,8 @@ Anything JSON cannot express degrades to a marked fallback instead of failing th
 
 Oversized values are capped: strings at 4000 chars, containers at 100 items.
 
-An **AssertionFailure** attachment (mode `full` only) with actual and expected values:
+An **AssertionFailure** attachment (mode `full` only) with the actual and expected values the
+assertion named:
 
 ```json
 {
@@ -59,6 +60,12 @@ An **AssertionFailure** attachment (mode `full` only) with actual and expected v
   "expected": {"name": "Alice", "age": 25}
 }
 ```
+
+A key appears only when the assertion named that side. Every failure carries the value under test, but
+most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would put a
+block under every failure that repeats what the reader already has. An assertion comparing against
+`None` does name it, and there `"expected": null` is present rather than omitted. The pytest terminal
+section below follows the same rule.
 
 A **Polling Trace** attachment (modes `diff`, `full`) when an
 [`eventually()`](../guides/testing.md#polling-trace) assertion times out, with per-poll samples and diffs
@@ -82,13 +89,39 @@ between consecutive distinct values:
 ```
 
 The `format` field versions the attachment schema, so downstream tooling can branch explicitly.
-Attachments without the field are the oldest repr-string form, `2` carries typed values, and the diff
-attachment is at `3`: an entry whose side is genuinely absent now says so with `"absent": "actual"` or
-`"absent": "expected"`. Under `2` both that and a field whose value really is `null` were written as a
-bare `null`, and nothing downstream could tell a missing field from a null one. The key appears only
-where a side is absent, so an entry that merely holds `null` reads the same as before.
+Attachments without the field are the oldest repr-string form, and `2` carries typed values.
 
-Each attachment is versioned on its own. The diff attachment is the one that moved to `3`, while the
+The diff attachment is at `4`. Two things arrived after `2`, and each only ever added a key:
+
+- `3` names a side that is genuinely absent, with `"absent": "actual"` or `"absent": "expected"`. Under
+  `2` both that and a field whose value really is `null` were written as a bare `null`, and nothing
+  downstream could tell a missing field from a null one. The key appears only where a side is absent.
+- `4` adds `steps` beside `path`. `path` is written for a person and cannot be read back: a mapping key
+  goes through `str()`, so `{3: ...}` and `{"3": ...}` render alike, and a key holding a dot or a
+  bracket has no grammar to parse it with. Each step carries the key, index, field name, set member or
+  line number itself.
+
+```json
+{
+  "path": "users[0].roles.7",
+  "actual": "admin",
+  "expected": "guest",
+  "steps": [
+    {"kind": "key", "value": "users"},
+    {"kind": "index", "value": 0},
+    {"kind": "key", "value": "roles"},
+    {"kind": "key", "value": 7}
+  ]
+}
+```
+
+`kind` is one of `key`, `index`, `attr`, `item` or `line`. A step carries `side` (`actual` or
+`expected`) only where a sequence's two sides have shifted apart and an index alone would name two
+different elements. `steps` is absent where there is no location to give: the whole value differing, and
+a containment entry whose path is a label rather than a coordinate. A step value that JSON cannot
+express degrades the same way every other value in an attachment does.
+
+Each attachment is versioned on its own. The diff attachment is the one that moved, while the
 `AssertionFailure` and polling-trace attachments stay at `2` because nothing about them changed.
 
 Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
