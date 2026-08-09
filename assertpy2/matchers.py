@@ -4,6 +4,7 @@ import threading
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from ._engine._introspection import is_same_implementation
 from ._matcher_impls import (
     AllOfMatcher,
     AnyOfMatcher,
@@ -108,14 +109,30 @@ _custom_matchers: dict[str, Callable[..., BaseMatcher]] = {}
 _custom_matchers_lock = threading.Lock()
 
 
-def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callable[..., BaseMatcher]]:
+def register_matcher(
+    name: str, *, override: bool = False
+) -> Callable[[Callable[..., BaseMatcher]], Callable[..., BaseMatcher]]:
     """Register a custom matcher factory on the ``match`` namespace.
+
+    A name already taken by another custom matcher is refused unless ``override`` says otherwise, so
+    two libraries registering ``has_status`` find out at import rather than by whichever imported
+    last quietly winning.
+
+    A name already taken by a *built-in* matcher is refused outright, and ``override`` cannot lift it.
+    ``match.equal_to`` resolves through ordinary attribute lookup, which never reaches this registry,
+    so such a registration would not lose an argument - it would simply never run.
 
     Args:
         name: the name to register on ``match`` (e.g. ``"is_valid_email"``)
+        override: replace an existing custom matcher of the same name instead of refusing
 
     Returns:
         A decorator that registers the wrapped function and returns it unchanged.
+
+    Raises:
+        TypeError: if ``name`` is not a string, or the decorated object is not callable
+        ValueError: if ``name`` is not an identifier, names a built-in matcher, or names a custom one
+            already registered and ``override`` is false
 
     Examples:
         Register a simple matcher:
@@ -138,11 +155,24 @@ def register_matcher(name: str) -> Callable[[Callable[..., BaseMatcher]], Callab
         raise TypeError("name must be a string")
     if not name.isidentifier():
         raise ValueError(f"name must be a valid Python identifier, got {name!r}")
+    if hasattr(_MatchNamespace, name):
+        raise ValueError(
+            f"match.{name} is a built-in matcher, and attribute lookup reaches it before this "
+            f"registry: a custom {name!r} would never be called. Register it under another name."
+        )
 
     def decorator(func: Callable[..., BaseMatcher]) -> Callable[..., BaseMatcher]:
         if not callable(func):
             raise TypeError("func must be callable")
         with _custom_matchers_lock:
+            # registering the same factory again is a no-op: a module imported twice, or a conftest
+            # fixture that runs per module, is not two libraries fighting over one name
+            clash = name in _custom_matchers and not is_same_implementation(_custom_matchers[name], func)
+            if clash and not override:
+                raise ValueError(
+                    f"a custom matcher named {name!r} is already registered; pass override=True to "
+                    f"replace it, or unregister_matcher({name!r}) first"
+                )
             _custom_matchers[name] = func
         return func
 

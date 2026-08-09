@@ -155,7 +155,9 @@ def is_foo(self):
 
 
 def dupe1():
-    add_extension(is_foo)
+    # replacing an extension is the point of this pair, so it says so rather than relying on the
+    # registry letting it through quietly
+    add_extension(is_foo, override=True)
     assert_that("foo").is_foo()
     with pytest.raises(AssertionError) as exc_info:
         assert_that("FOO").is_foo()
@@ -168,7 +170,7 @@ def dupe2():
             return self.error(f"Expected <{self.val}> to be FOO, but was not.")
         return self
 
-    add_extension(is_foo)
+    add_extension(is_foo, override=True)
     assert_that("FOO").is_foo()
     with pytest.raises(AssertionError) as exc_info:
         assert_that("foo").is_foo()
@@ -181,6 +183,81 @@ def test_dupe_extensions():
     dupe1()
 
 
+def test_a_second_implementation_under_one_name_is_refused():
+    # the hazard is two different functions claiming one name, which used to end with whichever was
+    # imported last and no way to tell
+    def already_there(self):
+        return self
+
+    def already_there_again(self):
+        return self.error("the other one")
+
+    already_there_again.__name__ = "already_there"
+
+    add_extension(already_there)
+    try:
+        with pytest.raises(ValueError, match="already been added"):
+            add_extension(already_there_again)
+        add_extension(already_there_again, override=True)
+    finally:
+        remove_extension(already_there)
+
+
+def test_a_function_rebuilt_by_a_fixture_is_not_a_clash():
+    # the documented way to share extensions is a module-scoped conftest fixture, and a fixture that
+    # defines its assertion inline hands over a NEW function object every time it runs. identity
+    # would call the second module a clash; the code object is what stays the same across rebuilds
+    def build():
+        def steady(self):
+            return self
+
+        return steady
+
+    first, second = build(), build()
+    assert first is not second
+    add_extension(first)
+    try:
+        add_extension(second)
+    finally:
+        remove_extension(first)
+
+
+def test_a_callable_object_falls_back_to_identity():
+    # an instance with __call__ has no code object to compare, so the strictest answer available is
+    # whether it is literally the same object
+    class Callable:
+        __name__ = "instance_extension"
+
+        def __call__(self, builder):
+            return builder
+
+    first, second = Callable(), Callable()
+    add_extension(first)
+    try:
+        add_extension(first)
+        with pytest.raises(ValueError, match="already been added"):
+            add_extension(second)
+    finally:
+        remove_extension(first)
+
+
+def test_a_callable_without_a_usable_name_is_refused():
+    # a callable object's __name__ is whatever it says it is, and the registry keys on it. a lambda
+    # gives "<lambda>", which is not something anyone can then call on the builder
+    with pytest.raises(ValueError, match="valid Python identifier"):
+        add_extension(lambda self: self)
+
+
+def test_replacing_a_built_in_assertion_has_to_be_deliberate():
+    # this used to go through in silence, and every later call to the core assertion got the
+    # extension's message instead. the project's own suite was doing it by accident
+    def is_type_of(self, other):
+        return self.error("shadowed")
+
+    with pytest.raises(ValueError, match="already defined on the assertion builder"):
+        add_extension(is_type_of)
+
+
 class TestExtensionBindingMechanics:
     """Plain functions bind to the extension host class once; exotic callables fall back to
     per-instance grafting; removal never damages the original API."""
@@ -189,7 +266,7 @@ class TestExtensionBindingMechanics:
         def is_true(self):
             return self.error("shadowed is_true")
 
-        add_extension(is_true)
+        add_extension(is_true, override=True)  # deliberate: the point of this test is the restore
         try:
             with pytest.raises(AssertionError, match="shadowed is_true"):
                 assert_that(True).is_true()

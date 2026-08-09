@@ -8,6 +8,7 @@ import inspect
 import logging
 import os
 import sys
+import threading
 import types
 from typing import TYPE_CHECKING, Any, Final, Generic, Literal, TypeVar, overload
 
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
 
 from . import _hints
 from ._engine._contract import contract_drift
+from ._engine._introspection import is_same_implementation
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
@@ -588,16 +590,29 @@ def soft_fail(msg=""):
 
 # assertion extensions
 _extensions = {}
+# guards the check-then-set below: two threads adding the same name would both pass an
+# unlocked collision check
+_extensions_lock = threading.Lock()
 
 
-def add_extension(func):
+def add_extension(func, *, override: bool = False):
     """Add a new user-defined custom assertion to assertpy.
 
     Once the assertion is registered with assertpy, use it like any other assertion.  Pass val to
     [`assert_that()`][assertpy2.assertpy.assert_that], and then call it.
 
+    A name already in use is refused, so an extension that would quietly replace a built-in assertion
+    or another extension says so instead.  Registering the same implementation again is not a clash:
+    a module-scoped ``conftest`` fixture rebuilds its function on every module that requests it.
+
     Args:
         func (Callable): the assertion function (to be added)
+        override: replace an assertion of the same name instead of refusing
+
+    Raises:
+        TypeError: if ``func`` is not callable
+        ValueError: if its ``__name__`` is not an identifier, or the name is taken and ``override``
+            is false
 
     Examples:
         Usage:
@@ -620,12 +635,34 @@ def add_extension(func):
     """
     if not callable(func):
         raise TypeError("func must be callable")
-    if isinstance(func, types.FunctionType):
-        # plain functions bind once here via the descriptor protocol, keeping assert_that() free of
-        # per-call grafting; the dedicated subclass keeps AssertionBuilder itself pristine on removal
-        setattr(_ExtendedBuilder, func.__name__, func)
-    else:
-        _extensions[func.__name__] = func
+    name = getattr(func, "__name__", None)
+    if not isinstance(name, str) or not name.isidentifier():
+        raise ValueError(f"the assertion's __name__ must be a valid Python identifier, got {name!r}")
+    with _extensions_lock:
+        # re-adding the same implementation is a no-op, not a clash
+        same = is_same_implementation(vars(_ExtendedBuilder).get(name), func) or is_same_implementation(
+            _extensions.get(name), func
+        )
+        if not override and not same:
+            # both of these used to go through in silence, and the second is the worse of the two:
+            # an extension called `is_equal_to` replaced the core assertion, and every later call to
+            # it failed with the extension's message instead
+            if name in vars(_ExtendedBuilder) or name in _extensions:
+                raise ValueError(
+                    f"an assertion named {name!r} has already been added; pass override=True to "
+                    f"replace it, or remove_extension() it first"
+                )
+            if hasattr(AssertionBuilder, name):
+                raise ValueError(
+                    f"{name!r} is already defined on the assertion builder; pass override=True to "
+                    f"replace it deliberately, or give the extension another name"
+                )
+        if isinstance(func, types.FunctionType):
+            # plain functions bind once here via the descriptor protocol, keeping assert_that() free of
+            # per-call grafting; the dedicated subclass keeps AssertionBuilder itself pristine on removal
+            setattr(_ExtendedBuilder, name, func)
+        else:
+            _extensions[name] = func
 
 
 def remove_extension(func):
