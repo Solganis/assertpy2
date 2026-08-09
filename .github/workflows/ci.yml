@@ -150,6 +150,12 @@ jobs:
       - name: Type check (pyright, public typing surface)
         run: uv run pyright tests/test_typing.py
 
+      # the package itself carries diagnostics that are not defects (values typed `object`, guarded
+      # optional imports, deliberate overloads). They are recorded per rule with a reason, so a new
+      # one fails here instead of hiding in a count nobody reads.
+      - name: Type check (pyright, package baseline)
+        run: uv run pytest tests/test_pyright_baseline.py -q
+
   ci-ok:
     timeout-minutes: 5
     needs: [test, optional-integrations, lint]
