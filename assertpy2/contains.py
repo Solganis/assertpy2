@@ -208,21 +208,40 @@ class ContainsMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** contain the item or items
 
+        Note:
+            Accepts a `Matcher` for any item, the same as
+            [`contains()`][assertpy2.contains.ContainsMixin.contains]: the assertion then fails when any
+            item of val matches it.
+
         Tip:
             Use the [`does_not_contain_key()`][assertpy2.dict.DictMixin.does_not_contain_key] alias when working with
             *dict-like* objects to be self-documenting.
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        elif len(items) == 1:
-            if items[0] in self.val:
-                return self.error(f"Expected <{self.val}> to not contain item <{items[0]}>, but did.")
+        values = materialized(self.val)
+
+        def described(item: object) -> object:
+            return item.describe() if _is_matcher(item) else item
+
+        def present(item: object) -> bool:
+            # `contains` has accepted a matcher since it was written and this, its own negation, did
+            # not: a matcher handed here was compared with `in`, which asks the wrong question
+            if _is_matcher(item):
+                return any(item.matches(value) for value in values)
+            return item in values
+
+        if len(items) == 1:
+            if present(items[0]):
+                return self.error(f"Expected <{values}> to not contain item <{described(items[0])}>, but did.")
         else:
-            found = [item for item in items if item in self.val]
+            found = [item for item in items if present(item)]
             if found:
+                shown = [described(item) for item in items]
+                found_shown = [described(item) for item in found]
                 return self.error(
-                    f"Expected <{self.val}> to not contain items {self._fmt_items(items)},"
-                    f" but did contain {self._fmt_items(found)}."
+                    f"Expected <{values}> to not contain items {self._fmt_items(shown)},"
+                    f" but did contain {self._fmt_items(found_shown)}."
                 )
         return self
 

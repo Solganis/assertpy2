@@ -86,6 +86,7 @@ assert_that(["a", "b"]).is_equal_to(["a", "b"]).is_not_equal_to(["b", "a"])
 
 assert_that(["a", "b"]).contains("b", "a")
 assert_that(["a", "b"]).does_not_contain("x", "y")
+assert_that([1, 2, 3]).does_not_contain(match.greater_than(99))   # matchers, same as contains
 assert_that(["a", "b"]).contains_only("a", "b")
 assert_that(["a", "b", "c"]).contains_sequence("b", "c")
 assert_that(["a", "b", "c"]).contains_exactly("a", "b", "c")
