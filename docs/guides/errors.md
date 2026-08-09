@@ -6,21 +6,25 @@ A failing assertion raises `AssertionFailure`, a subclass of `AssertionError` th
 data. Existing `except AssertionError` handlers keep working unchanged.
 
 ```python
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 
 try:
     assert_that(1).is_equal_to(2)
-except AssertionError as e:
+except AssertionFailure as e:
     print(e.actual)     # 1
     print(e.expected)   # 2
 ```
+
+Catching the subclass is what gives a type checker the structured fields: `except AssertionError`
+still runs, but types `e` as the base class, which declares none of them.
 
 For comparisons, a `DiffResult` with path-level entries is attached:
 
 ```python
 try:
     assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 99})
-except AssertionError as e:
+except AssertionFailure as e:
+    assert e.diff is not None   # every comparison failure carries one, other failures do not
     entry = e.diff.entries[0]
     print(entry.path, entry.actual, entry.expected)   # b 2 99
 ```
@@ -34,17 +38,20 @@ to parse it with. `entry.steps` is the same location in the form a program can a
 itself, untouched.
 
 ```python
+from typing import Any
+
 data = {"users": [{"roles": {7: "admin"}}]}
 
 try:
     assert_that(data).is_equal_to({"users": [{"roles": {7: "guest"}}]})
-except AssertionError as e:
+except AssertionFailure as e:
+    assert e.diff is not None
     entry = e.diff.entries[0]
     print(entry.path)                                  # users[0].roles.7
     print([(s.kind, s.value) for s in entry.steps])
     # [('key', 'users'), ('index', 0), ('key', 'roles'), ('key', 7)]
 
-    cursor = e.actual
+    cursor: Any = e.actual   # `actual` is `object`: the library does not know your payload's shape
     for step in entry.steps:
         cursor = cursor[step.value]
     print(cursor)                                      # admin
@@ -309,8 +316,10 @@ def test_diff_is_machine_readable():
         assert_that({"role": "guest"}).is_equal_to({"role": "admin"})
 
     failure = exc_info.value  # typed as AssertionFailure
-    assert_that(failure.diff.kind).is_equal_to("dict")
-    assert_that(failure.diff.entries[0].path).is_equal_to("role")
+    diff = failure.diff
+    assert diff is not None   # optional on the class, present on every comparison failure
+    assert_that(diff.kind).is_equal_to("dict")
+    assert_that(diff.entries[0].path).is_equal_to("role")
 ```
 
 The rich diff comes from the fluent form. The `==` drop-in for matchers (for example
@@ -369,14 +378,14 @@ matching parts of a structure collapse to `..`. None of that shrinks what `failu
 Excluding a key from the comparison also excludes it from the message and the diff:
 
 ```python
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 
 payload = {"user": "alice", "api_key": "sk-live-9f3b2a7c", "n": 1}
 expected = {"user": "alice", "api_key": "sk-live-different", "n": 2}
 
 try:
     assert_that(payload).is_equal_to(expected, ignore="api_key")
-except AssertionError as failure:
+except AssertionFailure as failure:
     print("sk-live" in str(failure))   # False: the key was never compared, so it is not reported
     print("sk-live" in str(failure.actual))  # True: the object you passed is unchanged
 ```
@@ -539,7 +548,9 @@ try:
         assert_that("foo").is_length(4)
 except AssertionFailure as e:
     print(len(e.failures))                       # 2
-    print(e.failures[0].diff.entries[0].path)    # role
+    first_diff = e.failures[0].diff
+    assert first_diff is not None
+    print(first_diff.entries[0].path)            # role
     print(e.failures[1].message)                 # Expected <foo> to be of length <4>, but was <3>.
 ```
 
@@ -560,6 +571,7 @@ outcome = assert_that({"role": "guest"}).check().is_equal_to({"role": "admin"})
 
 print(bool(outcome))          # False
 print(outcome.message)        # Expected <{'role': 'guest'}> to be equal to <{'role': 'admin'}>, but was not.
+assert outcome.diff is not None
 print(outcome.diff.entries[0].path)   # role
 ```
 
