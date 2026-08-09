@@ -5,11 +5,11 @@ import pytest
 from assertpy2 import add_extension, assert_that, remove_extension
 
 
-def is_even(self):
+def is_even_integer(self):
     if not isinstance(self.val, numbers.Integral):
         raise TypeError("val must be an integer")
     if self.val % 2 != 0:
-        return self.error(f"Expected <{self.val}> to be even, but was not.")
+        return self.error(f"Expected <{self.val}> to be an even integer, but was not.")
     return self
 
 
@@ -41,20 +41,20 @@ def is_factor_of(self, other):
     return self
 
 
-add_extension(is_even)
+add_extension(is_even_integer)
 add_extension(is_multiple_of)
 add_extension(is_factor_of)
 
 
 def test_is_even_extension():
-    assert_that(124).is_even()
-    assert_that(124).is_type_of(int).is_even().is_greater_than(123).is_less_than(125).is_equal_to(124)
+    assert_that(124).is_even_integer()
+    assert_that(124).is_type_of(int).is_even_integer().is_greater_than(123).is_less_than(125).is_equal_to(124)
 
 
 def test_is_even_extension_failure():
     with pytest.raises(AssertionError) as exc_info:
-        assert_that(123).is_even()
-    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be even, but was not.")
+        assert_that(123).is_even_integer()
+    assert_that(str(exc_info.value)).is_equal_to("Expected <123> to be an even integer, but was not.")
 
 
 def test_is_even_extension_failure_not_callable():
@@ -65,7 +65,7 @@ def test_is_even_extension_failure_not_callable():
 
 def test_is_even_extension_failure_not_integer():
     with pytest.raises(TypeError) as exc_info:
-        assert_that(124.0).is_even()
+        assert_that(124.0).is_even_integer()
     assert_that(str(exc_info.value)).is_equal_to("val must be an integer")
 
 
@@ -78,7 +78,7 @@ def test_is_multiple_of_extension():
     assert_that(24).is_multiple_of(8)
     assert_that(24).is_multiple_of(12)
     assert_that(24).is_multiple_of(24)
-    assert_that(124).is_type_of(int).is_even().is_multiple_of(31).is_equal_to(124)
+    assert_that(124).is_type_of(int).is_even_integer().is_multiple_of(31).is_equal_to(124)
 
 
 def test_is_multiple_of_extension_failure():
@@ -134,7 +134,7 @@ def test_call_missing_extension():
         pass
 
     with pytest.raises(AttributeError) as exc_info:
-        remove_extension(is_even)
+        remove_extension(is_even_integer)
         remove_extension(is_multiple_of)
         remove_extension(is_factor_of)
         remove_extension(is_missing)
