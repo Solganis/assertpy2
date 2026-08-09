@@ -6,12 +6,13 @@ from typing import TYPE_CHECKING, Any
 from ._engine._introspection import is_mapping_like
 from ._engine._mixin_base import _MixinBase
 from ._satisfies import _warn_if_vacuous
-from .matchers import BaseMatcher
+from .matchers import _is_matcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from ._engine._compat import Self
+    from .matchers import Matcher
 
 __tracebackhide__ = True
 
@@ -318,7 +319,7 @@ class CollectionMixin(_MixinBase):
             )
         return self
 
-    def filtered_on(self, predicate: Callable[[Any], bool]) -> Self:
+    def filtered_on(self, predicate: Matcher | Callable[[Any], bool]) -> Self:
         """Returns a new builder with elements matching the predicate.
 
         Args:
@@ -335,7 +336,10 @@ class CollectionMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             raise TypeError("val is not iterable")
-        if isinstance(predicate, BaseMatcher):
+        # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher`
+        # subclass check: a custom matcher written against the documented shape was called as a
+        # plain function here, and works everywhere else
+        if _is_matcher(predicate):
             filtered = [item for item in self.val if predicate.matches(item)]
         else:
             filtered = [item for item in self.val if predicate(item)]
