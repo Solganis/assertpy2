@@ -1381,6 +1381,17 @@ class TestSnapshotKeyReuseUnderXdist:
         # written under tmp_path on purpose: pytest would otherwise find the repository's own ini and
         # apply its `-p no:assertpy2`, disabling the very plugin under test
         (tmp_path / "test_reuse.py").write_text(_SHARED_KEY_MODULE.format(id=snapshot_id), encoding="utf-8")
+        try:
+            return self._spawn(tmp_path, extra)
+        except subprocess.TimeoutExpired as expired:
+            # the default report for this is the timeout alone, and a hang is exactly the case where
+            # how far the child got is the whole answer
+            raise AssertionError(
+                f"the child run did not finish in {expired.timeout}s\n"
+                f"stdout:\n{expired.stdout}\nstderr:\n{expired.stderr}"
+            ) from expired
+
+    def _spawn(self, tmp_path, extra):
         return subprocess.run(
             [
                 "uv",
@@ -1418,28 +1429,40 @@ class TestSnapshotKeyReuseUnderXdist:
             timeout=180,
         )
 
+    @staticmethod
+    def _report(result):
+        """The child's stdout, with everything a failure here needs to be explainable attached.
+
+        These checks read stdout and nothing else, so a child that failed to start, lost a worker or
+        rebuilt its environment showed up only as text that did not match. The reason was in the
+        captured stderr, which no assertion ever surfaced.
+        """
+        context = f"exit {result.returncode}, child stderr:\n{result.stderr.strip() or '<empty>'}\n"
+        return assert_that(result.stdout).described_as(context)
+
     def test_one_key_split_across_workers_still_warns(self, tmp_path):
-        output = self._run(tmp_path, '"one-key"').stdout
-        assert_that(output).contains("3 passed")
-        assert_that(output).contains("SnapshotKeyReusedWarning").contains("shared by 3 tests")
+        report = self._report(self._run(tmp_path, '"one-key"'))
+        report.contains("3 passed")
+        report.contains("SnapshotKeyReusedWarning").contains("shared by 3 tests")
         # the sweep's own frame: attribution to the test module would mean a single worker saw both
         # reaches, which is the case this test exists to rule out
-        assert_that(output).contains("pytest_plugin.py")
+        report.contains("pytest_plugin.py")
 
     def test_a_key_per_case_stays_silent(self, tmp_path):
         # without this the check above passes just as well against a gate that warns unconditionally
-        output = self._run(tmp_path, 'f"key-{name}"').stdout
-        assert_that(output).contains("3 passed")
-        assert_that(output).does_not_contain("SnapshotKeyReusedWarning")
+        report = self._report(self._run(tmp_path, 'f"key-{name}"'))
+        report.contains("3 passed")
+        report.does_not_contain("SnapshotKeyReusedWarning")
 
     def test_the_filters_turning_it_into_an_error_fail_the_run_not_the_hook(self, tmp_path):
         # `error` in the filters raises the sweep's warning inside session finish, and pytest renders an
         # exception from there as an INTERNALERROR: exit code aside, the reader gets this plugin's
         # traceback instead of the snapshot that needs fixing. only a real run shows which one it is
         result = self._run(tmp_path, '"one-key"', "-W", "error::assertpy2.SnapshotKeyReusedWarning")
-        assert_that(result.stdout).does_not_contain("INTERNALERROR")
-        assert_that(result.stdout).contains("ERROR: snapshot key").contains("shared by 3 tests")
+        report = self._report(result)
+        report.does_not_contain("INTERNALERROR")
+        report.contains("ERROR: snapshot key").contains("shared by 3 tests")
         # the tests themselves have to pass: without this the check below is happy with a run that went
         # red for any other reason, which is how a broken environment reads as a working sweep
-        assert_that(result.stdout).contains("3 passed")
-        assert_that(result.returncode).is_equal_to(1)
+        report.contains("3 passed")
+        assert_that(result.returncode).described_as(f"child stderr:\n{result.stderr}").is_equal_to(1)
