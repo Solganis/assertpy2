@@ -6,7 +6,7 @@ import os
 import time
 import warnings
 from dataclasses import replace
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from . import _inline
 from ._engine._compare import _build_compare_config
@@ -46,8 +46,11 @@ def _require_caller(frame: types.FrameType | None) -> types.FrameType:
 
 def register_snapshot_serializer(
     cls: type,
-    encode: Callable[[object], object],
-    decode: Callable[[object], object],
+    # `Any`, not `object`: a codec is only ever handed an instance of `cls`, and its decode only the
+    # payload its own encode produced. Demanding a parameter typed `object` rejects correct codecs,
+    # `pathlib.PurePath` as a decode among them, which is the pair recommended below
+    encode: Callable[[Any], object],
+    decode: Callable[[Any], object],
     *,
     tag: str | None = None,
 ) -> None:
