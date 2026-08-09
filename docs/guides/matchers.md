@@ -257,6 +257,36 @@ matcher fails inside an assertion.
 `register_matcher()` adds your own matcher to the `match` namespace. Custom matchers compose with
 `&`, `|`, `~` and work everywhere matchers are accepted.
 
+### Writing one from scratch
+
+`register_matcher()` composes existing matchers, which covers most cases. When the rule cannot be
+expressed that way, subclass `BaseMatcher` and supply the predicate and its two descriptions:
+
+```python
+from assertpy2 import BaseMatcher, assert_that
+
+class IsEven(BaseMatcher):
+    def matches(self, value):
+        return isinstance(value, int) and value % 2 == 0
+
+    def describe(self):
+        return "an even number"
+
+    def describe_mismatch(self, value):
+        return f"<{value}> is odd"
+
+assert_that(4).satisfies(IsEven())
+```
+
+`describe()` names what was required and `describe_mismatch()` what was seen, and the assertion
+composes the sentence from both. Only `matches()` and `describe()` are required: the default
+`describe_mismatch()` renders `was <value>`.
+
+A subclass gets `&`, `|` and `~` for free, so it composes with the built-ins exactly like they compose
+with each other.
+
+### Registering one on the `match` namespace
+
 ```python
 from assertpy2 import assert_that, match, register_matcher
 
