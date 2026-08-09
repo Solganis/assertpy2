@@ -89,12 +89,14 @@ async def test_status_converges():
 
 By default it polls for 5 seconds every 0.5 seconds. Tune with `within()` and `every()`:
 
+<!-- docs-guard: skip -->
 ```python
 await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
 ```
 
 Both sync and async callables work, and any assertion method is available after `eventually()`:
 
+<!-- docs-guard: skip -->
 ```python
 await assert_that(async_get_status).eventually().is_equal_to("done")
 await assert_that(get_name).eventually().starts_with("Al")
@@ -107,6 +109,7 @@ immediately.
 When "not ready yet" arrives as an exception, such as a refused connection while a service boots,
 list those exception types in `ignoring`:
 
+<!-- docs-guard: skip -->
 ```python
 await assert_that(get_order).eventually(timeout=10, ignoring=ConnectionError).has_status(
     "PAID"

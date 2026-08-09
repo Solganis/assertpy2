@@ -46,6 +46,7 @@ relevant from the first call to the last.
 Because each overload is typed, a type checker flags an assertion that does not apply to the value, or an
 argument of the wrong type, without running anything:
 
+<!-- docs-guard: type-error -->
 ```python
 # type error: is_positive is not a string assertion
 assert_that("foo").is_positive()
@@ -158,7 +159,7 @@ and it narrows the chain to the guarded type. Unlike `is_instance_of()`, which n
 a `TypeIs` predicate narrows by any runtime condition - a refinement type:
 
 ```python
-from typing import TypeIs  # or `from typing_extensions import TypeIs` on Python < 3.13
+from typing_extensions import TypeIs  # or `from typing import TypeIs` on Python 3.13+
 
 def is_paid(order: Order) -> TypeIs[PaidOrder]:
     return isinstance(order, PaidOrder) and order.status == "PAID"
@@ -204,6 +205,7 @@ further - it **validates a raw payload against a pydantic v2 model and continues
 instance**, narrowing the chain to that model. It is the capstone for API-response testing: parse,
 validate, and type in one step.
 
+<!-- docs-guard: skip -->
 ```python
 from pydantic import BaseModel
 
