@@ -52,6 +52,7 @@ from .file import FileMixin
 from .helpers import HelpersMixin
 from .json_mixin import JsonMixin
 from .numeric import NumericMixin
+from .outcome import AssertionOutcome
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
@@ -1029,6 +1030,17 @@ class AssertionBuilder(
             AssertionBuilder: returns this instance to chain to the next assertion, but only when
                 ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
         """
+        failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff))
+        if failure is None:
+            return self
+        # the raise stays here rather than in _deliver: a failing assertion's traceback ends at
+        # `error`, and tests/test_traceback.py pins that it is exactly three frames deep
+        if suppress_context:
+            raise failure from None
+        raise failure
+
+    def _compose(self, msg: str, *, actual: object, expected: object, diff: DiffResult | None) -> AssertionOutcome:
+        """Build the failure record.  Decides nothing about what happens to it."""
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self._value_origin and not len(self.val):
             # an empty derived value carries no context of its own, so name the step that produced it
@@ -1038,25 +1050,30 @@ class AssertionBuilder(
             # on its own line, like the comparison-settings echo, so the original message stays a
             # prefix and a `match=` or `startswith` written against it keeps working
             out = f"{out}\n{hint}"
+        return AssertionOutcome(message=out, actual=actual, expected=expected, diff=diff, hint=hint)
+
+    def _deliver(self, outcome: AssertionOutcome) -> AssertionError | None:
+        """Act on a composed failure according to the builder's mode.
+
+        Returns the exception the caller should raise, or ``None`` when the failure was collected or
+        logged instead.  Raising is left to `error()` so the traceback keeps its shape.
+        """
         if self.kind == "warn":
             if self._value_taint_reason is None:
-                self._value_taint_reason = out
-            detail = _indented_diff(diff, "   ")
-            self.logger.warning("\n".join([out, *detail]) if detail else out)
-            return self
-        elif self.kind == "soft":
+                self._value_taint_reason = outcome.message
+            detail = _indented_diff(outcome.diff, "   ")
+            self.logger.warning("\n".join([outcome.message, *detail]) if detail else outcome.message)
+            return None
+        if self.kind == "soft":
             if self._value_taint_reason is None:
-                self._value_taint_reason = out
-            _soft_err.get().append((_soft_group.get(), _caller_location(), out, diff))
-            return self
-        else:
-            if expected is not None or diff is not None:
-                failure: AssertionError = AssertionFailure(out, actual=actual, expected=expected, diff=diff)
-            else:
-                failure = AssertionError(out)
-            if suppress_context:
-                raise failure from None
-            raise failure
+                self._value_taint_reason = outcome.message
+            _soft_err.get().append((_soft_group.get(), _caller_location(), outcome.message, outcome.diff))
+            return None
+        if outcome.expected is not None or outcome.diff is not None:
+            return AssertionFailure(
+                outcome.message, actual=outcome.actual, expected=outcome.expected, diff=outcome.diff
+            )
+        return AssertionError(outcome.message)
 
     def eventually(
         self,
