@@ -89,16 +89,53 @@ class TestRegisterMatcher:
         assert_that("hello").satisfies(combined)
         assert_that("foo").satisfies(combined)
 
-    def test_overwrite_registration(self):
+    def test_a_name_already_taken_is_refused(self):
+        # two libraries both registering `has_status` used to end with whichever imported last, and
+        # nothing said so
         @register_matcher("custom")
         def custom_v1():
             return match.equal_to(1)
 
+        with pytest.raises(ValueError, match="already registered"):
+
+            @register_matcher("custom")
+            def custom_v2():
+                return match.equal_to(2)
+
+        assert_that(1).satisfies(match.custom())
+
+    def test_a_factory_rebuilt_by_a_fixture_is_not_a_clash(self):
+        def build():
+            def steady():
+                return match.equal_to(1)
+
+            return steady
+
+        first, second = build(), build()
+        assert first is not second
+        register_matcher("custom")(first)
+        register_matcher("custom")(second)
+        assert_that(1).satisfies(match.custom())
+
+    def test_replacing_deliberately_is_allowed(self):
         @register_matcher("custom")
+        def custom_v1():
+            return match.equal_to(1)
+
+        @register_matcher("custom", override=True)
         def custom_v2():
             return match.equal_to(2)
 
         assert_that(2).satisfies(match.custom())
+
+    def test_a_built_in_name_is_refused_outright(self):
+        # override cannot help here: `match.equal_to` is found by ordinary attribute lookup, which
+        # never consults this registry, so the registration would not lose an argument, it would
+        # simply never run
+        with pytest.raises(ValueError, match="built-in matcher"):
+            register_matcher("equal_to")(lambda: match.equal_to(1))
+        with pytest.raises(ValueError, match="built-in matcher"):
+            register_matcher("equal_to", override=True)(lambda: match.equal_to(1))
 
     def test_returns_decorated_function(self):
         @register_matcher("my_matcher")

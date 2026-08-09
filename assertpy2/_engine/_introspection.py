@@ -78,3 +78,21 @@ def is_mapping_like(obj: object) -> TypeGuard[MappingLike]:
     if type(obj) in _ATOMIC_TYPES:
         return False
     return isinstance(obj, MappingLike) and callable(obj.keys)
+
+
+def is_same_implementation(existing: object, candidate: object) -> bool:
+    """Whether two registrations are the same implementation rather than two claiming one name.
+
+    Object identity is too strict.  A ``def`` inside a pytest fixture builds a new function object
+    every time the fixture runs, and a module-scoped fixture in ``conftest.py`` is the documented way
+    to share an extension across test files, so that shape would otherwise look like a clash on the
+    second module.  CPython reuses the enclosing code object across those rebuilds, and it differs the
+    moment the body does, which is exactly the line wanted here.
+
+    Callables without a ``__code__`` (instances with ``__call__``, builtins, partials) fall back to
+    identity, which is the strictest answer available for them.
+    """
+    if existing is candidate:
+        return True
+    left = getattr(existing, "__code__", None)
+    return left is not None and left is getattr(candidate, "__code__", None)
