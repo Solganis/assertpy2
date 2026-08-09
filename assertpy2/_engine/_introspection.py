@@ -9,7 +9,12 @@ models (``model_dump``), ``attrs`` classes (``__attrs_attrs__``) and namedtuples
 
 from __future__ import annotations
 
-from typing import Any, Final, Protocol, TypeGuard, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, runtime_checkable
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+_T = TypeVar("_T")
 
 # Exact builtin types whose instances cannot carry protocol members (no instance ``__dict__``), so the
 # expensive ``runtime_checkable`` isinstance (getattr_static per member) is skipped for them.  Exact
@@ -96,3 +101,21 @@ def is_same_implementation(existing: object, candidate: object) -> bool:
         return True
     left = getattr(existing, "__code__", None)
     return left is not None and left is getattr(candidate, "__code__", None)
+
+
+def materialized(value: Iterable[_T]) -> Iterable[_T]:
+    """``value``, drained into a list when it is a one-shot iterator, handed back untouched otherwise.
+
+    An object that is its own iterator (a generator, a file, ``map``/``filter``/``zip``) is consumed by
+    the first pass over it.  Assertions that walk their subject more than once - once to decide and
+    again to describe, or once per argument - therefore see an empty value on the second pass, and
+    either report a wrong verdict or a message with the wrong contents in it.
+
+    Re-iterable values are returned as they are, so nothing is copied on the ordinary path.  A value
+    that cannot be iterated at all is also returned as it is, leaving the caller's own guard to produce
+    the error message it wants.
+    """
+    try:
+        return list(value) if iter(value) is value else value
+    except TypeError:
+        return value
