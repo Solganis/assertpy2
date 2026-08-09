@@ -8,6 +8,7 @@ from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import materialized
 from ._engine._mixin_base import _MixinBase
+from ._engine._path import _ROOT
 from .errors import DiffEntry, DiffResult
 from .matchers import _is_matcher
 
@@ -70,7 +71,7 @@ class ContainsMixin(_MixinBase):
                 continue
             if not any(key in item and not _guarded_not_equal(element[key], item[key]) for key in element):
                 continue  # no shared equal key -> not related enough to suggest
-            entries = _sub_diff_entries(element, item, "", config=None) or []
+            entries = _sub_diff_entries(element, item, _ROOT, config=None) or []
             if best is None or len(entries) < len(best[1]):
                 best = (element, entries)
         return best
@@ -513,7 +514,7 @@ class ContainsMixin(_MixinBase):
                 message += f" Same items, but the order differs at index {index}."
                 diff = DiffResult(
                     kind="sequence",
-                    entries=[DiffEntry(path=f"[{index}]", actual=val_list[index], expected=expected_list[index])],
+                    entries=[_ROOT.index(index).entry(actual=val_list[index], expected=expected_list[index])],
                 )
             return self.error(message, diff=diff)
         return self

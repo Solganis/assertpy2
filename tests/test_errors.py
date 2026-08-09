@@ -1,6 +1,9 @@
+import dataclasses
+
 import pytest
 
-from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, errors, soft_assertions
+from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, errors, fail, soft_assertions
+from assertpy2.outcome import MISSING
 
 
 class TestAssertionFailure:
@@ -175,17 +178,35 @@ class TestStructuredErrorFromAssertions:
             assert_that(ex.actual).is_equal_to({"a": 1, "b": 2, "c": 3})
             assert_that(ex.expected).is_equal_to({"a": 1, "b": 99})
 
-    def test_is_not_equal_to_raises_plain_assertion_error(self):
-        try:
+    def test_is_not_equal_to_raises_the_same_class_as_a_comparison(self):
+        # these two used to be the other half of a split: an assertion that named no expected value
+        # and built no diff raised a bare AssertionError, so what a handler could read off a failure
+        # depended on which assertion had produced it
+        with pytest.raises(AssertionFailure) as failure:
             assert_that(1).is_not_equal_to(1)
-        except AssertionError as ex:
-            assert_that(type(ex).__name__).is_equal_to("AssertionError")
+        assert_that(failure.value.actual).is_equal_to(1)
 
-    def test_is_true_raises_plain_assertion_error(self):
-        try:
+    def test_is_true_raises_the_same_class_as_a_comparison(self):
+        with pytest.raises(AssertionFailure) as failure:
             assert_that(False).is_true()
-        except AssertionError as ex:
-            assert_that(type(ex).__name__).is_equal_to("AssertionError")
+        assert_that(failure.value.actual).is_false()
+
+    def test_a_negated_assertion_that_fails_raises_it_too(self):
+        # NegatedBuilder inverts by catching, so its own failure is the path where nothing was caught
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(5).not_.is_positive()
+        assert_that(str(failure.value)).is_equal_to("Expected <5> to NOT satisfy: is_positive()")
+        assert_that(failure.value.actual).is_equal_to(5)
+
+    def test_a_soft_block_raises_it_too(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+        assert_that(str(failure.value)).contains("soft assertion failures")
+
+    def test_fail_raises_it_too(self):
+        with pytest.raises(AssertionFailure) as failure:
+            fail("should have raised")
+        assert_that(str(failure.value)).is_equal_to("Fail: should have raised!")
 
     def test_soft_assertions_still_work(self):
         try:
@@ -262,3 +283,119 @@ def test_is_equal_to_error_survives_raising_str_operand():
 
     with pytest.raises(AssertionError):
         assert_that(Bad()).is_equal_to(42)
+
+
+class TestEveryFailureCarriesTheValueUnderTest:
+    """Before this, `actual` reached the exception only when an assertion passed it explicitly, which
+    34 of 163 failure sites did. The message of every one of them reads "Expected <val> to ...", so the
+    subject was always there in text and almost never in the structured channel."""
+
+    def test_a_failure_that_never_named_actual_still_carries_it(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 2]).contains_exactly(1)
+        assert_that(failure.value.actual).is_equal_to([1, 2])
+
+    def test_the_record_says_the_value_was_filled_in_rather_than_named(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 2]).contains_exactly(1)
+        assert_that(failure.value._outcome.actual_provided).is_false()
+
+    def test_an_assertion_that_names_its_own_actual_is_marked_as_such(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 1}).is_equal_to({"a": 2})
+        assert_that(failure.value._outcome.actual_provided).is_true()
+        assert_that(failure.value.actual).is_equal_to({"a": 1})
+
+    def test_an_expected_of_none_is_told_from_no_expected_at_all(self):
+        # `expected is not None` cannot answer this, which is why the record carries a sentinel
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({}).is_equal_to(None)
+        assert_that(failure.value._outcome.has_expected).is_true()
+        assert_that(failure.value.expected).is_none()
+
+    def test_a_failure_built_outside_an_assertion_has_no_record(self):
+        # eventually() and the snapshot re-wraps construct the exception directly
+        assert_that(AssertionFailure("plain")._outcome).is_none()
+
+    def test_the_sentinel_reprs_as_itself(self):
+        assert_that(repr(MISSING)).is_equal_to("MISSING")
+
+
+class TestEveryDifferenceCarriesAMachineReadablePath:
+    """`path` is written for a person and cannot be read back: a mapping key goes through `str()`, so
+    `{3: ...}` and `{"3": ...}` render the same, and a key holding a dot or a bracket has no grammar to
+    parse it with. `steps` is the same location in the form a program can act on."""
+
+    def test_a_nested_mapping_key_keeps_its_own_type(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"outer": {3: "a"}}).is_equal_to({"outer": {3: "b"}})
+        entry = failure.value.diff.entries[0]
+        assert_that(entry.path).is_equal_to("outer.3")
+        assert_that([(step.kind, step.value) for step in entry.steps]).is_equal_to([("key", "outer"), ("key", 3)])
+
+    def test_an_integer_key_is_told_from_the_string_that_renders_the_same(self):
+        with pytest.raises(AssertionFailure) as integer_key:
+            assert_that({3: "a"}).is_equal_to({3: "b"})
+        with pytest.raises(AssertionFailure) as string_key:
+            assert_that({"3": "a"}).is_equal_to({"3": "b"})
+        assert_that(integer_key.value.diff.entries[0].path).is_equal_to(string_key.value.diff.entries[0].path)
+        assert_that(integer_key.value.diff.entries[0].steps[0].value).is_equal_to(3)
+        assert_that(string_key.value.diff.entries[0].steps[0].value).is_equal_to("3")
+
+    def test_a_sequence_position_is_an_index_not_a_bracketed_string(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([{"n": 1}]).is_equal_to([{"n": 2}])
+        entry = failure.value.diff.entries[0]
+        assert_that(entry.path).is_equal_to("[0].n")
+        assert_that([(step.kind, step.value) for step in entry.steps]).is_equal_to([("index", 0), ("key", "n")])
+
+    def test_a_field_step_names_the_attribute(self):
+        @dataclasses.dataclass
+        class Point:
+            x: int
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(Point(1)).is_equal_to(Point(2))
+        entry = failure.value.diff.entries[0]
+        assert_that(entry.path).is_equal_to(".x")
+        assert_that([(step.kind, step.value) for step in entry.steps]).is_equal_to([("attr", "x")])
+
+    def test_a_shifted_sequence_names_the_side_its_index_belongs_to(self):
+        # once alignment shifts the two apart their index spaces disagree, and an index without a side
+        # names two different elements
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 2, 3, 4]).is_equal_to([0, 1, 2, 3, 4])
+        one_sided = [entry for entry in failure.value.diff.entries if entry.absent is not None]
+        assert_that(one_sided).is_not_empty()
+        assert_that({step.side for entry in one_sided for step in entry.steps}).does_not_contain(None)
+
+    def test_a_set_member_has_no_position_so_the_step_carries_the_member(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({1, 2}).is_equal_to({1, 3})
+        kinds = {step.kind for entry in failure.value.diff.entries for step in entry.steps}
+        values = {step.value for entry in failure.value.diff.entries for step in entry.steps}
+        assert_that(kinds).is_equal_to({"item"})
+        assert_that(values).is_equal_to({2, 3})
+
+    def test_a_text_difference_steps_by_line_number(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that("a\nb").is_equal_to("a\nc")
+        entry = failure.value.diff.entries[0]
+        assert_that(entry.path).is_equal_to("line 2")
+        assert_that([(step.kind, step.value) for step in entry.steps]).is_equal_to([("line", 2)])
+
+    def test_the_whole_value_differing_takes_no_steps_at_all(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(1).is_equal_to(2)
+        assert_that(failure.value.diff.entries[0].path).is_equal_to(".")
+        assert_that(failure.value.diff.entries[0].steps).is_empty()
+
+    def test_the_steps_walk_back_into_the_value_they_came_from(self):
+        # the whole point: a reader can reach the differing part without parsing the rendered path
+        actual = {"users": [{"roles": {7: "admin"}}]}
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(actual).is_equal_to({"users": [{"roles": {7: "guest"}}]})
+        cursor = failure.value.actual
+        for step in failure.value.diff.entries[0].steps:
+            cursor = cursor[step.value]
+        assert_that(cursor).is_equal_to("admin")

@@ -272,11 +272,16 @@ class TestStructureMatcher:
         assert_that(value).satisfies(match.structure(spec))
 
 
+def _texts(mismatches):
+    """A mismatch list with its paths rendered, which is the half these tests are about."""
+    return [(path.text, actual, description) for path, actual, description in mismatches]
+
+
 class TestCollectMismatches:
     def test_collects_all_failing_fields(self):
         matcher = match.structure({"a": match.is_positive(), "b": match.is_positive(), "c": match.is_positive()})
         result = matcher.collect_mismatches({"a": -1, "b": 5, "c": -3})
-        assert_that([entry[0] for entry in result]).is_equal_to(["a", "c"])
+        assert_that([entry[0].text for entry in result]).is_equal_to(["a", "c"])
 
     def test_empty_when_all_match(self):
         matcher = match.structure({"a": match.is_positive(), "status": "active"})
@@ -285,35 +290,35 @@ class TestCollectMismatches:
     def test_nested_structure_matcher_joins_path(self):
         matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
         result = matcher.collect_mismatches({"address": {"city": "LA"}})
-        assert_that(result[0][0]).is_equal_to("address.city")
+        assert_that(result[0][0].text).is_equal_to("address.city")
 
     def test_missing_key_recorded(self):
         matcher = match.structure({"name": match.is_non_empty_string()})
         path, actual, description = matcher.collect_mismatches({})[0]
-        assert_that(path).is_equal_to("name")
+        assert_that(path.text).is_equal_to("name")
         assert_that(repr(actual)).is_equal_to("<missing>")
         assert_that(description).is_equal_to("a non-empty string")
 
     def test_nested_structure_matcher_against_non_dict(self):
         matcher = match.structure({"user": match.structure({"name": match.is_non_empty_string()})})
         result = matcher.collect_mismatches({"user": "not a dict"})
-        assert_that(result[0][0]).is_equal_to("user")
+        assert_that(result[0][0].text).is_equal_to("user")
 
     def test_plain_nested_dict_against_non_dict(self):
         matcher = match.structure({"user": {"name": match.is_non_empty_string()}})
         path, _actual, description = matcher.collect_mismatches({"user": "not a dict"})[0]
-        assert_that(path).is_equal_to("user")
+        assert_that(path.text).is_equal_to("user")
         assert_that(description).is_equal_to("a mapping")
 
     def test_plain_nested_dict_recurses(self):
         matcher = match.structure({"user": {"role": "admin"}})
         result = matcher.collect_mismatches({"user": {"role": "guest"}})
-        assert_that(result[0][0]).is_equal_to("user.role")
+        assert_that(result[0][0].text).is_equal_to("user.role")
 
     def test_raw_value_mismatch(self):
         matcher = match.structure({"status": "active"})
         path, actual, description = matcher.collect_mismatches({"status": "inactive"})[0]
-        assert_that(path).is_equal_to("status")
+        assert_that(path.text).is_equal_to("status")
         assert_that(actual).is_equal_to("inactive")
         assert_that(description).is_equal_to("<active>")
 
@@ -518,7 +523,7 @@ class TestModelNestedInsideDict:
         value = {"address": _SpecModel(city="LA")}
         matcher = match.structure({"address": match.structure({"city": match.equal_to("NYC")})})
         result = matcher.collect_mismatches(value)
-        assert_that(result[0][0]).is_equal_to("address.city")
+        assert_that(result[0][0].text).is_equal_to("address.city")
 
     def test_model_under_plain_dict_spec_matches(self):
         value = {"address": _SpecModel(city="NYC")}
@@ -527,7 +532,7 @@ class TestModelNestedInsideDict:
     def test_model_under_plain_dict_spec_keeps_leaf_path(self):
         value = {"address": _SpecModel(city="LA")}
         result = match.structure({"address": {"city": "NYC"}}).collect_mismatches(value)
-        assert_that(result[0][0]).is_equal_to("address.city")
+        assert_that(result[0][0].text).is_equal_to("address.city")
 
     def test_matches_structure_failure_shows_model_leaf_path(self):
         with pytest.raises(AssertionError, match=r"at <address\.city>"):
@@ -1071,21 +1076,23 @@ class TestStructureWalkPathsAndCycles:
         value["self"] = value
         spec = {"a": 1}
         spec["self"] = spec
-        assert_that(StructureMatcher(spec).collect_mismatches(value)).is_equal_to(
+        assert_that(_texts(StructureMatcher(spec).collect_mismatches(value))).is_equal_to(
             [("self", "<circular ref>", "<circular ref>")]
         )
 
     def test_a_missing_nested_key_carries_its_full_path(self):
         mismatches = StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": {}})
-        assert_that([path for path, _, _ in mismatches]).is_equal_to(["a.b"])
+        assert_that([path.text for path, _, _ in mismatches]).is_equal_to(["a.b"])
 
     def test_every_missing_key_is_reported_not_just_the_first(self):
         # the loop continues past a missing key; breaking instead would report one and hide the rest
         mismatches = StructureMatcher({"a": 1, "b": 2}).collect_mismatches({})
-        assert_that([path for path, _, _ in mismatches]).is_equal_to(["a", "b"])
+        assert_that([path.text for path, _, _ in mismatches]).is_equal_to(["a", "b"])
 
     def test_a_non_dict_where_a_dict_was_specified_reports_the_value(self):
-        assert_that(StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": 5})).is_equal_to([("a", 5, "a mapping")])
+        assert_that(_texts(StructureMatcher({"a": {"b": 1}}).collect_mismatches({"a": 5}))).is_equal_to(
+            [("a", 5, "a mapping")]
+        )
 
     def test_a_matcher_whose_probe_raises_counts_as_a_mismatch(self):
         class Boom:
@@ -1096,7 +1103,7 @@ class TestStructureWalkPathsAndCycles:
 
         boom = Boom()
         mismatches = StructureMatcher({"a": match.greater_than(1)}).collect_mismatches({"a": boom})
-        assert_that([(path, expected) for path, _, expected in mismatches]).is_equal_to(
+        assert_that([(path.text, expected) for path, _, expected in mismatches]).is_equal_to(
             [("a", "a value greater than <1>")]
         )
         assert_that(mismatches[0][1]).is_same_as(boom)
@@ -1107,7 +1114,7 @@ class TestStructureWalkPathsAndCycles:
         inner = {"n": 1}
         value = {"a": inner, "b": inner}
         mismatches = StructureMatcher({"a": {"n": 1}, "b": {"n": 2}}).collect_mismatches(value)
-        assert_that([path for path, _, _ in mismatches]).is_equal_to(["b.n"])
+        assert_that([path.text for path, _, _ in mismatches]).is_equal_to(["b.n"])
 
     def test_a_value_revisited_against_a_different_sub_spec_is_still_compared(self):
         # the guard is keyed on the (value, spec) pair. Keyed on the value alone, a cyclic payload
@@ -1116,7 +1123,7 @@ class TestStructureWalkPathsAndCycles:
         inner = {"n": 1}
         inner["a"] = inner
         mismatches = StructureMatcher({"a": {"a": {"n": 2}}}).collect_mismatches({"a": inner})
-        assert_that(mismatches).is_equal_to([("a.a.n", 1, "<2>")])
+        assert_that(_texts(mismatches)).is_equal_to([("a.a.n", 1, "<2>")])
 
     def test_the_mismatch_detail_comes_from_the_matcher(self):
         # `describe_mismatch` renders the detail of the first mismatch; handing the matcher the wrong
@@ -1160,7 +1167,7 @@ class TestMatchesStructureAcceptsAnyMapping:
     def test_a_mismatch_inside_a_mapping_keeps_its_path(self):
         value = types.MappingProxyType({"outer": self._Mapping({"inner": -1})})
         mismatches = StructureMatcher({"outer": {"inner": match.is_positive()}}).collect_mismatches(value)
-        assert_that([path for path, _, _ in mismatches]).is_equal_to(["outer.inner"])
+        assert_that([path.text for path, _, _ in mismatches]).is_equal_to(["outer.inner"])
 
     def test_a_non_mapping_is_still_refused(self):
         with pytest.raises(TypeError, match="mapping, a pydantic-style model, or an attrs instance"):

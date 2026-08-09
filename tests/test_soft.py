@@ -1,6 +1,6 @@
 import pytest
 
-from assertpy2 import assert_that, fail, soft_assertions
+from assertpy2 import AssertionFailure, assert_that, fail, soft_assertions, soft_fail
 
 
 def test_success():
@@ -225,3 +225,66 @@ class TestSoftFailuresCarryTheirDiff:
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(1).is_equal_to(2)
         assert_that(str(exc_info.value).splitlines()).is_length(2)
+
+
+class TestTheAggregateHandsBackWhatItCollected:
+    """A soft block used to flatten every failure into one string at its boundary: the collector held
+    tuples of (group, location, message, diff) and the raise turned them into a numbered list. The text
+    is unchanged, and the parts it was rendered from now ride on the exception."""
+
+    def test_the_aggregate_carries_one_record_per_collected_failure(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that({"a": 1}).is_equal_to({"a": 2})
+            assert_that("foo").is_length(4)
+        assert_that(failure.value.failures).is_length(2)
+        assert_that([outcome.message for outcome in failure.value.failures]).is_equal_to(
+            [
+                "Expected <{'a': 1}> to be equal to <{'a': 2}>, but was not.",
+                "Expected <foo> to be of length <4>, but was <3>.",
+            ]
+        )
+
+    def test_each_record_keeps_the_structure_the_message_had_flattened(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that({"a": 1}).is_equal_to({"a": 2})
+        collected = failure.value.failures[0]
+        assert_that(collected.actual).is_equal_to({"a": 1})
+        assert_that(collected.expected).is_equal_to({"a": 2})
+        assert_that(collected.diff.kind).is_equal_to("dict")
+        assert_that([step.value for step in collected.diff.entries[0].steps]).is_equal_to(["a"])
+
+    def test_a_record_knows_where_it_was_collected(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+        location = failure.value.failures[0].location
+        assert_that(location[0]).ends_with("test_soft.py")
+        assert_that(location[1]).is_instance_of(int)
+
+    def test_a_grouped_failure_keeps_its_label(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions() as sa:
+            with sa.group("Body"):
+                assert_that(1).is_equal_to(2)
+            assert_that(3).is_equal_to(4)
+        assert_that([outcome.group for outcome in failure.value.failures]).is_equal_to(["Body", None])
+
+    def test_a_negated_failure_is_collected_as_a_record_too(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(5).not_.is_positive()
+        collected = failure.value.failures[0]
+        assert_that(collected.message).is_equal_to("Expected <5> to NOT satisfy: is_positive()")
+        assert_that(collected.actual).is_equal_to(5)
+
+    def test_soft_fail_is_collected_as_a_record_too(self):
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            soft_fail("manual")
+        assert_that(failure.value.failures[0].message).is_equal_to("Fail: manual!")
+
+    def test_a_failure_that_was_raised_carries_no_collection(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(1).is_equal_to(2)
+        assert_that(failure.value.failures).is_empty()
+
+    def test_a_negation_that_held_leaves_nothing_behind(self):
+        # the rollback is a slice of the collected list, which only works while the sink stays an append
+        with soft_assertions():
+            assert_that(-5).not_.is_positive()

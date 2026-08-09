@@ -15,6 +15,7 @@ from ._engine._compare import (
 )
 from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._introspection import is_namedtuple
+from ._engine._path import _ROOT
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr, _reject_unknown_kwargs
@@ -310,7 +311,7 @@ class BaseMixin(SatisfiesMixin):
                     # does not take apart has nothing left to check and is equal
                     decision = (
                         "leaf"
-                        if _child_entries(actual_item, expected_item, "", descended_for="strict", config=config)
+                        if _child_entries(actual_item, expected_item, _ROOT, descended_for="strict", config=config)
                         else "equal"
                     )
                 if decision != "equal":

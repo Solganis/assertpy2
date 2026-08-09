@@ -24,10 +24,12 @@ from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
 from assertpy2._engine._introspection import is_mapping_like
+from assertpy2._engine._path import _ROOT
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _disambiguated
+from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
 
 try:  # the OpenAPI properties need the [json] extra; the rest of the file does not
@@ -675,19 +677,19 @@ def test_soft_report_numbers_every_failure_sequentially(specs):
     # the aggregated report carries every message once, numbered 1..N across any grouping, and the
     # numbering must survive the diff lines that a structured failure adds under its entry
     entries = [
-        (
-            group,
-            (f"file{index}.py", index) if located else None,
-            f"failure message {index}",
-            DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
+        AssertionOutcome(
+            group=group,
+            location=(f"file{index}.py", index) if located else None,
+            message=f"failure message {index}",
+            diff=DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
             if diffed
             else None,
         )
         for index, (group, located, diffed) in enumerate(specs)
     ]
     report = _format_soft_errors(entries)
-    for _, _, message, _diff in entries:
-        assert_that(report).contains(message)
+    for outcome in entries:
+        assert_that(report).contains(outcome.message)
     for number in range(1, len(entries) + 1):
         assert_that(report).contains(f"{number}. ")
 
@@ -696,19 +698,18 @@ def test_soft_report_numbers_every_failure_sequentially(specs):
 @given(specs=_soft_specs)
 def test_soft_report_shows_each_diff_path_under_its_own_entry(specs):
     entries = [
-        (
-            group,
-            None,
-            f"failure message {index}",
-            DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
+        AssertionOutcome(
+            group=group,
+            message=f"failure message {index}",
+            diff=DiffResult(kind="dict", entries=[DiffEntry(path=f"field{index}", actual=index, expected=-index)])
             if diffed
             else None,
         )
         for index, (group, located, diffed) in enumerate(specs)
     ]
     report = _format_soft_errors(entries)
-    for index, (_, _, _, diff) in enumerate(entries):
-        if diff is not None:
+    for index, outcome in enumerate(entries):
+        if outcome.diff is not None:
             assert_that(report).contains(f"field{index}: {index} != {-index}")
 
 
@@ -1149,7 +1150,7 @@ def test_the_wide_lattice_reaches_a_value_the_nested_walker_cannot_decompose():
     the walkers cannot take apart.  Narrowing it for speed would leave that property green and
     disarmed, so the reach is asserted rather than assumed - once per ladder, because the two answer
     different questions and disagree (see the module docstring of ``assertpy2._engine._diff``)."""
-    found = _reachable(lambda value: type(value) not in _EQ_ATOMIC and _sub_diff_entries(value, value, "") is None)
+    found = _reachable(lambda value: type(value) not in _EQ_ATOMIC and _sub_diff_entries(value, value, _ROOT) is None)
     assert_that(type(found) in _EQ_ATOMIC).is_false()
 
 
@@ -1280,7 +1281,9 @@ def test_a_clipped_block_still_shows_something(count, kind):
     # `set` and `contains` join every item into a single row, so dropping the row that crosses the
     # limit erased the whole diff: the reader got a header and a count and not one item
     filler = "x" * 3_000
-    entries = [DiffEntry(path="extra", actual=filler, expected=None) for _ in range(count)]
+    # `absent` is what puts an item in the extra group, and every producer of a set or containment
+    # entry sets it: without it the entry claims its expected value really is None
+    entries = [DiffEntry(path="extra", actual=filler, expected=None, absent="expected") for _ in range(count)]
     rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0)
     assert_that(len(rendered)).is_greater_than(1_000)
     assert_that(rendered).contains("xxx")

@@ -4,7 +4,10 @@ import difflib
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, NamedTuple
+
+if TYPE_CHECKING:
+    from .outcome import AssertionOutcome
 
 
 def _safe_repr(value: object) -> str:
@@ -103,6 +106,35 @@ class VacuousAssertionWarning(UserWarning):
     """
 
 
+class Step(NamedTuple):
+    """One hop from a value to one of its parts, as `DiffEntry.steps` records it.
+
+    ``path`` is written for a person and is lossy by construction: a mapping key goes through ``str()``,
+    so ``{3: ...}`` and ``{"3": ...}`` land on the same text, and a key holding a dot or a bracket
+    cannot be read back out.  A step keeps the key itself, so a reader can walk back into the value it
+    came from instead of parsing a string that was never a grammar.
+    """
+
+    kind: Literal["key", "index", "attr", "item", "line"]
+    """What kind of hop this is.
+
+    ``key`` indexes a mapping, ``index`` a sequence, ``attr`` reads a field of a dataclass, namedtuple,
+    attrs class or model.  ``item`` names a member of a set, which has no position to index by.
+    ``line`` is the 1-based line number of a text or bytes diff.
+    """
+
+    value: object
+    """The key, index, field name, member or line number.  Not stringified: that is the whole point."""
+
+    side: Literal["actual", "expected"] | None = None
+    """Which sequence the index belongs to, when the two have shifted apart.
+
+    Sequence alignment reports an inserted element against one side only, and once the two index spaces
+    disagree an index without a side names two different elements.  ``None`` whenever both sides share
+    the position, which is every step that is not a one-sided element of an aligned sequence.
+    """
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DiffEntry:
     """Single difference between actual and expected values at a specific path."""
@@ -120,6 +152,14 @@ class DiffEntry:
 
     Defaults to ``None``, so an entry built the old way keeps its old meaning and only the producers
     that mean absence say so.
+    """
+
+    steps: tuple[Step, ...] = ()
+    """The same location as ``path``, in the form a program can use.
+
+    Empty at the root, which is the entry ``path`` renders as ``.``: the difference is the whole value.
+    Also empty on an entry whose ``path`` is a label rather than a location, which is what a containment
+    or matcher failure produces.
     """
 
     def __str__(self) -> str:
@@ -329,8 +369,10 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
             for entry in visible
         )
     elif kind in {"set", "contains"}:
-        extra = ", ".join(_diff_side(entry.actual) for entry in visible if entry.path == "extra")
-        missing = ", ".join(_diff_side(entry.expected) for entry in visible if entry.path == "missing")
+        # `absent` rather than the label the path renders: which side is missing is what the two
+        # groups mean, and a mapping key spelled "extra" used to land in the wrong one
+        extra = ", ".join(_diff_side(entry.actual) for entry in visible if entry.absent == "expected")
+        missing = ", ".join(_diff_side(entry.expected) for entry in visible if entry.absent == "actual")
         if extra:
             lines.append(f"  {red}extra:   {{{extra}}}{reset}")
         if missing:
@@ -417,6 +459,7 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         expected: object = None,
         diff: DiffResult | None = None,
         trace: PollTrace | None = None,
+        failures: tuple[AssertionOutcome, ...] = (),
     ):
         super().__init__(message)
         self._message = message
@@ -424,6 +467,32 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         self.expected = expected
         self.diff = diff
         self.trace = trace
+        self.failures = failures
+        """The failures a soft block collected, in the order they were collected.
+
+        Empty on a failure that is about one value, which is every failure except the aggregate a
+        ``soft_assertions()`` block raises when it closes.  The aggregate's message is these rendered
+        into a list; this is the same thing before it became a string.
+        """
+        self._outcome: AssertionOutcome | None = None
+        """The record this failure was composed from, set by the delivery half of `error()`.
+
+        Carries what the flat attributes cannot: whether ``actual`` and ``expected`` were named by the
+        assertion or filled in from the value under test.  Stays ``None`` on a failure built directly,
+        which `eventually()` and the snapshot re-wraps still do.
+
+        Private, and not a constructor argument, because `AssertionOutcome` is still gaining a field
+        per release.  It becomes public when a caller outside this package has a reason to read it.
+        """
+
+    __module__ = "assertpy2"
+    """Where the class says it lives, which is what a traceback prints in front of the message.
+
+    Every failure is an `AssertionFailure` now, so this prefix is on every failure line a reader sees,
+    and pytest's one-line summary is cut to the terminal width with the prefix counted first.  The
+    canonical import is ``from assertpy2 import AssertionFailure``, so the shorter path is also the
+    truer one.  The reference still documents it under `assertpy2.errors`, which reads the source.
+    """
 
     def __str__(self) -> str:
         if _RENDER_DIFF_IN_MESSAGE and self.diff is not None:

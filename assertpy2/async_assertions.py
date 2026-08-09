@@ -251,8 +251,11 @@ class AsyncAssertionBuilder:
                             message, trace = _timeout_failure(recorder, self._timeout, loop.time() - start, failure)
                             if self._kind in ("soft", "warn"):
                                 # inner failures already carry the description; an empty one here
-                                # avoids a double prefix in the collected/logged message
-                                return self._builder_func(None, "", self._kind, None, self._logger).error(message)
+                                # avoids a double prefix in the collected/logged message.  the trace goes
+                                # with it: a collected timeout kept the text and dropped the telemetry
+                                return self._builder_func(None, "", self._kind, None, self._logger).error(
+                                    message, trace=trace
+                                )
                             raise AssertionFailure(message, trace=trace) from last_error
                         await asyncio.sleep(self._interval)
 
@@ -374,8 +377,11 @@ class SyncAssertionBuilder:
                         message, trace = _timeout_failure(recorder, self._timeout, time.monotonic() - start, failure)
                         if self._kind in ("soft", "warn"):
                             # inner failures already carry the description; an empty one here
-                            # avoids a double prefix in the collected/logged message
-                            return self._builder_func(None, "", self._kind, None, self._logger).error(message)
+                            # avoids a double prefix in the collected/logged message.  the trace goes
+                            # with it: a collected timeout kept the text and dropped the telemetry
+                            return self._builder_func(None, "", self._kind, None, self._logger).error(
+                                message, trace=trace
+                            )
                         raise AssertionFailure(message, trace=trace) from last_error
                     time.sleep(self._interval)
 

@@ -11,6 +11,7 @@ import pytest
 from . import _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
+from ._engine._path import _ROOT
 from .errors import _diff_side, _json_safe, _render_diff
 
 try:
@@ -348,16 +349,28 @@ def pytest_runtest_makereport(item, call):
     diff = getattr(exc, "diff", None)
     trace = getattr(exc, "trace", None)
 
-    if actual is None and expected is None and diff is None and trace is None:
+    # what the report can show is what the assertion named, and "the attribute is not None" stopped
+    # being able to answer that on either side. `actual` is filled on every failure now, so it would
+    # put a block under all of them; `expected` was never able to tell "compared against None" from
+    # "no expected at all", and lost the line on both
+    outcome = getattr(exc, "_outcome", None)
+    if outcome is None:
+        # built by hand, by `eventually()` or by a snapshot re-wrap: the values are all there is to go on
+        named_actual, named_expected = actual is not None, expected is not None
+    else:
+        named_actual, named_expected = outcome.actual_provided, outcome.has_expected
+
+    # the cheap exit for a failure with nothing to add to its own message, which is most of them
+    if not (named_actual or named_expected) and diff is None and trace is None:
         return
 
-    if actual is not None or expected is not None:
+    if named_actual or named_expected:
         # capped like the diff rows: this section is read on a terminal, and the untouched values stay
         # on the exception for anything that wants them
         lines = []
-        if actual is not None:
+        if named_actual:
             lines.append(f"  actual:   {_diff_side(actual)}")
-        if expected is not None:
+        if named_expected:
             lines.append(f"  expected: {_diff_side(expected)}")
         report.sections.append(("AssertionFailure", "\n".join(lines)))
 
@@ -373,7 +386,16 @@ def pytest_runtest_makereport(item, call):
         mode = getattr(item.config, "_assertpy2_allure_mode", "diff")
         allure_max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
         with contextlib.suppress(Exception):
-            _attach_allure(actual, expected, diff, trace=trace, mode=mode, max_entries=allure_max_entries)
+            _attach_allure(
+                actual,
+                expected,
+                diff,
+                trace=trace,
+                mode=mode,
+                max_entries=allure_max_entries,
+                named_actual=named_actual,
+                named_expected=named_expected,
+            )
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:
@@ -406,7 +428,7 @@ def _trace_to_json(trace):
     for previous, current in pairwise(fails):
         if current.value == previous.value:
             continue
-        entries = _sub_diff_entries(previous.value, current.value, "")
+        entries = _sub_diff_entries(previous.value, current.value, _ROOT)
         if entries is None:
             entries_json = [{"path": ".", "actual": previous.value, "expected": current.value}]
         else:
@@ -465,14 +487,17 @@ def _diff_to_json(diff, max_entries=50):
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
 
 
-def _attach_allure(actual, expected, diff, *, trace=None, mode="diff", max_entries=50):
+def _attach_allure(actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50):
+    # the two flags carry the terminal section's decision, so an Allure run and a pytest report agree
+    # on which values the assertion named. Required rather than defaulted: a caller that reads them
+    # off the values instead is the reading this phase removed
     if mode == "off":
         return
-    if mode == "full" and (actual is not None or expected is not None):
+    if mode == "full" and (named_actual or named_expected):
         data = {"format": 2}
-        if actual is not None:
+        if named_actual:
             data["actual"] = _json_safe(actual)
-        if expected is not None:
+        if named_expected:
             data["expected"] = _json_safe(expected)
         allure.attach(
             body=json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False),

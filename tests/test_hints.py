@@ -14,6 +14,7 @@ import enum
 import pytest
 
 from assertpy2 import assert_that
+from assertpy2._engine._path import _ROOT
 from assertpy2._hints import diagnose
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 
@@ -146,8 +147,8 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
         # the diff decomposes a reordered list of dicts into per-key entries, so the pairs that do
         # reach here holding an unhashable value come from a leaf the walk stopped at
         entries = [
-            DiffEntry(path="[0]", actual={"a": 1}, expected={"b": 2}),
-            DiffEntry(path="[1]", actual={"b": 2}, expected={"a": 1}),
+            _ROOT.index(0).entry(actual={"a": 1}, expected={"b": 2}),
+            _ROOT.index(1).entry(actual={"b": 2}, expected={"a": 1}),
         ]
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).contains("in a different order")
 
@@ -159,8 +160,8 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
                 raise ValueError("boom")
 
         entries = [
-            DiffEntry(path="[0]", actual=Hostile(), expected=1),
-            DiffEntry(path="[1]", actual=2, expected=Hostile()),
+            _ROOT.index(0).entry(actual=Hostile(), expected=1),
+            _ROOT.index(1).entry(actual=2, expected=Hostile()),
         ]
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 
@@ -172,8 +173,8 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
                 raise ValueError("boom")
 
         entries = [
-            DiffEntry(path="[0]", actual=Awkward(), expected=1),
-            DiffEntry(path="[1]", actual=2, expected=Awkward()),
+            _ROOT.index(0).entry(actual=Awkward(), expected=1),
+            _ROOT.index(1).entry(actual=2, expected=Awkward()),
         ]
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 
@@ -278,8 +279,8 @@ class TestSilenceOnEverythingElse:
                 raise ValueError("boom")
 
         entries = [
-            DiffEntry(path="[0]", actual=Unreprable(), expected=1),
-            DiffEntry(path="[1]", actual=2, expected=Unreprable()),
+            _ROOT.index(0).entry(actual=Unreprable(), expected=1),
+            _ROOT.index(1).entry(actual=2, expected=Unreprable()),
         ]
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 

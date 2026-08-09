@@ -58,6 +58,9 @@ from ._matcher_impls import (
 from ._matcher_impls import (
     Matcher as Matcher,
 )
+from ._matcher_impls import (
+    MatchResult as MatchResult,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -80,6 +83,25 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
     if callable(matcher):
         return bool(matcher(value))
     raise TypeError("given arg must be a Matcher or callable")
+
+
+def _evaluate_matcher(matcher: Matcher, value: object) -> MatchResult:
+    """One `MatchResult` from any matcher, including one that never heard of `evaluate()`.
+
+    `BaseMatcher` gets `evaluate()` from its base, but a matcher is allowed to be duck-typed: the
+    `Matcher` protocol is three methods and stays three, because widening it would un-match every
+    third-party matcher written against the documented shape.  The composition that `BaseMatcher` does
+    for its subclasses is done here for everything else.
+    """
+    evaluate = getattr(matcher, "evaluate", None)
+    if evaluate is not None:
+        return evaluate(value)
+    matched = matcher.matches(value)
+    return MatchResult(
+        matched=matched,
+        description=matcher.describe(),
+        mismatch="" if matched else matcher.describe_mismatch(value),
+    )
 
 
 def _describe_callable(predicate: Callable[..., object]) -> str:

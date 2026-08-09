@@ -1,4 +1,5 @@
 from .assertpy import (
+    CheckBuilder,
     NegatedBuilder,
     SoftAssertionCollector,
     WarningLoggingAdapter,
@@ -16,7 +17,16 @@ from .assertpy import (
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
 from .errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace, VacuousAssertionWarning
 from .file import contents_of
-from .matchers import BaseMatcher, Matcher, clear_custom_matchers, match, register_matcher, unregister_matcher
+from .matchers import (
+    BaseMatcher,
+    Matcher,
+    MatchResult,
+    clear_custom_matchers,
+    match,
+    register_matcher,
+    unregister_matcher,
+)
+from .outcome import AssertionOutcome
 from .snapshot import (
     SnapshotCreatedWarning,
     SnapshotKeyReusedWarning,
@@ -26,10 +36,13 @@ from .snapshot import (
 
 __all__ = [
     "AssertionFailure",
+    "AssertionOutcome",
     "AsyncAssertionBuilder",
     "BaseMatcher",
+    "CheckBuilder",
     "DiffEntry",
     "DiffResult",
+    "MatchResult",
     "Matcher",
     "NegatedBuilder",
     "PollSample",

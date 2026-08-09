@@ -9,6 +9,7 @@ from assertpy2 import assert_that, match
 from assertpy2._engine import _diff as _diff_module
 from assertpy2._engine._compare import _build_compare_config
 from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
+from assertpy2._engine._path import _Path
 from assertpy2.errors import DiffEntry, DiffResult, _cut, _within_budget
 from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
@@ -962,7 +963,7 @@ class TestModelDumpDiff:
             def __eq__(self, other):
                 return False
 
-        result = _sub_diff_entries(Outer(), Outer2(), "root")
+        result = _sub_diff_entries(Outer(), Outer2(), _Path("root"))
         assert_that(result).is_not_none()
         assert_that(result[0].path).is_equal_to("root.val")
 
@@ -981,7 +982,7 @@ class TestModelDumpDiff:
             def __eq__(self, other):
                 return False
 
-        result = _sub_diff_entries(ModelA(), ModelB(), "item")
+        result = _sub_diff_entries(ModelA(), ModelB(), _Path("item"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "item.y")
         assert_that(entry.expected).is_none()
@@ -1001,7 +1002,7 @@ class TestModelDumpDiff:
             def __eq__(self, other):
                 return False
 
-        result = _sub_diff_entries(ModelA(), ModelB(), "item")
+        result = _sub_diff_entries(ModelA(), ModelB(), _Path("item"))
         entry = next(entry for entry in result if entry.path == "item.z")
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_equal_to(3)
@@ -1028,7 +1029,7 @@ class TestModelDumpDiff:
             def __eq__(self, other):
                 return False
 
-        result = _sub_diff_entries(Outer(), Outer2(), "root")
+        result = _sub_diff_entries(Outer(), Outer2(), _Path("root"))
         assert_that(result).is_not_none()
         paths = [entry.path for entry in result]
         assert_that(paths).contains("root.child.val")
@@ -1038,7 +1039,7 @@ class TestSubDiffNamedtupleCoverage:
     def test_namedtuple_in_sub_diff_extra_field(self):
         A = namedtuple("A", ["x", "y"])
         B = namedtuple("B", ["x"])
-        result = _sub_diff_entries(A(1, 2), B(1), "item")
+        result = _sub_diff_entries(A(1, 2), B(1), _Path("item"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "item.y")
         assert_that(entry.expected).is_none()
@@ -1046,7 +1047,7 @@ class TestSubDiffNamedtupleCoverage:
     def test_namedtuple_in_sub_diff_missing_field(self):
         A = namedtuple("A", ["x"])
         B = namedtuple("B", ["x", "z"])
-        result = _sub_diff_entries(A(1), B(1, 3), "item")
+        result = _sub_diff_entries(A(1), B(1, 3), _Path("item"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "item.z")
         assert_that(entry.actual).is_none()
@@ -1055,7 +1056,7 @@ class TestSubDiffNamedtupleCoverage:
     def test_namedtuple_missing_field_sentinel(self):
         A = namedtuple("A", ["x", "y"])
         B = namedtuple("B", ["x"])
-        result = _sub_diff_entries(A(1, 2), B(1), "root")
+        result = _sub_diff_entries(A(1, 2), B(1), _Path("root"))
         assert_that(result).is_not_none()
         has_y = any(entry.path == "root.y" and entry.expected is None for entry in result)
         assert_that(has_y).is_true()
@@ -1065,14 +1066,14 @@ class TestSubDiffNamedtupleCoverage:
         Outer = namedtuple("Outer", ["name", "inner"])
         actual = Outer("same", Inner(1, 2))
         expected = Outer("same", Inner(1, 99))
-        result = _sub_diff_entries(actual, expected, "root")
+        result = _sub_diff_entries(actual, expected, _Path("root"))
         assert_that(result).is_not_none()
         paths = [entry.path for entry in result]
         assert_that(paths).contains("root.inner.b")
 
     def test_namedtuple_scalar_diff_in_sub_diff(self):
         Point = namedtuple("Point", ["x", "y"])
-        result = _sub_diff_entries(Point(1, 2), Point(1, 99), "item")
+        result = _sub_diff_entries(Point(1, 2), Point(1, 99), _Path("item"))
         assert_that(result).is_not_none()
         assert_that(result[0].path).is_equal_to("item.y")
         assert_that(result[0].actual).is_equal_to(2)
@@ -1098,7 +1099,7 @@ class TestBuildEqualityDiffCircularRef:
         # the nested walk has its own cycle guard, and it was pinned by nothing at all
         circular = [1]
         circular.append(circular)
-        entries = _sub_diff_entries(circular, circular, "x", _seen={id(circular)})
+        entries = _sub_diff_entries(circular, circular, _Path("x"), _seen={id(circular)})
         assert_that(entries).is_length(1)
         assert_that(entries[0].actual).is_equal_to("<circular ref>")
         assert_that(entries[0].expected).is_equal_to("<circular ref>")
@@ -1120,7 +1121,7 @@ class TestSubDiffDataclassMissingField:
         class B:
             x: int
 
-        result = _sub_diff_entries(A(1, 2), B(1), "root")
+        result = _sub_diff_entries(A(1, 2), B(1), _Path("root"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "root.y")
         assert_that(entry.expected).is_none()
@@ -1134,7 +1135,7 @@ class TestSubDiffDataclassMissingField:
         class Outer:
             inner: Inner
 
-        result = _sub_diff_entries(Outer(Inner(1)), Outer(Inner(99)), "root")
+        result = _sub_diff_entries(Outer(Inner(1)), Outer(Inner(99)), _Path("root"))
         assert_that(result).is_not_none()
         paths = [entry.path for entry in result]
         assert_that(paths).contains("root.inner.val")
@@ -1153,7 +1154,7 @@ class TestCircularRefProtection:
         inner_a["loop"] = inner_a
         inner_b = {"val": 2}
         inner_b["loop"] = inner_b
-        result = _sub_diff_entries(inner_a, inner_b, "root")
+        result = _sub_diff_entries(inner_a, inner_b, _Path("root"))
         assert_that(result).is_not_none()
         paths = [entry.path for entry in result]
         assert_that(paths).contains("root.val")
@@ -1167,7 +1168,7 @@ class TestCircularRefProtection:
         actual = {"name": "x"}
         actual["ref"] = actual
         expected = {"name": "y", "ref": {"name": "z"}}
-        result = _sub_diff_entries(actual, expected, "root")
+        result = _sub_diff_entries(actual, expected, _Path("root"))
         paths = [entry.path for entry in result]
         assert_that(paths).contains("root.ref")
         entry = next(entry for entry in result if entry.path == "root.ref")
@@ -1428,7 +1429,7 @@ class TestDiffOrderingActualGreater:
         assert_that(entry.expected).is_equal_to("b")
 
     def test_sub_dict_actual_greater(self):
-        result = _sub_diff_entries({"k": 9}, {"k": 2}, "root")
+        result = _sub_diff_entries({"k": 9}, {"k": 2}, _Path("root"))
         entry = next(entry for entry in result if entry.path == "root.k")
         assert_that(entry.actual).is_equal_to(9)
         assert_that(entry.expected).is_equal_to(2)
@@ -1438,14 +1439,14 @@ class TestDiffOrderingActualGreater:
         class Dc:
             a: int
 
-        result = _sub_diff_entries(Dc(9), Dc(2), "root")
+        result = _sub_diff_entries(Dc(9), Dc(2), _Path("root"))
         entry = next(entry for entry in result if entry.path == "root.a")
         assert_that(entry.actual).is_equal_to(9)
         assert_that(entry.expected).is_equal_to(2)
 
     def test_sub_namedtuple_actual_greater(self):
         Pair = namedtuple("Pair", ["x"])
-        result = _sub_diff_entries(Pair(9), Pair(2), "root")
+        result = _sub_diff_entries(Pair(9), Pair(2), _Path("root"))
         entry = next(entry for entry in result if entry.path == "root.x")
         assert_that(entry.actual).is_equal_to(9)
         assert_that(entry.expected).is_equal_to(2)
@@ -1458,7 +1459,7 @@ class TestDiffOrderingActualGreater:
             def model_dump(self):
                 return dict(self.__dict__)
 
-        result = _sub_diff_entries(FakeModel(a=9), FakeModel(a=2), "root")
+        result = _sub_diff_entries(FakeModel(a=9), FakeModel(a=2), _Path("root"))
         entry = next(entry for entry in result if entry.path == "root.a")
         assert_that(entry.actual).is_equal_to(9)
         assert_that(entry.expected).is_equal_to(2)
@@ -1492,7 +1493,7 @@ class TestNestedSubDiffDecomposition:
         assert_that(entry.expected).is_equal_to(9)
 
     def test_sub_sequence_decomposes(self):
-        result = _sub_diff_entries([1, 2, 3], [1, 9, 3], "root")
+        result = _sub_diff_entries([1, 2, 3], [1, 9, 3], _Path("root"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "root[1]")
         assert_that(entry.actual).is_equal_to(2)
@@ -1508,7 +1509,7 @@ class TestNestedSubDiffDecomposition:
             x: int
             y: int
 
-        result = _sub_diff_entries(One(1), Two(1, 2), "root")
+        result = _sub_diff_entries(One(1), Two(1, 2), _Path("root"))
         assert_that(result).is_not_none()
         entry = next(entry for entry in result if entry.path == "root.y")
         assert_that(entry.actual).is_none()
@@ -1520,7 +1521,7 @@ class TestNestedSubDiffDecomposition:
             z: int
             a: int
 
-        result = _sub_diff_entries(NonAlpha(1, 1), NonAlpha(9, 9), "root")
+        result = _sub_diff_entries(NonAlpha(1, 1), NonAlpha(9, 9), _Path("root"))
         assert_that([entry.path for entry in result]).is_equal_to(["root.a", "root.z"])
 
     def test_nested_list_of_dataclass_in_dataclass_recurses(self):
