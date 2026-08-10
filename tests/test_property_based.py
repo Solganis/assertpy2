@@ -28,7 +28,7 @@ from assertpy2._engine._path import _ROOT
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
-from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _disambiguated
+from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _diff_sides, _disambiguated
 from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
 
@@ -1355,3 +1355,19 @@ def test_the_key_walk_covers_both_sides_once_and_keeps_the_written_order(actual,
     assert_that(set(walked)).is_equal_to(set(actual) | set(expected))
     assert_that([key for key in walked if key in actual]).is_equal_to(list(actual))
     assert_that(_ordered_keys(actual, expected)).is_equal_to(walked)
+
+
+@given(
+    lead=st.integers(min_value=0, max_value=3000),
+    trail=st.integers(min_value=0, max_value=3000),
+    marker=st.sampled_from("ABC"),
+)
+def test_a_windowed_pair_shows_where_the_two_sides_part_however_deep_it_is(lead, trail, marker):
+    # the defect this replaced: each side was cut from its start, so a difference past the cap left two
+    # identical-looking values printed under a heading saying they were not equal.  the shared run is
+    # generated up to well past the 400-character cap, which is exactly where the old form went blind
+    left, right = f"{'x' * lead}{marker}{'y' * trail}", f"{'x' * lead}z{'y' * trail}"
+    rendered_left, rendered_right = _diff_sides(left, right)
+    assert_that(rendered_left).is_not_equal_to(rendered_right)
+    assert_that(rendered_left).contains(marker)
+    assert_that(rendered_right).contains("z")

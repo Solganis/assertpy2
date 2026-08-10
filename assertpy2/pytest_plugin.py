@@ -12,7 +12,7 @@ from . import _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
-from .errors import _diff_side, _json_safe, _render_diff
+from .errors import _diff_side, _diff_sides, _json_safe, _render_diff
 
 try:
     import allure  # ty: ignore[unresolved-import]  # optional dependency
@@ -368,9 +368,15 @@ def pytest_runtest_makereport(item, call):
         # capped like the diff rows: this section is read on a terminal, and the untouched values stay
         # on the exception for anything that wants them
         lines = []
-        if named_actual:
+        if named_actual and named_expected:
+            # windowed as a pair: capping each side on its own hides the difference when it sits past
+            # the cap, and prints two values that look identical under a heading saying they are not
+            left, right = _diff_sides(actual, expected)
+            lines.append(f"  actual:   {left}")
+            lines.append(f"  expected: {right}")
+        elif named_actual:
             lines.append(f"  actual:   {_diff_side(actual)}")
-        if named_expected:
+        else:
             lines.append(f"  expected: {_diff_side(expected)}")
         report.sections.append(("AssertionFailure", "\n".join(lines)))
 

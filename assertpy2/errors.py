@@ -198,6 +198,17 @@ def _diff_side(value: object, limit: int = 400) -> str:
     return _truncated(_safe_repr(value), limit)
 
 
+def _diff_sides(actual: object, expected: object, limit: int = 400) -> tuple[str, str]:
+    """Both sides of one comparison, capped onto the difference rather than from the start.
+
+    `_diff_side` caps each side on its own, which is right for a row that stands alone.  A pair read
+    together needs the pair's window: two 10 000-character strings differing in the middle were both
+    cut at character 400, so the section printed two identical-looking values under a heading saying
+    they were not equal, while the diff below it pointed straight at the change.
+    """
+    return _windowed(_safe_repr(actual), _safe_repr(expected), limit)
+
+
 def _windowed(actual: str, expected: str, width: int = 160) -> tuple[str, str]:
     """Both lines cut to a window around their first difference.
 
