@@ -7,7 +7,7 @@ PyHamcrest, the original assertpy, and dirty-equals.
     assertpy2 unifies the fluent, matcher, and `==` styles in one typed package, then adds thread-
     and async-safe soft assertions, async polling, structured failures, and rich pytest diffs.
 
-    It ships **39 composable matchers** and **over 100 assertion methods** across **12 value types**,
+    It ships **41 composable matchers** and **over 100 assertion methods** across **12 value types**,
     with no runtime dependencies on Python 3.11+.
 
 ## All three styles, one import
@@ -155,7 +155,7 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 |---|:---:|:---:|:---:|:---:|:---:|
 | Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#all-three-styles-one-import)** |
 | Mix styles in one suite | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
-| Static typing (`py.typed`, overloads) | n/a | No | No | **Typed** | **[Yes](../concepts/type-safety.md)** |
+| Static typing (`py.typed`, overloads) | n/a | `py.typed` only | No | **Typed** | **[Yes](../concepts/type-safety.md)** |
 | Autocomplete filtered by value type | No | No | No | No | **[Yes](../concepts/type-safety.md#type-aware-autocomplete)** |
 | Typed narrowing (the assertion returns the value, narrowed) | No | No | No | No | **[Yes](../concepts/type-safety.md#typed-narrowing-with-value)** |
 | Contract testing (validate a payload and narrow to the model) | No | No | No | No | **[Yes](../concepts/type-safety.md#contract-narrowing-with-assert_conforms)** |
