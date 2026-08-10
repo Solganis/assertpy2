@@ -30,22 +30,15 @@ pytest.importorskip("pytest_examples")
 from pytest_examples import CodeExample, find_examples
 
 from assertpy2 import assert_that
-from tests.docs_fixtures import PAGE_FIXTURES
+from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
-CHECKED_DOCS = [
-    "README.md",
-    "docs/guides/matchers.md",
-    "docs/guides/assertions.md",
-    "docs/guides/data.md",
-    "docs/guides/errors.md",
-    "docs/guides/fluent.md",
-    "docs/guides/testing.md",
-    "docs/concepts/type-safety.md",
-    "docs/getting-started/quickstart.md",
-    "docs/index.md",
-    "docs/getting-started/migration.md",
-    "docs/recipes.md",
-]
+# Pages this guard does not read, each with the reason it does not. Everything else is read, including
+# a page added after this line was written.
+UNCHECKED_DOCS = {
+    "docs/getting-started/comparison.md": "the blocks are the other library's API, not ours",
+}
+
+CHECKED_DOCS = documented_pages(UNCHECKED_DOCS)
 
 # what the pages assume a reader already has in scope by the time they reach a later block, kept the
 # same as the executing guard's namespace so a block cannot pass one and fail the other over an import
