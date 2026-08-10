@@ -69,3 +69,9 @@ Setup a page assumes (a domain class, a repository, an HTTP response) goes in
 - Prove it on one of four counts: correctness, performance, API consistency, developer experience.
 - Do not grow the typed surface without a caller that needs it. An overload with no scenario behind
   it costs every user the diagnostics it adds.
+- A format validator (`is_uuid`, `is_ip`, ...) earns its name only when a stdlib parser knows
+  something a regex does not. `uuid.UUID` reads a UUID's version and variant, `ipaddress` handles
+  compressed IPv6. A hex-length check is not in that class, and a URL has no stdlib validator worth
+  shipping.
+- A sound implementation is not itself a reason. `is_ip` clears the bar above and is still not here,
+  because nobody has asked for it.
