@@ -4,6 +4,8 @@ Add your own assertions to `assertpy2` with `add_extension()`.
 
 ## A custom assertion
 
+<!-- docs-guard: untyped -->
+
 ```python
 from assertpy2 import add_extension, assert_that
 
@@ -17,6 +19,11 @@ add_extension(is_5)
 assert_that(5).is_5()
 assert_that(6).is_5()  # fails!
 ```
+
+Both lines run, but a type checker rejects the first one: `5` resolves to the numeric protocol, which
+declares no `is_5`. An extension is only visible to a checker on values that fall to the generic
+builder, which means your own classes rather than `str`, `int`, `dict` and the rest. The reason and the
+ways round it are in [Where the typed surface ends](../concepts/type-safety.md#where-the-typed-surface-ends).
 
 `remove_extension()` takes the same function and unregisters it, so a temporary assertion does not
 leak into other tests:
@@ -47,6 +54,8 @@ def my_extensions():
 ```
 
 Then request the fixture in any test that needs the extensions:
+
+<!-- docs-guard: untyped -->
 
 ```python
 from assertpy2 import assert_that
