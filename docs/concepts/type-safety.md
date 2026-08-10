@@ -94,6 +94,20 @@ This is the deliberate cost of keeping the original assertpy API working unchang
 mutually satisfiable: for a checker to accept `has_first_name` on a dict, `_DictAssertion` would need a
 `__getattr__`, and that same declaration would stop it reporting `contins_key` as a typo.
 
+[Custom assertions](../extending/custom-assertions.md) registered with `add_extension()` sit on the same
+line, for the same reason. The name is attached at runtime, so it reaches a checker through that one
+`__getattr__` and nowhere else:
+
+<!-- docs-guard: untyped -->
+```python
+assert_that(order).is_paid()  # clean: a user class falls to the generic builder
+assert_that(5).is_5()         # type error: _NumericAssertion has no attribute is_5
+```
+
+Both lines run. If your extension targets a value with an overload of its own, the call needs
+`# type: ignore[attr-defined]` at each site, and the return type a checker infers for it is `Any`
+rather than whatever the extension actually returns.
+
 ## Typed narrowing with .value
 
 Assertions don't just check a value - they can hand it back, typed. The `value` property ends a chain
@@ -274,9 +288,27 @@ A few refinements keep it precise:
 
 ## Set up your type checker
 
-The narrowing works in any checker mode, but strict mode surfaces the most - a wrong method called on a
-narrowed value, a missing return annotation, a `.value` read where the type was never narrowed. Turn it
-on for your checker:
+Under mypy, one setting decides whether any of this reaches your tests. mypy does not look inside a
+function with no annotations at all, and a test written as `def test_orders():` is exactly that, so the
+narrowing is silently skipped for the file where you wanted it most. The same three mistakes below are
+reported six times by Pyright and `ty` out of the box, three times by mypy at its defaults, and six by
+mypy once it is told to read those bodies:
+
+<!-- docs-guard: skip -->
+
+```python
+def test_unannotated():        # mypy default: not checked at all
+    assert_that("abc").is_greater_than(3)
+
+def test_annotated() -> None:  # mypy default: checked
+    assert_that("abc").is_greater_than(3)
+```
+
+Either annotate every test with `-> None`, or set `check_untyped_defs = true`, which `strict = true`
+already includes. Pyright and `ty` need neither.
+
+Strict mode then surfaces the most - a wrong method called on a narrowed value, a missing return
+annotation, a `.value` read where the type was never narrowed. Turn it on for your checker:
 
 ```toml
 # pyproject.toml - mypy
