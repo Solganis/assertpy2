@@ -118,7 +118,12 @@ def test_failure_without_locatable_caller_frame():
     logger.addHandler(logging.StreamHandler(capture))
     adapted = WarningLoggingAdapter(logger, None)
 
-    with patch.object(assertpy_module, "ASSERTPY_FILES", [""]):
+    # every frame reads as internal, so there is no handover to a user frame to report
+    class _EverythingIsInternal(frozenset):
+        def __contains__(self, item):
+            return True
+
+    with patch.object(assertpy_module, "ASSERTPY_FILES", _EverythingIsInternal()):
         assert_warn("foo", logger=adapted).is_equal_to("bar")
 
     assert_that(capture.getvalue()).starts_with("Expected <foo> to be equal to <bar>, but was not.")
