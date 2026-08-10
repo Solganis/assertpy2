@@ -6,11 +6,6 @@ import math
 import numbers
 import re
 
-try:
-    import attrs
-except ImportError:  # pragma: no cover - optional dependency; the attrs branch runs only when present
-    attrs = None  # ty: ignore[invalid-assignment]  # sentinel for the absent optional module
-
 from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
 
 from ._engine._compare import _CompareConfig, _config_note, _guarded_not_equal, _node_decision, _spec_matches
@@ -551,7 +546,15 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            # attrs is importable whenever an attrs instance exists, so the guarded import bound it;
+            # deferred, and the only import in the package that is: at module level it cost 8.5 ms and
+            # 22 modules of a 39.8 ms import, a fifth of it, paid by every pytest run in an environment
+            # where attrs happens to be installed.  The auto-loaded plugin means that is every run, and
+            # it was paid whether or not any attrs instance ever reached a comparison.  Here it is paid
+            # by the one branch that needs it, and the guard above already proved the library is present
+            # (nothing carries `__attrs_attrs__` unless attrs built it).  Every other optional
+            # dependency in the package is imported inside its own branch for the same reason.
+            import attrs
+
             # asdict recurses like dataclasses.asdict, flattening nested attrs for ignore/include
             return attrs.asdict(obj)
         if hasattr(obj, "__dict__") and not isinstance(obj, type):

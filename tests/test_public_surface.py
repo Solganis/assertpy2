@@ -15,6 +15,9 @@ package happens to say, which gates nothing: the point is that a human edits the
 from __future__ import annotations
 
 import dataclasses
+import json
+import subprocess
+import sys
 
 import assertpy2
 from assertpy2 import assert_that
@@ -130,3 +133,36 @@ class TestTheCountsTheDocsQuote:
         assert_that(len(assertions)).described_as("assertions, quoted in comparison.md as over 100").is_greater_than(
             100
         )
+
+
+class TestNoOptionalDependencyIsImportedEagerly:
+    """Importing the package must not drag in a library it only needs on one branch.
+
+    The pytest plugin is auto-loaded, so `import assertpy2` happens in every pytest run in the
+    environment, whether or not a test ever calls an assertion. `attrs` sat at module level in
+    `helpers.py` and cost 8.5 ms and 22 modules of a 39.8 ms import, a fifth of it, for a branch that
+    fires only when an attrs instance reaches a comparison. Nothing in the suite noticed, because an
+    eager import is invisible to every other gate here.
+
+    Run in a subprocess: this process has already imported half of PyPI by the time a test runs.
+    """
+
+    OPTIONAL = ("attrs", "attr", "numpy", "pandas", "polars", "pydantic", "jsonschema", "jsonpath_ng", "executing")
+
+    def test_none_of_them_arrives_with_the_package(self):
+        program = (
+            "import sys, json; import assertpy2; "
+            f"print(json.dumps([name for name in {self.OPTIONAL!r} if name in sys.modules]))"
+        )
+        result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, check=True)
+        eager = json.loads(result.stdout)
+        assert_that(eager).described_as("optional dependencies imported by `import assertpy2`").is_empty()
+
+    def test_the_guard_can_see_an_eager_import(self):
+        # without this the test above would pass just as well against a broken probe
+        program = (
+            "import sys, json; import attrs; import assertpy2; "
+            f"print(json.dumps([name for name in {self.OPTIONAL!r} if name in sys.modules]))"
+        )
+        result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, check=True)
+        assert_that(json.loads(result.stdout)).contains("attrs")
