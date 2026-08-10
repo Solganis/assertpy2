@@ -29,11 +29,17 @@ from __future__ import annotations
 
 import dataclasses
 import difflib
+from typing import TYPE_CHECKING, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _node_decision
 from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
 from ._path import _ROOT, _Path
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable, Iterable
+
+_K = TypeVar("_K", bound="Hashable")  # a mapping key or a field name, kept as itself through the walk
 
 __tracebackhide__ = True
 
@@ -254,20 +260,34 @@ def _element_entries(actual_item, expected_item, path: _Path, seen, config) -> l
     return _child_entries(actual_item, expected_item, path, descended_for=decision, _seen=seen, config=config)
 
 
+def _ordered_keys(actual: Iterable[_K], expected: Iterable[_K]) -> list[_K]:
+    """Every key of both sides, in the order a reader wrote them.
+
+    A union of two sets loses insertion order, which is why this used to be sorted: without an order
+    imposed, the report varied with the hash seed.  Sorting bought determinism at the price of the one
+    ordering that carries meaning - a JSON response reads in the order its fields arrived, and `k0, k1,
+    k10, k100` reads as no order at all.  Walking the actual side and then the keys only the expected
+    side has is just as deterministic, and it is the order pytest shows.
+    """
+    seen = set(actual)
+    return [*actual, *(key for key in expected if key not in seen)]
+
+
 def _dataclass_diff_entries(actual, expected, prefix: _Path, seen, config=None) -> list[DiffEntry]:
-    """Diff two dataclasses over the sorted union of field names, both directions, recursing.
+    """Diff two dataclasses over both sides' field names in declaration order, recursing.
 
     Reports fields present on only one side, and recurses into nested containers.  ``seen`` must
     already include the ids of ``actual``/``expected``.  Shared by the top-level and nested paths
     so both report dataclass fields identically.
     """
     entries: list[DiffEntry] = []
-    actual_names = {field.name for field in dataclasses.fields(actual)}
-    expected_names = {field.name for field in dataclasses.fields(expected)}
-    for field in sorted(actual_names | expected_names):
-        if field not in expected_names:
+    actual_names = [field.name for field in dataclasses.fields(actual)]
+    expected_names = [field.name for field in dataclasses.fields(expected)]
+    in_actual, in_expected = set(actual_names), set(expected_names)
+    for field in _ordered_keys(actual_names, expected_names):
+        if field not in in_expected:
             entries.append(prefix.attr(field).entry(actual=getattr(actual, field), expected=None, absent="expected"))
-        elif field not in actual_names:
+        elif field not in in_actual:
             entries.append(prefix.attr(field).entry(actual=None, absent="actual", expected=getattr(expected, field)))
         else:
             actual_value = getattr(actual, field)
@@ -356,7 +376,7 @@ def _build_equality_diff(
         actual_dict = _field_dict(actual, both_model)
         expected_dict = _field_dict(expected, both_model)
         entries = []
-        for key in sorted(set(actual_dict) | set(expected_dict)):
+        for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
                 entries.append(_prefix.attr(key).entry(actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
@@ -439,7 +459,7 @@ def _sub_diff_entries(
         entries: list[DiffEntry] = []
         actual_keys = set(actual)
         expected_keys = set(expected)
-        for key in sorted(actual_keys | expected_keys, key=_safe_repr):
+        for key in _ordered_keys(actual, expected):
             if key not in expected_keys:
                 entries.append(prefix.key(key).entry(actual=actual[key], expected=None, absent="expected"))
             elif key not in actual_keys:
@@ -504,7 +524,7 @@ def _sub_diff_entries(
         actual_dict = _field_dict(actual, both_model)
         expected_dict = _field_dict(expected, both_model)
         entries = []
-        for key in sorted(set(actual_dict) | set(expected_dict)):
+        for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
                 entries.append(prefix.attr(key).entry(actual=actual_dict[key], expected=None, absent="expected"))
             elif key not in actual_dict:
