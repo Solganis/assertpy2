@@ -15,7 +15,7 @@ import pytest
 
 from assertpy2 import assert_that
 from assertpy2._engine._path import _ROOT
-from assertpy2._hints import diagnose
+from assertpy2._hints import _explains, diagnose
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 
 
@@ -393,3 +393,25 @@ class TestTheNarrowerExplanationStillWins:
     def test_a_type_difference_the_ladder_already_explains(self, actual, expected, expected_line):
         # both of these differ in type too, and both have a better answer than saying so
         assert_that(_message(actual, expected)).contains(expected_line)
+
+
+class TestTheContractOfTheExplanationLadder:
+    """The two rules a new step in `_STEPS` has to respect, stated where a change will trip on them.
+
+    Both are written next to the ladder as comments as well. A comment can be read past a year from
+    now; a test cannot.
+    """
+
+    def test_a_normalisation_never_explains_a_pair_that_already_matches(self):
+        # the first rule, at the level it lives on rather than through the failure it produced. a pair
+        # whose sides already agree is a difference for some other reason, and a step that leaves it
+        # alone has not accounted for anything
+        assert_that(_explains([(1, 1)], (lambda value: value,))).is_false()
+        assert_that(_explains([("a ", "a")], (str.strip,))).is_true()
+
+    def test_a_named_encoding_outranks_the_general_claim_that_types_differ(self):
+        # the second rule. both sides read alike under `str()`, which is what the type branch looks
+        # for, and the ladder has the better answer
+        message = _message({"a": [1, 2]}, {"a": "[1, 2]"})
+        assert_that(message).contains("unparsed JSON text")
+        assert_that(message).does_not_contain("another type")
