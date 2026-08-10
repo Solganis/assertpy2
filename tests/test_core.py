@@ -143,8 +143,10 @@ def test_fmt_args_kwargs_multiple_both():
 
 
 def test_check_dict_like_empty_dict():
+    # the old form was `assert_that(builder._require_dict_like({}))`, which asserted nothing: the method
+    # returns None and reports by raising, so the test passed whatever it did
     builder = assert_that(None)
-    assert_that(builder._require_dict_like({}))
+    assert_that(builder._require_dict_like).does_not_raise(TypeError).when_called_with({})
 
 
 def test_check_dict_like_not_iterable():
