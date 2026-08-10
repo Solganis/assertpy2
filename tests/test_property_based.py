@@ -22,7 +22,7 @@ from hypothesis import strategies as st
 from assertpy2 import assert_conforms, assert_that, match
 from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
-from assertpy2._engine._diff import _build_equality_diff, _sub_diff_entries
+from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
 from assertpy2._engine._introspection import is_mapping_like
 from assertpy2._engine._path import _ROOT
 from assertpy2._inline import _format_literal, is_literalable
@@ -1338,3 +1338,20 @@ def test_the_entry_cap_is_honoured_and_the_remainder_counted(entries, limit):
         assert_that(rendered).contains(f"... and {len(entries) - limit} more entries")
     else:
         assert_that(rendered).does_not_contain("more entries")
+
+
+# --- report ordering and windowing ------------------------------------------------------------
+
+
+@given(
+    actual=st.dictionaries(st.text(min_size=1, max_size=4), st.integers(), max_size=8),
+    expected=st.dictionaries(st.text(min_size=1, max_size=4), st.integers(), max_size=8),
+)
+def test_the_key_walk_covers_both_sides_once_and_keeps_the_written_order(actual, expected):
+    # what the union of two sets used to give at the price of an imposed sort: every key, no repeats,
+    # and a deterministic order. this adds the part the sort destroyed, which is the order itself
+    walked = _ordered_keys(actual, expected)
+    assert_that(walked).is_length(len(set(actual) | set(expected)))
+    assert_that(set(walked)).is_equal_to(set(actual) | set(expected))
+    assert_that([key for key in walked if key in actual]).is_equal_to(list(actual))
+    assert_that(_ordered_keys(actual, expected)).is_equal_to(walked)

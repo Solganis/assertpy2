@@ -437,9 +437,10 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(mapping)}
             parts = []
             ellip = False
-            # build items by iterating keys + [] (the dict-likeness gate guarantees those, not items())
-            mapping_items = ((key, mapping[key]) for key in mapping)
-            for key, value in sorted(mapping_items, key=lambda item: _safe_repr(item[0])):
+            # build items by iterating keys + [] (the dict-likeness gate guarantees those, not items()).
+            # left in the order the mapping holds them, which is what the diff under this line prints:
+            # sorting only here made the two halves of one message disagree about where a key sits
+            for key, value in ((key, mapping[key]) for key in mapping):
                 if key not in counterpart:
                     parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                 else:

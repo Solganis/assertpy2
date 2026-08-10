@@ -1355,9 +1355,33 @@ class TestDiffEngineHarmonization:
         assert_that(entry.actual).is_equal_to("a")
         assert_that(entry.expected).is_equal_to("z")
 
-    def test_int_keys_sorted_by_repr(self):
+    def test_keys_keep_the_order_they_were_written_in(self):
+        # sorted by repr this read 1, 10, 2, which looks like no order at all. insertion order is just
+        # as deterministic and is the one the reader chose
         paths = self._paths({1: "a", 2: "b", 10: "c"}, {1: "z", 2: "y", 10: "x"})
-        assert_that(paths).is_equal_to(["1", "10", "2"])
+        assert_that(paths).is_equal_to(["1", "2", "10"])
+
+    def test_keys_of_mixed_types_do_not_need_an_ordering(self):
+        # the reason the old code sorted by repr rather than by value: `sorted` on {1, "a"} raises.
+        # walking the two sides in order never compares keys at all
+        paths = self._paths({1: "a", "b": "c"}, {1: "z", "b": "y"})
+        assert_that(paths).is_equal_to(["1", "b"])
+
+    def test_a_key_only_the_expected_side_has_comes_after_the_actual_ones(self):
+        paths = self._paths({"b": 1}, {"b": 2, "a": 3})
+        assert_that(paths).is_equal_to(["b", "a"])
+
+    def test_the_headline_and_the_diff_read_the_keys_in_the_same_order(self):
+        # the two halves of one message used to be built by different code with different opinions:
+        # the headline sorted by repr while the diff below it walked the mapping, so a reader matching
+        # a key from one to the other found it in a different place
+        written = {"zebra": 1, "apple": 2, "mango": 3}
+        with pytest.raises(AssertionError) as failure:
+            assert_that(written).is_equal_to({"zebra": 9, "apple": 9, "mango": 9})
+        headline = str(failure.value)
+        in_headline = sorted(written, key=headline.index)
+        assert_that(in_headline).is_equal_to(["zebra", "apple", "mango"])
+        assert_that(self._paths(written, {"zebra": 9, "apple": 9, "mango": 9})).is_equal_to(in_headline)
 
     def test_top_level_mapping_still_decomposes(self):
         paths = self._paths(_ReadOnlyMapping({"a": 1, "b": 2}), _ReadOnlyMapping({"a": 1, "b": 9}))
@@ -1515,14 +1539,14 @@ class TestNestedSubDiffDecomposition:
         assert_that(entry.actual).is_none()
         assert_that(entry.expected).is_equal_to(2)
 
-    def test_sub_dataclass_sorted_field_order(self):
+    def test_sub_dataclass_keeps_declaration_field_order(self):
         @dataclass
         class NonAlpha:
             z: int
             a: int
 
         result = _sub_diff_entries(NonAlpha(1, 1), NonAlpha(9, 9), _Path("root"))
-        assert_that([entry.path for entry in result]).is_equal_to(["root.a", "root.z"])
+        assert_that([entry.path for entry in result]).is_equal_to(["root.z", "root.a"])
 
     def test_nested_list_of_dataclass_in_dataclass_recurses(self):
         @dataclass
