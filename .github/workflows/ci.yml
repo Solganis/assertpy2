@@ -17,6 +17,10 @@ jobs:
   test:
     timeout-minutes: 15
     runs-on: ${{ matrix.os }}
+    # mapped at job level so the upload step can ask whether it has a token before it runs: the secrets
+    # context is not readable from a step `if`, and step-level env is not in scope for its own condition
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -75,10 +79,11 @@ jobs:
         # Only the full-deps cell. The bare 3.14/ubuntu cell skips every integration test and used
         # to upload too: Codecov merges reports so the number stayed right, but one of the two was
         # always a partial report sent at a 100% target.
-        # A fork PR, dependabot's included, runs without repository secrets, so the token is empty and
-        # Codecov rejects the upload on a protected branch. Skipping there keeps a red CI meaningful:
-        # every such run failed on the upload rather than on a test, and nobody could act on it.
-        if: matrix.full-deps && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        # A run without repository secrets gets an empty token, and Codecov rejects an untokened upload
+        # to a protected branch, so the job went red on the upload while every test passed.  The gate is
+        # the token rather than who opened the pull request: dependabot pushes its branches into this
+        # repository, so a fork test reads false for it and it still runs without secrets.
+        if: matrix.full-deps && env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
