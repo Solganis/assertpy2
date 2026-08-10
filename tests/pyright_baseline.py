@@ -26,7 +26,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/helpers.py", "reportArgumentType"): 3,
     ("assertpy2/helpers.py", "reportGeneralTypeIssues"): 1,
     ("assertpy2/helpers.py", "reportIndexIssue"): 2,
-    ("assertpy2/helpers.py", "reportOptionalMemberAccess"): 1,
     ("assertpy2/pytest_plugin.py", "reportArgumentType"): 3,
     # --- `numbers.Number` declares no arithmetic --------------------------------------------------
     # The ABC names the tower without promising operators, so comparing one or passing it to
