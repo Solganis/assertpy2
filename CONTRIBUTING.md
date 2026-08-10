@@ -4,15 +4,17 @@ Contributions of docs, tests, or code are welcome.
 
 ## Workflow
 
-1. Fork the repo
-2. Clone your fork (`git clone <your_fork_url>`)
-3. Create a branch (`git checkout -b my_branch`)
-4. Install dependencies: `uv sync`
-5. Make your changes
-6. Run the [verification pipeline](#verification-pipeline) and fix any issues
-7. Commit using [Conventional Commits](#commit-style)
-8. Push your branch (`git push origin my_branch`)
-9. Open a [Pull Request](http://github.com/Solganis/assertpy2/pulls)
+1. For a new assertion or matcher, open an issue first. The API grows from demand, and a working
+   implementation on its own is not enough to land one
+2. Fork the repo
+3. Clone your fork (`git clone <your_fork_url>`)
+4. Create a branch (`git checkout -b my_branch`)
+5. Install dependencies: `uv sync`
+6. Make your changes
+7. Run the [verification pipeline](#verification-pipeline) and fix any issues
+8. Commit using [Conventional Commits](#commit-style)
+9. Push your branch (`git push origin my_branch`)
+10. Open a [Pull Request](http://github.com/Solganis/assertpy2/pulls)
 
 Read more about how pulls work on GitHub's [About pull requests](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/about-pull-requests) page.
 
@@ -63,13 +65,3 @@ Guide code blocks are executed (`tests/test_docs_examples.py`) and type-checked
 
 Setup a page assumes (a domain class, a repository, an HTTP response) goes in
 `tests/docs_fixtures.py`, not into an extra block on the page.
-
-## What earns a change
-
-- Prove it on one of four counts: correctness, performance, API consistency, developer experience.
-- Do not grow the typed surface without a caller that needs it. An overload with no scenario behind
-  it costs every user the diagnostics it adds.
-- A format validator (`is_uuid`, `is_ip`, ...) earns its name only where a stdlib parser knows more
-  than a regex would: `uuid.UUID` reads version and variant, `ipaddress` handles compressed IPv6.
-- A sound implementation is not a reason on its own. `is_ip` clears the bar above and is still not
-  here, because nobody has asked for it.
