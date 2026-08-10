@@ -62,6 +62,11 @@ if TYPE_CHECKING:
     assert_type(assert_that(len), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])
 
+    # a dynamic assertion and an `add_extension` name both resolve through the same `__getattr__`, and
+    # no one signature is true of both, so the hook deliberately answers Any. pinned here because both
+    # narrower forms were tried and each one rejected code that runs: see DynamicMixin.__getattr__
+    assert_type(assert_that(object()).has_anything("value"), Any)
+
     # not_ hands back the assertion it was reached from, so inverting a step does not end the
     # narrowing: the value type survives it and a wrong-domain assertion is still rejected after it.
     assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])

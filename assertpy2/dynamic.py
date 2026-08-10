@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import collections.abc
 import inspect
+from typing import Any
 
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
@@ -43,9 +44,22 @@ class DynamicMixin(_MixinBase):
         assert_that(fred).has_shoe_size(12)
     """
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr: str) -> Any:
         """Asserts that val has attribute attr and that its value is equal to other via a dynamic
-        assertion of the form ``has_<attr>()``."""
+        assertion of the form ``has_<attr>()``.
+
+        The return stays ``Any`` on purpose, and the reason is written down because the annotation looks
+        like an oversight worth fixing.  Two unrelated things resolve through this hook: a ``has_``
+        wrapper, which takes one argument and hands back the builder, and any name registered with
+        `add_extension`, which takes and returns whatever it declares.  No single signature is true of
+        both.  Pinning the argument list reported a correct zero-argument extension call as too few
+        arguments, and pinning the return type reported a correct extension result as the wrong type
+        where it was used.  Both were measured against mypy, pyright and ty.
+
+        The narrower annotation also bought less than it looked like.  It could not catch an assertion
+        chained onto a dynamic step, because that access resolves back through this same hook; the only
+        thing it added was a verdict in assignment position, which is where it was wrong for extensions.
+        """
         if not attr.startswith("has_"):
             raise AttributeError(f"assertpy has no assertion <{attr}()>")
 
