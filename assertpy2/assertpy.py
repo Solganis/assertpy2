@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import contextvars
 import logging
 import os
@@ -15,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Final, Generic, Literal, TypeVar, overloa
 if TYPE_CHECKING:
     import datetime
     import pathlib
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable
 
     from typing_extensions import TypeIs
 
@@ -72,7 +71,6 @@ if TYPE_CHECKING:
     _V = TypeVar("_V")  # dict value type
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
-contextlib.__tracebackhide__ = True  # ty: ignore[unresolved-attribute]  # pytest monkey-patch
 
 # assertpy2 source files, used to strip internal frames when locating the caller for warn-mode messages.
 # Derived from the package directory so new modules are covered automatically (no hand-maintained list).
@@ -121,12 +119,33 @@ _soft_err: contextvars.ContextVar[list[AssertionOutcome]] = contextvars.ContextV
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
 
+class _Group:
+    """The context `group()` hands back.
+
+    A class rather than a `@contextlib.contextmanager` generator, and the same goes for the soft block
+    itself.  A generator-based manager puts `contextlib.__exit__` on the stack, so a failure raised on
+    the way out is reported against `contextlib.py` instead of the `with` line in the test.  The old
+    cure was setting `__tracebackhide__` on the `contextlib` module, which fixed our two managers by
+    changing how every third-party context manager in the process is reported.
+    """
+
+    __slots__ = ("_label", "_token")
+
+    def __init__(self, label: str) -> None:
+        self._label = label
+
+    def __enter__(self) -> None:
+        self._token = _soft_group.set(self._label)
+
+    def __exit__(self, *_exc: object) -> None:
+        _soft_group.reset(self._token)
+
+
 class SoftAssertionCollector:
     """Collector returned by [`soft_assertions()`][assertpy2.assertpy.soft_assertions] for grouping
     errors hierarchically."""
 
-    @contextlib.contextmanager
-    def group(self, label: str) -> Iterator[None]:
+    def group(self, label: str) -> _Group:
         """Group subsequent assertion failures under *label*.
 
         Examples:
@@ -138,11 +157,7 @@ class SoftAssertionCollector:
                     with sa.group("Body"):
                         assert_that(body["status"]).is_equal_to("ok")
         """
-        token = _soft_group.set(label)
-        try:
-            yield
-        finally:
-            _soft_group.reset(token)
+        return _Group(label)
 
 
 def _located(location: tuple[str, int] | None, msg: str) -> str:
@@ -195,8 +210,32 @@ def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
     return "\n".join(lines)
 
 
-@contextlib.contextmanager
-def soft_assertions() -> Iterator[SoftAssertionCollector]:
+class _SoftAssertions:
+    """The context `soft_assertions()` hands back.  See `_Group` for why this is a class."""
+
+    __slots__ = ()
+
+    def __enter__(self) -> SoftAssertionCollector:
+        ctx = _soft_ctx.get()
+        if ctx == 0:
+            _soft_err.set([])
+        _soft_ctx.set(ctx + 1)
+        return SoftAssertionCollector()
+
+    def __exit__(self, exc_type: type[BaseException] | None, *_exc: object) -> None:
+        _soft_ctx.set(_soft_ctx.get() - 1)
+        if exc_type is not None:
+            return  # an error out of the block wins: it says more than the failures collected before it
+        errs = _soft_err.get([])
+        if errs and _soft_ctx.get() == 0:
+            out = _format_soft_errors(errs)
+            _soft_err.set([])
+            # the same class as a single failure, so one `except AssertionFailure` covers a soft block
+            # too, and it hands back what it aggregated rather than only the text it rendered
+            raise AssertionFailure(out, failures=tuple(errs))
+
+
+def soft_assertions() -> _SoftAssertions:
     """Create a soft assertion context.
 
     Normally, any assertion failure will halt test execution immediately by raising an error.
@@ -243,23 +282,7 @@ def soft_assertions() -> Iterator[SoftAssertionCollector]:
         If you need more forgiving behavior, use [`soft_fail()`][assertpy2.assertpy.soft_fail] to add
         a failure message without halting test execution.
     """
-    ctx = _soft_ctx.get()
-    if ctx == 0:
-        _soft_err.set([])
-    _soft_ctx.set(ctx + 1)
-
-    try:
-        yield SoftAssertionCollector()
-    finally:
-        _soft_ctx.set(_soft_ctx.get() - 1)
-
-    errs = _soft_err.get([])
-    if errs and _soft_ctx.get() == 0:
-        out = _format_soft_errors(errs)
-        _soft_err.set([])
-        # the same class as a single failure, so one `except AssertionFailure` covers a soft block too,
-        # and it hands back what it aggregated rather than only the text it rendered
-        raise AssertionFailure(out, failures=tuple(errs))
+    return _SoftAssertions()
 
 
 def assert_all(*callables: Callable[[], object]) -> None:

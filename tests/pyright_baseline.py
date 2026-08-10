@@ -58,9 +58,10 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
     ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
     # --- dynamic attribute resolution ---------------------------------------------------------------
-    # `__getattr__` builds the dynamic assertions and the check/negation proxies, so what it returns
-    # cannot match a declared return type. Each site carries its own ty suppression.
-    ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 4,
+    # `__getattr__` builds the check/negation proxies, so what it returns cannot match a declared
+    # return type. Each site carries its own ty suppression.  There used to be a fourth here, from
+    # writing `__tracebackhide__` onto the contextlib module; that patch is gone and so is the report.
+    ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
     ("assertpy2/assertpy.py", "reportReturnType"): 4,
     # the failure record is `| None` in general and never None at this call, as the comment there says
     ("assertpy2/snapshot.py", "reportArgumentType"): 1,
