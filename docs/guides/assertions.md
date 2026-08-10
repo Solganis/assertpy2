@@ -36,6 +36,19 @@ assert_that("123-456-7890").matches(r"\d{3}-\d{3}-\d{4}")
 assert_that("foo").does_not_match(r"\d+")
 ```
 
+!!! note "An empty prefix or suffix is refused"
+    This one does not follow from Python, where `"foo".startswith("")` is `True`. An empty prefix holds
+    for every value, so the assertion cannot fail and checks nothing. `starts_with()`, `ends_with()`,
+    their `_ignoring_case` spellings and `starts_with_bytes()` raise `ValueError` rather than pass.
+
+    <!-- docs-guard: raises -->
+    ```python
+    assert_that("foo").starts_with("")   # ValueError: given prefix arg must not be empty
+    ```
+
+    An empty **value** is refused the same way when the subject is a non-string iterable, since there is
+    no first element to compare against.
+
 !!! note "Regex matching"
     Use raw strings (`r"..."`) for patterns. `matches()` passes on **partial** matches (like the
     underlying `re.match`). Anchor the pattern (`^...$`) to match the whole string. Inline flags such as
