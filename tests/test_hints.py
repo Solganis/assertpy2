@@ -29,9 +29,13 @@ class _State(enum.Enum):
     CLOSED = "closed"
 
 
-def _message(actual, expected):
+class _UserId(int):
+    """A domain wrapper over a value it compares equal to, so only `strict_types` calls it a difference."""
+
+
+def _message(actual, expected, **kwargs):
     with pytest.raises(AssertionFailure) as failure:
-        assert_that(actual).is_equal_to(expected)
+        assert_that(actual).is_equal_to(expected, **kwargs)
     return str(failure.value)
 
 
@@ -311,3 +315,81 @@ class TestTheMessageStaysUsableAsAPrefix:
             assert_that("bob ").described_as("the name").is_equal_to("bob")
         assert_that(str(failure.value)).starts_with("[the name] Expected")
         assert_that(str(failure.value)).contains("surrounding whitespace")
+
+
+class TestOnlyTheTypesDiffer:
+    """The failure a REST payload produces more than any other: the ids came back as text."""
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ({"id": 7}, {"id": "7"}),
+            ({"id": 7, "qty": 3, "n": 9}, {"id": "7", "qty": "3", "n": "9"}),
+            ({"user": {"id": 7}}, {"user": {"id": "7"}}),
+            ([1, 2], ["1", "2"]),
+            ({"total": 1.5}, {"total": "1.5"}),
+            ({"a": None}, {"a": "None"}),
+        ],
+        ids=["one field", "every field", "nested", "list", "float", "none"],
+    )
+    def test_a_payload_that_came_back_as_text(self, actual, expected):
+        assert_that(_message(actual, expected)).contains("the same text against a value of another type")
+
+    def test_a_scalar_says_nothing_because_the_headline_already_did(self):
+        # `<7:int>` / `<7:str>` names both types outright, which is more than the line could say
+        message = _message(7, "7")
+        assert_that(message).contains("<7:int>").contains("<7:str>")
+        assert_that(message).does_not_contain("another type")
+
+    def test_a_mixture_of_type_and_value_differences_says_nothing(self):
+        # one pair differs in type and the other in value, so no single statement covers the failure
+        assert_that(_message({"a": 7, "b": 1}, {"a": "7", "b": 2})).does_not_contain("another type")
+
+
+class TestStrictTypesNoLongerBlamesJson:
+    """The first invariant of the ladder: a normalisation explains a pair only if the pair differed.
+
+    Under `strict_types` the two sides of an entry compare equal and are a difference anyway, so every
+    normalisation "resolves" them by doing nothing and the first step took the credit. A comparison
+    holding no JSON at all was reported as one of unparsed JSON text.
+    """
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [({"id": _UserId(7)}, {"id": 7}), ({"n": 1}, {"n": 1.0}), ({"n": True}, {"n": 1})],
+        ids=["subclass", "int against float", "bool against int"],
+    )
+    def test_the_line_names_the_types_rather_than_json(self, actual, expected):
+        message = _message(actual, expected, strict_types=True)
+        assert_that(message).contains("only their types differ")
+        assert_that(message).does_not_contain("JSON")
+
+    def test_a_strict_failure_that_also_differs_in_value_says_nothing(self):
+        message = _message({"n": 1, "m": 2}, {"n": 1.0, "m": 3}, strict_types=True)
+        assert_that(message).does_not_contain("only their types differ")
+
+
+class TestTheNarrowerExplanationStillWins:
+    """The second invariant: a named encoding outranks the general claim that the types differ.
+
+    The type line is the broad statement, so a step that says which encoding the two sides differ in
+    has to be reached first, or every one of those failures would be reported as a bare type mismatch.
+    """
+
+    def test_text_that_parses_as_json_is_still_called_json(self):
+        # both sides read alike under `str()`, which is exactly what the type line looks for
+        message = _message({"a": [1, 2]}, {"a": "[1, 2]"})
+        assert_that(message).contains("unparsed JSON text")
+        assert_that(message).does_not_contain("another type")
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "expected_line"),
+        [
+            ({"a": b"x", "b": b"y"}, {"a": "x", "b": "y"}, "bytes against decoded text"),
+            ({"a": _State.CLOSED}, {"a": "closed"}, "enum members against their values"),
+        ],
+        ids=["bytes", "enum"],
+    )
+    def test_a_type_difference_the_ladder_already_explains(self, actual, expected, expected_line):
+        # both of these differ in type too, and both have a better answer than saying so
+        assert_that(_message(actual, expected)).contains(expected_line)

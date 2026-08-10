@@ -277,6 +277,24 @@ than none: you would act on it and land back at the same failure. So a value tha
 gets nothing, and neither does a failure where one field differs by whitespace and another by its
 content.
 
+The one a JSON payload produces more than any other is a field that came back as text. The diff shows
+`- 7` against `+ '7'` on every row, and the line says it once:
+
+```python
+from assertpy2 import assert_that
+
+payload = {"id": 7, "quantity": 3}
+
+try:
+    assert_that(payload).is_equal_to({"id": "7", "quantity": "3"})
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # every difference here is the same text against a value of another type
+```
+
+A single value compared on its own says it in the sentence instead, tagging each side with its type
+(`Expected <7:int> to be equal to <7:str>`), so the line stays away rather than repeating it.
+
 `NaN` is stated first whatever else differs, since no value on the other side could have made that
 comparison pass:
 

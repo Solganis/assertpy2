@@ -101,6 +101,16 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
 # its value and two different enum types that happen to share one, and only the first of those is what
 # "one side holds members" would claim.  Where the shapes differ enough to matter, the label is a
 # function of them instead of a fixed string.
+#
+# Two rules hold for anything added here, and the second one cost a shipped bug to learn:
+#
+# 1. A step explains a pair only if the pair differed *before* it ran.  A pair whose two sides already
+#    compare equal is a difference for some other reason - `strict_types` is the only one there is -
+#    and then every normalisation "resolves" it by doing nothing.  `_explains` enforces this.  It is a
+#    rule about normalisations, not about explanations at large: `_typed` below deliberately speaks
+#    about pairs that compare equal, because their types are exactly what it is reporting.
+# 2. A step here outranks the general claim that the two sides differ in type, which is why `_typed`
+#    runs after this ladder.  `[1, 2]` against `"[1, 2]"` differs in type and is better called JSON.
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),
@@ -113,6 +123,12 @@ _STEPS: list[tuple[Callable[[object], object], _Label]] = [
 def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[object], object]]) -> bool:
     """Whether applying ``steps`` to both sides of every pair leaves nothing differing.
 
+    A pair that already matches counts against every step rather than for it.  Under
+    ``strict_types=True`` the two sides of an entry can compare equal and still be a difference,
+    because what differs is their type - and then any normalisation "explains" them by doing nothing,
+    so the first step in the ladder took the credit and the reader was told that a comparison holding
+    no JSON at all was one of unparsed JSON text.
+
     Comparison failures count as "not explained" rather than propagating.  This runs while a failure
     is already being raised, on values the caller wrote, and a numpy array or any object with an
     opinionated ``__eq__`` can raise from ``!=``.  Letting that out would replace the assertion error
@@ -120,6 +136,8 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
     """
     try:
         for left, right in pairs:
+            if left == right:
+                return False
             for step in steps:
                 left, right = step(left), step(right)
             if left != right:
@@ -127,6 +145,33 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return False
     return True
+
+
+def _typed(pairs: Sequence[tuple[object, object]], kind: str) -> str | None:
+    """Whether every pair differs in its type, and what kind of type difference it is.
+
+    The leaf twin of the DTO-against-payload claim above, and the case a REST payload produces more
+    than any other: the ids came back as ``"7"`` where the test expects ``7``.  Two facts live here
+    rather than one, because they are not the same news.  Values that compare equal differ only in
+    their type, which is a difference at all only under ``strict_types``.  Values that do not compare
+    equal but read alike are the same text on one side and a parsed value on the other.
+
+    Silent where the headline already said it.  A scalar failure whose two sides render alike is
+    tagged by `_disambiguated` as ``<1:str>`` / ``<1:int>``, which names the two types outright, and
+    a line under it restating that in general terms is worse than nothing.
+    """
+    try:
+        if not all(type(left) is not type(right) for left, right in pairs):
+            return None
+        if kind == "scalar" and all(str(left) == str(right) for left, right in pairs):
+            return None
+        if all(left == right for left, right in pairs):
+            return "the values on both sides are equal, and only their types differ"
+        if all(str(left) == str(right) for left, right in pairs):
+            return "every difference here is the same text against a value of another type"
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return None
+    return None
 
 
 def diagnose(diff: DiffResult | None, actual: object = None, expected: object = None) -> str | None:
@@ -201,6 +246,13 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
     named = _named(pairs)
     if named is not None:
         return named
+
+    # after the ladder, not before it: a step that resolves the pairs has named the *encoding* they
+    # differ in, which is the narrower claim.  `[1, 2]` against `"[1, 2]"` is JSON text and reads
+    # better as that than as a bare difference of types
+    typed = _typed(pairs, diff.kind)
+    if typed is not None:
+        return typed
 
     # last, because it is the broadest thing that can be said and the easiest to reach by accident.
     # one differing value can never be a rearrangement, which also keeps the sort off the common case
