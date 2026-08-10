@@ -29,20 +29,19 @@ pytest.importorskip("pytest_examples")
 from pytest_examples import CodeExample, EvalExample, find_examples
 
 import assertpy2
-from tests.docs_fixtures import PAGE_FIXTURES
+from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
-GUARDED_DOCS = [
-    "README.md",
-    "docs/guides/matchers.md",
-    "docs/guides/assertions.md",
-    "docs/guides/data.md",
-    "docs/guides/errors.md",
-    "docs/guides/fluent.md",
-    "docs/getting-started/quickstart.md",
-    "docs/index.md",
-    "docs/getting-started/migration.md",
-    "docs/recipes.md",
-]
+# Pages this guard does not run, each with the reason. Everything else is run, including a page added
+# after this line was written: a hand-kept list of pages to check is a list that quietly stops growing.
+UNRUN_DOCS = {
+    "docs/concepts/type-safety.md": "several blocks are counter-examples that are supposed to fail",
+    "docs/guides/testing.md": "the examples write snapshot files, which would be left behind in the repo",
+    "docs/getting-started/comparison.md": "the blocks are the other library's API, not ours",
+    "docs/extending/custom-assertions.md": "the page registers extensions process-wide and shows a failing call",
+    "docs/extending/integrations.md": "the behave blocks need a library the coverage cell must not install",
+}
+
+GUARDED_DOCS = documented_pages(UNRUN_DOCS)
 
 # assertpy2's public API minus its submodules (which shadow builtins like `dict`/`bytes`), plus the
 # stdlib names the guide pages assume are already imported by the time a reader reaches a later block.

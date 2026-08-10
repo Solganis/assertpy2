@@ -10,6 +10,26 @@ statically only, and its fixture says so by raising from every body.
 
 from __future__ import annotations
 
+import pathlib
+
+
+def documented_pages(excluded: dict[str, str]) -> list[str]:
+    """Every markdown page a guard should read, minus the ones excluded with a reason.
+
+    A glob rather than a hand-kept list, so a page added tomorrow is guarded by default and has to be
+    excluded deliberately.  The two lists this replaced drifted apart and neither said why: three pages
+    carrying fourteen code blocks were outside both, including the one whose central example does not
+    type-check.  Failing closed costs an exclusion entry; failing open costs a page nobody checks.
+    """
+    pages = ["README.md", *sorted(path.as_posix() for path in pathlib.Path("docs").rglob("*.md"))]
+    stale = sorted(set(excluded) - set(pages))
+    if stale:
+        # a renamed page would otherwise leave its exclusion behind, excusing nothing while reading as
+        # though the decision still stood, and the renamed page itself would rejoin the guard unnoticed
+        raise ValueError(f"excluded pages that no longer exist: {stale}")
+    return [page for page in pages if page not in excluded]
+
+
 TYPE_SAFETY = '''
 from typing import Any
 
@@ -143,8 +163,56 @@ payload: dict[str, Any] = {}
 metrics: dict[str, float] = {}
 """
 
+# The page registers `is_5` in its first block and keeps using it in later ones, which each guard reads
+# on its own. `some_library` stands for whatever the reader is wrapping, so it is stubbed to the shape
+# the example uses rather than dropped: a block nobody checks is how the `is_5` gap went unnoticed.
+EXTENDING = """
+class _ValidationError(Exception):
+    pass
+
+
+class _SomeLibrary:
+    ValidationError = _ValidationError
+
+    def validate(self, value: object) -> None:
+        raise NotImplementedError
+
+
+some_library = _SomeLibrary()
+
+
+def is_5(self):
+    if self.val != 5:
+        return self.error(f"{self.val} is NOT 5!")
+    return self
+"""
+
+# behave is not installed in the guard's environment (it changes the failure path for the whole suite,
+# so it gets its own CI job), and the step decorators are the only thing the page borrows from it.
+INTEGRATIONS = """
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+
+def given(text: str) -> Any:
+    raise NotImplementedError
+
+
+def when(text: str) -> Any:
+    raise NotImplementedError
+
+
+actual = pd.DataFrame({"a": [1, 2]})
+expected = pd.DataFrame({"a": [1, 2]})
+computed = np.array([1.0, 2.0])
+"""
+
 PAGE_FIXTURES = {
     "docs/concepts/type-safety.md": TYPE_SAFETY,
     "docs/guides/fluent.md": FLUENT,
     "docs/guides/testing.md": TESTING,
+    "docs/extending/custom-assertions.md": EXTENDING,
+    "docs/extending/integrations.md": INTEGRATIONS,
 }
