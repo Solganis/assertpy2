@@ -135,6 +135,7 @@ nav:
   - Patterns & recipes: recipes.md
   - Concepts:
       - Type safety: concepts/type-safety.md
+      - Stability: concepts/stability.md
   - Extending:
       - Custom assertions: extending/custom-assertions.md
       - Integrations: extending/integrations.md
