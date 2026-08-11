@@ -24,6 +24,9 @@ import sys
 import assertpy2
 from assertpy2 import assert_that
 
+# the stability page spells small counts as words, the way prose does
+_WORDS = {9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
+
 EXPECTED_EXPORTS = [
     "AssertionFailure",
     "AssertionOutcome",
@@ -158,6 +161,41 @@ class TestTheCountsTheDocsQuote:
         )
         quoted = re.findall(r"(?<![\w.])(\d+) type-specific Protocols", pathlib.Path("README.md").read_text("utf-8"))
         assert_that(quoted).described_as("the figure the README quotes").is_equal_to([str(self.QUOTED_PROTOCOL_COUNT)])
+
+    def test_the_stability_page_counts_what_it_promises(self):
+        """That page's whole claim is that every row is held by a test, so a wrong figure on it is
+        worse than a wrong figure anywhere else. It was found saying 123 `assert_type` checks over a
+        file holding 122.
+        """
+        page = pathlib.Path("docs/concepts/stability.md").read_text(encoding="utf-8")
+        typing_suite = pathlib.Path("tests/test_typing.py").read_text(encoding="utf-8")
+        protocols = pathlib.Path("assertpy2/_engine/_typing.py").read_text(encoding="utf-8")
+        quoted = {
+            "exported names": (re.search(r"The (\d+) names", page), len(assertpy2.__all__)),
+            "assert_type checks": (re.search(r"(\d+) `assert_type` checks", page), typing_suite.count("assert_type(")),
+            # spelled as a word on the page, so the guard reads the word rather than a digit
+            "protocols": (
+                re.search(r"walks all (\w+) protocols", page),
+                len(re.findall(r"class _\w+Assertion", protocols)),
+            ),
+        }
+        wrong = {}
+        for what, (found, real) in quoted.items():
+            said = found.group(1) if found else None
+            if said is None or said not in {str(real), _WORDS.get(real)}:
+                wrong[what] = f"page says {said}, real is {real}"
+        assert_that(wrong).described_as("figures on the stability page").is_empty()
+
+    def test_the_documented_allure_payloads_carry_the_version_the_plugin_emits(self):
+        """The attachment schema is a promise to downstream tooling, so its version number is the one
+        figure in the docs a consumer branches on. The diff attachment moved to 4 and the page went on
+        printing 2, which is worse than no example: it reads as a contract.
+        """
+        plugin = pathlib.Path("assertpy2/pytest_plugin.py").read_text(encoding="utf-8")
+        page = pathlib.Path("docs/extending/integrations.md").read_text(encoding="utf-8")
+        emitted = {int(number) for number in re.findall(r'"format":\s*(\d+)', plugin)}
+        documented = {int(number) for number in re.findall(r'"format":\s*(\d+)', page)}
+        assert_that(documented).described_as("attachment versions the page prints").is_equal_to(emitted)
 
     def test_the_assertion_count_clears_the_floor_the_docs_claim(self):
         # a floor, not an exact number: `add_extension` writes onto the builder, so a suite that
