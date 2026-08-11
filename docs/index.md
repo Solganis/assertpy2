@@ -115,6 +115,15 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     [:octicons-arrow-right-24: JSON & data](guides/data.md)
 
+-   :material-magnify-scan:{ .lg .middle } __The assertion that checked nothing__
+
+    ---
+
+    `all_satisfy` over an empty collection passes, the way `all([])` is true. An opt-in guard says so,
+    turning **the silent false pass a green run never reveals** into a warning you can escalate.
+
+    [:octicons-arrow-right-24: Assertions that checked nothing](guides/assertions.md#assertions-that-checked-nothing)
+
 </div>
 
 ## Install
