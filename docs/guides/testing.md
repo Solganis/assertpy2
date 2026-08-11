@@ -223,6 +223,46 @@ Setting it to `off` also stops the samples being collected, so nothing is measur
 Polls are attributed to the test that made them, including those a fixture makes in setup or teardown.
 Under `pytest-xdist` the workers ship their findings to the controller, which prints the combined list.
 
+### Waiting on a browser
+
+A UI test is the polling case in its purest form: the page is asked something before it is ready, and
+the answer settles a moment later. `eventually_sync()` takes any callable, so a driver read is a probe
+like any other.
+
+```python
+def test_the_banner_settles():
+    reads = iter(["", "", "Welcome, Alice"])  # a page that is not ready on the first two reads
+
+    assert_that(lambda: next(reads)).eventually_sync(timeout=2, interval=0.1).is_equal_to(
+        "Welcome, Alice"
+    )
+```
+
+With a real driver the probe is the read itself. Selenium has no assertions of its own, so this
+replaces a hand-written `WebDriverWait` and keeps the failure diagnostics:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(lambda: driver.find_element(By.CSS_SELECTOR, "#banner").text).eventually_sync(
+    timeout=10, ignoring=(NoSuchElementException, StaleElementReferenceException)
+).is_equal_to("Welcome, Alice")
+```
+
+**Use Playwright's own `expect()` for locator assertions.** It auto-waits, it retries, and it knows
+things about the page that a generic poller cannot. What it does not cover is the data behind the
+interface, and that is where an assertion library earns its place:
+
+<!-- docs-guard: skip -->
+```python
+expect(page.get_by_role("heading")).to_have_text("Orders")  # Playwright's job
+
+order = assert_conforms(api.get(f"/orders/{order_id}").json(), OrderModel).value
+assert_that(order.total).is_close_to(page_total, 0.01)      # ours
+```
+
+The same split applies to Selenium once you leave the DOM: assert the page with the driver, assert the
+payload, the database row or the extracted structure with `assert_that()`.
+
 ## Snapshot testing
 
 Capture a data structure to disk as JSON and compare against it on every run.
