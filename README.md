@@ -23,12 +23,6 @@
 
 ---
 
-A fluent assertion names the value once, then says what should hold of it.
-
-The chain is typed, so your editor offers only the assertions that fit that value.
-
-A failure names the exact path that differs, instead of printing both sides.
-
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/quickstart/">Quick start</a></h2>
 
 ```bash
