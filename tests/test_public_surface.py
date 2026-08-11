@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import pathlib
+import re
 import subprocess
 import sys
 
@@ -115,12 +117,34 @@ class TestRecordFields:
 
 
 class TestTheCountsTheDocsQuote:
-    """`docs/getting-started/comparison.md` states these as figures, and a figure in prose rots
-    silently: it was written at 39 matchers and was still saying so at 41."""
+    """The pages state these as figures, and a figure in prose rots silently: it was written at 39
+    matchers and was still saying so at 41.
+
+    The pages are read here rather than trusted to a number repeated in this file. Pinning the count
+    alone left the README saying 39 for two releases, because nothing connected the figure to the
+    sentence carrying it.
+    """
+
+    QUOTED_MATCHER_COUNT = 41
+    PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
 
     def test_the_matcher_count(self):
         matchers = [name for name in dir(assertpy2.match) if not name.startswith("_")]
-        assert_that(matchers).described_as("matchers, quoted in comparison.md").is_length(41)
+        assert_that(matchers).described_as("matchers, quoted in the docs").is_length(self.QUOTED_MATCHER_COUNT)
+
+    # a bare `(\d+) matchers` reads the "2" out of "assertpy2 matchers", so the digits have to start a
+    # word, and the adjective between number and noun ("41 composable matchers") has to be allowed
+    _QUOTED = re.compile(r"(?<![\w.])(\d+)\s+(?:\w+\s+)?matchers")
+
+    def test_every_page_quoting_the_matcher_count_quotes_the_right_one(self):
+        stale = {}
+        for page in self.PAGES_QUOTING_THE_MATCHER_COUNT:
+            quoted = self._QUOTED.findall(pathlib.Path(page).read_text(encoding="utf-8"))
+            # a page that stopped quoting the figure is as much a drift as one quoting it wrong: the
+            # sentence was rewritten and this guard would go on passing over a page it no longer covers
+            if not quoted or set(quoted) != {str(self.QUOTED_MATCHER_COUNT)}:
+                stale[page] = quoted
+        assert_that(stale).described_as("pages quoting a matcher count that is not the real one").is_empty()
 
     def test_the_assertion_count_clears_the_floor_the_docs_claim(self):
         # a floor, not an exact number: `add_extension` writes onto the builder, so a suite that
