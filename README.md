@@ -23,6 +23,12 @@
 
 ---
 
+A fluent assertion names the value once, then says what should hold of it.
+
+The chain is typed, so your editor offers only the assertions that fit that value.
+
+A failure names the exact path that differs, instead of printing both sides.
+
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/quickstart/">Quick start</a></h2>
 
 ```bash
@@ -78,8 +84,9 @@ Allure, Behave, JSON Path and Schema, pandas, polars, numpy, and OpenAPI respons
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/comparison/">Why fluent assertions?</a></h2>
 
-`assert` is a fine way to state a condition, and pytest reports it well. What it cannot do is say
-*where* two structures differ: it prints both and leaves the reading to you.
+`assert` states a condition well, and pytest reports it well.
+
+What it cannot say is *where* two structures differ. It prints both and leaves the reading to you:
 
 ```text
 assert response == expected
@@ -90,7 +97,7 @@ E     {'user': {'name': 'Alice', 'role': 'superadmin'}} != {'user': {'name': 'Al
 E     {'status': 'active'} != {'status': 'disabled'}
 ```
 
-assertpy2 reports the [exact path to every difference](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs), in color:
+assertpy2 names the [exact path](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs), in color:
 
 <!-- docs-guard: skip -->
 ```python
@@ -101,33 +108,45 @@ assert_that(response).is_equal_to(expected)
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
 </p>
 
-The diff recurses through nested containers, and matcher predicates get the same path-level treatment. For dynamic fields like IDs or timestamps, assert a subset with [`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
+It recurses through nested containers, and matcher predicates get the same treatment.
 
-The chain is the second half of it: one statement carries the whole intent, and your IDE offers only
-the [methods that fit the value's type](https://solganis.github.io/assertpy2/concepts/type-safety/).
+For dynamic fields like IDs, assert a subset with
+[`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
+
+The chain is the other half: one statement carries the whole intent, and your IDE offers only the
+[methods that fit the value](https://solganis.github.io/assertpy2/concepts/type-safety/).
 
 <!-- docs-guard: skip -->
 ```python
 assert_that(items).is_instance_of(list).is_length(3).contains("admin")
 ```
 
-Matchers are ordinary values that answer `==`, the way `unittest.mock.ANY` does. Nothing is patched and
-`==` keeps its meaning, so a matcher can sit inside the expected structure itself, at any depth, with or
-without the fluent chain:
+Matchers are ordinary values that answer `==`, the way `unittest.mock.ANY` does.
+
+Nothing is patched, so a matcher can sit inside the expected structure itself, at any depth:
 
 ```python
 response = {"id": 7, "user": {"name": "Alice", "age": 30}, "tags": ["a", "b"]}
 
 assert_that(response).is_equal_to(
-    {"id": match.greater_than(0), "user": {"name": "Alice", "age": match.between(18, 120)}, "tags": ["a", "b"]}
+    {
+        "id": match.greater_than(0),
+        "user": {"name": "Alice", "age": match.between(18, 120)},
+        "tags": ["a", "b"],
+    }
 )
 
 # or keep the bare `assert`, and pytest's own rewriting reports it
-assert response == {"id": match.greater_than(0), "user": match.ignore(), "tags": ["a", "b"]}
+assert response == {
+    "id": match.greater_than(0),
+    "user": match.ignore(),
+    "tags": ["a", "b"],
+}
 ```
 
-The fluent form keeps the path-level diff, the bare form keeps pytest's. There are
-[41 matchers](https://solganis.github.io/assertpy2/guides/matchers/), and they combine with `&`, `|` and `~`.
+The fluent form keeps the path-level diff, the bare form keeps pytest's.
+
+There are [41 matchers](https://solganis.github.io/assertpy2/guides/matchers/), combining with `&`, `|` and `~`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-gallery.png" width="640" alt="Structured diffs in the terminal: dict path, list element, set extra/missing, and structural-matcher predicate diffs, side by side">
@@ -149,8 +168,9 @@ Works in PyCharm, VS Code, and any LSP-compatible editor.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
-An assertion hands the value back, statically narrowed. `is_not_none()` strips `None`,
-`is_instance_of()` narrows to the class, and `.value` returns it with no `cast` and no bare `assert`:
+An assertion hands the value back, statically narrowed.
+
+`is_not_none()` strips `None`, `is_instance_of()` narrows to the class, and `.value` returns it:
 
 <!-- docs-guard: skip -->
 ```python
@@ -158,8 +178,9 @@ order = assert_that(repo.find(42)).is_not_none().is_instance_of(PaidOrder).value
 order.refund()  # statically PaidOrder - verified by ty, mypy, and pyright
 ```
 
-For API tests, [`assert_conforms()`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms) validates a raw payload against a Pydantic model and narrows the chain to it,<br>
-with `exact=True` catching silent contract drift:
+For API tests,
+[`assert_conforms()`](https://solganis.github.io/assertpy2/concepts/type-safety/#contract-narrowing-with-assert_conforms)
+validates a payload against a Pydantic model and narrows to it. `exact=True` catches contract drift:
 
 <!-- docs-guard: skip -->
 ```python
@@ -168,9 +189,9 @@ data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting">A failure you can read from code</a></h2>
 
-An assertion normally ends in an exception, which is the right default and a dead end for anything that
-wants to look at the result. `check()` runs the next assertion for its verdict instead, and every raised
-failure carries the same record:
+An exception is the right default, and a dead end for anything that wants to read the result.
+
+`check()` runs the next assertion for its verdict instead:
 
 ```python
 response = {"user": {"name": "Alice", "role": "superadmin"}, "status": "active"}
@@ -182,10 +203,12 @@ if not outcome and outcome.diff:
     print(outcome.diff.entries[0].path)  # user.role
 ```
 
-`AssertionOutcome` is truthy when the assertion held, and carries `.message`, `.actual`, `.expected` and
-a walkable `.diff` when it did not. `AssertionFailure` carries the same fields, so a reporter reads
-structure instead of parsing a rendered string. That is how the [Allure integration](https://solganis.github.io/assertpy2/extending/integrations/#allure) attaches
-machine-readable data, and it is available to anything else you build on top.
+It is truthy when the assertion held. When it did not, it carries `.message`, `.actual`, `.expected`
+and a walkable `.diff`, and so does `AssertionFailure`.
+
+So a reporter reads structure instead of parsing a string. That is how the
+[Allure integration](https://solganis.github.io/assertpy2/extending/integrations/#allure) works, and it
+is open to anything else you build.
 
 <h2 align="center">Features</h2>
 
