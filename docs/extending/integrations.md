@@ -31,11 +31,19 @@ A **Structured Diff** attachment (modes `diff`, `full`) with a path-level breakd
 
 ```json
 {
-  "format": 2,
+  "format": 4,
   "kind": "dict",
   "entries": [
-    {"path": "user.settings.theme", "actual": "dark", "expected": "light"},
-    {"path": "user.settings.retries", "actual": 3, "expected": 5}
+    {
+      "path": "user.settings.theme",
+      "actual": "dark",
+      "expected": "light",
+      "steps": [
+        {"kind": "key", "value": "user"},
+        {"kind": "key", "value": "settings"},
+        {"kind": "key", "value": "theme"}
+      ]
+    }
   ]
 }
 ```
@@ -62,10 +70,11 @@ assertion named:
 ```
 
 A key appears only when the assertion named that side. Every failure carries the value under test, but
-most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would put a
-block under every failure that repeats what the reader already has. An assertion comparing against
-`None` does name it, and there `"expected": null` is present rather than omitted. The pytest terminal
-section below follows the same rule.
+most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would repeat
+what the reader already has.
+
+An assertion comparing against `None` does name it, and there `"expected": null` is present rather than
+omitted. The pytest terminal section below follows the same rule.
 
 A **Polling Trace** attachment (modes `diff`, `full`) when an
 [`eventually()`](../guides/testing.md#polling-trace) assertion times out, with per-poll samples and diffs
@@ -117,9 +126,11 @@ The diff attachment is at `4`. Two things arrived after `2`, and each only ever 
 
 `kind` is one of `key`, `index`, `attr`, `item` or `line`. A step carries `side` (`actual` or
 `expected`) only where a sequence's two sides have shifted apart and an index alone would name two
-different elements. `steps` is absent where there is no location to give: the whole value differing, and
-a containment entry whose path is a label rather than a coordinate. A step value that JSON cannot
-express degrades the same way every other value in an attachment does.
+different elements.
+
+`steps` is absent where there is no location to give: the whole value differing, and a containment
+entry whose path is a label rather than a coordinate. A step value that JSON cannot express degrades
+the same way every other value in an attachment does.
 
 Each attachment is versioned on its own. The diff attachment is the one that moved, while the
 `AssertionFailure` and polling-trace attachments stay at `2` because nothing about them changed.

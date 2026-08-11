@@ -82,7 +82,7 @@ assert_that(person).has_first_name("Fred")   # clean: a user class falls to the 
 assert_that(payload).has_first_name("Fred")  # type error: _DictAssertion has no attribute has_first_name
 ```
 
-The runtime behaves identically in both lines; only the checker differs. On a value with its own
+The runtime behaves identically in both lines, and only the checker differs. On a value with its own
 overload the choice is between `# type: ignore[attr-defined]` and the typed equivalent, which for a
 dict is [`contains_entry()`](../guides/assertions.md#dicts):
 
@@ -289,10 +289,10 @@ A few refinements keep it precise:
 ## Set up your type checker
 
 Under mypy, one setting decides whether any of this reaches your tests. mypy does not look inside a
-function with no annotations at all, and a test written as `def test_orders():` is exactly that, so the
-narrowing is silently skipped for the file where you wanted it most. The same three mistakes below are
-reported six times by Pyright and `ty` out of the box, three times by mypy at its defaults, and six by
-mypy once it is told to read those bodies:
+function with no annotations at all, and a test written as `def test_orders():` is exactly that.
+
+So the same three mistakes below are reported six times by Pyright and `ty` out of the box, three times
+by mypy at its defaults, and six by mypy once it is told to read those bodies:
 
 <!-- docs-guard: skip -->
 
