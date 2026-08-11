@@ -80,6 +80,15 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
 
+-   :material-help-circle-outline:{ .lg .middle } __Assertions as values__
+
+    ---
+
+    `check()` runs the next assertion for its **verdict instead of an exception**, handing back an
+    `AssertionOutcome` that carries the message, the values and a walkable diff.
+
+    [:octicons-arrow-right-24: Asking instead of asserting](guides/errors.md#asking-instead-of-asserting)
+
 -   :material-camera:{ .lg .middle } __Snapshot testing__
 
     ---

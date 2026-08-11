@@ -33,7 +33,9 @@ except AssertionFailure as e:
 
 `entry.path` is written for a person and cannot be read back. A mapping key goes through `str()`, so
 `{3: "a"}` and `{"3": "a"}` produce the same text, and a key holding a dot or a bracket has no grammar
-to parse it with. `entry.steps` is the same location in the form a program can act on: a tuple of
+to parse it with.
+
+`entry.steps` is the same location in the form a program can act on: a tuple of
 [`Step`][assertpy2.errors.Step], each holding the key, index, field name, set member or line number
 itself, untouched.
 

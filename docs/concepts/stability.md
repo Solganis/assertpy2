@@ -9,11 +9,11 @@ an intention.
 |---|---|
 | The 36 names `assertpy2` exports, and the fields of every record it hands you | [`test_public_surface.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_public_surface.py) pins both against a hand-written list |
 | Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all ten protocols |
-| The type your chain has after each step | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 123 `assert_type` checks under ty, mypy `--strict` and Pyright, zero suppressions |
+| The type your chain has after each step | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 122 `assert_type` checks under ty, mypy `--strict` and Pyright, zero suppressions |
 | One relation keeping one name across the API | [`test_api_vocabulary.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_vocabulary.py) |
 | The three-method `Matcher` protocol your custom matchers implement | [`test_matcher_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_matcher_parity.py) |
 | The Allure attachment schema | versioned in its own `format` field, so a consumer branches on a number rather than guessing |
-| Your assertions keeping their verdict | 4100 tests at 100 % branch coverage, plus mutation testing |
+| Your assertions keeping their verdict | the suite at 100 % branch coverage, plus mutation testing |
 
 The records in the first row are `AssertionOutcome`, `MatchResult`, `DiffEntry`, `DiffResult`, `Step`,
 `PollSample` and `PollTrace`. Fields are added, never renamed or removed, inside a major version.

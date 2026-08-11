@@ -385,14 +385,16 @@ both sides is matched by identity and not walked again, exactly as Python does i
 a config object placed in two expected blocks stays cheap and a container holding the same `NaN` on
 both sides keeps comparing equal.
 
-Two limits. Anything matched **by hash** is outside it, which means dictionary keys and set elements:
-`1`, `1.0` and `True` hash alike and compare equal, so the pair is found before anything looks at its
-type, and the walk never sees it. `{True: "a"}` against `{1: "a"}` and `{1}` against `{1.0}` both pass
-a strict comparison. Values, list elements and object fields are all covered normally. And strictness
-turns off the fast path, because a container's own
-`==` says nothing about the types inside it, so every comparison walks the whole structure in Python.
-On a list of 20 000 dicts that is about 0.3 ms against 29 ms, which matters only if you are comparing
-large dumps in a loop.
+Two limits.
+
+Anything matched **by hash** is outside it, which means dictionary keys and set elements. `1`, `1.0`
+and `True` hash alike and compare equal, so the pair is found before anything looks at its type and
+the walk never sees it. `{True: "a"}` against `{1: "a"}` and `{1}` against `{1.0}` both pass a strict
+comparison. Values, list elements and object fields are all covered normally.
+
+Strictness also turns off the fast path: a container's own `==` says nothing about the types inside
+it, so every comparison walks the whole structure in Python. On a list of 20 000 dicts that is about
+0.3 ms against 29 ms, which matters only if you are comparing large dumps in a loop.
 
 Inside a [structural spec](matchers.md#structural-matching) the same relation is spelled
 `match.equal_to(value, strict_types=True)`, one matcher covering value and type together:
@@ -660,7 +662,7 @@ assert_that(users).extracting("user", filter=lambda x: x["age"] > 20).is_equal_t
 #### Sorting
 
 `sort` orders the extracted items. It may be a key/attribute name, an iterable of names (tie-breaking
-left to right), or a key function. `None` means no ordering; anything else is a mistake and raises a
+left to right), or a key function. `None` means no ordering. Anything else is a mistake and raises a
 `TypeError`, rather than quietly handing back unsorted items for a later assertion to trip over:
 
 <!-- docs-guard: skip -->

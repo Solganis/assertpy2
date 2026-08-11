@@ -72,8 +72,10 @@ same results:
     assertpy2 writes more into some failures than the original did, usually by adding to the end of
     the message. A `pytest.raises(match=...)` or a substring check keeps passing.
 
-    Comparing a whole message with `==` is the one thing that can break, both on the switch and
-    between assertpy2 versions.
+    What a substring check does not survive is a change of *order*: a mapping's keys are printed in
+    the order they were written rather than sorted, so a check pinned to the sorted rendering needs
+    updating. Comparing a whole message with `==` breaks on both counts, on the switch and between
+    assertpy2 versions.
 
     Prefer matching a substring. Better still, skip the text and assert on the structured data the
     failure carries: `AssertionFailure.actual`, `.expected` and `.diff`.

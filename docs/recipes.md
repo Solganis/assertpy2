@@ -190,7 +190,8 @@ assert_that(response["meta"]["total"]).is_equal_to(2)
 ```
 
 `extracting()` pulls a field or JSON path off every element of a collection. `has_json_path()` and
-`at_json_path()` navigate into a nested payload. This keeps the failure focused on the field that broke.
+`at_json_path()` navigate into a nested payload, and need the JSON extra
+(`pip install assertpy2[json]`). This keeps the failure focused on the field that broke.
 
 ## Migrate an assertion from plain `assert`
 
@@ -209,5 +210,5 @@ assert "admin" in items
 assert_that(items).is_instance_of(list).is_length(3).contains("admin")
 ```
 
-More before/after pairs, including `unittest` and the original `assertpy`, are on the
+Coming from the original `assertpy`, the switch is one import: see the
 [Migration page](getting-started/migration.md).

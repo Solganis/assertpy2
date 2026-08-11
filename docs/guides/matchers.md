@@ -105,7 +105,8 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.close_to(val, tolerance)` | a value within `tolerance` of `val` |
 | `match.is_none()` | `None` |
 | `match.is_not_none()` | a non-`None` value |
-| `match.is_instance_of(type)` | an instance of `type` |
+| `match.is_instance_of(type)` | an instance of `type`, subclasses included |
+| `match.is_type_of(type)` | exactly `type`, so `True` does not match `int` |
 | `match.is_truthy()` | a truthy value |
 | `match.is_falsy()` | a falsy value |
 | `match.has_length(n)` | a value whose `len()` equals `n` (also `match.is_length(n)`, the name the fluent assertion uses) |

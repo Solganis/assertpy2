@@ -136,8 +136,18 @@ assert_that(orders).filtered_on(lambda o: o.status == "FAILED").mapped(
 assert_that(items).filtered_on(match.is_positive()).not_.is_empty()
 ```
 
-!!! note
-    Pipeline navigation (`first`/`last`/`element`/`single`/`mapped`/`flat_mapped`) keeps the
-    collection's static type, so a type checker still offers iterable methods after it. End on a
-    type-agnostic assertion (`satisfies`, `is_equal_to`, `is_not_none`, ...) rather than a
-    type-specific one like `is_positive`.
+!!! note "What the pipeline does to the static type"
+    The two halves behave differently, and the difference is the useful part.
+
+    `first()`, `last()`, `element()` and `single()` narrow the chain to the **element**, so a list of
+    orders hands you an order and `.value` is typed as one. Every assertion is available on it,
+    type-specific ones included.
+
+    `mapped()` and `flat_mapped()` stay a collection, re-typed to whatever the function returns.
+
+    ```python
+    assert_that([10, 20, 30]).first().is_positive()      # element: numeric assertions apply
+    assert_that(["a", "bb"]).mapped(len).contains(1, 2)  # still a collection, now of int
+    ```
+
+    See [typed narrowing](../concepts/type-safety.md#typed-narrowing-with-value) for the whole picture.
