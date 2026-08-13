@@ -34,6 +34,25 @@ record per collected failure, with everything the text had flattened: values, di
 `(file, line)` it was collected at. See
 [What a soft block hands back](errors.md#what-a-soft-block-hands-back).
 
+An exception from inside the block still wins, and it is left exactly as it was raised: same type, same
+message, same traceback, so `except TimeoutError` around the block keeps working. What the block had
+already collected travels with it as an exception note rather than being dropped:
+
+```text
+TimeoutError: service did not answer
+
+soft assertion failures:
+1. Expected <1> to be equal to <2>, but was not.  [test_orders.py:14]
+```
+
+On Python 3.10 the failures are attached the same way and stay reachable as `exc.__notes__`, but that
+interpreter's traceback does not print notes, so there they are read rather than shown. `add_note`
+arrived in 3.11.
+
+One consequence for anyone matching on the message: current pytest searches notes as well, so
+`pytest.raises(..., match="^service did not answer$")` around a soft block stops matching once a note is
+attached. The message itself is unchanged.
+
 ## Grouped soft assertions
 
 Bind the collector with `as sa` and group failures by section with `sa.group(label)`:
