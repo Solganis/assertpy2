@@ -51,11 +51,13 @@ authoritative-sounding line about whitespace in a predicate.
 
 
 def _newlines(value: object) -> object:
+    if isinstance(value, bytes):
+        return value.replace(b"\r\n", b"\n")
     return value.replace("\r\n", "\n") if isinstance(value, str) else value
 
 
 def _stripped(value: object) -> object:
-    return value.strip() if isinstance(value, str) else value
+    return value.strip() if isinstance(value, (str, bytes)) else value
 
 
 def _parsed_json(value: object) -> object:
@@ -224,7 +226,9 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
         # line only. Reading that entry would have this claim that trailing whitespace is the whole
         # story, the reader would strip it, and the assertion would fail again on the endings. The
         # two strings themselves are the complete account, and comparing them costs nothing
-        if not isinstance(actual, str) or not isinstance(expected, str):
+        # bytes reach this kind too, and the reasoning above is theirs unchanged: their own
+        # `splitlines()` folds the two line endings together in exactly the same way
+        if not isinstance(actual, (str, bytes)) or not isinstance(expected, (str, bytes)):
             return None
         return _named([(actual, expected)])
 

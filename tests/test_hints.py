@@ -39,6 +39,13 @@ def _message(actual, expected, **kwargs):
     return str(failure.value)
 
 
+def _hint(actual, expected):
+    """The diagnostic line alone, or ``None``, without the message it would be printed under."""
+    with pytest.raises(AssertionFailure) as failure:
+        assert_that(actual).is_equal_to(expected)
+    return diagnose(failure.value.diff, actual, expected)
+
+
 class TestTheHintNamesTheWholeDifference:
     def test_surrounding_whitespace_nested_in_a_structure(self):
         # the nastiest failure of the lot: the diff shows two values that render the same
@@ -415,3 +422,42 @@ class TestTheContractOfTheExplanationLadder:
         message = _message({"a": [1, 2]}, {"a": "[1, 2]"})
         assert_that(message).contains("unparsed JSON text")
         assert_that(message).does_not_contain("another type")
+
+
+class TestBytesReadTheSameAsText:
+    """A difference of whitespace or line endings is the same difference in either type.
+
+    It was not: the string branch demanded two `str` and returned nothing for anything else, so a
+    payload compared as bytes got no hint at all while the identical comparison on text got one. Found
+    on a live suite whose failures were all bytes, where the summary of that run said nothing that the
+    individual failures did not already say - and the reason turned out to be here, not there.
+    """
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ("payload\n", "payload"),
+            ("  x  ", "x"),
+            ("a\r\nb", "a\nb"),
+            ("line1\nline2\n", "line1\nline2"),
+            ("a\r\n b", "a\nb"),
+            ("one", "two"),
+            ("x\ty", "x y"),
+        ],
+        ids=["trailing newline", "surrounding spaces", "line endings", "multiline", "both at once", "plain", "tab"],
+    )
+    def test_the_same_pair_reads_the_same_in_both_types(self, actual, expected):
+        # including the shapes that must stay silent: a rule that only fires is half a rule
+        assert_that(_hint(actual.encode(), expected.encode())).is_equal_to(_hint(actual, expected))
+
+    def test_bytes_that_do_not_decode_are_read_too(self):
+        # the pair a decode-first route would miss, and binary payloads are where bytes get compared
+        assert_that(_message(b"\xd7\xd8\n", b"\xd7\xd8")).contains("surrounding whitespace")
+
+    def test_two_bytes_are_not_called_a_difference_of_encoding(self):
+        # `_decoded` sits above `_stripped` in the ladder and would take the credit through a pair of
+        # steps, telling a reader about decoded text when both sides are bytes and nothing was decoded
+        assert_that(_message(b"payload\n", b"payload")).does_not_contain("decoded text")
+
+    def test_one_side_bytes_still_reads_as_encoding(self):
+        assert_that(_message(b"x", "x")).contains("bytes against decoded text")

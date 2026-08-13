@@ -25,6 +25,7 @@ from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
 from assertpy2._engine._introspection import is_mapping_like
 from assertpy2._engine._path import _ROOT
+from assertpy2._hints import diagnose
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
@@ -1371,3 +1372,34 @@ def test_a_windowed_pair_shows_where_the_two_sides_part_however_deep_it_is(lead,
     assert_that(rendered_left).is_not_equal_to(rendered_right)
     assert_that(rendered_left).contains(marker)
     assert_that(rendered_right).contains("z")
+
+
+class TestOneDifferenceReadsTheSameInTextAndBytes:
+    """The hint is about the difference, not about the type carrying it.
+
+    It was type-dependent: the string branch demanded two `str` and returned nothing for anything else,
+    so an upload compared as bytes got no hint while the identical comparison on text got one. Example
+    tests pinned seven shapes. This states the rule over the space instead.
+    """
+
+    _TEXT = st.text(alphabet=st.sampled_from(" \t\r\n abcXYZ019"), max_size=24)
+
+    @staticmethod
+    def _hint(actual, expected):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(actual).is_equal_to(expected)
+        return diagnose(failure.value.diff, actual, expected)
+
+    @given(_TEXT, _TEXT)
+    @settings(deadline=None)
+    def test_the_same_pair_reads_the_same_in_both_types(self, actual, expected):
+        assume(actual != expected)
+        assert_that(self._hint(actual.encode(), expected.encode())).is_equal_to(self._hint(actual, expected))
+
+    @given(_TEXT)
+    @settings(deadline=None)
+    def test_trailing_whitespace_is_named_in_both_types(self, value):
+        assume(value.strip() and value.strip() != value)
+        stripped = value.strip()
+        assert_that(self._hint(value, stripped)).contains("surrounding whitespace")
+        assert_that(self._hint(value.encode(), stripped.encode())).contains("surrounding whitespace")
