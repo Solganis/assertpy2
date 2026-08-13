@@ -182,6 +182,100 @@ The exact-pairing and multiset assertions:
 - `has_same_size_as` - compares lengths against another sized object.
 - `contains_exactly_in_any_order` - multiset equality: exact items and counts, order ignored.
 
+#### Assertions that never ran
+
+The guard above catches an assertion that ran and examined nothing. The other half of the same problem
+is an assertion that never ran at all:
+
+<!-- docs-guard: skip -->
+```python
+def test_the_user_is_active():
+    assert_that(user)                     # builds a builder and asserts nothing
+    assert_that(user.age).is_positive     # looked up, never called
+```
+
+Both are green forever. Neither is possible with a bare `assert`, which is the price of a fluent API,
+so the library owes you a way to find them. The second line is already reported by
+[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/). The first is reported by
+nothing, because a call may have side effects and no linter can know this one does not.
+
+```bash
+pytest --assertpy2-dangling
+```
+
+```text
+DanglingAssertionWarning: assert_that() builds a builder here and asserts nothing
+```
+
+For a project that wants it on every run, set it in the config instead. The flag still wins, so one
+person can try it without editing a file the whole team shares:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_dangling = "on"
+```
+
+The check reads your test files rather than running anything, so it costs nothing at runtime and
+cannot move a stack frame.
+
+**A warning on its own leaves the run green.** pytest exits zero with warnings, so a finding that
+should stop a merge has to be promoted to an error. The finding is attached to the test containing the
+line, so promoting it fails that test and nothing else:
+
+```toml
+[tool.pytest.ini_options]
+filterwarnings = [
+    "error::assertpy2.DanglingAssertionWarning",
+]
+```
+
+Without that line the check is a report you have to go and read, which is a fair choice for a first
+look and a poor one for CI.
+
+When asserting nothing is the point - a benchmark measuring what building a builder costs, a test of
+the assertion machinery itself - say so on the line and the check passes over it:
+
+<!-- docs-guard: skip -->
+```python
+for index in range(1000):
+    assert_that(index)  # assertpy2: allow-dangling
+```
+
+The marker is namespaced rather than borrowing ruff's, so a line silenced for one tool is not silently
+silenced for the other. It covers the statement it sits on, and on a call broken over several lines the
+closing line works.
+
+Most suites of any size wrap `assert_that` in a helper of their own, and the check cannot see through
+one it has never heard of. Name yours and it reads them the same way:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_dangling_entries = "check verify"
+```
+
+Only list a wrapper that **builds** something to assert on, the way `assert_that` does. A helper that
+asserts inside its own body is complete as a statement, and listing it would report working code. The
+name has to arrive through `from ... import check`, aliases included. That import is the whole
+difference between your wrapper and any other function in the world that happens to be called `check`,
+so a helper reached as `helpers.check(...)` is out of scope.
+
+What it deliberately leaves alone:
+
+- a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is a question
+  about the rest of the function, not about that statement
+- a chain ending on a pivot (`.described_as(...)`, `.extracting(...)`), since which names are
+  assertions is a runtime property of the builder and hard-coding the list here would rot
+- `assert_conforms()`, `fail()` and `soft_fail()`, which assert on their own, so a bare call is correct
+
+One limit worth knowing before you count on it: the check reads the test modules pytest collected, and
+nothing else. A project that keeps its assertion layer in a package of its own, `framework/asserts/`
+rather than the test files, gets no coverage of that package from a pytest run, because pytest never
+collects it. Nothing warns you about that, since from inside a run the two cases look identical.
+
+Another cost: the check is static, and a
+[dynamic assertion](#dynamic-assertions-on-objects) is resolved at runtime, so
+`assert_that(fred).has_first_name` without its parentheses is caught by `B018` rather than here.
+
 Lists of lists can be flattened by index with `extracting` (see [dict flattening](#dict-flattening)):
 
 ```python

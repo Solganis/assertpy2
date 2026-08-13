@@ -20,6 +20,7 @@ from hypothesis import assume, find, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_conforms, assert_that, match
+from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
@@ -1403,3 +1404,31 @@ class TestOneDifferenceReadsTheSameInTextAndBytes:
         stripped = value.strip()
         assert_that(self._hint(value, stripped)).contains("surrounding whitespace")
         assert_that(self._hint(value.encode(), stripped.encode())).contains("surrounding whitespace")
+
+
+class TestTheDanglingScanCountsWhatWasWritten:
+    """The check's whole value is that it does not miss the shape it exists for, and its whole cost is
+    reporting a working chain. Generated modules attack both at once.
+    """
+
+    _STATEMENTS = st.lists(
+        st.sampled_from(
+            [
+                ("    assert_that(1)\n", 1),
+                ("    assert_that(2).is_equal_to(2)\n", 0),
+                ("    assert_that(3)  # assertpy2: allow-dangling\n", 0),
+                ('    assert_that("# assertpy2: allow-dangling")\n', 1),
+                ("    builder = assert_that(4)\n", 0),
+                ("    assert_that(5).is_none\n", 1),
+            ]
+        ),
+        min_size=1,
+        max_size=8,
+    )
+
+    @given(_STATEMENTS)
+    @settings(deadline=None)
+    def test_every_dangling_line_is_reported_and_no_other(self, statements):
+        body = "".join(line for line, _ in statements)
+        source = "from assertpy2 import assert_that\n\n\ndef test_generated():\n" + body
+        assert_that(dangling_findings(source, "generated.py")).is_length(sum(count for _, count in statements))
