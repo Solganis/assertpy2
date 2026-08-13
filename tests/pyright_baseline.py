@@ -45,8 +45,9 @@ BASELINE: dict[tuple[str, str], int] = {
     # --- the overload sets, all deliberate ---------------------------------------------------------
     # `assert_that` dispatches on value type, so per-type overloads overlap the generic fallback and
     # the implementation is typed to the core protocol. The `satisfies` narrowing pair is the same
-    # trade taken once more.
-    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 1,
+    # trade taken once more, now in three places: the core protocol, and the string and numeric ones
+    # that narrow it to `Matcher[str]` / `Matcher[_N]` so a matcher built for another type is caught.
+    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 3,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
     ("assertpy2/assertpy.py", "reportOverlappingOverload"): 4,
     # `_N` is a constrained TypeVar read back through `value`, and covariance would break its inputs

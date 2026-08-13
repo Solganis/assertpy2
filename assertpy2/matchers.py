@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_same_implementation
 from ._matcher_impls import (
@@ -71,7 +71,7 @@ if TYPE_CHECKING:
 # --- Matcher application helpers ---
 
 
-def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> bool:
+def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object) -> bool:
     """Evaluate a ``Matcher`` or one-arg callable against ``value``.
 
     Shared resolution for every assertion that accepts either a `Matcher` or a callable
@@ -81,11 +81,11 @@ def _apply_matcher(matcher: Matcher | Callable[..., object], value: object) -> b
     if _is_matcher(matcher):
         return matcher.matches(value)
     if callable(matcher):
-        return bool(matcher(value))
+        return bool(cast("Callable[..., object]", matcher)(value))
     raise TypeError("given arg must be a Matcher or callable")
 
 
-def _evaluate_matcher(matcher: Matcher, value: object) -> MatchResult:
+def _evaluate_matcher(matcher: Matcher[Any], value: object) -> MatchResult:
     """One `MatchResult` from any matcher, including one that never heard of `evaluate()`.
 
     `BaseMatcher` gets `evaluate()` from its base, but a matcher is allowed to be duck-typed: the
@@ -118,11 +118,11 @@ def _describe_callable(predicate: Callable[..., object]) -> str:
     return "the given predicate"
 
 
-def _describe_matcher(matcher: Matcher | Callable[..., object]) -> str:
+def _describe_matcher(matcher: Matcher[Any] | Callable[..., object]) -> str:
     """Describe a ``Matcher`` or callable for the "expected" half of an error or diff entry."""
     if _is_matcher(matcher):
         return matcher.describe()
-    return _describe_callable(matcher)
+    return _describe_callable(cast("Callable[..., object]", matcher))
 
 
 # --- Custom matcher registry ---
@@ -400,37 +400,37 @@ class _MatchNamespace:
         return HasPropertyMatcher(name, matcher)
 
     @staticmethod
-    def contains_string(substring: str) -> ContainsStringMatcher:
+    def contains_string(substring: str) -> Matcher[str]:
         """Matcher for a string containing ``substring``."""
         return ContainsStringMatcher(substring)
 
     @staticmethod
-    def matches_regex(pattern: str) -> MatchesRegexMatcher:
+    def matches_regex(pattern: str) -> Matcher[str]:
         """Matcher for a string in which ``pattern`` is found (``re.search``)."""
         return MatchesRegexMatcher(pattern)
 
     @staticmethod
-    def starts_with(prefix: str) -> StartsWithMatcher:
+    def starts_with(prefix: str) -> Matcher[str]:
         """Matcher for a string starting with ``prefix``."""
         return StartsWithMatcher(prefix)
 
     @staticmethod
-    def ends_with(suffix: str) -> EndsWithMatcher:
+    def ends_with(suffix: str) -> Matcher[str]:
         """Matcher for a string ending with ``suffix``."""
         return EndsWithMatcher(suffix)
 
     @staticmethod
-    def all_of(*matchers: Matcher) -> AllOfMatcher:
+    def all_of(*matchers: Matcher[Any]) -> AllOfMatcher:
         """Matcher that holds when every one of ``matchers`` matches (the ``&`` operator)."""
         return AllOfMatcher(*matchers)
 
     @staticmethod
-    def any_of(*matchers: Matcher) -> AnyOfMatcher:
+    def any_of(*matchers: Matcher[Any]) -> AnyOfMatcher:
         """Matcher that holds when at least one of ``matchers`` matches (the ``|`` operator)."""
         return AnyOfMatcher(*matchers)
 
     @staticmethod
-    def not_(matcher: Matcher) -> NotMatcher:
+    def not_(matcher: Matcher[Any]) -> NotMatcher:
         """Matcher that inverts ``matcher`` (the ``~`` operator)."""
         return NotMatcher(matcher)
 
@@ -470,7 +470,7 @@ class _MatchNamespace:
         return IsAfterMatcher(other)
 
     @staticmethod
-    def each_item(matcher: Matcher) -> EachMatcher:
+    def each_item(matcher: Matcher[Any]) -> EachMatcher:
         """Matcher for an iterable whose every item matches ``matcher``.
 
         Args:

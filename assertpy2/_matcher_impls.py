@@ -5,7 +5,7 @@ import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, runtime_checkable
 
 from ._engine._compare import _CompareConfig, _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
@@ -26,15 +26,28 @@ if TYPE_CHECKING:
     ClassInfo: TypeAlias = "type | UnionType | tuple[type | UnionType, ...]"
 
 
-@runtime_checkable
-class Matcher(Protocol):
-    """Protocol for composable matcher objects."""
+_M_contra = TypeVar("_M_contra", contravariant=True)
 
-    def matches(self, value: Any) -> bool: ...
+
+@runtime_checkable
+class Matcher(Protocol[_M_contra]):
+    """Protocol for composable matcher objects, parameterised by the value they judge.
+
+    Contravariant, because a matcher *consumes* the value: one written for `object` answers about an
+    `int`, and one written for `str` does not.  That is the direction that makes
+    `satisfies(match.starts_with("a"))` on an `int` a type error while keeping `match.is_none()` usable
+    anywhere.
+
+    Written without a PEP 696 default on purpose: that spelling needs `typing_extensions` on everything
+    before 3.13, and this package declares it only for 3.10.  A bare `Matcher` in an annotation is read
+    as `Matcher[Any]` by all three checkers anyway, so existing annotations keep their meaning.
+    """
+
+    def matches(self, value: _M_contra) -> bool: ...
 
     def describe(self) -> str: ...
 
-    def describe_mismatch(self, value: Any) -> str: ...
+    def describe_mismatch(self, value: _M_contra) -> str: ...
 
 
 # builtin scalar/container types are never matchers; a frozenset membership test skips the expensive
@@ -44,7 +57,7 @@ _NON_MATCHER_TYPES: Final = frozenset(
 )
 
 
-def _is_matcher(obj: object) -> TypeIs[Matcher]:
+def _is_matcher(obj: object) -> TypeIs[Matcher[Any]]:
     """Fast membership test for the runtime_checkable ``Matcher`` protocol.
 
     ``isinstance(x, Matcher)`` is expensive: the runtime_checkable check walks every protocol member
@@ -141,13 +154,13 @@ class BaseMatcher:
     def describe_mismatch(self, value: Any) -> str:
         return f"was <{value}>"
 
-    def __and__(self, other: Matcher) -> AllOfMatcher:
+    def __and__(self, other: Matcher[Any]) -> AllOfMatcher:
         _require_matcher(other, "&")
         left = list(self.matchers) if isinstance(self, AllOfMatcher) else [self]
         right = list(other.matchers) if isinstance(other, AllOfMatcher) else [other]
         return AllOfMatcher(*left, *right)
 
-    def __or__(self, other: Matcher) -> AnyOfMatcher:
+    def __or__(self, other: Matcher[Any]) -> AnyOfMatcher:
         _require_matcher(other, "|")
         left = list(self.matchers) if isinstance(self, AnyOfMatcher) else [self]
         right = list(other.matchers) if isinstance(other, AnyOfMatcher) else [other]
@@ -176,7 +189,7 @@ class BaseMatcher:
 class AllOfMatcher(BaseMatcher):
     """Matches when all sub-matchers match (``&`` operator)."""
 
-    def __init__(self, *matchers: Matcher):
+    def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
@@ -193,7 +206,7 @@ class AllOfMatcher(BaseMatcher):
 class AnyOfMatcher(BaseMatcher):
     """Matches when at least one sub-matcher matches (``|`` operator)."""
 
-    def __init__(self, *matchers: Matcher):
+    def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
@@ -209,7 +222,7 @@ class AnyOfMatcher(BaseMatcher):
 class NotMatcher(BaseMatcher):
     """Matches when the wrapped matcher does not match (``~`` operator)."""
 
-    def __init__(self, matcher: Matcher):
+    def __init__(self, matcher: Matcher[Any]):
         self.matcher = matcher
 
     def matches(self, value: Any) -> bool:
@@ -767,7 +780,7 @@ class IsAfterMatcher(BaseMatcher):
 class EachMatcher(BaseMatcher):
     """Matches when every item in an iterable satisfies the wrapped matcher."""
 
-    def __init__(self, matcher: Matcher):
+    def __init__(self, matcher: Matcher[Any]):
         self.matcher = matcher
 
     def matches(self, value: Any) -> bool:

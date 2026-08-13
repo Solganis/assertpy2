@@ -21,8 +21,10 @@ if TYPE_CHECKING:
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
     from assertpy2._engine._typing import (
+        _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
+        _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
@@ -41,7 +43,16 @@ if TYPE_CHECKING:
     assert_type(assert_that("text"), _StringAssertion)
     assert_type(assert_that(42), _NumericAssertion[int])
     assert_type(assert_that(3.14), _NumericAssertion[float])
-    assert_type(assert_that(complex(1, 2)), _NumericAssertion[complex])
+    # `complex` and `bool` carry only what the runtime accepts for them: no ordering for a complex
+    # number, no parity for a bool. Both used to resolve to the numeric protocol and be offered methods
+    # whose only outcome was a TypeError
+    assert_type(assert_that(complex(1, 2)), _ComplexAssertion)
+    assert_type(assert_that(True), _BoolAssertion)
+    # a step hands back `Self`, so the smaller protocol holds for the whole chain rather than for the
+    # first call: `.value` stays `complex` and the assertions after it stay the two that apply
+    assert_type(assert_that(complex(1, 2)).is_not_zero().value, complex)
+    assert_type(assert_that(complex(1, 2)).not_.is_zero().value, complex)
+    assert_type(assert_that(True).is_greater_than(0).value, bool)
     assert_type(assert_that({"key": "value"}), _DictAssertion[str, str])
     assert_type(assert_that(["a", "b"]), _IterableAssertion[str])
     assert_type(assert_that(("a", "b")), _IterableAssertion[str])

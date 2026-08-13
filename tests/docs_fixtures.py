@@ -31,6 +31,7 @@ def documented_pages(excluded: dict[str, str]) -> list[str]:
 
 
 TYPE_SAFETY = '''
+from datetime import date
 from typing import Any
 
 from pydantic import BaseModel

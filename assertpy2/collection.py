@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import collections.abc
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_mapping_like
 from ._engine._mixin_base import _MixinBase
@@ -319,7 +319,7 @@ class CollectionMixin(_MixinBase):
             )
         return self
 
-    def filtered_on(self, predicate: Matcher | Callable[[Any], bool]) -> Self:
+    def filtered_on(self, predicate: Matcher[Any] | Callable[[Any], bool]) -> Self:
         """Returns a new builder with elements matching the predicate.
 
         Args:
@@ -342,7 +342,8 @@ class CollectionMixin(_MixinBase):
         if _is_matcher(predicate):
             filtered = [item for item in self.val if predicate.matches(item)]
         else:
-            filtered = [item for item in self.val if predicate(item)]
+            narrowed = cast("Callable[..., object]", predicate)
+            filtered = [item for item in self.val if narrowed(item)]
         return self.builder(
             filtered,
             self.description,
