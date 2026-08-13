@@ -102,7 +102,10 @@ def _rebound(tree: ast.Module) -> frozenset[str]:
             names.add(node.id)
         elif isinstance(node, ast.arg):
             names.add(node.arg)
-        elif isinstance(node, ast.ExceptHandler) and node.name:
+        # kept apart from the branch below, whose body is identical: merging them into one `or` is what
+        # ruff asks for and what a type checker then rejects, since `ExceptHandler.name` is `str | None`
+        # and only the separate branch narrows it
+        elif isinstance(node, ast.ExceptHandler) and node.name:  # noqa: SIM114
             names.add(node.name)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             names.add(node.name)
