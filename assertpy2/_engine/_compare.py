@@ -272,6 +272,25 @@ def _types_differ(actual, expected) -> bool:
     return not _is_matcher(expected) and not _is_matcher(actual)
 
 
+def _keyed_types_differ(actual, expected) -> bool:
+    """Whether two equal containers disagree on the *types* of what they are keyed by.
+
+    The rest of `strict_types` works pair by pair, and a mapping key or a set member never becomes a
+    pair: the container matched them itself, by hash and equality, before the walk ever saw them.  So
+    `{True: "a"} == {1: "a"}` and `{1} == {1.0}` both passed a strict comparison, which is the one
+    thing the flag's name promises they would not.
+
+    Each side is reduced to its members paired with their types.  `(bool, True)` and `(int, 1)` are
+    different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
+    Values are left alone here: they do become pairs, and the walk judges them.
+    """
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
+    if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
+        return {(type(member), member) for member in actual} != {(type(member), member) for member in expected}
+    return False
+
+
 def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None) -> str:
     """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"`` or ``"strict"``.
 
@@ -302,6 +321,10 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
                 # ahead of tolerance on purpose: a tolerance says how far apart two numbers may be, it
                 # does not say they may be different types, and a strict run that quietly accepted int
                 # vs float inside its own tolerance would be the surprise, not the rule
+                return "leaf"
+            if _keyed_types_differ(actual, expected):
+                # before the walk, because the walk cannot reach a key: it descends *through* keys into
+                # values, and two mappings keyed `True` and `1` present it with the same set of values
                 return "leaf"
             if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
                 # a container's own `==` says nothing about the types inside it: `[True] == [1]`.  The

@@ -8,7 +8,14 @@ import re
 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
 
-from ._engine._compare import _CompareConfig, _config_note, _guarded_not_equal, _node_decision, _spec_matches
+from ._engine._compare import (
+    _CompareConfig,
+    _config_note,
+    _guarded_not_equal,
+    _keyed_types_differ,
+    _node_decision,
+    _spec_matches,
+)
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
@@ -319,6 +326,11 @@ class HelpersMixin(_MixinBase):
             keys_in_other = set(other)
 
         if keys_in_val != keys_in_other:
+            return True
+        if config is not None and config.strict_types and _keyed_types_differ(val, other):
+            # two mappings can hold the same keys and disagree on their types: `{True: "a"}` and
+            # `{1: "a"}` are equal to Python, and under strict types they are not the same mapping.
+            # Checked here rather than in the walk below, which only ever sees the values
             return True
         for key in keys_in_val:
             if config is not None:

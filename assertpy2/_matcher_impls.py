@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, runtime_checkable
 
-from ._engine._compare import _CompareConfig, _guarded_not_equal
+from ._engine._compare import _CompareConfig, _guarded_not_equal, _keyed_types_differ
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 from ._engine._path import _ROOT, _Path
@@ -258,6 +258,8 @@ class EqualToMatcher(BaseMatcher):
         # the flag walks to the leaves, so this has to as well: a composite expected value whose own
         # `==` is true says nothing about the types inside it, and one spelling of a relation that
         # disagrees with the other on nested data is worse than not offering it
+        if _keyed_types_differ(value, self.expected):
+            return False  # a set the walker does not decompose, and a mapping key it walks straight past
         entries = _sub_diff_entries(value, self.expected, _ROOT, config=_CompareConfig(strict_types=True))
         if entries is None:  # a leaf the walker does not decompose
             return bool(value == self.expected)

@@ -459,6 +459,19 @@ def _sub_diff_entries(
         entries: list[DiffEntry] = []
         actual_keys = set(actual)
         expected_keys = set(expected)
+        if config is not None and config.strict_types:
+            # a key is matched by hash before the walk reaches it, so two mappings keyed `True` and `1`
+            # present identical values and no difference at all. Reported against the key, since that is
+            # what differs: the value under it is the same.
+            #
+            # Keyed lookup rather than an intersection of the two key sets: `{True} & {1}` hands back
+            # whichever side the set implementation drew from, so the type under comparison was already
+            # gone. A dict indexed by the expected keys answers with the key it actually stores
+            stored = {key: key for key in expected}
+            for key in actual:
+                counterpart = stored.get(key, key)
+                if type(key) is not type(counterpart):
+                    entries.append(prefix.key(key).entry(actual=key, expected=counterpart))
         for key in _ordered_keys(actual, expected):
             if key not in expected_keys:
                 entries.append(prefix.key(key).entry(actual=actual[key], expected=None, absent="expected"))
