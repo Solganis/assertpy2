@@ -96,6 +96,15 @@ def _json_safe(value, _depth=0, _seen=None):
     return {"__repr__": _truncated(_safe_repr(value))}
 
 
+class DanglingAssertionWarning(UserWarning):
+    """An ``assert_that()`` statement that asserts nothing.
+
+    Emitted at collection under ``--assertpy2-dangling``.  A separate category so it can be turned
+    into an error on its own with ``-W error::assertpy2.DanglingAssertionWarning``, the same way
+    the vacuity and snapshot-key warnings are escalated.
+    """
+
+
 class VacuousAssertionWarning(UserWarning):
     """Emitted when a universal assertion passes because there was nothing to check.
 

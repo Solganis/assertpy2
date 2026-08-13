@@ -17,6 +17,7 @@ from .assertpy import (
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
 from .errors import (
     AssertionFailure,
+    DanglingAssertionWarning,
     DiffEntry,
     DiffResult,
     PollSample,
@@ -48,6 +49,7 @@ __all__ = [
     "AsyncAssertionBuilder",
     "BaseMatcher",
     "CheckBuilder",
+    "DanglingAssertionWarning",
     "DiffEntry",
     "DiffResult",
     "MatchResult",

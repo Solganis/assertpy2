@@ -205,7 +205,7 @@ def test_builder_construction(benchmark):
     # builder dispatch on the value's type. this is the floor every other assertion is charged
     def run():
         for index in range(_ASSERTIONS):
-            assert_that(index)
+            assert_that(index)  # assertpy2: allow-dangling
 
     benchmark(run)
 

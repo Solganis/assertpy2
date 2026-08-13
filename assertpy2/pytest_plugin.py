@@ -8,7 +8,7 @@ from typing import Final
 
 import pytest
 
-from . import _inline, _satisfies, async_assertions, errors
+from . import _dangling, _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
@@ -38,6 +38,12 @@ def pytest_addoption(parser):
         help="Warn when a universal assertion passes over an empty value, having checked nothing",
     )
     parser.addoption(
+        "--assertpy2-dangling",
+        action="store_true",
+        default=False,
+        help="Warn when assert_that() is used as a statement without asserting anything",
+    )
+    parser.addoption(
         "--assertpy2-snapshot-ci",
         action="store_true",
         default=False,
@@ -53,6 +59,17 @@ def pytest_addoption(parser):
         "assertpy2_allure",
         help="Allure attachment mode: off, diff (default), full",
         default="diff",
+    )
+    parser.addini(
+        "assertpy2_dangling",
+        help="Warn about assert_that() statements that assert nothing: off (default), on",
+        default="off",
+    )
+    parser.addini(
+        "assertpy2_dangling_entries",
+        help="Names of your own assert_that wrappers the dangling check should also read as builders",
+        type="args",
+        default=[],
     )
     parser.addini(
         "assertpy2_diff",
@@ -92,6 +109,43 @@ def _poll_threshold(raw: object) -> float | None:
     return value
 
 
+def _dangling_enabled(config) -> bool:
+    """Whether the dangling check runs, from the flag or the ini setting.
+
+    The flag wins: a run that asks for the check on the command line gets it whatever the file says,
+    which is how somebody tries it once without editing a config they share with everybody else.
+    """
+    if config.getoption("assertpy2_dangling"):
+        return True
+    setting = str(config.getini("assertpy2_dangling")).strip().lower()
+    if setting not in {"on", "off"}:
+        warnings.warn(
+            f"assertpy2_dangling={setting!r} is not 'on' or 'off', falling back to 'off'",
+            stacklevel=1,
+        )
+        return False
+    return setting == "on"
+
+
+def _dangling_entries(config) -> frozenset[str]:
+    """The project's own wrapper names the dangling check should treat as builder factories.
+
+    Only a plain name can bind through an import, so anything else is dropped with a warning rather
+    than kept to match nothing: `helpers.check` in a config file looks like it works, and a check that
+    silently covers none of what it was told to cover is worse than one that is off.
+    """
+    names = {str(name).strip() for name in config.getini("assertpy2_dangling_entries") or ()}
+    usable = {name for name in names if name.isidentifier()}
+    if rejected := sorted(names - usable):
+        warnings.warn(
+            f"assertpy2_dangling_entries: {', '.join(repr(name) for name in rejected)} "
+            f"{'is not a plain name' if len(rejected) == 1 else 'are not plain names'} "
+            f"and cannot be matched, ignoring",
+            stacklevel=1,
+        )
+    return frozenset(usable)
+
+
 def pytest_configure(config):
     mode = config.getini("assertpy2_allure")
     if mode not in _ALLURE_MODES:
@@ -103,6 +157,8 @@ def pytest_configure(config):
         config._assertpy2_allure_mode = "diff"
     else:
         config._assertpy2_allure_mode = mode
+    config._assertpy2_dangling_enabled = _dangling_enabled(config)
+    config._assertpy2_dangling_entries = _dangling_entries(config)
     config._assertpy2_diff_enabled = config.getini("assertpy2_diff") != "off"
     try:
         config._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
@@ -113,6 +169,7 @@ def pytest_configure(config):
     # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
+    config._assertpy2_failure_count = 0
     config._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
     # nothing reads the samples once the report is off, so stop paying for them at the poll site
     async_assertions._COLLECT_RETRIES = config._assertpy2_poll_threshold is not None
@@ -133,6 +190,9 @@ def pytest_unconfigure(config):
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
+    # module-level, so a second session in the same process would otherwise open with the first one's
+    # failures already counted. the other controller accumulators are cleared where they are consumed;
+    # these are consumed by a hook that may not run at all, so they are released here instead
     _satisfies._VACUOUS_GUARD = getattr(config, "_assertpy2_prev_vacuous", _satisfies._env_enabled())
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = False
@@ -150,11 +210,63 @@ _controller_inline: list = []
 # node ids that reached each snapshot key, shipped by xdist workers and unioned on the controller
 _controller_accesses: dict = {}
 
+# failures shipped by xdist workers: the summary is written on the controller, and a worker's own
+# config is not the controller's, so without this the run that most needs a summary gets none
+
+
+def pytest_collection_modifyitems(session, config, items):
+    """Read every collected test file once and record the statements that assert nothing.
+
+    Collection rather than runtime: the check is static (see `_dangling`), so a selected subset
+    (`-k`, `--lf`) is the subset that gets read, and each path is read once however many items it
+    contributed.  The findings are only *recorded* here; they are reported from `runtest_setup`,
+    because a warning raised out of a collection hook under `-W error` aborts pytest with an
+    INTERNALERROR instead of failing anything a reader can act on.
+    """
+    config._assertpy2_dangling = {}
+    if not getattr(config, "_assertpy2_dangling_enabled", False):
+        return
+    for item in items:
+        path = getattr(item, "path", None)
+        if path is None or path in config._assertpy2_dangling:  # pragma: no cover - items carry a path
+            continue
+        try:
+            source = path.read_text(encoding="utf-8")
+            entries = getattr(config, "_assertpy2_dangling_entries", frozenset())
+            config._assertpy2_dangling[path] = _dangling.findings(source, str(path), entries)
+        except (OSError, SyntaxError):  # pragma: no cover - pytest imported the module, so it read and parsed
+            config._assertpy2_dangling[path] = []
+
+
+def _report_dangling(item):
+    """Warn once per file, on the first test to run from it, so pytest attributes it to that node.
+
+    `warn_explicit` rather than `warn`: the location that matters is the offending statement, not
+    this line, and a reader jumping to the warning should land in their own test file.
+    """
+    config = getattr(item, "config", None)  # a hook driven directly in a test carries no config
+    recorded = getattr(config, "_assertpy2_dangling", {})
+    found = recorded.get(getattr(item, "path", None))
+    if not found:
+        return
+    name = getattr(getattr(item, "function", None), "__name__", None)
+    # a finding outside any def (module scope) has no test to attach to, so the first item takes it
+    mine = [finding for finding in found if finding.function in (name, None)]
+    recorded[item.path] = [finding for finding in found if finding not in mine]
+    for finding in mine:
+        warnings.warn_explicit(
+            finding.message,
+            errors.DanglingAssertionWarning,
+            finding.path,
+            finding.lineno,
+        )
+
 
 def pytest_runtest_setup(item):
     """Name the running test, so a snapshot key reached by two of them can be told from a helper that
     snapshots twice inside one."""
     _snapshot._CURRENT_NODE = item.nodeid
+    _report_dangling(item)
 
 
 @pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed

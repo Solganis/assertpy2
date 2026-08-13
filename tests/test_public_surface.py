@@ -29,6 +29,7 @@ _WORDS = {9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
 
 EXPECTED_EXPORTS = [
     "AssertionFailure",
+    "DanglingAssertionWarning",
     "AssertionOutcome",
     "AsyncAssertionBuilder",
     "BaseMatcher",

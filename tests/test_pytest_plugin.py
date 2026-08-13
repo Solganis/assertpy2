@@ -83,11 +83,13 @@ class TestPluginLoaded:
     def test_addoption_registers_ini(self):
         parser = MagicMock()
         pytest_addoption(parser)
-        assert_that(parser.addini.call_count).is_equal_to(4)
+        assert_that(parser.addini.call_count).is_equal_to(6)
         names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
         assert_that(names).contains("assertpy2_diff_max_entries")
+        assert_that(names).contains("assertpy2_dangling")
+        assert_that(names).contains("assertpy2_dangling_entries")
 
 
 class TestHookSkipsIrrelevantReports:
@@ -735,12 +737,17 @@ class TestAllureOffMode:
         mock.attach.assert_not_called()
 
 
-def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7"):
+def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7", dangling="off", entries=()):
     # a bare MagicMock returns a truthy mock from getoption(), which would flip the snapshot-update
     # module flag and leak update mode into unrelated tests
     config = MagicMock()
     # dispatch per key: a single return value would feed the allure mode to every other ini reader
-    config.getini.side_effect = lambda name: poll_report if name == "assertpy2_poll_report" else ini
+    per_key = {
+        "assertpy2_poll_report": poll_report,
+        "assertpy2_dangling": dangling,
+        "assertpy2_dangling_entries": entries,
+    }
+    config.getini.side_effect = lambda name: per_key.get(name, ini)
     config.getoption.return_value = snapshot_update
     return config
 
