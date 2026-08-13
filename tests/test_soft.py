@@ -1,3 +1,5 @@
+import contextlib
+
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, fail, soft_assertions, soft_fail
@@ -288,3 +290,88 @@ class TestTheAggregateHandsBackWhatItCollected:
         # the rollback is a slice of the collected list, which only works while the sink stays an append
         with soft_assertions():
             assert_that(-5).not_.is_positive()
+
+
+class TestAnErrorOutOfTheBlockKeepsWhatWasCollected:
+    """An exception from inside the block still wins, and the failures gathered before it survive.
+
+    They used to be dropped on the floor. A soft block exists to gather failures, so a timeout three
+    assertions in took all three with it, and the reader saw only the timeout. Reported by an external
+    review of the shipped library.
+
+    A note rather than a replacement or an `ExceptionGroup`: the type and the message stay exactly what
+    the block raised, so `except TimeoutError` around it keeps working and the traceback still points at
+    what actually stopped the test.
+    """
+
+    def test_the_exception_is_unchanged(self):
+        with pytest.raises(ValueError, match="service did not answer") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise ValueError("service did not answer")
+        assert_that(type(failure.value)).is_equal_to(ValueError)
+        assert_that(str(failure.value)).is_equal_to("service did not answer")
+
+    def test_the_note_is_part_of_what_pytest_matches_against(self):
+        """A consequence worth stating rather than discovering: `pytest.raises(match=...)` searches the
+        notes as well as the message, so an anchored pattern that used to end at the message no longer
+        matches. The message itself is untouched, which is what `str(exc)` and every handler sees.
+        """
+        with pytest.raises(ValueError, match="soft assertion failures") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise ValueError("boom")
+        assert_that(str(failure.value)).described_as("the message stays the message").is_equal_to("boom")
+
+    def test_the_collected_failures_travel_with_it(self):
+        with pytest.raises(ValueError) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            assert_that("a").is_equal_to("b")
+            raise ValueError("boom")
+        notes = getattr(failure.value, "__notes__", [])
+        assert_that(notes).is_length(1)
+        assert_that(notes[0]).contains("soft assertion failures:")
+        assert_that(notes[0]).contains("<1> to be equal to <2>").contains("<a> to be equal to <b>")
+
+    def test_a_block_that_collected_nothing_adds_no_note(self):
+        with pytest.raises(ValueError) as failure, soft_assertions():
+            assert_that(1).is_equal_to(1)
+            raise ValueError("boom")
+        assert_that(getattr(failure.value, "__notes__", [])).is_empty()
+
+    def test_the_next_block_starts_clean(self):
+        with contextlib.suppress(ValueError), soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise ValueError("boom")
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that("x").is_equal_to("y")
+        assert_that(str(failure.value)).does_not_contain("<1> to be equal to <2>")
+
+    def test_python_310_keeps_them_reachable_without_add_note(self):
+        """`add_note` arrived in 3.11 and this package supports 3.10.
+
+        There the note cannot be printed by the interpreter's own traceback, but the failures can still
+        travel on the exception, and losing them is the thing this whole branch exists to stop. The
+        absence is emulated rather than skipped, so the branch is covered on every interpreter.
+        """
+
+        class WithoutAddNoteError(ValueError):
+            add_note = None  # what 3.10 looks like to `getattr`
+
+        with pytest.raises(WithoutAddNoteError) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise WithoutAddNoteError("boom")
+        notes = getattr(failure.value, "__notes__", [])
+        assert_that(notes).is_length(1)
+        assert_that(notes[0]).contains("<1> to be equal to <2>")
+        assert_that(str(failure.value)).described_as("the message is still the message").is_equal_to("boom")
+
+    def test_only_the_outermost_block_annotates(self):
+        # a nested block hands its failures upward, so annotating on the way out of the inner one would
+        # report them twice and empty the outer block's own collection
+        with pytest.raises(ValueError) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            with soft_assertions():
+                assert_that(3).is_equal_to(4)
+            raise ValueError("boom")
+        notes = getattr(failure.value, "__notes__", [])
+        assert_that(notes).is_length(1)
+        assert_that(notes[0]).contains("<1> to be equal to <2>").contains("<3> to be equal to <4>")

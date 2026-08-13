@@ -224,10 +224,29 @@ class _SoftAssertions:
         _soft_ctx.set(ctx + 1)
         return SoftAssertionCollector()
 
-    def __exit__(self, exc_type: type[BaseException] | None, *_exc: object) -> None:
+    def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, *_rest: object) -> None:
         _soft_ctx.set(_soft_ctx.get() - 1)
         if exc_type is not None:
-            return  # an error out of the block wins: it says more than the failures collected before it
+            # an error out of the block still wins, because replacing it would hide why the block
+            # stopped and would break `except ValueError` around it. But the failures collected before
+            # it are the reader's own data, and dropping them silently is a second loss on top of the
+            # first: a soft block exists to gather them, and a timeout three assertions in used to take
+            # all three with it. They travel as a note, which changes neither the type nor the message
+            if exc is not None and (errs := _soft_err.get([])) and _soft_ctx.get() == 0:
+                _soft_err.set([])
+                # asked for rather than caught: `add_note` arrived in 3.11 and this package supports
+                # 3.10, and swallowing an AttributeError here would also swallow one raised by the
+                # rendering itself. On 3.10 the list is written directly, which keeps the failures
+                # reachable (`exc.__notes__`) even though that interpreter's traceback does not print
+                # them: losing them is what this whole branch exists to stop
+                rendered = _format_soft_errors(errs)
+                add_note = getattr(exc, "add_note", None)
+                if add_note is not None:
+                    add_note(rendered)
+                else:
+                    notes = [*getattr(exc, "__notes__", []), rendered]
+                    exc.__notes__ = notes  # ty: ignore[unresolved-attribute]  # 3.10 lacks it until set
+            return
         errs = _soft_err.get([])
         if errs and _soft_ctx.get() == 0:
             out = _format_soft_errors(errs)
