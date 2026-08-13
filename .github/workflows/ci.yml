@@ -141,7 +141,10 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --extra json --extra inline --group typecheck
+        # `numpy` rather than the whole `data` stack: the rejection gate needs numpy *scalars*, which
+        # guard against the numeric bound being narrowed back to a list of types and rejecting
+        # `numpy.int64`. pandas and polars would only make this job heavier
+        run: uv sync --extra json --extra numpy --extra inline --group typecheck
 
       - name: Ruff check
         run: uv run ruff check .
@@ -163,6 +166,12 @@ jobs:
       # one fails here instead of hiding in a count nobody reads.
       - name: Type check (pyright, package baseline)
         run: uv run pytest tests/test_pyright_baseline.py -q
+
+      # the other direction: which incompatible operands the checkers actually refuse. Recorded per
+      # relation, so tightening a signature shows up here as a deliberate change rather than as a
+      # number, and loosening one shows up at all
+      - name: Type check (rejections, all three checkers)
+        run: uv run pytest tests/test_typing_negative.py -q
 
   ci-ok:
     timeout-minutes: 5
