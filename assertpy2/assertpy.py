@@ -20,8 +20,10 @@ if TYPE_CHECKING:
 
     from ._engine._compat import Self
     from ._engine._typing import (
+        _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
+        _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
@@ -316,6 +318,8 @@ def assert_that(val: str, description: str = "") -> _StringAssertion: ...
 
 
 @overload
+def assert_that(val: bool, description: str = "") -> _BoolAssertion: ...
+@overload
 def assert_that(val: int, description: str = "") -> _NumericAssertion[int]: ...
 
 
@@ -324,7 +328,7 @@ def assert_that(val: float, description: str = "") -> _NumericAssertion[float]: 
 
 
 @overload
-def assert_that(val: complex, description: str = "") -> _NumericAssertion[complex]: ...
+def assert_that(val: complex, description: str = "") -> _ComplexAssertion: ...
 
 
 @overload
@@ -1143,7 +1147,7 @@ class AssertionBuilder(
         @overload
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
-        def satisfies(self, matcher: Matcher | Callable[..., bool]) -> Self: ...
+        def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self: ...
         def satisfies(self, matcher: Any) -> Any:  # overload impl stub, never executed
             ...
 

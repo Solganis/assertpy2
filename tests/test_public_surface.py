@@ -130,7 +130,7 @@ class TestTheCountsTheDocsQuote:
 
     QUOTED_MATCHER_COUNT = 41
     PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
-    QUOTED_PROTOCOL_COUNT = 9
+    QUOTED_PROTOCOL_COUNT = 11
 
     def test_the_matcher_count(self):
         matchers = [name for name in dir(assertpy2.match) if not name.startswith("_")]
@@ -151,9 +151,9 @@ class TestTheCountsTheDocsQuote:
         assert_that(stale).described_as("pages quoting a matcher count that is not the real one").is_empty()
 
     def test_the_protocol_count(self):
-        # counted from what `assert_that` dispatches to, which is the claim the pages make. There is a
-        # tenth protocol in the module, `_InvokedAssertion`, reached through `raised()` rather than
-        # from `assert_that`, so it is not one of the nine an IDE picks between on the first call
+        # counted from what `assert_that` dispatches to, which is the claim the pages make. One more
+        # protocol in the module, `_InvokedAssertion`, is reached through `raised()` rather than from
+        # `assert_that`, so it is not one of the ones an IDE picks between on the first call
         source = pathlib.Path("assertpy2/assertpy.py").read_text(encoding="utf-8")
         returned = set(re.findall(r"-> (_[A-Za-z]+Assertion)\b", source))
         assert_that(returned).described_as("protocols assert_that returns, quoted in the docs").is_length(

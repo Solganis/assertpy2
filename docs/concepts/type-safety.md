@@ -54,6 +54,25 @@ assert_that("foo").is_positive()
 assert_that(42).is_instance_of("int")
 ```
 
+The same holds for a relation between two values, not only for a method that does not apply. An
+argument is bound to the type of the value under test, so a comparison that could never hold is an
+error rather than a test that fails at runtime:
+
+<!-- docs-guard: type-error -->
+```python
+assert_that([1, 2, 3]).contains("four")            # an item that cannot be in a list of int
+assert_that({"id": 1}).contains_key(3.14)          # a key that cannot be in a dict[str, int]
+assert_that(1).is_greater_than("wrong type")       # a number against text
+assert_that(date.today()).is_before(5)             # a date against a number
+assert_that(1).satisfies(match.starts_with("a"))   # a matcher built for another type
+```
+
+Comparing an `int` against a `float`, passing a matcher where an item is expected, and every other
+ordinary combination keep working. Which relations are refused and which stay accepted is measured
+rather than asserted: the file lives in
+[`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py) and CI
+compares all three checkers against a recorded baseline in both directions.
+
 [ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy), and
 [Pyright](https://github.com/microsoft/pyright) all report these in the editor and in CI, turning a class
 of test bugs into errors you see while typing.
@@ -69,6 +88,18 @@ broadens or changes a return type fails the build. `ty` additionally type-checks
     never advertising methods that may not apply. See [Errors & Reporting](../guides/errors.md#expected-exceptions).
 
 ### Where the typed surface ends
+
+One relation stays invisible, and it is a property of the builder rather than of a signature. A value
+with no overload of its own gets the generic `AssertionBuilder`, which carries every assertion there is,
+so a numeric assertion on a user class type-checks:
+
+<!-- docs-guard: untyped -->
+```python
+assert_that(person).is_positive()   # accepted: the generic builder carries every method
+```
+
+It fails at runtime with a clear message. Closing it statically means splitting the runtime builder,
+which is a larger change than any signature.
 
 [Dynamic assertions](../guides/assertions.md#dynamic-assertions-on-objects) (`has_<attribute>()`) are
 resolved at runtime from the value itself, so no overload can declare them ahead of time. A checker

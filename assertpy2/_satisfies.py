@@ -3,7 +3,7 @@ from __future__ import annotations
 import collections.abc
 import os
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
@@ -104,7 +104,7 @@ def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
 class SatisfiesMixin(_MixinBase):
     """Predicate and matcher-application assertions: satisfies / each / *_satisfy / matches_structure."""
 
-    def all_fields_satisfy(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
+    def all_fields_satisfy(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that every scalar leaf in val's object graph satisfies the given matcher.
 
         Walks val recursively (mappings, dataclasses, namedtuples, Pydantic models, lists, tuples) and
@@ -169,7 +169,7 @@ class SatisfiesMixin(_MixinBase):
         _warn_if_vacuous("has_no_none_fields", self.val, allow_empty)
         return self.all_fields_satisfy(IsNotNoneMatcher(), allow_empty=True)
 
-    def satisfies(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that val satisfies the given matcher.
 
         Args:
@@ -218,13 +218,13 @@ class SatisfiesMixin(_MixinBase):
                     ),
                 )
         elif callable(matcher):
-            if not matcher(self.val):
+            if not cast("Callable[..., object]", matcher)(self.val):
                 return self.error(f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.")
         else:
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def each(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
+    def each(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that every item in val satisfies the given matcher.
 
         Args:
@@ -269,7 +269,7 @@ class SatisfiesMixin(_MixinBase):
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
-                if not matcher(item):
+                if not cast("Callable[..., object]", matcher)(item):
                     return self.error(
                         f"Expected all items to satisfy {_describe_matcher(matcher)},"
                         f" but item at index {i} <{item}> did not."
@@ -366,7 +366,7 @@ class SatisfiesMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to not be callable, but was.")
         return self
 
-    def any_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def any_satisfy(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that at least one item in val satisfies the given matcher.
 
         Args:
@@ -416,7 +416,7 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def all_satisfy(self, matcher: Matcher | Callable[..., bool], *, allow_empty: bool = False) -> Self:
+    def all_satisfy(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that all items in val satisfy the given matcher.
 
         Semantic alias for [`each()`][assertpy2.base.BaseMixin.each].
@@ -441,7 +441,7 @@ class SatisfiesMixin(_MixinBase):
         _warn_if_vacuous("all_satisfy", self.val, allow_empty)
         return self.each(matcher, allow_empty=True)
 
-    def none_satisfy(self, matcher: Matcher | Callable[..., bool]) -> Self:
+    def none_satisfy(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that no item in val satisfies the given matcher.
 
         Args:
@@ -475,7 +475,7 @@ class SatisfiesMixin(_MixinBase):
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
-                if matcher(item):
+                if cast("Callable[..., object]", matcher)(item):
                     return self.error(
                         f"Expected no item to satisfy {_describe_matcher(matcher)}, but item at index {i} <{item}> did."
                     )
@@ -483,7 +483,7 @@ class SatisfiesMixin(_MixinBase):
             raise TypeError("given arg must be a Matcher or callable")
         return self
 
-    def satisfies_exactly(self, *matchers: Matcher | Callable[..., bool]) -> Self:
+    def satisfies_exactly(self, *matchers: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that val has exactly one item per matcher, each satisfying the matcher at its position.
 
         Unlike [`each()`][assertpy2.base.BaseMixin.each] (one matcher applied to every item), this
@@ -539,7 +539,7 @@ class SatisfiesMixin(_MixinBase):
             )
         return self
 
-    def satisfies_exactly_in_any_order(self, *matchers: Matcher | Callable[..., bool]) -> Self:
+    def satisfies_exactly_in_any_order(self, *matchers: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that the items and the given matchers can be paired one-to-one, in any order.
 
         Like [`satisfies_exactly()`][assertpy2.base.BaseMixin.satisfies_exactly] but ignoring
