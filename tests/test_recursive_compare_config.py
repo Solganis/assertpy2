@@ -618,11 +618,43 @@ class TestStrictTypes:
         ],
         ids=str,
     )
-    def test_hash_matched_positions_are_a_known_gap(self, actual, expected):
-        # a dict key and a set element are found by hash, and 1, 1.0 and True hash alike, so the pair
-        # is matched before anything looks at its type. Documented, not fixed.
+    def test_a_hash_matched_key_or_member_is_compared_by_type_too(self, actual, expected):
+        """The one place the flag's name promised something it did not deliver.
+
+        A dict key and a set element are found by hash, and `1`, `1.0` and `True` hash alike, so the
+        pair was matched before anything looked at its type. Everything else about `strict_types` works
+        pair by pair, and a key never becomes a pair. Reported by an external review of the shipped
+        library, reproduced, and now closed on both sides: the container's own walk and the matcher.
+        """
+        with pytest.raises(AssertionError):
+            assert_that(actual).is_equal_to(expected, strict_types=True)
+        assert_that(match.equal_to(expected, strict_types=True).matches(actual)).is_false()
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [({1: "a"}, {1: "a"}), ({"s": {1, 2}}, {"s": {2, 1}}), (frozenset({1}), frozenset({1}))],
+        ids=str,
+    )
+    def test_the_same_keys_of_the_same_types_still_match(self, actual, expected):
+        # the other half: a check that only ever fires is a check that broke equality
         assert_that(actual).is_equal_to(expected, strict_types=True)
-        assert_that(match.equal_to(expected, strict_types=True).matches(actual)).is_true()
+
+    def test_the_diff_names_the_key_rather_than_the_whole_mapping(self):
+        # a verdict with no diff would read as "these two equal-looking dicts differ, work out why"
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({True: "a", "ok": 1}).is_equal_to({1: "a", "ok": 1}, strict_types=True)
+        assert_that(str(failure.value)).contains("only their types differ")
+        diff = failure.value.diff
+        assert_that(diff).is_not_none()
+        assert_that([(entry.actual, entry.expected) for entry in diff.entries]).is_equal_to([(True, 1)])
+        assert_that(diff.entries[0].steps[-1].kind).described_as("reported against the key").is_equal_to("key")
+
+    def test_a_key_matched_by_hash_is_found_whichever_side_stores_it(self):
+        # `{True} & {1}` hands back whichever side the set implementation drew from, so an intersection
+        # loses the very type being compared. Both orders have to report
+        for actual, expected in (({True: "a"}, {1: "a"}), ({1: "a"}, {True: "a"})):
+            with pytest.raises(AssertionError):
+                assert_that(actual).is_equal_to(expected, strict_types=True)
 
     @pytest.mark.parametrize("bad", ["yes", 1, None])
     def test_non_bool_is_rejected(self, bad):
