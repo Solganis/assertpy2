@@ -151,6 +151,11 @@ Retry rules, soft/warn behavior, and the polling trace are identical to `eventua
 The one difference is that the probe must be a sync callable. One that returns an awaitable raises
 `TypeError`, so poll async probes with `eventually()` and `await`.
 
+Reaching for `asyncio.run()` to call `eventually()` from a non-async test works only where nothing
+else owns a loop in that thread. Playwright's sync API is the common counter-example, since it drives
+a loop of its own and the call fails with `RuntimeError: asyncio.run() cannot be called from a running
+event loop`. That configuration is why `eventually_sync()` exists.
+
 ### Polling trace
 
 Every poll is recorded, so a timeout failure diagnoses itself instead of just reporting that time ran
