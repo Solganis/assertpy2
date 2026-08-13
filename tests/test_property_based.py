@@ -26,6 +26,7 @@ from hypothesis import strategies as st
 import assertpy2._engine._typing
 import assertpy2.assertpy
 from assertpy2 import assert_conforms, assert_that, match, soft_assertions
+from assertpy2._clustering import _VALUE_LIMIT, Observation, Signature, _shown, clusters, render, stable_repr
 from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
@@ -2079,3 +2080,100 @@ class TestEveryLeafOfAGroupIsReachable:
             assert_that(caught.check().does_not_contain_error(wanted).passed).described_as(
                 f"does_not_contain_error({wanted.__name__}) against contains_error"
             ).is_equal_to(not present)
+
+
+# --- the summary layers added last: a value walk, a grouping, and a static scan ------------------
+
+_LEAVES = st.one_of(
+    st.integers(), st.floats(allow_nan=False), st.text(max_size=8), st.booleans(), st.none(), st.binary(max_size=8)
+)
+_STRUCTURES = st.recursive(
+    _LEAVES,
+    lambda inner: st.one_of(
+        st.lists(inner, max_size=4),
+        st.tuples(inner, inner),
+        st.dictionaries(st.text(max_size=4), inner, max_size=4),
+        st.frozensets(_LEAVES, max_size=4),
+    ),
+    max_leaves=12,
+)
+
+
+class TestStableReprHoldsOverArbitraryStructures:
+    """It runs inside a pytest report hook, where an exception costs the reader the whole run.
+
+    Both shapes that used to escape were found by a reviewer rather than by the example suite, so the
+    invariant is stated here as a property instead of as more examples.
+    """
+
+    @given(_STRUCTURES)
+    @settings(deadline=None)
+    def test_it_never_raises_and_repeats_itself(self, value):
+        first = stable_repr(value)
+        assert_that(first).is_instance_of(str)
+        assert_that(stable_repr(value)).described_as("same value, same text").is_equal_to(first)
+
+    @given(st.frozensets(_LEAVES, max_size=6))
+    @settings(deadline=None)
+    def test_a_set_reads_the_same_however_it_was_built(self, members):
+        # the xdist hazard in miniature: two processes iterate one set in two orders
+        rebuilt = frozenset(reversed(list(members)))
+        assert_that(stable_repr(rebuilt)).is_equal_to(stable_repr(members))
+
+    @given(st.dictionaries(st.text(max_size=4), _LEAVES, max_size=4))
+    @settings(deadline=None)
+    def test_a_value_that_contains_itself_terminates(self, value):
+        value["self"] = value
+        assert_that(stable_repr(value)).contains("...")
+
+
+class TestClusteringDoesNotDependOnArrivalOrder:
+    """Under xdist the controller receives failures in whatever order workers finish in.
+
+    A summary that changes with that order is a summary a reader cannot compare between two runs of the
+    same red suite, and one such dependency shipped into the rewrite before a reviewer caught it.
+    """
+
+    _OBSERVATIONS = st.lists(
+        st.builds(
+            Observation,
+            st.builds(Signature, st.just(True), st.sampled_from(["a", "b.c", "d[*]"]), st.just((("key", "'a'"),))),
+            st.sampled_from(["1", "2", "3"]),
+            st.sampled_from(["9", "8"]),
+        ),
+        min_size=1,
+        max_size=3,
+    )
+
+    @given(st.lists(st.tuples(st.text(min_size=1, max_size=6), _OBSERVATIONS), min_size=3, max_size=12), st.randoms())
+    @settings(deadline=None)
+    def test_the_rendered_summary_is_a_function_of_the_set_not_the_sequence(self, recorded, random):
+        shuffled = list(recorded)
+        random.shuffle(shuffled)
+        total = len(recorded)
+        assert_that(render(clusters(shuffled, total), total)).is_equal_to(render(clusters(recorded, total), total))
+
+    @given(st.lists(st.tuples(st.text(min_size=1, max_size=6), _OBSERVATIONS), max_size=12))
+    @settings(deadline=None)
+    def test_no_cluster_ever_claims_more_failures_than_the_run_had(self, recorded):
+        total = len(recorded)
+        for cluster in clusters(recorded, total):
+            assert_that(cluster.size).is_less_than_or_equal_to(total)
+
+
+class TestSummaryValuesStayWithinTheirBudget:
+    """Two failures over a large payload used to put the payload on the terminal twice and through the
+    xdist transport once per failure. The cap is what keeps a summary a summary.
+    """
+
+    @given(_STRUCTURES)
+    @settings(deadline=None)
+    def test_no_value_exceeds_the_cap_by_more_than_its_own_notice(self, value):
+        shown = _shown(value)
+        assert_that(len(shown)).is_less_than_or_equal_to(_VALUE_LIMIT + len("... (999999 more chars)"))
+
+    @given(st.text(min_size=400, max_size=900))
+    @settings(deadline=None)
+    def test_a_long_value_says_how_much_was_cut(self, value):
+        shown = _shown(value)
+        assert_that(shown).starts_with(stable_repr(value)[:_VALUE_LIMIT]).ends_with("more chars)")

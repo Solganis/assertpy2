@@ -26,7 +26,9 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/helpers.py", "reportArgumentType"): 3,
     ("assertpy2/helpers.py", "reportGeneralTypeIssues"): 1,
     ("assertpy2/helpers.py", "reportIndexIssue"): 2,
-    ("assertpy2/pytest_plugin.py", "reportArgumentType"): 3,
+    # three of these are values walked as `object`; the fourth is the failure-cluster share, parsed
+    # the same guarded way the poll-report fraction is
+    ("assertpy2/pytest_plugin.py", "reportArgumentType"): 4,
     # --- `numbers.Number` declares no arithmetic --------------------------------------------------
     # The ABC names the tower without promising operators, so comparing one or passing it to
     # `math.isnan` is flagged even though every concrete member supports both.

@@ -8,7 +8,7 @@ from typing import Final
 
 import pytest
 
-from . import _dangling, _inline, _satisfies, async_assertions, errors
+from . import _clustering, _dangling, _inline, _satisfies, async_assertions, errors
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
@@ -82,6 +82,11 @@ def pytest_addoption(parser):
         default="50",
     )
     parser.addini(
+        "assertpy2_failure_clusters",
+        help="Group failures sharing one difference: off (default), or the failing tests a cluster must hold",
+        default="off",
+    )
+    parser.addini(
         "assertpy2_poll_report",
         help="Name polls that converged this close to their deadline: off, or a fraction (default 0.7)",
         default="0.7",
@@ -106,6 +111,32 @@ def _poll_threshold(raw: object) -> float | None:
             stacklevel=1,
         )
         return 0.7
+    return value
+
+
+def _cluster_minimum(raw: object) -> int | None:
+    """Parse how many failing tests a cluster must hold: ``off`` silences the summary, a count moves it.
+
+    ``None`` means the summary is off, and the per-failure recording is skipped with it, so a run that
+    does not want the summary pays nothing for it.
+
+    A count rather than a share of the run, which was tried first and measured strictly worse: under a
+    share every additional cause raises the bar for all the others, so a run splitting cleanly into
+    five causes of eight printed nothing at all.
+    """
+    if str(raw).strip().lower() == "off":
+        return None
+    try:
+        value = int(raw)  # ty: ignore[invalid-argument-type]  # guarded by the except below
+    except (ValueError, TypeError):
+        value = 0
+    if value < 2:
+        warnings.warn(
+            f"assertpy2_failure_clusters={raw!r} is not 'off' or a count of 2 or more, "
+            f"falling back to {_clustering.MINIMUM_SIZE}",
+            stacklevel=1,
+        )
+        return _clustering.MINIMUM_SIZE
     return value
 
 
@@ -169,6 +200,9 @@ def pytest_configure(config):
     # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
+    config._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
+    _session_config[0] = config
+    config._assertpy2_failures = []
     config._assertpy2_failure_count = 0
     config._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
     # nothing reads the samples once the report is off, so stop paying for them at the poll site
@@ -193,6 +227,12 @@ def pytest_unconfigure(config):
     # module-level, so a second session in the same process would otherwise open with the first one's
     # failures already counted. the other controller accumulators are cleared where they are consumed;
     # these are consumed by a hook that may not run at all, so they are released here instead
+    _controller_failures.clear()
+    _controller_failure_count[0] = 0
+    _controller_lost_workers[0] = 0
+    _controller_unreadable_workers[0] = 0
+    _controller_collect_errors[0] = 0
+    _session_config[0] = None
     _satisfies._VACUOUS_GUARD = getattr(config, "_assertpy2_prev_vacuous", _satisfies._env_enabled())
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = False
@@ -212,6 +252,14 @@ _controller_accesses: dict = {}
 
 # failures shipped by xdist workers: the summary is written on the controller, and a worker's own
 # config is not the controller's, so without this the run that most needs a summary gets none
+_controller_failures: list = []
+_controller_failure_count: list = [0]
+_controller_lost_workers: list = [0]
+_controller_unreadable_workers: list = [0]
+_controller_collect_errors: list = [0]
+
+# the session's config, for the one hook that is handed a report and no way back to it
+_session_config: list = [None]
 
 
 def pytest_collection_modifyitems(session, config, items):
@@ -290,9 +338,39 @@ def pytest_runtest_setup(item):
     _report_dangling(item)
 
 
+def pytest_collectreport(report):
+    """Note a collection that failed, which is red and never reaches a test report.
+
+    `--continue-on-collection-errors` runs the rest of the suite, so pytest ends with `3 failed, 1 error`
+    while the summary saw only the three and said `3 of 3`.  Counted on its own line rather than into the
+    denominator, because a collector is not a test and `3 of 4 failing tests` would name a fourth test
+    that does not exist.  Without that flag the run stops and no summary is written, so this costs nothing in
+    the ordinary case.
+
+    The report arrives without its config, and this hook is the only place a collection failure is
+    visible, which is what the session-level reference is for.
+    """
+    config = _session_config[0]
+    if config is None or not report.failed or hasattr(config, "workeroutput"):
+        # not on a worker: under xdist every worker collects the whole suite, so counting there turned
+        # one broken module into one red result per worker. The controller collects too, and it is the
+        # one writing the summary
+        return
+    if getattr(config, "_assertpy2_cluster_minimum", None) is not None:
+        _controller_collect_errors[0] += 1
+
+
 @pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed
 def pytest_testnodedown(node, error):
-    """xdist controller hook: collect the touched snapshots and inline edits each worker shipped."""
+    """xdist controller hook: collect the touched snapshots and inline edits each worker shipped.
+
+    ``error`` is set when the worker died rather than finished.  Then it never ran its `sessionfinish`,
+    so whatever it had recorded never left it, and the cluster summary would otherwise report a share
+    of the failures it happened to receive as though that were the whole run.
+    """
+    if error is not None:
+        _controller_lost_workers[0] += 1
+    _collect_worker_failures(node, died=error is not None)
     touched = getattr(node, "workeroutput", {}).get("assertpy2_touched")
     if touched:
         _controller_touched.update(tuple(item) for item in touched)
@@ -416,6 +494,11 @@ def pytest_sessionfinish(session, exitstatus):
         config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
         config.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
         config.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
+        config.workeroutput["assertpy2_failures"] = [
+            [nodeid, [_observation_to_wire(one) for one in found]]
+            for nodeid, found in getattr(config, "_assertpy2_failures", [])
+        ]
+        config.workeroutput["assertpy2_failure_count"] = getattr(config, "_assertpy2_failure_count", 0)
         config.workeroutput["assertpy2_accesses"] = [
             [snapname, key, sorted(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")]
             for (snapname, key), nodes in _snapshot._ACCESS_NODES.items()
@@ -444,6 +527,178 @@ def pytest_sessionfinish(session, exitstatus):
     _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned)
 
 
+def _refuse(value: object) -> bool:
+    """Raise, from inside a comprehension's condition, where a plain `raise` cannot go."""
+    raise TypeError(value)
+
+
+def _collect_worker_failures(node, died: bool = False) -> None:
+    """Take one worker's recorded failures, or leave the worker counted as lost.
+
+    Everything here came off the wire, and a controller running one version of this library against a
+    worker running another is a real installation.  A row that does not unpack must not take down a hook
+    that pytest answers with INTERNALERROR, and it must not be silently dropped either: the summary
+    reports what share of the run it explains, so a worker whose failures went missing is the same
+    situation as a worker that died.
+
+    Unreadable is counted apart from dead (``died``), because the two are different claims about the run
+    and a worker that finished must not be reported as having crashed.  A worker that already counted as
+    dead is not looked at here at all: it has one thing wrong with it, not two.
+
+    Both wire values are read outright rather than defaulted, which is what makes a worker that shipped
+    neither unreadable rather than invisible.  This version ships both from every worker, summary on or
+    off, so their absence is a worker that does not speak this protocol, and its failures are missing from
+    the denominator: leaving that unsaid is how a run of twelve prints a confident `6 of 6`.
+
+    Node ids are prefixed with the worker's own name because two workers can legitimately report the
+    same test: `--dist=each` runs the whole suite on every worker.  Without the prefix the denominator
+    counted both executions and the cluster counted one, and the summary reported a run half unexplained
+    when nothing was unexplained at all.
+    """
+    if died:  # already counted, and a worker that never finished has nothing to have shipped
+        return
+    output = getattr(node, "workeroutput", {})
+    worker = getattr(node, "gateway", None)
+    prefix = getattr(worker, "id", "") or ""
+    try:
+        received = [
+            (f"{prefix}::{nodeid}", [_observation_from_wire(one) for one in found])
+            for nodeid, found in output["assertpy2_failures"]
+            if isinstance(nodeid, str) or _refuse(nodeid)
+        ]
+        counted = output["assertpy2_failure_count"]
+        # both halves or neither: rows without a count add cluster members to a denominator they never
+        # raised, and the summary then reports six of three. The count is checked rather than coerced,
+        # since `int()` would turn `True` and `3.9` into a denominator nobody sent
+        if isinstance(counted, bool) or not isinstance(counted, int):
+            raise TypeError(counted)
+        if counted < len({nodeid for nodeid, _ in received}):
+            raise ValueError(counted)
+    except Exception:  # pragma: no cover - the guard itself; a malformed payload is tested through it
+        _controller_unreadable_workers[0] += 1
+        return
+    _controller_failures.extend(received)
+    _controller_failure_count[0] += counted
+
+
+def _observation_to_wire(one):
+    """An observation as plain lists, which is all execnet can carry between worker and controller."""
+    key = one.signature
+    steps = [list(step) for step in key.steps]
+    return [key.located, key.where, steps, key.label, list(key.values), one.actual, one.expected]
+
+
+def _observation_from_wire(row):
+    """Rebuild an observation the controller can group by, refusing anything it could not group by.
+
+    Tuples again, not lists: the signature *is* the cluster key, so it has to hash, and a list inside it
+    would raise the moment the controller tried to group anything a worker sent.
+
+    Each field is checked rather than trusted, because a row of the right length can still hold the wrong
+    thing.  A list where a value belongs unpacks happily and then raises out of the grouping, past the
+    point where the worker could be reported as unreadable: the summary simply vanished, and the run said
+    nothing about why.
+    """
+    located, where, steps, label, values, actual, expected = row
+    if not (
+        isinstance(located, bool)
+        and all(isinstance(field, str) for field in (where, label, actual, expected))
+        and all(isinstance(one, str) for one in values)
+        and all(len(step) == 2 and all(isinstance(part, str) for part in step) for step in steps)
+    ):
+        raise TypeError(row)
+    key = _clustering.Signature(located, where, tuple(tuple(step) for step in steps), label, tuple(values))
+    if not _clustering.is_well_formed(key):
+        raise ValueError(key)
+    return _clustering.Observation(key, actual, expected)
+
+
+def _record_for_clustering(config, nodeid, exc):
+    """Note what one failure differed at, for the end-of-run summary.
+
+    Counted even when it carries no diff, and even when there is no exception to ask - a strict xfail
+    that passed is red and holds nothing - because the summary reports how much of the run it accounts
+    for, and that is only meaningful against every failure.
+
+    The failure's own diagnostic line keys the differences that have no location, so it is asked for
+    here, while the values are still at hand.
+    """
+    if getattr(config, "_assertpy2_cluster_minimum", None) is None:
+        return
+    # a set of node ids rather than a counter: a retried test is reported failing once per attempt, and
+    # counting attempts made the run look larger than it was
+    failed = getattr(config, "_assertpy2_failed_ids", None)
+    if failed is None:
+        failed = config._assertpy2_failed_ids = set()
+    failed.add(nodeid)
+    config._assertpy2_failure_count = len(failed)
+    try:
+        # inside the guard, reads included: `diff` is our own attribute name on somebody else's
+        # exception, and reading a property runs their code. One that raised took the whole run down
+        # with INTERNALERROR, which is the cost of every line here being outside the net rather than in
+        diff = getattr(exc, "diff", None)
+        # the hint the failure already computed for its own message, rather than a second run of the
+        # same analysis. `_outcome` is absent on a failure raised outside the fluent path
+        outcome = getattr(exc, "_outcome", None)
+        label = getattr(outcome, "hint", None)
+        found = _clustering.observations_of(diff, label)
+    except Exception:
+        # a summary is a convenience and a report hook is not a place to raise from: pytest answers an
+        # exception here with INTERNALERROR, which costs the reader the entire run's results
+        return
+    if found:
+        config._assertpy2_failures.append((nodeid, found))
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Say in a line what the failures had in common, when enough of them had anything in common.
+
+    This hook rather than `pytest_sessionfinish`, which runs before the tracebacks are printed and puts
+    the summary above all of them.  Here it lands in the closing block, immediately above
+    `short test summary info`.
+
+    Not below it, and that is not a choice: the terminal reporter writes that list from the `finally`
+    of its own wrapper around this hook, so every third-party implementation runs first.  Measured with
+    a plain implementation, with `trylast`, and with a wrapper printing after its yield - all three
+    land in the same place.
+    """
+    try:
+        _write_cluster_summary(terminalreporter, config)
+    except Exception as exc:  # pragma: no cover - the barrier itself; its parts are tested directly
+        # a summary is a convenience and this hook is not a place to raise from: everything below is
+        # optional, and taking a run's whole report down to print it would be the worst possible trade.
+        # `Exception`, not `BaseException`: a Ctrl-C or a SystemExit through here still has to travel
+        with contextlib.suppress(Exception):
+            # the notice is itself suppressed rather than trusted: under `-W error` a warning raises,
+            # which would put the barrier's own traceback in the report in place of the failure it caught
+            warnings.warn(f"assertpy2 could not write its failure-cluster summary: {exc!r}", stacklevel=1)
+
+
+def _write_cluster_summary(terminalreporter, config) -> None:
+    """Build and print the summary, or return having printed nothing."""
+    minimum = getattr(config, "_assertpy2_cluster_minimum", None)
+    # a worker's failures arrive through `pytest_testnodedown`, and the controller runs none of its own
+    total = getattr(config, "_assertpy2_failure_count", 0) + _controller_failure_count[0]
+    recorded = [*getattr(config, "_assertpy2_failures", []), *_controller_failures]
+    if minimum is None or total < minimum:
+        return
+    found = _clustering.clusters(recorded, total, minimum=minimum)
+    lines = _clustering.render(
+        found,
+        total,
+        _controller_lost_workers[0],
+        _controller_unreadable_workers[0],
+        minimum=minimum,
+        collect_errors=_controller_collect_errors[0],
+    )
+    if not lines:
+        return
+    terminalreporter.write_line("")
+    terminalreporter.write_line("assertpy2 failure clusters:")
+    for line in lines:
+        terminalreporter.write_line(f"  {line}")
+
+
 def _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned):
     reporter = config.pluginmanager.get_plugin("terminalreporter")
     if reporter is None:  # pragma: no cover - the terminal reporter is always present under pytest
@@ -468,13 +723,18 @@ def pytest_runtest_makereport(item, call):
     # every phase, not just "call": a fixture that polls in teardown runs after the call report, so
     # draining only there would tag its retries with the next test that happens to run
     _drain_retries(report.nodeid)
-    if report.when != "call" or not report.failed:
-        return
-    if call.excinfo is None:
+    if not report.failed:
         return
 
-    exc = call.excinfo.value
-    if not isinstance(exc, AssertionError):
+    # before the "call" gate, before the AssertionError one, and before an exception is even required,
+    # all three deliberately: the summary says how much of the run it accounts for, and that is only
+    # honest against every red result. A broken fixture erroring thirty tests is what a live red run is
+    # mostly made of, and a passing test under `xfail(strict=True)` is red with no exception at all -
+    # each of those, left out, printed "3 of 3 failing tests differ at role" over a larger run
+    exc = call.excinfo.value if call.excinfo is not None else None
+    _record_for_clustering(item.config, report.nodeid, exc)
+
+    if call.excinfo is None or report.when != "call" or not isinstance(exc, AssertionError):
         return
 
     actual = getattr(exc, "actual", None)

@@ -1,0 +1,1219 @@
+"""Grouping a run's failures by the difference they share.
+
+The two halves matter for different reasons. Getting the grouping right is what makes the summary
+useful; getting the *non*-grouping right is what keeps it honest, because a diff entry that carries no
+coordinate would otherwise put every unrelated failure of its kind under one meaningless heading.
+
+The key is the place rather than the values, which was a correction: an applicability map over eleven
+shapes of run showed that keying on values covers a broken constant and nothing else, and misses a
+broken formula differing at the same field with a value of its own per test.
+"""
+
+from __future__ import annotations
+
+import warnings
+from types import SimpleNamespace
+
+import pytest
+
+from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2._clustering import (
+    _EXAMPLE_LIMIT,
+    MINIMUM_SIZE,
+    Observation,
+    Signature,
+    _made_unique,
+    canonical_path,
+    clusters,
+    observations_of,
+    render,
+    stable_repr,
+)
+from assertpy2.pytest_plugin import (
+    _cluster_minimum,
+    _observation_from_wire,
+    _observation_to_wire,
+    _record_for_clustering,
+    pytest_terminal_summary,
+)
+
+
+def diff_of(case):
+    """The `DiffResult` a failing assertion carries."""
+    with pytest.raises(AssertionFailure) as failure:
+        case()
+    return failure.value.diff
+
+
+def observations(case, label=None):
+    return observations_of(diff_of(case), label)
+
+
+def keys(case, label=None):
+    """Just the cluster keys, for the tests about what counts as one difference."""
+    return [one.signature for one in observations(case, label)]
+
+
+def located(where, steps=(("key", "'role'"),)):
+    """A located signature, spelled out rather than derived, so the tests state their own input."""
+    return Signature(True, where, steps)
+
+
+def recorded(count, signature, *, actual="'super'", expected="'admin'", prefix="test"):
+    return [(f"{prefix}_{index}", [Observation(signature, actual, expected)]) for index in range(count)]
+
+
+class TestWhatCountsAsOneDifference:
+    def test_the_same_field_and_values_in_two_failures(self):
+        first = keys(lambda: assert_that({"u": {"role": "super"}}).is_equal_to({"u": {"role": "admin"}}))
+        second = keys(lambda: assert_that({"u": {"role": "super"}}).is_equal_to({"u": {"role": "admin"}}))
+        assert_that(first).is_equal_to(second)
+
+    def test_the_same_field_with_different_values_is_the_same_difference(self):
+        """The correction the applicability map forced, and the reason for it.
+
+        A broken constant gives every failure the same pair of values, and keying on values covers it.
+        A broken formula gives each test a value of its own at the same field, and keying on values
+        scattered a run of forty into forty clusters of one. Both are ordinary shapes.
+        """
+        first = keys(lambda: assert_that({"total": 7}).is_equal_to({"total": 8}))
+        second = keys(lambda: assert_that({"total": 91}).is_equal_to({"total": 104}))
+        assert_that(first).is_equal_to(second)
+
+    def test_two_different_fields_are_still_two_differences(self):
+        first = keys(lambda: assert_that({"role": "s"}).is_equal_to({"role": "a"}))
+        second = keys(lambda: assert_that({"name": "s"}).is_equal_to({"name": "a"}))
+        assert_that(first).is_not_equal_to(second)
+
+    def test_the_row_index_is_generalised_away(self):
+        # `users[0].role` and `users[7].role` are one difference reported against two rows, and a
+        # reader chasing a common cause wants them on one line
+        first = keys(lambda: assert_that({"users": [{"role": "super"}]}).is_equal_to({"users": [{"role": "x"}]}))
+        second = keys(
+            lambda: assert_that({"users": [{"role": "y"}, {"role": "super"}]}).is_equal_to(
+                {"users": [{"role": "y"}, {"role": "x"}]}
+            )
+        )
+        assert_that(first).is_equal_to(second)
+        assert_that(first[0].where).is_equal_to("users[*].role")
+
+    def test_a_mapping_key_is_taken_from_the_step_not_the_rendered_path(self):
+        # the rendered path puts a key through `str()`, so {3: ...} and {"3": ...} read alike. the
+        # steps hold the keys themselves, and these two must not share a cluster
+        numeric = keys(lambda: assert_that({3: "a"}).is_equal_to({3: "b"}))
+        textual = keys(lambda: assert_that({"3": "a"}).is_equal_to({"3": "b"}))
+        assert_that(numeric).is_not_equal_to(textual)
+
+    def test_one_failure_with_two_differing_fields_joins_two_clusters(self):
+        found = keys(lambda: assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 8}))
+        assert_that(found).is_length(2)
+        assert_that([one.where for one in found]).is_equal_to(["a", "b"])
+
+    def test_a_failure_with_no_diff_contributes_nothing(self):
+        assert_that(observations_of(None)).is_empty()
+
+    def test_the_values_are_kept_as_examples_even_though_they_are_not_the_key(self):
+        found = observations(lambda: assert_that({"role": "super"}).is_equal_to({"role": "admin"}))
+        assert_that(found[0].actual).is_equal_to("'super'")
+        assert_that(found[0].expected).is_equal_to("'admin'")
+
+
+class _Payload:
+    """A value whose repr is longer than the summary prints, so identity and display come apart."""
+
+    def __init__(self, tail):
+        self.tail = tail
+
+    def __repr__(self):
+        return "<Payload " + "x" * 300 + self.tail + ">"
+
+    def __eq__(self, other):
+        return isinstance(other, _Payload) and other.tail == self.tail
+
+    __hash__ = None
+
+
+class TestTheKindsThatHaveNoCoordinate:
+    """An audit of every diff kind found three that name a label rather than a place. Keying those on
+    their path would file every unrelated failure of that kind under one heading.
+
+    Their fallback is the failure's own diagnostic line, which states the difference as a kind instead
+    of a place. Only where there is no diagnostic either do the values become the key.
+    """
+
+    def test_containment_stays_out_of_the_summary_without_a_diagnostic(self):
+        """Its two fields hold presence, not values, so a heading built from them lies.
+
+        A missing item reports `None` on the actual side, and `actual: None` under a cluster heading
+        reads as a claim about the value under test, which was a list of three. Reported by an
+        independent review, reproduced, and answered by dropping the family rather than giving it a
+        second rendering: it clustered almost nothing to begin with.
+        """
+        assert_that(observations(lambda: assert_that([1, 2]).contains(9))).is_empty()
+
+    def test_a_set_difference_stays_out_for_the_same_reason(self):
+        # and it produced two entries per failure, so one failing test printed two blocks under one
+        # heading and the cluster sizes summed past the number of failures
+        assert_that(observations(lambda: assert_that({1, 2}).is_equal_to({1, 3}))).is_empty()
+
+    def test_a_diagnostic_still_lets_them_cluster(self):
+        # the fields are unusable, the diagnostic is not: it describes the difference, not a side
+        hint = "every difference here is one of surrounding whitespace"
+        found = keys(lambda: assert_that({"a ", "b "}).is_equal_to({"a", "b"}), hint)
+        assert_that(found).is_not_empty()
+        assert_that(found[0].label).is_equal_to(hint)
+
+    def test_two_long_values_that_start_alike_do_not_cluster(self):
+        """The printed form is cut at 200 characters, and the key must not be.
+
+        Two payloads that agree for their first two hundred characters and diverge after are two
+        different failures.  Keying on the truncated text merged them, and the summary then announced a
+        difference the two never shared.
+        """
+        first = keys(lambda: assert_that(_Payload("one")).is_equal_to(_Payload("expected")))
+        second = keys(lambda: assert_that(_Payload("two")).is_equal_to(_Payload("expected")))
+        assert_that(first).is_not_equal_to(second)
+
+    def test_the_same_value_still_clusters_however_long_it_is(self):
+        # the other half of the same rule: past the cut, equal values still have to key alike
+        first = keys(lambda: assert_that(_Payload("same")).is_equal_to(_Payload("expected")))
+        second = keys(lambda: assert_that(_Payload("same")).is_equal_to(_Payload("expected")))
+        assert_that(first).is_equal_to(second)
+
+    def test_two_scalar_failures_with_different_values_do_not_cluster(self):
+        first = keys(lambda: assert_that(1).is_equal_to(2))
+        second = keys(lambda: assert_that(5).is_equal_to(6))
+        assert_that(first).is_not_equal_to(second)
+
+    def test_a_diagnostic_makes_two_of_them_one_difference(self):
+        """The half of the correction that the location-free family needed.
+
+        Five uploads differing from their expected bodies only by a trailing newline are one bug, and
+        their values are five different payloads. The diagnostic says what they share.
+        """
+        hint = "every difference here is one of surrounding whitespace"
+        first = keys(lambda: assert_that(b"one\n").is_equal_to(b"one"), hint)
+        second = keys(lambda: assert_that(b"two\n").is_equal_to(b"two"), hint)
+        assert_that(first).is_equal_to(second)
+        assert_that(first[0].label).is_equal_to(hint)
+        assert_that(first[0].values).described_as("the label replaces the values, never joins them").is_empty()
+
+    def test_two_diagnostics_that_differ_stay_apart(self):
+        first = keys(lambda: assert_that(b"one\n").is_equal_to(b"one"), "one of surrounding whitespace")
+        second = keys(lambda: assert_that(b"one\n").is_equal_to(b"one"), "one of line endings")
+        assert_that(first).is_not_equal_to(second)
+
+    def test_a_located_failure_ignores_the_diagnostic(self):
+        # a place is the stronger signal, and letting a label split one field into two clusters would
+        # undo the whole correction
+        plain = keys(lambda: assert_that({"a": "x "}).is_equal_to({"a": "x"}))
+        hinted = keys(lambda: assert_that({"a": "x "}).is_equal_to({"a": "x"}), "one of surrounding whitespace")
+        assert_that(plain).is_equal_to(hinted)
+
+    def test_a_key_holding_a_set_is_written_the_same_way_in_any_process(self):
+        """The walk that pins set ordering has to reach a mapping *key*, not only the values.
+
+        A key is hashable, so it can be a frozenset, and a frozenset reprs in hash order.  Two workers
+        are two processes with two hash seeds, so the same failure keyed differently on each and the
+        two never clustered - the exact symptom `stable_repr` exists to remove, one call site away.
+        """
+        key = frozenset({"b", "a", "c"})
+        found = keys(lambda: assert_that({key: 1}).is_equal_to({key: 2}))
+        assert_that(found[0].steps[0][1]).is_equal_to(stable_repr(key))
+
+    def test_a_matcher_failure_keeps_its_path(self):
+        found = keys(lambda: assert_that({"role": "super"}).matches_structure({"role": match.is_in("admin")}))
+        assert_that(found[0].located).is_true()
+        assert_that(found[0].where).is_equal_to("role")
+
+    def test_a_changed_line_is_a_location_with_its_number_generalised(self):
+        # two files differing on different lines are still "the same line changed" for triage, and the
+        # line number is as incidental to that as a row index is
+        first = keys(lambda: assert_that("a\nb").is_equal_to("a\nc"))
+        second = keys(lambda: assert_that("x\ny\nb").is_equal_to("x\ny\nc"))
+        assert_that(first[0].where).is_equal_to("line [n]")
+        assert_that(first).is_equal_to(second)
+
+    def test_canonical_path_is_none_where_there_is_no_path(self):
+        assert_that(canonical_path(SimpleNamespace(steps=()))).is_none()
+
+
+class TestNothingHereMayRaise:
+    """A summary is a convenience, and this code runs inside a pytest report hook.
+
+    An exception raised there is answered with INTERNALERROR: the run reports nothing at all, not even
+    the failures it had already collected. Both shapes below did exactly that, and both were already
+    solved elsewhere in the library - the diff engine carries a `_seen` set, and `_safe_repr` exists
+    for values whose own code raises. Walking containers here meant owning them again.
+    """
+
+    def test_a_value_that_contains_itself(self):
+        node = {"name": "a"}
+        node["self"] = node
+        assert_that(stable_repr(node)).is_equal_to("{'name': 'a', 'self': ...}")
+
+    def test_a_list_that_contains_itself(self):
+        rows = [1]
+        rows.append(rows)
+        assert_that(stable_repr(rows)).is_equal_to("[1, ...]")
+
+    def test_two_references_to_one_value_are_not_a_cycle(self):
+        # the guard is per path, not global: a value used twice is printed twice, as `repr` does
+        shared = {"x": 1}
+        assert_that(stable_repr([shared, shared])).is_equal_to("[{'x': 1}, {'x': 1}]")
+
+    def test_a_container_that_raises_when_iterated(self):
+        # a detached ORM collection, a lazy wrapper over a closed connection
+        class Detached(list):
+            def __iter__(self):
+                raise RuntimeError("not bound to a Session")
+
+            def __repr__(self):
+                return "<Detached>"
+
+        assert_that(stable_repr([Detached()])).is_equal_to("[<Detached>]")
+
+    def test_a_value_whose_repr_raises(self):
+        class Hostile:
+            def __repr__(self):
+                raise ValueError("no repr for you")
+
+        assert_that(stable_repr({"k": Hostile()})).contains("unreprable Hostile")
+
+
+class TestValuesAreBounded:
+    """The summary sits in the closing screen of a run and travels between xdist processes, so it caps
+    harder than the failure message does: 200 characters a side against the message's 400.
+    """
+
+    def test_a_long_value_is_cut_with_its_length_named(self):
+        found = observations(lambda: assert_that("x" * 5000).is_equal_to("y"))
+        assert_that(found[0].actual).is_length(200 + len("... (4802 more chars)"))
+        assert_that(found[0].actual).ends_with("more chars)")
+
+    def test_an_ordinary_value_is_untouched(self):
+        found = observations(lambda: assert_that({"role": "super"}).is_equal_to({"role": "admin"}))
+        assert_that(found[0].actual).is_equal_to("'super'")
+
+
+class TestASignatureReadsTheSameInAnyProcess:
+    """A signature has to survive being built on two xdist workers, which are two processes with two
+    hash seeds. A set reprs in iteration order, so identical failures produced different signatures
+    and never clustered - the feature going silent on exactly the runs it exists for.
+    """
+
+    def test_a_set_is_ordered(self):
+        assert_that(stable_repr({"b", "a", "c"})).is_equal_to("{'a', 'b', 'c'}")
+
+    def test_a_set_nested_in_a_container_is_reached(self):
+        assert_that(stable_repr({"tags": {"b", "a"}})).is_equal_to("{'tags': {'a', 'b'}}")
+        assert_that(stable_repr([{"b", "a"}])).is_equal_to("[{'a', 'b'}]")
+
+    def test_an_empty_set_keeps_its_own_repr(self):
+        assert_that(stable_repr(set())).is_equal_to("set()")
+
+    def test_a_one_element_tuple_keeps_its_comma(self):
+        assert_that(stable_repr((1,))).is_equal_to("(1,)")
+        assert_that(stable_repr((1, 2))).is_equal_to("(1, 2)")
+
+    def test_everything_else_is_left_to_repr(self):
+        assert_that(stable_repr("x")).is_equal_to("'x'")
+        assert_that(stable_repr(None)).is_equal_to("None")
+        assert_that(stable_repr(frozenset({2, 1}))).is_equal_to("{1, 2}")
+
+    def test_a_dict_keeps_the_order_it_was_written_in(self):
+        # deliberately not sorted: a dict's order is the reader's own, and pinning it here would put a
+        # value in the summary that the failure message never showed
+        assert_that(stable_repr({"z": 1, "a": 2})).is_equal_to("{'z': 1, 'a': 2}")
+
+
+class TestWhichClustersAreWorthPrinting:
+    """The floor is a count, not a share, and that is a correction rather than a preference.
+
+    Under a share every additional cause raises the bar for all the others, so a run of forty failures
+    splitting cleanly into five causes of eight printed nothing at all. Measured across eleven shapes,
+    the share was never better than the floor and worse on four of them.
+    """
+
+    def test_a_cluster_covering_most_of_the_run_is_reported(self):
+        found = clusters(recorded(37, located("user.role")), 40)
+        assert_that(found).is_length(1)
+        assert_that(found[0].size).is_equal_to(37)
+
+    def test_a_small_cluster_in_a_large_run_is_still_reported(self):
+        # the exact case a share got wrong: five failures sharing a cause in a run of forty are five
+        # tests to fix together, whatever the other thirty-five were doing
+        assert_that(clusters(recorded(5, located("user.role")), 40)).is_length(1)
+
+    def test_two_of_three_clears_any_ratio_and_is_still_refused(self):
+        # the floor is what keeps the summary quiet on a small run, where reading the two failures is
+        # faster than reading a summary of them
+        assert_that(clusters(recorded(2, located("user.role")), 3)).is_empty()
+        assert_that(MINIMUM_SIZE).is_equal_to(3)
+
+    def test_the_floor_can_be_raised(self):
+        assert_that(clusters(recorded(4, located("a")), 40, minimum=5)).is_empty()
+        assert_that(clusters(recorded(4, located("a")), 40, minimum=4)).is_length(1)
+
+    def test_a_run_with_no_failures_reports_nothing(self):
+        assert_that(clusters([], 0)).is_empty()
+
+    def test_clusters_come_back_largest_first_and_ties_break_deterministically(self):
+        rows = (
+            recorded(4, located("b.field", (("key", "'b'"),)), prefix="b")
+            + recorded(4, located("a.field", (("key", "'a'"),)), prefix="a")
+            + recorded(9, located("z.field", (("key", "'z'"),)), prefix="z")
+        )
+        found = clusters(rows, 20)
+        assert_that([one.signature.where for one in found]).is_equal_to(["z.field", "a.field", "b.field"])
+
+    def test_a_cluster_collects_the_distinct_values_it_saw(self):
+        rows = [
+            ("t1", [Observation(located("total"), "7", "8")]),
+            ("t2", [Observation(located("total"), "91", "8")]),
+            ("t3", [Observation(located("total"), "7", "8")]),
+        ]
+        found = clusters(rows, 3)[0]
+        assert_that(found.actuals).described_as("distinct, in order of appearance").is_equal_to(("7", "91"))
+        assert_that(found.expecteds).described_as("one expected value across all three").is_equal_to(("8",))
+
+
+class TestTheSummaryText:
+    def test_it_names_the_share_the_place_and_both_values(self):
+        lines = render(clusters(recorded(37, located("user.role")), 40), 40)
+        assert_that(lines[0]).is_equal_to("37 of 40 failing tests differ at user.role")
+        assert_that(lines[1]).contains("'super'")
+        assert_that(lines[2]).contains("'admin'")
+        assert_that(lines[3]).is_equal_to("3 of 40 outside any cluster of 3")
+
+    def test_a_cluster_whose_values_disagree_says_so(self):
+        """The one way a place-keyed summary could mislead, closed in the rendering.
+
+        Printing the first pair as though it were the difference would let two causes at one field read
+        as one fact to act on. A count says what it is: a place to look.
+        """
+        rows = [("t1", [Observation(located("total"), "7", "8")]), ("t2", [Observation(located("total"), "91", "104")])]
+        rows.append(("t3", [Observation(located("total"), "5", "6")]))
+        lines = render(clusters(rows, 3), 3)
+        assert_that(lines[1]).is_equal_to("    actual:   5 and 2 other values")
+        assert_that(lines[2]).is_equal_to("    expected: 104 and 2 other values")
+
+    def test_the_printed_example_does_not_depend_on_who_finished_first(self):
+        """Sorted, not first-seen: under xdist the order of arrival is the order workers finished in.
+
+        The same failing run printed a different example on different runs, which is the hazard
+        `stable_repr` exists for, moved from the key into the rendering.
+        """
+        one = [("a", [Observation(located("id"), "3", "9")]), ("b", [Observation(located("id"), "14", "9")])]
+        one.append(("c", [Observation(located("id"), "7", "9")]))
+        other = list(reversed(one))
+        assert_that(render(clusters(other, 3), 3)).is_equal_to(render(clusters(one, 3), 3))
+
+    def test_one_other_value_is_not_pluralised(self):
+        rows = [("t1", [Observation(located("a"), "1", "2")]), ("t2", [Observation(located("a"), "9", "2")])]
+        rows.append(("t3", [Observation(located("a"), "1", "2")]))
+        assert_that(render(clusters(rows, 3), 3)[1]).is_equal_to("    actual:   1 and 1 other value")
+
+    def test_a_cluster_keyed_on_a_diagnostic_prints_the_diagnostic(self):
+        hint = "every difference here is one of surrounding whitespace"
+        key = Signature(False, "string", label=hint)
+        lines = render(clusters(recorded(4, key, actual="b'a\\n'", expected="b'a'"), 4), 4)
+        assert_that(lines[0]).is_equal_to("4 of 4 failing tests share one string difference")
+        assert_that(lines[1]).is_equal_to(f"    {hint}")
+        assert_that(lines).described_as("the words replace the two value lines").is_length(2)
+
+    def test_a_kind_without_a_place_is_marked_as_one(self):
+        key = Signature(False, "contains", values=("None", "9"))
+        assert_that(render(clusters(recorded(5, key), 5), 5)[0]).is_equal_to(
+            "5 of 5 failing tests share one contains difference"
+        )
+
+    def test_nothing_is_said_when_every_failure_is_covered(self):
+        assert_that(render(clusters(recorded(5, located("a")), 5), 5)).is_length(3)
+
+    def test_nothing_is_said_at_all_without_a_cluster(self):
+        assert_that(render([], 40)).is_empty()
+
+    def test_two_clusters_that_would_print_alike_are_spelled_out(self):
+        # `{3: ...}` and `{"3": ...}` are two clusters and one readable path, so printing both plainly
+        # hands the reader identical blocks and looks like a rendering bug
+        numeric = observations(lambda: assert_that({3: "a"}).is_equal_to({3: "b"}))
+        textual = observations(lambda: assert_that({"3": "a"}).is_equal_to({"3": "b"}))
+        rows = [(f"n{index}", numeric) for index in range(4)] + [(f"t{index}", textual) for index in range(4)]
+        headings = [line for line in render(clusters(rows, 8), 8) if "differ at" in line]
+        assert_that(headings).is_length(2)
+        assert_that(set(headings)).described_as("two clusters printed the same heading").is_length(2)
+        assert_that(headings[0]).contains("key=")
+
+    def test_two_long_locations_do_not_print_as_one(self):
+        """The disambiguating spelling is cut at the same limit as the path it disambiguates.
+
+        Two mapping keys agreeing for two hundred characters then printed identically, which hands the
+        reader two blocks that look like a rendering bug and hides that they are different places.
+        """
+        shared = "k" * 300
+        first = located("long", (("key", f"'{shared}one'"),))
+        second = located("long", (("key", f"'{shared}two'"),))
+        lines = render(clusters(recorded(3, first) + recorded(3, second, prefix="other"), 6), 6)
+        headings = [line for line in lines if "differ at" in line]
+        assert_that(headings).is_length(2)
+        assert_that(headings[0]).is_not_equal_to(headings[1])
+
+    def test_two_locations_that_even_spell_alike_are_still_told_apart(self):
+        """The spelling is a join, so two different step tuples can produce the same text.
+
+        `key=a.key=b` is what both a two-hop location and a one-hop location holding that very text come
+        to.  They are different places and different clusters, and the summary has to show them as two.
+        """
+        first = Signature(True, "same", (("key", "a"), ("key", "b")))
+        second = Signature(True, "same", (("key", "a.key=b"),))
+        lines = render(clusters(recorded(3, first) + recorded(3, second, prefix="other"), 6), 6)
+        headings = [line for line in lines if "differ at" in line]
+        assert_that(headings).is_length(2)
+        assert_that(headings[0]).is_not_equal_to(headings[1])
+
+    def test_whatever_still_reads_alike_is_numbered(self):
+        # the spelling identifies, and a cut spelling keeps a digest, but neither can promise two
+        # headings differ. This can, and it is the last line of that defence rather than the first
+        assert_that(_made_unique(["a", "a", "b"])).is_equal_to(["a #1", "a #2", "b"])
+        assert_that(_made_unique(["only"])).described_as("one of a kind keeps its name").is_equal_to(["only"])
+
+    def test_an_ordinary_summary_still_reads_as_a_path(self):
+        # the precise spelling is for collisions only: it must not leak into the common case
+        found = observations(lambda: assert_that({"user": {"role": "s"}}).is_equal_to({"user": {"role": "a"}}))
+        lines = render(clusters([(f"p{index}", found) for index in range(5)], 5), 5)
+        assert_that(lines[0]).contains("differ at user.role").does_not_contain("key=")
+
+
+class TestThePluginWiring:
+    @staticmethod
+    def _config(setting="3"):
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = _cluster_minimum(setting)
+        return config
+
+    def test_the_summary_is_off_unless_asked_for(self):
+        # the shipped default. two ways to crash a run were found in a review of this module alone,
+        # and the project's other opt-in checks (vacuous, dangling) set the precedent
+        assert_that(_cluster_minimum("off")).is_none()
+
+    def test_off_records_nothing(self):
+        config = self._config("off")
+        _record_for_clustering(config, "t.py::test_x", diff_of(lambda: assert_that(1).is_equal_to(2)))
+        assert_that(config._assertpy2_failure_count).is_zero()
+
+    def test_a_failure_that_is_not_an_assertion_at_all_still_counts(self):
+        """A live suite fails on timeouts and transport errors far more often than on assertions.
+
+        Counting only assertion failures made the summary a fraction of the wrong whole: four assertion
+        failures in a run of fourteen printed as "4 of 4 failing tests differ at role", which reads as every
+        failure sharing one cause.
+        """
+        config = self._config()
+        for index in range(3):
+            _record_for_clustering(config, f"t.py::test_{index}", TimeoutError("waiting for locator"))
+        assert_that(config._assertpy2_failure_count).is_equal_to(3)
+        assert_that(config._assertpy2_failures).described_as("nothing to cluster on").is_empty()
+
+    def test_a_failure_without_a_diff_still_counts_toward_the_whole(self):
+        config = self._config()
+        _record_for_clustering(config, "t.py::test_x", AssertionFailure("no diff here"))
+        assert_that(config._assertpy2_failure_count).is_equal_to(1)
+        assert_that(config._assertpy2_failures).is_empty()
+
+    def test_the_failures_own_diagnostic_reaches_the_key(self):
+        # taken from the outcome the failure already built for its message, not recomputed
+        config = self._config()
+        for index in range(3):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that(f"payload-{index}\n".encode()).is_equal_to(f"payload-{index}".encode())
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+        found = clusters(config._assertpy2_failures, 3)
+        assert_that(found).described_as("three different payloads, one difference").is_length(1)
+        assert_that(found[0].signature.label).contains("surrounding whitespace")
+
+    def test_an_unreadable_setting_falls_back_with_a_warning(self):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert_that(_cluster_minimum("banana")).is_equal_to(MINIMUM_SIZE)
+        assert_that(caught).is_length(1)
+        assert_that(str(caught[0].message)).contains("a count of 2 or more")
+
+    def test_a_count_below_two_falls_back_too(self):
+        # one failure is not a cluster, and zero would print a heading per distinct difference
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            assert_that(_cluster_minimum("1")).is_equal_to(MINIMUM_SIZE)
+
+    def test_a_count_is_taken_as_written(self):
+        assert_that(_cluster_minimum("10")).is_equal_to(10)
+        assert_that(_cluster_minimum("  off  ")).is_none()
+
+    def test_the_summary_is_written_once_the_run_has_a_cluster(self, capsys):
+        config = self._config()
+        for index in range(5):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({"role": "super"}).is_equal_to({"role": "admin"})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+        reporter = SimpleNamespace(write_line=print)
+        pytest_terminal_summary(reporter, 1, config)
+        assert_that(capsys.readouterr().out).contains("assertpy2 failure clusters:").contains("role")
+
+    def test_a_run_too_small_to_cluster_says_nothing(self, capsys):
+        config = self._config()
+        _record_for_clustering(config, "t.py::test_x", diff_of(lambda: assert_that(1).is_equal_to(2)))
+        pytest_terminal_summary(SimpleNamespace(write_line=print), 1, config)
+        assert_that(capsys.readouterr().out).is_empty()
+
+    def test_a_run_where_nothing_repeats_says_nothing(self, capsys):
+        config = self._config()
+        for index in range(9):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({f"field{index}": 1}).is_equal_to({f"field{index}": 2})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+        pytest_terminal_summary(SimpleNamespace(write_line=print), 1, config)
+        assert_that(capsys.readouterr().out).is_empty()
+
+    def test_an_observation_survives_the_trip_to_the_controller(self):
+        """Under xdist the summary is written on the controller, which runs none of the failures.
+
+        The first version recorded them on the worker's own config and nothing shipped them, so the
+        run that most needs a summary - a big suite, in parallel - got none, silently.
+        """
+        original = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))[0]
+        restored = _observation_from_wire(_observation_to_wire(original))
+        assert_that(restored).is_equal_to(original)
+        # the signature is the cluster key, so it has to survive as something hashable
+        assert_that({restored.signature: 1}).contains_key(original.signature)
+
+    def test_a_location_free_observation_survives_it_too(self):
+        # the other family travels through different fields of the wire form, label against values
+        hint = "every difference here is one of surrounding whitespace"
+        original = observations(lambda: assert_that(b"a\n").is_equal_to(b"a"), hint)[0]
+        assert_that(_observation_from_wire(_observation_to_wire(original))).is_equal_to(original)
+
+    def test_a_worker_observation_groups_with_a_local_one(self):
+        original = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        shipped = [_observation_from_wire(_observation_to_wire(one)) for one in original]
+        rows = [(f"local{index}", original) for index in range(2)] + [(f"worker{index}", shipped) for index in range(3)]
+        assert_that(clusters(rows, 5)).is_length(1)
+
+    def test_two_workers_reporting_the_same_test_are_two_failing_tests(self):
+        """`--dist=each` runs the whole suite on every worker, so one node id legitimately fails twice.
+
+        The denominator summed both executions while the cluster deduplicated them by node id, and the
+        summary reported half the run as unexplained when none of it was.  Measured on a live run: 26
+        failures over two workers read as `6 of 26` with `17 of 26 not clustered`.
+        """
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+        original = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        shipped = [_observation_to_wire(one) for one in original]
+        for worker in ("gw0", "gw1"):
+            node = SimpleNamespace(
+                gateway=SimpleNamespace(id=worker),
+                workeroutput={
+                    "assertpy2_failures": [[f"t.py::test_{index}", shipped] for index in range(3)],
+                    "assertpy2_failure_count": 3,
+                },
+            )
+            pytest_plugin._collect_worker_failures(node)
+        recorded = pytest_plugin._controller_failures
+        assert_that(pytest_plugin._controller_failure_count[0]).is_equal_to(6)
+        assert_that([nodeid for nodeid, _ in recorded]).does_not_contain_duplicates()
+        assert_that(clusters(recorded, 6)[0].size).described_as("every execution in the cluster").is_equal_to(6)
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+
+    @pytest.mark.parametrize(
+        "output",
+        [
+            pytest.param({"assertpy2_failures": [["t.py::test_x", [["not", "an", "observation"]]]]}, id="broken-row"),
+            pytest.param({"assertpy2_failures": [["t.py::test_x", []]]}, id="rows-without-a-count"),
+            pytest.param({"assertpy2_failure_count": "many"}, id="count-that-is-not-a-number"),
+            pytest.param({"assertpy2_failures": []}, id="one-half-of-the-payload"),
+            pytest.param({"assertpy2_failure_count": 4}, id="the-other-half-of-the-payload"),
+            pytest.param(
+                {
+                    "assertpy2_failures": [
+                        ["t.py::test_x", [[True, "role", [["key", "'role'"]], "", [], ["a"], "'b'"]]]
+                    ],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-row-of-the-right-length-holding-the-wrong-thing",
+            ),
+            pytest.param(
+                {"assertpy2_failures": [[7, []]], "assertpy2_failure_count": 3},
+                id="a-node-id-that-is-not-a-name",
+            ),
+            pytest.param(
+                {"assertpy2_failures": [], "assertpy2_failure_count": 3.9},
+                id="a-count-that-is-not-whole",
+            ),
+            pytest.param(
+                {"assertpy2_failures": [], "assertpy2_failure_count": True},
+                id="a-count-that-is-a-flag",
+            ),
+            pytest.param({}, id="a-worker-that-does-not-speak-this-protocol"),
+            pytest.param(
+                {
+                    "assertpy2_failures": [["t.py::test_x", [[True, "role", [], "", [], "'a'", "'b'"]]]],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-place-with-nowhere-in-it",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [["t.py::test_x", [[True, "", [], "", [], "'a'", "'b'"]]]],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-place-with-nowhere-in-it-and-nothing-to-say",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [
+                        ["t.py::test_x", [[True, "role", [["key", "'role'"]], "a diagnostic", [], "'a'", "'b'"]]]
+                    ],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-place-that-also-carries-a-diagnostic",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [
+                        ["t.py::test_x", [[True, "elsewhere", [["key", "'role'"]], "", [], "1", "2"]]]
+                    ],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-heading-that-is-not-what-its-steps-render-to",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [["t.py::test_x", [[False, "scalar", [], "", [], "'a'", "'b'"]]]],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-difference-with-neither-a-diagnostic-nor-values",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [
+                        ["t.py::test_x", [[False, "scalar", [], "a diagnostic", ["1", "2"], "'a'", "'b'"]]]
+                    ],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-difference-with-both",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [
+                        ["t.py::test_x", [[False, "scalar", [["key", "'role'"]], "", ["1", "2"], "'a'", "'b'"]]]
+                    ],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-difference-with-no-place-that-brought-one-anyway",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [["t.py::test_x", [[True, "role", [["item", "'role'"]], "", [], "1", "2"]]]],
+                    "assertpy2_failure_count": 3,
+                },
+                id="a-place-built-from-a-step-that-names-no-place",
+            ),
+            pytest.param(
+                {
+                    "assertpy2_failures": [["t.py::test_x", []], ["t.py::test_y", []]],
+                    "assertpy2_failure_count": 1,
+                },
+                id="count-smaller-than-the-tests-it-shipped",
+            ),
+        ],
+    )
+    def test_a_worker_whose_payload_cannot_be_read_is_said_to_be_unreadable(self, output):
+        """A controller on one version against a worker on another is an ordinary installation.
+
+        Every way the payload has been wrong so far, and one outcome for all of them: the hook does not
+        raise, nothing half-read reaches the summary, and the summary says its counts are partial.
+
+        Two of these were found by taking the guard apart rather than by reading it.  Rows without a
+        count add cluster members to a denominator they never raised, so the summary could report six of
+        three.  A row of the right length holding a list where a value belongs unpacks happily and then
+        raises out of the grouping, past the point where the worker could still be reported: the summary
+        vanished and the run said nothing about why.
+        """
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_unreadable_workers[0] = 0
+        node = SimpleNamespace(gateway=SimpleNamespace(id="gw0"), workeroutput=output)
+        pytest_plugin._collect_worker_failures(node)
+        assert_that(pytest_plugin._controller_unreadable_workers[0]).is_equal_to(1)
+        assert_that(pytest_plugin._controller_failures).is_empty()
+        assert_that(pytest_plugin._controller_failure_count[0]).is_zero()
+
+        # end to end: what the reader is actually told about a run the summary only partly saw
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
+        for index in range(4):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({"role": "super"}).is_equal_to({"role": "admin"})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+        printed: list[str] = []
+        pytest_terminal_summary(SimpleNamespace(write_line=printed.append), 1, config)
+        assert_that(printed).contains(
+            "  the failures of 1 worker could not be read, so these counts cover only the rest"
+        )
+        assert_that(printed).contains("  4 of 4 failing tests differ at role")
+        pytest_plugin._controller_unreadable_workers[0] = 0
+
+    def test_a_worker_that_died_is_not_also_called_unreadable(self):
+        # one thing is wrong with it, not two, and the summary should say which
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_unreadable_workers[0] = 0
+        node = SimpleNamespace(gateway=SimpleNamespace(id="gw0"), workeroutput={"assertpy2_failure_count": "many"})
+        pytest_plugin._collect_worker_failures(node, died=True)
+        assert_that(pytest_plugin._controller_unreadable_workers[0]).is_zero()
+
+    def test_a_worker_that_shipped_nothing_about_clusters_is_never_called_dead(self):
+        # it did finish, so the line about it has to be the one about unreadable data rather than a crash
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_lost_workers[0] = 0
+        pytest_plugin._controller_unreadable_workers[0] = 0
+        pytest_plugin._collect_worker_failures(SimpleNamespace(gateway=SimpleNamespace(id="gw0"), workeroutput={}))
+        assert_that(pytest_plugin._controller_lost_workers[0]).is_zero()
+        assert_that(pytest_plugin._controller_unreadable_workers[0]).is_equal_to(1)
+        pytest_plugin._controller_unreadable_workers[0] = 0
+
+    def test_one_readable_worker_beside_a_silent_one_says_the_count_is_partial(self):
+        """The case the old early return got wrong, end to end.
+
+        This version ships both wire values from every worker whether the summary is on or off, so a
+        worker that shipped neither is one that does not speak this protocol.  Its failures are missing
+        from the denominator, and saying nothing about that is how a run of twelve prints `6 of 6`.
+        """
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+        pytest_plugin._controller_unreadable_workers[0] = 0
+        original = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        shipped = [_observation_to_wire(one) for one in original]
+        speaking = SimpleNamespace(
+            gateway=SimpleNamespace(id="gw0"),
+            workeroutput={
+                "assertpy2_failures": [[f"t.py::test_{index}", shipped] for index in range(6)],
+                "assertpy2_failure_count": 6,
+            },
+        )
+        silent = SimpleNamespace(gateway=SimpleNamespace(id="gw1"), workeroutput={})
+        pytest_plugin.pytest_testnodedown(speaking, None)
+        pytest_plugin.pytest_testnodedown(silent, None)
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
+        printed: list[str] = []
+        pytest_terminal_summary(SimpleNamespace(write_line=printed.append), 1, config)
+        assert_that(printed).contains(
+            "  the failures of 1 worker could not be read, so these counts cover only the rest"
+        )
+        assert_that(printed).contains("  6 of 6 failing tests differ at u.role")
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+        pytest_plugin._controller_unreadable_workers[0] = 0
+
+    def test_a_second_session_in_one_process_does_not_inherit_the_first(self):
+        """The controller's accumulators are module level, so nothing but an explicit release stops a
+        run from opening with the previous run's failures already counted.
+
+        Reproduced before the fix: two sessions gave 10 failures and two records where one session had
+        produced 5 and one.
+        """
+        from assertpy2 import pytest_plugin
+
+        wire = [["t.py::test_x", [[True, "user.role", [["key", "'user'"], ["key", "'role'"]], "", [], "'s'", "'a'"]]]]
+        node = SimpleNamespace(workeroutput={"assertpy2_failures": wire, "assertpy2_failure_count": 5})
+        released = SimpleNamespace(getoption=lambda name: False)
+
+        pytest_plugin.pytest_testnodedown(node, None)
+        pytest_plugin.pytest_unconfigure(released)
+        pytest_plugin.pytest_testnodedown(node, None)
+        assert_that(pytest_plugin._controller_failure_count[0]).is_equal_to(5)
+        assert_that(pytest_plugin._controller_failures).is_length(1)
+        pytest_plugin.pytest_unconfigure(released)
+
+    def test_off_writes_nothing_even_with_failures_recorded(self, capsys):
+        config = self._config("off")
+        pytest_terminal_summary(SimpleNamespace(write_line=print), 1, config)
+        assert_that(capsys.readouterr().out).is_empty()
+
+
+class TestTheDenominatorCountsEveryRedResult:
+    """A live red run is mostly not assertion failures, and the summary says how much of it it covers.
+
+    This gate has now been wrong twice in the same way. First it counted only `AssertionError`, so four
+    assertion failures in a run of fourteen printed "4 of 4". Then it counted only the `call` phase, so
+    three assertion failures beside thirty errors from one broken fixture printed "3 of 3 failures
+    differ at user.role" - a summary claiming one cause for a run that was thirty parts environment.
+    """
+
+    @staticmethod
+    def _report(when, nodeid="t.py::test_x", failed=True):
+        return SimpleNamespace(when=when, failed=failed, nodeid=nodeid)
+
+    @staticmethod
+    def _item(config):
+        return SimpleNamespace(config=config, nodeid="t.py::test_x")
+
+    def _run(self, when, exc):
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        outcome = SimpleNamespace(get_result=lambda: self._report(when))
+        call = SimpleNamespace(excinfo=SimpleNamespace(value=exc), when=when)
+        hook = pytest_plugin.pytest_runtest_makereport(self._item(config), call)
+        next(hook)
+        with pytest.raises(StopIteration):
+            hook.send(outcome)
+        return config
+
+    @pytest.mark.parametrize("when", ["setup", "call", "teardown"])
+    def test_a_failure_in_any_phase_counts(self, when):
+        config = self._run(when, RuntimeError("service did not come up"))
+        assert_that(config._assertpy2_failure_count).is_equal_to(1)
+
+    def test_a_red_report_with_no_exception_at_all_counts(self):
+        """A test that passes under `xfail(strict=True)` is a failed report with no exception.
+
+        pytest builds it in its own hook rather than from a raise, so `call.excinfo` is None while the
+        report is red.  Counting only failures that carry an exception printed `3 of 3 failing tests`
+        on a run pytest called `4 failed`.
+        """
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        outcome = SimpleNamespace(get_result=lambda: self._report("call"))
+        call = SimpleNamespace(excinfo=None, when="call")
+        hook = pytest_plugin.pytest_runtest_makereport(self._item(config), call)
+        next(hook)
+        with pytest.raises(StopIteration):
+            hook.send(outcome)
+        assert_that(config._assertpy2_failure_count).is_equal_to(1)
+        assert_that(config._assertpy2_failures).described_as("nothing to cluster on").is_empty()
+
+    def test_a_passing_report_counts_nothing(self):
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        outcome = SimpleNamespace(get_result=lambda: self._report("call", failed=False))
+        call = SimpleNamespace(excinfo=None, when="call")
+        hook = pytest_plugin.pytest_runtest_makereport(self._item(config), call)
+        next(hook)
+        with pytest.raises(StopIteration):
+            hook.send(outcome)
+        assert_that(config._assertpy2_failure_count).is_zero()
+
+    def test_one_test_going_red_twice_is_one_test(self):
+        """pytest counts a failed call and a broken teardown as a failure and an error, and it is right.
+
+        The summary counts tests, because it answers "how much of this run is one cause", and a test
+        whose teardown also blew up is one broken test rather than two.  The lines say `failing tests`
+        so the two readings cannot be confused for each other.
+        """
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        for when, exc in (("call", AssertionError("call")), ("teardown", RuntimeError("teardown"))):
+            outcome = SimpleNamespace(get_result=lambda when=when: self._report(when))
+            call = SimpleNamespace(excinfo=SimpleNamespace(value=exc), when=when)
+            hook = pytest_plugin.pytest_runtest_makereport(self._item(config), call)
+            next(hook)
+            with pytest.raises(StopIteration):
+                hook.send(outcome)
+        assert_that(config._assertpy2_failure_count).described_as("one test, two red reports").is_equal_to(1)
+
+    def test_an_exception_that_fights_back_is_still_only_a_failure(self):
+        """`diff` is this library's attribute name on somebody else's exception.
+
+        Reading it runs their code, and a property that raises took the whole run down with
+        INTERNALERROR: the reader lost every result to a summary they did not ask for. The reads belong
+        inside the net, not in front of it.
+        """
+        from assertpy2 import pytest_plugin
+
+        class HostileError(RuntimeError):
+            @property
+            def diff(self):
+                raise ValueError("reading this raises")
+
+            @property
+            def actual(self):
+                raise ValueError("this one too")
+
+        config = SimpleNamespace(
+            _assertpy2_failures=[],
+            _assertpy2_failure_count=0,
+            _assertpy2_cluster_minimum=3,
+            _assertpy2_diff_enabled=True,
+            _assertpy2_diff_max=50,
+            option=SimpleNamespace(color="no"),
+        )
+        report = self._report("call")
+        report.sections = []
+        outcome = SimpleNamespace(get_result=lambda: report)
+        call = SimpleNamespace(excinfo=SimpleNamespace(value=HostileError("hostile")), when="call")
+        hook = pytest_plugin.pytest_runtest_makereport(self._item(config), call)
+        next(hook)
+        with pytest.raises(StopIteration):
+            hook.send(outcome)
+        assert_that(config._assertpy2_failure_count).described_as("counted like any other red result").is_equal_to(1)
+        assert_that(config._assertpy2_failures).described_as("and clustered on nothing").is_empty()
+        assert_that(report.sections).described_as("nothing decorated, and nothing raised").is_empty()
+
+    def test_a_failed_collection_is_counted_apart_from_the_tests(self):
+        """A collection failure never reaches a test report, and it is red.
+
+        Under `--continue-on-collection-errors` pytest finishes `3 failed, 1 error` while the summary had
+        seen three, so it printed `3 of 3` with nothing about the fourth. Said on its own line rather than
+        added to the denominator, because `3 of 4 failing tests` would name a fourth test that never
+        existed. Without that flag the run stops and no summary is written at all.
+        """
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
+        pytest_plugin._session_config[0] = config
+        pytest_plugin._controller_collect_errors[0] = 0
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_equal_to(1)
+        assert_that(config._assertpy2_failure_count).described_as("a module is not a test").is_zero()
+        pytest_plugin._controller_collect_errors[0] = 0
+        pytest_plugin._session_config[0] = None
+
+    def test_a_collection_that_worked_counts_nothing(self):
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
+        pytest_plugin._session_config[0] = config
+        pytest_plugin._controller_collect_errors[0] = 0
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=False, nodeid="fine.py"))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_zero()
+        pytest_plugin._session_config[0] = None
+
+    def test_a_run_with_the_summary_off_does_not_count_collections_either(self):
+        # nothing reads the number when the summary is off, and a run that did not ask for it pays
+        # nothing for it
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=None)
+        pytest_plugin._session_config[0] = config
+        pytest_plugin._controller_collect_errors[0] = 0
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_zero()
+        pytest_plugin._session_config[0] = None
+
+    def test_a_worker_does_not_count_the_collection_every_worker_repeats(self):
+        # under xdist each worker collects the whole suite, so counting there turned one broken module
+        # into one red result per worker: measured as `3 of 6` on a run pytest called `3 failed, 1 error`
+        from assertpy2 import pytest_plugin
+
+        worker = SimpleNamespace(
+            _assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3, workeroutput={}
+        )
+        pytest_plugin._session_config[0] = worker
+        pytest_plugin._controller_collect_errors[0] = 0
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_zero()
+        pytest_plugin._session_config[0] = None
+
+    def test_a_collection_failure_outside_a_session_is_ignored(self):
+        # the reference is cleared on unconfigure, and a report arriving after that has nowhere to go
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._session_config[0] = None
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
+
+    def test_a_setup_error_is_counted_but_never_clustered(self):
+        # it has no diff, so it can only ever be part of the whole the summary reports against
+        config = self._run("setup", RuntimeError("service did not come up"))
+        assert_that(config._assertpy2_failures).is_empty()
+
+
+class TestAWorkerThatDiedIsNotSilentlyIgnored:
+    """A worker killed mid-run never reaches its `sessionfinish`, so nothing it recorded ships.
+
+    Reproduced under `-n 2`: a run of thirteen failures, one of which killed its worker, printed
+    `6 of 6 failing tests differ at user.role`. Every number in the summary was a share of the half the
+    controller happened to receive, and nothing said so.
+    """
+
+    @staticmethod
+    def _cluster():
+        return clusters(recorded(6, located("user.role")), 6)
+
+    def test_the_summary_says_the_counts_are_partial(self):
+        lines = render(self._cluster(), 6, 1)
+        assert_that(lines[0]).is_equal_to("1 worker died, so these counts cover only what was reported")
+        assert_that(lines[1]).contains("6 of 6 failing tests differ at user.role")
+
+    def test_two_of_them_read_as_plural(self):
+        assert_that(render(self._cluster(), 6, 2)[0]).contains("2 workers died")
+
+    def test_a_failed_collection_is_named_apart_from_the_tests(self):
+        # it is red and it is not a test, so folding it into the denominator would name a test that
+        # never existed: measured as `3 of 4 failing tests` on a run pytest called `3 failed, 1 error`.
+        # "collection error" rather than "module": a package or a plugin's collector can fail too
+        lines = render(self._cluster(), 6, collect_errors=1)
+        assert_that(lines[0]).is_equal_to("1 collection error, not counted below")
+        assert_that(lines[1]).contains("6 of 6 failing tests")
+        assert_that(render(self._cluster(), 6, collect_errors=2)[0]).is_equal_to(
+            "2 collection errors, not counted below"
+        )
+
+    def test_an_unreadable_worker_is_not_reported_as_a_crash(self):
+        # the two are different claims about the run, and reporting a crash that did not happen is the
+        # kind of false statement this summary exists to avoid
+        lines = render(self._cluster(), 6, lost_workers=0, unreadable_workers=1)
+        assert_that(lines[0]).is_equal_to(
+            "the failures of 1 worker could not be read, so these counts cover only the rest"
+        )
+        assert_that(lines[0]).does_not_contain("died")
+
+    def test_two_unreadable_workers_read_as_plural(self):
+        lines = render(self._cluster(), 6, unreadable_workers=2)
+        assert_that(lines[0]).contains("the failures of 2 workers could not be read")
+
+    def test_both_kinds_of_loss_are_said_separately(self):
+        lines = render(self._cluster(), 6, lost_workers=1, unreadable_workers=1)
+        assert_that(lines[0]).contains("1 worker died")
+        assert_that(lines[1]).contains("could not be read")
+
+    def test_an_intact_run_says_nothing_about_workers(self):
+        assert_that(render(self._cluster(), 6)[0]).does_not_contain("worker")
+
+    def test_a_worker_that_finished_normally_is_not_counted_as_lost(self):
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_lost_workers[0] = 0
+        pytest_plugin.pytest_testnodedown(SimpleNamespace(workeroutput={}), None)
+        assert_that(pytest_plugin._controller_lost_workers[0]).is_zero()
+
+    def test_a_worker_that_died_is(self):
+        from assertpy2 import pytest_plugin
+
+        pytest_plugin._controller_lost_workers[0] = 0
+        pytest_plugin.pytest_testnodedown(SimpleNamespace(workeroutput={}), "Node crashed")
+        assert_that(pytest_plugin._controller_lost_workers[0]).is_equal_to(1)
+        pytest_plugin.pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+        assert_that(pytest_plugin._controller_lost_workers[0]).described_as("released with the rest").is_zero()
+
+    def test_the_note_reaches_the_terminal(self, capsys):
+        from assertpy2 import pytest_plugin
+
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        for index in range(4):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({"role": "super"}).is_equal_to({"role": "admin"})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+        pytest_plugin.pytest_testnodedown(SimpleNamespace(workeroutput={}), "Node crashed")
+        pytest_terminal_summary(SimpleNamespace(write_line=print), 1, config)
+        assert_that(capsys.readouterr().out).contains("1 worker died")
+        pytest_plugin.pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+
+
+class TestTheSummaryHasBounds:
+    """A diagnostic that grows with the run is a diagnostic that hurts the worst runs most.
+
+    Raised by an external review: the value cap was there, but nothing bounded how many distinct values
+    a cluster kept or how many clusters printed. Twenty thousand failures differing at one field held
+    twenty thousand examples, 888 KB, to print one of them and a count.
+    """
+
+    @staticmethod
+    def _many(count, *, expected="9"):
+        key = located("total", (("key", "'total'"),))
+        return [(f"t{index}", [Observation(key, str(index).zfill(6), expected)]) for index in range(count)]
+
+    def test_a_side_keeps_no_more_than_the_cap(self):
+        found = clusters(self._many(500), 500)[0]
+        assert_that(found.actuals).is_length(_EXAMPLE_LIMIT + 1)
+        assert_that(found.expecteds).described_as("one expected value, kept whole").is_length(1)
+
+    def test_a_capped_side_reads_as_a_floor_not_a_total(self):
+        lines = render(clusters(self._many(500), 500), 500)
+        assert_that(lines[1]).is_equal_to(f"    actual:   000000 and {_EXAMPLE_LIMIT}+ other values")
+
+    def test_an_uncapped_side_still_gives_the_exact_count(self):
+        lines = render(clusters(self._many(4), 4), 4)
+        assert_that(lines[1]).is_equal_to("    actual:   000000 and 3 other values")
+
+    def test_the_printed_example_survives_the_cap(self):
+        # the cap must not reintroduce the defect the sort closed: under xdist the arrival order is
+        # whatever the workers did, and the smallest value has to win whatever order it arrived in
+        rows = self._many(500)
+        assert_that(render(clusters(list(reversed(rows)), 500), 500)).is_equal_to(render(clusters(rows, 500), 500))
+
+    def test_only_the_largest_clusters_print_and_the_rest_are_counted(self):
+        rows = []
+        for field in range(8):
+            key = located(f"field{field}", (("key", f"'field{field}'"),))
+            rows += [(f"f{field}t{index}", [Observation(key, "1", "2")]) for index in range(4)]
+        lines = render(clusters(rows, 32), 32)
+        assert_that([line for line in lines if "differ at" in line]).is_length(5)
+        assert_that(lines[-1]).is_equal_to("3 more clusters not shown")
+
+    def test_one_omitted_cluster_reads_as_one(self):
+        rows = []
+        for field in range(6):
+            key = located(f"field{field}", (("key", f"'field{field}'"),))
+            rows += [(f"f{field}t{index}", [Observation(key, "1", "2")]) for index in range(4)]
+        assert_that(render(clusters(rows, 24), 24)[-1]).is_equal_to("1 more cluster not shown")
+
+    def test_nothing_is_said_about_omissions_when_there_are_none(self):
+        assert_that(render(clusters(recorded(4, located("a")), 4), 4)).does_not_contain("not shown")
+
+
+class TestTheSummaryNeverTakesTheRunDown:
+    """It is optional output written from a report hook, so it fails open.
+
+    The parts have their own guards, and this is the barrier behind them: whatever else breaks, the
+    reader keeps the run's actual results.
+    """
+
+    def test_a_broken_reporter_warns_instead_of_raising(self):
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        for index in range(4):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({"role": "super"}).is_equal_to({"role": "admin"})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+
+        def explode(_line):
+            raise RuntimeError("terminal is gone")
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pytest_terminal_summary(SimpleNamespace(write_line=explode), 1, config)
+        assert_that(caught).is_length(1)
+        assert_that(str(caught[0].message)).contains("could not write its failure-cluster summary")
+        assert_that(str(caught[0].message)).contains("terminal is gone")
+
+    def test_the_notice_itself_cannot_raise_under_warnings_as_errors(self):
+        # a suite running `-W error` turns the barrier's own notice into an exception, which would put
+        # its traceback in the report in place of the failure it was catching
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
+        config._assertpy2_cluster_minimum = 3
+        for index in range(4):
+            with pytest.raises(AssertionFailure) as failure:
+                assert_that({"role": "super"}).is_equal_to({"role": "admin"})
+            _record_for_clustering(config, f"t.py::test_{index}", failure.value)
+
+        def explode(_line):
+            raise RuntimeError("terminal is gone")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_terminal_summary(SimpleNamespace(write_line=explode), 1, config)
