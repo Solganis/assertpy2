@@ -13,6 +13,7 @@ from assertpy2 import assert_that, async_assertions, match
 from assertpy2 import errors as errors_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
+from assertpy2._clustering import Observation, Signature
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
     _diff_to_json,
@@ -83,11 +84,12 @@ class TestPluginLoaded:
     def test_addoption_registers_ini(self):
         parser = MagicMock()
         pytest_addoption(parser)
-        assert_that(parser.addini.call_count).is_equal_to(6)
+        assert_that(parser.addini.call_count).is_equal_to(7)
         names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
         assert_that(names).contains("assertpy2_diff_max_entries")
+        assert_that(names).contains("assertpy2_failure_clusters")
         assert_that(names).contains("assertpy2_dangling")
         assert_that(names).contains("assertpy2_dangling_entries")
 
@@ -737,13 +739,14 @@ class TestAllureOffMode:
         mock.attach.assert_not_called()
 
 
-def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7", dangling="off", entries=()):
+def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7", clusters="3", dangling="off", entries=()):
     # a bare MagicMock returns a truthy mock from getoption(), which would flip the snapshot-update
     # module flag and leak update mode into unrelated tests
     config = MagicMock()
     # dispatch per key: a single return value would feed the allure mode to every other ini reader
     per_key = {
         "assertpy2_poll_report": poll_report,
+        "assertpy2_failure_clusters": clusters,
         "assertpy2_dangling": dangling,
         "assertpy2_dangling_entries": entries,
     }
@@ -865,6 +868,43 @@ class TestSnapshotOrphans:
         pytest_testnodedown(node, None)
         assert_that(pytest_plugin._controller_touched).contains(("/x/snap-a.json", "10"))
         pytest_plugin._controller_touched.clear()
+
+    def test_testnodedown_collects_worker_failures(self):
+        # the whole point of the transport: the controller writes the summary and runs none of the
+        # failures itself, so a worker's findings have to arrive here or the summary is empty
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+        node = SimpleNamespace(
+            gateway=SimpleNamespace(id="gw3"),
+            workeroutput={
+                "assertpy2_failures": [
+                    [
+                        "t.py::test_x",
+                        [[True, "user.role", [["key", "'user'"], ["key", "'role'"]], "", [], "'s'", "'a'"]],
+                    ]
+                ],
+                "assertpy2_failure_count": 7,
+            },
+        )
+        pytest_testnodedown(node, None)
+        assert_that(pytest_plugin._controller_failures).is_length(1)
+        assert_that(pytest_plugin._controller_failure_count[0]).is_equal_to(7)
+        nodeid, found = pytest_plugin._controller_failures[0]
+        # the worker's own name is part of the key: `--dist=each` gives two workers the same test
+        assert_that(nodeid).is_equal_to("gw3::t.py::test_x")
+        assert_that(found[0].signature.where).is_equal_to("user.role")
+        pytest_plugin._controller_failures.clear()
+        pytest_plugin._controller_failure_count[0] = 0
+
+    def test_sessionfinish_ships_the_failures_a_worker_recorded(self):
+        config = SimpleNamespace(
+            workeroutput={},
+            _assertpy2_failures=[("t.py::test_x", [Observation(Signature(True, "a.b", (("key", "'a'"),)), "1", "2")])],
+            _assertpy2_failure_count=4,
+        )
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_failure_count"]).is_equal_to(4)
+        assert_that(config.workeroutput["assertpy2_failures"][0][0]).is_equal_to("t.py::test_x")
 
     def test_testnodedown_ignores_node_without_touches(self):
         pytest_plugin._controller_touched.clear()

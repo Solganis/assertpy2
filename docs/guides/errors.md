@@ -346,6 +346,90 @@ The rich diff comes from the fluent form. The `==` drop-in for matchers (for exa
 `assert response == {"id": match.is_positive()}`) hands rendering to pytest instead, which prints its
 own dict comparison without the path.
 
+### What the failures had in common
+
+Forty failing tests are usually not forty problems. Turn this on and a red run ends with a line saying
+what the failures actually differed at:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_failure_clusters = "3"   # failing tests a cluster must hold before it is printed
+```
+
+```text
+assertpy2 failure clusters:
+  37 of 40 failing tests differ at user.role
+      actual:   'superadmin'
+      expected: 'admin'
+  3 of 40 outside any cluster of 3
+```
+
+That is a hypothesis you can act on before opening a single traceback, and it comes from the same
+structured diff the report sections are built from. Nothing about it is a guess: two failures share a
+cluster when their difference is *equal*, never when it looks similar. Where a difference has no place to
+be keyed on, what is compared is the text the values print as, so two values with the same `repr` count
+as one.
+
+**Failures are grouped by the place they differ at, not by the values they showed.** A broken constant
+gives every failure the same pair, and grouping on values would find it. A broken formula differs at
+the same field with a value of its own per test, and grouping on values would scatter it into forty
+clusters of one. Where a cluster's values disagree, the summary says so rather than printing the first
+pair as though it explained all of them:
+
+```text
+  12 of 12 failing tests differ at order.total
+      actual:   118.4 and 11 other values
+      expected: 120.0
+```
+
+A row index is generalised away, so `users[0].role` and `users[7].role` are one difference reported
+against two rows. A line number in a string comparison is generalised the same way.
+
+Three kinds of difference carry no location at all: a containment failure names `missing` or `extra`,
+a set entry names a member, and a scalar failure is the whole value. Those group on the failure's own
+[diagnostic line](#some-failures-say-why-not-only-what) when it has one, so five uploads that differ
+from their expected bodies only by a trailing newline read as one cause even though their payloads are
+five different values. Those read as `5 of 5 failing tests share one scalar difference`, because a
+family is not a place and a summary that pointed at one would be inventing it.
+
+Containment and set differences without a diagnostic stay out of the summary. Their two fields hold
+presence rather than values, so a missing item reports `None` on the actual side, and a heading built
+from that would tell you your value was `None` when it was a list of three.
+
+The floor is a count rather than a share of the run, deliberately. Under a share, every additional
+cause raises the bar for all the others, and a run of forty failures splitting cleanly into five causes
+of eight says nothing at all.
+
+The share is measured against **every** test that went red, errors from a broken fixture included, so
+`10 of 13 outside any cluster of 3` is the honest reading of a run that was mostly environment. It
+names the floor because that is what it measures: two tests sharing a difference under a floor of three
+are related, and the summary declined to print them rather than found nothing. Tests, not reports:
+a test that fails its assertion and then errors in teardown is one broken test, and pytest counts it in
+both of its own totals.
+
+A collection that failed is red and is not a test, so it is named on its own line rather than folded into
+a count of tests: `1 collection error, not counted below`. That only happens under
+`--continue-on-collection-errors`, since otherwise the run stops before anything is summarised.
+
+Under `pytest-xdist`, a worker killed mid-run never ships what it recorded, and a worker running a
+different version of this library can ship something unreadable. Either way the summary says so rather
+than presenting a share of what it happened to receive:
+
+```text
+assertpy2 failure clusters:
+  1 worker died, so these counts cover only what was reported
+  6 of 6 failing tests differ at user.role
+```
+
+Everything printed is bounded, because a diagnostic that grows with the run hurts the worst runs most.
+Values longer than 200 characters are cut, a cluster reports a floor rather than a count past 64 distinct
+values per side (`and 64+ other values`), and at most five clusters print, followed by a count of the
+rest. What a cluster is keyed on is not cut, since two payloads that agree for their first 200 characters
+are still two failures. The failure message and the structured diff keep their values whole.
+
+Nothing here can fail a run that would otherwise have passed or reported: if the summary cannot be
+built, it says so in a warning and the run's own results are untouched.
+
 ### Configuration
 
 ```toml
@@ -353,6 +437,7 @@ own dict comparison without the path.
 assertpy2_diff = "off"              # disable structured diff sections entirely
 assertpy2_diff_max_entries = "100"  # max entries to show (default 50, 0 = unlimited)
 assertpy2_poll_report = "off"       # silence the near-timeout poll report (default 0.7)
+assertpy2_failure_clusters = "3"    # group failures sharing one difference (default off)
 assertpy2_dangling = "on"           # warn about assert_that() statements that assert nothing
 assertpy2_dangling_entries = "check"  # your own assert_that wrappers, for the check above
 ```
