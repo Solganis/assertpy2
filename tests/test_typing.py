@@ -238,6 +238,40 @@ if TYPE_CHECKING:
         list[_Order] | tuple[_Order, ...] | set[_Order] | frozenset[_Order],
     )
 
+    # The same pivots on the other walkable types.  A character of a string is a string and a byte is an
+    # int, so both stay on their own protocol instead of widening to the generic builder.
+    assert_type(assert_that("abc").first(), _StringAssertion)
+    assert_type(assert_that("abc").last(), _StringAssertion)
+    assert_type(assert_that("abc").element(1), _StringAssertion)
+    assert_type(assert_that("a").single(), _StringAssertion)
+    assert_type(assert_that("abc").filtered_on(lambda char: True), _IterableAssertion[str])
+    assert_type(assert_that("abc").mapped(str.upper), _IterableAssertion[str])
+    assert_type(assert_that("abc").flat_mapped(lambda char: [char]), _IterableAssertion[str])
+    assert_type(assert_that(b"abc").first(), _NumericAssertion[int])
+    assert_type(assert_that(bytearray(b"abc")).last(), _NumericAssertion[int])
+    assert_type(assert_that(b"abc").element(0), _NumericAssertion[int])
+    assert_type(assert_that(b"a").single(), _NumericAssertion[int])
+    assert_type(assert_that(b"abc").filtered_on(lambda byte: True), _IterableAssertion[int])
+    assert_type(assert_that(b"abc").mapped(lambda byte: byte * 2), _IterableAssertion[int])
+    # a dict is walked over its keys, and a key of an arbitrary type has no protocol to narrow to
+    assert_type(assert_that({"a": 1}).first(), AssertionBuilder[str])
+    assert_type(assert_that({"a": 1}).filtered_on(lambda key: True), _IterableAssertion[str])
+    assert_type(assert_that({"a": 1}).mapped(str.upper), _IterableAssertion[str])
+
+    # The iterable pair is a question any value may ask, so it sits on the core protocol and keeps the
+    # asking type rather than being reachable only from the collection view.
+    assert_type(assert_that(42).is_not_iterable(), _NumericAssertion[int])
+    assert_type(assert_that(datetime.date(2026, 1, 1)).is_not_iterable(), _DateAssertion)
+    assert_type(assert_that(pathlib.Path("/tmp")).is_iterable(), _PathAssertion)
+    assert_type(assert_that("abc").is_iterable(), _StringAssertion)
+    assert_type(assert_that({"a": 1}).is_iterable(), _DictAssertion[str, int])
+    # sorting is offered wherever the runtime walks a value, with the key typed to what it is handed
+    assert_type(assert_that("aBc").is_sorted(key=str.lower), _StringAssertion)
+    assert_type(assert_that(b"abc").is_sorted(key=lambda byte: -byte), _BytesAssertion[bytes])
+    assert_type(assert_that({"a": 1}).is_sorted(key=str.upper), _DictAssertion[str, int])
+    assert_type(assert_that([3, 1]).is_sorted(key=abs), _IterableAssertion[int])
+    assert_type(assert_that(b"ab").is_subset_of(b"abc"), _BytesAssertion[bytes])
+
     # `.value` on the typed protocols returns each protocol's value-family type.
     assert_type(assert_that("text").value, str)
     assert_type(assert_that(42).value, int)
