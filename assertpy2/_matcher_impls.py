@@ -648,15 +648,28 @@ class HasPropertyMatcher(BaseMatcher):
 # --- String matchers ---
 
 
+# `str` and `bytes` are each other's neighbours and never each other's operands, so the three text
+# matchers below take the two apart rather than trying an operation and catching the TypeError.  They
+# used to accept `str` alone, and answered False where the method of the same name passed: the one place
+# a matcher and its method disagreed on the verdict rather than on strictness
+def _textlike_noun(operand: object) -> str:
+    """What to call the operand in a description, so a bytes match does not read as a string one."""
+    return "bytes" if isinstance(operand, (bytes, bytearray)) else "a string"
+
+
 class ContainsStringMatcher(BaseMatcher):
-    def __init__(self, substring: str):
+    def __init__(self, substring: str | bytes):
         self.substring = substring
 
     def matches(self, value: Any) -> bool:
-        return isinstance(value, str) and self.substring in value
+        if isinstance(value, str):
+            return isinstance(self.substring, str) and self.substring in value
+        if isinstance(value, (bytes, bytearray)):
+            return isinstance(self.substring, (bytes, bytearray)) and self.substring in value
+        return False
 
     def describe(self) -> str:
-        return f"a string containing <{self.substring}>"
+        return f"{_textlike_noun(self.substring)} containing <{self.substring}>"
 
 
 class MatchesRegexMatcher(BaseMatcher):
@@ -676,25 +689,33 @@ class MatchesRegexMatcher(BaseMatcher):
 
 
 class StartsWithMatcher(BaseMatcher):
-    def __init__(self, prefix: str):
+    def __init__(self, prefix: str | bytes):
         self.prefix = prefix
 
     def matches(self, value: Any) -> bool:
-        return isinstance(value, str) and value.startswith(self.prefix)
+        if isinstance(value, str):
+            return isinstance(self.prefix, str) and value.startswith(self.prefix)
+        if isinstance(value, (bytes, bytearray)):
+            return isinstance(self.prefix, (bytes, bytearray)) and value.startswith(self.prefix)
+        return False
 
     def describe(self) -> str:
-        return f"a string starting with <{self.prefix}>"
+        return f"{_textlike_noun(self.prefix)} starting with <{self.prefix}>"
 
 
 class EndsWithMatcher(BaseMatcher):
-    def __init__(self, suffix: str):
+    def __init__(self, suffix: str | bytes):
         self.suffix = suffix
 
     def matches(self, value: Any) -> bool:
-        return isinstance(value, str) and value.endswith(self.suffix)
+        if isinstance(value, str):
+            return isinstance(self.suffix, str) and value.endswith(self.suffix)
+        if isinstance(value, (bytes, bytearray)):
+            return isinstance(self.suffix, (bytes, bytearray)) and value.endswith(self.suffix)
+        return False
 
     def describe(self) -> str:
-        return f"a string ending with <{self.suffix}>"
+        return f"{_textlike_noun(self.suffix)} ending with <{self.suffix}>"
 
 
 # --- Structural matchers ---

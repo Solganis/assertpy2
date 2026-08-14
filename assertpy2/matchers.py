@@ -400,8 +400,8 @@ class _MatchNamespace:
         return HasPropertyMatcher(name, matcher)
 
     @staticmethod
-    def contains_string(substring: str) -> Matcher[str]:
-        """Matcher for a string containing ``substring``."""
+    def contains_string(substring: str | bytes) -> Matcher[str | bytes]:
+        """Matcher for text containing ``substring``, on `str` and on `bytes` alike."""
         return ContainsStringMatcher(substring)
 
     @staticmethod
@@ -410,13 +410,13 @@ class _MatchNamespace:
         return MatchesRegexMatcher(pattern)
 
     @staticmethod
-    def starts_with(prefix: str) -> Matcher[str]:
-        """Matcher for a string starting with ``prefix``."""
+    def starts_with(prefix: str | bytes) -> Matcher[str | bytes]:
+        """Matcher for text starting with ``prefix``, on `str` and on `bytes` alike."""
         return StartsWithMatcher(prefix)
 
     @staticmethod
-    def ends_with(suffix: str) -> Matcher[str]:
-        """Matcher for a string ending with ``suffix``."""
+    def ends_with(suffix: str | bytes) -> Matcher[str | bytes]:
+        """Matcher for text ending with ``suffix``, on `str` and on `bytes` alike."""
         return EndsWithMatcher(suffix)
 
     @staticmethod
