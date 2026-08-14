@@ -38,6 +38,18 @@ Those are covered by the table above. **Message wording is not**: it improves in
 `pytest.raises(match=...)` written against our phrasing, or a snapshot of a failing run, is the one
 thing that predictably needs updating. Match on the exception type and read the fields.
 
+What that promise covers exactly, so the edges are decided rather than assumed:
+
+- `AssertionFailure` is an `AssertionError`, and stays one. An existing `except AssertionError` keeps
+  working.
+- On a failure raised by this library, `actual`, `expected`, `diff`, `trace` and `failures` are there to
+  read. `trace` is set for polling assertions, `failures` for a soft block, and both are `None` and empty
+  elsewhere.
+- `None` in `actual` or `expected` does not tell you whether the operand was named. `is_equal_to(None)`
+  and `is_none()` leave the same values behind, and no public field separates them.
+- Constructing `AssertionFailure` yourself is not part of the API. Raise your own `AssertionError`, or
+  let an assertion raise this one.
+
 ## Upgrading
 
 Semantic versioning, read strictly: a new assertion is a minor, a patch carries fixes only.
