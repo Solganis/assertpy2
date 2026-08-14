@@ -1,10 +1,9 @@
 import collections.abc
+import difflib
 import dataclasses
 import datetime
-import difflib
 import math
 import numbers
-import re
 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
 
@@ -12,59 +11,24 @@ from ._engine._compare import (
     _CompareConfig,
     _config_note,
     _guarded_not_equal,
-    _keyed_types_differ,
     _node_decision,
     _spec_matches,
 )
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
+from ._engine._equality import (
+    IncludeKeysMissingError,
+    ignore_specs,
+    include_specs,
+    mapping_differs,
+    mapping_shaped,
+    normalize_key_specs,
+)
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type
 
 __tracebackhide__ = True
-
-
-def _values_not_equal(value: object, other_value: object, config: _CompareConfig | None) -> bool:
-    """Whether two non-mapping values differ, delegating to the shared structural walker.
-
-    Asking `_sub_diff_entries` keeps the equality *decision* and the rendered *diff* in agreement: every
-    shape it can decompose (dataclass, attrs, namedtuple, model, sequence) is then compared under the
-    compare config, instead of falling back to plain equality and silently dropping that config.
-    Without a config there is nothing to honour, so the plain check is kept exactly as it was.
-    """
-    if value is other_value:
-        return False  # identity first, the way Python's own container comparison short-circuits
-    if config is None:
-        return _guarded_not_equal(value, other_value)
-    entries = _sub_diff_entries(value, other_value, _ROOT, config=config)
-    if entries is None:  # a leaf the walker does not decompose
-        return _guarded_not_equal(value, other_value)
-    return bool(entries)
-
-
-def _reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
-    """Raise on a keyword the method does not read, naming the closest one it does.
-
-    A misspelt option is the worst silent pass there is.  ``is_equal_to(other, strict_type=True)``
-    returned green with the comparison never tightened, and nothing said so: no error, no warning, and
-    no type error either, because a ``**kwargs`` signature makes every spelling legal to a checker.
-    The reader is left certain they asserted something they did not.
-
-    The matcher spelling of the same option already fails loudly, since a real parameter list gets
-    this from the interpreter for free.  This gives the ``**kwargs`` entry points the same manners.
-    """
-    unknown = sorted(set(kwargs) - known)
-    if not unknown:
-        return
-    named = []
-    for name in unknown:
-        # one suggestion, not a list: the same reasoning as the extraction hint, where measured typos
-        # score ~0.9 and wrong neighbours ~0.65, so extra candidates only cost the hint its credibility
-        close = difflib.get_close_matches(str(name), sorted(known), n=1)
-        named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
-    plural = "" if len(named) == 1 else "s"
-    raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
 
 
 def _both_list_like(left: object, right: object) -> bool:
@@ -154,6 +118,30 @@ def _elided_seq_repr(seq, counterpart) -> str:
     return _joined_parts(parts, elided=elided, opener=opener, closer=closer)
 
 
+def _reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
+    """Raise on a keyword the method does not read, naming the closest one it does.
+
+    A misspelt option is the worst silent pass there is.  ``is_equal_to(other, strict_type=True)``
+    returned green with the comparison never tightened, and nothing said so: no error, no warning, and
+    no type error either, because a ``**kwargs`` signature makes every spelling legal to a checker.
+    The reader is left certain they asserted something they did not.
+
+    The matcher spelling of the same option already fails loudly, since a real parameter list gets
+    this from the interpreter for free.  This gives the ``**kwargs`` entry points the same manners.
+    """
+    unknown = sorted(set(kwargs) - known)
+    if not unknown:
+        return
+    named = []
+    for name in unknown:
+        # one suggestion, not a list: the same reasoning as the extraction hint, where measured typos
+        # score ~0.9 and wrong neighbours ~0.65, so extra candidates only cost the hint its credibility
+        close = difflib.get_close_matches(str(name), sorted(known), n=1)
+        named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
+    plural = "" if len(named) == 1 else "s"
+    raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -237,15 +225,7 @@ class HelpersMixin(_MixinBase):
 
     def _is_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True):
         """Return whether *candidate* has the requested dict-like attributes."""
-        if type(candidate) is dict:  # fast path: a real dict satisfies every check, skip the ABC isinstance
-            return True
-        if not isinstance(candidate, collections.abc.Iterable):
-            return False
-        if check_keys and not callable(getattr(candidate, "keys", None)):
-            return False
-        if check_values and not callable(getattr(candidate, "values", None)):
-            return False
-        return not (check_getitem and not hasattr(candidate, "__getitem__"))
+        return mapping_shaped(candidate, check_keys=check_keys, check_values=check_values, check_getitem=check_getitem)
 
     def _require_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True, name="val"):
         """Raise ``TypeError`` unless *candidate* has the requested dict-like attributes."""
@@ -266,123 +246,49 @@ class HelpersMixin(_MixinBase):
             refuse(val, "a value with a [] accessor", subject=name)
 
     def _dict_not_equal(self, val, other, ignore=None, include=None, config: _CompareConfig | None = None, _seen=None):
-        """Helper to compare dicts, optionally honoring ignore/include key-specs and a compare ``config``."""
-        if _seen is None:
-            _seen = set()
-        pair = (id(val), id(other))
-        if pair in _seen:
-            return False
-        _seen = _seen | {pair}
+        """Whether two dict-like values differ, under optional ignore/include specs and a compare config.
 
-        if not (ignore or include or config is not None):
-            return _guarded_not_equal(val, other)
-
-        ignores = []  # bound for the nested-recursion use below; only read when ``ignore`` is set
-        if ignore or include:
-            ignores = self._dict_ignore(ignore)
-            includes = self._dict_include(include)
-
-            if include:
-                missing = [
-                    include_key
-                    for include_key in includes
-                    if not isinstance(include_key, (re.Pattern, type)) and include_key not in val
-                ]
-                if missing:
-                    keys_suffix = "" if len(includes) == 1 else "s"
-                    missing_suffix = "" if len(missing) == 1 else "s"
-                    includes_fmt = self._fmt_items(
-                        [
-                            ".".join([str(segment) for segment in include_key])
-                            if type(include_key) is tuple
-                            else include_key
-                            for include_key in includes
-                        ]
-                    )
-                    missing_fmt = self._fmt_items(missing)
-                    return self.error(
-                        f"Expected <{val}> to include key{keys_suffix} {includes_fmt},"
-                        f" but did not include key{missing_suffix} {missing_fmt}."
-                    )
-
-            keys_in_val = {
-                key
-                for key in val
-                if (not ignore or not _spec_matches(key, val[key], ignores))
-                and (not include or _spec_matches(key, val[key], includes))
-            }
-            keys_in_other = {
-                key
-                for key in other
-                if (not ignore or not _spec_matches(key, other[key], ignores))
-                and (not include or _spec_matches(key, other[key], includes))
-            }
-        else:
-            keys_in_val = set(val)
-            keys_in_other = set(other)
-
-        if keys_in_val != keys_in_other:
-            return True
-        if config is not None and config.strict_types and _keyed_types_differ(val, other):
-            # two mappings can hold the same keys and disagree on their types: `{True: "a"}` and
-            # `{1: "a"}` are equal to Python, and under strict types they are not the same mapping.
-            # Checked here rather than in the walk below, which only ever sees the values
-            return True
-        for key in keys_in_val:
-            if config is not None:
-                decision = _node_decision(val[key], other[key], config, field=key)
-                if decision == "equal":
-                    continue
-                if decision == "leaf":
-                    return True
-            nested_ignore = (
-                [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignore else None
+        The decision lives in `_engine._equality`, where a matcher reaches it too.  What stays here is
+        the one part that is not a comparison: an `include` naming a key the mapping does not have is a
+        mistake in the call, and it is reported as a failure in the builder's own wording.
+        """
+        try:
+            return mapping_differs(
+                val,
+                other,
+                ignore=ignore,
+                include=include,
+                config=config,
+                seen=None if _seen is None else frozenset(_seen),
             )
-            nested_include = (
-                [entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key]
-                if include
-                else None
-            )
-            if self._is_dict_like(val[key], check_values=False) and self._is_dict_like(other[key], check_values=False):
-                if self._dict_not_equal(
-                    val[key], other[key], ignore=nested_ignore, include=nested_include, config=config, _seen=_seen
-                ):
-                    return True
-            elif _values_not_equal(val[key], other[key], config):
-                return True
-        return False
+        except IncludeKeysMissingError as found:
+            absent = found
+        # reported outside the except block on purpose: a failure raised inside one carries the signal
+        # along as its `__context__`, and an internal marker has no business in a user-facing traceback
+        keys_suffix = "" if len(absent.includes) == 1 else "s"
+        missing_suffix = "" if len(absent.missing) == 1 else "s"
+        includes_fmt = self._fmt_items(
+            [".".join([str(segment) for segment in key]) if type(key) is tuple else key for key in absent.includes]
+        )
+        return self.error(
+            f"Expected <{absent.mapping}> to include key{keys_suffix} {includes_fmt},"
+            f" but did not include key{missing_suffix} {self._fmt_items(absent.missing)}."
+        )
 
     @staticmethod
     def _normalize_key_specs(specs, param):
-        """Normalize an ``ignore``/``include`` kwarg into a flat list of key-specs.
-
-        A ``list``, ``set`` or ``frozenset`` is treated as a collection of key-specs and
-        expanded.  A ``str``/``bytes``/``tuple`` (a single key or a nested-path key) or any
-        non-iterable hashable key is wrapped as a single key-spec.  Any other iterable
-        (generator, iterator, ``dict_keys``, ...) is rejected, since it is one-shot or
-        ambiguous and would otherwise be silently mishandled as one opaque key.
-        """
-        if isinstance(specs, (list, set, frozenset)):
-            return list(specs)
-        if isinstance(specs, (str, bytes, tuple)) or not isinstance(specs, collections.abc.Iterable):
-            return [specs]
-        refuse(specs, "a key, a nested-path tuple, or a list/set/frozenset of them", subject=param)
+        """An ``ignore``/``include`` kwarg as a flat list of key-specs; see `_engine._equality`."""
+        return normalize_key_specs(specs, param)
 
     @staticmethod
     def _dict_ignore(ignore):
-        """Helper to make list for given ignore kwarg values."""
-        return [
-            entry[0] if type(entry) is tuple and len(entry) == 1 else entry
-            for entry in HelpersMixin._normalize_key_specs(ignore, "ignore")
-        ]
+        """Ignore-specs for one comparison; see `_engine._equality`."""
+        return ignore_specs(ignore)
 
     @staticmethod
     def _dict_include(include):
-        """Helper to make a list from given include kwarg values."""
-        return [
-            entry[0] if type(entry) is tuple else entry
-            for entry in HelpersMixin._normalize_key_specs(include, "include")
-        ]
+        """Include-specs for one comparison; see `_engine._equality`."""
+        return include_specs(include)
 
     def _selected_keys_only(self, mapping: object, ignore: object, include: object) -> object:
         """A copy of ``mapping`` holding only the keys the comparison actually looked at.
