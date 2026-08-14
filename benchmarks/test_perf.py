@@ -7,6 +7,8 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 
+import pytest
+
 from assertpy2 import assert_that, match
 from assertpy2.errors import AssertionFailure
 
@@ -226,5 +228,34 @@ def test_short_chain_pass(benchmark):
     def run():
         for _ in range(_ASSERTIONS):
             assert_that("user-42").is_not_none().is_instance_of(str).starts_with("user").is_length(7)
+
+    benchmark(run)
+
+
+# The membership relations used to cost `len(a) * len(b)` comparisons, so a collection of a few thousand
+# elements spent the whole assertion inside `in`.  Two sizes rather than one: the pair is what shows the
+# shape, since a quadratic path grows 400x between them where a linear one grows 20x.
+@pytest.mark.parametrize("size", [100, 2000])
+def test_contains_only_pass(benchmark, size):
+    values = list(range(size))
+    items = tuple(range(size))
+    benchmark(lambda: assert_that(values).contains_only(*items))
+
+
+@pytest.mark.parametrize("size", [100, 2000])
+def test_matcher_is_subset_of_pass(benchmark, size):
+    values = list(range(size))
+    superset = list(range(size + 1))
+    benchmark(lambda: assert_that(values).satisfies(match.is_subset_of(superset)))
+
+
+@pytest.mark.parametrize("size", [100, 2000])
+def test_duplicates_reported(benchmark, size):
+    # the failing side on purpose: naming the repeats is the part that used to count each element again
+    values = [*range(size), 0]
+
+    def run():
+        with contextlib.suppress(AssertionFailure):
+            assert_that(values).does_not_contain_duplicates()
 
     benchmark(run)
