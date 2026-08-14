@@ -11,7 +11,7 @@ from ._engine._compare import _CompareConfig, _guarded_not_equal, _keyed_types_d
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 from ._engine._path import _ROOT, _Path
-from ._engine._require import argument, refuse
+from ._engine._require import argument, raised_inside, refuse
 
 if TYPE_CHECKING:
     from types import UnionType
@@ -284,7 +284,9 @@ class GreaterThanMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value > self.boundary)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -298,7 +300,9 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value >= self.boundary)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -312,7 +316,9 @@ class LessThanMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value < self.boundary)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -326,7 +332,9 @@ class LessThanOrEqualToMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value <= self.boundary)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -341,7 +349,9 @@ class BetweenMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(self.low <= value <= self.high)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -368,7 +378,9 @@ class CloseToMatcher(BaseMatcher):
             return False
         try:
             return not (value - self.tolerance > self.expected or value + self.tolerance < self.expected)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -418,7 +430,9 @@ class IsInstanceOfMatcher(BaseMatcher):
         # `describe()` - only when a failure was being rendered.
         try:
             isinstance(None, expected_type)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             refuse(expected_type, "a class", subject=argument("class"))
         self.expected_type = expected_type
 
@@ -483,7 +497,9 @@ class HasLengthMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return len(value) == self.expected_length
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -492,7 +508,9 @@ class HasLengthMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         try:
             return f"was <{value}> with length <{len(value)}>"
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return f"was <{value!r}>, which has no length"
 
 
@@ -500,7 +518,9 @@ class IsEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return len(value) == 0
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -511,7 +531,9 @@ class IsNotEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return len(value) > 0
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -525,7 +547,9 @@ class IsPositiveMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value > 0)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -536,7 +560,9 @@ class IsNegativeMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return bool(value < 0)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -778,7 +804,9 @@ class IsBeforeMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return isinstance(value, datetime) and value < self._other
-        except TypeError:  # naive vs aware operands are not comparable -> no match
+        except TypeError as exc:  # naive vs aware operands are not comparable -> no match
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -794,7 +822,9 @@ class IsAfterMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return isinstance(value, datetime) and value > self._other
-        except TypeError:  # naive vs aware operands are not comparable -> no match
+        except TypeError as exc:  # naive vs aware operands are not comparable -> no match
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -810,7 +840,9 @@ class EachMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return all(self.matcher.matches(item) for item in value)
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return False
 
     def describe(self) -> str:
@@ -821,7 +853,9 @@ class EachMatcher(BaseMatcher):
             for i, item in enumerate(value):
                 if not self.matcher.matches(item):
                     return f"item at index {i} <{item}> did not match {self.matcher.describe()}"
-        except TypeError:
+        except TypeError as exc:
+            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+                raise
             return f"was not iterable: <{value}>"
         return f"was <{value}>"
 
