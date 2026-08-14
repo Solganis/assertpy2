@@ -79,7 +79,7 @@ class TestValue:
         # adversarial: a pivot can never reach .value with a value derived from an unvalidated None.
         # extracting on the None left by a failed is_not_none raises in the pivot's own input check,
         # before .value - so per-value taint + pivot input-validation together close the poison path
-        with pytest.raises(TypeError, match="val is not iterable"), soft_assertions():
+        with pytest.raises(TypeError, match="val must be iterable"), soft_assertions():
             _ = assert_that(None).is_not_none().extracting("total").value
 
     def test_strict_value_is_never_tainted(self):
@@ -152,14 +152,14 @@ def test_check_dict_like_empty_dict():
 def test_check_dict_like_not_iterable():
     builder = assert_that(None)
     assert_that(builder._require_dict_like).raises(TypeError).when_called_with(123).is_equal_to(
-        "val <int> is not dict-like: not iterable"
+        "val must be dict-like (this one is not iterable), but was <123> (int)"
     )
 
 
 def test_check_dict_like_missing_keys():
     builder = assert_that(None)
     assert_that(builder._require_dict_like).raises(TypeError).when_called_with("foo").is_equal_to(
-        "val <str> is not dict-like: missing keys()"
+        "val must be dict-like (this one has no keys()), but was <'foo'> (str)"
     )
 
 

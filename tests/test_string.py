@@ -53,7 +53,7 @@ def test_contains_ignoring_case():
 def test_contains_ignoring_case_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_ignoring_case("f")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string or an iterable, but was <123> (int)")
 
 
 def test_contains_ignoring_case_missinge_item_failure():
@@ -71,7 +71,7 @@ def test_contains_ignoring_case_single_item_failure():
 def test_contains_ignoring_case_single_item_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_ignoring_case(12)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <12> (int)")
 
 
 def test_contains_ignoring_case_multi_item_failure():
@@ -85,7 +85,7 @@ def test_contains_ignoring_case_multi_item_failure():
 def test_contains_ignoring_case_multi_item_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_ignoring_case("F", 12)
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <12> (int)")
 
 
 def test_contains_ignoring_case_list():
@@ -102,20 +102,20 @@ def test_contains_ignoring_case_generator_not_exhausted():
 
 def test_contains_ignoring_case_list_elem_type_failure_order_independent():
     # a non-string element must raise regardless of whether a matching item is found before it
-    with pytest.raises(TypeError, match="val items must all be strings"):
+    with pytest.raises(TypeError, match="every item of val must be a string"):
         assert_that(["OK", 200]).contains_ignoring_case("ok")
 
 
 def test_contains_ignoring_case_list_elem_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that([123]).contains_ignoring_case("f")
-    assert_that(str(exc_info.value)).is_equal_to("val items must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("every item of val must be a string, but was <123> (int)")
 
 
 def test_contains_ignoring_case_list_multi_elem_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["foo", 123]).contains_ignoring_case("f")
-    assert_that(str(exc_info.value)).is_equal_to("val items must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("every item of val must be a string, but was <123> (int)")
 
 
 def test_contains_ignoring_case_list_missinge_item_failure():
@@ -135,7 +135,7 @@ def test_contains_ignoring_case_list_single_item_failure():
 def test_contains_ignoring_case_list_single_item_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["foo"]).contains_ignoring_case(12)
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <12> (int)")
 
 
 def test_contains_ignoring_case_list_multi_item_failure():
@@ -149,7 +149,7 @@ def test_contains_ignoring_case_list_multi_item_failure():
 def test_contains_ignoring_case_list_multi_item_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["foo", "bar"]).contains_ignoring_case("F", 12)
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <12> (int)")
 
 
 def test_does_not_contain():
@@ -214,13 +214,13 @@ def test_is_equal_ignoring_case_failure():
 def test_is_equal_ignoring_case_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_case(12)
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_equal_ignoring_case_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").is_equal_to_ignoring_case(12)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a string, but was <12> (int)")
 
 
 def test_is_equal_ignoring_whitespace():
@@ -246,13 +246,13 @@ def test_is_equal_ignoring_whitespace_case_still_matters_failure():
 def test_is_equal_ignoring_whitespace_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_whitespace("123")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_equal_ignoring_whitespace_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").is_equal_to_ignoring_whitespace(12)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a string, but was <12> (int)")
 
 
 def test_starts_with():
@@ -270,19 +270,21 @@ def test_starts_with_failure():
 def test_starts_with_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).starts_with(12)
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string or an iterable, but was <123> (int)")
 
 
 def test_starts_with_bad_arg_none_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").starts_with(None)
-    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must not be none")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given prefix arg must be a string or bytes, but was <None> (NoneType)"
+    )
 
 
 def test_starts_with_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").starts_with(123)
-    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string, but was <123> (int)")
 
 
 def test_starts_with_bad_arg_empty_failure():
@@ -306,19 +308,21 @@ def test_ends_with_failure():
 def test_ends_with_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).ends_with(12)
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string or iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string or an iterable, but was <123> (int)")
 
 
 def test_ends_with_bad_arg_none_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").ends_with(None)
-    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must not be none")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given suffix arg must be a string or bytes, but was <None> (NoneType)"
+    )
 
 
 def test_ends_with_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").ends_with(123)
-    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string, but was <123> (int)")
 
 
 def test_ends_with_bad_arg_empty_failure():
@@ -342,13 +346,13 @@ def test_starts_with_ignoring_case_failure():
 def test_starts_with_ignoring_case_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b"]).starts_with_ignoring_case("a")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <['a', 'b']> (list)")
 
 
 def test_starts_with_ignoring_case_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").starts_with_ignoring_case(123)
-    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given prefix arg must be a string, but was <123> (int)")
 
 
 def test_starts_with_ignoring_case_bad_arg_empty_failure():
@@ -372,13 +376,13 @@ def test_ends_with_ignoring_case_failure():
 def test_ends_with_ignoring_case_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b"]).ends_with_ignoring_case("b")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <['a', 'b']> (list)")
 
 
 def test_ends_with_ignoring_case_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").ends_with_ignoring_case(123)
-    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given suffix arg must be a string, but was <123> (int)")
 
 
 def test_ends_with_ignoring_case_bad_arg_empty_failure():
@@ -405,13 +409,13 @@ def test_matches_failure():
 def test_matches_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).matches(12)
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_matches_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").matches(123)
-    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string, but was <123> (int)")
 
 
 def test_matches_bad_arg_empty_failure():
@@ -435,13 +439,13 @@ def test_does_not_match_failure():
 def test_does_not_match_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_match(12)
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_does_not_match_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("fred").does_not_match(123)
-    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string")
+    assert_that(str(exc_info.value)).is_equal_to("given pattern arg must be a string, but was <123> (int)")
 
 
 def test_does_not_match_bad_arg_empty_failure():
@@ -475,7 +479,7 @@ def test_is_alpha_punctuation_failure():
 def test_is_alpha_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_alpha()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_alpha_empty_value_failure():
@@ -509,7 +513,7 @@ def test_is_digit_punctuation_failure():
 def test_is_digit_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_digit()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_digit_empty_value_failure():
@@ -533,7 +537,7 @@ def test_is_lower_failure():
 def test_is_lower_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_lower()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_lower_empty_value_failure():
@@ -557,7 +561,7 @@ def test_is_upper_failure():
 def test_is_upper_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_upper()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_upper_empty_value_failure():
@@ -598,7 +602,7 @@ def test_is_alphanumeric_special_chars_failure():
 def test_is_alphanumeric_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_alphanumeric()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_alphanumeric_empty_failure():
@@ -630,7 +634,7 @@ def test_is_whitespace_mixed_failure():
 def test_is_whitespace_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_whitespace()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_is_whitespace_empty_failure():
@@ -665,7 +669,7 @@ def test_contains_any_of_single_failure():
 def test_contains_any_of_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_any_of("foo")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_contains_any_of_empty_args_failure():
@@ -677,7 +681,7 @@ def test_contains_any_of_empty_args_failure():
 def test_contains_any_of_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_any_of(123)
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <123> (int)")
 
 
 def test_contains_none_of():
@@ -704,7 +708,7 @@ def test_contains_none_of_multiple_found_failure():
 def test_contains_none_of_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_none_of("foo")
-    assert_that(str(exc_info.value)).is_equal_to("val is not a string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a string, but was <123> (int)")
 
 
 def test_contains_none_of_empty_args_failure():
@@ -716,7 +720,7 @@ def test_contains_none_of_empty_args_failure():
 def test_contains_none_of_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_none_of(123)
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be strings")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, but was <123> (int)")
 
 
 def test_chaining():

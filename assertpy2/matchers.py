@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_same_implementation
+from ._engine._require import argument, refuse
 from ._matcher_impls import (
     AllOfMatcher,
     AnyOfMatcher,
@@ -82,7 +83,7 @@ def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object)
         return matcher.matches(value)
     if callable(matcher):
         return bool(cast("Callable[..., object]", matcher)(value))
-    raise TypeError("given arg must be a Matcher or callable")
+    refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
 
 
 def _evaluate_matcher(matcher: Matcher[Any], value: object) -> MatchResult:
@@ -174,7 +175,7 @@ def register_matcher(
             assert_that(order).satisfies(match.has_status("active"))
     """
     if not isinstance(name, str):
-        raise TypeError("name must be a string")
+        refuse(name, "a string", subject=argument("name"))
     if not name.isidentifier():
         raise ValueError(f"name must be a valid Python identifier, got {name!r}")
     if hasattr(_MatchNamespace, name):
@@ -185,7 +186,7 @@ def register_matcher(
 
     def decorator(func: Callable[..., BaseMatcher]) -> Callable[..., BaseMatcher]:
         if not callable(func):
-            raise TypeError("func must be callable")
+            refuse(func, "callable", subject=argument("func"))
         with _custom_matchers_lock:
             # registering the same factory again is a no-op: a module imported twice, or a conftest
             # fixture that runs per module, is not two libraries fighting over one name

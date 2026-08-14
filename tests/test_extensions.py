@@ -60,7 +60,7 @@ def test_is_even_extension_failure():
 def test_is_even_extension_failure_not_callable():
     with pytest.raises(TypeError) as exc_info:
         add_extension("foo")
-    assert_that(str(exc_info.value)).is_equal_to("func must be callable")
+    assert_that(str(exc_info.value)).is_equal_to("given func arg must be callable, but was <'foo'> (str)")
 
 
 def test_is_even_extension_failure_not_integer():
@@ -145,7 +145,7 @@ def test_call_missing_extension():
 def test_remove_bad_extension():
     with pytest.raises(TypeError) as exc_info:
         remove_extension("foo")
-    assert_that(str(exc_info.value)).is_equal_to("func must be callable")
+    assert_that(str(exc_info.value)).is_equal_to("given func arg must be callable, but was <'foo'> (str)")
 
 
 def is_foo(self):

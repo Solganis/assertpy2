@@ -29,12 +29,14 @@ class TestAnySatisfy:
     def test_any_satisfy_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).any_satisfy(match.is_positive())
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_any_satisfy_bad_matcher_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1, 2]).any_satisfy("not a matcher")
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given matcher arg must be a Matcher or a callable, but was <'not a matcher'> (str)"
+        )
 
     def test_any_satisfy_empty_iterable_failure(self):
         with pytest.raises(AssertionError) as exc_info:
@@ -82,12 +84,14 @@ class TestNoneSatisfy:
     def test_none_satisfy_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).none_satisfy(match.is_positive())
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_none_satisfy_bad_matcher_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).none_satisfy("not a matcher")
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given matcher arg must be a Matcher or a callable, but was <'not a matcher'> (str)"
+        )
 
     def test_none_satisfy_empty_iterable(self):
         assert_that([]).none_satisfy(match.is_positive())

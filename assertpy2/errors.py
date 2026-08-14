@@ -99,9 +99,11 @@ def _json_safe(value, _depth=0, _seen=None):
 class DanglingAssertionWarning(UserWarning):
     """An ``assert_that()`` statement that asserts nothing.
 
-    Emitted at collection under ``--assertpy2-dangling``.  A separate category so it can be turned
-    into an error on its own with ``-W error::assertpy2.DanglingAssertionWarning``, the same way
-    the vacuity and snapshot-key warnings are escalated.
+    Found at collection under ``--assertpy2-dangling`` and emitted when the test that contains it is
+    set up, so pytest attributes it to that test rather than to whichever ran first.  A separate
+    category so it can be turned into an error on its own with
+    ``-W error::assertpy2.DanglingAssertionWarning``, the same way the vacuity and snapshot-key
+    warnings are escalated.
     """
 
 

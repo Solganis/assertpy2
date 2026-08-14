@@ -48,7 +48,7 @@ def test_expected_exception_no_arg_bad_func_failure():
 def test_expected_exception_no_arg_bad_exception_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(func_noop).raises(int).when_called_with()
-    assert_that(str(exc_info.value)).contains("given arg must be exception")
+    assert_that(str(exc_info.value)).contains("given exception arg must be an exception type")
 
 
 def test_expected_exception_no_arg_wrong_exception_failure():
@@ -214,12 +214,14 @@ class TestDoesNotRaise:
     def test_not_callable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).does_not_raise(ValueError)
-        assert_that(str(exc_info.value)).is_equal_to("val must be callable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be callable, but was <42> (int)")
 
     def test_not_exception_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(lambda: None).does_not_raise(str)
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be exception")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given exception arg must be an exception type, but was <<class 'str'>> (type)"
+        )
 
     def test_raises_expected_soft_mode(self):
         def raises_value_error():

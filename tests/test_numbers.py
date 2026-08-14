@@ -20,7 +20,7 @@ def test_is_zero_failure():
 def test_is_zero_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_zero()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_zero():
@@ -38,7 +38,7 @@ def test_is_not_zero_failure():
 def test_is_not_zero_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_zero()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_nan():
@@ -88,13 +88,13 @@ def test_is_nan_failure():
 def test_is_nan_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_nan()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_nan_bad_type_failure_complex():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_nan()
-    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a real number, but was <(1+2j)> (complex)")
 
 
 def test_is_not_nan():
@@ -111,13 +111,13 @@ def test_is_not_nan_failure():
 def test_is_not_nan_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_nan()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_nan_bad_type_failure_complex():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_nan()
-    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a real number, but was <(1+2j)> (complex)")
 
 
 def test_is_inf():
@@ -134,13 +134,13 @@ def test_is_inf_failure():
 def test_is_inf_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_inf()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_inf_bad_type_failure_complex():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_inf()
-    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a real number, but was <(1+2j)> (complex)")
 
 
 def test_is_not_inf():
@@ -157,13 +157,13 @@ def test_is_not_inf_failure():
 def test_is_not_inf_bad_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_inf()
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_inf_bad_type_failure_complex():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_inf()
-    assert_that(str(exc_info.value)).is_equal_to("val is not real number")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a real number, but was <(1+2j)> (complex)")
 
 
 def test_is_greater_than():
@@ -182,19 +182,23 @@ def test_is_greater_than_failure():
 def test_is_greater_than_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_greater_than(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_greater_than_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_greater_than(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be comparable with val <'foo'> (str), but was <0> (int)"
+    )
 
 
 def test_is_greater_than_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_greater_than("foo")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_greater_than_or_equal_to():
@@ -214,19 +218,23 @@ def test_is_greater_than_or_equal_to_failure():
 def test_is_greater_than_or_equal_to_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_greater_than_or_equal_to(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_greater_than_or_equal_to_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_greater_than_or_equal_to(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be comparable with val <'foo'> (str), but was <0> (int)"
+    )
 
 
 def test_is_greater_than_or_equal_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_greater_than_or_equal_to("foo")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_less_than():
@@ -245,19 +253,23 @@ def test_is_less_than_failure():
 def test_is_less_than_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_less_than(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_less_than_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_less_than(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be comparable with val <'foo'> (str), but was <0> (int)"
+    )
 
 
 def test_is_less_than_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_less_than("foo")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_less_than_or_equal_to():
@@ -277,19 +289,23 @@ def test_is_less_than_or_equal_to_failure():
 def test_is_less_than_or_equal_to_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_less_than_or_equal_to(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_less_than_or_equal_to_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_less_than_or_equal_to(0)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be comparable with val <'foo'> (str), but was <0> (int)"
+    )
 
 
 def test_is_less_than_or_equal_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_less_than_or_equal_to("foo")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a number, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_positive():
@@ -328,25 +344,29 @@ def test_is_between_failure():
 def test_is_between_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_between(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_between_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_between(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a number or a date, which is what an ordering is defined for, but was <'foo'> (str)"
+    )
 
 
 def test_is_between_low_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_between("foo", 1)
-    assert_that(str(exc_info.value)).is_equal_to("given low arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_between_high_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_between(0, "foo")
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_between_bad_arg_delta_failure():
@@ -371,25 +391,29 @@ def test_is_not_between_failure():
 def test_is_not_between_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_between(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <complex>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_not_between_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_between(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <str>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a number or a date, which is what an ordering is defined for, but was <'foo'> (str)"
+    )
 
 
 def test_is_not_between_low_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_not_between("foo", 1)
-    assert_that(str(exc_info.value)).is_equal_to("given low arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_between_high_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_not_between(0, "foo")
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be numeric, but was <str>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_between_bad_arg_delta_failure():
@@ -415,25 +439,27 @@ def test_is_close_to_failure():
 def test_is_close_to_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_close_to(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for complex numbers")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_close_to_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_close_to(123, 1)
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric or datetime")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number or a datetime, but was <'foo'> (str)")
 
 
 def test_is_close_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_close_to("foo", 1)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_close_to_bad_tolerance_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_close_to(0, "foo")
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_close_to_negative_tolerance_failure():
@@ -481,25 +507,27 @@ def test_is_not_close_to_failure():
 def test_is_not_close_to_complex_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1 + 2j).is_not_close_to(0, 1)
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for complex numbers")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)"
+    )
 
 
 def test_is_not_close_to_bad_value_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_not_close_to(123, 1)
-    assert_that(str(exc_info.value)).is_equal_to("val is not numeric or datetime")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a number or a datetime, but was <'foo'> (str)")
 
 
 def test_is_not_close_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_not_close_to("foo", 1)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_close_to_bad_tolerance_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123.01).is_not_close_to(0, "foo")
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be numeric")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be a number, but was <'foo'> (str)")
 
 
 def test_is_not_close_to_negative_tolerance_failure():
@@ -559,7 +587,10 @@ def test_comparable_no_ordering_failure():
 
     with pytest.raises(TypeError) as exc_info:
         assert_that(NoOrder()).is_greater_than(NoOrder())
-    assert_that(str(exc_info.value)).is_equal_to("ordering is not defined for type <NoOrder>")
+    # the repr of a local class carries its address, so the assertion is on the sentence around it
+    message = str(exc_info.value)
+    assert_that(message).starts_with("given other arg must be comparable with val <")
+    assert_that(message).ends_with("(NoOrder)")
 
 
 def test_is_even():
@@ -584,19 +615,19 @@ def test_is_even_negative_failure():
 def test_is_even_bad_type_float_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(2.0).is_even()
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <2.0> (float)")
 
 
 def test_is_even_bad_type_str_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_even()
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got str")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <'foo'> (str)")
 
 
 def test_is_even_bad_type_bool_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(True).is_even()
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <True> (bool)")
 
 
 def test_is_odd():
@@ -621,13 +652,13 @@ def test_is_odd_negative_failure():
 def test_is_odd_bad_type_float_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(1.0).is_odd()
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <1.0> (float)")
 
 
 def test_is_odd_bad_type_bool_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(False).is_odd()
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <False> (bool)")
 
 
 def test_is_divisible_by():
@@ -648,19 +679,19 @@ def test_is_divisible_by_failure():
 def test_is_divisible_by_bad_type_float_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(10.0).is_divisible_by(5)
-    assert_that(str(exc_info.value)).is_equal_to("val is not an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("val must be an integer, but was <10.0> (float)")
 
 
 def test_is_divisible_by_bad_divisor_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(10).is_divisible_by(2.5)
-    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, got float")
+    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, but was <2.5> (float)")
 
 
 def test_is_divisible_by_bad_divisor_bool_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(10).is_divisible_by(True)
-    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, got bool")
+    assert_that(str(exc_info.value)).is_equal_to("given divisor arg must be an integer, but was <True> (bool)")
 
 
 def test_is_divisible_by_zero_divisor_failure():

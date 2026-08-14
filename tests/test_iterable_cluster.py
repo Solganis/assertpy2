@@ -55,12 +55,12 @@ class TestSatisfiesExactly:
     def test_not_iterable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).satisfies_exactly(match.is_odd())
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_bad_matcher_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1, 2]).satisfies_exactly("not a matcher", match.is_even())
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).starts_with("given matcher arg must be a Matcher or a callable")
 
 
 class TestSatisfiesExactlyInAnyOrder:
@@ -144,12 +144,14 @@ class TestSatisfiesExactlyInAnyOrder:
     def test_not_iterable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).satisfies_exactly_in_any_order(match.is_odd())
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_bad_matcher_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1, 2]).satisfies_exactly_in_any_order("not a matcher", match.is_even())
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given matcher arg must be a Matcher or a callable, but was <'not a matcher'> (str)"
+        )
 
 
 class TestZipSatisfies:
@@ -189,17 +191,19 @@ class TestZipSatisfies:
     def test_predicate_not_callable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).zip_satisfies([1], "not callable")
-        assert_that(str(exc_info.value)).is_equal_to("given predicate must be callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given predicate arg must be callable, but was <'not callable'> (str)"
+        )
 
     def test_val_not_iterable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).zip_satisfies([1], lambda left, right: True)
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_other_not_iterable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).zip_satisfies(42, lambda left, right: True)
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be iterable")
+        assert_that(str(exc_info.value)).is_equal_to("given other arg must be iterable, but was <42> (int)")
 
 
 class TestContainsOnlyOnce:
@@ -251,7 +255,7 @@ class TestContainsOnlyOnce:
     def test_not_iterable_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_only_once(1)
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
 
 class TestHasSameSizeAs:
@@ -279,7 +283,7 @@ class TestHasSameSizeAs:
     def test_other_not_sized_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).has_same_size_as(42)
-        assert_that(str(exc_info.value)).is_equal_to("given arg <int> is not a sized object")
+        assert_that(str(exc_info.value)).is_equal_to("given other arg must be a sized object, but was <42> (int)")
 
     def test_val_not_sized_raises_type_error(self):
         with pytest.raises(TypeError):
@@ -316,7 +320,7 @@ class TestHasSizeGreaterThan:
     def test_non_int_arg_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).has_size_greater_than("2")
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be an int")
+        assert_that(str(exc_info.value)).is_equal_to("given size arg must be an integer, but was <'2'> (str)")
 
     def test_bool_arg_raises_type_error(self):
         with pytest.raises(TypeError):
@@ -355,7 +359,7 @@ class TestHasSizeLessThan:
     def test_non_int_arg_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).has_size_less_than("2")
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be an int")
+        assert_that(str(exc_info.value)).is_equal_to("given size arg must be an integer, but was <'2'> (str)")
 
     def test_negative_arg_raises_value_error(self):
         with pytest.raises(ValueError) as exc_info:
@@ -392,12 +396,12 @@ class TestHasSizeBetween:
     def test_non_int_low_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).has_size_between("1", 2)
-        assert_that(str(exc_info.value)).is_equal_to("given low arg must be an int")
+        assert_that(str(exc_info.value)).is_equal_to("given low arg must be an integer, but was <'1'> (str)")
 
     def test_non_int_high_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).has_size_between(1, "2")
-        assert_that(str(exc_info.value)).is_equal_to("given high arg must be an int")
+        assert_that(str(exc_info.value)).is_equal_to("given high arg must be an integer, but was <'2'> (str)")
 
     def test_negative_bound_raises_value_error(self):
         with pytest.raises(ValueError) as exc_info:

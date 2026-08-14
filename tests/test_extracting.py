@@ -53,13 +53,13 @@ def test_extracting_dict():
 def test_extracting_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).extracting("bar")
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_extracting_bad_val_str_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").extracting("bar")
-    assert_that(str(exc_info.value)).is_equal_to("val must not be string")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a collection rather than a string, but was <'foo'> (str)")
 
 
 def test_extracting_empty_args_failure():
@@ -192,7 +192,7 @@ def test_extracting_filter_none():
 
 
 def test_extracting_filter_bad_type():
-    with pytest.raises(TypeError, match="must be a str, dict, or callable"):
+    with pytest.raises(TypeError, match="given filter arg must be a str, a dict, or a callable"):
         assert_that(users).extracting("user", filter=123)
 
 
@@ -264,7 +264,7 @@ def test_extracting_sort_none():
 def test_extracting_sort_bad_type():
     # mirrors filter: a wrong whole arg is a mistake, not a request for no ordering. Silently returning
     # unsorted items surfaces later as a baffling order mismatch, or passes by luck.
-    with pytest.raises(TypeError, match="must be a str, iterable, or callable"):
+    with pytest.raises(TypeError, match="given sort arg must be a str, an iterable, or a callable"):
         assert_that(users).extracting("user", sort=123)
 
 
@@ -411,7 +411,7 @@ def test_extracting_iterable_of_strings():
 def test_extracting_iterable_failure_set():
     with pytest.raises(TypeError) as exc_info:
         assert_that([{1}]).extracting(0).contains(1, 4, 7)
-    assert_that(str(exc_info.value)).is_equal_to("item <set> does not have [] accessor")
+    assert_that(str(exc_info.value)).is_equal_to("item must be a value with a [] accessor, but was <{1}> (set)")
 
 
 def test_extracting_iterable_failure_out_of_range():

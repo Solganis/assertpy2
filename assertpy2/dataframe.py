@@ -15,6 +15,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import refuse
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -83,9 +84,7 @@ class DataFrameMixin(_MixinBase):
             type(actual).__module__.split(".", 1)[0],
         )
         if root not in _FRAME_ROOTS:
-            raise TypeError(
-                f"is_frame_equal() expects a pandas or polars DataFrame/Series, but was <{type(actual).__name__}>."
-            )
+            refuse(actual, "a pandas or polars DataFrame/Series")
         library, testing = _load(root)
         class_name = type(actual).__name__
         # isinstance handles real subclasses; the class-name check handles duck-typed frames (a test may
@@ -96,9 +95,7 @@ class DataFrameMixin(_MixinBase):
             assert_equal, label = testing.assert_frame_equal, "DataFrame"
         else:
             # a pandas/polars object that is neither a DataFrame nor a Series (Index, Categorical, ...)
-            raise TypeError(
-                f"is_frame_equal() expects a pandas or polars DataFrame/Series, but was <{type(actual).__name__}>."
-            )
+            refuse(actual, "a pandas or polars DataFrame/Series")
         try:
             assert_equal(actual, expected, **options)
         except AssertionError as exc:

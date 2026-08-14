@@ -73,7 +73,9 @@ A few conventions keep custom assertions consistent with the built-ins:
 2. Read the actual value from `self.val`.
 3. Test the negative case and fail if it holds.
 4. Fail via `self.error(...)`, which raises `AssertionError` and prints your message.
-5. Raise `TypeError`/`ValueError` for bad input (a programming error), not `self.error()`.
+5. Raise `TypeError`/`ValueError` for bad input (a programming error), not `self.error()`. The
+   built-ins word every type refusal the same way, `<subject> must be <expectation>, but was
+   <value> (<type>)`, so a custom assertion reads like one when it follows the same shape.
 6. Always `return self` so the assertion chains.
 
 ```python

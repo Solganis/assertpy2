@@ -562,7 +562,7 @@ class TestSatisfies:
             assert_that(3).satisfies(lambda x: x % 2 == 0)
 
     def test_invalid_arg(self):
-        with pytest.raises(TypeError, match="must be a Matcher or callable"):
+        with pytest.raises(TypeError, match="given matcher arg must be a Matcher or a callable"):
             assert_that(1).satisfies("not a matcher")
 
     def test_chaining(self):
@@ -605,11 +605,11 @@ class TestEach:
         assert_that([]).each(match.is_positive())
 
     def test_invalid_arg(self):
-        with pytest.raises(TypeError, match="must be a Matcher or callable"):
+        with pytest.raises(TypeError, match="given matcher arg must be a Matcher or a callable"):
             assert_that([1, 2]).each("not a matcher")
 
     def test_not_iterable(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).each(match.is_positive())
 
     def test_chaining(self):
@@ -1261,14 +1261,14 @@ class TestTypeMatchersRefuseBadInputAtConstruction:
 
     @pytest.mark.parametrize("bad", [list[int], None, "int", 42])
     def test_is_instance_of_refuses_what_isinstance_refuses(self, bad):
-        with pytest.raises(TypeError, match="given arg must be a class"):
+        with pytest.raises(TypeError, match="given class arg must be a class"):
             match.is_instance_of(bad)
 
     @pytest.mark.parametrize("bad", [list[int], None, "int", int | str, (int, str)])
     def test_is_type_of_refuses_anything_but_a_type(self, bad):
         # `type(value) is <a union>` can never hold, so accepting one yields a matcher that silently
         # never matches
-        with pytest.raises(TypeError, match="given arg must be a type"):
+        with pytest.raises(TypeError, match="given type arg must be a type"):
             match.is_type_of(bad)
 
     @pytest.mark.parametrize("good", [int, int | str, (int, str), (int | str, float)])

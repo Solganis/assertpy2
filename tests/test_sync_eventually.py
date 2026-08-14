@@ -40,7 +40,7 @@ class TestEventuallySyncBasic:
             assert_that(lambda: 1).eventually_sync(timeout=0.1, interval=0.02).is_equal_to(999)
 
     def test_non_callable_raises_type_error(self):
-        with pytest.raises(TypeError, match=r"val must be callable when using eventually_sync\(\)"):
+        with pytest.raises(TypeError, match="val must be callable, since eventually_sync"):
             assert_that(42).eventually_sync()
 
     def test_async_probe_raises_type_error(self):

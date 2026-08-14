@@ -84,7 +84,7 @@ def test_exists_failure(tmpfile):
 def test_exists_bad_val_failure(tmpfile):
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).exists()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a path")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a path, but was <123> (int)")
 
 
 def test_does_not_exist():
@@ -100,7 +100,7 @@ def test_does_not_exist_failure(tmpfile):
 def test_does_not_exist_bad_val_failure(tmpfile):
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_exist()
-    assert_that(str(exc_info.value)).is_equal_to("val is not a path")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a path, but was <123> (int)")
 
 
 def test_is_file(tmpfile):

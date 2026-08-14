@@ -20,6 +20,7 @@ from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
+from ._engine._require import argument, refuse, require_type
 
 __tracebackhide__ = True
 
@@ -198,42 +199,37 @@ class HelpersMixin(_MixinBase):
         high_type = type(high)
 
         if val_type in self._NUMERIC_NON_COMPAREABLE:
-            raise TypeError(f"ordering is not defined for type <{val_type.__name__}>")
+            refuse(self.val, "a value with an ordering (complex numbers have none)")
 
         if val_type in self._NUMERIC_COMPAREABLE:
             if low_type is not val_type:
-                raise TypeError(f"given low arg must be <{val_type.__name__}>, but was <{low_type.__name__}>")
+                refuse(low, f"a {val_type.__name__}, to match val", subject=argument("low"))
             if high_type is not val_type:
-                raise TypeError(f"given high arg must be <{val_type.__name__}>, but was <{high_type.__name__}>")
+                refuse(high, f"a {val_type.__name__}, to match val", subject=argument("high"))
         elif isinstance(self.val, numbers.Number):
-            if not isinstance(low, numbers.Number):
-                raise TypeError(f"given low arg must be numeric, but was <{low_type.__name__}>")
-            if not isinstance(high, numbers.Number):
-                raise TypeError(f"given high arg must be numeric, but was <{high_type.__name__}>")
+            require_type(low, numbers.Number, "a number", subject=argument("low"))
+            require_type(high, numbers.Number, "a number", subject=argument("high"))
         else:
-            raise TypeError(f"ordering is not defined for type <{val_type.__name__}>")
+            refuse(self.val, "a number or a date, which is what an ordering is defined for")
 
         if low > high:
             raise ValueError("given low arg must be less than given high arg")
 
     def _validate_close_to_args(self, val, other, tolerance):
         """Helper for validate given arg and delta."""
-        if type(val) is complex or type(other) is complex or type(tolerance) is complex:
-            raise TypeError("ordering is not defined for complex numbers")
+        for operand in (val, other, tolerance):
+            if type(operand) is complex:
+                refuse(operand, "a value with an ordering (complex numbers have none)")
 
-        if not isinstance(val, numbers.Number) and not isinstance(val, datetime.datetime):
-            raise TypeError("val is not numeric or datetime")
+        if not isinstance(val, (numbers.Number, datetime.datetime)):
+            refuse(val, "a number or a datetime")
 
         if isinstance(val, datetime.datetime):
-            if not isinstance(other, datetime.datetime):
-                raise TypeError(f"given arg must be datetime, but was <{type(other).__name__}>")
-            if not isinstance(tolerance, datetime.timedelta):
-                raise TypeError(f"given tolerance arg must be timedelta, but was <{type(tolerance).__name__}>")
+            require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
+            require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
         else:
-            if not isinstance(other, numbers.Number):
-                raise TypeError("given arg must be numeric")
-            if not isinstance(tolerance, numbers.Number):
-                raise TypeError("given tolerance arg must be numeric")
+            require_type(other, numbers.Number, "a number", subject=argument("other"))
+            require_type(tolerance, numbers.Number, "a number", subject=argument("tolerance"))
             if math.isnan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
             if tolerance < 0:
@@ -254,20 +250,20 @@ class HelpersMixin(_MixinBase):
     def _require_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True, name="val"):
         """Raise ``TypeError`` unless *candidate* has the requested dict-like attributes."""
         if not isinstance(candidate, collections.abc.Iterable):
-            raise TypeError(f"{name} <{type(candidate).__name__}> is not dict-like: not iterable")
+            refuse(candidate, "dict-like (this one is not iterable)", subject=name)
         if check_keys and not callable(getattr(candidate, "keys", None)):
-            raise TypeError(f"{name} <{type(candidate).__name__}> is not dict-like: missing keys()")
+            refuse(candidate, "dict-like (this one has no keys())", subject=name)
         if check_values and not callable(getattr(candidate, "values", None)):
-            raise TypeError(f"{name} <{type(candidate).__name__}> is not dict-like: missing values()")
+            refuse(candidate, "dict-like (this one has no values())", subject=name)
         if check_getitem and not hasattr(candidate, "__getitem__"):
-            raise TypeError(f"{name} <{type(candidate).__name__}> is not dict-like: missing [] accessor")
+            refuse(candidate, "dict-like (this one has no [] accessor)", subject=name)
 
     def _check_iterable(self, val, check_getitem=True, name="val"):
         """Helper to check if given val is iterable with optional item access."""
         if not isinstance(val, collections.abc.Iterable):
-            raise TypeError(f"{name} <{type(val).__name__}> is not iterable")
+            refuse(val, "iterable", subject=name)
         if check_getitem and not hasattr(val, "__getitem__"):
-            raise TypeError(f"{name} <{type(val).__name__}> does not have [] accessor")
+            refuse(val, "a value with a [] accessor", subject=name)
 
     def _dict_not_equal(self, val, other, ignore=None, include=None, config: _CompareConfig | None = None, _seen=None):
         """Helper to compare dicts, optionally honoring ignore/include key-specs and a compare ``config``."""
@@ -370,10 +366,7 @@ class HelpersMixin(_MixinBase):
             return list(specs)
         if isinstance(specs, (str, bytes, tuple)) or not isinstance(specs, collections.abc.Iterable):
             return [specs]
-        raise TypeError(
-            f"{param} must be a key, a nested-path tuple, or a list/set/frozenset of them,"
-            f" but was <{type(specs).__name__}>"
-        )
+        refuse(specs, "a key, a nested-path tuple, or a list/set/frozenset of them", subject=param)
 
     @staticmethod
     def _dict_ignore(ignore):

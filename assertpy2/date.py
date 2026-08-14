@@ -4,6 +4,7 @@ import datetime
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -13,8 +14,7 @@ __tracebackhide__ = True
 
 def _require_datetime(value: object, label: str) -> None:
     """Raise ``TypeError`` unless *value* is exactly a `datetime.datetime`."""
-    if not isinstance(value, datetime.datetime):
-        raise TypeError(f"{label} must be datetime, but was type <{type(value).__name__}>")
+    require_type(value, datetime.datetime, "a datetime", subject=label)
 
 
 def _require_comparable_datetimes(first: datetime.datetime, second: datetime.datetime) -> None:
@@ -62,7 +62,7 @@ class DateMixin(_MixinBase):
                 also works with datetime
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val >= other:
             return self.error(
@@ -100,7 +100,7 @@ class DateMixin(_MixinBase):
                 also works with datetime
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val <= other:
             return self.error(
@@ -133,7 +133,7 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** before or equal to the given date
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val > other:
             return self.error(
@@ -166,7 +166,7 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** after or equal to the given date
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val < other:
             return self.error(
@@ -198,7 +198,7 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** equal to the given date to the second
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if (
             self.val.date() != other.date()
@@ -235,7 +235,7 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** equal to the given date to the minute
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
             return self.error(
@@ -267,7 +267,7 @@ class DateMixin(_MixinBase):
             AssertionError: if val is **not** equal to the given date ignoring time
         """
         _require_datetime(self.val, "val")
-        _require_datetime(other, "given arg")
+        _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         if self.val.date() != other.date():
             return self.error(

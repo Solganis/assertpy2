@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, refuse
 from .errors import _callable_name
 
 if TYPE_CHECKING:
@@ -55,9 +56,9 @@ class ExceptionMixin(_MixinBase):
             AssertionBuilder: returns a new instance (with the expected exception) to chain the next assertion
         """
         if not callable(self.val):
-            raise TypeError("val must be callable")
+            refuse(self.val, "callable")
         if not issubclass(ex, BaseException):
-            raise TypeError("given arg must be exception")
+            refuse(ex, "an exception type", subject=argument("exception"))
 
         return self.builder(self.val, self.description, self.kind, ex, self.logger)
 
@@ -288,9 +289,9 @@ class ExceptionMixin(_MixinBase):
             AssertionBuilder: returns a new instance to chain to the next assertion
         """
         if not callable(self.val):
-            raise TypeError("val must be callable")
+            refuse(self.val, "callable")
         if not issubclass(ex, BaseException):
-            raise TypeError("given arg must be exception")
+            refuse(ex, "an exception type", subject=argument("exception"))
 
         new_builder = self.builder(self.val, self.description, self.kind, ex, self.logger)
         new_builder._not_expected = True

@@ -33,7 +33,7 @@ def test_is_type_of_failure():
 def test_is_type_of_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_type_of("bad")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a type")
+    assert_that(str(exc_info.value)).is_equal_to("given type arg must be a type, but was <'bad'> (str)")
 
 
 def test_is_type_of_subclass_failure():
@@ -66,7 +66,7 @@ def test_is_instance_of_failure():
 def test_is_instance_of_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_instance_of("bad")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a class")
+    assert_that(str(exc_info.value)).is_equal_to("given class arg must be a class, but was <'bad'> (str)")
 
 
 def test_is_instance_of_any():
@@ -98,7 +98,9 @@ def test_is_instance_of_any_no_args_failure():
 def test_is_instance_of_any_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").is_instance_of_any(int, "bad")
-    assert_that(str(exc_info.value)).is_equal_to("given args must all be classes")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given class arg must be classes, but was <(<class 'int'>, 'bad')> (tuple)"
+    )
 
 
 def test_is_subclass_of():
@@ -121,10 +123,11 @@ def test_is_subclass_of_failure():
 def test_is_subclass_of_non_class_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(Foo()).is_subclass_of(Foo)
-    assert_that(str(exc_info.value)).is_equal_to("val must be a class")
+    # the repr of an instance carries its address, so the assertion is on everything around it
+    assert_that(str(exc_info.value)).starts_with("val must be a class, but was <").ends_with("> (Foo)")
 
 
 def test_is_subclass_of_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(Foo).is_subclass_of("bad")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be a class")
+    assert_that(str(exc_info.value)).is_equal_to("given class arg must be a class, but was <'bad'> (str)")

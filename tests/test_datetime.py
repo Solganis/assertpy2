@@ -25,13 +25,13 @@ def test_is_before_failure():
 def test_is_before_bad_val_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_before(123)
-    assert_that(str(exc_info.value)).is_equal_to("val must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a datetime, but was <123> (int)")
 
 
 def test_is_before_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_before(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a datetime, but was <123> (int)")
 
 
 def test_is_after():
@@ -52,13 +52,13 @@ def test_is_after_failure():
 def test_is_after_bad_val_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_after(123)
-    assert_that(str(exc_info.value)).is_equal_to("val must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a datetime, but was <123> (int)")
 
 
 def test_is_after_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_after(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_milliseconds():
@@ -78,13 +78,13 @@ def test_is_equal_to_ignoring_milliseconds_failure():
 def test_is_equal_to_ignoring_milliseconds_bad_val_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_milliseconds(123)
-    assert_that(str(exc_info.value)).is_equal_to("val must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_milliseconds_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_equal_to_ignoring_milliseconds(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_seconds():
@@ -103,13 +103,13 @@ def test_is_equal_to_ignoring_seconds_failure():
 def test_is_equal_to_ignoring_seconds_bad_val_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_seconds(123)
-    assert_that(str(exc_info.value)).is_equal_to("val must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_seconds_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_equal_to_ignoring_seconds(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_time():
@@ -128,13 +128,13 @@ def test_is_equal_to_ignoring_time_failure():
 def test_is_equal_to_ignoring_time_bad_val_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_equal_to_ignoring_time(123)
-    assert_that(str(exc_info.value)).is_equal_to("val must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("val must be a datetime, but was <123> (int)")
 
 
 def test_is_equal_to_ignoring_time_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_equal_to_ignoring_time(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was type <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given other arg must be a datetime, but was <123> (int)")
 
 
 def test_is_greater_than():
@@ -155,7 +155,9 @@ def test_is_greater_than_failure():
 def test_is_greater_than_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_greater_than(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_greater_than_or_equal_to():
@@ -175,7 +177,9 @@ def test_is_greater_than_or_equal_to_failure():
 def test_is_greater_than_or_equal_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_greater_than_or_equal_to(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_less_than():
@@ -196,7 +200,9 @@ def test_is_less_than_failure():
 def test_is_less_than_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_less_than(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_less_than_or_equal_to():
@@ -216,7 +222,9 @@ def test_is_less_than_or_equal_to_failure():
 def test_is_less_than_or_equal_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_less_than_or_equal_to(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_between():
@@ -239,14 +247,14 @@ def test_is_between_failure():
 def test_is_between_bad_arg1_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_between(123, 456)
-    assert_that(str(exc_info.value)).is_equal_to("given low arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be a datetime, to match val, but was <123> (int)")
 
 
 def test_is_between_bad_arg2_type_failure():
     with pytest.raises(TypeError) as exc_info:
         other_time = datetime.datetime.today()
         assert_that(reference_time).is_between(other_time, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be a datetime, to match val, but was <123> (int)")
 
 
 def test_is_not_between():
@@ -269,14 +277,14 @@ def test_is_not_between_failure():
 def test_is_not_between_bad_arg1_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_not_between(123, 456)
-    assert_that(str(exc_info.value)).is_equal_to("given low arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be a datetime, to match val, but was <123> (int)")
 
 
 def test_is_not_between_bad_arg2_type_failure():
     with pytest.raises(TypeError) as exc_info:
         other_time = datetime.datetime.today()
         assert_that(reference_time).is_not_between(other_time, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be <datetime>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be a datetime, to match val, but was <123> (int)")
 
 
 def test_is_close_to():
@@ -297,14 +305,18 @@ def test_is_close_to_failure():
 def test_is_close_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_close_to(123, 456)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_close_to_bad_tolerance_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         other_time = datetime.datetime.today()
         assert_that(reference_time).is_close_to(other_time, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be timedelta, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given tolerance arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 def test_is_not_close_to():
@@ -325,14 +337,18 @@ def test_is_not_close_to_failure():
 def test_is_not_close_to_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_time).is_not_close_to(123, 456)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be datetime, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a datetime, to match val, but was <123> (int)"
+    )
 
 
 def test_is_not_close_to_bad_tolerance_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         other_time = datetime.datetime.today()
         assert_that(reference_time).is_not_close_to(other_time, 123)
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be timedelta, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given tolerance arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 reference_delta = datetime.timedelta(seconds=60)
@@ -355,7 +371,9 @@ def test_is_greater_than_timedelta_failure():
 def test_is_greater_than_timedelta_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_delta).is_greater_than(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <timedelta>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 def test_is_greater_than_or_equal_to_timedelta():
@@ -374,7 +392,9 @@ def test_is_greater_than_or_equal_to_timedelta_failure():
 def test_is_greater_than_or_equal_to_timedelta_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_delta).is_greater_than_or_equal_to(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <timedelta>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 def test_is_less_than_timedelta():
@@ -394,7 +414,9 @@ def test_is_less_than_timedelta_failure():
 def test_is_less_than_timedelta_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_delta).is_less_than(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <timedelta>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 def test_is_less_than_or_equal_to_timedelta():
@@ -413,7 +435,9 @@ def test_is_less_than_or_equal_to_timedelta_failure():
 def test_is_less_than_or_equal_to_timedelta_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(reference_delta).is_less_than_or_equal_to(123)
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be <timedelta>, but was <int>")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "given other arg must be a timedelta, to match val, but was <123> (int)"
+    )
 
 
 def test_is_between_timedelta():
@@ -528,22 +552,22 @@ class TestIsBeforeOrEqualTo:
     def test_bad_val_type(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that("foo").is_before_or_equal_to(datetime.datetime.now())
-        assert_that(str(exc_info.value)).contains("val must be datetime")
+        assert_that(str(exc_info.value)).contains("val must be a datetime")
 
     def test_bad_arg_type(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.datetime.now()).is_before_or_equal_to("foo")
-        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+        assert_that(str(exc_info.value)).contains("given other arg must be a datetime")
 
     def test_date_not_datetime_val(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.date(2020, 1, 1)).is_before_or_equal_to(datetime.datetime.now())
-        assert_that(str(exc_info.value)).contains("val must be datetime")
+        assert_that(str(exc_info.value)).contains("val must be a datetime")
 
     def test_date_not_datetime_arg(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.datetime.now()).is_before_or_equal_to(datetime.date(2020, 1, 1))
-        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+        assert_that(str(exc_info.value)).contains("given other arg must be a datetime")
 
 
 class TestIsAfterOrEqualTo:
@@ -566,17 +590,17 @@ class TestIsAfterOrEqualTo:
     def test_bad_val_type(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that("foo").is_after_or_equal_to(datetime.datetime.now())
-        assert_that(str(exc_info.value)).contains("val must be datetime")
+        assert_that(str(exc_info.value)).contains("val must be a datetime")
 
     def test_bad_arg_type(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.datetime.now()).is_after_or_equal_to("foo")
-        assert_that(str(exc_info.value)).contains("given arg must be datetime")
+        assert_that(str(exc_info.value)).contains("given other arg must be a datetime")
 
     def test_date_not_datetime_val(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(datetime.date(2020, 1, 1)).is_after_or_equal_to(datetime.datetime.now())
-        assert_that(str(exc_info.value)).contains("val must be datetime")
+        assert_that(str(exc_info.value)).contains("val must be a datetime")
 
 
 def test_naive_vs_aware_comparison_raises_clear_type_error():

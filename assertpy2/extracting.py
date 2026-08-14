@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ._engine._introspection import is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, refuse, require_type
 from .helpers import _reject_unknown_kwargs
 
 _EXTRACTING_OPTIONS = frozenset({"filter", "sort"})
@@ -158,10 +159,9 @@ class ExtractingMixin(_MixinBase):
             AssertionBuilder: returns a new instance (extracted list as val) to chain the next assertion
         """
         _reject_unknown_kwargs(kwargs, _EXTRACTING_OPTIONS, "extracting")
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         if isinstance(self.val, str):
-            raise TypeError("val must not be string")
+            refuse(self.val, "a collection rather than a string")
         if len(names) == 0:
             raise ValueError("one or more name args must be given")
 
@@ -223,9 +223,7 @@ class ExtractingMixin(_MixinBase):
                     return kwargs["filter"](item)
                 elif kwargs["filter"] is None:
                     return True
-                raise TypeError(
-                    f"given filter arg must be a str, dict, or callable, but was <{type(kwargs['filter']).__name__}>"
-                )
+                refuse(kwargs["filter"], "a str, a dict, or a callable", subject=argument("filter"))
             return True
 
         def _sort(item):
@@ -242,7 +240,7 @@ class ExtractingMixin(_MixinBase):
                 return 0
             # anything else is a mistake: silently returning unsorted items would be answered by a
             # confusing order mismatch further down the chain, the way `filter` used to behave
-            raise TypeError(f"given sort arg must be a str, iterable, or callable, but was <{type(sort).__name__}>")
+            refuse(sort, "a str, an iterable, or a callable", subject=argument("sort"))
 
         # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val

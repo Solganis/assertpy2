@@ -9,6 +9,7 @@ from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import materialized
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
+from ._engine._require import argument, refuse, require_type, sized_len
 from .errors import DiffEntry, DiffResult
 from .matchers import _is_matcher
 
@@ -121,6 +122,10 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         # membership is tested once per argument, so a one-shot iterator has to be drained first
         values = materialized(self.val)
+        if not isinstance(values, Iterable) and not hasattr(type(values), "__contains__"):
+            # left to `in`, Python answers "argument of type 'int' is not a container or iterable":
+            # true, and about the operator rather than about the value the assertion was handed
+            refuse(self.val, "a container or iterable")
         if len(items) == 1:
             item = items[0]
             if _is_matcher(item):
@@ -319,9 +324,8 @@ class ContainsMixin(_MixinBase):
         if isinstance(self.val, str):
             search_start = 0
             for item in items:
-                if not isinstance(item, str):
-                    raise TypeError("given args must be strings when val is a string")
-                found_index = self.val.find(item, search_start)
+                text = require_type(item, str, "a string, to match val", subject=argument("item"))
+                found_index = self.val.find(text, search_start)
                 if found_index == -1:
                     # name where the chain broke: "but did not" makes the reader re-derive it by eye
                     matched = items[: items.index(item)]
@@ -330,7 +334,7 @@ class ContainsMixin(_MixinBase):
                         f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but <{item}>"
                         f" was not found{trail}."
                     )
-                search_start = found_index + len(item)
+                search_start = found_index + len(text)
             return self
         best_prefix = 0
         # this walk is by index, which a one-shot iterator does not support at all
@@ -339,9 +343,8 @@ class ContainsMixin(_MixinBase):
             # two different wrong inputs, and the old guard reported both as "not iterable": true for
             # an int, plainly false for a set, which is iterable and simply has no order to hold a
             # sequence in
-            if not isinstance(values, Iterable):
-                raise TypeError("val is not iterable")
-            raise TypeError("val must be a sequence to contain a sequence")
+            require_type(values, Iterable, "iterable")
+            refuse(self.val, "a sequence, to contain a sequence")
         for i in range(len(values) - len(items) + 1):
             for j in range(len(items)):
                 if values[i + j] != items[j]:
@@ -378,7 +381,7 @@ class ContainsMixin(_MixinBase):
         try:
             values = list(self.val)
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         if _has_duplicates(values):
             return self
         return self.error(f"Expected <{self.val}> to contain duplicates, but did not.")
@@ -402,7 +405,7 @@ class ContainsMixin(_MixinBase):
         try:
             values = list(self.val)
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         if not _has_duplicates(values):
             return self
         # name them: "but did" leaves the reader to scan the value for the repeat, and the sibling
@@ -440,7 +443,7 @@ class ContainsMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** empty
         """
-        if len(self.val) != 0:
+        if sized_len(self.val) != 0:
             if isinstance(self.val, str):
                 return self.error(f"Expected <{self.val}> to be empty string, but was not.")
             else:
@@ -465,7 +468,7 @@ class ContainsMixin(_MixinBase):
         Raises:
             AssertionError: if val **is** empty
         """
-        if len(self.val) == 0:
+        if sized_len(self.val) == 0:
             if isinstance(self.val, str):
                 return self.error("Expected not empty string, but was empty.")
             else:
@@ -499,7 +502,7 @@ class ContainsMixin(_MixinBase):
         try:
             val_list = list(self.val)
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         expected_list = list(items)
         if val_list != expected_list:
             message = f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not."
@@ -553,7 +556,7 @@ class ContainsMixin(_MixinBase):
         try:
             val_list = list(self.val)
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         entries = _multiset_diff_entries(val_list, list(items))
         if entries:
             return self.error(
@@ -589,7 +592,7 @@ class ContainsMixin(_MixinBase):
         try:
             val_list = list(self.val)
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         item_index = 0
         for element in val_list:
             if item_index < len(items) and element == items[item_index]:
@@ -635,7 +638,7 @@ class ContainsMixin(_MixinBase):
         try:
             val_list = list(materialized(self.val))
         except TypeError:
-            raise TypeError("val is not iterable") from None
+            refuse(self.val, "iterable")
         # list.count compares with == so unhashable items (dicts, lists) work, unlike Counter/hashing
         missing = [item for item in items if val_list.count(item) == 0]
         duplicated = [item for item in items if val_list.count(item) > 1]

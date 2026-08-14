@@ -18,7 +18,7 @@ class TestIsValidUtf8:
         assert_that(bytearray(b"hello")).is_valid_utf8()
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that("string").is_valid_utf8()
 
 
@@ -38,7 +38,7 @@ class TestIsValidEncoding:
             assert_that(b"hello").is_valid_encoding("nonexistent-encoding")
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that(42).is_valid_encoding("utf-8")
 
 
@@ -63,7 +63,7 @@ class TestStartsWithBytes:
         assert_that(str(failure.value)).is_equal_to("Expected <b'hello'> to start with <b'world'>, but did not.")
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that("hello").starts_with_bytes(b"h")
 
 
@@ -87,7 +87,7 @@ class TestContainsBytes:
         assert_that(failure.value.actual).is_equal_to(b"hello")
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that(42).contains_bytes(b"\x00")
 
 
@@ -108,7 +108,7 @@ class TestHasByteAt:
             assert_that(b"ab").has_byte_at(-1, 0x00)
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that(42).has_byte_at(0, 0x00)
 
 
@@ -124,7 +124,7 @@ class TestIsHexEqualTo:
         assert_that(b"\xab\xcd").is_hex_equal_to("ABCD")
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that("hello").is_hex_equal_to("68656c6c6f")
 
 
@@ -150,7 +150,7 @@ class TestDecodedAs:
         assert_that(result.description).is_equal_to("raw")
 
     def test_non_bytes_raises(self):
-        with pytest.raises(TypeError, match="not bytes"):
+        with pytest.raises(TypeError, match="val must be bytes or a bytearray"):
             assert_that(42).decoded_as()
 
 

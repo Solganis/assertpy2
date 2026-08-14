@@ -6,6 +6,7 @@ import numbers
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import _shown, argument, refuse, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -55,29 +56,34 @@ class NumericMixin(_MixinBase):
         other_type = type(other)
 
         if self_type in self._NUMERIC_NON_COMPAREABLE:
-            raise TypeError(f"ordering is not defined for type <{self_type.__name__}>")
+            refuse(self.val, "a value with an ordering (complex numbers have none)")
         if self_type in self._NUMERIC_COMPAREABLE:
             if other_type is not self_type:
-                raise TypeError(f"given arg must be <{self_type.__name__}>, but was <{other_type.__name__}>")
+                refuse(other, f"a {self_type.__name__}, to match val", subject=argument("other"))
             return
         if isinstance(self.val, numbers.Number):
-            if not isinstance(other, numbers.Number):
-                raise TypeError(f"given arg must be a number, but was <{other_type.__name__}>")
+            require_type(other, numbers.Number, "a number", subject=argument("other"))
             return
         try:
             _ = self.val < other
         except TypeError:
-            raise TypeError(f"ordering is not defined for type <{self_type.__name__}>") from None
+            # a `__lt__` of their own that raises is a bug in the value, not an incomparable pair:
+            # answering it with our sentence would send the reader looking in the wrong file
+            # the pair is what cannot be ordered, not the value: two strings compare fine, and saying
+            # "ordering is not defined for type <str>" about `"10" > 5` was simply untrue
+            comparable = False
+        else:
+            comparable = True
+        if not comparable:
+            refuse(other, f"comparable with val {_shown(self.val)}", subject=argument("other"))
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
-        if not isinstance(self.val, numbers.Number):
-            raise TypeError("val is not numeric")
+        require_type(self.val, numbers.Number, "a number")
 
     def _validate_real(self):
         """Raise TypeError if val is not real number."""
-        if not isinstance(self.val, numbers.Real):
-            raise TypeError("val is not real number")
+        require_type(self.val, numbers.Real, "a real number")
 
     def is_zero(self) -> Self:
         """Asserts that val is numeric and is zero.
@@ -467,7 +473,7 @@ class NumericMixin(_MixinBase):
 
     def _validate_int(self):
         if isinstance(self.val, bool) or not isinstance(self.val, int):
-            raise TypeError(f"val is not an integer, got {type(self.val).__name__}")
+            refuse(self.val, "an integer")
 
     def is_even(self) -> Self:
         """Asserts that val is an integer and is even.
@@ -531,7 +537,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_int()
         if isinstance(divisor, bool) or not isinstance(divisor, int):
-            raise TypeError(f"given divisor arg must be an integer, got {type(divisor).__name__}")
+            refuse(divisor, "an integer", subject=argument("divisor"))
         if divisor == 0:
             raise ValueError("given divisor arg must not be zero")
         if self.val % divisor != 0:

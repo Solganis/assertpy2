@@ -4,6 +4,7 @@ import os
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -69,8 +70,7 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist
         """
-        if not isinstance(self.val, (str, os.PathLike)):
-            raise TypeError("val is not a path")
+        require_type(self.val, (str, os.PathLike), "a path")
         if not os.path.exists(self.val):
             return self.error(f"Expected <{self.val}> to exist, but was not found.")
         return self
@@ -90,8 +90,7 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** exist
         """
-        if not isinstance(self.val, (str, os.PathLike)):
-            raise TypeError("val is not a path")
+        require_type(self.val, (str, os.PathLike), "a path")
         if os.path.exists(self.val):
             return self.error(f"Expected <{self.val}> to not exist, but was found.")
         return self
@@ -152,8 +151,7 @@ class FileMixin(_MixinBase):
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** named the given filename
         """
         self.is_file()
-        if not isinstance(filename, (str, os.PathLike)):
-            raise TypeError("given filename arg must be a path")
+        require_type(filename, (str, os.PathLike), "a path", subject=argument("filename"))
         val_filename = os.path.basename(os.path.abspath(self.val))
         expected_filename = os.fspath(filename)  # normalize an os.PathLike arg to its string form
         if val_filename != expected_filename:
@@ -180,8 +178,7 @@ class FileMixin(_MixinBase):
             AssertionError: if val does **not** exist, is **not** a file, or is **not** a child of given directory
         """
         self.is_file()
-        if not isinstance(parent, (str, os.PathLike)):
-            raise TypeError("given parent directory arg must be a path")
+        parent = require_type(parent, (str, os.PathLike), "a path", subject=argument("parent directory"))
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent)
         try:

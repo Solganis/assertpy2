@@ -40,11 +40,11 @@ def test_check_iterable_not_iterable():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_iterable(123, name="my-int")
-    assert_that(str(exc_info.value)).contains("my-int <int> is not iterable")
+    assert_that(str(exc_info.value)).contains("my-int must be iterable")
 
 
 def test_check_iterable_no_getitem():
     with pytest.raises(TypeError) as exc_info:
         builder = assert_that(None)
         builder._check_iterable({1}, name="my-set")
-    assert_that(str(exc_info.value)).contains("my-set <set> does not have [] accessor")
+    assert_that(str(exc_info.value)).contains("my-set must be a value with a [] accessor")
