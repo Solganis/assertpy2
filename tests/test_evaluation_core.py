@@ -30,7 +30,13 @@ from assertpy2._engine._equality import (
     mapping_shaped,
     values_differ,
 )
-from assertpy2._engine._membership import missing_items, only_faults, searchable
+from assertpy2._engine._membership import (
+    missing_items,
+    not_contained_in,
+    only_faults,
+    repeated_items,
+    searchable,
+)
 from assertpy2._engine._ordering import UnorderableError, compare, first_out_of_order, holds
 from assertpy2._engine._size import length_of
 from assertpy2._engine._text import contains as text_contains
@@ -42,6 +48,43 @@ from assertpy2.matchers import _is_matcher
 class Reading:
     sensor: str
     value: float
+
+
+class _ByField:
+    """Equality by field, hash by identity: the pair a set cannot answer for.
+
+    Written by hand rather than taken from a library because that is how it appears in real suites, and
+    it is the value that decides whether a set may stand in for a walk.
+    """
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _ByField) and other.value == self.value
+
+    def __hash__(self) -> int:
+        return id(self)
+
+
+class _NoHash:
+    """Inherited equality, but explicitly unhashable, which the type rule alone would not notice."""
+
+    __hash__ = None
+
+
+# both halves of the membership rule in one generator: values a set may answer for, and values it may
+# not.  Mixing them is what makes the properties below test the classifier rather than the fast path
+_MIXED_ELEMENTS = st.one_of(
+    st.integers(-5, 5),
+    st.text(max_size=2),
+    st.none(),
+    st.booleans(),
+    st.builds(bytearray, st.binary(max_size=2)),  # unhashable, and easy to mistake for a built-in
+    st.builds(_ByField, st.integers(-2, 2)),  # hashable, but not by the equality it answers with
+    st.builds(_NoHash),
+    st.lists(st.integers(-2, 2), max_size=2),  # plain unhashable container
+)
 
 
 OPTIONS = [
@@ -638,6 +681,138 @@ class TestTheCoresUnderTheAwkwardCases:
     def test_duplicates_do_not_confuse_membership(self):
         assert_that(missing_items([1, 1, 2], [1, 2], _is_matcher)).is_empty()
         assert_that(only_faults([1, 1, 2], (1, 2))).is_equal_to(([], []))
+
+    def test_membership_keeps_its_answer_when_hashing_and_equality_disagree(self):
+        """The case the set shortcut must refuse: equality by field, hash by identity.
+
+        `a in [b]` is True because `==` says so, and `a in {b}` is False because the hashes differ and
+        the comparison never happens. Membership here follows `==`, so such a value has to keep the walk.
+        """
+
+        wanted, held = _ByField(1), _ByField(1)
+        # the premise, spelled with two elements so it is a real set lookup rather than one comparison
+        assert_that(held in {wanted, _ByField(2)}).described_as("premise: a set cannot find it").is_false()
+        assert_that(missing_items([held], [wanted], _is_matcher)).described_as("membership finds it").is_empty()
+        assert_that(only_faults([held], (wanted,))).is_equal_to(([], []))
+        assert_that(not_contained_in([held], [wanted])).is_empty()
+        assert_that([held]).contains_only(wanted)
+        assert_that([held]).is_subset_of([wanted])
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(bytearray(b"a"), id="bytearray: mutable, so unhashable despite looking built-in"),
+            pytest.param(_NoHash(), id="identity equality but __hash__ set to None"),
+        ],
+    )
+    def test_a_value_that_cannot_be_hashed_is_answered_rather_than_raised_at(self, value):
+        """Both of these once raised `TypeError: cannot use 'bytearray' as a set element`.
+
+        Hashability has to be asked, not assumed from the type looking simple or from equality being the
+        inherited one: a class may keep identity equality and still say `__hash__ = None`.
+        """
+        twin = bytearray(b"a") if isinstance(value, bytearray) else value
+        assert_that(only_faults([value], (twin,))).is_equal_to(([], []))
+        assert_that(not_contained_in([value], [twin])).is_empty()
+        assert_that(missing_items([value], [twin], _is_matcher)).is_empty()
+        assert_that(repeated_items([value, twin])).described_as("two equal elements are one repeat").is_length(1)
+        assert_that([value]).contains_only(twin)
+        assert_that([value]).is_subset_of([twin])
+        assert_that([value]).contains(twin)
+        assert_that([value]).does_not_contain_duplicates()
+
+    def test_the_shortcut_is_taken_once_the_collections_are_large_enough(self):
+        """The other side of the threshold, and the reason it exists at all.
+
+        Small collections keep the walk because deciding to avoid it costs more than the walk. These
+        sizes are past that point, so the set path runs, and it has to answer exactly the same thing.
+        """
+        values, wanted = list(range(60)), tuple(range(60))
+        assert_that(only_faults(values, wanted)).is_equal_to(([], []))
+        assert_that(only_faults([*values, 999], wanted)).is_equal_to(([999], []))
+        assert_that(not_contained_in(values, [*wanted, 999])).is_empty()
+        assert_that(missing_items(values, wanted, _is_matcher)).is_empty()
+
+    def test_a_value_without_a_length_is_judged_worth_hashing(self):
+        """A collection that can be walked but not sized: the cost of walking it is unknown.
+
+        The core assumes it is not small rather than skipping the shortcut on something that may well be
+        huge. Reachable from the public API, since being walkable is all `contains_only` requires.
+        """
+
+        class Unsized:
+            def __iter__(self):
+                return iter(range(60))
+
+        assert_that(only_faults(Unsized(), tuple(range(60)))).is_equal_to(([], []))
+        assert_that(Unsized()).contains_only(*range(60))
+
+    def test_duplicates_are_found_when_hashing_and_equality_disagree(self):
+        """The other half of the disagreement case: the count has to follow `==`, not the hash."""
+        first, second = _ByField(1), _ByField(1)
+        assert_that(repeated_items([first, second])).is_length(1)
+        with pytest.raises(AssertionFailure):
+            assert_that([first, second]).does_not_contain_duplicates()
+        assert_that([first, second]).contains_duplicates()
+
+    def test_membership_keeps_its_answer_on_values_that_cannot_be_hashed(self):
+        assert_that(only_faults([[1], [2]], ([1], [2]))).is_equal_to(([], []))
+        assert_that(not_contained_in([{"a": 1}], [{"a": 1}, {"b": 2}])).is_empty()
+        assert_that([[1], [2]]).contains_only([1], [2])
+
+    def test_a_matcher_among_the_wanted_items_keeps_the_walk(self):
+        """Matchers are hashable, so a set would look them up by hash and answer the wrong thing.
+
+        What the walk answers, and what this pins, is the behaviour the shipped revision had: a matcher
+        is "found" because its own `__eq__` accepts the element, so nothing is reported missing.
+        """
+        assert_that(only_faults([1, 2], (match.greater_than(0), match.greater_than(1)))).is_equal_to(([], []))
+        assert_that([5]).contains(match.greater_than(3))
+
+    def test_nan_is_found_by_identity_on_both_paths(self):
+        nan = float("nan")
+        assert_that(missing_items([nan], [nan], _is_matcher)).described_as("the same object").is_empty()
+        assert_that(only_faults([nan], (nan,))).is_equal_to(([], []))
+        assert_that(missing_items([float("nan")], [float("nan")], _is_matcher)).described_as(
+            "two distinct NaNs stay unequal"
+        ).is_length(1)
+
+    def test_membership_still_drains_a_one_shot_value_once(self):
+        assert_that(only_faults(searchable(iter([1, 2])), (1, 2))).is_equal_to(([], []))
+        assert_that(not_contained_in(searchable(iter([1])), [1, 2])).is_empty()
+
+    def test_duplicates_are_named_once_in_order_of_first_appearance(self):
+        assert_that(repeated_items([3, 1, 3, 2, 1, 3])).is_equal_to([3, 1])
+        assert_that(repeated_items([1, 2, 3])).is_empty()
+        # `1` and `1.0` are the same key to a counter and equal to a walk, so they name one duplicate
+        assert_that(repeated_items([1, 1.0, 2])).is_equal_to([1])
+        assert_that(repeated_items([[1], [1], [2]])).described_as("unhashable keeps the walk").is_equal_to([[1]])
+
+    @given(
+        values=st.lists(_MIXED_ELEMENTS, max_size=12),
+        items=st.lists(_MIXED_ELEMENTS, max_size=6),
+    )
+    @settings(max_examples=300)
+    def test_the_shortcut_answers_what_the_walk_answers(self, values, items):
+        """The property the whole optimisation rests on, checked against the walk it replaced.
+
+        The elements are deliberately mixed rather than all safe: a generator of integers and strings
+        exercises only the fast half and would have missed both ways the classifier was wrong.
+        """
+        walked_extra = [item for item in values if item not in items]
+        walked_missing = [item for item in items if item not in values]
+        assert_that(only_faults(values, items)).is_equal_to((walked_extra, walked_missing))
+        assert_that(not_contained_in(values, items)).is_equal_to([item for item in values if item not in items])
+        assert_that(missing_items(values, items, _is_matcher)).is_equal_to(walked_missing)
+
+    @given(values=st.lists(_MIXED_ELEMENTS, max_size=12))
+    @settings(max_examples=300)
+    def test_naming_duplicates_answers_what_counting_answered(self, values):
+        counted: list[object] = []
+        for value in values:
+            if values.count(value) > 1 and not any(value == earlier for earlier in counted):
+                counted.append(value)
+        assert_that(repeated_items(values)).is_equal_to(counted)
 
     def test_text_relations_accept_subclasses_of_their_types(self):
         class Name(str):
