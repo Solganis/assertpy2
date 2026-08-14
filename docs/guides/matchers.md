@@ -120,6 +120,10 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.is_divisible_by(n)` | an integer divisible by `n` |
 | `match.is_callable()` | a callable object |
 | `match.is_in(*values)` | a value present in `values` |
+| `match.contains(*items)` | a collection containing every one of `items`; a mapping is searched by key |
+| `match.contains_only(*items)` | a collection holding these items and nothing else |
+| `match.is_subset_of(*superset)` | a collection whose items all appear in `superset` |
+| `match.is_sorted(key=None, reverse=False)` | a collection in order, optionally by `key` |
 | `match.has_property(name, matcher?)` | an object with attribute `name`, optionally matching a nested matcher |
 | `match.contains_string(sub)` | text containing `sub`, on `str` and on `bytes` |
 | `match.matches_regex(pattern)` | a string where `pattern` is found (`re.search`) |
