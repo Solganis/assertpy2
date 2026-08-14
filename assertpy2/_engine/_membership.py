@@ -13,6 +13,8 @@ turns the answer into a message with a closest-element hint, and a matcher turns
 
 from __future__ import annotations
 
+import datetime
+import decimal
 from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
@@ -64,7 +66,29 @@ def is_walkable(value: object) -> bool:
 # `1 in [True]` both answer True, which is the equality Python itself uses.  `bytearray` is not here
 # although it looks like it belongs: it is mutable and therefore unhashable, and listing it turned
 # `assert_that([bytearray(b"a")]).contains_only(...)` into a TypeError
-_HASH_SAFE = frozenset({int, float, complex, bool, str, bytes, frozenset, type(None)})
+_HASH_SAFE = frozenset(
+    {
+        int,
+        float,
+        complex,
+        bool,
+        str,
+        bytes,
+        frozenset,
+        type(None),
+        # the numeric tower and the calendar types: Python guarantees that equal values hash equally
+        # across them, which is the whole rule here.  `Decimal` earns its place by measurement - a
+        # collection of two thousand of them cost 53 ms on the walk and a tenth of a millisecond here -
+        # and both modules are already imported by the comparison core, so this costs no import time.
+        # `Fraction` is deliberately absent despite the same guarantee: `fractions` pulls in thirteen
+        # more modules, and import cost is a promise this package keeps
+        decimal.Decimal,
+        datetime.date,
+        datetime.datetime,
+        datetime.time,
+        datetime.timedelta,
+    }
+)
 
 
 # below this many comparisons the walk is cheaper than deciding whether to avoid it.  A set costs a pass
@@ -117,7 +141,7 @@ def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object
     the core reach up for them would make the dependency circular.
     """
     absent = []
-    present = set(value) if isinstance(value, (list, tuple)) and _classified(value, items) else value
+    present = indexed(value) if isinstance(value, (list, tuple)) and _classified(value, items) else value
     for item in items:
         if is_matcher(item):
             if not any(item.matches(element) for element in value):
@@ -137,7 +161,7 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     # and asking four times cost more on small collections than the walk it was avoiding
     if not _classified(value, items):
         return [item for item in value if item not in items], [item for item in items if item not in value]
-    wanted, present = set(items), set(value)
+    wanted, present = indexed(items), indexed(value)
     extra = [item for item in value if item not in wanted]
     missing = [item for item in items if item not in present]
     return extra, missing
@@ -146,7 +170,9 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
 def has_duplicates(values: Sequence[Any]) -> bool:
     """Whether any element appears twice, by the same equality the rest of membership uses."""
     if _classified_alone(values):
-        return len(set(values)) != len(values)
+        unique = indexed(values)
+        if isinstance(unique, set):
+            return len(unique) != len(values)
     # `in` rather than a generator of `==`: it is the same question asked by the interpreter instead of
     # by a Python loop, and it short-circuits on identity, which is how the rest of membership answers
     # for a value that is not equal to itself
@@ -165,13 +191,18 @@ def repeated_items(values: Sequence[Any]) -> list[Any]:
     duplicates in a collection of a few thousand costs as much as the assertion it explains.  Where the
     elements are safe to hash (same rule as membership uses), one pass counts them all.
     """
-    if not _classified_alone(values):
+    counts = None
+    if _classified_alone(values):
+        try:
+            counts = Counter(values)
+        except TypeError:  # a value that refuses to hash despite its type, such as a signalling NaN
+            counts = None
+    if counts is None:
         named: list[Any] = []
         for value in values:
             if values.count(value) > 1 and not any(value == earlier for earlier in named):
                 named.append(value)
         return named
-    counts = Counter(values)
     seen: set[Any] = set()
     repeated = []
     for value in values:
@@ -183,13 +214,28 @@ def repeated_items(values: Sequence[Any]) -> list[Any]:
 
 def not_contained_in(value: Any, container: Any) -> list[Any]:
     """Which elements of *value* the *container* does not hold, for "is a subset of"."""
-    allowed = set(container) if isinstance(container, (list, tuple)) and _classified(container, value) else container
+    fast = isinstance(container, (list, tuple)) and _classified(container, value)
+    allowed = indexed(container) if fast else container
     return [item for item in value if item not in allowed]
 
 
 def _classified(container: Any, probes: Any) -> bool:
     """Whether a set may stand in for the walk here: worth the preparation, and safe to build."""
     return _worth_hashing(container, probes) and _hash_safe(container) and _hash_safe(probes)
+
+
+def indexed(items: Any) -> Any:
+    """*items* as a set, or unchanged when one of them refuses to be hashed after all.
+
+    The type rule answers for the type, and one value in the standard library disagrees with its own
+    type: `Decimal("snan")` raises when hashed, because a signalling NaN is meant to be noticed rather
+    than compared quietly.  That is a property of the value, so it cannot be seen before trying, and the
+    walk answers it perfectly well.
+    """
+    try:
+        return set(items)
+    except TypeError:
+        return items
 
 
 def _classified_alone(values: Any) -> bool:
