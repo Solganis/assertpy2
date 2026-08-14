@@ -581,6 +581,12 @@ Each record keeps what the text had flattened: the values, the diff, the `group`
 under, and the `(file, line)` the message renders in brackets. A polling assertion that times out inside
 a soft block keeps its [`trace`](testing.md#polling-trace) there too.
 
+The rendering under each entry is one line per differing path rather than the block form a single
+failure prints, because a block that collected ten failures would otherwise repeat ten headers. A scalar
+and a short line of text add no line, since the entry above already carries both values in full. A long
+line does add one, cut to a window around the first difference: that difference is the part nobody can
+find by reading a 200-character payload twice.
+
 `failures` is empty on every other failure, which is about one value rather than a collection of them.
 
 ### Asking instead of asserting

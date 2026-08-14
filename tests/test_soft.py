@@ -228,6 +228,42 @@ class TestSoftFailuresCarryTheirDiff:
             assert_that(1).is_equal_to(2)
         assert_that(str(exc_info.value).splitlines()).is_length(2)
 
+    def test_a_short_line_of_text_adds_no_line_either(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that("hello").is_equal_to("hallo")
+        assert_that(str(exc_info.value).splitlines()).is_length(2)
+
+    def test_a_long_line_of_text_is_windowed_onto_its_difference(self):
+        # the hard failure spends caret rows on this. Without the window the collected one said only
+        # that two 181-character payloads were unequal, which no reader can act on
+        actual, expected = "x" * 90 + "A" + "y" * 90, "x" * 90 + "B" + "y" * 90
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(actual).is_equal_to(expected)
+        detail = str(exc_info.value).splitlines()[-1]
+        assert_that(detail).starts_with("   line 1: ").contains("xA").contains("xB")
+        assert_that(detail).described_as("both sides are cut, not one").contains("more chars) != ")
+
+    def test_a_long_bytes_value_is_windowed_the_same_way(self):
+        actual, expected = b"a" * 80 + b"X" + b"b" * 80, b"a" * 80 + b"Y" + b"b" * 80
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(actual).is_equal_to(expected)
+        # asserted on the detail line, not on a substring: the headline carries both values in full,
+        # so `contains("aX")` passed against the entry itself and the window was never exercised
+        detail = str(exc_info.value).splitlines()[-1]
+        assert_that(detail).starts_with("   line 1: ").contains("aX").contains("aY")
+
+    def test_a_message_of_several_lines_stays_one_entry(self):
+        # the one-cause hint puts a second line in the message. Rendered flat, the location landed at
+        # the end of it and the line itself started at column zero, so an entry read as two
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that({"a": b"x", "b": b"y"}).is_equal_to({"a": "x", "b": "y"})
+            assert_that(1).is_equal_to(2)
+        first, second, *_rest, last = str(exc_info.value).splitlines()
+        assert_that(first).is_equal_to("soft assertion failures:")
+        assert_that(second).starts_with("1. Expected").ends_with("]")
+        assert_that(_rest[0]).is_equal_to("   every difference here is one of bytes against decoded text")
+        assert_that(last).starts_with("2. Expected <1>")
+
 
 class TestTheAggregateHandsBackWhatItCollected:
     """A soft block used to flatten every failure into one string at its boundary: the collector held
@@ -375,3 +411,141 @@ class TestAnErrorOutOfTheBlockKeepsWhatWasCollected:
         notes = getattr(failure.value, "__notes__", [])
         assert_that(notes).is_length(1)
         assert_that(notes[0]).contains("<1> to be equal to <2>").contains("<3> to be equal to <4>")
+
+    def test_an_error_thrown_inside_the_inner_block_is_annotated_once_on_the_way_out(self):
+        # the exception passes through both exits. The inner one sees a depth that is not yet zero and
+        # leaves the failures alone, so the note is written where the whole collection is: outside
+        with pytest.raises(ValueError) as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            with soft_assertions():
+                assert_that(3).is_equal_to(4)
+                raise ValueError("boom")
+        notes = getattr(failure.value, "__notes__", [])
+        assert_that(notes).is_length(1)
+        assert_that(notes[0]).contains("<1> to be equal to <2>").contains("<3> to be equal to <4>")
+
+
+class TestTheNoteNeverReplacesTheException:
+    """Attaching the note is a diagnostic hung on somebody else's exception, so it fails open.
+
+    It did not. `add_note` refuses when `__notes__` is already something other than a list, and that
+    `TypeError` replaced the exception the user raised, leaving theirs in `__context__`: exactly
+    backwards for a mechanism whose whole job is not losing information. Reported by an external review
+    of the shipped code, which is where all three shapes below come from.
+    """
+
+    def test_a_tuple_of_notes_is_not_fatal(self):
+        original = ValueError("original")
+        original.__notes__ = ("existing",)
+        with pytest.raises(ValueError, match="original") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise original
+        assert_that(type(failure.value)).is_equal_to(ValueError)
+        assert_that(list(failure.value.__notes__)).is_length(2)
+        assert_that(failure.value.__notes__[-1]).contains("<1> to be equal to <2>")
+
+    def test_an_add_note_that_raises_is_not_fatal(self):
+        class HostileError(ValueError):
+            def add_note(self, note):
+                raise RuntimeError("no notes here")
+
+        with pytest.raises(HostileError, match="original") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise HostileError("original")
+        assert_that(getattr(failure.value, "__notes__", [])).is_length(1)
+
+    def test_an_add_note_that_is_not_callable_is_not_fatal(self):
+        class OddError(ValueError):
+            add_note = "not a method"
+
+        with pytest.raises(OddError, match="original") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise OddError("original")
+        assert_that(getattr(failure.value, "__notes__", [])).is_length(1)
+
+    def test_an_add_note_that_silently_does_nothing_still_records(self):
+        """The reason the call is made unbound rather than through the instance.
+
+        An override that raises is caught by the guard around it. One that accepts the note and drops
+        it is not: nothing signals the loss, and the failures would be gone with no error anywhere.
+        `BaseException.add_note` steps around the override entirely.
+        """
+
+        class SwallowingError(ValueError):
+            def add_note(self, note):
+                return None
+
+        with pytest.raises(SwallowingError, match="original") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise SwallowingError("original")
+        notes = getattr(failure.value, "__notes__", [])
+        assert_that(notes).described_as("the override never got the chance to drop it").is_length(1)
+        assert_that(notes[0]).contains("<1> to be equal to <2>")
+
+    def test_an_exception_that_refuses_the_attribute_is_not_fatal(self):
+        # the last resort: nothing can be attached, and the exception still has to travel untouched
+        class SealedError(ValueError):
+            __slots__ = ()
+
+            def add_note(self, note):
+                raise RuntimeError("no notes here")
+
+            def __setattr__(self, name, value):
+                raise AttributeError(name)
+
+        with pytest.raises(SealedError, match="original") as failure, soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise SealedError("original")
+        assert_that(str(failure.value)).is_equal_to("original")
+
+
+class TestTheInvariantBehindAllOfThem:
+    """One rule, stated once: annotating an exception never changes which exception the caller sees.
+
+    The tests above name the shapes that broke it. This one says the rule itself, over generated
+    exception types, so a shape nobody thought of is covered by the same statement.
+    """
+
+    @staticmethod
+    def _hostile(kind: str) -> type[BaseException]:
+        if kind == "add_note raises":
+            return type("RaisesError", (ValueError,), {"add_note": lambda self, note: 1 / 0})
+        if kind == "add_note is not callable":
+            return type("NotCallableError", (ValueError,), {"add_note": "text"})
+        if kind == "attributes are refused":
+            return type(
+                "SealedError",
+                (ValueError,),
+                {"__setattr__": lambda self, name, value: (_ for _ in ()).throw(AttributeError(name))},
+            )
+        return ValueError
+
+    @pytest.mark.parametrize(
+        "kind",
+        ["plain", "add_note raises", "add_note is not callable", "attributes are refused"],
+    )
+    @pytest.mark.parametrize("notes", [None, [], ["existing"], ("existing",), "not a sequence"])
+    def test_the_caller_sees_the_exception_that_was_raised(self, kind, notes):
+        raised = self._hostile(kind)("original")
+        if notes is not None:
+            try:
+                raised.__notes__ = notes
+            except AttributeError:
+                pytest.skip("this shape refuses attributes, which the None case already covers")
+
+        with pytest.raises(BaseException) as failure, soft_assertions():  # the type is the assertion
+            assert_that(1).is_equal_to(2)
+            raise raised
+
+        assert_that(failure.value).described_as("the same object, not a replacement").is_same_as(raised)
+        assert_that(str(failure.value)).is_equal_to("original")
+        assert_that(failure.value.__context__).described_as("nothing was raised over it").is_none()
+
+    def test_the_next_block_is_clean_after_a_failed_attachment(self):
+        sealed = self._hostile("attributes are refused")("original")
+        with contextlib.suppress(ValueError), soft_assertions():
+            assert_that(1).is_equal_to(2)
+            raise sealed
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that("x").is_equal_to("y")
+        assert_that(str(failure.value)).does_not_contain("<1> to be equal to <2>")

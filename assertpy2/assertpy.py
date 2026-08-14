@@ -48,7 +48,7 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure, DiffEntry, DiffResult, Step, _safe_repr, _truncated
+from .errors import AssertionFailure, DiffEntry, DiffResult, Step, _safe_repr, _safe_str, _truncated, _windowed
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -113,11 +113,36 @@ def _caller_location() -> tuple[str, int] | None:
     return location
 
 
+class _SoftBlock:
+    """The failures one `soft_assertions()` block is collecting, and whether it is still collecting.
+
+    ``active`` exists because a context variable is copied *by value* into a new task: a child created
+    inside the block inherits the depth and the list, and the parent's exit is invisible to it.  The
+    list is shared, so the flag rides along with it and the child can see that nobody is listening any
+    more.  Without it, an assertion in a task that outlived the block appended to an orphaned list and
+    the test passed having checked nothing.
+    """
+
+    __slots__ = ("active", "failures")
+
+    def __init__(self) -> None:
+        self.failures: list[AssertionOutcome] = []
+        self.active = True
+
+
+def _collecting() -> _SoftBlock | None:
+    """The block currently collecting in this context, or ``None`` when assertions should raise."""
+    if not _soft_ctx.get():
+        return None
+    block = _soft_err.get(None)
+    return block if block is not None and block.active else None
+
+
 # soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
 # the composed record of each collected failure, group and caller location included: nothing about a
 # soft failure is flattened until the aggregate message is rendered, and the aggregate keeps them too
-_soft_err: contextvars.ContextVar[list[AssertionOutcome]] = contextvars.ContextVar("assertpy2_soft_err")
+_soft_err: contextvars.ContextVar[_SoftBlock | None] = contextvars.ContextVar("assertpy2_soft_err", default=None)
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
 
@@ -169,6 +194,11 @@ def _located(location: tuple[str, int] | None, msg: str) -> str:
     return f"{msg}  [{os.path.basename(location[0])}:{location[1]}]"
 
 
+# how much text a reader can still compare side by side on one line before a difference stops being
+# visible.  Half the block form's window, because the compact form puts both sides on the same line
+_SCANNABLE_WIDTH = 60
+
+
 def _indented_diff(diff: object, indent: str) -> list[str]:
     """Render a collected failure's diff under its entry, or nothing when it carries none."""
     # one line per differing path: the full block form repeats its header on every collected failure,
@@ -179,10 +209,19 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
     # "no steps and a root path" is what tells that from a mapping whose only differing key is
     # spelled "." - that key is a step, and it used to be dropped from the report as a scalar
     only = entries[0] if len(entries) == 1 else None
-    if only is not None and ((not only.steps and only.path == ".") or only.steps == (Step("line", 1),)):
-        # a scalar or a one-line string: the header already carries both values, so a path of "." would
-        # only repeat them
+    if only is not None and not only.steps and only.path == ".":
+        # a scalar: the header already carries both values, so a path of "." would only repeat them
         return lines
+    if only is not None and only.steps == (Step("line", 1),):
+        # one line of text, which the header carries in full as well.  Repeating it is worth nothing
+        # until the line is long enough that the change cannot be found by eye: two 180-character
+        # payloads differing at character 91 were reported by the block form with a caret and by this
+        # one with nothing at all.  A window around the change is that caret, spent as a line
+        actual_text, expected_text = _safe_str(only.actual), _safe_str(only.expected)
+        if len(actual_text) <= _SCANNABLE_WIDTH and len(expected_text) <= _SCANNABLE_WIDTH:
+            return lines
+        near_actual, near_expected = _windowed(actual_text, expected_text, _SCANNABLE_WIDTH)
+        return [f"{indent}{only.path}: {near_actual} != {near_expected}"]
     shown = entries[:5]  # bound once: a slice and a separate threshold would drift apart
     for entry in shown:
         if entry.absent == "expected":  # an extra item, which has no counterpart to contrast with
@@ -207,9 +246,45 @@ def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
             if group is not None:
                 lines.append(f"  [{group}]")
         indent = ("    " if group is not None else "  ") if has_groups else ""
-        lines.append(f"{indent}{counter}. {_located(outcome.location, outcome.message)}")
+        # a message can be more than one line: a one-cause hint sits under the headline, and a polling
+        # failure carries its whole timeline. Numbering the first line and indenting the rest keeps one
+        # entry looking like one entry. Written flat, the location landed at the end of the *last* line
+        # and the continuation started at column zero, so the second failure read as a new section
+        headline, *continuation = outcome.message.splitlines() or [""]
+        lines.append(f"{indent}{counter}. {_located(outcome.location, headline)}")
+        lines.extend(f"{indent}   {line}" for line in continuation)
         lines.extend(_indented_diff(outcome.diff, indent + "   "))
     return "\n".join(lines)
+
+
+def _attach_soft_note(exc: BaseException, rendered: str) -> None:
+    """Put the collected failures on *exc* without ever becoming the reason the test failed.
+
+    This is a diagnostic hung on somebody else's exception, so every step of it is best-effort.  Three
+    things can go wrong and each of them used to matter more than the note:
+
+    * `__notes__` may already be something other than a list.  CPython's own `add_note` refuses with
+      `TypeError: Cannot add note: __notes__ is not a list`, and that error replaced the exception the
+      user raised, leaving theirs in `__context__`.  Exactly backwards for a mechanism whose whole job
+      is not losing information;
+    * a user exception type can override `add_note` with something that raises, or with something that
+      is not callable at all.  `BaseException.add_note` is called unbound to step around the override;
+    * the attribute may not be writable, on a type with `__slots__` or a frozen instance.
+
+    `add_note` also arrived in 3.11 and this package supports 3.10, which the first branch covers on the
+    way past: there the unbound lookup raises `AttributeError` and the assignment takes over.
+    """
+    try:
+        BaseException.add_note(exc, rendered)  # ty: ignore[unresolved-attribute]  # absent on 3.10
+        return
+    except Exception:  # every failure here falls through to the assignment below
+        pass
+    try:
+        existing = getattr(exc, "__notes__", ())
+        notes = [*existing, rendered] if isinstance(existing, (list, tuple)) else [rendered]
+        exc.__notes__ = notes  # ty: ignore[unresolved-attribute]  # 3.10 lacks it until set
+    except Exception:  # a note is worth nothing next to the exception it annotates
+        pass
 
 
 class _SoftAssertions:
@@ -219,8 +294,8 @@ class _SoftAssertions:
 
     def __enter__(self) -> SoftAssertionCollector:
         ctx = _soft_ctx.get()
-        if ctx == 0:
-            _soft_err.set([])
+        if ctx == 0 or _soft_err.get(None) is None:
+            _soft_err.set(_SoftBlock())
         _soft_ctx.set(ctx + 1)
         return SoftAssertionCollector()
 
@@ -232,25 +307,21 @@ class _SoftAssertions:
             # it are the reader's own data, and dropping them silently is a second loss on top of the
             # first: a soft block exists to gather them, and a timeout three assertions in used to take
             # all three with it. They travel as a note, which changes neither the type nor the message
-            if exc is not None and (errs := _soft_err.get([])) and _soft_ctx.get() == 0:
-                _soft_err.set([])
-                # asked for rather than caught: `add_note` arrived in 3.11 and this package supports
-                # 3.10, and swallowing an AttributeError here would also swallow one raised by the
-                # rendering itself. On 3.10 the list is written directly, which keeps the failures
-                # reachable (`exc.__notes__`) even though that interpreter's traceback does not print
-                # them: losing them is what this whole branch exists to stop
-                rendered = _format_soft_errors(errs)
-                add_note = getattr(exc, "add_note", None)
-                if add_note is not None:
-                    add_note(rendered)
-                else:
-                    notes = [*getattr(exc, "__notes__", []), rendered]
-                    exc.__notes__ = notes  # ty: ignore[unresolved-attribute]  # 3.10 lacks it until set
+            if exc is not None and (block := _soft_err.get(None)) is not None and _soft_ctx.get() == 0:
+                block.active = False
+                errs, block.failures = block.failures, []
+                if errs:
+                    _attach_soft_note(exc, _format_soft_errors(errs))
             return
-        errs = _soft_err.get([])
+        block = _soft_err.get(None)
+        errs = block.failures if block is not None else []
+        if _soft_ctx.get() == 0 and block is not None:
+            # closed before the failures are raised, so a task still running with this block in its
+            # own context copy stops collecting into a list nobody will read
+            block.active = False
+            block.failures = []
         if errs and _soft_ctx.get() == 0:
             out = _format_soft_errors(errs)
-            _soft_err.set([])
             # the same class as a single failure, so one `except AssertionFailure` covers a soft block
             # too, and it hands back what it aggregated rather than only the text it rendered
             raise AssertionFailure(out, failures=tuple(errs))
@@ -414,7 +485,7 @@ def assert_that(val: object, description="") -> _CoreAssertion:
                 assert_that('foobar').is_length(6).starts_with('foo').ends_with('bar')
                 assert_that(['a', 'b', 'c']).contains('a').does_not_contain('x')
     """
-    if _soft_ctx.get():
+    if _collecting() is not None:
         return _builder(val, description, "soft")
     return _builder(val, description)
 
@@ -500,7 +571,7 @@ def assert_conforms(
     """
     if not (isinstance(model, type) and hasattr(model, "model_validate")):
         raise TypeError("assert_conforms requires a pydantic v2 model class")
-    kind = "soft" if _soft_ctx.get() else None
+    kind = "soft" if _collecting() is not None else None
     builder = _builder(val, description, kind)
     pydantic = sys.modules.get("pydantic")  # loaded already, since model exposes model_validate
     catchable: tuple[type[BaseException], ...] = (pydantic.ValidationError,) if pydantic is not None else ()
@@ -655,8 +726,8 @@ def soft_fail(msg=""):
             3. Expected <foo> to be equal to <bar>, but was not.  [test_add.py:12]
 
     """
-    if _soft_ctx.get():
-        _soft_err.get().append(
+    if (block := _collecting()) is not None:
+        block.failures.append(
             AssertionOutcome(
                 message=f"Fail: {msg}!" if msg else "Fail!",
                 group=_soft_group.get(),
@@ -896,7 +967,8 @@ class NegatedBuilder(Generic[_S]):
     def _negated_soft(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        err_list = _soft_err.get()
+        block = _collecting()
+        err_list = block.failures if block is not None else []
         before = len(err_list)
         taint_before = self._builder._value_taint_reason
         attr(*args, **kwargs)
@@ -1263,9 +1335,15 @@ class AssertionBuilder(
             self.logger.warning("\n".join([outcome.message, *detail]) if detail else outcome.message)
             return None
         if self.kind == "soft":
+            block = _collecting()
+            if block is None:
+                # the block this builder was made under has since closed, which happens when a task
+                # created inside it outlives it: the context copy still says "soft", and appending here
+                # would put the failure in a list nobody reads. Failing is the honest answer
+                return self._failure(outcome)
             if self._value_taint_reason is None:
                 self._value_taint_reason = outcome.message
-            _soft_err.get().append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
+            block.failures.append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
             return None
         if self.kind == "check":
             # deliberately no taint: the caller asked for a verdict rather than asserting, so reading
