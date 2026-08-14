@@ -21,6 +21,8 @@ import re
 import subprocess
 import sys
 
+import pytest
+
 import assertpy2
 from assertpy2 import assert_that
 
@@ -242,3 +244,53 @@ class TestNoOptionalDependencyIsImportedEagerly:
         )
         result = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, check=True)
         assert_that(json.loads(result.stdout)).contains("attrs")
+
+
+class TestWhatAFailureLetsYouRead:
+    """The failure itself, which the records above do not cover.
+
+    `EXPECTED_FIELDS` pins dataclasses and named tuples, and an exception is neither, so nothing here
+    held the five attributes the errors guide teaches callers to read. The functional tests do exercise
+    them, which is a different guarantee: they would notice a value going wrong, not a name going away.
+    """
+
+    READABLE = ("actual", "expected", "diff", "trace", "failures")
+
+    def test_it_stays_an_assertion_error(self):
+        # what lets an existing `except AssertionError` keep working, and what pytest itself keys on
+        assert_that(issubclass(assertpy2.AssertionFailure, AssertionError)).is_true()
+
+    def test_a_plain_failure_carries_the_readable_surface(self):
+        with pytest.raises(assertpy2.AssertionFailure) as failure:
+            assert_that(1).is_equal_to(2)
+        missing = [name for name in self.READABLE if not hasattr(failure.value, name)]
+        assert_that(missing).described_as("documented attributes missing from a failure").is_empty()
+        assert_that(failure.value.actual).is_equal_to(1)
+        assert_that(failure.value.expected).is_equal_to(2)
+
+    def test_a_soft_block_reports_what_it_collected(self):
+        with pytest.raises(assertpy2.AssertionFailure) as failure, assertpy2.soft_assertions():
+            assert_that(1).is_equal_to(2)
+            assert_that("a").is_equal_to("b")
+        assert_that(failure.value.failures).is_length(2)
+        assert_that([outcome.passed for outcome in failure.value.failures]).is_equal_to([False, False])
+
+    def test_a_polling_failure_reports_its_trace(self):
+        with pytest.raises(assertpy2.AssertionFailure) as failure:
+            assert_that(lambda: 1).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(2)
+        assert_that(failure.value.trace).is_not_none()
+        assert_that(failure.value.trace.total_polls).is_greater_than_or_equal_to(1)
+
+    def test_none_says_nothing_about_whether_an_operand_was_named(self):
+        """The limit of the contract, pinned so it is a decision rather than an accident.
+
+        A caller cannot tell "compared against None" from "no expected value at all" through the public
+        attributes. The distinction exists inside, on the outcome the pytest plugin reads, and it is
+        deliberately not published: no consumer outside this repository has asked for it.
+        """
+        with pytest.raises(assertpy2.AssertionFailure) as compared:
+            assert_that(1).is_equal_to(None)
+        with pytest.raises(assertpy2.AssertionFailure) as unset:
+            assert_that(1).is_none()
+        assert_that(compared.value.expected).is_equal_to(unset.value.expected).is_none()
+        assert_that(compared.value.actual).is_equal_to(unset.value.actual).is_equal_to(1)
