@@ -4,6 +4,7 @@ import collections.abc
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_mapping_like
+from ._engine._membership import not_contained_in
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, first_out_of_order
 from ._engine._require import argument, refuse, require_type, sized_len
@@ -126,12 +127,16 @@ class CollectionMixin(_MixinBase):
                     collected.extend(superset)
                 except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
                     collected.append(superset)
+            # the same core the matcher spelling uses, so both answer by `==` on a value whose hash
+            # disagrees with it.  A bare `set()` here reported such a value as missing while
+            # `match.is_subset_of` found it
+            missing.extend(not_contained_in(self.val, collected))
             try:
-                allowed = set(collected)
-                missing.extend(item for item in self.val if item not in allowed)
-                superset_values: object = allowed
-            except TypeError:  # unhashable items (dicts, lists): linear == membership instead of a set
-                missing.extend(item for item in self.val if item not in collected)
+                # for the message only, and deliberately not tied to the lookup above: the failure has
+                # always shown the superset as a set where that was possible, and which shape the
+                # membership decision happened to take is not a reason to change what a reader sees
+                superset_values: object = set(collected)
+            except TypeError:
                 superset_values = collected
             if missing:
                 return self.error(
