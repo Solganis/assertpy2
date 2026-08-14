@@ -7,7 +7,7 @@ PyHamcrest, the original assertpy, and dirty-equals.
     assertpy2 unifies the fluent, matcher, and `==` styles in one typed package, then adds thread-
     and async-safe soft assertions, async polling, structured failures, and rich pytest diffs.
 
-    It ships **41 composable matchers** and **over 100 assertion methods** across **12 value types**,
+    It ships **45 composable matchers** and **over 100 assertion methods** across **12 value types**,
     with no runtime dependencies on Python 3.11+.
 
 ## All three styles, one import

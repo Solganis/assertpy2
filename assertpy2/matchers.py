@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ._engine._introspection import is_same_implementation
 from ._engine._require import argument, refuse
@@ -11,6 +11,8 @@ from ._matcher_impls import (
     AnyOfMatcher,
     BetweenMatcher,
     CloseToMatcher,
+    ContainsMatcher,
+    ContainsOnlyMatcher,
     ContainsStringMatcher,
     EachMatcher,
     EndsWithMatcher,
@@ -36,6 +38,8 @@ from ._matcher_impls import (
     IsNowMatcher,
     IsOddMatcher,
     IsPositiveMatcher,
+    IsSortedMatcher,
+    IsSubsetOfMatcher,
     IsTruthyMatcher,
     IsUuidMatcher,
     IsZeroMatcher,
@@ -64,8 +68,11 @@ from ._matcher_impls import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
+    # the element of the collection a membership matcher judges, so `match.contains("x")` is a matcher
+    # for collections *of strings* rather than for anything at all
+    _Item = TypeVar("_Item")
 
     from ._matcher_impls import ClassInfo
 
@@ -480,6 +487,59 @@ class _MatchNamespace:
     def is_after(other: datetime) -> IsAfterMatcher:
         """Matcher for a ``datetime`` strictly after ``other`` (a non-comparable value never matches)."""
         return IsAfterMatcher(other)
+
+    @staticmethod
+    def contains(*items: _Item) -> Matcher[Iterable[_Item]]:
+        """Matcher for a collection containing every one of ``items``.
+
+        The spec spelling of [`contains()`][assertpy2.contains.ContainsMixin.contains], with the same
+        rules: a mapping is searched by key, and a matcher among the items is satisfied by any element.
+
+        Examples:
+            Usage:
+
+                assert_that(payload).matches_structure({"tags": match.contains("beta")})
+                assert_that(rows).satisfies(match.contains(match.greater_than(100)))
+        """
+        return ContainsMatcher(*items)
+
+    @staticmethod
+    def contains_only(*items: _Item) -> Matcher[Iterable[_Item]]:
+        """Matcher for a collection holding these items and nothing else.
+
+        The spec spelling of [`contains_only()`][assertpy2.contains.ContainsMixin.contains_only].
+        """
+        return ContainsOnlyMatcher(*items)
+
+    @overload
+    @staticmethod
+    def is_subset_of(superset: Iterable[_Item], /) -> Matcher[Iterable[_Item]]: ...
+
+    @overload
+    @staticmethod
+    def is_subset_of(*superset: _Item) -> Matcher[Iterable[_Item]]: ...
+
+    @staticmethod
+    def is_subset_of(*superset: object) -> Matcher[Iterable[Any]]:
+        """Matcher for a collection whose items all appear in ``superset``.
+
+        The spec spelling of [`is_subset_of()`][assertpy2.collection.CollectionMixin.is_subset_of].
+        Takes the superset either as one collection or as loose items, which is why it is overloaded:
+        read off a single union, a checker cannot tell `[1, 2]` the collection from `[1, 2]` the item.
+
+        An ordinary collection stays a live view of itself, the way ``equal_to`` keeps its expected
+        value; a one-shot iterator is drained when the matcher is built, since it could not answer a
+        second time otherwise.  Handing in an endless iterator therefore never returns.
+        """
+        return IsSubsetOfMatcher(*superset)
+
+    @staticmethod
+    def is_sorted(key: Callable[[Any], Any] | None = None, reverse: bool = False) -> Matcher[Iterable[Any]]:
+        """Matcher for a collection in order, optionally by ``key`` and optionally reversed.
+
+        The spec spelling of [`is_sorted()`][assertpy2.collection.CollectionMixin.is_sorted].
+        """
+        return IsSortedMatcher(key, reverse)
 
     @staticmethod
     def each_item(matcher: Matcher[Any]) -> EachMatcher:
