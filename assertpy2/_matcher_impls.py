@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, run
 from ._engine._compare import _build_compare_config, _config_note, _guarded_not_equal, _keyed_types_differ
 from ._engine._equality import IncludeKeysMissingError, mapping_differs, mapping_shaped, values_differ
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
-from ._engine._ordering import UnorderableError, holds
+from ._engine._membership import is_searchable, missing_items, not_contained_in, only_faults, searchable
+from ._engine._ordering import UnorderableError, first_out_of_order, holds
 from ._engine._path import _ROOT, _Path
 from ._engine._require import argument, raised_inside, refuse, reject_unknown_kwargs
 from ._engine._size import length_of
@@ -752,6 +753,130 @@ class EndsWithMatcher(BaseMatcher):
 
 
 # --- Structural matchers ---
+
+
+class ContainsMatcher(BaseMatcher):
+    """Membership, spelled for a structural spec.
+
+    `each_item` says every element matches and `is_in` says the value is one of these, but the plain
+    relation the builder has had all along -- this collection contains that -- could not be written in a
+    spec at all.  The decision is the same one `contains()` reaches, asked of `_engine._membership`.
+    """
+
+    def __init__(self, *items: object):
+        if not items:
+            raise ValueError("one or more items must be given")
+        self.items = items
+
+    def matches(self, value: Any) -> bool:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return False  # a value membership cannot be asked of simply does not contain anything
+        return not missing_items(searched, self.items, _is_matcher)
+
+    def describe(self) -> str:
+        described = [item.describe() if _is_matcher(item) else repr(item) for item in self.items]
+        return f"a collection containing {', '.join(described)}"
+
+    def describe_mismatch(self, value: Any) -> str:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return f"was <{value!r}>, which cannot be searched"
+        absent = missing_items(searched, self.items, _is_matcher)
+        described = [item.describe() if _is_matcher(item) else repr(item) for item in absent]
+        return f"was <{value}>, missing {', '.join(described)}"
+
+
+class ContainsOnlyMatcher(BaseMatcher):
+    """ "Nothing but these", spelled for a structural spec.
+
+    Reaches the same decision `contains_only()` reaches: what is present but unwanted, and what is
+    wanted but absent.  Either half makes it a non-match.
+    """
+
+    def __init__(self, *items: object):
+        if not items:
+            raise ValueError("one or more items must be given")
+        self.items = items
+
+    def matches(self, value: Any) -> bool:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return False
+        extra, missing = only_faults(searched, self.items)
+        return not (extra or missing)
+
+    def describe(self) -> str:
+        return f"a collection containing only {', '.join(repr(item) for item in self.items)}"
+
+    def describe_mismatch(self, value: Any) -> str:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return f"was <{value!r}>, which cannot be searched"
+        extra, missing = only_faults(searched, self.items)
+        faults = []
+        if extra:
+            faults.append(f"also had {', '.join(repr(item) for item in extra)}")
+        if missing:
+            faults.append(f"lacked {', '.join(repr(item) for item in missing)}")
+        return f"was <{value}>, which {' and '.join(faults)}"
+
+
+class IsSubsetOfMatcher(BaseMatcher):
+    """Every element of the value is somewhere in the given collection."""
+
+    def __init__(self, *superset: object):
+        if not superset:
+            raise ValueError("one or more items must be given")
+        given = superset[0] if len(superset) == 1 and is_searchable(superset[0]) else superset
+        # drained here rather than at each call: a matcher is a specification and is expected to answer
+        # the same way every time it is used. Kept as given, a generator handed in as the superset was
+        # consumed by the first `matches()` and the second call said "no" about the same value
+        self.superset = searchable(given)
+
+    def matches(self, value: Any) -> bool:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return False
+        return not not_contained_in(searched, self.superset)
+
+    def describe(self) -> str:
+        return f"a collection whose items all appear in <{self.superset}>"
+
+    def describe_mismatch(self, value: Any) -> str:
+        searched = searchable(value)
+        if not is_searchable(searched):
+            return f"was <{value!r}>, which cannot be searched"
+        absent = not_contained_in(searched, self.superset)
+        return f"was <{value}>, with {', '.join(repr(item) for item in absent)} outside it"
+
+
+class IsSortedMatcher(BaseMatcher):
+    """The value is in order, by the same walk `is_sorted()` uses."""
+
+    def __init__(self, key: Callable[[Any], Any] | None = None, reverse: bool = False):
+        self.key = key or (lambda item: item)
+        self.reverse = reverse
+
+    def matches(self, value: Any) -> bool:
+        if not isinstance(value, Iterable):
+            return False
+        try:
+            return first_out_of_order(value, key=self.key, reverse=self.reverse) is None
+        except UnorderableError:
+            return False  # elements that cannot be ordered against each other are not sorted
+
+    def describe(self) -> str:
+        return "a collection sorted in reverse" if self.reverse else "a collection sorted in order"
+
+    def describe_mismatch(self, value: Any) -> str:
+        if not isinstance(value, Iterable):
+            return f"was <{value!r}>, which cannot be walked"
+        broken = first_out_of_order(value, key=self.key, reverse=self.reverse)
+        if broken is None:  # pragma: no cover - only reached if asked about a value that matches
+            return f"was <{value}>"
+        index, earlier, later = broken
+        return f"was <{value}>, out of order at index {index}: <{earlier}> then <{later}>"
 
 
 class IgnoreMatcher(BaseMatcher):

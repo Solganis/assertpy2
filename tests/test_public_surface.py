@@ -129,7 +129,7 @@ class TestTheCountsTheDocsQuote:
     sentence carrying it.
     """
 
-    QUOTED_MATCHER_COUNT = 41
+    QUOTED_MATCHER_COUNT = 45
     PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
     QUOTED_PROTOCOL_COUNT = 11
 
