@@ -259,6 +259,12 @@ name has to arrive through `from ... import check`, aliases included. That impor
 difference between your wrapper and any other function in the world that happens to be called `check`,
 so a helper reached as `helpers.check(...)` is out of scope.
 
+Two limits worth knowing before you rely on it. A name this module binds itself is dropped for the
+whole file, so one `assert_that = something` anywhere in it turns the check off for that name
+everywhere in that file: the trade buys no false alarms at the cost of missed ones. And several
+dangling statements in one test arrive as a single warning naming the extra lines, because under
+`filterwarnings = ["error"]` the first one ends the test and a second warning would never be seen.
+
 What it deliberately leaves alone:
 
 - a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is a question

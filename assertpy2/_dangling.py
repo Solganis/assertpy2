@@ -63,16 +63,19 @@ _NOT_CALLED: Final = "assertion is looked up and never called (missing parenthes
 class Finding(NamedTuple):
     """One offending statement.
 
-    ``path`` and ``lineno`` locate it and ``message`` says which shape it is.  ``function`` names the
-    enclosing ``def`` so the report can be attached to the test that contains the line rather than to
-    whichever test of that file happens to run first: under ``filterwarnings = ["error"]`` the
-    difference is which test goes red.
+    ``path`` and ``lineno`` locate it and ``message`` says which shape it is.  ``scope`` is the chain of
+    names around it, ``("TestOne", "test_same")``, so the report reaches the test that contains the line
+    rather than another test of the same name: under ``filterwarnings = ["error"]`` the difference is
+    which test goes red, and with two same-named methods it was the difference between a finding being
+    reported and being dropped.
+
+    Empty for a statement at module scope, which belongs to no test at all.
     """
 
     path: str
     lineno: int
     message: str
-    function: str | None
+    scope: tuple[str, ...]
 
 
 class _Bindings(NamedTuple):
@@ -177,22 +180,27 @@ def _reaches_entry(node: ast.expr, bindings: _Bindings) -> bool:
             return False
 
 
-def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr, str | None]]:
-    """Every expression statement with the name of the ``def`` it sits in, nested defs included.
+def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr, tuple[str, ...]]]:
+    """Every expression statement with the scope it sits in, as the chain of names around it.
 
     An expression statement is the only place a discarded builder can appear: anywhere else the value
     is bound, passed or returned, and whether *that* asserts is not a question about this statement.
+
+    The scope is a chain rather than one name because a bare name does not identify a test: two classes
+    in one file may each define `test_same`, and matching on the name alone handed both findings to
+    whichever ran first.  Classes are walked for the same reason, so the chain reads
+    ``("TestOne", "test_same")``.
     """
-    stack: list[tuple[ast.AST, str | None]] = [(tree, None)]
+    stack: list[tuple[ast.AST, tuple[str, ...]]] = [(tree, ())]
     while stack:
-        node, enclosing = stack.pop()
+        node, scope = stack.pop()
         for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                stack.append((child, child.name))
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                stack.append((child, (*scope, child.name)))
             else:
                 if isinstance(child, ast.Expr):
-                    yield child, enclosing
-                stack.append((child, enclosing))
+                    yield child, scope
+                stack.append((child, scope))
 
 
 def _marked_lines(source: str) -> frozenset[int]:
@@ -242,14 +250,14 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
         return []
     marked = _marked_lines(source)
     found: list[Finding] = []
-    for statement, function in _statements(tree):
+    for statement, scope in _statements(tree):
         if _silenced(statement, marked):
             continue
         value = statement.value
         while isinstance(value, ast.Await):  # `await assert_that(x).eventually()...` unwraps to the chain
             value = value.value
         if name := _entry_call(value, bindings):
-            found.append(Finding(path, statement.lineno, _NO_ASSERTION.format(name=name), function))
+            found.append(Finding(path, statement.lineno, _NO_ASSERTION.format(name=name), scope))
         elif isinstance(value, ast.Attribute) and _reaches_entry(value, bindings):
-            found.append(Finding(path, statement.lineno, _NOT_CALLED, function))
+            found.append(Finding(path, statement.lineno, _NOT_CALLED, scope))
     return sorted(found, key=lambda finding: finding.lineno)
