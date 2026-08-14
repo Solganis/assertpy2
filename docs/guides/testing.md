@@ -167,6 +167,22 @@ assert_that(get_order).eventually_sync().within(10).ignoring(ConnectionError).ha
 
 Retry rules, soft/warn behavior, and the polling trace are identical to `eventually()`.
 
+A chain keeps polling for as long as it is written. Every call on it, whether a navigation step like
+`described_as()` or another assertion, is replayed against a fresh probe on each poll, so the wait
+covers the chain as a whole rather than only its first link:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(get_order).eventually_sync(timeout=10).is_instance_of(Order).has_status("PAID")
+```
+
+Negation is part of that chain too, which is how you wait for something to stop being true:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(get_status).eventually_sync(timeout=10).not_.is_equal_to("pending")
+```
+
 The one difference is that the probe must be a sync callable. One that returns an awaitable raises
 `TypeError`, so poll async probes with `eventually()` and `await`.
 
