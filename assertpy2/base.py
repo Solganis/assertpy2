@@ -14,6 +14,7 @@ from ._engine._compare import (
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
+from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len
@@ -232,7 +233,7 @@ class BaseMixin(SatisfiesMixin):
                 diff=_build_equality_diff(self.val, other, config=config),
             )
 
-        if self._is_dict_like(self.val, check_values=False) and self._is_dict_like(other, check_values=False):
+        if mapping_shaped(self.val, check_values=False) and mapping_shaped(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
                 self._dict_err(self.val, other, ignore=ignore, include=include, config=config)
         elif ignore or include:

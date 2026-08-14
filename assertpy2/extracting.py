@@ -5,6 +5,7 @@ import difflib
 import inspect
 from typing import TYPE_CHECKING
 
+from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type
@@ -177,7 +178,7 @@ class ExtractingMixin(_MixinBase):
             return attr()  # a TypeError from here comes from the method body, not an arity mismatch
 
         def _extract(item, name):
-            if self._is_dict_like(item, check_values=False):
+            if mapping_shaped(item, check_values=False):
                 if name in item:
                     return item[name]
                 raise _extraction_error(f"item keys {list(item.keys())} did not contain key <{name}>")
@@ -213,7 +214,7 @@ class ExtractingMixin(_MixinBase):
             if "filter" in kwargs:
                 if isinstance(kwargs["filter"], str):
                     return bool(_extract(item, kwargs["filter"]))
-                elif self._is_dict_like(kwargs["filter"], check_values=False):
+                elif mapping_shaped(kwargs["filter"], check_values=False):
                     for key in kwargs["filter"]:
                         if isinstance(key, str) and _extract(item, key) != kwargs["filter"][key]:
                             return False

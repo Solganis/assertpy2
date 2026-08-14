@@ -349,6 +349,19 @@ class TestOrderingIsOneDecisionAsWell:
             compare(actual, expected)
         assert_that(unordered.value.kind).described_as(label).is_equal_to(kind)
 
+    def test_a_nan_outside_the_builtin_types_is_answered_the_same(self):
+        """The fast path covers `float`; the rule behind it has to hold for the rest too.
+
+        A `numpy.float64` NaN goes the long way round, where "neither smaller nor larger" would read as
+        "equal" and make `le`/`ge` true. It is the only case that reaches that guard now that plain
+        floats short-circuit, so it is what keeps the guard honest.
+        """
+        numpy = pytest.importorskip("numpy")
+        nan = numpy.float64("nan")
+        assert_that(holds(nan, nan, "le")).is_false()
+        assert_that(holds(nan, nan, "ge")).is_false()
+        assert_that(holds(nan, nan, "lt")).is_false()
+
     def test_nan_is_neither_less_nor_greater_nor_equal(self):
         # `compare` answers 0 because neither side is smaller, and that is the one place where "not
         # less, not greater" must not become "equal": `le`/`ge` stay false

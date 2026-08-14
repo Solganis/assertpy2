@@ -15,6 +15,7 @@ answers "no match", because it feeds `==` and the combinators where raising woul
 from __future__ import annotations
 
 import numbers
+import operator
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -28,6 +29,10 @@ if TYPE_CHECKING:
 _KIND_BOUND = frozenset({datetime, timedelta, date, time})
 # ordering exists for real numbers and not for complex ones, whatever `numbers.Number` says
 _UNORDERED = frozenset({complex})
+# types whose ordering needs no rule at all: identical on both sides, total, and not kind-bound
+_PLAIN = frozenset({int, float, str, bytes})
+# the operators behind the four relation names, for the path that needs no rule
+_DIRECT = {"lt": operator.lt, "le": operator.le, "gt": operator.gt, "ge": operator.ge}
 
 
 class UnorderableError(Exception):
@@ -50,6 +55,11 @@ def compare(actual: Any, expected: Any) -> int:
     value, not an unorderable pair, and answering it either way would send the reader to the wrong file.
     """
     actual_type = type(actual)
+    # the ordinary case first: two values of the same simple type are ordered by the operator, and no
+    # rule below can change that. Reached from every matcher in a loop, so the checks that follow --
+    # a frozenset lookup and two `isinstance` against the numeric tower -- were paid per element
+    if actual_type is type(expected) and actual_type in _PLAIN:
+        return (actual > expected) - (actual < expected)
     if actual_type in _UNORDERED:
         raise UnorderableError("value")
     if actual_type in _KIND_BOUND and type(expected) is not actual_type:
@@ -83,6 +93,11 @@ def holds(actual: Any, expected: Any, relation: str) -> bool:
     neither side is less than the other.  That would make `le`/`ge` true, which is the one place where
     "not less, not greater" does not mean "equal", so equality is asked separately.
     """
+    actual_type = type(actual)
+    if actual_type is type(expected) and actual_type in _PLAIN:
+        # the same shortcut `compare` takes, taken one call earlier: this is the loop body of every
+        # ordering matcher, and building the answer through a dict of four keys was most of its cost
+        return _DIRECT[relation](actual, expected)
     order = compare(actual, expected)
     if order == 0 and relation in ("le", "ge") and not bool(actual == expected):
         return False
@@ -108,8 +123,8 @@ def first_out_of_order(
             # origin check reads it as somebody else's code and lets a plain type mismatch escape
             # each element's key is computed once and carried to the next round: recomputing it for
             # the left-hand side doubled the calls, which a key with a cost or a side effect would feel
-            order = compare(current_key, previous_key)
-            if (order > 0) if reverse else (order < 0):
+            broken = holds(current_key, previous_key, "gt" if reverse else "lt")
+            if broken:
                 return index - 1, previous, current
         previous = current
         previous_key = current_key

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
+from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
 from ._engine._membership import is_searchable, missing_items, only_faults, searchable
 from ._engine._mixin_base import _MixinBase
@@ -65,11 +66,11 @@ class ContainsMixin(_MixinBase):
         Similarity is the fewest differing paths among elements that share at least one equal key, so an
         unrelated element is never offered.  Runs only on a failed ``contains``, never on the hot path.
         """
-        if not self._is_dict_like(item, check_values=False):
+        if not mapping_shaped(item, check_values=False):
             return None
         best = None
         for element in self.val if values is None else values:
-            if not self._is_dict_like(element, check_values=False):
+            if not mapping_shaped(element, check_values=False):
                 continue
             if not any(key in item and not _guarded_not_equal(element[key], item[key]) for key in element):
                 continue  # no shared equal key -> not related enough to suggest
@@ -140,7 +141,7 @@ class ContainsMixin(_MixinBase):
                         diff=diff,
                     )
             elif item not in values:
-                if self._is_dict_like(values):
+                if mapping_shaped(values):
                     diff = DiffResult(
                         kind="contains",
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)],
@@ -171,7 +172,7 @@ class ContainsMixin(_MixinBase):
                         for missing_item in missing_desc
                     ],
                 )
-                if self._is_dict_like(values):
+                if mapping_shaped(values):
                     return self.error(
                         f"Expected <{values}> to contain keys {self._fmt_items(items)}, but did not contain"
                         f" key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}.",
