@@ -93,6 +93,29 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
+    # the four membership and ordering matchers judge a collection, so a scalar is the wrong subject for
+    # them. Recorded separately from the text matcher above because they were added later and their
+    # binding is the new part: without it they would have resolved to `Matcher[Any]` and matched anything
+    "membership-matcher-for-a-scalar": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    },
+    "only-matcher-for-a-scalar": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    },
+    "subset-matcher-for-a-scalar": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    },
+    "sorted-matcher-for-a-scalar": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    },
     # --- the method is not on this value's protocol ------------------------------------------------
     "complex-ordered": _MISSING,
     "complex-signed": _MISSING,
@@ -137,6 +160,21 @@ VALID: frozenset[str] = frozenset(
         "valid-complex-instance",
         "valid-complex-predicate",
         "valid-bool-truth",
+        "valid-membership-matcher",
+        "valid-membership-matcher-of-text",
+        "valid-membership-matcher-on-mapping",
+        "valid-only-matcher",
+        "valid-subset-from-collection",
+        "valid-subset-from-items",
+        "valid-sorted-matcher",
+        "valid-sorted-by-key",
+        "valid-equal-to-tolerance",
+        "valid-equal-to-ignore",
+        "valid-membership-in-a-union-collection",
+        "valid-membership-in-a-wide-collection",
+        "valid-membership-of-a-subclass",
+        "valid-subset-of-a-wide-collection",
+        "valid-only-in-a-union-collection",
         "valid-numpy-integer",
         "valid-numpy-float",
         "valid-numpy-tolerance",

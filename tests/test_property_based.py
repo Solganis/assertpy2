@@ -24,9 +24,16 @@ from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
+from assertpy2._engine._equality import values_differ
 from assertpy2._engine._introspection import is_mapping_like
+from assertpy2._engine._membership import missing_items
+from assertpy2._engine._ordering import compare, holds
 from assertpy2._engine._path import _ROOT
 from assertpy2._engine._require import refuse
+from assertpy2._engine._size import length_of
+from assertpy2._engine._text import contains as text_contains
+from assertpy2._engine._text import ends_with as text_ends_with
+from assertpy2._engine._text import starts_with as text_starts_with
 from assertpy2._hints import diagnose
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
@@ -1502,3 +1509,64 @@ class TestEveryRefusalIsReadableWhateverArrived:
             refuse(value, "a number")
         # the cap is on the rendered value; the sentence around it is short and fixed
         assert_that(len(str(failure.value))).is_less_than(140)
+
+
+class TestTheEvaluationCoresAgreeWithPython:
+    """The cores answer the same questions Python does, over generated values rather than chosen ones.
+
+    Each core replaced a rule that was written twice, and the risk of that kind of move is a shift at the
+    edges rather than in the middle: the examples that were in mind when it was written keep passing.
+    """
+
+    @given(left=_values, right=_values)
+    @settings(deadline=None)
+    def test_equality_without_options_is_python_equality(self, left, right):
+        assert_that(values_differ(left, right, None)).is_equal_to(not bool(left == right))
+
+    @given(left=st.integers(), right=st.integers())
+    def test_ordering_is_a_total_order_on_integers(self, left, right):
+        assert_that(compare(left, right)).is_equal_to((left > right) - (left < right))
+        assert_that(holds(left, right, "lt")).is_equal_to(left < right)
+        assert_that(holds(left, right, "ge")).is_equal_to(left >= right)
+
+    @given(left=st.integers(), middle=st.integers(), right=st.integers())
+    def test_ordering_is_transitive(self, left, middle, right):
+        if holds(left, middle, "lt") and holds(middle, right, "lt"):
+            assert_that(holds(left, right, "lt")).is_true()
+
+    @given(items=st.lists(st.integers(), max_size=8), wanted=st.integers())
+    def test_membership_matches_the_in_operator(self, items, wanted):
+        absent = missing_items(items, [wanted], lambda candidate: False)
+        assert_that(not absent).is_equal_to(wanted in items)
+
+    @given(items=st.lists(st.integers(), min_size=1, max_size=8))
+    def test_a_collection_contains_all_of_its_own_elements(self, items):
+        assert_that(missing_items(items, items, lambda candidate: False)).is_empty()
+
+    @given(
+        value=st.one_of(st.text(), st.lists(st.integers()), st.dictionaries(st.text(), st.integers()), st.integers())
+    )
+    def test_size_answers_none_exactly_when_len_refuses(self, value):
+        try:
+            expected = len(value)  # ty: ignore[invalid-argument-type]  # the refusal is the point
+        except TypeError:
+            expected = None
+        assert_that(length_of(value)).is_equal_to(expected)
+
+    @given(left=st.text(max_size=20), right=st.text(max_size=20))
+    def test_text_relations_match_their_str_methods(self, left, right):
+        assert_that(text_contains(left, right)).is_equal_to(right in left)
+        assert_that(text_starts_with(left, right)).is_equal_to(left.startswith(right))
+        assert_that(text_ends_with(left, right)).is_equal_to(left.endswith(right))
+
+    @given(left=st.binary(max_size=20), right=st.binary(max_size=20))
+    def test_text_relations_do_the_same_for_bytes(self, left, right):
+        assert_that(text_contains(left, right)).is_equal_to(right in left)
+        assert_that(text_starts_with(left, right)).is_equal_to(left.startswith(right))
+
+    @given(text=st.text(max_size=20), raw=st.binary(max_size=20))
+    def test_the_two_text_families_never_match_each_other(self, text, raw):
+        assert_that(text_contains(text, raw)).is_false()
+        assert_that(text_contains(raw, text)).is_false()
+        assert_that(text_starts_with(text, raw)).is_false()
+        assert_that(text_ends_with(raw, text)).is_false()
