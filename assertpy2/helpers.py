@@ -1,5 +1,4 @@
 import collections.abc
-import difflib
 import dataclasses
 import datetime
 import math
@@ -116,30 +115,6 @@ def _elided_seq_repr(seq, counterpart) -> str:
         parts.append(_safe_repr(value))
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
     return _joined_parts(parts, elided=elided, opener=opener, closer=closer)
-
-
-def _reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
-    """Raise on a keyword the method does not read, naming the closest one it does.
-
-    A misspelt option is the worst silent pass there is.  ``is_equal_to(other, strict_type=True)``
-    returned green with the comparison never tightened, and nothing said so: no error, no warning, and
-    no type error either, because a ``**kwargs`` signature makes every spelling legal to a checker.
-    The reader is left certain they asserted something they did not.
-
-    The matcher spelling of the same option already fails loudly, since a real parameter list gets
-    this from the interpreter for free.  This gives the ``**kwargs`` entry points the same manners.
-    """
-    unknown = sorted(set(kwargs) - known)
-    if not unknown:
-        return
-    named = []
-    for name in unknown:
-        # one suggestion, not a list: the same reasoning as the extraction hint, where measured typos
-        # score ~0.9 and wrong neighbours ~0.65, so extra candidates only cost the hint its credibility
-        close = difflib.get_close_matches(str(name), sorted(known), n=1)
-        named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
-    plural = "" if len(named) == 1 else "s"
-    raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
 
 
 class HelpersMixin(_MixinBase):

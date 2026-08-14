@@ -3,16 +3,17 @@ from __future__ import annotations
 import math
 import re
 import uuid as _uuid_mod
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, runtime_checkable
 
-from ._engine._compare import _CompareConfig, _guarded_not_equal, _keyed_types_differ
-from ._engine._diff import _sub_diff_entries
+from ._engine._compare import _build_compare_config, _config_note, _guarded_not_equal, _keyed_types_differ
+from ._engine._equality import IncludeKeysMissingError, mapping_differs, mapping_shaped, values_differ
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
-from ._engine._path import _ROOT, _Path
 from ._engine._ordering import UnorderableError, holds
-from ._engine._require import argument, raised_inside, refuse
+from ._engine._path import _ROOT, _Path
+from ._engine._require import argument, raised_inside, refuse, reject_unknown_kwargs
 from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
@@ -120,6 +121,12 @@ class MatchResult:
     def __bool__(self) -> bool:
         """The verdict, so a result reads the same way the ``matches()`` it can replace did."""
         return self.matched
+
+
+# the options `is_equal_to` accepts, offered here as well: one relation, one set of knobs. Before this
+# the matcher took `strict_types` alone, so a structural spec could not express "close enough" or
+# "ignore this field" at all, and the two spellings of equality answered different questions
+_EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "comparators", "ignore_null"})
 
 
 class BaseMatcher:
@@ -252,29 +259,59 @@ class EqualToMatcher(BaseMatcher):
     a second matcher on every field that needs both.
     """
 
-    def __init__(self, expected: object, strict_types: bool = False):
+    def __init__(self, expected: object, strict_types: bool = False, **options: object):
+        reject_unknown_kwargs(options, _EQUAL_TO_OPTIONS, "equal_to")
         self.expected = expected
         self.strict_types = strict_types
+        self.ignore = options.get("ignore")
+        self.include = options.get("include")
+        self.config = _build_compare_config(
+            options.get("tolerance"),
+            options.get("comparators"),
+            bool(options.get("ignore_null", False)),
+            strict_types,
+        )
 
     def matches(self, value: Any) -> bool:
-        if not self.strict_types:
-            return bool(value == self.expected)
-        if type(value) is not type(self.expected):
+        if not (self.strict_types or self.ignore or self.include or self.config is not None):
+            return bool(value == self.expected)  # the hot path stays a plain comparison
+        if self.strict_types and type(value) is not type(self.expected):
             return False
-        # the flag walks to the leaves, so this has to as well: a composite expected value whose own
-        # `==` is true says nothing about the types inside it, and one spelling of a relation that
-        # disagrees with the other on nested data is worse than not offering it
-        if _keyed_types_differ(value, self.expected):
+        if mapping_shaped(value, check_values=False) and mapping_shaped(self.expected, check_values=False):
+            try:
+                return not mapping_differs(
+                    value, self.expected, ignore=self.ignore, include=self.include, config=self.config
+                )
+            except IncludeKeysMissingError:
+                return False  # an include naming an absent key: a mistake in the spec, so nothing matches
+        if self.strict_types and _keyed_types_differ(value, self.expected):
+            # the flag walks to the leaves, so this has to as well: a composite expected value whose own
+            # `==` is true says nothing about the types inside it, and one spelling of a relation that
+            # disagrees with the other on nested data is worse than not offering it
             return False  # a set the walker does not decompose, and a mapping key it walks straight past
-        entries = _sub_diff_entries(value, self.expected, _ROOT, config=_CompareConfig(strict_types=True))
-        if entries is None:  # a leaf the walker does not decompose
-            return bool(value == self.expected)
-        return not entries
+        return not values_differ(value, self.expected, self.config, at_root=True)
+
+    def _settings(self) -> str:
+        """The comparison settings in force, in the same words the assertion uses for them.
+
+        Without this the matcher computed with a tolerance and then reported a plain "not equal", so a
+        reader questioning why a field they thought was tolerated still failed had nothing to read.
+        `_config_note` renders the same line for `is_equal_to`; `ignore`/`include` are named here too,
+        because the assertion puts them in its own sentence and a matcher has no sentence to put them in.
+        """
+        selectors = []
+        if self.ignore is not None:
+            selectors.append(f"ignoring {self.ignore!r}")
+        if self.include is not None:
+            selectors.append(f"including {self.include!r}")
+        note = _config_note(self.config).strip()
+        parts = [*selectors, note.removeprefix("compared with ")] if note else selectors
+        return f" ({', '.join(parts)})" if parts else ""
 
     def describe(self) -> str:
         if self.strict_types:
-            return f"a value equal to <{self.expected}> of type <{type(self.expected).__name__}>"
-        return f"a value equal to <{self.expected}>"
+            return f"a value equal to <{self.expected}> of type <{type(self.expected).__name__}>{self._settings()}"
+        return f"a value equal to <{self.expected}>{self._settings()}"
 
     def describe_mismatch(self, value: Any) -> str:
         if self.strict_types and type(value) is not type(self.expected):

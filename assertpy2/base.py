@@ -16,10 +16,10 @@ from ._engine._compare import (
 from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
-from ._engine._require import argument, refuse, require_type, sized_len
+from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
-from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr, _reject_unknown_kwargs
+from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -207,7 +207,7 @@ class BaseMixin(SatisfiesMixin):
                 return self
             ignore = include = config = None
         else:
-            _reject_unknown_kwargs(kwargs, _IS_EQUAL_TO_OPTIONS, "is_equal_to")
+            reject_unknown_kwargs(kwargs, _IS_EQUAL_TO_OPTIONS, "is_equal_to")
             ignore = kwargs.get("ignore")
             include = kwargs.get("include")
             config = _build_compare_config(
