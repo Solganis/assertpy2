@@ -10,7 +10,7 @@ from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse
-from ._matcher_impls import _walks_its_value
+from ._matcher_impls import _has_own_evaluate
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import (
     IsNotNoneMatcher,
@@ -209,7 +209,7 @@ class SatisfiesMixin(_MixinBase):
             # a matcher that walks its value is asked once, so a `key` or comparator inside it runs
             # once; one that answers from a type check keeps the cheap path, where the result nobody
             # reads is never built
-            if _walks_its_value(matcher) or not matcher.matches(value):
+            if _has_own_evaluate(matcher) or not matcher.matches(value):
                 result = _evaluate_matcher(matcher, value)
             else:
                 result = None
@@ -262,7 +262,7 @@ class SatisfiesMixin(_MixinBase):
             for i, item in enumerate(self.val):
                 # asked once per item: the verdict and the reason come from the same look, so a matcher
                 # over a one-shot item is right about both and a user's `key` runs once
-                if not (_walks_its_value(matcher) or not matcher.matches(item)):
+                if not (_has_own_evaluate(matcher) or not matcher.matches(item)):
                     continue
                 outcome = _evaluate_matcher(matcher, item)
                 if not outcome.matched:

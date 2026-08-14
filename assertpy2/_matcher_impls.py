@@ -72,8 +72,12 @@ _NON_MATCHER_TYPES: Final = frozenset(
 )
 
 
-def _walks_its_value(matcher: object) -> bool:
-    """Whether *matcher* implements `evaluate()` itself instead of inheriting the composed default.
+def _has_own_evaluate(matcher: object) -> bool:
+    """Whether *matcher* declares `evaluate()` itself instead of inheriting the composed default.
+
+    Named after what it checks rather than after why it is asked.  The reason is usually that the
+    matcher walks its value, but a matcher may override `evaluate()` for a structured result without
+    walking anything, and a name promising a walk would invite an optimisation that is not sound.
 
     One that does has to be asked once: the default asks `matches()` and then `describe_mismatch()`,
     which walks the value again and, over a one-shot value, sees what the first walk left.  One that
@@ -1212,10 +1216,10 @@ class StructureMatcher(BaseMatcher):
                 # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match".
                 # asked once rather than twice, so a matcher over a one-shot leaf keeps its reason
                 try:
-                    if _walks_its_value(expected):
+                    if _has_own_evaluate(expected):
                         # a matcher that walks its value answers once, so it is right about the reason
                         # even when the leaf is a one-shot iterator. `evaluate` is on `BaseMatcher`
-                        # rather than on the three-method protocol, and `_walks_its_value` just found it
+                        # rather than on the three-method protocol, and `_has_own_evaluate` just found it
                         outcome = cast("BaseMatcher", expected).evaluate(actual)
                         if not outcome.matched:
                             mismatches.append(
