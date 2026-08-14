@@ -50,6 +50,14 @@ class _OnlyFloat:
         return 0.0
 
 
+class _Base:
+    """A base and its subclass, for the variance half of the membership matchers."""
+
+
+class _Derived(_Base):
+    pass
+
+
 class _Ordered:
     """Ordered against anything and convertible to nothing, which both sides refuse alike."""
 
@@ -76,6 +84,10 @@ def _incompatible_operands() -> None:
     # which is the half of the approximation that works
     assert_that(1).is_greater_than(_Ordered())  # case: ordered-but-not-convertible
     assert_that(1).satisfies(match.starts_with("a"))  # case: matcher-for-another-type
+    assert_that(1).satisfies(match.contains("x"))  # case: membership-matcher-for-a-scalar
+    assert_that(1).satisfies(match.contains_only("x"))  # case: only-matcher-for-a-scalar
+    assert_that(1).satisfies(match.is_subset_of(["x"]))  # case: subset-matcher-for-a-scalar
+    assert_that(1).satisfies(match.is_sorted())  # case: sorted-matcher-for-a-scalar
 
 
 def _numbers_that_are_not_ordinary_numbers() -> None:
@@ -188,6 +200,26 @@ def _relations_that_must_keep_working() -> None:
     assert_that(1 + 2j).is_instance_of(complex)  # case: valid-complex-instance
     assert_that(1 + 2j).satisfies(lambda value: value == 0)  # case: valid-complex-predicate
     assert_that(True).is_true()  # case: valid-bool-truth
+    assert_that([1, 2]).satisfies(match.contains(1))  # case: valid-membership-matcher
+    assert_that(["a"]).satisfies(match.contains("a"))  # case: valid-membership-matcher-of-text
+    assert_that({"a": 1}).satisfies(match.contains("a"))  # case: valid-membership-matcher-on-mapping
+    assert_that([1, 2]).satisfies(match.contains_only(1, 2))  # case: valid-only-matcher
+    assert_that([1, 2]).satisfies(match.is_subset_of([1, 2, 3]))  # case: valid-subset-from-collection
+    assert_that([1, 2]).satisfies(match.is_subset_of(1, 2, 3))  # case: valid-subset-from-items
+    assert_that([1, 2]).satisfies(match.is_sorted())  # case: valid-sorted-matcher
+    assert_that([{"n": 1}]).satisfies(match.is_sorted(key=lambda row: row["n"]))  # case: valid-sorted-by-key
+    assert_that(1.05).satisfies(match.equal_to(1.0, tolerance=0.1))  # case: valid-equal-to-tolerance
+    assert_that({"a": 1}).satisfies(match.equal_to({"a": 2}, ignore="a"))  # case: valid-equal-to-ignore
+    # `Iterable` is covariant and `Matcher` is contravariant, so binding the element to the collection
+    # is easy to make too strict: these three are ordinary code and must keep type-checking
+    _mixed: list[int | str] = [1, "x"]
+    assert_that(_mixed).satisfies(match.contains("x"))  # case: valid-membership-in-a-union-collection
+    _wide: list[object] = [1, "x"]
+    assert_that(_wide).satisfies(match.contains("x"))  # case: valid-membership-in-a-wide-collection
+    _bases: list[_Base] = [_Derived()]
+    assert_that(_bases).satisfies(match.contains(_Derived()))  # case: valid-membership-of-a-subclass
+    assert_that(_wide).satisfies(match.is_subset_of([1, "x", 2.0]))  # case: valid-subset-of-a-wide-collection
+    assert_that(_mixed).satisfies(match.contains_only(1, "x"))  # case: valid-only-in-a-union-collection
     # the regression this half of the file exists for: the numeric bound was first written as a list of
     # types and rejected `numpy.int64`, which this library documents support for and which compares
     # happily at runtime. Named as a capability now, so anything that can produce a float is accepted
