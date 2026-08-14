@@ -238,6 +238,22 @@ def pytest_collection_modifyitems(session, config, items):
             config._assertpy2_dangling[path] = []
 
 
+def _item_scope(item) -> tuple[str, ...]:
+    """The test's own scope chain, matching what the static pass recorded: ``("TestOne", "test_same")``.
+
+    Read from `__qualname__` rather than assembled from `item.cls`, which names only the innermost
+    class: a method of a class nested in another class is `TestOuter.TestInner.test_it` to the source
+    and only `TestInner.test_it` to that attribute, and the two chains then failed to line up.
+
+    A function name alone is worse than either: two classes in one file may each define `test_same`,
+    and a finding matched by name went to whichever ran first.
+    """
+    qualname = getattr(getattr(item, "function", None), "__qualname__", None)
+    if not qualname:
+        return ()
+    return tuple(part for part in qualname.split(".") if part != "<locals>")
+
+
 def _report_dangling(item):
     """Warn once per file, on the first test to run from it, so pytest attributes it to that node.
 
@@ -249,17 +265,22 @@ def _report_dangling(item):
     found = recorded.get(getattr(item, "path", None))
     if not found:
         return
-    name = getattr(getattr(item, "function", None), "__name__", None)
-    # a finding outside any def (module scope) has no test to attach to, so the first item takes it
-    mine = [finding for finding in found if finding.function in (name, None)]
-    recorded[item.path] = [finding for finding in found if finding not in mine]
-    for finding in mine:
-        warnings.warn_explicit(
-            finding.message,
-            errors.DanglingAssertionWarning,
-            finding.path,
-            finding.lineno,
-        )
+    here = _item_scope(item)
+    # a finding outside any def (module scope) has no test to attach to, so the first item takes it,
+    # and one inside a nested `def` belongs to the test whose scope its own starts with
+    mine = [one for one in found if not one.scope or (here and one.scope[: len(here)] == here)]
+    if not mine:
+        return
+    recorded[item.path] = [one for one in recorded[item.path] if one not in mine]
+    # one warning for the whole test, however many statements it holds: under `-W error` the first
+    # warning leaves this function as an exception, so a second one would never be reported at all and
+    # the reader would fix one line, rerun, and meet the next
+    first, rest = mine[0], mine[1:]
+    message = first.message
+    if rest:
+        lines = ", ".join(str(one.lineno) for one in rest)
+        message = f"{message} (and {len(rest)} more in this test, at line{'' if len(rest) == 1 else 's'} {lines})"
+    warnings.warn_explicit(message, errors.DanglingAssertionWarning, first.path, first.lineno)
 
 
 def pytest_runtest_setup(item):

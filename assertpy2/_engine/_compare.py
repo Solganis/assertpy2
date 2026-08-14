@@ -284,7 +284,11 @@ def _keyed_types_differ(actual, expected) -> bool:
     different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
     Values are left alone here: they do become pairs, and the walk judges them.
     """
-    if isinstance(actual, dict) and isinstance(expected, dict):
+    # `is_mapping_like` rather than `isinstance(..., dict)`: everything else in this engine judges a
+    # mapping structurally, so a `UserDict` or a `MappingProxyType` is compared key by key like any
+    # other. Checking only the concrete type left those passing here while the matcher, which walks the
+    # same values through the diff, refused them - the two spellings of one relation disagreeing again
+    if is_mapping_like(actual) and is_mapping_like(expected):
         return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         return {(type(member), member) for member in actual} != {(type(member), member) for member in expected}

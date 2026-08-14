@@ -7,6 +7,9 @@ the negative cases below are the ones that keep it usable.
 
 from __future__ import annotations
 
+import pathlib
+import subprocess
+import sys
 import textwrap
 import warnings
 from types import SimpleNamespace
@@ -37,7 +40,7 @@ class TestTheShapesItReports:
             """)
         assert_that(found).is_length(1)
         assert_that(found[0].message).is_equal_to(_NO_ASSERTION.format(name="assert_that"))
-        assert_that(found[0].function).is_equal_to("test_x")
+        assert_that(found[0].scope).is_equal_to(("test_x",))
 
     def test_an_assertion_looked_up_and_never_called(self):
         found = scan("""
@@ -75,19 +78,19 @@ class TestTheShapesItReports:
         found = scan("def test_x():\n    ap.assert_that(1)\n", "import assertpy2 as ap\n")
         assert_that(found[0].message).is_equal_to(_NO_ASSERTION.format(name="ap.assert_that"))
 
-    def test_a_finding_at_module_scope_names_no_function(self):
+    def test_a_finding_at_module_scope_belongs_to_no_test(self):
         found = scan("assert_that(1)\n")
         assert_that(found).is_length(1)
-        assert_that(found[0].function).is_none()
+        assert_that(found[0].scope).described_as("nothing encloses it").is_empty()
 
-    def test_a_nested_def_is_named_rather_than_its_parent(self):
+    def test_a_nested_def_keeps_the_whole_chain(self):
         found = scan("""
             def test_x():
                 def inner():
                     assert_that(1)
                 inner()
             """)
-        assert_that(found).extracting("function").is_equal_to(["inner"])
+        assert_that(found).extracting("scope").is_equal_to([("test_x", "inner")])
 
     def test_findings_come_back_in_source_order(self):
         found = scan("""
@@ -213,7 +216,7 @@ class TestAwaitedChains:
                 await assert_that(1)
             """)
         assert_that(found).is_length(1)
-        assert_that(found[0].function).is_equal_to("test_x")
+        assert_that(found[0].scope).is_equal_to(("test_x",))
 
     def test_an_awaited_working_chain_is_not(self):
         found = scan("""
@@ -248,7 +251,7 @@ class TestAProjectsOwnWrapper:
         assert_that(found[0].message).described_as("named as the reader wrote it").is_equal_to(
             _NO_ASSERTION.format(name="check")
         )
-        assert_that(found[0].function).is_equal_to("test_x")
+        assert_that(found[0].scope).is_equal_to(("test_x",))
 
     def test_a_configured_wrapper_that_does_assert_is_left_alone(self):
         found = findings(
@@ -303,7 +306,9 @@ class TestThePluginWiring:
 
     @staticmethod
     def _item(config, path, function_name=None, nodeid="t.py::test_x"):
-        function = SimpleNamespace(__name__=function_name) if function_name else None
+        # `__qualname__` rather than `__name__`: the plugin reads the whole chain, so a fake item has
+        # to carry one too
+        function = SimpleNamespace(__name__=function_name, __qualname__=function_name) if function_name else None
         return SimpleNamespace(config=config, path=path, function=function, nodeid=nodeid)
 
     def test_the_flag_off_records_nothing(self, tmp_path):
@@ -378,6 +383,39 @@ class TestThePluginWiring:
         config = SimpleNamespace(_assertpy2_dangling_enabled=False)
         pytest_collection_modifyitems(None, config, [])
         assert_that(config._assertpy2_dangling).is_empty()
+
+    def test_two_findings_in_one_test_become_one_warning(self, tmp_path):
+        # under `-W error` the first warning leaves the hook as an exception, so reporting them one by
+        # one would show the reader a single line and quietly drop the rest of that test's
+        source = tmp_path / "t.py"
+        body = textwrap.dedent("""
+            def test_x():
+                assert_that(1)
+                assert_that(2)
+            """)
+        source.write_text(PREAMBLE + body, encoding="utf-8")
+        config = self._config(enabled=True)
+        item = self._item(config, source, "test_x")
+        pytest_collection_modifyitems(None, config, [item])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _report_dangling(item)
+        assert_that(caught).described_as("one warning, not two").is_length(1)
+        assert_that(str(caught[0].message)).contains("and 1 more in this test, at line 5")
+        assert_that(config._assertpy2_dangling[source]).described_as("neither is left behind").is_empty()
+
+    def test_an_item_with_no_function_still_takes_a_module_scope_finding(self, tmp_path):
+        # a collector or a hook driven by hand has no function to name, and a finding that belongs to
+        # no test has to land somewhere rather than be held forever
+        source = tmp_path / "t.py"
+        source.write_text(PREAMBLE + "assert_that(1)\n", encoding="utf-8")
+        config = self._config(enabled=True)
+        item = self._item(config, source)
+        pytest_collection_modifyitems(None, config, [item])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _report_dangling(item)
+        assert_that(caught).is_length(1)
 
     def test_an_item_without_a_config_is_left_alone(self):
         # the plugin's own tests drive hooks with a bare namespace, and this one must tolerate that
@@ -540,3 +578,167 @@ class TestTheMarkerIsAComment:
         found = scan(f"def test_x():\n    assert_that(1)  # {ALLOW_MARKER}\n    assert_that(2)\n")
         assert_that(found).is_length(1)
         assert_that(found[0].lineno).is_equal_to(4)
+
+
+class TestUnderARealPytestRun:
+    """Driven through an actual pytest process, not by calling the hooks.
+
+    The rest of this file drives them directly, because the suite runs with `-p no:assertpy2`. That
+    misses everything about how findings are handed to items, which is where the defect lived: two
+    classes defining `test_same` had their findings matched by function name, so both went to whichever
+    ran first and the second test passed while holding a dangling assertion.
+    """
+
+    @staticmethod
+    def _run(tmp_path, body: str, *flags: str) -> subprocess.CompletedProcess[str]:
+        (tmp_path / "test_generated.py").write_text(body, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("[pytest]\nassertpy2_dangling = on\n", encoding="utf-8")
+        return subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                str(tmp_path),
+                "-p",
+                "assertpy2",
+                "-p",
+                "no:randomly",
+                "-q",
+                "--tb=no",
+                "-c",
+                str(tmp_path / "pytest.ini"),
+                *flags,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+        )
+
+    SAME_NAME = (
+        "from assertpy2 import assert_that\n\n\n"
+        "class TestOne:\n    def test_same(self):\n        assert_that(1)\n\n\n"
+        "class TestTwo:\n    def test_same(self):\n        assert_that(2)\n"
+    )
+
+    def test_two_tests_of_the_same_name_each_get_their_own_finding(self, tmp_path):
+        result = self._run(tmp_path, self.SAME_NAME, "-W", "error::assertpy2.DanglingAssertionWarning")
+        assert_that(result.stdout).contains("TestOne::test_same").contains("TestTwo::test_same")
+        assert_that(result.stdout).described_as("neither may pass while holding one").contains("2 errors")
+
+    def test_both_are_reported_as_warnings_without_the_escalation(self, tmp_path):
+        result = self._run(tmp_path, self.SAME_NAME)
+        assert_that(result.stdout.count("DanglingAssertionWarning")).is_equal_to(2)
+        assert_that(result.stdout).contains("2 passed")
+
+    def test_two_findings_in_one_test_arrive_together(self, tmp_path):
+        # under `-W error` the first warning leaves the reporting hook as an exception, so a second
+        # warning would never be reached: one aggregated warning is what keeps the second line visible
+        body = "from assertpy2 import assert_that\n\n\ndef test_two():\n    assert_that(1)\n    assert_that(2)\n"
+        reported = self._run(tmp_path, body)
+        assert_that(reported.stdout).contains("and 1 more in this test, at line 6")
+        assert_that(reported.stdout.count("DanglingAssertionWarning")).described_as("one per test").is_equal_to(1)
+        escalated = self._run(tmp_path, body, "-W", "error::assertpy2.DanglingAssertionWarning")
+        assert_that(escalated.stdout).contains("1 error")
+
+    def test_a_finding_in_a_nested_class_reaches_its_own_test(self, tmp_path):
+        # `item.cls` names only the innermost class, so the chains lined up only once the plugin read
+        # the whole `__qualname__`
+        body = (
+            "from assertpy2 import assert_that\n\n\n"
+            "class TestOuter:\n    class TestInner:\n        def test_nested(self):\n            assert_that(1)\n"
+        )
+        result = self._run(tmp_path, body, "-W", "error::assertpy2.DanglingAssertionWarning")
+        assert_that(result.stdout).contains("TestInner::test_nested").contains("1 error")
+
+    def test_a_clean_suite_says_nothing(self, tmp_path):
+        body = "from assertpy2 import assert_that\n\n\ndef test_clean():\n    assert_that(1).is_equal_to(1)\n"
+        result = self._run(tmp_path, body, "-W", "error::assertpy2.DanglingAssertionWarning")
+        assert_that(result.stdout).contains("1 passed").does_not_contain("Dangling")
+
+
+class TestEveryFindingReachesExactlyOneTest:
+    """The invariant behind the same-name defect, stated once and checked through a real run.
+
+    Two properties together: nothing is reported twice, and nothing is silently dropped. The second is
+    the one that broke, and it broke quietly - a test held a dangling assertion and passed.
+    """
+
+    MODULE = (
+        "from assertpy2 import assert_that\n\n\n"
+        "assert_that('module scope')\n\n\n"
+        "class TestOne:\n"
+        "    def test_same(self):\n        assert_that(1)\n\n"
+        "    def test_two_lines(self):\n        assert_that(2)\n        assert_that(3)\n\n\n"
+        "class TestTwo:\n"
+        "    def test_same(self):\n        assert_that(4)\n\n"
+        "    class TestNested:\n"
+        "        def test_deep(self):\n            assert_that(5)\n\n\n"
+        "def test_plain():\n    assert_that(6)\n"
+    )
+
+    def test_no_test_holding_a_dangling_assertion_can_pass(self, tmp_path):
+        (tmp_path / "test_generated.py").write_text(self.MODULE, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("[pytest]\nassertpy2_dangling = on\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                str(tmp_path),
+                "-p",
+                "assertpy2",
+                "-p",
+                "no:randomly",
+                "-q",
+                "--tb=no",
+                "-c",
+                str(tmp_path / "pytest.ini"),
+                "-W",
+                "error::assertpy2.DanglingAssertionWarning",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+        )
+        # five tests, every one of them holding at least one dangling statement
+        for name in (
+            "TestOne::test_same",
+            "TestOne::test_two_lines",
+            "TestTwo::test_same",
+            "TestNested::test_deep",
+            "test_plain",
+        ):
+            assert_that(result.stdout).described_as(f"{name} was not reported").contains(name)
+        assert_that(result.stdout).described_as("none of them may pass").contains("5 errors")
+
+    def test_every_statement_is_accounted_for_exactly_once(self, tmp_path):
+        (tmp_path / "test_generated.py").write_text(self.MODULE, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("[pytest]\nassertpy2_dangling = on\n", encoding="utf-8")
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                str(tmp_path),
+                "-p",
+                "assertpy2",
+                "-p",
+                "no:randomly",
+                "-q",
+                "--tb=no",
+                "-c",
+                str(tmp_path / "pytest.ini"),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=pathlib.Path(__file__).resolve().parent.parent,
+        )
+        source = (tmp_path / "test_generated.py").read_text(encoding="utf-8")
+        expected = len(findings(source, "test_generated.py"))
+        # one warning per test, and the aggregated one names the lines it stands for, so every finding
+        # is either a warning of its own or named inside one
+        reported = result.stdout.count("DanglingAssertionWarning") + result.stdout.count("more in this test")
+        assert_that(reported).described_as(f"{expected} findings in the file").is_equal_to(expected)

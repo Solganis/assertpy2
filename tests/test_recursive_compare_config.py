@@ -2,9 +2,11 @@ import copy
 import datetime
 import decimal
 import re
+import types
 import uuid
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict, UserDict, namedtuple
 from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 
@@ -882,3 +884,47 @@ class TestDecisionSentinelsReachTheDiff:
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": {"x": 1}}).is_equal_to({"a": {"x": 2}}, comparators={"a": lambda actual, expected: False})
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
+
+
+class TestBuilderAndMatcherDecideAlike:
+    """One relation, two spellings, and they have disagreed twice now.
+
+    First the matcher walked its own route and accepted mapping keys the builder refused. Then the
+    builder's key check asked `isinstance(..., dict)` while everything else in the engine judges a
+    mapping structurally, so `UserDict` and `MappingProxyType` split them again. The rule is stated
+    here over every container category the engine claims to support, rather than per bug.
+    """
+
+    _MAPPINGS: ClassVar = [dict, OrderedDict, UserDict, types.MappingProxyType]
+    _PAIRS: ClassVar = [
+        ({True: "a"}, {1: "a"}),
+        ({1: "a"}, {1.0: "a"}),
+        ({1: "a"}, {1: "a"}),
+        ({"k": {True: 1}}, {"k": {1: 1}}),
+        ({"k": 1}, {"k": 1}),
+    ]
+
+    @pytest.mark.parametrize("factory", _MAPPINGS, ids=lambda kind: kind.__name__)
+    @pytest.mark.parametrize(("actual", "expected"), _PAIRS, ids=str)
+    def test_a_mapping_gets_the_same_verdict_from_both(self, factory, actual, expected):
+        left, right = factory(actual), factory(expected)
+        try:
+            assert_that(left).is_equal_to(right, strict_types=True)
+            builder_passed = True
+        except AssertionError:
+            builder_passed = False
+        matcher_passed = match.equal_to(right, strict_types=True).matches(left)
+        assert_that(matcher_passed).described_as(f"{factory.__name__}: builder said {builder_passed}").is_equal_to(
+            builder_passed
+        )
+
+    @pytest.mark.parametrize("factory", [set, frozenset], ids=lambda kind: kind.__name__)
+    @pytest.mark.parametrize(("actual", "expected"), [({1}, {1.0}), ({True}, {1}), ({1, 2}, {2, 1})], ids=str)
+    def test_a_set_gets_the_same_verdict_from_both(self, factory, actual, expected):
+        left, right = factory(actual), factory(expected)
+        try:
+            assert_that(left).is_equal_to(right, strict_types=True)
+            builder_passed = True
+        except AssertionError:
+            builder_passed = False
+        assert_that(match.equal_to(right, strict_types=True).matches(left)).is_equal_to(builder_passed)
