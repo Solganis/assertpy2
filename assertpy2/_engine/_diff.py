@@ -324,7 +324,8 @@ def _build_equality_diff(
 
     strict_descent = False
     if config is not None:
-        decision = _node_decision(actual, expected, config)
+        # the root of a comparison, where identity does not stand in for equality: see `_node_decision`
+        decision = _node_decision(actual, expected, config, at_root=_prefix is _ROOT)
         if decision == "equal":
             return DiffResult(kind="scalar", entries=[])
         if decision == "leaf":

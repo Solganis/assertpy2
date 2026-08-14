@@ -295,7 +295,7 @@ def _keyed_types_differ(actual, expected) -> bool:
     return False
 
 
-def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None) -> str:
+def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None, at_root: bool = False) -> str:
     """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"`` or ``"strict"``.
 
     With ``config is None`` this is exactly the engine's historical behavior: differing values ``"recurse"``
@@ -315,11 +315,15 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
         if comparator is not None:
             return "equal" if comparator(actual, expected) else "leaf"
         if config.strict_types:
-            if actual is expected:
+            if actual is expected and not at_root:
                 # what `PyObject_RichCompareBool` hands a container for free, and what forcing the walk
                 # below would otherwise take away: one object is equal to itself without consulting
                 # `__eq__`, which is why a shared subnode is cheap and why `[nan] == [nan]` is true when
-                # both elements are the same float
+                # both elements are the same float.
+                #
+                # Not at the root, where there is no container to inherit it from. Applied there, it made
+                # `strict_types` *weaker* than plain equality: `assert_that(nan).is_equal_to(nan)` failed
+                # and the same call with `strict_types=True` passed, which inverts what the flag means
                 return "equal"
             if _types_differ(actual, expected):
                 # ahead of tolerance on purpose: a tolerance says how far apart two numbers may be, it
