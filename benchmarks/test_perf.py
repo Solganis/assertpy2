@@ -251,11 +251,16 @@ def test_matcher_is_subset_of_pass(benchmark, size):
 
 @pytest.mark.parametrize("size", [100, 2000])
 def test_duplicates_reported(benchmark, size):
-    # the failing side on purpose: naming the repeats is the part that used to count each element again
+    # the failing side on purpose: naming the repeats is the part that used to count each element again.
+    # The failure is required rather than suppressed: swallowing it would leave the benchmark green and
+    # silently timing a passing assertion if the duplicate ever stopped being found
     values = [*range(size), 0]
 
     def run():
-        with contextlib.suppress(AssertionFailure):
+        try:
             assert_that(values).does_not_contain_duplicates()
+        except AssertionFailure:
+            return
+        raise RuntimeError("the duplicate was not reported, so this measures the wrong path")
 
     benchmark(run)

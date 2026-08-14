@@ -2,6 +2,7 @@ import numbers
 
 import pytest
 
+import assertpy2.assertpy
 from assertpy2 import add_extension, assert_that, remove_extension
 
 
@@ -50,18 +51,21 @@ def _shared_extensions():
 
     The registry is global, so registering at import time made the file order-dependent: the test that
     proves a removed extension is gone removes all three, and every test after it in a different order
-    would lose its assertion. Registering here scopes that to one test, and removal of something already
-    gone is silent, so the teardown works whether the test removed them or not.
+    would lose its assertion. Registering here scopes that to one test.
+
+    What is restored is the registry as it was, not merely "these three names gone". Removing them
+    unconditionally would destroy an extension of the same name that existed before, which trades one
+    order dependency for another. A snapshot is taken instead, and `finally` puts it back whether the
+    test removed things, added things, or raised half-way through.
     """
+    before = dict(assertpy2.assertpy._extensions)  # the registry is module state by design
     try:
         for extension in _SHARED:
             add_extension(extension, override=True)
         yield
     finally:
-        # `finally` rather than plain teardown, so a registration that raises half-way through still
-        # leaves the registry as it found it rather than partly populated
-        for extension in _SHARED:
-            remove_extension(extension)
+        assertpy2.assertpy._extensions.clear()  # same reason: restoring what was there
+        assertpy2.assertpy._extensions.update(before)
 
 
 def test_is_even_extension():
