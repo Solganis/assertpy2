@@ -3,15 +3,21 @@ from __future__ import annotations
 import math
 import re
 import uuid as _uuid_mod
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, cast, runtime_checkable
 
 from ._engine._compare import _build_compare_config, _config_note, _guarded_not_equal, _keyed_types_differ
 from ._engine._equality import IncludeKeysMissingError, mapping_differs, mapping_shaped, values_differ
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
-from ._engine._membership import is_searchable, missing_items, not_contained_in, only_faults, searchable
+from ._engine._membership import (
+    is_searchable,
+    is_walkable,
+    missing_items,
+    not_contained_in,
+    only_faults,
+    searchable,
+)
 from ._engine._ordering import UnorderableError, first_out_of_order, holds
 from ._engine._path import _ROOT, _Path
 from ._engine._require import argument, raised_inside, refuse, reject_unknown_kwargs
@@ -21,6 +27,7 @@ from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import UnionType
     from typing import TypeAlias
 
@@ -63,6 +70,20 @@ class Matcher(Protocol[_M_contra]):
 _NON_MATCHER_TYPES: Final = frozenset(
     {int, float, bool, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset, type(None)}
 )
+
+
+def _walks_its_value(matcher: object) -> bool:
+    """Whether *matcher* implements `evaluate()` itself instead of inheriting the composed default.
+
+    One that does has to be asked once: the default asks `matches()` and then `describe_mismatch()`,
+    which walks the value again and, over a one-shot value, sees what the first walk left.  One that
+    answers from a type check gains nothing, and a `MatchResult` per leaf of a structure is an
+    allocation and a rendered description per leaf, measured at 59% of the structural benchmark.
+
+    `getattr` with a default rather than an attribute access: a duck-typed matcher satisfies the
+    protocol with three methods and need not have `evaluate` at all.
+    """
+    return getattr(type(matcher), "evaluate", BaseMatcher.evaluate) is not BaseMatcher.evaluate
 
 
 def _is_matcher(obj: object) -> TypeIs[Matcher[Any]]:
@@ -763,6 +784,11 @@ class EndsWithMatcher(BaseMatcher):
 # --- Structural matchers ---
 
 
+def _listed(items: Any) -> str:
+    """Items as a reader sees them, with a matcher naming itself rather than showing its repr."""
+    return ", ".join(item.describe() if _is_matcher(item) else repr(item) for item in items)
+
+
 class ContainsMatcher(BaseMatcher):
     """Membership, spelled for a structural spec.
 
@@ -783,16 +809,29 @@ class ContainsMatcher(BaseMatcher):
         return not missing_items(searched, self.items, _is_matcher)
 
     def describe(self) -> str:
-        described = [item.describe() if _is_matcher(item) else repr(item) for item in self.items]
-        return f"a collection containing {', '.join(described)}"
+        return f"a collection containing {_listed(self.items)}"
 
     def describe_mismatch(self, value: Any) -> str:
+        return self.evaluate(value).mismatch
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """The verdict and the reason from one look, which is the only way to be right about both.
+
+        The default composition asks `matches()` and then `describe_mismatch()`, and each of them walks
+        the value.  Over a one-shot iterator the second walk sees what the first left behind, so the
+        message named items that were there and missed the ones that were not.
+        """
         searched = searchable(value)
         if not is_searchable(searched):
-            return f"was <{value!r}>, which cannot be searched"
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be searched"
+            )
         absent = missing_items(searched, self.items, _is_matcher)
-        described = [item.describe() if _is_matcher(item) else repr(item) for item in absent]
-        return f"was <{value}>, missing {', '.join(described)}"
+        return MatchResult(
+            matched=not absent,
+            description=self.describe(),
+            mismatch="" if not absent else f"was <{searched}>, missing {_listed(absent)}",
+        )
 
 
 class ContainsOnlyMatcher(BaseMatcher):
@@ -808,26 +847,34 @@ class ContainsOnlyMatcher(BaseMatcher):
         self.items = items
 
     def matches(self, value: Any) -> bool:
-        searched = searchable(value)
-        if not is_searchable(searched):
-            return False
-        extra, missing = only_faults(searched, self.items)
-        return not (extra or missing)
+        return self.evaluate(value).matched
 
     def describe(self) -> str:
-        return f"a collection containing only {', '.join(repr(item) for item in self.items)}"
+        return f"a collection containing only {_listed(self.items)}"
 
     def describe_mismatch(self, value: Any) -> str:
+        return self.evaluate(value).mismatch
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """One walk: "only these" needs everything that is there, and two walks cannot both see it."""
         searched = searchable(value)
-        if not is_searchable(searched):
-            return f"was <{value!r}>, which cannot be searched"
+        if not is_walkable(searched):
+            # membership alone is not enough here: every element has to be seen, and a value that only
+            # answers `__contains__` cannot be listed
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be listed"
+            )
         extra, missing = only_faults(searched, self.items)
         faults = []
         if extra:
-            faults.append(f"also had {', '.join(repr(item) for item in extra)}")
+            faults.append(f"also had {_listed(extra)}")
         if missing:
-            faults.append(f"lacked {', '.join(repr(item) for item in missing)}")
-        return f"was <{value}>, which {' and '.join(faults)}"
+            faults.append(f"lacked {_listed(missing)}")
+        return MatchResult(
+            matched=not faults,
+            description=self.describe(),
+            mismatch="" if not faults else f"was <{searched}>, which {' and '.join(faults)}",
+        )
 
 
 class IsSubsetOfMatcher(BaseMatcher):
@@ -843,20 +890,27 @@ class IsSubsetOfMatcher(BaseMatcher):
         self.superset = searchable(given)
 
     def matches(self, value: Any) -> bool:
-        searched = searchable(value)
-        if not is_searchable(searched):
-            return False
-        return not not_contained_in(searched, self.superset)
+        return self.evaluate(value).matched
 
     def describe(self) -> str:
         return f"a collection whose items all appear in <{self.superset}>"
 
     def describe_mismatch(self, value: Any) -> str:
+        return self.evaluate(value).mismatch
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """One walk: the subject is listed, while the superset is only asked about membership."""
         searched = searchable(value)
-        if not is_searchable(searched):
-            return f"was <{value!r}>, which cannot be searched"
+        if not is_walkable(searched):
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be listed"
+            )
         absent = not_contained_in(searched, self.superset)
-        return f"was <{value}>, with {', '.join(repr(item) for item in absent)} outside it"
+        return MatchResult(
+            matched=not absent,
+            description=self.describe(),
+            mismatch="" if not absent else f"was <{searched}>, with {_listed(absent)} outside it",
+        )
 
 
 class IsSortedMatcher(BaseMatcher):
@@ -867,24 +921,37 @@ class IsSortedMatcher(BaseMatcher):
         self.reverse = reverse
 
     def matches(self, value: Any) -> bool:
-        if not isinstance(value, Iterable):
-            return False
-        try:
-            return first_out_of_order(value, key=self.key, reverse=self.reverse) is None
-        except UnorderableError:
-            return False  # elements that cannot be ordered against each other are not sorted
+        return self.evaluate(value).matched
 
     def describe(self) -> str:
         return "a collection sorted in reverse" if self.reverse else "a collection sorted in order"
 
     def describe_mismatch(self, value: Any) -> str:
-        if not isinstance(value, Iterable):
-            return f"was <{value!r}>, which cannot be walked"
-        broken = first_out_of_order(value, key=self.key, reverse=self.reverse)
-        if broken is None:  # pragma: no cover - only reached if asked about a value that matches
-            return f"was <{value}>"
+        return self.evaluate(value).mismatch
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """One walk, which also means the user's `key` is called once per element rather than twice."""
+        if not is_walkable(value):
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be walked"
+            )
+        items = searchable(value)
+        try:
+            broken = first_out_of_order(items, key=self.key, reverse=self.reverse)
+        except UnorderableError:
+            return MatchResult(
+                matched=False,
+                description=self.describe(),
+                mismatch=f"was <{items}>, holding items that cannot be ordered against each other",
+            )
+        if broken is None:
+            return MatchResult(matched=True, description=self.describe(), mismatch="")
         index, earlier, later = broken
-        return f"was <{value}>, out of order at index {index}: <{earlier}> then <{later}>"
+        return MatchResult(
+            matched=False,
+            description=self.describe(),
+            mismatch=f"was <{items}>, out of order at index {index}: <{earlier}> then <{later}>",
+        )
 
 
 class IgnoreMatcher(BaseMatcher):
@@ -1142,15 +1209,28 @@ class StructureMatcher(BaseMatcher):
             if isinstance(expected, StructureMatcher) and is_mapping_like(normalized := self._as_mapping(actual)):
                 mismatches.extend(self._walk(normalized, expected._spec, path.key(key), seen))
             elif _is_matcher(expected):
-                # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match"
+                # mirror BaseMatcher.__eq__ totality: a predicate that cannot evaluate means "no match".
+                # asked once rather than twice, so a matcher over a one-shot leaf keeps its reason
                 try:
-                    matched = expected.matches(actual)
+                    if _walks_its_value(expected):
+                        # a matcher that walks its value answers once, so it is right about the reason
+                        # even when the leaf is a one-shot iterator. `evaluate` is on `BaseMatcher`
+                        # rather than on the three-method protocol, and `_walks_its_value` just found it
+                        outcome = cast("BaseMatcher", expected).evaluate(actual)
+                        if not outcome.matched:
+                            mismatches.append(
+                                _SpecMismatch(path.key(key), actual, outcome.description, outcome.mismatch)
+                            )
+                    elif not expected.matches(actual):
+                        # the rest answer from a type check or a length: nothing is rendered until the
+                        # leaf has actually failed, which is what keeps a passing spec cheap
+                        mismatches.append(
+                            _SpecMismatch(
+                                path.key(key), actual, expected.describe(), expected.describe_mismatch(actual)
+                            )
+                        )
                 except (TypeError, ValueError):
-                    matched = False
-                if not matched:
-                    mismatches.append(
-                        _SpecMismatch(path.key(key), actual, expected.describe(), expected.describe_mismatch(actual))
-                    )
+                    mismatches.append(_SpecMismatch(path.key(key), actual, expected.describe(), f"was <{actual}>"))
             elif isinstance(expected, dict):
                 normalized = self._as_mapping(actual)
                 if is_mapping_like(normalized):

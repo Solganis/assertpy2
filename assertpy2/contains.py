@@ -8,7 +8,7 @@ from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
-from ._engine._membership import is_searchable, missing_items, only_faults, searchable
+from ._engine._membership import is_searchable, is_walkable, missing_items, only_faults, searchable
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len
@@ -273,7 +273,11 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         # walked twice below and rendered a third time, so a one-shot iterator has to be drained
-        values = materialized(self.val)
+        values = searchable(self.val)
+        if not is_walkable(values):
+            # "only these" has to see every element, so answering `in` is not enough here: left to the
+            # comprehension, a value like that came back as Python's "object is not iterable"
+            refuse(self.val, "iterable")
         extra, missing = only_faults(values, items)
         if extra or missing:
             # both halves at once: reporting only the extras sends the reader to fix one problem and

@@ -10,6 +10,7 @@ from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse
+from ._matcher_impls import _walks_its_value
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import (
     IsNotNoneMatcher,
@@ -205,11 +206,14 @@ class SatisfiesMixin(_MixinBase):
             # in both: on a one-shot iterator the second call saw what the first had left, so `each_item`
             # named the wrong item at the wrong index rather than merely losing detail
             value = materialized(self.val)
-            # the cheap verdict first: a passing `satisfies` must not pay for a result nobody reads.
-            # the whole result is built only for the failure, which is also what lets a matcher that
-            # implements `evaluate()` alone answer here
-            if not matcher.matches(value):
+            # a matcher that walks its value is asked once, so a `key` or comparator inside it runs
+            # once; one that answers from a type check keeps the cheap path, where the result nobody
+            # reads is never built
+            if _walks_its_value(matcher) or not matcher.matches(value):
                 result = _evaluate_matcher(matcher, value)
+            else:
+                result = None
+            if result is not None and not result.matched:
                 return self.error(
                     f"Expected {result.description}, but {result.mismatch}.",
                     actual=value,
@@ -256,12 +260,15 @@ class SatisfiesMixin(_MixinBase):
         if _is_matcher(matcher):
             description = matcher.describe()
             for i, item in enumerate(self.val):
-                # the cheap verdict per item, the whole result only for the one that failed: a matcher is
-                # asked about every element and a result nobody reads is an allocation per element
-                if not matcher.matches(item):
+                # asked once per item: the verdict and the reason come from the same look, so a matcher
+                # over a one-shot item is right about both and a user's `key` runs once
+                if not (_walks_its_value(matcher) or not matcher.matches(item)):
+                    continue
+                outcome = _evaluate_matcher(matcher, item)
+                if not outcome.matched:
                     return self.error(
                         f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
-                        f" {matcher.describe_mismatch(item)}.",
+                        f" {outcome.mismatch}.",
                         actual=item,
                         expected=description,
                         diff=DiffResult(
