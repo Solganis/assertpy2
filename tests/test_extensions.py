@@ -41,9 +41,27 @@ def is_factor_of(self, other):
     return self
 
 
-add_extension(is_even_integer)
-add_extension(is_multiple_of)
-add_extension(is_factor_of)
+_SHARED = (is_even_integer, is_multiple_of, is_factor_of)
+
+
+@pytest.fixture(autouse=True)
+def _shared_extensions():
+    """Register the three shared extensions per test, and take them back afterwards.
+
+    The registry is global, so registering at import time made the file order-dependent: the test that
+    proves a removed extension is gone removes all three, and every test after it in a different order
+    would lose its assertion. Registering here scopes that to one test, and removal of something already
+    gone is silent, so the teardown works whether the test removed them or not.
+    """
+    try:
+        for extension in _SHARED:
+            add_extension(extension, override=True)
+        yield
+    finally:
+        # `finally` rather than plain teardown, so a registration that raises half-way through still
+        # leaves the registry as it found it rather than partly populated
+        for extension in _SHARED:
+            remove_extension(extension)
 
 
 def test_is_even_extension():
