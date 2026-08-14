@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import datetime
 import decimal
+import fractions
 import math
 from dataclasses import dataclass
 
@@ -31,6 +32,7 @@ from assertpy2._engine._equality import (
     values_differ,
 )
 from assertpy2._engine._membership import (
+    has_duplicates,
     missing_items,
     not_contained_in,
     only_faults,
@@ -746,6 +748,117 @@ class TestTheCoresUnderTheAwkwardCases:
 
         assert_that(only_faults(Unsized(), tuple(range(60)))).is_equal_to(([], []))
         assert_that(Unsized()).contains_only(*range(60))
+
+    def test_the_fast_path_asks_for_one_hash_per_element_and_no_comparisons(self):
+        """What the shortcut is actually for, counted rather than assumed.
+
+        A property test proves the answer is the same; it says nothing about the work done to reach it.
+        These counters do: the walk would compare every element against every wanted one, and the set
+        hashes each element once instead.
+        """
+        hashes: list[int] = []
+
+        class Counted:
+            """No `__eq__` of its own, so equality is identity and the shortcut may hash it."""
+
+            def __init__(self, value: int) -> None:
+                self.value = value
+
+            def __hash__(self) -> int:
+                hashes.append(self.value)
+                return self.value
+
+        def hash_calls_for(size: int) -> int:
+            hashes.clear()
+            values = [Counted(index) for index in range(size)]
+            only_faults(values, tuple(values))
+            return len(hashes)
+
+        small, large = hash_calls_for(30), hash_calls_for(60)
+        # the shape is the claim: doubling the input doubles the hashing.  A walk would have quadrupled
+        # the comparisons instead, which is exactly the cost this path exists to avoid
+        assert_that(large / small).described_as("hash calls when the input doubles").is_close_to(2.0, 0.1)
+        assert_that(small / 30).described_as("hash calls per element").is_close_to(4.0, 0.1)
+
+    def test_the_walk_is_kept_where_it_must_be_and_costs_what_it_costs(self):
+        comparisons: list[tuple[int, int]] = []
+
+        class ByValue:
+            def __init__(self, value: int) -> None:
+                self.value = value
+
+            def __eq__(self, other: object) -> bool:
+                comparisons.append((self.value, getattr(other, "value", -1)))
+                return isinstance(other, ByValue) and other.value == self.value
+
+            __hash__ = None  # unhashable, so there is no shortcut to take
+
+        values = [ByValue(index) for index in range(6)]
+        only_faults(values, tuple(values))
+        assert_that(comparisons).described_as("a walk does compare, and that is the price of it").is_not_empty()
+
+    def test_a_one_shot_value_is_walked_once(self):
+        seen: list[int] = []
+
+        def counting():
+            for index in range(50):
+                seen.append(index)
+                yield index
+
+        assert_that(only_faults(searchable(counting()), tuple(range(50)))).is_equal_to(([], []))
+        assert_that(seen).described_as("elements produced by the generator").is_length(50)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param(decimal.Decimal("1.5"), id="Decimal: hash agrees with == by the numeric contract"),
+            pytest.param(fractions.Fraction(1, 3), id="Fraction: same, and neither is in the safe list"),
+        ],
+    )
+    def test_numbers_outside_the_safe_list_are_answered_by_the_walk(self, value):
+        """Kept out of the shortcut on purpose: their equality is right, but the list stays conservative.
+
+        The point of the test is that being excluded costs correctness nothing.
+        """
+        assert_that(only_faults([value], (value,))).is_equal_to(([], []))
+        assert_that([value]).contains_only(value)
+        assert_that([value]).is_subset_of([value])
+        assert_that([value, value]).contains_duplicates()
+
+    def test_a_value_that_refuses_to_hash_despite_its_type_falls_back(self):
+        """`Decimal` is on the safe list, and one `Decimal` still refuses to be hashed.
+
+        A signalling NaN is meant to be noticed rather than compared quietly, so it raises on hashing.
+        That is a property of the value, invisible to a rule about types, so the set is attempted and the
+        walk takes over when it fails.  The sizes are past the threshold, so the fast path really is tried.
+        """
+        values = [decimal.Decimal("snan")] * 30
+        assert_that(only_faults(values, tuple(values))).is_equal_to(([], []))
+        assert_that(not_contained_in(values, values)).is_empty()
+        assert_that(values).contains_only(*values)
+        assert_that(values).is_subset_of(values)
+
+    def test_naming_repeats_of_an_unhashable_value_answers_like_the_shipped_release(self):
+        # both duplicate paths fall back to comparing, and comparing signalling NaNs is what raises -
+        # the same thing the released version does, so nothing here changed for such a value
+        same_object = [decimal.Decimal("snan")] * 30
+        # `in` short-circuits on identity, so the same object repeated is found without comparing at all
+        assert_that(has_duplicates(same_object)).described_as("one object, thirty times").is_true()
+        # naming them compares explicitly, and comparing a signalling NaN is what raises
+        with pytest.raises(decimal.InvalidOperation):
+            repeated_items(same_object)
+
+    def test_an_operator_that_raises_travels_out_of_both_paths(self):
+        class Angry:
+            def __eq__(self, other: object) -> bool:
+                raise ValueError("comparison is a bug in the value, not a verdict")
+
+            __hash__ = None
+
+        with pytest.raises(ValueError, match="bug in the value"):
+            only_faults([Angry()], (Angry(),))
+        with pytest.raises(ValueError, match="bug in the value"):
+            assert_that([Angry()]).contains_only(Angry())
 
     def test_duplicates_are_found_when_hashing_and_equality_disagree(self):
         """The other half of the disagreement case: the count has to follow `==`, not the hash."""
