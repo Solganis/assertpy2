@@ -23,10 +23,10 @@ are not, and a rule with an exception is a rule nobody can rely on.
 
 from __future__ import annotations
 
-from collections.abc import Sized
 from typing import NoReturn, TypeVar
 
 from ..errors import _safe_repr, _truncated
+from ._size import length_of
 
 _T = TypeVar("_T")
 
@@ -109,10 +109,9 @@ def sized_len(value: object, *, subject: str = "val") -> int:
     Left to `len()` alone, the refusal reads "object of type 'int' has no len()": true, and about the
     builtin rather than about the assertion, with no mention of which operand was wrong.
     """
-    if not isinstance(value, Sized):
+    length = length_of(value)
+    if length is None:
         refuse(value, "a sized object", subject=subject)
     # past the protocol check there is nothing left to diagnose: a `__len__` that exists and still
-    # raises is a bug in the value, and it travels out as its author wrote it. This is stricter than
-    # asking where the error came from, and it does not depend on a Python frame being pushed: a
-    # `__len__` implemented in C adds no frame, so the origin check alone would have mislabelled it
-    return len(value)
+    # raises is a bug in the value, and it travels out as its author wrote it
+    return length

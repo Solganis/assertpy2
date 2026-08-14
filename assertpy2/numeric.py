@@ -6,7 +6,8 @@ import numbers
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
-from ._engine._require import _shown, argument, raised_inside, refuse, require_type
+from ._engine._ordering import UnorderableError, compare
+from ._engine._require import _shown, argument, refuse, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -52,31 +53,27 @@ class NumericMixin(_MixinBase):
     _NUMERIC_NON_COMPAREABLE = frozenset({complex})
 
     def _validate_compareable(self, other):
-        self_type = type(self.val)
-        other_type = type(other)
+        """Refuse the pair when it cannot be ordered, in the wording this surface uses.
 
-        if self_type in self._NUMERIC_NON_COMPAREABLE:
-            refuse(self.val, "a value with an ordering (complex numbers have none)")
-        if self_type in self._NUMERIC_COMPAREABLE:
-            if other_type is not self_type:
-                refuse(other, f"a {self_type.__name__}, to match val", subject=argument("other"))
-            return
-        if isinstance(self.val, numbers.Number):
-            require_type(other, numbers.Number, "a number", subject=argument("other"))
-            return
+        Whether it can be is decided in `_engine._ordering`, which the matchers ask as well: the rule
+        used to be written once here as a list of types and once there as a `try`/`except`, and one
+        relation spelled twice is how the text matchers drifted apart on bytes.
+        """
         try:
-            _ = self.val < other
-        except TypeError as exc:
-            # a `__lt__` of their own that raises is a bug in the value, not an incomparable pair:
-            # answering it with our sentence would send the reader looking in the wrong file
-            if raised_inside(exc):
-                raise
+            compare(self.val, other)
+        except UnorderableError as unordered:
+            if unordered.kind == "value":
+                refuse(self.val, "a value with an ordering (complex numbers have none)")
+            kind_bound = unordered.wanted
+            if unordered.kind == "kind":
+                wanted = (
+                    "a number"
+                    if kind_bound is numbers.Number or kind_bound is None
+                    else f"a {kind_bound.__name__}, to match val"
+                )
+                refuse(other, wanted, subject=argument("other"))
             # the pair is what cannot be ordered, not the value: two strings compare fine, and saying
             # "ordering is not defined for type <str>" about `"10" > 5` was simply untrue
-            comparable = False
-        else:
-            comparable = True
-        if not comparable:
             refuse(other, f"comparable with val {_shown(self.val)}", subject=argument("other"))
 
     def _validate_number(self):

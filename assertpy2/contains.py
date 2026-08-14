@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import materialized
+from ._engine._membership import is_searchable, missing_items, only_faults, searchable
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len
@@ -121,8 +122,8 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         # membership is tested once per argument, so a one-shot iterator has to be drained first
-        values = materialized(self.val)
-        if not isinstance(values, Iterable) and not hasattr(type(values), "__contains__"):
+        values = searchable(self.val)
+        if not is_searchable(values):
             # left to `in`, Python answers "argument of type 'int' is not a container or iterable":
             # true, and about the operator rather than about the value the assertion was handed
             refuse(self.val, "a container or iterable")
@@ -158,13 +159,7 @@ class ContainsMixin(_MixinBase):
                 )
                 return self.error(f"Expected <{values}> to contain item <{item}>, but did not.", diff=diff)
         else:
-            missing = []
-            for item in items:
-                if _is_matcher(item):
-                    if not any(item.matches(value) for value in values):
-                        missing.append(item)
-                elif item not in values:
-                    missing.append(item)
+            missing = missing_items(values, items, _is_matcher)
             if missing:
                 missing_desc = [
                     missing_item.describe() if _is_matcher(missing_item) else missing_item for missing_item in missing
@@ -278,8 +273,7 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         # walked twice below and rendered a third time, so a one-shot iterator has to be drained
         values = materialized(self.val)
-        extra = [item for item in values if item not in items]
-        missing = [item for item in items if item not in values]
+        extra, missing = only_faults(values, items)
         if extra or missing:
             # both halves at once: reporting only the extras sends the reader to fix one problem and
             # rerun into the other, and the message wording of each half alone is unchanged
