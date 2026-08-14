@@ -121,10 +121,10 @@ that leaks into a membership check or a foreign comparison stays safe.
 | `match.is_callable()` | a callable object |
 | `match.is_in(*values)` | a value present in `values` |
 | `match.has_property(name, matcher?)` | an object with attribute `name`, optionally matching a nested matcher |
-| `match.contains_string(sub)` | a string containing `sub` |
+| `match.contains_string(sub)` | text containing `sub`, on `str` and on `bytes` |
 | `match.matches_regex(pattern)` | a string where `pattern` is found (`re.search`) |
-| `match.starts_with(prefix)` | a string starting with `prefix` |
-| `match.ends_with(suffix)` | a string ending with `suffix` |
+| `match.starts_with(prefix)` | text starting with `prefix`, on `str` and on `bytes` |
+| `match.ends_with(suffix)` | text ending with `suffix`, on `str` and on `bytes` |
 | `match.is_uuid()` | a string parseable as a UUID |
 | `match.is_non_empty_string()` | a non-empty string |
 | `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`) of now. Handles naive and tz-aware values |

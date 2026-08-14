@@ -693,6 +693,47 @@ class TestDescribeCoverage:
         assert_that(match.ends_with("bar").describe()).is_equal_to("a string ending with <bar>")
 
 
+class TestTheTextMatchersAgreeWithTheirMethods:
+    """A matcher and the method of the same name may differ in strictness, never in the answer.
+
+    `assert_that(b"hello").contains(b"ell")` passed while `match.contains_string(b"ell")` failed: the
+    matchers demanded `str`, and the methods had grown bytes support without them.  A matcher is what
+    `contains()`, `satisfies()` and the `==` protocol all delegate to, so the disagreement reached
+    every one of those.
+    """
+
+    @pytest.mark.parametrize(
+        ("method", "matcher", "operand"),
+        [
+            ("contains", match.contains_string, b"ell"),
+            ("starts_with", match.starts_with, b"he"),
+            ("ends_with", match.ends_with, b"lo"),
+        ],
+    )
+    def test_bytes_are_matched_the_way_the_method_matches_them(self, method, matcher, operand):
+        getattr(assert_that(b"hello"), method)(operand)
+        assert_that(b"hello").satisfies(matcher(operand))
+        assert_that(bytearray(b"hello")).satisfies(matcher(operand))
+
+    @pytest.mark.parametrize("matcher", [match.contains_string, match.starts_with, match.ends_with])
+    def test_the_two_text_types_never_match_each_other(self, matcher):
+        # the method raises TypeError on this pair; a matcher answers instead of raising, and the
+        # answer is no.  Anything else would make `b"hello" == match.starts_with("he")` a silent yes
+        assert_that(matcher("he").matches(b"hello")).is_false()
+        assert_that(matcher(b"he").matches("hello")).is_false()
+
+    @pytest.mark.parametrize("matcher", [match.contains_string, match.starts_with, match.ends_with])
+    def test_a_value_that_is_not_text_at_all_is_no_match(self, matcher):
+        assert_that(matcher("he").matches(["he", "llo"])).is_false()
+        assert_that(matcher("he").matches(None)).is_false()
+
+    def test_a_bytes_operand_is_described_as_bytes(self):
+        # "a string containing <b'ell'>" described the wrong thing about the one operand that needed it
+        assert_that(match.contains_string(b"ell").describe()).is_equal_to("bytes containing <b'ell'>")
+        assert_that(match.starts_with(b"he").describe()).is_equal_to("bytes starting with <b'he'>")
+        assert_that(match.ends_with(b"lo").describe()).is_equal_to("bytes ending with <b'lo'>")
+
+
 class TestMatcherEqProtocol:
     def test_eq_positive_match(self):
         assert 5 == match.is_positive()
