@@ -152,7 +152,7 @@ class TestRegisterMatcherErrors:
         clear_custom_matchers()
 
     def test_name_not_string(self):
-        with pytest.raises(TypeError, match="name must be a string"):
+        with pytest.raises(TypeError, match="given name arg must be a string"):
             register_matcher(123)
 
     def test_name_not_identifier(self):
@@ -164,7 +164,7 @@ class TestRegisterMatcherErrors:
             register_matcher("has spaces")
 
     def test_func_not_callable(self):
-        with pytest.raises(TypeError, match="func must be callable"):
+        with pytest.raises(TypeError, match="given func arg must be callable"):
             register_matcher("test")(42)
 
     def test_unregistered_name_attribute_error(self):

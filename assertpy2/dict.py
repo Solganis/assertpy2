@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, refuse
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -165,7 +166,7 @@ class DictMixin(_MixinBase):
         missing = []
         for entry in entries:
             if type(entry) is not dict:
-                raise TypeError("given entry arg must be a dict")
+                refuse(entry, "a dict", subject=argument("entry"))
             if len(entry) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(entry))
@@ -213,7 +214,7 @@ class DictMixin(_MixinBase):
         found = []
         for entry in entries:
             if type(entry) is not dict:
-                raise TypeError("given entry arg must be a dict")
+                refuse(entry, "a dict", subject=argument("entry"))
             if len(entry) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(entry))

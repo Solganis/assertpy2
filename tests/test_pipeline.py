@@ -55,7 +55,7 @@ class TestFilteredOn:
         assert_that(ITEMS).filtered_on(match.has_property("name", match.contains_string("o"))).is_length(2)
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).filtered_on(lambda x: x > 0)
 
     def test_preserves_description(self):
@@ -77,7 +77,7 @@ class TestMapped:
         assert_that([]).mapped(str.upper).is_empty()
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).mapped(str.upper)
 
 
@@ -92,7 +92,7 @@ class TestFlatMapped:
         assert_that([[], [], []]).flat_mapped(lambda x: x).is_empty()
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).flat_mapped(list)
 
 
@@ -108,7 +108,7 @@ class TestFirst:
             assert_that([]).first()
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).first()
 
 
@@ -124,7 +124,7 @@ class TestLast:
             assert_that([]).last()
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).last()
 
 
@@ -147,7 +147,7 @@ class TestElement:
             assert_that([10, 20]).element(-1)
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).element(0)
 
 
@@ -164,7 +164,7 @@ class TestSingle:
             assert_that([1, 2, 3]).single()
 
     def test_non_iterable_raises(self):
-        with pytest.raises(TypeError, match="not iterable"):
+        with pytest.raises(TypeError, match="val must be iterable"):
             assert_that(42).single()
 
 

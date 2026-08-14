@@ -124,19 +124,19 @@ def test_is_subset_of_failure_single_key_dict_value():
 def test_is_subset_of_failure_bad_dict_arg1():
     with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of("foo")
-    assert_that(str(exc_info.value)).contains("arg #1").contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("arg #1").contains("must be dict-like")
 
 
 def test_is_subset_of_failure_bad_dict_arg2():
     with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1}, "foo")
-    assert_that(str(exc_info.value)).contains("arg #2").contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("arg #2").contains("must be dict-like")
 
 
 def test_is_subset_of_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_subset_of(1234)
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_is_subset_of_bad_arg_failure():
@@ -185,7 +185,7 @@ def test_is_sorted_reverse_failure():
 def test_is_sorted_failure_bad_val():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).is_sorted()
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_chaining():

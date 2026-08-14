@@ -82,7 +82,7 @@ def test_warns_val_not_callable():
 def test_warns_arg_not_a_warning():
     with pytest.raises(TypeError) as exc_info:
         assert_that(no_warn).warns(ValueError)
-    assert_that(str(exc_info.value)).contains("given arg must be a warning")
+    assert_that(str(exc_info.value)).contains("given warning arg must be a warning type")
 
 
 # does_not_warn

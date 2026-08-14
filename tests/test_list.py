@@ -42,10 +42,10 @@ def test_is_length_between_above_high_failure():
 def test_is_length_between_bad_args():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["a"]).is_length_between("1", 2)
-    assert_that(str(exc_info.value)).is_equal_to("given low arg must be an int")
+    assert_that(str(exc_info.value)).is_equal_to("given low arg must be an integer, but was <'1'> (str)")
     with pytest.raises(TypeError) as exc_info:
         assert_that(["a"]).is_length_between(1, "2")
-    assert_that(str(exc_info.value)).is_equal_to("given high arg must be an int")
+    assert_that(str(exc_info.value)).is_equal_to("given high arg must be an integer, but was <'2'> (str)")
     with pytest.raises(ValueError) as exc_info:
         assert_that(["a"]).is_length_between(0, -1)
     assert_that(str(exc_info.value)).is_equal_to("given args must be positive ints")
@@ -57,7 +57,7 @@ def test_is_length_between_bad_args():
 def test_is_length_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(["a", "b", "c"]).is_length("bar")
-    assert_that(str(exc_info.value)).is_equal_to("given arg must be an int")
+    assert_that(str(exc_info.value)).is_equal_to("given length arg must be an integer, but was <'bar'> (str)")
 
 
 def test_is_length_negative_arg_failure():
@@ -247,7 +247,7 @@ def test_contains_sequence_tail_prefix_absent_fails_cleanly():
 def test_contains_sequence_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_sequence(1, 2)
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_contains_sequence_no_args_failure():
@@ -286,7 +286,7 @@ def test_contains_sequence_string_substrings_not_found():
 def test_contains_sequence_string_bad_arg_type():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foobar").contains_sequence("foo", 123)
-    assert_that(str(exc_info.value)).is_equal_to("given args must be strings when val is a string")
+    assert_that(str(exc_info.value)).is_equal_to("given item arg must be a string, to match val, but was <123> (int)")
 
 
 def test_contains_duplicates():
@@ -310,7 +310,7 @@ def test_contains_duplicates_failure():
 def test_contains_duplicates_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_duplicates()
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_does_not_contain_duplicates():
@@ -338,11 +338,11 @@ def test_does_not_contain_duplicates_failure():
 def test_does_not_contain_duplicates_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_contain_duplicates()
-    assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+    assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <123> (int)")
 
 
 def test_contains_duplicates_unhashable_items():
-    # a list of dicts (unhashable) must use an == based fallback, not raise "val is not iterable"
+    # a list of dicts (unhashable) must use an == based fallback, not raise "val must be iterable"
     assert_that([{"a": 1}, {"b": 2}, {"a": 1}]).contains_duplicates()
     with pytest.raises(AssertionError):
         assert_that([{"a": 1}, {"b": 2}]).contains_duplicates()
@@ -566,7 +566,7 @@ class TestContainsExactly:
     def test_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_exactly(1)
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
     def test_unhashable_items_failure(self):
         # the failure path used Counter and crashed with TypeError on unhashable items
@@ -645,7 +645,7 @@ class TestContainsExactlyInAnyOrder:
     def test_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_exactly_in_any_order(1)
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
 
 class TestContainsInOrder:
@@ -679,7 +679,7 @@ class TestContainsInOrder:
     def test_not_iterable_failure(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that(42).contains_in_order(1)
-        assert_that(str(exc_info.value)).is_equal_to("val is not iterable")
+        assert_that(str(exc_info.value)).is_equal_to("val must be iterable, but was <42> (int)")
 
 
 class TestOrderingFailuresNameTheBreakPoint:

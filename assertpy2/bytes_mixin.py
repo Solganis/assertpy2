@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import refuse, sized_len
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -15,7 +16,7 @@ class BytesMixin(_MixinBase):
 
     def _check_bytes(self) -> None:
         if not isinstance(self.val, (bytes, bytearray)):
-            raise TypeError("val is not bytes or bytearray")
+            refuse(self.val, "bytes or a bytearray")
 
     def is_valid_utf8(self) -> Self:
         """Assert that val is valid UTF-8.
@@ -109,8 +110,8 @@ class BytesMixin(_MixinBase):
             AssertionError: if the byte at index does not match
         """
         self._check_bytes()
-        if index < 0 or index >= len(self.val):
-            raise IndexError(f"Expected index {index} to be in range [0, {len(self.val)}), but was out of range.")
+        if index < 0 or index >= sized_len(self.val):
+            raise IndexError(f"Expected index {index} to be in range [0, {sized_len(self.val)}), but was out of range.")
         actual = self.val[index]
         if actual != expected:
             return self.error(f"Expected byte at index {index} to be <0x{expected:02x}>, but was <0x{actual:02x}>.")

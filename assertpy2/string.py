@@ -5,6 +5,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, refuse, require_type, sized_len
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -23,9 +24,8 @@ class StringMixin(_MixinBase):
         Validates that val is a non-empty string, then emits a "contain only ``description``" error if
         ``is_valid(self.val)`` is falsy.
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if len(self.val) == 0:
+        require_type(self.val, str, "a string")
+        if sized_len(self.val) == 0:
             raise ValueError("val is empty")
         if not is_valid(self.val):
             return self.error(f"Expected <{self.val}> to contain only {description}, but did not.")
@@ -52,10 +52,8 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if actual is **not** case-insensitive equal to expected
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(other, str):
-            raise TypeError("given arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(other, str, "a string", subject=argument("other"))
         if self.val.lower() != other.lower():
             return self.error(f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.")
         return self
@@ -84,10 +82,8 @@ class StringMixin(_MixinBase):
             AssertionError: if actual is **not** equal to expected ignoring whitespace
             TypeError: if val or the given arg is not a string
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(other, str):
-            raise TypeError("given arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(other, str, "a string", subject=argument("other"))
         if "".join(self.val.split()) != "".join(other.split()):
             return self.error(f"Expected <{self.val}> to be equal to <{other}> ignoring whitespace, but was not.")
         return self
@@ -118,8 +114,7 @@ class StringMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         if isinstance(self.val, str):
             if len(items) == 1:
-                if not isinstance(items[0], str):
-                    raise TypeError("given arg must be a string")
+                require_type(items[0], str, "a string", subject=argument("item"))
                 if items[0].lower() not in self.val.lower():
                     return self.error(
                         f"Expected <{self.val}> to case-insensitive contain item <{items[0]}>, but did not."
@@ -128,8 +123,7 @@ class StringMixin(_MixinBase):
                 val_lower = self.val.lower()
                 missing = []
                 for item in items:
-                    if not isinstance(item, str):
-                        raise TypeError("given args must all be strings")
+                    require_type(item, str, "a string", subject=argument("item"))
                     if item.lower() not in val_lower:
                         missing.append(item)
                 if missing:
@@ -141,13 +135,11 @@ class StringMixin(_MixinBase):
             lowered_values = []
             for value in list(self.val):  # materialize once so a one-shot iterable is not exhausted
                 # validate every element up front so the error does not depend on match/scan order
-                if not isinstance(value, str):
-                    raise TypeError("val items must all be strings")
+                require_type(value, str, "a string", subject="every item of val")
                 lowered_values.append(value.lower())
             missing = []
             for item in items:
-                if not isinstance(item, str):
-                    raise TypeError("given args must all be strings")
+                require_type(item, str, "a string", subject=argument("item"))
                 if item.lower() not in lowered_values:
                     missing.append(item)
             if missing:
@@ -156,7 +148,7 @@ class StringMixin(_MixinBase):
                     f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
                 )
         else:
-            raise TypeError("val is not a string or iterable")
+            refuse(self.val, "a string or an iterable")
         return self
 
     def starts_with(self, prefix: str) -> Self:
@@ -179,11 +171,10 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** start with prefix
         """
-        if prefix is None:
-            raise TypeError("given prefix arg must not be none")
+        if prefix is None:  # `None` is neither, and reaches the branch below only to confuse it
+            refuse(prefix, "a string or bytes", subject=argument("prefix"))
         if isinstance(self.val, str):
-            if not isinstance(prefix, str):
-                raise TypeError("given prefix arg must be a string")
+            require_type(prefix, str, "a string", subject=argument("prefix"))
             if len(prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(prefix):
@@ -192,12 +183,11 @@ class StringMixin(_MixinBase):
             # bytes are iterable, so without this branch they fall through to the one below and get
             # compared element-wise: `b"foo"` yields the int 102 first, and `102 != b"f"` fails an
             # assertion that should pass. A prefix of a byte string is a byte string, same as for text
-            if not isinstance(prefix, (bytes, bytearray)):
-                raise TypeError("given prefix arg must be bytes")
-            if len(prefix) == 0:
+            raw_prefix = require_type(prefix, (bytes, bytearray), "bytes", subject=argument("prefix"))
+            if len(raw_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
-            if not self.val.startswith(prefix):
-                return self.error(f"Expected <{self.val!r}> to start with <{prefix!r}>, but did not.")
+            if not self.val.startswith(raw_prefix):
+                return self.error(f"Expected <{self.val!r}> to start with <{raw_prefix!r}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             iterator = iter(self.val)
             try:
@@ -207,7 +197,7 @@ class StringMixin(_MixinBase):
             if first != prefix:
                 return self.error(f"Expected {self.val} to start with <{prefix}>, but did not.")
         else:
-            raise TypeError("val is not a string or iterable")
+            refuse(self.val, "a string or an iterable")
         return self
 
     def ends_with(self, suffix: str) -> Self:
@@ -231,10 +221,9 @@ class StringMixin(_MixinBase):
             AssertionError: if val does **not** end with suffix
         """
         if suffix is None:
-            raise TypeError("given suffix arg must not be none")
+            refuse(suffix, "a string or bytes", subject=argument("suffix"))
         if isinstance(self.val, str):
-            if not isinstance(suffix, str):
-                raise TypeError("given suffix arg must be a string")
+            require_type(suffix, str, "a string", subject=argument("suffix"))
             if len(suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(suffix):
@@ -242,12 +231,11 @@ class StringMixin(_MixinBase):
         elif isinstance(self.val, (bytes, bytearray)):
             # the mirror of the branch in starts_with, and broken the same way without it: the last
             # element of `b"foo"` is the int 111, never equal to `b"o"`
-            if not isinstance(suffix, (bytes, bytearray)):
-                raise TypeError("given suffix arg must be bytes")
-            if len(suffix) == 0:
+            raw_suffix = require_type(suffix, (bytes, bytearray), "bytes", subject=argument("suffix"))
+            if len(raw_suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
-            if not self.val.endswith(suffix):
-                return self.error(f"Expected <{self.val!r}> to end with <{suffix!r}>, but did not.")
+            if not self.val.endswith(raw_suffix):
+                return self.error(f"Expected <{self.val!r}> to end with <{raw_suffix!r}>, but did not.")
         elif isinstance(self.val, collections.abc.Iterable):
             items = list(self.val)
             if not items:
@@ -255,7 +243,7 @@ class StringMixin(_MixinBase):
             if items[-1] != suffix:
                 return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.")
         else:
-            raise TypeError("val is not a string or iterable")
+            refuse(self.val, "a string or an iterable")
         return self
 
     def starts_with_ignoring_case(self, prefix: str) -> Self:
@@ -281,10 +269,8 @@ class StringMixin(_MixinBase):
             TypeError: if val or the given prefix is not a string
             ValueError: if the given prefix is empty
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(prefix, str):
-            raise TypeError("given prefix arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(prefix, str, "a string", subject=argument("prefix"))
         if len(prefix) == 0:
             raise ValueError("given prefix arg must not be empty")
         if not self.val.lower().startswith(prefix.lower()):
@@ -314,10 +300,8 @@ class StringMixin(_MixinBase):
             TypeError: if val or the given suffix is not a string
             ValueError: if the given suffix is empty
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(suffix, str):
-            raise TypeError("given suffix arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(suffix, str, "a string", subject=argument("suffix"))
         if len(suffix) == 0:
             raise ValueError("given suffix arg must not be empty")
         if not self.val.lower().endswith(suffix.lower()):
@@ -374,10 +358,8 @@ class StringMixin(_MixinBase):
             underlying ``re.match`` method).  So, if you need to match the entire string, you must
             include anchors in the regex pattern.
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(pattern, str):
-            raise TypeError("given pattern arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(pattern, str, "a string", subject=argument("pattern"))
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is None:
@@ -405,10 +387,8 @@ class StringMixin(_MixinBase):
         See Also:
             [`matches()`][assertpy2.string.StringMixin.matches] - for more about regex patterns
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(pattern, str):
-            raise TypeError("given pattern arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(pattern, str, "a string", subject=argument("pattern"))
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is not None:
@@ -530,13 +510,11 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** contain any of the items
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
+        require_type(self.val, str, "a string")
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         for item in items:
-            if not isinstance(item, str):
-                raise TypeError("given args must all be strings")
+            require_type(item, str, "a string", subject=argument("item"))
         if not any(item in self.val for item in items):
             return self.error(f"Expected <{self.val}> to contain any of {self._fmt_items(items)}, but did not.")
         return self
@@ -558,13 +536,11 @@ class StringMixin(_MixinBase):
         Raises:
             AssertionError: if val **does** contain any of the items
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
+        require_type(self.val, str, "a string")
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         for item in items:
-            if not isinstance(item, str):
-                raise TypeError("given args must all be strings")
+            require_type(item, str, "a string", subject=argument("item"))
         found = [item for item in items if item in self.val]
         if found:
             return self.error(
@@ -621,10 +597,8 @@ class StringMixin(_MixinBase):
             ValueError: if pattern is empty
             AssertionError: if the pattern does not match val or the group does not exist
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(pattern, str):
-            raise TypeError("given pattern arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(pattern, str, "a string", subject=argument("pattern"))
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         match_obj = re.search(pattern, self.val)
@@ -673,10 +647,8 @@ class StringMixin(_MixinBase):
             ValueError: if pattern is empty
             AssertionError: if the pattern does not match val
         """
-        if not isinstance(self.val, str):
-            raise TypeError("val is not a string")
-        if not isinstance(pattern, str):
-            raise TypeError("given pattern arg must be a string")
+        require_type(self.val, str, "a string")
+        require_type(pattern, str, "a string", subject=argument("pattern"))
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         match_obj = re.search(pattern, self.val)

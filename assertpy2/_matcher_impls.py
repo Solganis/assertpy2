@@ -11,6 +11,7 @@ from ._engine._compare import _CompareConfig, _guarded_not_equal, _keyed_types_d
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 from ._engine._path import _ROOT, _Path
+from ._engine._require import argument, refuse
 
 if TYPE_CHECKING:
     from types import UnionType
@@ -418,7 +419,7 @@ class IsInstanceOfMatcher(BaseMatcher):
         try:
             isinstance(None, expected_type)
         except TypeError:
-            raise TypeError("given arg must be a class") from None
+            refuse(expected_type, "a class", subject=argument("class"))
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:
@@ -443,7 +444,7 @@ class IsTypeOfMatcher(BaseMatcher):
         # the same check `is_type_of` applies, and for the same reason: `type(value) is <a union>` can
         # never be true, so accepting one produces a matcher that silently never matches
         if type(expected_type) is not type and not issubclass(type(expected_type), type):
-            raise TypeError("given arg must be a type")
+            refuse(expected_type, "a type", subject=argument("type"))
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:

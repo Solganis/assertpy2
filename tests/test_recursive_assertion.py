@@ -175,12 +175,16 @@ class TestAllFieldsSatisfy:
     def test_bad_matcher_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([1]).all_fields_satisfy(42)
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given matcher arg must be a Matcher or a callable, but was <42> (int)"
+        )
 
     def test_bad_matcher_on_empty_raises_type_error(self):
         with pytest.raises(TypeError) as exc_info:
             assert_that([]).all_fields_satisfy("not a matcher")
-        assert_that(str(exc_info.value)).is_equal_to("given arg must be a Matcher or callable")
+        assert_that(str(exc_info.value)).is_equal_to(
+            "given matcher arg must be a Matcher or a callable, but was <'not a matcher'> (str)"
+        )
 
     def test_empty_container_passes(self):
         assert_that({}).all_fields_satisfy(match.is_positive())

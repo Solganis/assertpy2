@@ -41,7 +41,7 @@ class TestExtractingGroup:
             assert_that("hello").extracting_group(r"hello(?:(\d+))?", 1)
 
     def test_val_not_string(self):
-        with pytest.raises(TypeError, match="val is not a string"):
+        with pytest.raises(TypeError, match="val must be a string"):
             assert_that(123).extracting_group(r"\d+", 0)
 
     def test_pattern_not_string(self):
@@ -95,7 +95,7 @@ class TestMatchesWithGroups:
             assert_that("no match").described_as("log parsing").matches_with_groups(r"(\d+)")
 
     def test_val_not_string(self):
-        with pytest.raises(TypeError, match="val is not a string"):
+        with pytest.raises(TypeError, match="val must be a string"):
             assert_that(42).matches_with_groups(r"(\d+)")
 
     def test_pattern_not_string(self):

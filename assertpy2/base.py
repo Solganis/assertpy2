@@ -16,6 +16,7 @@ from ._engine._compare import (
 from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
+from ._engine._require import argument, refuse, require_type, sized_len
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr, _reject_unknown_kwargs
@@ -553,7 +554,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** of the given type
         """
         if type(some_type) is not type and not issubclass(type(some_type), type):
-            raise TypeError("given arg must be a type")
+            refuse(some_type, "a type", subject=argument("type"))
         if type(self.val) is not some_type:
             type_name = self._type(self.val)
             return self.error(f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.")
@@ -597,7 +598,7 @@ class BaseMixin(SatisfiesMixin):
                     f"Expected <{self.val}:{type_name}> to be instance of class <{some_class.__name__}>, but was not."
                 )
         except TypeError:
-            raise TypeError("given arg must be a class") from None
+            refuse(some_class, "a class", subject=argument("class"))
         return self
 
     def is_instance_of_any(self, *some_classes: type) -> Self:
@@ -631,7 +632,7 @@ class BaseMixin(SatisfiesMixin):
                     f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not."
                 )
         except TypeError:
-            raise TypeError("given args must all be classes") from None
+            refuse(some_classes, "classes", subject=argument("class"))
         return self
 
     def is_subclass_of(self, some_class: type) -> Self:
@@ -662,15 +663,14 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** a subclass of the given class
             TypeError: if val or the given arg is not a class
         """
-        if not isinstance(self.val, type):
-            raise TypeError("val must be a class")
+        require_type(self.val, type, "a class")
         try:
             if not issubclass(self.val, some_class):
                 return self.error(
                     f"Expected <{self.val.__name__}> to be subclass of <{some_class.__name__}>, but was not."
                 )
         except TypeError:
-            raise TypeError("given arg must be a class") from None
+            refuse(some_class, "a class", subject=argument("class"))
         return self
 
     def is_length(self, length) -> Self:
@@ -697,11 +697,11 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** the given length
         """
         if type(length) is not int:
-            raise TypeError("given arg must be an int")
+            refuse(length, "an integer", subject=argument("length"))
         if length < 0:
             raise ValueError("given arg must be a positive int")
-        if len(self.val) != length:
-            return self.error(f"Expected <{self.val}> to be of length <{length}>, but was <{len(self.val)}>.")
+        if sized_len(self.val) != length:
+            return self.error(f"Expected <{self.val}> to be of length <{length}>, but was <{sized_len(self.val)}>.")
         return self
 
     def is_length_between(self, low: int, high: int) -> Self:
@@ -732,15 +732,15 @@ class BaseMixin(SatisfiesMixin):
             ValueError: if a given arg is negative, or low is greater than high
         """
         if type(low) is not int:
-            raise TypeError("given low arg must be an int")
+            refuse(low, "an integer", subject=argument("low"))
         if type(high) is not int:
-            raise TypeError("given high arg must be an int")
+            refuse(high, "an integer", subject=argument("high"))
         if low < 0 or high < 0:
             raise ValueError("given args must be positive ints")
         if low > high:
             raise ValueError("given low arg must be less than given high arg")
-        if not low <= len(self.val) <= high:
+        if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{len(self.val)}>."
+                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{sized_len(self.val)}>."
             )
         return self

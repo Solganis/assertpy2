@@ -84,7 +84,7 @@ def test_contains_key():
 def test_contains_key_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).contains_key(1)
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_does_not_contain_key():
@@ -95,7 +95,7 @@ def test_does_not_contain_key():
 def test_does_not_contain_key_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_contain_key(1)
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_contains_key_single_item_failure():
@@ -168,7 +168,7 @@ def test_contains_value_empty_arg_failure():
 def test_contains_value_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_value("x")
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_contains_value_single_item_failure():
@@ -191,7 +191,7 @@ def test_does_not_contain_value():
 def test_does_not_contain_value_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).does_not_contain_value(1)
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_does_not_contain_value_empty_arg_failure():
@@ -232,7 +232,7 @@ def test_contains_entry():
 def test_contains_entry_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").contains_entry({"a": 1})
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_contains_entry_empty_arg_failure():
@@ -244,7 +244,7 @@ def test_contains_entry_empty_arg_failure():
 def test_contains_entry_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2, "c": 3}).contains_entry("x")
-    assert_that(str(exc_info.value)).is_equal_to("given entry arg must be a dict")
+    assert_that(str(exc_info.value)).is_equal_to("given entry arg must be a dict, but was <'x'> (str)")
 
 
 def test_contains_entry_bad_arg_too_big_failure():
@@ -292,7 +292,7 @@ def test_does_not_contain_entry():
 def test_does_not_contain_entry_bad_val_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that("foo").does_not_contain_entry({"a": 1})
-    assert_that(str(exc_info.value)).contains("is not dict-like")
+    assert_that(str(exc_info.value)).contains("must be dict-like")
 
 
 def test_does_not_contain_entry_empty_arg_failure():
@@ -304,7 +304,7 @@ def test_does_not_contain_entry_empty_arg_failure():
 def test_does_not_contain_entry_bad_arg_type_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that({"a": 1, "b": 2, "c": 3}).does_not_contain_entry("x")
-    assert_that(str(exc_info.value)).is_equal_to("given entry arg must be a dict")
+    assert_that(str(exc_info.value)).is_equal_to("given entry arg must be a dict, but was <'x'> (str)")
 
 
 def test_does_not_contain_entry_bad_arg_too_big_failure():

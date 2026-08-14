@@ -39,6 +39,7 @@ from . import _hints
 from ._engine._contract import contract_drift
 from ._engine._introspection import is_same_implementation
 from ._engine._path import _ROOT, _Path
+from ._engine._require import argument, refuse
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
@@ -784,7 +785,7 @@ def add_extension(func, *, override: bool = False):
                 # 6 is NOT 5!
     """
     if not callable(func):
-        raise TypeError("func must be callable")
+        refuse(func, "callable", subject=argument("func"))
     name = getattr(func, "__name__", None)
     if not isinstance(name, str) or not name.isidentifier():
         raise ValueError(f"the assertion's __name__ must be a valid Python identifier, got {name!r}")
@@ -829,7 +830,7 @@ def remove_extension(func):
             remove_extension(is_5)
     """
     if not callable(func):
-        raise TypeError("func must be callable")
+        refuse(func, "callable", subject=argument("func"))
     if func.__name__ in vars(_ExtendedBuilder):
         delattr(_ExtendedBuilder, func.__name__)
     _extensions.pop(func.__name__, None)
@@ -1439,7 +1440,7 @@ class AssertionBuilder(
                 ``Exception`` subclass
         """
         if not callable(self.val):
-            raise TypeError("val must be callable when using eventually()")
+            refuse(self.val, "callable, since eventually() polls it")
         return AsyncAssertionBuilder(
             self.val,
             builder_func=_builder,
@@ -1511,7 +1512,7 @@ class AssertionBuilder(
                 ``Exception`` subclass
         """
         if not callable(self.val):
-            raise TypeError("val must be callable when using eventually_sync()")
+            refuse(self.val, "callable, since eventually_sync() polls it")
         return SyncAssertionBuilder(
             self.val,
             builder_func=_builder,

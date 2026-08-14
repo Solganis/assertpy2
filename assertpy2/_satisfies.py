@@ -9,6 +9,7 @@ from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
+from ._engine._require import argument, refuse
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import (
     IsNotNoneMatcher,
@@ -131,7 +132,7 @@ class SatisfiesMixin(_MixinBase):
         """
         _warn_if_vacuous("all_fields_satisfy", self.val, allow_empty)
         if not _is_matcher(matcher) and not callable(matcher):
-            raise TypeError("given arg must be a Matcher or callable")
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         description = _describe_matcher(matcher)
         failures = [
             path.leaf_entry(actual=leaf, expected=description)
@@ -221,7 +222,7 @@ class SatisfiesMixin(_MixinBase):
             if not cast("Callable[..., object]", matcher)(self.val):
                 return self.error(f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.")
         else:
-            raise TypeError("given arg must be a Matcher or callable")
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self
 
     def each(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
@@ -251,7 +252,7 @@ class SatisfiesMixin(_MixinBase):
         """
         _warn_if_vacuous("each", self.val, allow_empty)
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         if _is_matcher(matcher):
             description = matcher.describe()
             for i, item in enumerate(self.val):
@@ -275,7 +276,7 @@ class SatisfiesMixin(_MixinBase):
                         f" but item at index {i} <{item}> did not."
                     )
         else:
-            raise TypeError("given arg must be a Matcher or callable")
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self
 
     def matches_structure(self, spec: dict[Any, Any]) -> Self:
@@ -309,9 +310,9 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** match the structure spec
         """
         if not is_mapping_like(self.val) and not is_model_dump_object(self.val) and not is_attrs_instance(self.val):
-            raise TypeError("val must be a mapping, a pydantic-style model, or an attrs instance")
+            refuse(self.val, "a mapping, a pydantic-style model, or an attrs instance")
         if not isinstance(spec, dict):
-            raise TypeError("given arg must be a dict")
+            refuse(spec, "a dict", subject=argument("spec"))
         matcher = StructureMatcher(spec)
         # one walk, read twice: the entries want every mismatch, the message wants the first one in words
         mismatches = matcher.walk_mismatches(self.val)
@@ -391,7 +392,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if no item satisfies the matcher
         """
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         description = _describe_matcher(matcher)
         if _is_matcher(matcher) or callable(matcher):
             # counted again below to name how many were examined, so drain a one-shot iterator
@@ -413,7 +414,7 @@ class SatisfiesMixin(_MixinBase):
                     ),
                 )
         else:
-            raise TypeError("given arg must be a Matcher or callable")
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self
 
     def all_satisfy(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
@@ -466,7 +467,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if any item satisfies the matcher
         """
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         if _is_matcher(matcher):
             for i, item in enumerate(self.val):
                 if matcher.matches(item):
@@ -480,7 +481,7 @@ class SatisfiesMixin(_MixinBase):
                         f"Expected no item to satisfy {_describe_matcher(matcher)}, but item at index {i} <{item}> did."
                     )
         else:
-            raise TypeError("given arg must be a Matcher or callable")
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self
 
     def satisfies_exactly(self, *matchers: Matcher[Any] | Callable[..., bool]) -> Self:
@@ -516,7 +517,7 @@ class SatisfiesMixin(_MixinBase):
         if len(matchers) == 0:
             raise ValueError("one or more args must be given")
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         items = list(self.val)
         if len(items) != len(matchers):
             return self.error(
@@ -577,9 +578,9 @@ class SatisfiesMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         for matcher in matchers:
             if not _is_matcher(matcher) and not callable(matcher):
-                raise TypeError("given arg must be a Matcher or callable")
+                refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         items = list(self.val)
         if len(items) != len(matchers):
             return self.error(
@@ -653,11 +654,11 @@ class SatisfiesMixin(_MixinBase):
         """
         _warn_if_vacuous("zip_satisfies", self.val, allow_empty)
         if not callable(predicate):
-            raise TypeError("given predicate must be callable")
+            refuse(predicate, "callable", subject=argument("predicate"))
         if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+            refuse(self.val, "iterable")
         if not isinstance(other, collections.abc.Iterable):
-            raise TypeError("given arg must be iterable")
+            refuse(other, "iterable", subject=argument("other"))
         val_items = list(self.val)
         other_items = list(other)
         if len(val_items) != len(other_items):

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import functools
 import json
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import TYPE_CHECKING, Any
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, require_type
 from .errors import DiffEntry, DiffResult
 
 if TYPE_CHECKING:
@@ -26,6 +27,9 @@ def _parsed_json_path(path: str):
     Bounded rather than unbounded: a path built from test data (``$.users[7].name``) is a fresh string
     each time, and an unbounded cache would grow with the suite.
     """
+    # the parser indexes the expression it is handed, so a non-string reaches it and comes back as
+    # "'int' object is not subscriptable": about jsonpath's own lexer, not about the call that was made
+    require_type(path, str, "a string", subject=argument("path"))
     return _ensure_jsonpath_ng().parse(path)
 
 
@@ -202,6 +206,9 @@ class JsonMixin(_MixinBase):
             ValueError: if no match is found at the given path
         """
         expr = _parsed_json_path(path)
+        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
+        # subscriptable", which is about its own indexing rather than about the value under assertion
+        require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if not matches:
             raise ValueError(f"Expected JSON path <{path}> to exist, but it did not.")
@@ -228,6 +235,9 @@ class JsonMixin(_MixinBase):
             AssertionError: if the path does not exist
         """
         expr = _parsed_json_path(path)
+        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
+        # subscriptable", which is about its own indexing rather than about the value under assertion
+        require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if not matches:
             return self.error(f"Expected JSON path <{path}> to exist, but it did not.")
@@ -252,6 +262,9 @@ class JsonMixin(_MixinBase):
             AssertionError: if the path exists
         """
         expr = _parsed_json_path(path)
+        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
+        # subscriptable", which is about its own indexing rather than about the value under assertion
+        require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if matches:
             return self.error(f"Expected JSON path <{path}> to not exist, but it did.")
@@ -277,6 +290,12 @@ class JsonMixin(_MixinBase):
         """
         jsonschema_mod = _ensure_jsonschema()
         try:
+            require_type(
+                schema,
+                (dict, bool),
+                "a JSON Schema (a dict, or a bool for the trivial schema)",
+                subject=argument("schema"),
+            )
             jsonschema_mod.validate(self.val, schema)
         except jsonschema_mod.ValidationError as exc:
             # carry the path ourselves: it is the only part of jsonschema's own text the message does
@@ -305,6 +324,7 @@ class JsonMixin(_MixinBase):
         Raises:
             AssertionError: if val does not conform to the schema
         """
+        require_type(path, (str, PurePath), "a path", subject=argument("path"))
         schema = json.loads(Path(path).read_text(encoding="utf-8"))
         return self.matches_json_schema(schema)
 

@@ -364,7 +364,7 @@ class TestMatchesStructureMethod:
             assert_that("not a dict").matches_structure({"a": 1})
 
     def test_non_dict_spec(self):
-        with pytest.raises(TypeError, match="given arg must be a dict"):
+        with pytest.raises(TypeError, match="given spec arg must be a dict"):
             assert_that({"a": 1}).matches_structure("not a dict")
 
     def test_chaining(self):

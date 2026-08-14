@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_mapping_like
 from ._engine._mixin_base import _MixinBase
+from ._engine._require import argument, refuse, require_type, sized_len
 from ._satisfies import _warn_if_vacuous
 from .matchers import _is_matcher
 
@@ -22,8 +23,7 @@ class CollectionMixin(_MixinBase):
 
     def _as_list(self) -> list[Any]:
         """Returns val as a list, raising TypeError if val is not iterable."""
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         return list(self.val)
 
     def is_iterable(self) -> Self:
@@ -96,8 +96,7 @@ class CollectionMixin(_MixinBase):
             AssertionError: if val is **not** subset of given superset (or supersets)
         """
         _warn_if_vacuous("is_subset_of", self.val, allow_empty)
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         if len(supersets) == 0:
             raise ValueError("one or more superset args must be given")
 
@@ -172,8 +171,7 @@ class CollectionMixin(_MixinBase):
             AssertionError: if val is **not** sorted
         """
         _warn_if_vacuous("is_sorted", self.val, allow_empty)
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
 
         previous = None
         for index, current in enumerate(self.val):
@@ -213,11 +211,10 @@ class CollectionMixin(_MixinBase):
             AssertionError: if val and other do **not** have the same length
             TypeError: if other is not a sized object
         """
-        try:
-            other_len = len(other)
-        except TypeError:
-            raise TypeError(f"given arg <{type(other).__name__}> is not a sized object") from None
-        actual_len = len(self.val)
+        other_len = sized_len(other, subject=argument("other"))
+        # val used to be left to `len()` itself, which answers "object of type 'int' has no len()":
+        # about the builtin rather than the assertion, and naming neither operand
+        actual_len = sized_len(self.val)
         if actual_len != other_len:
             return self.error(
                 f"Expected <{self.val}> to have same size as <{other}> of length <{other_len}>,"
@@ -247,11 +244,12 @@ class CollectionMixin(_MixinBase):
             ValueError: if the given arg is negative
         """
         if type(size) is not int:
-            raise TypeError("given arg must be an int")
+            refuse(size, "an integer", subject=argument("size"))
         if size < 0:
             raise ValueError("given arg must be a positive int")
-        if len(self.val) <= size:
-            return self.error(f"Expected <{self.val}> to have size greater than <{size}>, but was <{len(self.val)}>.")
+        actual = sized_len(self.val)
+        if actual <= size:
+            return self.error(f"Expected <{self.val}> to have size greater than <{size}>, but was <{actual}>.")
         return self
 
     def has_size_less_than(self, size: int) -> Self:
@@ -276,11 +274,12 @@ class CollectionMixin(_MixinBase):
             ValueError: if the given arg is negative
         """
         if type(size) is not int:
-            raise TypeError("given arg must be an int")
+            refuse(size, "an integer", subject=argument("size"))
         if size < 0:
             raise ValueError("given arg must be a positive int")
-        if len(self.val) >= size:
-            return self.error(f"Expected <{self.val}> to have size less than <{size}>, but was <{len(self.val)}>.")
+        actual = sized_len(self.val)
+        if actual >= size:
+            return self.error(f"Expected <{self.val}> to have size less than <{size}>, but was <{actual}>.")
         return self
 
     def has_size_between(self, low: int, high: int) -> Self:
@@ -306,16 +305,16 @@ class CollectionMixin(_MixinBase):
             ValueError: if a given arg is negative, or low is greater than high
         """
         if type(low) is not int:
-            raise TypeError("given low arg must be an int")
+            refuse(low, "an integer", subject=argument("low"))
         if type(high) is not int:
-            raise TypeError("given high arg must be an int")
+            refuse(high, "an integer", subject=argument("high"))
         if low < 0 or high < 0:
             raise ValueError("given args must be positive ints")
         if low > high:
             raise ValueError("given low arg must be less than given high arg")
-        if not low <= len(self.val) <= high:
+        if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{len(self.val)}>."
+                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{sized_len(self.val)}>."
             )
         return self
 
@@ -334,8 +333,7 @@ class CollectionMixin(_MixinBase):
         Returns:
             AssertionBuilder: returns a new instance with the filtered list as val
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher`
         # subclass check: a custom matcher written against the documented shape was called as a
         # plain function here, and works everywhere else
@@ -366,8 +364,7 @@ class CollectionMixin(_MixinBase):
         Returns:
             AssertionBuilder: returns a new instance with the mapped list as val
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         return self.builder([func(item) for item in self.val], self.description, self.kind, logger=self.logger)
 
     def flat_mapped(self, func: Callable[[Any], Iterable[Any]]) -> Self:
@@ -384,8 +381,7 @@ class CollectionMixin(_MixinBase):
         Returns:
             AssertionBuilder: returns a new instance with the flattened list as val
         """
-        if not isinstance(self.val, collections.abc.Iterable):
-            raise TypeError("val is not iterable")
+        require_type(self.val, collections.abc.Iterable, "iterable")
         return self.builder(
             [inner for item in self.val for inner in func(item)], self.description, self.kind, logger=self.logger
         )
