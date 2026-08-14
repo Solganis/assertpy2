@@ -66,6 +66,7 @@ from ._matcher_impls import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+
     from ._matcher_impls import ClassInfo
 
 
@@ -238,15 +239,25 @@ class _MatchNamespace:
     """
 
     @staticmethod
-    def equal_to(expected: object, strict_types: bool = False) -> EqualToMatcher:
+    def equal_to(expected: object, strict_types: bool = False, **options: object) -> EqualToMatcher:
         """Matcher for a value equal to ``expected``.
 
         Args:
             expected: the value to compare against
             strict_types: also require the same type, so ``True`` no longer matches ``1``.  The same
                 relation ``is_equal_to(..., strict_types=True)`` applies, spelled for a spec.
+            **options: the rest of what
+                [`is_equal_to()`][assertpy2.base.BaseMixin.is_equal_to] accepts, with the same meaning:
+                ``tolerance``, ``comparators``, ``ignore``, ``include`` and ``ignore_null``.  One
+                relation, one set of knobs, whichever way it is spelled.
+
+        Examples:
+            Usage:
+
+                assert_that(reading).satisfies(match.equal_to(expected, tolerance=0.01))
+                assert_that(payload).matches_structure({"user": match.equal_to(user, ignore="updated_at")})
         """
-        return EqualToMatcher(expected, strict_types)
+        return EqualToMatcher(expected, strict_types, **options)
 
     @staticmethod
     def greater_than(val: object) -> GreaterThanMatcher:
