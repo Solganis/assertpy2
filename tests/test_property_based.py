@@ -19,13 +19,14 @@ import pytest
 from hypothesis import assume, find, given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import assert_conforms, assert_that, match
+from assertpy2 import assert_conforms, assert_that, match, soft_assertions
 from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
 from assertpy2._engine._introspection import is_mapping_like
 from assertpy2._engine._path import _ROOT
+from assertpy2._engine._require import refuse
 from assertpy2._hints import diagnose
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
@@ -1432,3 +1433,72 @@ class TestTheDanglingScanCountsWhatWasWritten:
         body = "".join(line for line, _ in statements)
         source = "from assertpy2 import assert_that\n\n\ndef test_generated():\n" + body
         assert_that(dangling_findings(source, "generated.py")).is_length(sum(count for _, count in statements))
+
+
+class TestTheCompactRenderingKeepsThePositionOfChange:
+    """A soft entry drops the detail row when the headline already carries both values readably.
+
+    "Readably" is a threshold, and a threshold is where an example-based test stops being convincing:
+    every string long enough must keep a window around its first difference, wherever that difference
+    falls, and every short one must stay a single line.  Generated pairs attack both sides of it.
+    """
+
+    @staticmethod
+    def _detail(actual: str, expected: str) -> list[str]:
+        """The diff rows of the single collected entry, without the one-cause hint above them.
+
+        The hint is indented into the entry the same way, and it is about the whole failure rather than
+        about a path: a pair like `''` against `' '` is explained by one and has no rows at all.
+        """
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(actual).is_equal_to(expected)
+        _header, _entry, *detail = str(failure.value).splitlines()
+        return [row for row in detail if not row.strip().startswith(("every difference here is", "the values are"))]
+
+    @given(
+        head=st.text(alphabet="abcdefghij", min_size=61, max_size=200),
+        tail=st.text(alphabet="abcdefghij", max_size=200),
+    )
+    @settings(deadline=None)
+    def test_a_long_pair_always_shows_where_it_diverges(self, head, tail):
+        actual, expected = head + "X" + tail, head + "Y" + tail
+        detail = self._detail(actual, expected)
+        assert_that(detail).is_length(1)
+        assert_that(detail[0]).starts_with("   line 1: ").contains("X").contains("Y")
+
+    # control characters are excluded because `\r` and friends are line breaks to `splitlines()`, which
+    # is how the message is read back here: a value carrying one is a *multi*-line failure, and those
+    # keep their per-line rows by design
+    _ONE_LINE = st.text(st.characters(exclude_categories=("Cc", "Cs", "Zl", "Zp")), max_size=60)
+
+    @given(actual=_ONE_LINE, expected=_ONE_LINE)
+    @settings(deadline=None)
+    def test_a_short_pair_never_repeats_the_headline(self, actual, expected):
+        assume(actual != expected)
+        assert_that(self._detail(actual, expected)).is_empty()
+
+
+class TestEveryRefusalIsReadableWhateverArrived:
+    """The refusal shape has to survive the value it is describing.
+
+    It embeds `repr(value)`, and a repr can be empty, enormous, multi-line, or contain the very
+    brackets the shape uses. Generated values attack all four at once, which no fixed set of examples
+    covers: what a reader must always get back is the subject, the expectation and a named type.
+    """
+
+    @given(value=_values, expectation=st.text(min_size=1, max_size=20).filter(str.strip))
+    @settings(deadline=None)
+    def test_the_sentence_survives_any_value(self, value, expectation):
+        with pytest.raises(TypeError) as failure:
+            refuse(value, expectation)
+        message = str(failure.value)
+        assert_that(message).starts_with(f"val must be {expectation}, but was <")
+        assert_that(message).ends_with(f"({type(value).__name__})")
+
+    @given(value=st.text(min_size=200, max_size=4000))
+    @settings(deadline=None)
+    def test_a_long_value_never_floods_the_line(self, value):
+        with pytest.raises(TypeError) as failure:
+            refuse(value, "a number")
+        # the cap is on the rendered value; the sentence around it is short and fixed
+        assert_that(len(str(failure.value))).is_less_than(140)
