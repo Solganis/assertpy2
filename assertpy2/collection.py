@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_mapping_like
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import UnorderableError, first_out_of_order
 from ._engine._require import argument, refuse, require_type, sized_len
 from ._satisfies import _warn_if_vacuous
 from .matchers import _is_matcher
@@ -173,22 +174,25 @@ class CollectionMixin(_MixinBase):
         _warn_if_vacuous("is_sorted", self.val, allow_empty)
         require_type(self.val, collections.abc.Iterable, "iterable")
 
-        previous = None
-        for index, current in enumerate(self.val):
-            if index > 0:
-                if reverse:
-                    if key(current) > key(previous):
-                        return self.error(
-                            f"Expected <{self.val}> to be sorted reverse, "
-                            f"but subset {self._fmt_items([previous, current])} at index {index - 1} is not."
-                        )
-                else:
-                    if key(current) < key(previous):
-                        return self.error(
-                            f"Expected <{self.val}> to be sorted, "
-                            f"but subset {self._fmt_items([previous, current])} at index {index - 1} is not."
-                        )
-            previous = current
+        broken = None
+        try:
+            broken = first_out_of_order(self.val, key=key, reverse=reverse)
+        except UnorderableError:
+            # elements that cannot be ordered against each other: reported about the collection, not
+            # left to Python's "'<' not supported between instances of 'str' and 'int'", which is about
+            # the operator and names neither the assertion nor the value it was given
+            unorderable = True
+        else:
+            unorderable = False
+        if unorderable:
+            refuse(self.val, "a collection whose items can be ordered against each other")
+        if broken is not None:
+            index, earlier, later = broken
+            direction = " reverse" if reverse else ""
+            return self.error(
+                f"Expected <{self.val}> to be sorted{direction}, "
+                f"but subset {self._fmt_items([earlier, later])} at index {index} is not."
+            )
 
         return self
 

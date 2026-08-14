@@ -11,7 +11,12 @@ from ._engine._compare import _CompareConfig, _guarded_not_equal, _keyed_types_d
 from ._engine._diff import _sub_diff_entries
 from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
 from ._engine._path import _ROOT, _Path
+from ._engine._ordering import UnorderableError, holds
 from ._engine._require import argument, raised_inside, refuse
+from ._engine._size import length_of
+from ._engine._text import contains as text_contains
+from ._engine._text import ends_with as text_ends_with
+from ._engine._text import starts_with as text_starts_with
 
 if TYPE_CHECKING:
     from types import UnionType
@@ -283,11 +288,9 @@ class GreaterThanMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return bool(value > self.boundary)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            return holds(value, self.boundary, "gt")
+        except UnorderableError:
+            return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
         return f"a value greater than <{self.boundary}>"
@@ -299,11 +302,9 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return bool(value >= self.boundary)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            return holds(value, self.boundary, "ge")
+        except UnorderableError:
+            return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
         return f"a value greater than or equal to <{self.boundary}>"
@@ -315,11 +316,9 @@ class LessThanMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return bool(value < self.boundary)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            return holds(value, self.boundary, "lt")
+        except UnorderableError:
+            return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
         return f"a value less than <{self.boundary}>"
@@ -331,11 +330,9 @@ class LessThanOrEqualToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return bool(value <= self.boundary)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            return holds(value, self.boundary, "le")
+        except UnorderableError:
+            return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
         return f"a value less than or equal to <{self.boundary}>"
@@ -348,11 +345,9 @@ class BetweenMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return bool(self.low <= value <= self.high)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            return holds(value, self.low, "ge") and holds(value, self.high, "le")
+        except UnorderableError:
+            return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
         return f"a value between <{self.low}> and <{self.high}>"
@@ -495,33 +490,23 @@ class HasLengthMatcher(BaseMatcher):
         self.expected_length = expected_length
 
     def matches(self, value: Any) -> bool:
-        try:
-            return len(value) == self.expected_length
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+        # no `try` any more: the core answers `None` for a value with no length, and a `__len__` of
+        # their own that raises travels out on its own, which is what the catch used to swallow
+        return length_of(value) == self.expected_length
 
     def describe(self) -> str:
         return f"a value of length <{self.expected_length}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        try:
-            return f"was <{value}> with length <{len(value)}>"
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
+        length = length_of(value)
+        if length is None:
             return f"was <{value!r}>, which has no length"
+        return f"was <{value}> with length <{length}>"
 
 
 class IsEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        try:
-            return len(value) == 0
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+        return length_of(value) == 0
 
     def describe(self) -> str:
         return "an empty value"
@@ -529,12 +514,8 @@ class IsEmptyMatcher(BaseMatcher):
 
 class IsNotEmptyMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        try:
-            return len(value) > 0
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+        length = length_of(value)
+        return length is not None and length > 0
 
     def describe(self) -> str:
         return "a non-empty value"
@@ -689,11 +670,7 @@ class ContainsStringMatcher(BaseMatcher):
         self.substring = substring
 
     def matches(self, value: Any) -> bool:
-        if isinstance(value, str):
-            return isinstance(self.substring, str) and self.substring in value
-        if isinstance(value, (bytes, bytearray)):
-            return isinstance(self.substring, (bytes, bytearray)) and self.substring in value
-        return False
+        return text_contains(value, self.substring)
 
     def describe(self) -> str:
         return f"{_textlike_noun(self.substring)} containing <{self.substring}>"
@@ -720,11 +697,7 @@ class StartsWithMatcher(BaseMatcher):
         self.prefix = prefix
 
     def matches(self, value: Any) -> bool:
-        if isinstance(value, str):
-            return isinstance(self.prefix, str) and value.startswith(self.prefix)
-        if isinstance(value, (bytes, bytearray)):
-            return isinstance(self.prefix, (bytes, bytearray)) and value.startswith(self.prefix)
-        return False
+        return text_starts_with(value, self.prefix)
 
     def describe(self) -> str:
         return f"{_textlike_noun(self.prefix)} starting with <{self.prefix}>"
@@ -735,11 +708,7 @@ class EndsWithMatcher(BaseMatcher):
         self.suffix = suffix
 
     def matches(self, value: Any) -> bool:
-        if isinstance(value, str):
-            return isinstance(self.suffix, str) and value.endswith(self.suffix)
-        if isinstance(value, (bytes, bytearray)):
-            return isinstance(self.suffix, (bytes, bytearray)) and value.endswith(self.suffix)
-        return False
+        return text_ends_with(value, self.suffix)
 
     def describe(self) -> str:
         return f"{_textlike_noun(self.suffix)} ending with <{self.suffix}>"
