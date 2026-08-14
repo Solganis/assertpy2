@@ -918,6 +918,30 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(not_contained_in(iter([1, 2]), [1, 2, 3])).is_empty()
         assert_that(missing_items(iter([1, 2, 3]), (1, 3), _is_matcher)).is_empty()
 
+    def test_user_code_that_raises_during_the_search_is_not_swallowed_by_the_fallback(self):
+        """The boundary of the `try`, which is the whole point of where it is drawn.
+
+        Only hashing may be caught, because only hashing is what the shortcut added. A comparison or a
+        matcher raising is user code failing, and this library reports that as a bug in the test rather
+        than retrying quietly on the walk. A wider `try` would have hidden it and answered anyway.
+        """
+
+        class Exploding:
+            def matches(self, value: object) -> bool:
+                raise RuntimeError("the matcher itself is broken")
+
+            def describe(self) -> str:
+                return "an exploding matcher"
+
+            def describe_mismatch(self, value: object) -> str:
+                return "boom"
+
+        values = list(range(60))
+        with pytest.raises(RuntimeError, match="matcher itself is broken"):
+            missing_items(values, (Exploding(),), _is_matcher)
+        with pytest.raises(RuntimeError, match="matcher itself is broken"):
+            assert_that(values).contains(Exploding())
+
     def test_an_operator_that_raises_travels_out_of_both_paths(self):
         class Angry:
             def __eq__(self, other: object) -> bool:
