@@ -56,6 +56,26 @@ polars = ["polars>=1.0"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# What the source distribution carries, listed rather than filtered.  Hatchling's default is "everything
+# in the directory that git does not ignore", and it reads `.gitignore` only - so anything kept out of
+# the repository through `.git/info/exclude` or simply left lying in the working tree ends up shipped.
+# A build from a CI checkout is clean because the tree is; a build from a developer's directory is not.
+# The list is what a consumer needs to build the package and run its suite: the package, the tests, the
+# docs those tests execute, and the benchmark module one of them reads.
+[tool.hatch.build.targets.sdist]
+include = [
+    "assertpy2",
+    "tests",
+    "docs",
+    "benchmarks",
+    "mkdocs.yml",
+    "mkdocs_hooks.py",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+]
+
 [dependency-groups]
 dev = [
     "hypothesis>=6.165.0",
