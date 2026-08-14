@@ -6,7 +6,7 @@ import numbers
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
-from ._engine._require import _shown, argument, refuse, require_type
+from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -66,9 +66,11 @@ class NumericMixin(_MixinBase):
             return
         try:
             _ = self.val < other
-        except TypeError:
+        except TypeError as exc:
             # a `__lt__` of their own that raises is a bug in the value, not an incomparable pair:
             # answering it with our sentence would send the reader looking in the wrong file
+            if raised_inside(exc):
+                raise
             # the pair is what cannot be ordered, not the value: two strings compare fine, and saying
             # "ordering is not defined for type <str>" about `"10" > 5` was simply untrue
             comparable = False

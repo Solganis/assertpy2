@@ -23,6 +23,7 @@ are not, and a rule with an exception is a rule nobody can rely on.
 
 from __future__ import annotations
 
+from collections.abc import Sized
 from typing import NoReturn, TypeVar
 
 from ..errors import _safe_repr, _truncated
@@ -66,6 +67,18 @@ def _shown(value: object) -> str:
     return f"<{shown}> ({_truncated(type(value).__name__, _NAMED)})"
 
 
+def raised_inside(exc: BaseException) -> bool:
+    """Whether *exc* came out of somebody else's code rather than from the operation itself.
+
+    `len(42)` and `1 < "a"` are refusals by the operation: the traceback stops at the frame that tried
+    it.  A `__len__` or a `__lt__` that raises `TypeError` of its own adds a frame, and that error is a
+    bug in the value being tested, not a wrong operand.  Answering it with "val must be a sized object"
+    is a lie that sends the reader looking in the wrong file, so those are re-raised untouched.
+    """
+    traceback = exc.__traceback__
+    return traceback is not None and traceback.tb_next is not None
+
+
 def refuse(value: object, expectation: str, *, subject: str = "val") -> NoReturn:
     """Raise the refusal for *value*, for a check the caller has already made."""
     raise TypeError(f"{subject} must be {expectation}, but was {_shown(value)}")
@@ -96,7 +109,10 @@ def sized_len(value: object, *, subject: str = "val") -> int:
     Left to `len()` alone, the refusal reads "object of type 'int' has no len()": true, and about the
     builtin rather than about the assertion, with no mention of which operand was wrong.
     """
-    try:
-        return len(value)
-    except TypeError:
+    if not isinstance(value, Sized):
         refuse(value, "a sized object", subject=subject)
+    # past the protocol check there is nothing left to diagnose: a `__len__` that exists and still
+    # raises is a bug in the value, and it travels out as its author wrote it. This is stricter than
+    # asking where the error came from, and it does not depend on a Python frame being pushed: a
+    # `__len__` implemented in C adds no frame, so the origin check alone would have mislabelled it
+    return len(value)
