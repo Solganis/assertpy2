@@ -261,20 +261,28 @@ class EqualToMatcher(BaseMatcher):
     """
 
     def __init__(self, expected: object, strict_types: bool = False, **options: object):
-        reject_unknown_kwargs(options, _EQUAL_TO_OPTIONS, "equal_to")
+        if options:  # the plain `equal_to(value)` builds nothing: it is constructed inside loops
+            reject_unknown_kwargs(options, _EQUAL_TO_OPTIONS, "equal_to")
         self.expected = expected
         self.strict_types = strict_types
         self.ignore = options.get("ignore")
         self.include = options.get("include")
-        self.config = _build_compare_config(
-            options.get("tolerance"),
-            options.get("comparators"),
-            bool(options.get("ignore_null", False)),
-            strict_types,
+        # `equal_to(value)` with nothing else is the spelling used inside `matches_structure` and inside
+        # loops, so whether anything at all was configured is decided once, here
+        self.plain = not (strict_types or options)
+        self.config = (
+            _build_compare_config(
+                options.get("tolerance"),
+                options.get("comparators"),
+                bool(options.get("ignore_null", False)),
+                strict_types,
+            )
+            if options or strict_types
+            else None
         )
 
     def matches(self, value: Any) -> bool:
-        if not (self.strict_types or self.ignore or self.include or self.config is not None):
+        if self.plain:
             return bool(value == self.expected)  # the hot path stays a plain comparison
         if self.strict_types and type(value) is not type(self.expected):
             return False

@@ -290,7 +290,7 @@ class HelpersMixin(_MixinBase):
             nested_include = [
                 entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key
             ] or None
-            if (nested_ignore or nested_include) and self._is_dict_like(value, check_values=False):
+            if (nested_ignore or nested_include) and mapping_shaped(value, check_values=False):
                 value = self._selected_keys_only(value, nested_ignore, nested_include)
             kept[key] = value
         return kept
@@ -332,7 +332,7 @@ class HelpersMixin(_MixinBase):
                         parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                     else:  # recurse
                         other_value = counterpart[key]
-                        if self._is_dict_like(value, check_values=False) and self._is_dict_like(
+                        if mapping_shaped(value, check_values=False) and mapping_shaped(
                             other_value, check_values=False
                         ):
                             value_repr = _dict_repr(value, other_value, _seen)
@@ -363,9 +363,7 @@ class HelpersMixin(_MixinBase):
                     ellip = True
                 elif decision == "leaf":
                     parts.append(_safe_repr(value))
-                elif self._is_dict_like(value, check_values=False) and self._is_dict_like(
-                    other_value, check_values=False
-                ):
+                elif mapping_shaped(value, check_values=False) and mapping_shaped(other_value, check_values=False):
                     parts.append(_dict_repr(value, other_value, _seen))
                 elif _both_list_like(value, other_value):
                     parts.append(_list_repr(value, other_value, _seen))

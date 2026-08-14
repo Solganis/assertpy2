@@ -10,6 +10,10 @@ other caught `TypeError` and so also swallowed a `__len__` of the user's own tha
 from __future__ import annotations
 
 from collections.abc import Sized
+from typing import cast
+
+# the built-in containers, which carry a length without any protocol lookup
+_SIZED = frozenset({list, tuple, dict, str, bytes, set, frozenset, bytearray})
 
 
 def length_of(value: object) -> int | None:
@@ -20,6 +24,10 @@ def length_of(value: object) -> int | None:
     reporting it as the latter sends the reader looking in the wrong file.  It also does not depend on a
     Python frame being pushed, which a `__len__` implemented in C does not do.
     """
+    if type(value) in _SIZED:
+        # fast path for the builtins: `isinstance` against an ABC is the whole cost of this function,
+        # and it was paid per element on the extraction path. The cast says what the frozenset checked
+        return len(cast("Sized", value))
     if not isinstance(value, Sized):
         return None
     return len(value)
