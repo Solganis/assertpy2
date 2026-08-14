@@ -475,9 +475,29 @@ class TestTheRelationsASpecCouldNotExpress:
         assert_that(match.contains_only("a").matches(42)).is_false()
         assert_that(match.is_subset_of([1]).matches(42)).is_false()
         assert_that(match.is_sorted().matches(42)).is_false()
-        assert_that(match.contains_only("a").describe_mismatch(42)).contains("cannot be searched")
-        assert_that(match.is_subset_of([1]).describe_mismatch(42)).contains("cannot be searched")
+        assert_that(match.contains_only("a").describe_mismatch(42)).contains("cannot be listed")
+        assert_that(match.is_subset_of([1]).describe_mismatch(42)).contains("cannot be listed")
         assert_that(match.is_sorted().describe_mismatch(42)).contains("cannot be walked")
+
+    def test_answering_membership_is_not_the_same_as_being_listable(self):
+        """`contains` needs only `in`; "only these" and "a subset of" need every element.
+
+        Told apart because they were not: a value with `__contains__` and nothing else satisfied the
+        capability check and then met Python's own "object is not iterable" inside the comprehension.
+        """
+
+        class MembershipOnly:
+            def __contains__(self, item: object) -> bool:
+                return item == 1
+
+        value = MembershipOnly()
+        assert_that(match.contains(1).matches(value)).described_as("membership is enough").is_true()
+        assert_that(match.contains_only(1).matches(value)).described_as("listing is not").is_false()
+        assert_that(match.is_subset_of([1]).matches(value)).described_as("listing is not").is_false()
+        assert_that(value).contains(1)
+        for relation in ("contains_only", "is_subset_of"):
+            with pytest.raises(TypeError, match=r"^val must be iterable"):
+                getattr(assert_that(value), relation)(1)
 
     def test_elements_that_cannot_be_ordered_are_not_sorted(self):
         assert_that(match.is_sorted().matches([1, "a"])).is_false()
@@ -742,3 +762,68 @@ class TestTheNewMatchersAcceptTheCollectionsPeopleActuallyHave:
         values: list[TestTheNewMatchersAcceptTheCollectionsPeopleActuallyHave.Base] = [item]
         assert_that(values).satisfies(match.contains(item))
         assert_that(values).satisfies(match.is_subset_of(values))
+
+
+class TestAMatcherLooksAtItsValueOnce:
+    """The verdict and the reason come from one walk, and every consumer asks for them together.
+
+    Two walks are wrong in two different ways. Over a one-shot value the second sees the remains of the
+    first, so the message named items that were there and missed the ones that were not. Over any value
+    it runs the user's `key` or comparator again, which is a side effect nobody asked for.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "matcher", "expected"),
+        [
+            ("contains", match.contains(9), "missing 9"),
+            ("contains_only", match.contains_only(1, 2), "also had 3"),
+            ("is_subset_of", match.is_subset_of([1, 2]), "3 outside it"),
+            ("is_sorted", match.is_sorted(), "out of order at index 0"),
+        ],
+    )
+    def test_the_reason_is_right_on_a_one_shot_value(self, label, matcher, expected):
+        source = {"contains": [1, 2], "contains_only": [1, 3], "is_subset_of": [3], "is_sorted": [2, 1]}[label]
+        result = matcher.evaluate(iter(source))
+        assert_that(result.matched).described_as(label).is_false()
+        assert_that(result.mismatch).described_as(label).contains(expected)
+
+    def test_a_key_runs_once_per_element_through_the_public_surface(self):
+        # measured through `satisfies`, not through the core: the core was already right, and the two
+        # extra walks lived above it
+        calls: list[int] = []
+
+        def key(value: int) -> int:
+            calls.append(value)
+            return value
+
+        with pytest.raises(AssertionFailure):
+            assert_that([2, 1]).satisfies(match.is_sorted(key=key))
+        assert_that(calls).is_equal_to([2, 1])
+
+    def test_a_key_runs_once_per_element_inside_each(self):
+        calls: list[int] = []
+
+        def key(value: int) -> int:
+            calls.append(value)
+            return value
+
+        with pytest.raises(AssertionFailure):
+            assert_that([[2, 1]]).each(match.is_sorted(key=key))
+        assert_that(calls).is_equal_to([2, 1])
+
+    def test_an_iterator_as_a_leaf_of_a_structure_keeps_its_reason(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"rows": iter([2, 1])}).matches_structure({"rows": match.is_sorted()})
+        assert_that(str(failure.value)).contains("out of order at index 0")
+
+    def test_a_single_walk_matcher_that_passes_inside_a_structure(self):
+        # the other half of the branch: a leaf whose matcher answers in one look and answers "yes"
+        assert_that({"rows": [1, 2, 3]}).matches_structure({"rows": match.is_sorted()})
+        assert_that({"tags": ["a", "b"]}).matches_structure({"tags": match.contains("a")})
+
+    def test_the_matcher_still_answers_the_same_way_twice(self):
+        # single-walk must not turn into caching: a matcher is used against many values
+        matcher = match.is_sorted()
+        assert_that(matcher.matches([1, 2])).is_true()
+        assert_that(matcher.matches([2, 1])).is_false()
+        assert_that(matcher.matches([1, 2])).is_true()

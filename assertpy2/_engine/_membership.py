@@ -44,8 +44,18 @@ def searchable(value: object) -> Any:
 
 
 def is_searchable(value: object) -> bool:
-    """Whether membership can be asked of *value* at all: `in` needs a container or an iterable."""
+    """Whether membership can be asked of *value*: `in` needs a container or an iterable.
+
+    Wider than `is_walkable` on purpose, and the two are not interchangeable.  A value that answers
+    `__contains__` and nothing else can be asked whether it holds something, and cannot be listed: it
+    fits `contains` and does not fit `contains_only`, which has to see everything that is there.
+    """
     return isinstance(value, Iterable) or hasattr(type(value), "__contains__")
+
+
+def is_walkable(value: object) -> bool:
+    """Whether *value* can be listed, which is what "only these" and "a subset of" both need."""
+    return isinstance(value, Iterable)
 
 
 def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
