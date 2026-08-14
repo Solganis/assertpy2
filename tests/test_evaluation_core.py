@@ -32,6 +32,8 @@ from assertpy2._engine._equality import (
     values_differ,
 )
 from assertpy2._engine._membership import (
+    _classified,
+    _hash_safe,
     has_duplicates,
     missing_items,
     not_contained_in,
@@ -808,22 +810,28 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(only_faults(searchable(counting()), tuple(range(50)))).is_equal_to(([], []))
         assert_that(seen).described_as("elements produced by the generator").is_length(50)
 
-    @pytest.mark.parametrize(
-        "value",
-        [
-            pytest.param(decimal.Decimal("1.5"), id="Decimal: hash agrees with == by the numeric contract"),
-            pytest.param(fractions.Fraction(1, 3), id="Fraction: same, and neither is in the safe list"),
-        ],
-    )
-    def test_numbers_outside_the_safe_list_are_answered_by_the_walk(self, value):
-        """Kept out of the shortcut on purpose: their equality is right, but the list stays conservative.
+    def test_decimals_take_the_shortcut_and_answer_the_same(self):
+        """`Decimal` is on the safe list, so this has to prove the fast path, not just the answer.
 
-        The point of the test is that being excluded costs correctness nothing.
+        Sizes are past the threshold on purpose: at one element the walk would run whatever the list
+        says, and the test would prove nothing about the path it claims to exercise.
         """
-        assert_that(only_faults([value], (value,))).is_equal_to(([], []))
-        assert_that([value]).contains_only(value)
-        assert_that([value]).is_subset_of([value])
-        assert_that([value, value]).contains_duplicates()
+        values = [decimal.Decimal(index) for index in range(30)]
+        assert_that(_hash_safe(values)).described_as("classified as safe to index").is_true()
+        assert_that(_classified(values, tuple(values))).described_as("and worth indexing at this size").is_true()
+        assert_that(only_faults(values, tuple(values))).is_equal_to(([], []))
+        assert_that(values).contains_only(*values)
+        assert_that(values).is_subset_of(values)
+        assert_that([*values, values[0]]).contains_duplicates()
+
+    def test_fractions_stay_on_the_walk_and_answer_the_same(self):
+        """Kept out of the shortcut for import cost, not for correctness, so both have to be shown."""
+        values = [fractions.Fraction(index, 3) for index in range(30)]
+        assert_that(_hash_safe(values)).described_as("not classified as safe: the list omits Fraction").is_false()
+        assert_that(only_faults(values, tuple(values))).is_equal_to(([], []))
+        assert_that(values).contains_only(*values)
+        assert_that(values).is_subset_of(values)
+        assert_that([*values, values[0]]).contains_duplicates()
 
     def test_a_value_that_refuses_to_hash_despite_its_type_falls_back(self):
         """`Decimal` is on the safe list, and one `Decimal` still refuses to be hashed.
@@ -847,6 +855,68 @@ class TestTheCoresUnderTheAwkwardCases:
         # naming them compares explicitly, and comparing a signalling NaN is what raises
         with pytest.raises(decimal.InvalidOperation):
             repeated_items(same_object)
+
+    def test_a_value_whose_class_cannot_be_hashed_keeps_the_walk(self):
+        """The classifier hashes the types, and a metaclass may refuse that.
+
+        The instances compare perfectly well, so refusing to classify has to mean walking rather than
+        raising. Found by review: the shortcut turned a plain assertion failure into a `TypeError`.
+        """
+
+        class Unhashable(type):
+            __hash__ = None
+
+        class Odd(metaclass=Unhashable):
+            pass
+
+        values = [Odd() for _ in range(30)]
+        others = tuple(Odd() for _ in range(30))
+        assert_that(_hash_safe(values)).described_as("cannot be classified, so not safe").is_false()
+        # distinct objects compare unequal, so every one of them is reported: an answer, not a crash
+        assert_that(only_faults(values, others)[0]).is_length(len(values))
+        with pytest.raises(AssertionFailure):
+            assert_that(values).contains_only(*others)
+
+    def test_a_hash_that_raises_is_not_a_reason_to_stop_answering(self):
+        """A shortcut may not introduce an exception the library did not have.
+
+        This class compares by identity, which the rule accepts, and hashes by raising. Before the
+        shortcut nothing hashed it and the assertion simply failed; that is what it does again.
+        """
+
+        class Angry:
+            def __hash__(self) -> int:
+                raise ValueError("hashing is a bug in this value")
+
+        values = [Angry() for _ in range(30)]
+        assert_that(only_faults(values, tuple(Angry() for _ in range(30)))[0]).is_length(len(values))
+        with pytest.raises(AssertionFailure):
+            assert_that(values).contains_only(*[Angry() for _ in range(30)])
+
+    def test_indexing_is_all_or_nothing_across_both_sides(self):
+        """One side indexed and the other not is how the lookup started raising again.
+
+        Plain decimals index cleanly, a signalling NaN among the wanted items does not, and asking a set
+        about it would hash it after all.
+        """
+        plain = [decimal.Decimal(index) for index in range(30)]
+        signalling = [decimal.Decimal("snan")] * 30
+        # what must not happen is a hashing `TypeError`.  Comparing a signalling NaN raises on its own,
+        # by the decimal standard, and that is what the released version does too
+        for call in (
+            lambda: only_faults(plain, tuple(signalling)),
+            lambda: not_contained_in(signalling, plain),
+            lambda: missing_items(plain, tuple(signalling), _is_matcher),
+        ):
+            with pytest.raises(decimal.InvalidOperation):
+                call()
+
+    def test_a_raw_one_shot_value_is_materialised_before_it_is_classified(self):
+        # classification walks the value too, so a caller reaching the core directly used to hand it a
+        # drained iterator and get every wanted item reported missing
+        assert_that(only_faults(iter([1, 2, 3]), (1, 2, 3))).is_equal_to(([], []))
+        assert_that(not_contained_in(iter([1, 2]), [1, 2, 3])).is_empty()
+        assert_that(missing_items(iter([1, 2, 3]), (1, 3), _is_matcher)).is_empty()
 
     def test_an_operator_that_raises_travels_out_of_both_paths(self):
         class Angry:

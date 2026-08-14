@@ -123,11 +123,16 @@ def _hash_safe(items: Any) -> bool:
     The types are collected first and judged afterwards, because a Python loop over ten thousand elements
     costs more than the set it is deciding about: `map(type, ...)` runs in the interpreter's own loop, and
     what is left to judge is one entry per distinct type, which is almost always one.
+
+    Collecting them can itself fail, which is not a hypothetical: a class whose metaclass declares
+    `__hash__ = None` cannot go into a set, although its instances compare perfectly well.  A question
+    that cannot be answered is answered "no", and the walk takes it from there.
     """
-    return all(
-        kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__)
-        for kind in set(map(type, items))
-    )
+    try:
+        kinds = set(map(type, items))
+    except TypeError:  # the class objects themselves refuse to be hashed
+        return False
+    return all(kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__) for kind in kinds)
 
 
 def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
@@ -141,7 +146,9 @@ def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object
     the core reach up for them would make the dependency circular.
     """
     absent = []
-    present = indexed(value) if isinstance(value, (list, tuple)) and _classified(value, items) else value
+    value = materialized(value)  # a caller handing in a raw iterator would otherwise search a drained one
+    # both sides go in, because the lookup hashes the wanted item as well as the held one
+    present = indexed(value, items)[0] if isinstance(value, (list, tuple)) and _classified(value, items) else value
     for item in items:
         if is_matcher(item):
             if not any(item.matches(element) for element in value):
@@ -157,11 +164,14 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     Both halves at once, because reporting only the extras sends the reader to fix one problem and rerun
     into the other.  A matcher looks at whether either list is non-empty; the assertion words them.
     """
+    # walked three times below, so a one-shot value has to be a sequence first.  Idempotent and free
+    # for the callers that already did it: a list is handed back as it is
+    value = materialized(value)
     # both sides classified once rather than once per lookup: this is the hot spot of the whole module,
     # and asking four times cost more on small collections than the walk it was avoiding
     if not _classified(value, items):
         return [item for item in value if item not in items], [item for item in items if item not in value]
-    wanted, present = indexed(items), indexed(value)
+    wanted, present = indexed(items, value)
     extra = [item for item in value if item not in wanted]
     missing = [item for item in items if item not in present]
     return extra, missing
@@ -170,7 +180,7 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
 def has_duplicates(values: Sequence[Any]) -> bool:
     """Whether any element appears twice, by the same equality the rest of membership uses."""
     if _classified_alone(values):
-        unique = indexed(values)
+        (unique,) = indexed(values)
         if isinstance(unique, set):
             return len(unique) != len(values)
     # `in` rather than a generator of `==`: it is the same question asked by the interpreter instead of
@@ -214,8 +224,9 @@ def repeated_items(values: Sequence[Any]) -> list[Any]:
 
 def not_contained_in(value: Any, container: Any) -> list[Any]:
     """Which elements of *value* the *container* does not hold, for "is a subset of"."""
+    value, container = materialized(value), materialized(container)
     fast = isinstance(container, (list, tuple)) and _classified(container, value)
-    allowed = indexed(container) if fast else container
+    allowed = indexed(container, value)[0] if fast else container
     return [item for item in value if item not in allowed]
 
 
@@ -224,18 +235,25 @@ def _classified(container: Any, probes: Any) -> bool:
     return _worth_hashing(container, probes) and _hash_safe(container) and _hash_safe(probes)
 
 
-def indexed(items: Any) -> Any:
-    """*items* as a set, or unchanged when one of them refuses to be hashed after all.
+def indexed(*collections: Any) -> tuple[Any, ...]:
+    """Every collection as a set, or all of them unchanged. Never some of them.
 
-    The type rule answers for the type, and one value in the standard library disagrees with its own
-    type: `Decimal("snan")` raises when hashed, because a signalling NaN is meant to be noticed rather
-    than compared quietly.  That is a property of the value, so it cannot be seen before trying, and the
-    walk answers it perfectly well.
+    Two rules, both learned from the shortcut getting them wrong.
+
+    **All or nothing.** A set answers `in` by hashing the value being looked for too, so indexing one
+    side while the other stays a sequence turns a working question into a `TypeError`: plain decimals in
+    the container, a signalling NaN among the wanted items, and the lookup dies on the one it could not
+    hash.  Either every side is indexed or none is.
+
+    **Any failure means the walk.** Not only `TypeError`: a value may hash by a method of its own that
+    raises whatever it likes, and before this shortcut existed nothing hashed it at all.  An optimisation
+    that introduces an exception where the library used to report a plain assertion failure is not an
+    optimisation, so the attempt is abandoned in full and the walk answers exactly as it always did.
     """
     try:
-        return set(items)
-    except TypeError:
-        return items
+        return tuple(set(collection) for collection in collections)
+    except Exception:  # the fallback is the point: any failure to index at all means walking instead
+        return collections
 
 
 def _classified_alone(values: Any) -> bool:
