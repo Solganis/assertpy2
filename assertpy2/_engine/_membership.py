@@ -97,6 +97,12 @@ _HASH_SAFE = frozenset(
 # assertion twice as slow, at a hundred it paid for itself several times over
 _WALK_UNDER = 400
 
+# the one classified type that hashes for almost every value and refuses for one: `Decimal("snan")`
+# raises, because a signalling NaN is meant to be noticed rather than compared quietly.  Everything else
+# on the safe list either always hashes or is excluded by the rule, so only this needs looking at, and
+# looking costs a pass that would otherwise be paid on every search
+_HASH_MAY_REFUSE = frozenset({decimal.Decimal})
+
 
 def _worth_hashing(container: Any, probes: Any) -> bool:
     """Whether the pair is large enough that a set can win at all, asked before anything expensive.
@@ -112,27 +118,37 @@ def _worth_hashing(container: Any, probes: Any) -> bool:
         return True
 
 
-def _hash_safe(items: Any) -> bool:
-    """Whether every element hashes and compares by the same rule, so a set may stand in for a walk.
+def _kinds(items: Any) -> set[type] | None:
+    """The distinct types in *items*, or ``None`` when even that cannot be asked.
 
-    Hashability is asked first, and asked of the type rather than tried on the value: an unhashable type
-    carries `__hash__ = None`, which is exactly what building the set would trip over.  It is not implied
-    by the rest of the rule - a class can inherit identity equality and still set `__hash__ = None` - so
-    without this the shortcut raised `TypeError` where it used to answer.
+    Collected in the interpreter's own loop rather than a Python one: over ten thousand elements the loop
+    would cost more than the set it is deciding about, and what is left to judge is one entry per type,
+    which is almost always one.
 
-    The types are collected first and judged afterwards, because a Python loop over ten thousand elements
-    costs more than the set it is deciding about: `map(type, ...)` runs in the interpreter's own loop, and
-    what is left to judge is one entry per distinct type, which is almost always one.
-
-    Collecting them can itself fail, which is not a hypothetical: a class whose metaclass declares
-    `__hash__ = None` cannot go into a set, although its instances compare perfectly well.  A question
-    that cannot be answered is answered "no", and the walk takes it from there.
+    Asking can itself fail, which is not hypothetical: a class whose metaclass declares `__hash__ = None`
+    cannot go into a set although its instances compare perfectly well.  Unanswerable means "no".
     """
     try:
-        kinds = set(map(type, items))
+        return set(map(type, items))
     except TypeError:  # the class objects themselves refuse to be hashed
-        return False
-    return all(kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__) for kind in kinds)
+        return None
+
+
+def _safe(kinds: set[type] | None) -> bool:
+    """Whether every one of *kinds* hashes and compares by the same rule.
+
+    Hashability is asked of the type, not tried on the value: an unhashable type carries
+    `__hash__ = None`.  It is not implied by the rest of the rule, since a class can inherit identity
+    equality and still declare itself unhashable, and without this the shortcut raised where it answered.
+    """
+    return kinds is not None and all(
+        kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__) for kind in kinds
+    )
+
+
+def _hash_safe(items: Any) -> bool:
+    """Whether *items* may be indexed. Kept as a name of its own because the tests read better with it."""
+    return _safe(_kinds(items))
 
 
 def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
@@ -251,25 +267,33 @@ def _index(container: Any, probes: Any) -> set[Any] | None:
     """*container* as a set, or ``None`` when the walk has to answer instead.
 
     Everything that can raise is inside, and nothing else is: building the set hashes the container, and
-    hashing each probe is the other half of the same question, because `x in some_set` hashes `x` too.
-    Both are asked here so that the search itself runs outside any `except`.
+    the probes are asked separately only where a classified type is still allowed to refuse, because
+    `x in some_set` hashes `x` too.  The search itself always runs outside any `except`.
+
+    Asking every probe unconditionally was the first shape of this, and it hashed the same values twice
+    on the successful path, which is a pass over the whole collection for `is_subset_of`.
 
     That boundary is the point.  A wider `try` around the search would swallow a failing comparison or a
     matcher raising from user code, and this library treats those as bugs in the test that must travel
     out, not as verdicts.  What is caught here is narrower and real: a type may pass the rule and still
-    hold a value that refuses to hash, such as `Decimal("snan")`, and before this shortcut existed
-    nothing hashed it at all.
+    hold a value that refuses to hash, and before this shortcut existed nothing hashed it at all.
 
-    A value whose `__hash__` has side effects sees them once even when the answer comes from the walk.
-    That is the residue of trying, and it is the reason the classification above is conservative.
+    Two limits, both deliberate.  Only subclasses of `Exception` are caught, so a `KeyboardInterrupt`
+    during hashing still stops the run, as it should.  And a `__hash__` that answers once and raises
+    later is not covered by anything here: a hash is required to be deterministic, and a value that
+    breaks that contract is left to break it.
     """
-    if not _classified(container, probes):
+    container_kinds, probe_kinds = _kinds(container), _kinds(probes)
+    if not (_worth_hashing(container, probes) and _safe(container_kinds) and _safe(probe_kinds)):
         return None
     try:
         indexed = set(container)
-        for probe in probes:
-            hash(probe)
-    except Exception:  # any refusal to hash, from either side, means the walk answers
+        if probe_kinds is not None and probe_kinds & _HASH_MAY_REFUSE:
+            # only the types that are classified and may still refuse are looked at, and the types were
+            # collected once above rather than walked again here
+            for probe in probes:
+                hash(probe)
+    except Exception:  # any Exception raised while hashing means the walk answers instead
         return None
     return indexed
 
