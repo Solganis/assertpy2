@@ -5,7 +5,7 @@ import inspect
 import time
 from collections import deque
 from itertools import pairwise
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe
 
@@ -17,6 +17,10 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _PROBE_UNSET = object()
+
+# one call recorded on a polling chain, as (name, args, kwargs); `None` args mark a step that was
+# read rather than called, which is `not_`
+_Step = tuple[str, "tuple | None", "dict | None"]
 
 
 _COLLECT_RETRIES: bool = False
@@ -121,6 +125,23 @@ def _timeout_failure(recorder: _PollRecorder | None, timeout: float, elapsed: fl
     return message, trace
 
 
+def _timed_out(message: str, trace: PollTrace | None, last_error: Exception | None) -> AssertionFailure:
+    """The timeout failure, carrying the structured payload of the assertion that kept failing.
+
+    A polling failure *is* that assertion's failure with a waiting line in front of it, so dropping the
+    values and the diff on the way out left the two surfaces unequal where it mattered most: under
+    pytest the diff section is built from `exc.diff`, and a timed-out equality printed no section at all
+    while the same equality outside a poll printed the full one.
+    """
+    return AssertionFailure(
+        message,
+        actual=getattr(last_error, "actual", None),
+        expected=getattr(last_error, "expected", None),
+        diff=getattr(last_error, "diff", None),
+        trace=trace,
+    )
+
+
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
     """Normalize an ``ignoring`` spec (one exception type or a tuple of them) to a validated tuple.
 
@@ -200,7 +221,11 @@ class AsyncAssertionBuilder:
         self._ignoring = _normalize_ignoring(exceptions)
         return self
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
+        # `Any` rather than the inferred union: `not_` hands back a builder while every other name hands
+        # back a callable, and a checker reading that union refused the call in `eventually_sync().
+        # is_equal_to(1)` as "SyncAssertionBuilder is not callable". Found by type-checking third-party
+        # code against the built wheel, where it broke chains that had always been valid
         if name.startswith("_"):
             raise AttributeError(name)
 
@@ -256,7 +281,7 @@ class AsyncAssertionBuilder:
                                 return self._builder_func(None, "", self._kind, None, self._logger).error(
                                     message, trace=trace
                                 )
-                            raise AssertionFailure(message, trace=trace) from last_error
+                            raise _timed_out(message, trace, last_error) from last_error
                         await asyncio.sleep(self._interval)
 
             return _poll()
@@ -296,6 +321,8 @@ class SyncAssertionBuilder:
         kind: str | None = None,
         logger: object = None,
         trace: bool = True,
+        steps: tuple[_Step, ...] = (),
+        last: Any = None,
     ):
         self._func = func
         self._builder_func = builder_func
@@ -306,6 +333,42 @@ class SyncAssertionBuilder:
         self._kind = kind
         self._logger = logger
         self._trace = trace
+        # every call made on this chain, replayed against a fresh builder on each poll.  Handing back
+        # the builder of the last poll instead used to end the polling silently: `.is_instance_of(int)`
+        # passed once and returned an ordinary builder, so `.is_equal_to(4)` after it ran against that
+        # single snapshot and failed without ever waiting
+        self._steps = steps
+        self._last = last
+
+    @property
+    def val(self) -> object:
+        """The value the last passing poll saw.
+
+        Declared on the class rather than left to `__getattr__`, which answers every other name with a
+        polling call: reading `.val` off a chain would otherwise poll once and hand back a function.
+
+        Before anything has passed there is no such value, and `__getattr__` says so.  A raise here
+        would not: Python falls back to `__getattr__` whenever an attribute lookup ends in
+        `AttributeError`, property included, so the message would have been swallowed and answered with
+        a polling call all the same.
+        """
+        return self._last.val
+
+    def _chained(self, steps: tuple[_Step, ...], last: Any = None) -> SyncAssertionBuilder:
+        """A copy carrying one more step, so the next call in the chain polls with all of them."""
+        return SyncAssertionBuilder(
+            self._func,
+            builder_func=self._builder_func,
+            description=self._description,
+            timeout=self._timeout,
+            interval=self._interval,
+            ignoring=self._ignoring,
+            kind=self._kind,
+            logger=self._logger,
+            trace=self._trace,
+            steps=steps,
+            last=self._last if last is None else last,
+        )
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
@@ -331,11 +394,23 @@ class SyncAssertionBuilder:
         self._ignoring = _normalize_ignoring(exceptions)
         return self
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
+        # `Any` rather than the inferred union: `not_` hands back a builder while every other name hands
+        # back a callable, and a checker reading that union refused the call in `eventually_sync().
+        # is_equal_to(1)` as "SyncAssertionBuilder is not callable". Found by type-checking third-party
+        # code against the built wheel, where it broke chains that had always been valid
         if name.startswith("_"):
             raise AttributeError(name)
+        if name == "val":  # reached only when the property above found no poll to read it from
+            raise AttributeError("val is available once an assertion on this chain has passed")
+        if name == "not_":
+            # a property on the builder rather than a call, so there is nothing to poll for yet: it
+            # joins the chain and is re-taken on every poll.  Read straight through, it used to hand
+            # back this method's inner function, and `.not_.is_equal_to(1)` died on an AttributeError
+            return self._chained((*self._steps, (name, None, None)))
 
         def _run(*args, **kwargs):
+            steps = (*self._steps, (name, args, kwargs))
             start = time.monotonic()
             deadline = start + self._timeout
             recorder = _PollRecorder() if self._trace else None
@@ -352,11 +427,16 @@ class SyncAssertionBuilder:
                         )
                     probed = val
                     builder = self._builder_func(val, self._description)
-                    method = getattr(builder, name)
-                    method(*args, **kwargs)
+                    for step, step_args, step_kwargs in steps:
+                        attribute = getattr(builder, step)
+                        # a step read rather than called, which is `not_`, carries no arguments at all
+                        if step_args is None or step_kwargs is None:
+                            builder = attribute
+                        else:
+                            builder = attribute(*step_args, **step_kwargs)
                     if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                         _RETRIES.append((recorder.total_polls + 1, time.monotonic() - start, self._timeout))
-                    return builder
+                    return self._chained(steps, builder)
                 except (
                     AssertionError,
                     *self._ignoring,
@@ -382,7 +462,7 @@ class SyncAssertionBuilder:
                             return self._builder_func(None, "", self._kind, None, self._logger).error(
                                 message, trace=trace
                             )
-                        raise AssertionFailure(message, trace=trace) from last_error
+                        raise _timed_out(message, trace, last_error) from last_error
                     time.sleep(self._interval)
 
         return _run

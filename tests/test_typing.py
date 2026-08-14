@@ -159,6 +159,11 @@ if TYPE_CHECKING:
     # eventually() and eventually_sync() switch the chain to the polling builders.
     assert_type(assert_that(len).eventually(trace=False), AsyncAssertionBuilder)
     assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), SyncAssertionBuilder)
+    # and the assertion written on that builder has to stay callable. Only the builder type was pinned
+    # here, so an inferred union out of its `__getattr__` made every polling chain uncallable to a
+    # checker while these lines stayed green: caught against the built wheel, not by this suite
+    assert_that(len).eventually_sync(timeout=2, trace=False).is_equal_to(1)
+    assert_that(len).eventually_sync(timeout=2, trace=False).not_.is_equal_to(2)
 
     # exception cluster: when_called_with() gives the invoked (string message + chain) protocol;
     # caused_by()/has_root_cause()/contains_error() keep it; raised() pivots to the exception object.

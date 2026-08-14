@@ -59,6 +59,24 @@ class TestEventuallySyncBasic:
             assert_that(lambda: FutureLike()).eventually_sync(timeout=1, interval=0.01).is_equal_to(42)
 
 
+class TestTheValueBehindTheChain:
+    """`.val` is declared on the poller because every other name means "poll for this".
+
+    Left to `__getattr__`, reading it would have polled once and handed back a function, which is the
+    kind of answer that looks like a value until it is used.
+    """
+
+    def test_it_hands_back_what_the_passing_poll_saw(self):
+        states = iter(["pending", "ready"])
+        chain = assert_that(lambda: next(states, "ready")).eventually_sync(timeout=1, interval=0.01)
+        assert_that(chain.is_equal_to("ready").val).is_equal_to("ready")
+
+    def test_it_refuses_before_anything_has_passed(self):
+        chain = assert_that(lambda: 1).eventually_sync(timeout=1, interval=0.01)
+        with pytest.raises(AttributeError, match="once an assertion on this chain has passed"):
+            _ = chain.val
+
+
 class TestEventuallySyncChaining:
     def test_within_and_every(self):
         counter = {"n": 0}
