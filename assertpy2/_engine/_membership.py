@@ -13,6 +13,7 @@ turns the answer into a message with a closest-element hint, and a matcher turns
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
@@ -58,6 +59,53 @@ def is_walkable(value: object) -> bool:
     return isinstance(value, Iterable)
 
 
+# the built-in types whose `__hash__` and `__eq__` are defined together and agree, so asking a set is
+# the same question as walking a list.  `bool` is here with `int` on purpose: `1 in {True}` and
+# `1 in [True]` both answer True, which is the equality Python itself uses.  `bytearray` is not here
+# although it looks like it belongs: it is mutable and therefore unhashable, and listing it turned
+# `assert_that([bytearray(b"a")]).contains_only(...)` into a TypeError
+_HASH_SAFE = frozenset({int, float, complex, bool, str, bytes, frozenset, type(None)})
+
+
+# below this many comparisons the walk is cheaper than deciding whether to avoid it.  A set costs a pass
+# to build and a pass to classify, and on the collections most assertions actually see - a handful of
+# elements - that preparation is the whole cost.  Measured: at ten elements the shortcut made the
+# assertion twice as slow, at a hundred it paid for itself several times over
+_WALK_UNDER = 400
+
+
+def _worth_hashing(container: Any, probes: Any) -> bool:
+    """Whether the pair is large enough that a set can win at all, asked before anything expensive.
+
+    The comparison count is what decides, so the two questions differ: searching one collection for the
+    elements of another costs `len * len`, while looking for a repeat inside one collection costs about
+    `len` squared over two but pays for only one set.  Passing the same collection twice is how the
+    second question spells itself.
+    """
+    try:
+        return len(container) * max(len(probes), 1) >= _WALK_UNDER
+    except TypeError:  # no length: an iterator or a view, where the walk cost is unknown but not small
+        return True
+
+
+def _hash_safe(items: Any) -> bool:
+    """Whether every element hashes and compares by the same rule, so a set may stand in for a walk.
+
+    Hashability is asked first, and asked of the type rather than tried on the value: an unhashable type
+    carries `__hash__ = None`, which is exactly what building the set would trip over.  It is not implied
+    by the rest of the rule - a class can inherit identity equality and still set `__hash__ = None` - so
+    without this the shortcut raised `TypeError` where it used to answer.
+
+    The types are collected first and judged afterwards, because a Python loop over ten thousand elements
+    costs more than the set it is deciding about: `map(type, ...)` runs in the interpreter's own loop, and
+    what is left to judge is one entry per distinct type, which is almost always one.
+    """
+    return all(
+        kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__)
+        for kind in set(map(type, items))
+    )
+
+
 def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
     """Which of *items* are not in *value*, in the order they were asked for.
 
@@ -69,11 +117,12 @@ def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object
     the core reach up for them would make the dependency circular.
     """
     absent = []
+    present = set(value) if isinstance(value, (list, tuple)) and _classified(value, items) else value
     for item in items:
         if is_matcher(item):
             if not any(item.matches(element) for element in value):
                 absent.append(item)
-        elif item not in value:
+        elif item not in present:
             absent.append(item)
     return absent
 
@@ -84,11 +133,71 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     Both halves at once, because reporting only the extras sends the reader to fix one problem and rerun
     into the other.  A matcher looks at whether either list is non-empty; the assertion words them.
     """
-    extra = [item for item in value if item not in items]
-    missing = [item for item in items if item not in value]
+    # both sides classified once rather than once per lookup: this is the hot spot of the whole module,
+    # and asking four times cost more on small collections than the walk it was avoiding
+    if not _classified(value, items):
+        return [item for item in value if item not in items], [item for item in items if item not in value]
+    wanted, present = set(items), set(value)
+    extra = [item for item in value if item not in wanted]
+    missing = [item for item in items if item not in present]
     return extra, missing
+
+
+def has_duplicates(values: Sequence[Any]) -> bool:
+    """Whether any element appears twice, by the same equality the rest of membership uses."""
+    if _classified_alone(values):
+        return len(set(values)) != len(values)
+    # `in` rather than a generator of `==`: it is the same question asked by the interpreter instead of
+    # by a Python loop, and it short-circuits on identity, which is how the rest of membership answers
+    # for a value that is not equal to itself
+    seen: list[Any] = []
+    for value in values:
+        if value in seen:
+            return True
+        seen.append(value)
+    return False
+
+
+def repeated_items(values: Sequence[Any]) -> list[Any]:
+    """Which elements appear more than once, each named once, in order of first appearance.
+
+    Counting with `list.count()` per element re-walks the whole sequence every time, so naming the
+    duplicates in a collection of a few thousand costs as much as the assertion it explains.  Where the
+    elements are safe to hash (same rule as membership uses), one pass counts them all.
+    """
+    if not _classified_alone(values):
+        named: list[Any] = []
+        for value in values:
+            if values.count(value) > 1 and not any(value == earlier for earlier in named):
+                named.append(value)
+        return named
+    counts = Counter(values)
+    seen: set[Any] = set()
+    repeated = []
+    for value in values:
+        if counts[value] > 1 and value not in seen:
+            seen.add(value)
+            repeated.append(value)
+    return repeated
 
 
 def not_contained_in(value: Any, container: Any) -> list[Any]:
     """Which elements of *value* the *container* does not hold, for "is a subset of"."""
-    return [item for item in value if item not in container]
+    allowed = set(container) if isinstance(container, (list, tuple)) and _classified(container, value) else container
+    return [item for item in value if item not in allowed]
+
+
+def _classified(container: Any, probes: Any) -> bool:
+    """Whether a set may stand in for the walk here: worth the preparation, and safe to build."""
+    return _worth_hashing(container, probes) and _hash_safe(container) and _hash_safe(probes)
+
+
+def _classified_alone(values: Any) -> bool:
+    """The same decision for a question asked of one collection, where only one set gets built.
+
+    Kept apart from `_classified` because the arithmetic differs, and differs in the other direction than
+    it first looks: what a set replaces here is a growing list of seen elements, which is quadratic from
+    the very first elements.  A size threshold made this *slower* at thirty elements, so there is none:
+    the only question is whether the elements may be hashed at all.
+    """
+    return _hash_safe(values)

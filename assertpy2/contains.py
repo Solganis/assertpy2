@@ -8,7 +8,15 @@ from ._engine._compare import _guarded_not_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
-from ._engine._membership import is_searchable, is_walkable, missing_items, only_faults, searchable
+from ._engine._membership import (
+    has_duplicates,
+    is_searchable,
+    is_walkable,
+    missing_items,
+    only_faults,
+    repeated_items,
+    searchable,
+)
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len
@@ -41,19 +49,6 @@ def _multiset_diff_entries(val_items, given_items):
         DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in sorted(missing, key=repr)
     )
     return entries
-
-
-def _has_duplicates(values: list) -> bool:
-    """Whether ``values`` contains a repeated element, tolerating unhashable items (dicts, lists)."""
-    try:
-        return len(values) != len(set(values))
-    except TypeError:  # unhashable items: quadratic duplicate check via == instead of a set
-        seen: list = []
-        for value in values:
-            if value in seen:
-                return True
-            seen.append(value)
-        return False
 
 
 class ContainsMixin(_MixinBase):
@@ -381,7 +376,7 @@ class ContainsMixin(_MixinBase):
             values = list(self.val)
         except TypeError:
             refuse(self.val, "iterable")
-        if _has_duplicates(values):
+        if has_duplicates(values):
             return self
         return self.error(f"Expected <{self.val}> to contain duplicates, but did not.")
 
@@ -405,14 +400,11 @@ class ContainsMixin(_MixinBase):
             values = list(self.val)
         except TypeError:
             refuse(self.val, "iterable")
-        if not _has_duplicates(values):
+        if not has_duplicates(values):
             return self
         # name them: "but did" leaves the reader to scan the value for the repeat, and the sibling
         # contains_only_once already reports exactly this shape
-        repeated = []
-        for value in values:
-            if values.count(value) > 1 and not any(value == seen for seen in repeated):
-                repeated.append(value)
+        repeated = repeated_items(values)
         return self.error(
             f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(repeated)}"
             f" {'was' if len(repeated) == 1 else 'were'} repeated.",
