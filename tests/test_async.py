@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import itertools
 import logging
 import threading
@@ -626,3 +627,102 @@ class TestRetryCollection:
         with pytest.raises(AssertionError):
             assert_that(lambda: "PENDING").eventually_sync(timeout=0.1, interval=0.02).is_equal_to("READY")
         assert_that(_RETRIES).is_empty()
+
+
+class TestATaskThatOutlivesItsSoftBlock:
+    """A context variable is copied by value into a new task, so the parent's exit is invisible to it.
+
+    The list is shared, though, and that was the hole: a task created inside the block and awaited
+    after it appended its failure to a list nobody would ever read, and the test passed having checked
+    nothing. Reported by an external review of the shipped code.
+
+    The block now carries a flag beside its failures, so a child can tell that nobody is listening and
+    fails on the spot instead.
+    """
+
+    def test_a_failure_after_the_block_closed_is_raised_not_swallowed(self):
+        async def scenario():
+            started = asyncio.Event()
+
+            async def child():
+                await started.wait()
+                assert_that(1).is_equal_to(2)
+
+            with soft_assertions():
+                task = asyncio.create_task(child())
+            started.set()
+            await task
+
+        with pytest.raises(AssertionFailure, match="to be equal to"):
+            asyncio.run(scenario())
+
+    def test_a_task_awaited_inside_the_block_is_still_collected(self):
+        # the other half: inheritance is the feature, and closing the block must not cost it
+        async def scenario():
+            async def child():
+                assert_that(1).is_equal_to(2)
+
+            with soft_assertions():
+                await asyncio.create_task(child())
+                assert_that(3).is_equal_to(4)
+
+        with pytest.raises(AssertionFailure) as failure:
+            asyncio.run(scenario())
+        assert_that(str(failure.value).count("to be equal to")).is_equal_to(2)
+
+    def test_gathered_children_are_collected_together(self):
+        async def scenario():
+            async def child(value):
+                assert_that(value).is_equal_to(0)
+
+            with soft_assertions():
+                await asyncio.gather(child(1), child(2))
+
+        with pytest.raises(AssertionFailure) as failure:
+            asyncio.run(scenario())
+        assert_that(str(failure.value).count("to be equal to")).is_equal_to(2)
+
+    def test_a_builder_made_inside_the_block_fails_when_used_after_it(self):
+        """The narrower half of the same hole, and the one a checker cannot see.
+
+        `assert_that()` called in the orphaned task builds an ordinary builder, because it asks whether
+        anything is collecting. A builder *made inside* the block already carries soft mode with it, so
+        the decision falls to the delivery step instead.
+        """
+
+        async def scenario():
+            started = asyncio.Event()
+            holder = {}
+
+            async def child():
+                await started.wait()
+                holder["builder"].is_equal_to(2)
+
+            with soft_assertions():
+                holder["builder"] = assert_that(1)
+                task = asyncio.create_task(child())
+            started.set()
+            await task
+
+        with pytest.raises(AssertionFailure, match="to be equal to"):
+            asyncio.run(scenario())
+
+    def test_the_next_block_in_the_same_task_is_clean(self):
+        async def scenario():
+            started = asyncio.Event()
+
+            async def child():
+                await started.wait()
+                with contextlib.suppress(AssertionFailure):
+                    assert_that("orphan").is_equal_to("wrong")
+
+            with soft_assertions():
+                task = asyncio.create_task(child())
+            started.set()
+            await task
+            with soft_assertions():
+                assert_that("fresh").is_equal_to("wrong")
+
+        with pytest.raises(AssertionFailure) as failure:
+            asyncio.run(scenario())
+        assert_that(str(failure.value)).contains("fresh").does_not_contain("orphan")
