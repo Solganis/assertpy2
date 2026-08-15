@@ -142,18 +142,53 @@ class TestWhatTheCheckersRefuse:
     def test_the_codes_say_the_same_thing_in_three_dialects(self, by_case):
         """A relation refused for one reason by one checker and another by the next is not one relation.
 
-        Each row of the baseline names a family, and the three spellings inside it have to belong to
-        that family: an argument that does not fit, or a method that is not there.
+        Families are read per checker rather than as one pool of codes, and the reason is a code that
+        belongs to two of them: pyright says `reportCallIssue` both for an argument that does not fit an
+        overload and for a keyword that does not exist.  Pooled together, those two families overlapped
+        through that one code, and an overlap makes the check unable to tell them apart.
         """
         families = [
-            {"invalid-argument-type", "arg-type", "reportArgumentType", "no-matching-overload", "reportCallIssue"},
-            {"unresolved-attribute", "attr-defined", "reportAttributeAccessIssue"},
+            # an argument that does not fit.  `misc` rides along with mypy's `arg-type` when the
+            # argument is a callable: the same refusal said twice, not a second reason
+            {
+                "ty": {"invalid-argument-type", "no-matching-overload"},
+                "mypy": {"arg-type", "misc"},
+                "pyright": {"reportArgumentType", "reportCallIssue"},
+            },
+            # a method the value's protocol does not have
+            {
+                "ty": {"unresolved-attribute"},
+                "mypy": {"attr-defined"},
+                "pyright": {"reportAttributeAccessIssue"},
+            },
+            # a keyword the signature does not have, where the call does not even bind
+            {
+                "ty": {"unknown-argument"},
+                "mypy": {"call-arg"},
+                "pyright": {"reportCallIssue"},
+            },
+            # a required argument that is not there.  Kept apart from the keyword family above, because
+            # `call-arg` and `reportCallIssue` cover both and only ty tells them apart by name
+            {
+                "ty": {"missing-argument"},
+                "mypy": {"call-arg"},
+                "pyright": {"reportCallIssue"},
+            },
         ]
         mixed = {}
         for name, expected in CAUGHT.items():
-            codes = {code for spelling in expected.values() for code in spelling}
-            if codes and not any(codes <= family for family in families):
-                mixed[name] = sorted(codes)
+            # every checker has to speak, with codes of its own: `set()` is a subset of any family, so a
+            # row missing one would otherwise read as three dialects agreeing
+            speaks_for_all = set(expected) == {"ty", "mypy", "pyright"} and all(expected.values())
+            fits_one = any(
+                all(set(expected.get(checker, ())) <= codes for checker, codes in family.items()) for family in families
+            )
+            # `misc` is mypy's second word for an argument that does not fit, never a reason on its own:
+            # alone it would let an unrelated error read as one of these families
+            spoken = set(expected.get("mypy", ()))
+            rides_along = "misc" not in spoken or "arg-type" in spoken
+            if expected and not (speaks_for_all and fits_one and rides_along):
+                mixed[name] = {checker: sorted(codes) for checker, codes in expected.items()}
         assert_that(mixed).described_as("one relation, refused for unrelated reasons").is_empty()
 
 

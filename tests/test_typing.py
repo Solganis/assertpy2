@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         _DictAssertion,
         _InvokedAssertion,
         _IterableAssertion,
+        _ListAssertion,
         _NumericAssertion,
         _PathAssertion,
         _StringAssertion,
@@ -71,6 +72,9 @@ if TYPE_CHECKING:
     assert_type(assert_that({"a": 1}).all_satisfy(lambda key: True), _DictAssertion[str, int])
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
+    # the same view, pinned on a literal callable as well: a name resolves through its own type, and the
+    # pair gate reads literals, so this is the line that ties `Callable` to the view it dispatches to
+    assert_type(assert_that(lambda: None), _CallableAssertion)
     assert_type(assert_that(object()), AssertionBuilder[object])
 
     # a dynamic assertion and an `add_extension` name both resolve through the same `__getattr__`, and
@@ -231,32 +235,34 @@ if TYPE_CHECKING:
     order_list = cast("list[_Order]", [])
     assert_type(assert_that(order_list).single().value, _Order)
     assert_type(assert_that(order_list).first(), AssertionBuilder[_Order])
-    # a map pivot re-types the element; a filter preserves it
-    assert_type(assert_that([1, 2]).mapped(str).value, list[str] | tuple[str, ...] | set[str] | frozenset[str])
-    assert_type(
-        assert_that(order_list).filtered_on(lambda o: True).value,
-        list[_Order] | tuple[_Order, ...] | set[_Order] | frozenset[_Order],
-    )
+    # a map pivot re-types the element; a filter preserves it.  Either way the value that comes back is
+    # a list, because that is what the pipeline builds whatever it was handed
+    assert_type(assert_that([1, 2]).mapped(str).value, list[str])
+    assert_type(assert_that(order_list).filtered_on(lambda o: True).value, list[_Order])
+    assert_type(assert_that((1, 2)).filtered_on(lambda n: True).value, list[int])
+    assert_type(assert_that({1, 2}).mapped(str).value, list[str])
 
-    # The same pivots on the other walkable types.  A character of a string is a string and a byte is an
-    # int, so both stay on their own protocol instead of widening to the generic builder.
+    # The same pivots on the other walkable types.  A character of a string is a string and a byte is
+    # an int, so both stay on their own protocol instead of widening to the generic builder.  The
+    # invoked view inherits the same pivots and lands on text instead, which is what keeps a caught
+    # message from being asked whether it exists on disk.
     assert_type(assert_that("abc").first(), _StringAssertion)
     assert_type(assert_that("abc").last(), _StringAssertion)
     assert_type(assert_that("abc").element(1), _StringAssertion)
     assert_type(assert_that("a").single(), _StringAssertion)
-    assert_type(assert_that("abc").filtered_on(lambda char: True), _IterableAssertion[str])
-    assert_type(assert_that("abc").mapped(str.upper), _IterableAssertion[str])
-    assert_type(assert_that("abc").flat_mapped(lambda char: [char]), _IterableAssertion[str])
+    assert_type(assert_that("abc").filtered_on(lambda char: True), _ListAssertion[str])
+    assert_type(assert_that("abc").mapped(str.upper), _ListAssertion[str])
+    assert_type(assert_that("abc").flat_mapped(lambda char: [char]), _ListAssertion[str])
     assert_type(assert_that(b"abc").first(), _NumericAssertion[int])
     assert_type(assert_that(bytearray(b"abc")).last(), _NumericAssertion[int])
     assert_type(assert_that(b"abc").element(0), _NumericAssertion[int])
     assert_type(assert_that(b"a").single(), _NumericAssertion[int])
-    assert_type(assert_that(b"abc").filtered_on(lambda byte: True), _IterableAssertion[int])
-    assert_type(assert_that(b"abc").mapped(lambda byte: byte * 2), _IterableAssertion[int])
+    assert_type(assert_that(b"abc").filtered_on(lambda byte: True), _ListAssertion[int])
+    assert_type(assert_that(b"abc").mapped(lambda byte: byte * 2), _ListAssertion[int])
     # a dict is walked over its keys, and a key of an arbitrary type has no protocol to narrow to
     assert_type(assert_that({"a": 1}).first(), AssertionBuilder[str])
-    assert_type(assert_that({"a": 1}).filtered_on(lambda key: True), _IterableAssertion[str])
-    assert_type(assert_that({"a": 1}).mapped(str.upper), _IterableAssertion[str])
+    assert_type(assert_that({"a": 1}).filtered_on(lambda key: True), _ListAssertion[str])
+    assert_type(assert_that({"a": 1}).mapped(str.upper), _ListAssertion[str])
 
     # The iterable pair is a question any value may ask, so it sits on the core protocol and keeps the
     # asking type rather than being reachable only from the collection view.

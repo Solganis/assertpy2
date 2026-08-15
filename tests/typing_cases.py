@@ -12,18 +12,21 @@ checkers.  A gap nobody wrote down is a gap nobody can close on purpose.
 from __future__ import annotations
 
 import datetime
+from collections.abc import Mapping
 from decimal import Decimal
 from enum import Enum
 from fractions import Fraction
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import numpy
+from typing_extensions import TypeIs
 
 from assertpy2 import assert_that, match
 
 if TYPE_CHECKING:
     from collections import Counter
-    from collections.abc import Mapping
+    from collections.abc import Iterator
 
     from assertpy2._engine._typing import _IterableAssertion, _RepeatableAssertion
 
@@ -58,6 +61,42 @@ class _Base:
 
 class _Derived(_Base):
     pass
+
+
+def _truthy_int(row: object) -> int:
+    """A predicate answering with something other than `bool`, which the runtime reads for truth."""
+    return 1
+
+
+def _numpy_verdict(row: object) -> numpy.bool_:
+    """The verdict a numpy comparison produces, and the reason the parameter is not typed `bool`."""
+    return numpy.bool_(True)
+
+
+def _is_int(value: object) -> TypeIs[int]:
+    """A predicate that carries the type onward, which is how a json path chain narrows.
+
+    The parameter is `object` rather than `Any` on purpose: `Any` would satisfy the signature of
+    `satisfies` whether or not the two really fit, so the narrowing case would prove nothing.
+    """
+    return isinstance(value, int)
+
+
+class _TakesAnyKey(Mapping[object, str]):
+    """A row that reads a key without hashing it, mirrored in `test_property_based.py`.
+
+    Both halves of the selector claim use this same shape on purpose: one proves the call type-checks,
+    the other proves it runs, and naming two different rows would have proved neither together.
+    """
+
+    def __getitem__(self, key: object) -> str:
+        return f"got {key!r}"
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
 
 
 class _Ordered:
@@ -136,6 +175,32 @@ def _an_element_type_must_not_be_substitutable_by_a_wider_one(over_bases: _Itera
     refusing it costs.
     """
     _takes_repeats_of_derived(over_bases)  # case: repeats-of-a-wider-element-substituted
+
+
+def _a_json_path_lands_on_an_unknown_shape() -> None:
+    """What the document holds at a path is not knowable statically, so the view offers no shape.
+
+    Both of these used to type-check and raise at runtime: the mapping view offered `contains_key` on
+    what turned out to be an `int`, and the sequence view offered `contains` on the same value.
+    """
+    assert_that({"id": 1}).at_json_path("$.id").is_positive()  # case: numeric-assertion-after-a-json-path
+    assert_that({"id": 1}).at_json_path("$.id").contains_key("x")  # case: mapping-assertion-after-a-json-path
+    assert_that([{"id": 1}]).at_json_path("$[0].id").contains(1)  # case: membership-assertion-after-a-json-path
+    assert_that({"id": 1}).at_json_path("$.id").value.bit_length()  # case: reading-a-json-path-value-as-a-type
+    # the two mistakes the runtime refuses by name, now refused before the run
+    rows = [{"id": 1}]
+    assert_that(rows).extracting("id", filtr=lambda row: True)  # case: extracting-with-an-unknown-option
+    assert_that(rows).extracting("id", filter=lambda left, right: True)  # case: extracting-filter-of-wrong-arity
+    assert_that(rows).extracting("id", sort=lambda left, right: 0)  # case: extracting-sort-of-wrong-arity
+    # the predicate is handed the element, so the element's own type is what it may be asked about
+    assert_that([1, 2]).filtered_on(lambda item: item.missing)  # case: predicate-reading-a-field-the-element-lacks
+    assert_that({"a": 1}).filtered_on(lambda key: key.missing)  # case: mapping-predicate-reading-a-missing-field
+    assert_that([1, 2]).any_satisfy(lambda item: item.missing)  # case: quantifier-reading-a-missing-field
+    assert_that(b"ab").filtered_on(lambda byte: byte.missing)  # case: byte-predicate-reading-a-missing-field
+    assert_that([1, 2]).each(lambda item: item.missing)  # case: each-reading-a-missing-field
+    assert_that({"a": 1}).all_satisfy(lambda key: key.missing)  # case: all-satisfy-reading-a-missing-field
+    # the runtime refuses a call with no selector, and so does the type now
+    assert_that(rows).extracting()  # case: extracting-with-no-selector
 
 
 def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
@@ -240,6 +305,40 @@ def _relations_that_must_keep_working() -> None:
     _bases: list[_Base] = [_Derived()]
     assert_that(_bases).satisfies(match.contains(_Derived()))  # case: valid-membership-of-a-subclass
     _takes_repeats_of_derived(assert_that([_Derived()]))  # case: valid-repeats-of-the-exact-element
+    # a json path continues in the type the caller states; the runtime runs the predicate and reads
+    # its boolean answer, so the declared narrowing is trusted rather than verified
+    assert_that({"id": 1}).at_json_path("$.id").is_equal_to(1)  # case: valid-equality-after-a-json-path
+    assert_that({"id": 1}).at_json_path("$.id").satisfies(_is_int).is_positive()  # case: valid-narrowed-json-path
+    assert_that({"id": 1}).at_json_path("$.id").satisfies(match.greater_than(0))  # case: valid-matcher-after-json-path
+    # every call form the extraction signature accepts, so the count of them is measured rather than said
+    _rows = [{"id": 1, "name": "a"}]
+    assert_that(_rows).extracting("id")  # case: valid-extracting-one-name
+    assert_that(_rows).extracting("id", "name")  # case: valid-extracting-several-names
+    assert_that(_rows).extracting("id", filter="name")  # case: valid-extracting-filter-by-key
+    assert_that(_rows).extracting("id", filter={"name": "a"})  # case: valid-extracting-filter-by-mapping
+    assert_that(_rows).extracting("id", filter=lambda row: True)  # case: valid-extracting-filter-callable
+    assert_that(_rows).extracting("id", sort="id")  # case: valid-extracting-sort-by-key
+    assert_that(_rows).extracting("id", sort=["id", "name"])  # case: valid-extracting-sort-by-keys
+    assert_that(_rows).extracting("id", sort=lambda row: row["id"])  # case: valid-extracting-sort-callable
+    assert_that(_rows).extracting("id", filter="name", sort="id")  # case: valid-extracting-filter-and-sort
+    # a mapping filter, held in a variable rather than written inline: `dict` is invariant, so the
+    # parameter has to be a `Mapping` for this to type-check at all
+    _criteria: dict[str, str] = {"name": "a"}
+    assert_that(_rows).extracting("id", filter=_criteria)  # case: valid-extracting-filter-from-a-variable
+    _proxy: Mapping[str, str] = MappingProxyType({"name": "a"})
+    assert_that(_rows).extracting("id", filter=_proxy)  # case: valid-extracting-filter-from-a-mapping
+    # a slice selects part of a sequence row, and it only became hashable in 3.12
+    assert_that([(1, 2, 3)]).extracting(slice(0, 2))  # case: valid-extracting-a-slice
+    # the verdict is read for truth, so a predicate answering with something other than `bool` is
+    # ordinary: `numpy.bool_` is the case that decided this, since the library documents numpy support
+    assert_that(_rows).extracting("id", filter=_truthy_int)  # case: valid-filter-option-verdict-not-a-bool
+    assert_that(_rows).each(_truthy_int)  # case: valid-quantifier-predicate-returning-an-int
+    assert_that(_rows).filtered_on(_truthy_int)  # case: valid-filter-predicate-returning-an-int
+    assert_that(_rows).each(_numpy_verdict)  # case: valid-quantifier-predicate-returning-a-numpy-bool
+    # even a list, on the same kind of row the runtime suite uses: a mapping whose `__getitem__` takes
+    # one answers, measured, so the selector type stays `object` and the runtime is what says no when
+    # the row cannot take what it was handed
+    assert_that([_TakesAnyKey()]).extracting([])  # case: valid-extracting-an-unhashable-selector
     assert_that(_wide).satisfies(match.is_subset_of([1, "x", 2.0]))  # case: valid-subset-of-a-wide-collection
     assert_that(_mixed).satisfies(match.contains_only(1, "x"))  # case: valid-only-in-a-union-collection
     # the regression this half of the file exists for: the numeric bound was first written as a list of
