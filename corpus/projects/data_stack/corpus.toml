@@ -1,0 +1,6 @@
+# numpy and pandas values reach the assertions as operands, and their scalars are not builtin numbers:
+# this is where a numeric bound written as a list of types broke a working suite once before.
+[consumer]
+shape = "numpy scalars and pandas frames as operands, with the data extra installed"
+extras = ["numpy", "pandas"]
+requires = ["pandas-stubs>=2.0"]

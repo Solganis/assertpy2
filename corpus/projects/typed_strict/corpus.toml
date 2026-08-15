@@ -1,0 +1,7 @@
+# The opposite end from `pytest_style`: everything annotated, mypy at its strictest, pyright strict too.
+# A surface that only fits loose code fails here, and a surface that only fits strict code fails there.
+[consumer]
+shape = "a fully annotated suite over dataclasses and Pydantic models, checked at maximum strictness"
+extras = []
+requires = ["pydantic>=2.0", "attrs>=25.0"]
+mypy_strict = true
