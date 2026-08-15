@@ -116,6 +116,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
+    # --- a type parameter substituted by a wider one -----------------------------------------------
+    # the element of `_RepeatableAssertion` is invariant on purpose, and this line is what that buys.
+    # Declaring it contravariant, which pyright suggests and `pyright_baseline.py` records as refused,
+    # makes this substitution legal in both pyright and mypy, and a matcher for the narrower element
+    # then reaches an assertion over the wider one
+    "repeats-of-a-wider-element-substituted": _ARGUMENT,
     # --- the method is not on this value's protocol ------------------------------------------------
     "complex-ordered": _MISSING,
     "complex-signed": _MISSING,
@@ -173,6 +179,7 @@ VALID: frozenset[str] = frozenset(
         "valid-membership-in-a-union-collection",
         "valid-membership-in-a-wide-collection",
         "valid-membership-of-a-subclass",
+        "valid-repeats-of-the-exact-element",
         "valid-subset-of-a-wide-collection",
         "valid-only-in-a-union-collection",
         "valid-numpy-integer",
