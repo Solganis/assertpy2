@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
+    from .._engine._introspection import MappingLike
     from ..assertpy import AssertionBuilder, CheckBuilder, NegatedBuilder
     from ..async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from ..matchers import Matcher
@@ -40,13 +41,17 @@ if TYPE_CHECKING:
     # `comparators` with two, and either raises when handed the other.
 
     class _MembershipAssertion(Protocol):
-        """ "Is every one of my elements in there" asked the same way by three different types.
+        """ "Is every one of my elements in there", asked the same way by three types.
 
-        Only `is_subset_of` lives here, and the reason `contains` does not is worth keeping: a string
-        declares it as `str | Matcher[str]`, while a mapping and a byte string declare it untyped.
-        Lifting the untyped form into a shared base looked like removing a duplicate and was really
-        widening the string: `assert_that("abc").contains(123)` stopped being an error.  A capability
-        protocol may only carry a declaration that every carrier means identically.
+        `*supersets` is `object`, and that is measured rather than lazy.  The runtime compares by `==`,
+        so a superset of a wider element type works: `list[Dog]` against `list[Animal]`, `[1]` against
+        `1.0`, a `list[object]` holding the right values.  Both narrowings tried, `Iterable[_E]` and
+        `Iterable[_E] | _E`, refused those, and the first also refused the documented
+        `is_subset_of(1, 2, 3)` that our own suite calls.
+
+        The mapping view declares its own, because there the runtime refuses a shape by name rather
+        than by comparison.  `contains` stays out for the older reason: a string means `str | Matcher`
+        by it, and lifting the untyped form once widened the string by accident.
         """
 
         def is_subset_of(self, *supersets: object, allow_empty: bool = ...) -> Self: ...
@@ -414,7 +419,12 @@ if TYPE_CHECKING:
         def value(self) -> bool: ...
 
     class _IterableAssertion(
-        _StructureAssertion, _RepeatableAssertion[_E], _SizedAssertion, _CoreAssertion, Protocol[_E]
+        _MembershipAssertion,
+        _StructureAssertion,
+        _RepeatableAssertion[_E],
+        _SizedAssertion,
+        _CoreAssertion,
+        Protocol[_E],
     ):
         """Assertions available for ``list``, ``tuple``, ``set``, and ``frozenset`` values.
 
@@ -433,7 +443,6 @@ if TYPE_CHECKING:
         def contains_exactly(self, *items: _E | Matcher[_E]) -> Self: ...
         def contains_exactly_in_any_order(self, *items: _E | Matcher[_E]) -> Self: ...
         # CollectionMixin - the iterable pair lives on the core protocol, where every value can ask it
-        def is_subset_of(self, *supersets: Iterable[_E], allow_empty: bool = ...) -> Self: ...
         def is_sorted(
             self, key: Callable[[_E], object] = ..., reverse: bool = ..., *, allow_empty: bool = ...
         ) -> Self: ...
@@ -473,8 +482,15 @@ if TYPE_CHECKING:
         @property
         def value(self) -> list[_E]: ...
 
-    class _DictAssertion(_MembershipAssertion, _StructureAssertion, _SizedAssertion, _CoreAssertion, Protocol[_K, _V]):
+    class _DictAssertion(_StructureAssertion, _SizedAssertion, _CoreAssertion, Protocol[_K, _V]):
         """Assertions available for ``dict`` values, generic over the key and value types."""
+
+        # the one view where narrowing holds: the runtime refuses a superset without `keys()` by name,
+        # rather than comparing and failing.  Both spellings, because neither covers the other: the
+        # structural one takes a class carrying only `keys`, `__iter__` and `__getitem__`, measured, and
+        # `Mapping` takes what typeshed types more tightly than the protocol can, such as a mapping
+        # proxy.  Neither key nor value is bound: a superset may carry keys the subject does not have
+        def is_subset_of(self, *supersets: Mapping[Any, Any] | MappingLike, allow_empty: bool = ...) -> Self: ...
 
         def contains(self, *items: object) -> Self: ...
 

@@ -117,7 +117,8 @@ def _incompatible_operands() -> None:
     assert_that({"id": 1}).contains_value(object())  # case: mapping-value-of-another-type
     assert_that(1).is_between("a", "b")  # case: numeric-range-of-text
     assert_that([1, 2]).contains_exactly("a", "b")  # case: exact-items-of-another-type
-    assert_that([1, 2]).is_subset_of("abc")  # case: collection-subset-of-text
+    _keys: list[str] = ["a"]
+    assert_that({"a": 1}).is_subset_of(_keys)  # case: mapping-subset-of-a-sequence
     assert_that("text").is_length("3")  # case: length-given-text
     assert_that(b"data").starts_with("text")  # case: bytes-prefixed-with-text
     assert_that(datetime.date(2026, 1, 1)).is_before(5)  # case: date-compared-to-number
@@ -292,6 +293,16 @@ def _relations_that_must_keep_working() -> None:
     assert_that([1, 2]).satisfies(match.contains_only(1, 2))  # case: valid-only-matcher
     assert_that([1, 2]).satisfies(match.is_subset_of([1, 2, 3]))  # case: valid-subset-from-collection
     assert_that([1, 2]).satisfies(match.is_subset_of(1, 2, 3))  # case: valid-subset-from-items
+    # the same two spellings on the assertion itself, which the shared capability could not tell apart
+    assert_that([1, 2]).is_subset_of(1, 2, 3)  # case: valid-subset-of-loose-items
+    assert_that("ab").is_subset_of("abc")  # case: valid-subset-of-characters
+    assert_that({"a": 1}).is_subset_of({"a": 1, "b": 2})  # case: valid-subset-of-a-mapping
+    assert_that(b"ab").is_subset_of([97, 98])  # case: valid-subset-of-byte-values
+    # the runtime compares by `==`, so a superset of a wider element type is ordinary: only the mapping
+    # view narrows, because only there is a shape refused by name rather than by comparison
+    assert_that([1, 2]).is_subset_of("abc")  # case: valid-subset-of-text-items
+    assert_that([1]).is_subset_of(1.0)  # case: valid-subset-of-a-wider-number
+    assert_that("ab").is_subset_of([1, 2, "a", "b"])  # case: valid-subset-of-mixed-items
     assert_that([1, 2]).satisfies(match.is_sorted())  # case: valid-sorted-matcher
     assert_that([{"n": 1}]).satisfies(match.is_sorted(key=lambda row: row["n"]))  # case: valid-sorted-by-key
     assert_that(1.05).satisfies(match.equal_to(1.0, tolerance=0.1))  # case: valid-equal-to-tolerance

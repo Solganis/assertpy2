@@ -1,4 +1,5 @@
 import collections
+from types import MappingProxyType
 
 import pytest
 
@@ -377,3 +378,46 @@ def test_dynamic_assertion_on_dict_method():
     assert_that(fred).is_type_of(dict)
     assert_that(fred["update"]).is_equal_to("Fred")
     assert_that(fred).has_update("Fred")
+
+
+def test_subset_of_compares_the_values_behind_the_keys():
+    """The mapping branch is the one place a superset is refused by shape rather than by comparison.
+
+    The values are compared too, which is what keeps the superset type from binding to the subject's
+    value type: a superset may carry other keys, but a shared key has to carry a matching value.
+    """
+    assert_that({"a": 1}).is_subset_of({"a": 1, "b": 2})
+    # keys the subject does not have are free, and so are their values and their types
+    assert_that({"a": 1}).is_subset_of({"a": 1, "b": object()})
+    assert_that({"a": 1}).is_subset_of({"a": 1, 2: "extra"})
+    try:
+        assert_that({"a": 1}).is_subset_of({"a": object()})
+    except AssertionError as failure:
+        assert_that(str(failure)).contains("to be subset of")
+    else:  # pragma: no cover - the mismatched value is expected to fail
+        raise AssertionError("expected a differing value to fail")
+
+
+def test_subset_of_refuses_a_superset_that_is_not_dict_like():
+    """The refusal the mapping narrowing rests on: a shape rejected by name, not by comparison.
+
+    This is why `*supersets` is narrowed here and nowhere else.  The other views compare by `==` and
+    accept anything, so a type refusing an argument there would refuse working code.
+    """
+    with pytest.raises(TypeError, match="must be dict-like"):
+        assert_that({"a": 1}).is_subset_of(["a"])
+
+    # and what it does take: anything carrying `keys`, iteration and subscripting, whether or not it
+    # is a `Mapping`, which is what the declared type says by naming both spellings
+    class Structural:
+        def keys(self):
+            return ["a"]
+
+        def __iter__(self):
+            return iter(["a"])
+
+        def __getitem__(self, key):
+            return 1
+
+    assert_that({"a": 1}).is_subset_of(Structural())
+    assert_that({"a": 1}).is_subset_of(MappingProxyType({"a": 1}))
