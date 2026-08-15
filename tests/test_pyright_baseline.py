@@ -10,8 +10,10 @@ rather than in the main suite.
 from __future__ import annotations
 
 import collections
+import functools
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -24,8 +26,19 @@ from tests.pyright_baseline import BASELINE
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
+# Which variance suggestions are refused, named rather than counted.  A count says "two of this rule in
+# this file" and would stay green if one of them were replaced by an unrelated diagnostic of the same
+# rule, which is exactly what a recorded refusal must not allow: the reason each is refused is written
+# in `pyright_baseline.py` and applies to that TypeVar, not to a number.
+_REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
+    ("assertpy2/_engine/_typing.py", "_RepeatableAssertion", "_E", "contravariant"),
+    ("assertpy2/_engine/_typing.py", "_NumericAssertion", "_N", "covariant"),
+)
 
-def _observed() -> dict[tuple[str, str], int]:
+
+@functools.cache
+def _diagnostics() -> tuple[dict[str, str], ...]:
+    """Every pyright diagnostic over the package, as ``{file, rule, message}``, run once for the module."""
     result = subprocess.run(
         [sys.executable, "-m", "pyright", "--outputjson", "assertpy2/"],
         capture_output=True,
@@ -35,10 +48,20 @@ def _observed() -> dict[tuple[str, str], int]:
     )
     # pyright exits non-zero whenever it reports anything, so the payload is what to read, not the code
     report = json.loads(result.stdout)
+    return tuple(
+        {
+            "file": pathlib.Path(item["file"]).resolve().relative_to(_ROOT).as_posix(),
+            "rule": item.get("rule", item["severity"]),
+            "message": item["message"],
+        }
+        for item in report["generalDiagnostics"]
+    )
+
+
+def _observed() -> dict[tuple[str, str], int]:
     counts: collections.Counter[tuple[str, str]] = collections.Counter()
-    for item in report["generalDiagnostics"]:
-        relative = pathlib.Path(item["file"]).resolve().relative_to(_ROOT).as_posix()
-        counts[(relative, item.get("rule", item["severity"]))] += 1
+    for item in _diagnostics():
+        counts[(item["file"], item["rule"])] += 1
     return dict(counts)
 
 
@@ -52,3 +75,30 @@ def test_no_unrecorded_pyright_diagnostics() -> None:
 
     resolved = {key: count for key, count in BASELINE.items() if count > observed.get(key, 0)}
     assert_that(resolved).described_as("recorded in pyright_baseline.py but no longer reported").is_empty()
+
+
+def test_the_recorded_variance_refusals_are_the_ones_still_reported() -> None:
+    """Name the two variance suggestions the package refuses, rather than counting them.
+
+    The counting gate above cannot tell one diagnostic of a rule from another in the same file, so a new
+    `reportInvalidTypeVarUse` could take the place of a resolved one and nothing would move.  These two
+    are refused for reasons written down beside them, and each reason is about a specific TypeVar: `_N`
+    would break its inputs if made covariant, and `_E` is used covariantly through `Matcher[_E]` despite
+    appearing only in parameters, which `typing_cases.py` demonstrates on all three checkers.
+    """
+    read = [
+        (item, re.search(r'variable "(\w+)".*Protocol "(\w+)".*should be (\w+)', item["message"], re.DOTALL))
+        for item in _diagnostics()
+        if item["rule"] == "reportInvalidTypeVarUse"
+    ]
+    # every one has to be classified: a message this pattern cannot read would otherwise drop out of the
+    # comparison silently, and take a real change with it
+    unreadable = [item["message"] for item, found in read if found is None]
+    assert_that(unreadable).described_as("variance suggestions this test could not parse").is_empty()
+
+    # the file and the suggested variance are part of the record: the same protocol and TypeVar asked to
+    # become something else is a different diagnostic, and a count would not know
+    reported = [(item["file"], found.group(2), found.group(1), found.group(3)) for item, found in read if found]
+    assert_that(sorted(reported)).described_as("the variance suggestions pyright still reports").is_equal_to(
+        sorted(_REFUSED_VARIANCE)
+    )

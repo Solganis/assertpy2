@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from collections import Counter
     from collections.abc import Mapping
 
+    from assertpy2._engine._typing import _IterableAssertion, _RepeatableAssertion
+
 
 class _Person:
     name: str = "x"
@@ -115,6 +117,25 @@ def _chaining_must_not_widen_what_the_value_offers() -> None:
     # `__getattr__`, so the negated branch accepts what the protocol does not. Closing it means a
     # second protocol per type, which is a doubling of the typed surface for one inverted call
     assert_that(1 + 2j).not_.is_greater_than(0)  # case: negation-widens-the-protocol
+
+
+def _takes_repeats_of_derived(assertion: _RepeatableAssertion[_Derived]) -> None:
+    """A caller that wants to ask about repeats of one exact element type."""
+
+
+def _an_element_type_must_not_be_substitutable_by_a_wider_one(over_bases: _IterableAssertion[_Base]) -> None:
+    """Why `_RepeatableAssertion` keeps an invariant element, against the checkers' own advice.
+
+    Pyright asks for the parameter to be contravariant, because every method that names it takes it as an
+    argument.  One of those arguments is `Matcher[_E]`, and `Matcher` is contravariant itself, so the two
+    flips cancel and the parameter is in fact used covariantly.  Declaring it would make the line below
+    legal, and a `Matcher[_Derived]` would then reach an assertion holding base instances.
+
+    Measured before this case was written: with the parameter declared contravariant, both pyright and
+    mypy accept this substitution silently, and the diagnostic recorded in `pyright_baseline.py` is what
+    refusing it costs.
+    """
+    _takes_repeats_of_derived(over_bases)  # case: repeats-of-a-wider-element-substituted
 
 
 def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
@@ -218,6 +239,7 @@ def _relations_that_must_keep_working() -> None:
     assert_that(_wide).satisfies(match.contains("x"))  # case: valid-membership-in-a-wide-collection
     _bases: list[_Base] = [_Derived()]
     assert_that(_bases).satisfies(match.contains(_Derived()))  # case: valid-membership-of-a-subclass
+    _takes_repeats_of_derived(assert_that([_Derived()]))  # case: valid-repeats-of-the-exact-element
     assert_that(_wide).satisfies(match.is_subset_of([1, "x", 2.0]))  # case: valid-subset-of-a-wide-collection
     assert_that(_mixed).satisfies(match.contains_only(1, "x"))  # case: valid-only-in-a-union-collection
     # the regression this half of the file exists for: the numeric bound was first written as a list of
