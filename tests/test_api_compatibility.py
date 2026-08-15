@@ -8,7 +8,10 @@ So the surface is snapshotted and compared. The comparison is not "did anything 
 move", because the four kinds of movement carry different obligations:
 
 * **breaking** - a caller that worked stops working. Needs a major, or must not ship.
-* **addition** - new names, new optional parameters. A minor.
+* **behaviour** - the call still binds, but does something else: a default value changed. A minor, and
+  the release notes name it under behaviour changes.
+* **addition** - new names, new optional parameters, a parameter accepting one more way of being passed.
+  A minor.
 * **typing** - annotations only, the runtime is unchanged. A minor, and the release notes say so.
 * **internal** - never reaches this file, because private names are not collected.
 
@@ -44,6 +47,27 @@ def _parameters(entry: dict) -> dict[str, dict]:
     return {parameter["name"]: parameter for parameter in entry.get("parameters", [])}
 
 
+def _positional(entry: dict) -> list[str]:
+    """The names a caller may pass positionally, in the order they must be passed.
+
+    Compared as a sequence rather than as a set: swapping two of them, or slipping an optional one in
+    front of an existing one, keeps every name and still rebinds every positional call at the site.
+    """
+    return [
+        parameter["name"]
+        for parameter in entry.get("parameters", [])
+        if parameter["kind"] in ("POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD")
+    ]
+
+
+# how a parameter may change the ways it can be passed.  Widening is an addition: a caller that worked
+# still works and gains a spelling.  Narrowing takes a spelling away, so it breaks
+_WIDENING = {
+    ("POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD"),
+    ("KEYWORD_ONLY", "POSITIONAL_OR_KEYWORD"),
+}
+
+
 def _callable_changes(path: str, before: dict, after: dict) -> list[tuple[str, str]]:
     """How one callable moved, as (severity, description) pairs."""
     changes: list[tuple[str, str]] = []
@@ -61,6 +85,9 @@ def _callable_changes(path: str, before: dict, after: dict) -> list[tuple[str, s
         for name, parameter in new.items()
         if name not in old
     )
+    old_order, new_order = _positional(before), _positional(after)
+    if old_order != new_order[: len(old_order)]:
+        changes.append(("breaking", f"{path}: positional order changed from {old_order} to {new_order}"))
     if before.get("returns") != after.get("returns"):
         changes.append(("typing", f"{path}: returns {after.get('returns')} instead of {before.get('returns')}"))
     if before.get("kind") != after.get("kind"):
@@ -76,11 +103,16 @@ def _parameter_changes(path: str, name: str, before: dict, after: dict) -> list[
     """How one parameter moved, each rule its own line rather than a nest of branches."""
     changes = []
     if after["kind"] != before["kind"]:
-        changes.append(("breaking", f"{path}: parameter '{name}' is now {after['kind']}, was {before['kind']}"))
+        severity = "addition" if (before["kind"], after["kind"]) in _WIDENING else "breaking"
+        changes.append((severity, f"{path}: parameter '{name}' is now {after['kind']}, was {before['kind']}"))
     if after["required"] and not before["required"]:
         changes.append(("breaking", f"{path}: parameter '{name}' lost its default"))
     if not after["required"] and before["required"]:
         changes.append(("addition", f"{path}: parameter '{name}' gained a default"))
+    if after.get("default") != before.get("default") and after["required"] == before["required"]:
+        changes.append(
+            ("behaviour", f"{path}: parameter '{name}' defaults to {after.get('default')}, was {before.get('default')}")
+        )
     if after["annotation"] != before["annotation"]:
         changes.append(("typing", f"{path}: parameter '{name}' is now typed {after['annotation']}"))
     return changes
@@ -94,10 +126,16 @@ def _section_changes(section: str, before: dict, after: dict) -> list[tuple[str,
         old, new = before[name], after[name]
         changes.extend(_callable_changes(f"{section}.{name}", old, new))
         for field in ("fields", "bases"):
+            # order matters for both: fields carry positional construction and unpacking, bases carry
+            # the method resolution order, so a reshuffle changes behaviour while keeping every name
             gone = [item for item in old.get(field, []) if item not in new.get(field, [])]
             fresh = [item for item in new.get(field, []) if item not in old.get(field, [])]
             changes += [("breaking", f"{section}.{name}: {field[:-1]} '{item}' removed") for item in gone]
             changes += [("addition", f"{section}.{name}: {field[:-1]} '{item}' added") for item in fresh]
+            kept_before = [item for item in old.get(field, []) if item in new.get(field, [])]
+            kept_after = [item for item in new.get(field, []) if item in old.get(field, [])]
+            if kept_before != kept_after:
+                changes.append(("breaking", f"{section}.{name}: {field} reordered, {kept_before} -> {kept_after}"))
     return changes
 
 
@@ -112,6 +150,17 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     old_read, new_read = set(before["failure_attributes"]), set(after["failure_attributes"])
     changes.extend(("breaking", f"AssertionFailure.{name} no longer readable") for name in sorted(old_read - new_read))
     changes.extend(("addition", f"AssertionFailure.{name} now readable") for name in sorted(new_read - old_read))
+    old_overloads, new_overloads = before.get("entry_overloads", []), after.get("entry_overloads", [])
+    changes.extend(
+        ("breaking", f"assert_that overload gone: {declaration}")
+        for declaration in old_overloads
+        if declaration not in new_overloads
+    )
+    changes.extend(
+        ("typing", f"assert_that overload added: {declaration}")
+        for declaration in new_overloads
+        if declaration not in old_overloads
+    )
     lost = set(before["matcher_protocol"]) - set(after["matcher_protocol"])
     changes.extend(("breaking", f"matcher protocol lost '{name}'") for name in sorted(lost))
     if before["py_typed"] and not after["py_typed"]:
@@ -145,7 +194,8 @@ class TestThePublicSurfaceHasNotMoved:
             f"{section}.{name}"
             for section in ("exported", "builder", "matchers")
             for name in stored[section]
-            if name.startswith("_")
+            # one leading underscore is private; `__version__` and its kind are part of the surface
+            if name.startswith("_") and not name.startswith("__")
         ]
         assert_that(leaked).described_as("private names in the compatibility snapshot").is_empty()
 
@@ -156,17 +206,47 @@ class TestTheClassificationItself:
     BASE: ClassVar[dict] = {
         "exports": ["assert_that"],
         "py_typed": True,
-        "exported": {"assert_that": {"kind": "callable", "parameters": [], "returns": None}},
+        "exported": {
+            "assert_that": {"kind": "callable", "parameters": [], "returns": None},
+            "AssertionFailure": {
+                "kind": "class",
+                "parameters": [],
+                "returns": None,
+                "bases": ["AssertionError"],
+                "fields": ["actual", "expected"],
+            },
+        },
         "builder": {
             "is_equal_to": {
                 "kind": "callable",
                 "parameters": [
-                    {"name": "other", "kind": "POSITIONAL_OR_KEYWORD", "required": True, "annotation": None}
+                    {
+                        "name": "other",
+                        "kind": "POSITIONAL_OR_KEYWORD",
+                        "required": True,
+                        "default": None,
+                        "annotation": None,
+                    },
+                    {
+                        "name": "tolerance",
+                        "kind": "POSITIONAL_OR_KEYWORD",
+                        "required": False,
+                        "default": "0.0",
+                        "annotation": None,
+                    },
+                    {
+                        "name": "strict",
+                        "kind": "KEYWORD_ONLY",
+                        "required": False,
+                        "default": "False",
+                        "annotation": None,
+                    },
                 ],
                 "returns": "Self",
             }
         },
         "matchers": {},
+        "entry_overloads": ["(val: str) -> _StringAssertion"],
         "matcher_protocol": ["matches", "describe", "describe_mismatch"],
         "failure_attributes": ["actual"],
     }
@@ -183,10 +263,55 @@ class TestTheClassificationItself:
             ("an export disappears", lambda s: s.update(exports=[]), "breaking"),
             ("py.typed disappears", lambda s: s.update(py_typed=False), "breaking"),
             (
-                "a parameter loses its default",
+                "an existing parameter loses its default",
+                lambda s: s["builder"]["is_equal_to"]["parameters"][1].update(required=True, default=None),
+                "breaking",
+            ),
+            (
+                "a required parameter is added",
                 lambda s: s["builder"]["is_equal_to"]["parameters"].append(
-                    {"name": "tolerance", "kind": "KEYWORD_ONLY", "required": True, "annotation": None}
+                    {"name": "mode", "kind": "KEYWORD_ONLY", "required": True, "default": None, "annotation": None}
                 ),
+                "breaking",
+            ),
+            (
+                "a parameter is renamed",
+                lambda s: s["builder"]["is_equal_to"]["parameters"][0].update(name="expected"),
+                "breaking",
+            ),
+            (
+                "positional parameters swap places",
+                lambda s: s["builder"]["is_equal_to"]["parameters"].reverse(),
+                "breaking",
+            ),
+            (
+                "a keyword-only parameter becomes positional too",
+                lambda s: s["builder"]["is_equal_to"]["parameters"][2].update(kind="POSITIONAL_OR_KEYWORD"),
+                "addition",
+            ),
+            (
+                "a positional parameter becomes keyword-only",
+                lambda s: s["builder"]["is_equal_to"]["parameters"][0].update(kind="KEYWORD_ONLY"),
+                "breaking",
+            ),
+            (
+                "a default value changes",
+                lambda s: s["builder"]["is_equal_to"]["parameters"][1].update(default="True"),
+                "behaviour",
+            ),
+            (
+                "record fields are reordered",
+                lambda s: s["exported"]["AssertionFailure"].update(fields=["expected", "actual"]),
+                "breaking",
+            ),
+            (
+                "an assert_that overload disappears",
+                lambda s: s.update(entry_overloads=[]),
+                "breaking",
+            ),
+            (
+                "a matcher protocol method disappears",
+                lambda s: s.update(matcher_protocol=["matches"]),
                 "breaking",
             ),
             (
@@ -202,7 +327,7 @@ class TestTheClassificationItself:
             (
                 "an optional parameter appears",
                 lambda s: s["builder"]["is_equal_to"]["parameters"].append(
-                    {"name": "tolerance", "kind": "KEYWORD_ONLY", "required": False, "annotation": None}
+                    {"name": "ignore", "kind": "KEYWORD_ONLY", "required": False, "default": "None", "annotation": None}
                 ),
                 "addition",
             ),
