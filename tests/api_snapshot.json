@@ -519,7 +519,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
-     "default": "<callable Warning>",
+     "default": "<callable builtins.Warning>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -1557,7 +1557,7 @@
    "parameters": [
     {
      "annotation": null,
-     "default": "<callable CollectionMixin.<lambda>>",
+     "default": "<callable assertpy2.collection.CollectionMixin.<lambda>>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "key",
      "required": false
@@ -2013,7 +2013,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
-     "default": "<callable Warning>",
+     "default": "<callable builtins.Warning>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -2070,20 +2070,20 @@
   }
  },
  "entry_overloads": [
-  "(val: str, description: str) -> _StringAssertion",
-  "(val: bool, description: str) -> _BoolAssertion",
-  "(val: int, description: str) -> _NumericAssertion[int]",
-  "(val: float, description: str) -> _NumericAssertion[float]",
-  "(val: complex, description: str) -> _ComplexAssertion",
-  "(val: dict[_K, _V], description: str) -> _DictAssertion[_K, _V]",
-  "(val: list[_E] | tuple[_E, ...], description: str) -> _IterableAssertion[_E]",
-  "(val: set[_E] | frozenset[_E], description: str) -> _IterableAssertion[_E]",
-  "(val: datetime.date, description: str) -> _DateAssertion",
-  "(val: pathlib.Path, description: str) -> _PathAssertion",
-  "(val: bytes, description: str) -> _BytesAssertion[bytes]",
-  "(val: bytearray, description: str) -> _BytesAssertion[bytearray]",
-  "(val: Callable[..., object], description: str) -> _CallableAssertion",
-  "(val: _T, description: str) -> AssertionBuilder[_T]"
+  "(val: str, description: str = '') -> _StringAssertion",
+  "(val: bool, description: str = '') -> _BoolAssertion",
+  "(val: int, description: str = '') -> _NumericAssertion[int]",
+  "(val: float, description: str = '') -> _NumericAssertion[float]",
+  "(val: complex, description: str = '') -> _ComplexAssertion",
+  "(val: dict[_K, _V], description: str = '') -> _DictAssertion[_K, _V]",
+  "(val: list[_E] | tuple[_E, ...], description: str = '') -> _IterableAssertion[_E]",
+  "(val: set[_E] | frozenset[_E], description: str = '') -> _IterableAssertion[_E]",
+  "(val: datetime.date, description: str = '') -> _DateAssertion",
+  "(val: pathlib.Path, description: str = '') -> _PathAssertion",
+  "(val: bytes, description: str = '') -> _BytesAssertion[bytes]",
+  "(val: bytearray, description: str = '') -> _BytesAssertion[bytearray]",
+  "(val: Callable[..., object], description: str = '') -> _CallableAssertion",
+  "(val: _T, description: str = '') -> AssertionBuilder[_T]"
  ],
  "exported": {
   "AssertionFailure": {
