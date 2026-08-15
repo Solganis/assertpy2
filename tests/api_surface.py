@@ -49,7 +49,7 @@ def _value(value: Any, depth: int = 0) -> str:
     if isinstance(value, _SIMPLE):
         return repr(value)
     if isinstance(value, enum.Enum):
-        return f"{type(value).__name__}.{value.name}"
+        return f"{type(value).__module__}.{type(value).__qualname__}.{value.name}"
     if isinstance(value, (list, tuple, set, frozenset)) and depth < 3:
         items = [_value(item, depth + 1) for item in value]
         if isinstance(value, (set, frozenset)):
@@ -59,7 +59,8 @@ def _value(value: Any, depth: int = 0) -> str:
         pairs = ", ".join(f"{_value(key, depth + 1)}: {_value(item, depth + 1)}" for key, item in value.items())
         return f"dict[{pairs}]"
     if callable(value):
-        return f"<callable {getattr(value, '__qualname__', type(value).__name__)}>"
+        module = getattr(value, "__module__", type(value).__module__)
+        return f"<callable {module}.{getattr(value, '__qualname__', type(value).__name__)}>"
     return f"<{type(value).__module__}.{type(value).__name__}>"
 
 
@@ -176,10 +177,22 @@ def collect() -> dict[str, Any]:
     }
 
 
-def _is_overload(decorator: ast.expr) -> bool:
-    """`@overload`, `@typing.overload`, or whatever name it was imported under."""
+def _overload_names(tree: ast.Module) -> set[str]:
+    """The names `typing.overload` was actually imported under in this module.
+
+    Guessing by suffix accepted `@custom_overload` and rejected `from typing import overload as ov`,
+    which is two errors in opposite directions.  The imports say it exactly.
+    """
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module in ("typing", "typing_extensions"):
+            names |= {alias.asname or alias.name for alias in node.names if alias.name == "overload"}
+    return names
+
+
+def _is_overload(decorator: ast.expr, names: set[str]) -> bool:
     if isinstance(decorator, ast.Name):
-        return decorator.id.endswith("overload")
+        return decorator.id in names
     return isinstance(decorator, ast.Attribute) and decorator.attr == "overload"
 
 
@@ -193,14 +206,18 @@ def _entry_overloads() -> list[str]:
     `test_typing` pins the resolution of chosen calls, a different question: it would stay green if an
     overload nobody wrote an `assert_type` for disappeared.
     """
-    source = pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8")
-    return [
-        _signature_text(node)
-        for node in ast.walk(ast.parse(source))
+    tree = ast.parse(pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8"))
+    names = _overload_names(tree)
+    # taken from `tree.body` rather than `ast.walk`: the latter has no documented order and would also
+    # find a nested function of the same name, and order is exactly what this list is compared by
+    declared = [
+        node
+        for node in tree.body
         if isinstance(node, ast.FunctionDef)
         and node.name == "assert_that"
-        and any(_is_overload(decorator) for decorator in node.decorator_list)
+        and any(_is_overload(decorator, names) for decorator in node.decorator_list)
     ]
+    return [_signature_text(node) for node in sorted(declared, key=lambda node: node.lineno)]
 
 
 def _signature_text(node: ast.FunctionDef) -> str:
@@ -210,23 +227,42 @@ def _signature_text(node: ast.FunctionDef) -> str:
     first version of this collected `node.args.args` alone, which ignored every one of them.
     """
     arguments = node.args
-    parts = [_argument_text(argument) for argument in arguments.posonlyargs]
+    positional = arguments.posonlyargs + arguments.args
+    # defaults line up with the tail of the positional arguments, which is how the grammar defines them
+    padding: list[ast.expr | None] = [None] * (len(positional) - len(arguments.defaults))
+    positional_defaults = padding + list(arguments.defaults)
+    parts = [
+        _argument_text(argument, default)
+        for argument, default in zip(arguments.posonlyargs, positional_defaults, strict=False)
+    ]
     if arguments.posonlyargs:
         parts.append("/")
-    parts += [_argument_text(argument) for argument in arguments.args]
+    parts += [
+        _argument_text(argument, default)
+        for argument, default in zip(arguments.args, positional_defaults[len(arguments.posonlyargs) :], strict=False)
+    ]
     if arguments.vararg:
-        parts.append(f"*{_argument_text(arguments.vararg)}")
+        parts.append(f"*{_argument_text(arguments.vararg, None)}")
     elif arguments.kwonlyargs:
         parts.append("*")
-    parts += [_argument_text(argument) for argument in arguments.kwonlyargs]
+    parts += [
+        _argument_text(argument, default)
+        for argument, default in zip(arguments.kwonlyargs, arguments.kw_defaults, strict=False)
+    ]
     if arguments.kwarg:
-        parts.append(f"**{_argument_text(arguments.kwarg)}")
+        parts.append(f"**{_argument_text(arguments.kwarg, None)}")
     returns = ast.unparse(node.returns) if node.returns else "?"
     return f"({', '.join(parts)}) -> {returns}"
 
 
-def _argument_text(argument: ast.arg) -> str:
-    return f"{argument.arg}: {ast.unparse(argument.annotation) if argument.annotation else '?'}"
+def _argument_text(argument: ast.arg, default: ast.expr | None) -> str:
+    """One argument as declared, defaults included.
+
+    Without the default, `description: str` gaining `= ""`, or `= ""` becoming `= None`, moved nothing in
+    the snapshot while changing what an existing call does.
+    """
+    annotation = ast.unparse(argument.annotation) if argument.annotation else "?"
+    return f"{argument.arg}: {annotation}" + (f" = {ast.unparse(default)}" if default is not None else "")
 
 
 def _matcher_protocol() -> dict[str, Any]:
@@ -244,8 +280,10 @@ def _matcher_protocol() -> dict[str, Any]:
             {name: _member_entry(Matcher, name) for name in vars(base) if not name.startswith("_")},
         )
         for name, annotation in getattr(base, "__annotations__", {}).items():
+            # assigned rather than set as a default: walking base to derived means the derived one has
+            # to win, and `setdefault` kept whatever the base declared
             if not name.startswith("_"):
-                members.setdefault(name, {"kind": "annotation", "annotation": _text(annotation, None)})
+                members[name] = {"kind": "annotation", "annotation": _text(annotation, None)}
     return dict(sorted(members.items()))
 
 
@@ -268,7 +306,10 @@ def _failure_attributes() -> list[str]:
         name
         for base in assertpy2.AssertionFailure.__mro__
         for name, value in vars(base).items()
-        if not name.startswith("_") and isinstance(value, _DESCRIPTORS)
+        # every public member that is not a plain method: properties, slots, class attributes and any
+        # descriptor of someone else's making.  Narrowing this to three descriptor types once meant a
+        # public class attribute could disappear without a word
+        if not name.startswith("_") and not inspect.isroutine(value)
     }
     return sorted(from_class | _attributes_of_real_failures())
 

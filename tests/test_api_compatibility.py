@@ -97,7 +97,7 @@ def _callable_changes(path: str, before: dict, after: dict) -> list[tuple[str, s
 
 def _owned(construction: str | None) -> bool:
     """Whether the package itself defines the call, rather than inheriting it from somewhere else."""
-    return construction is None or construction.startswith("assertpy2")
+    return construction is None or construction == "assertpy2" or construction.startswith("assertpy2.")
 
 
 def _need(parameter: dict) -> str:
