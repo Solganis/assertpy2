@@ -104,6 +104,14 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_FilesystemAssertion": ("_StringAssertion", "_PathAssertion"),
     "_RealNumberAssertion": ("_NumericAssertion", "_BoolAssertion"),
     "_ZeroAssertion": ("_NumericAssertion", "_BoolAssertion", "_ComplexAssertion"),
+    "_MembershipAssertion": (
+        "_TextAssertion",
+        "_StringAssertion",
+        "_InvokedAssertion",
+        "_IterableAssertion",
+        "_ListAssertion",
+        "_BytesAssertion",
+    ),
     "_StructureAssertion": ("_IterableAssertion", "_ListAssertion", "_DictAssertion"),
     "_RepeatableAssertion": (
         "_TextAssertion",
@@ -111,13 +119,6 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_InvokedAssertion",
         "_IterableAssertion",
         "_ListAssertion",
-    ),
-    "_MembershipAssertion": (
-        "_TextAssertion",
-        "_StringAssertion",
-        "_InvokedAssertion",
-        "_DictAssertion",
-        "_BytesAssertion",
     ),
     # what a message and a string share, which is everything except reading the value as a path
     "_TextAssertion": ("_StringAssertion", "_InvokedAssertion"),
