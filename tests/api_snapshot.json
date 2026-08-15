@@ -519,7 +519,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
-     "default": "<type>",
+     "default": "<callable Warning>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -598,14 +598,14 @@
     },
     {
      "annotation": null,
-     "default": "<_Missing>",
+     "default": "<assertpy2.outcome._Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
      "annotation": null,
-     "default": "<_Missing>",
+     "default": "<assertpy2.outcome._Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
@@ -653,7 +653,7 @@
     },
     {
      "annotation": "type[Exception] | tuple[type[Exception], ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
@@ -687,7 +687,7 @@
     },
     {
      "annotation": "type[Exception] | tuple[type[Exception], ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
@@ -1557,7 +1557,7 @@
    "parameters": [
     {
      "annotation": null,
-     "default": "<function>",
+     "default": "<callable CollectionMixin.<lambda>>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "key",
      "required": false
@@ -1729,7 +1729,7 @@
    "parameters": [
     {
      "annotation": "object",
-     "default": "<object>",
+     "default": "<builtins.object>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": false
@@ -2013,7 +2013,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
-     "default": "<type>",
+     "default": "<callable Warning>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -2088,11 +2088,11 @@
  "exported": {
   "AssertionFailure": {
    "bases": [
-    "AssertionError",
-    "Exception",
-    "BaseException"
+    "builtins.AssertionError",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "own",
+   "construction": "assertpy2.AssertionFailure",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2133,7 +2133,7 @@
     },
     {
      "annotation": "tuple[AssertionOutcome, ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "failures",
      "required": false
@@ -2143,7 +2143,7 @@
   },
   "AssertionOutcome": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.outcome.AssertionOutcome",
    "fields": [
     "passed",
     "message",
@@ -2188,7 +2188,7 @@
     },
     {
      "annotation": "object",
-     "default": "<_Missing>",
+     "default": "<assertpy2.outcome._Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
@@ -2233,7 +2233,7 @@
   },
   "AsyncAssertionBuilder": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.async_assertions.AsyncAssertionBuilder",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2274,7 +2274,7 @@
     },
     {
      "annotation": "tuple[type[Exception], ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
@@ -2305,7 +2305,7 @@
   },
   "BaseMatcher": {
    "bases": [],
-   "construction": "inherited",
+   "construction": "builtins.object",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2313,7 +2313,7 @@
   },
   "CheckBuilder": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.assertpy.CheckBuilder",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2336,12 +2336,12 @@
   },
   "DanglingAssertionWarning": {
    "bases": [
-    "UserWarning",
-    "Warning",
-    "Exception",
-    "BaseException"
+    "builtins.UserWarning",
+    "builtins.Warning",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "inherited",
+   "construction": "builtins.UserWarning",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2349,7 +2349,7 @@
   },
   "DiffEntry": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.errors.DiffEntry",
    "fields": [
     "path",
     "actual",
@@ -2389,7 +2389,7 @@
     },
     {
      "annotation": "tuple[Step, ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "steps",
      "required": false
@@ -2399,7 +2399,7 @@
   },
   "DiffResult": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.errors.DiffResult",
    "fields": [
     "kind",
     "entries"
@@ -2415,7 +2415,7 @@
     },
     {
      "annotation": "list[DiffEntry]",
-     "default": "<_HAS_DEFAULT_FACTORY_CLASS>",
+     "default": "<dataclasses._HAS_DEFAULT_FACTORY_CLASS>",
      "kind": "KEYWORD_ONLY",
      "name": "entries",
      "required": false
@@ -2425,7 +2425,7 @@
   },
   "MatchResult": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2._matcher_impls.MatchResult",
    "fields": [
     "matched",
     "description",
@@ -2467,10 +2467,10 @@
   },
   "Matcher": {
    "bases": [
-    "Protocol",
-    "Generic"
+    "typing.Protocol",
+    "typing.Generic"
    ],
-   "construction": "own",
+   "construction": "assertpy2._matcher_impls.Matcher",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2493,9 +2493,9 @@
   },
   "NegatedBuilder": {
    "bases": [
-    "Generic"
+    "typing.Generic"
    ],
-   "construction": "own",
+   "construction": "assertpy2.assertpy.NegatedBuilder",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2511,7 +2511,7 @@
   },
   "PollSample": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.errors.PollSample",
    "fields": [
     "elapsed",
     "outcome",
@@ -2561,7 +2561,7 @@
   },
   "PollTrace": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.errors.PollTrace",
    "fields": [
     "samples",
     "total_polls",
@@ -2611,12 +2611,12 @@
   },
   "SnapshotCreatedWarning": {
    "bases": [
-    "UserWarning",
-    "Warning",
-    "Exception",
-    "BaseException"
+    "builtins.UserWarning",
+    "builtins.Warning",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "inherited",
+   "construction": "builtins.UserWarning",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2624,12 +2624,12 @@
   },
   "SnapshotKeyReusedWarning": {
    "bases": [
-    "UserWarning",
-    "Warning",
-    "Exception",
-    "BaseException"
+    "builtins.UserWarning",
+    "builtins.Warning",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "inherited",
+   "construction": "builtins.UserWarning",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2637,12 +2637,12 @@
   },
   "SnapshotUpdatedWarning": {
    "bases": [
-    "UserWarning",
-    "Warning",
-    "Exception",
-    "BaseException"
+    "builtins.UserWarning",
+    "builtins.Warning",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "inherited",
+   "construction": "builtins.UserWarning",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2650,7 +2650,7 @@
   },
   "SoftAssertionCollector": {
    "bases": [],
-   "construction": "inherited",
+   "construction": "builtins.object",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2658,9 +2658,9 @@
   },
   "Step": {
    "bases": [
-    "tuple"
+    "builtins.tuple"
    ],
-   "construction": "own",
+   "construction": "assertpy2.errors.Step",
    "fields": [
     "kind",
     "value",
@@ -2694,7 +2694,7 @@
   },
   "SyncAssertionBuilder": {
    "bases": [],
-   "construction": "own",
+   "construction": "assertpy2.async_assertions.SyncAssertionBuilder",
    "fields": [],
    "kind": "class",
    "parameters": [
@@ -2735,7 +2735,7 @@
     },
     {
      "annotation": "tuple[type[Exception], ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
@@ -2763,7 +2763,7 @@
     },
     {
      "annotation": "tuple[_Step, ...]",
-     "default": "()",
+     "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
      "name": "steps",
      "required": false
@@ -2780,12 +2780,12 @@
   },
   "VacuousAssertionWarning": {
    "bases": [
-    "UserWarning",
-    "Warning",
-    "Exception",
-    "BaseException"
+    "builtins.UserWarning",
+    "builtins.Warning",
+    "builtins.Exception",
+    "builtins.BaseException"
    ],
-   "construction": "inherited",
+   "construction": "builtins.UserWarning",
    "fields": [],
    "kind": "class",
    "parameters": [],
@@ -2793,18 +2793,39 @@
   },
   "WarningLoggingAdapter": {
    "bases": [
-    "LoggerAdapter"
+    "logging.LoggerAdapter"
    ],
-   "construction": "inherited",
+   "construction": "logging.LoggerAdapter",
    "fields": [],
    "kind": "class",
-   "parameters": [],
+   "parameters": [
+    {
+     "annotation": null,
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "logger",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "default": "None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "extra",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "default": "False",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "merge_extra",
+     "required": false
+    }
+   ],
    "returns": null
   },
   "__version__": {
-   "kind": "str",
-   "parameters": [],
-   "returns": null
+   "kind": "builtins.str",
+   "parameters": []
   },
   "add_extension": {
    "kind": "callable",
@@ -2966,9 +2987,8 @@
    "returns": null
   },
   "match": {
-   "kind": "_MatchNamespace",
-   "parameters": [],
-   "returns": null
+   "kind": "assertpy2.matchers._MatchNamespace",
+   "parameters": []
   },
   "register_matcher": {
    "kind": "callable",
@@ -3110,16 +3130,45 @@
  ],
  "failure_attributes": [
   "actual",
+  "args",
   "diff",
   "expected",
   "failures",
   "trace"
  ],
- "matcher_protocol": [
-  "describe",
-  "describe_mismatch",
-  "matches"
- ],
+ "matcher_protocol": {
+  "describe": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "str"
+  },
+  "describe_mismatch": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "_M_contra",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "value",
+     "required": true
+    }
+   ],
+   "returns": "str"
+  },
+  "matches": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "_M_contra",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "value",
+     "required": true
+    }
+   ],
+   "returns": "bool"
+  }
+ },
  "matchers": {
   "all_of": {
    "kind": "callable",
