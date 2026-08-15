@@ -6,19 +6,25 @@ Each test states an invariant and lets Hypothesis attack it with generated data;
 shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint the mismatch.
 """
 
+import ast
 import copy
 import datetime
 import json
+import pathlib
 import re
 import warnings
 from collections import Counter, namedtuple
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from itertools import pairwise
+from types import MappingProxyType
 
 import pytest
 from hypothesis import assume, find, given, settings
 from hypothesis import strategies as st
 
+import assertpy2._engine._typing
+import assertpy2.assertpy
 from assertpy2 import assert_conforms, assert_that, match, soft_assertions
 from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC
@@ -1570,3 +1576,425 @@ class TestTheEvaluationCoresAgreeWithPython:
         assert_that(text_contains(raw, text)).is_false()
         assert_that(text_starts_with(text, raw)).is_false()
         assert_that(text_ends_with(raw, text)).is_false()
+
+
+# Which narrowed view each subject reaches, so the table below can be checked against the typed surface
+# rather than trusted.  A hand-written list of "types with a pipeline" is exactly the kind of thing that
+# stops matching the code the first time a view is added.
+_PIPELINE_VIEWS = {
+    "list": "_IterableAssertion",
+    "tuple": "_IterableAssertion",
+    "set": "_IterableAssertion",
+    "frozenset": "_IterableAssertion",
+    "str": "_StringAssertion",
+    "bytes": "_BytesAssertion",
+    "bytearray": "_BytesAssertion",
+    "dict": "_DictAssertion",
+}
+
+# every subject `assert_that` narrows to a view carrying the pipeline steps, built from one list of ints
+_PIPELINE_SUBJECTS = {
+    "list": list,
+    "tuple": tuple,
+    "set": set,
+    "frozenset": frozenset,
+    "str": lambda items: "".join(chr(ord("a") + item % 26) for item in items),
+    "bytes": lambda items: bytes(item % 256 for item in items),
+    "bytearray": lambda items: bytearray(item % 256 for item in items),
+    "dict": lambda items: dict.fromkeys(items, 0),
+}
+_PIPELINE_STEPS = {
+    "filtered_on": lambda view: view.filtered_on(lambda item: True),
+    "mapped": lambda view: view.mapped(str),
+    "flat_mapped": lambda view: view.flat_mapped(lambda item: [item, item]),
+}
+
+
+# what `assert_that` answers when no concrete overload matches, and so the one overload with no subject
+_FALLBACK_VIEW = "AssertionBuilder"
+
+
+def _plain_name(annotation) -> str:
+    """The bare name an annotation is written with, or `""` for anything qualified, quoted or absent.
+
+    Reading `.value.id` straight off a subscript raised `AttributeError` on `module.View[T]`, which is
+    the opposite of the deliberate refusal the caller promises: an accident, not a diagnostic.
+    """
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value
+    return annotation.id if isinstance(annotation, ast.Name) else ""
+
+
+def _pinned_pairs() -> dict[str, str]:
+    """``{subject type name: view}`` read from the `assert_type(assert_that(<literal>), View)` calls.
+
+    Written as a syntactic walk rather than a text search on purpose: `", _DateAssertion"` matches an
+    import, a comment or an unrelated tuple just as happily as the call that proves anything.
+    """
+    source = pathlib.Path(__file__).with_name("test_typing.py").read_text(encoding="utf-8")
+    pinned: dict[str, str] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or _plain_name(node.func) != "assert_type" or len(node.args) != 2:
+            continue
+        checked, view = node.args
+        if not isinstance(checked, ast.Call) or _plain_name(checked.func) != "assert_that" or not checked.args:
+            continue
+        subject = _literal_type(checked.args[0])
+        if not subject:
+            continue
+        # pinned twice to different views is a contradiction and stops the run.  Pinned twice to the same
+        # view is ordinary and allowed: `test_typing.py` checks a list subject in many chains, and each
+        # of those lines is a real assertion rather than a duplicate to remove
+        if subject in pinned and pinned[subject] != _plain_name(view):
+            raise AssertionError(f"{subject} is pinned to both {pinned[subject]} and {_plain_name(view)}")
+        pinned[subject] = _plain_name(view)
+    return pinned
+
+
+def _literal_type(expression) -> str:
+    """The type name a literal subject has, or `""` when the expression is not a literal.
+
+    Only literals are read, because only they say what type `assert_that` was handed without resolving
+    a name.  A subject pinned solely through a variable simply does not count towards the pairs.
+    """
+    match expression:
+        case ast.Constant(value=value):
+            return type(value).__name__
+        case ast.List():
+            return "list"
+        case ast.Tuple():
+            return "tuple"
+        case ast.Dict():
+            return "dict"
+        case ast.Set():
+            return "set"
+        case ast.Lambda():
+            return "Callable"
+        case ast.Call(func=ast.Attribute(value=ast.Name(id=module), attr=name)):
+            return f"{module}.{name}"
+        case ast.Call(func=ast.Name(id=name)):
+            return name
+    return ""
+
+
+def _dispatch_relation() -> dict[str, str]:
+    """``{subject type name: protocol}`` for every `assert_that` overload that names a concrete type.
+
+    Only top-level definitions carrying `@overload` are read.  Walking every `assert_that` in the file
+    would take the implementation as well, whose annotation is the generic fallback and describes no
+    subject, and any nested definition a test happens to declare.
+
+    A subject appearing twice with different views is an error rather than a last-one-wins: the point of
+    reading this relation is to notice a change, and a silent overwrite is how a change goes unnoticed.
+    """
+    source = pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8")
+    relation: dict[str, str] = {}
+    fallbacks: list[list[str]] = []
+    for node in ast.parse(source).body:
+        if not isinstance(node, ast.FunctionDef) or node.name != "assert_that":
+            continue
+        if not any(_is_overload(decorator) for decorator in node.decorator_list):
+            continue
+        returns, arguments = node.returns, node.args.args
+        view = _plain_name(returns)
+        subjects = _annotated_types(arguments[0].annotation) if arguments and arguments[0].annotation else []
+        if view == _FALLBACK_VIEW:
+            # the overload answering for anything unrecognised.  Its subject is a bare TypeVar, and
+            # requiring that here is what stops a concrete overload from hiding behind the same return
+            fallbacks.append(subjects)
+            continue
+        # a return this walk cannot decode is refused for the same reason an unreadable subject is: a
+        # quoted or qualified annotation would drop its subject out of the relation without a word
+        if not view.endswith("Assertion"):
+            written = ast.unparse(returns) if returns else "nothing"
+            raise AssertionError(f"an assert_that overload returns {written}, which this walk cannot read")
+        # an overload this walk cannot read would drop out of the relation without a word, and the
+        # relation is the whole claim: refuse instead, the same way the protocol walk refuses a base
+        if not subjects:
+            raise AssertionError(f"an assert_that overload returning {view} has a subject this walk cannot read")
+        for subject in subjects:
+            # a repeat is an error even when it agrees: two overloads naming one subject is a
+            # duplicate to remove, and letting the agreeing case through would hide it
+            if subject in relation:
+                raise AssertionError(f"{subject} is dispatched by more than one overload")
+            relation[subject] = view
+    if fallbacks != [["_T"]]:
+        raise AssertionError(f"expected exactly one generic fallback overload, found subjects {fallbacks}")
+    return relation
+
+
+def _is_overload(decorator) -> bool:
+    """`@overload` or `@typing.overload`, the two ways the same decorator gets written."""
+    if isinstance(decorator, ast.Name):
+        return decorator.id == "overload"
+    return isinstance(decorator, ast.Attribute) and decorator.attr == "overload"
+
+
+def _annotated_types(annotation) -> list[str]:
+    """The concrete type names an annotation mentions, with `list[_E] | tuple[_E, ...]` giving two."""
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return _annotated_types(annotation.left) + _annotated_types(annotation.right)
+    if isinstance(annotation, ast.Subscript):
+        return _annotated_types(annotation.value)
+    if isinstance(annotation, ast.Attribute):
+        return [
+            f"{annotation.value.id}.{annotation.attr}" if isinstance(annotation.value, ast.Name) else annotation.attr
+        ]
+    return [annotation.id] if isinstance(annotation, ast.Name) else []
+
+
+def _reachable_methods(protocol: str) -> set[str]:
+    """Every method a protocol offers, inherited ones included."""
+    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    declared: dict[str, tuple[set[str], list[str]]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ClassDef) and node.name.endswith("Assertion"):
+            bases = [_plain_name(base) for base in node.bases]
+            methods = {item.name for item in node.body if isinstance(item, ast.FunctionDef)}
+            declared[node.name] = (methods, [base for base in bases if base.endswith("Assertion")])
+
+    def walk(name: str) -> set[str]:
+        methods, parents = declared[name]
+        return methods.union(*(walk(parent) for parent in parents)) if parents else methods
+
+    return walk(protocol)
+
+
+def _form_names(test_name: str) -> list[str]:
+    """The keys of the `forms` dictionary inside one test, read from this file's own syntax."""
+    tree = ast.parse(pathlib.Path(__file__).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == test_name:
+            assigned = [
+                statement
+                for statement in node.body
+                if isinstance(statement, ast.Assign)
+                and any(isinstance(target, ast.Name) and target.id == "forms" for target in statement.targets)
+            ]
+            # taking the first would compare one dictionary while another held the cases that ran
+            if len(assigned) != 1:
+                raise AssertionError(f"{test_name} has {len(assigned)} `forms` dictionaries, expected one")
+            for statement in assigned:
+                if True:
+                    # a computed key would otherwise be dropped here and the form would vanish from the
+                    # comparison, which is the drift this gate exists to catch
+                    if not isinstance(statement.value, ast.Dict):
+                        raise AssertionError(f"`forms` in {test_name} is not a dictionary literal")
+                    if not all(
+                        isinstance(key, ast.Constant) and isinstance(key.value, str) for key in statement.value.keys
+                    ):
+                        raise AssertionError(f"`forms` in {test_name} has a key this gate cannot read")
+                    return [key.value for key in statement.value.keys]
+    raise AssertionError(f"no `forms` dictionary found in {test_name}")
+
+
+class _TakesAnyKey(Mapping):
+    """A row that reads a key without hashing it, which is why the selector type stays `object`.
+
+    Written out rather than assumed: a mapping is free to define `__getitem__` however it likes, and
+    this one answers for a list.  Every narrowing of the selector type tried during review refused this
+    call, and the runtime takes it.
+    """
+
+    def __getitem__(self, key):
+        return f"got {key!r}"
+
+    def __iter__(self):
+        return iter(())
+
+    def __len__(self):
+        return 0
+
+
+class TestEveryPipelineStepHandsBackAList:
+    """The runtime half of what the typed surface promises after a pivot.
+
+    `_ListAssertion` says `value` is a `list`, and the point of saying so is that it holds for every
+    subject a pipeline accepts, not only for the `list` a suite usually starts from.  The check is the
+    whole product of subject and operation rather than a sample of it: the union that used to be
+    declared here came precisely from reasoning about one container and assuming the other three.
+    """
+
+    def test_the_subject_table_matches_what_assert_that_dispatches(self):
+        """The whole subject-to-view relation, read out of the overloads rather than remembered.
+
+        Comparing only the set of view names was not enough, and the hole is worth naming: a new subject
+        dispatched to a view already in the table, or one of several subjects sharing a view going away,
+        both left the comparison equal.  So the relation is compared as a relation.
+
+        Inheritance is resolved on the way, because a carrier can hold the pipeline without declaring it:
+        `_ListAssertion` gets `filtered_on` from `_IterableAssertion` and an inherited method is as real
+        to a caller as a declared one.
+        """
+        dispatched = _dispatch_relation()
+        with_a_pipeline = {
+            subject: view for subject, view in dispatched.items() if "filtered_on" in _reachable_methods(view)
+        }
+        assert_that(with_a_pipeline).described_as(
+            "what assert_that narrows to a view with a pipeline, against the subjects this file walks"
+        ).is_equal_to(_PIPELINE_VIEWS)
+
+    def test_every_subject_and_view_pair_is_pinned_by_an_assert_type(self):
+        """The structural relation says what is written; `test_typing.py` says what a checker picks.
+
+        This gate reads annotations, so it cannot see overload resolution: a wider overload written
+        above a narrower one would change which view a checker actually chooses while leaving the text
+        here untouched.  What closes that gap is the other file, where the pair is pinned with
+        `assert_type` and run through ty, mypy and pyright.
+
+        Pairs, not views.  Several subjects reach the same view, so pinning the view once would let the
+        resolution of every other subject in that group drift to the fallback unnoticed.
+        """
+        pinned = _pinned_pairs()
+        missing = {
+            f"{subject} -> {view}" for subject, view in _dispatch_relation().items() if pinned.get(subject) != view
+        }
+        assert_that(missing).described_as("subject-to-view pairs with no assert_type on them").is_empty()
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("View", "View"),
+            ("View[int]", "View"),
+            ("module.View", ""),
+            ("module.View[int]", ""),
+            ("'View'", ""),
+            ("View[int, str]", "View"),
+        ],
+    )
+    def test_the_name_reader_says_what_it_can_and_cannot_read(self, written, expected):
+        """The syntax these gates understand, written down instead of implied.
+
+        Every walk here reads source rather than resolved types, so which spellings it understands is a
+        real limit and belongs in a test: a form it cannot read has to come back empty and reach the
+        caller's explicit refusal, never an `AttributeError` and never a wrong answer.
+        """
+        assert_that(_plain_name(ast.parse(written, mode="eval").body)).is_equal_to(expected)
+
+    @pytest.mark.parametrize(
+        ("written", "expected"),
+        [
+            ("[1, 2]", "list"),
+            ("(1, 2)", "tuple"),
+            ("{1, 2}", "set"),
+            ("{'a': 1}", "dict"),
+            ("'text'", "str"),
+            ("b'raw'", "bytes"),
+            ("1", "int"),
+            ("True", "bool"),
+            ("lambda: None", "Callable"),
+            ("frozenset([1])", "frozenset"),
+            ("datetime.date(2026, 1, 1)", "datetime.date"),
+            ("some_variable", ""),
+            ("a + b", ""),
+        ],
+    )
+    def test_the_literal_reader_names_the_types_it_supports(self, written, expected):
+        """Which subjects count towards the pinned pairs, and which are simply not literals."""
+        assert_that(_literal_type(ast.parse(written, mode="eval").body)).is_equal_to(expected)
+
+    def test_a_second_step_runs_on_what_the_first_one_returned(self):
+        """The result of a pivot carries the pivots itself, which is what makes a chain a chain."""
+        chained = assert_that([1, 2, 3]).mapped(str).filtered_on(lambda item: item != "2")
+        assert_that(type(chained.value)).is_equal_to(list)
+        assert_that(chained.value).is_equal_to(["1", "3"])
+        assert_that(type(chained.mapped(int).value)).is_equal_to(list)
+
+    @pytest.mark.parametrize("subject", sorted(_PIPELINE_SUBJECTS), ids=sorted(_PIPELINE_SUBJECTS))
+    @pytest.mark.parametrize("step", sorted(_PIPELINE_STEPS), ids=sorted(_PIPELINE_STEPS))
+    @given(items=st.lists(st.integers(min_value=0, max_value=255), max_size=8))
+    def test_a_step_builds_a_list_whatever_the_subject_was(self, subject, step, items):
+        built = _PIPELINE_STEPS[step](assert_that(_PIPELINE_SUBJECTS[subject](items)))
+        assert_that(type(built.value)).described_as(f"{step} on a {subject}").is_equal_to(list)
+
+    @pytest.mark.parametrize("subject", ["list", "tuple", "set", "frozenset"], ids=lambda name: name)
+    @given(identifiers=st.lists(st.integers(), max_size=6, unique=True))
+    def test_extraction_ends_on_a_list_from_every_collection(self, subject, identifiers):
+        """The subject reaches `extracting` as the container under test, not as a list of its items.
+
+        The first version of this built the container and then rebuilt a list out of it before calling
+        `extracting`, so all four cases were the same case.  Rows are tuples here because a `set` and a
+        `frozenset` need hashable members, and a tuple is extracted by index the same way a mapping row
+        is extracted by key.
+        """
+        rows = _PIPELINE_SUBJECTS[subject]((identifier, "name") for identifier in identifiers)
+        extracted = assert_that(rows).extracting(0)
+        assert_that(type(extracted.value)).described_as(f"extracting from a {subject}").is_equal_to(list)
+
+    @given(rows=st.lists(st.tuples(st.integers(), st.text(alphabet="ab", max_size=3)), max_size=6))
+    def test_every_call_form_of_extraction_ends_on_a_list(self, rows):
+        """One name, several names, and each keyword option the signature accepts.
+
+        The declared return covers `*names` and `**kwargs` alike, so checking a single positional name
+        would leave the multi-name form, `filter` and `sort` resting on nothing.  Several names build
+        tuples rather than scalars, which is a different code path to the same promise.
+        """
+        subject = [{"id": identifier, "name": name} for identifier, name in rows]
+        # held in a variable rather than written inline, which is the shape the typed suite pins: an
+        # invariant `dict[str, str]` would not fit a `dict[str, object]` parameter
+        criteria: dict[str, str] = {"name": "a"}
+        forms = {
+            # keyed by the name of the case recording the same form in `typing_cases.py`, so the two
+            # suites compare as sets rather than as two numbers that happen to be equal
+            "one-name": lambda: assert_that(subject).extracting("id"),
+            "several-names": lambda: assert_that(subject).extracting("id", "name"),
+            "filter-callable": lambda: assert_that(subject).extracting("id", filter=lambda row: True),
+            "filter-by-key": lambda: assert_that(subject).extracting("id", filter="name"),
+            "sort-callable": lambda: assert_that(subject).extracting("id", sort=lambda row: row["id"]),
+            "filter-by-mapping": lambda: assert_that(subject).extracting("id", filter={"name": "a"}),
+            "sort-by-key": lambda: assert_that(subject).extracting("id", sort="id"),
+            "sort-by-keys": lambda: assert_that(subject).extracting("id", sort=["name", "id"]),
+            "filter-and-sort": lambda: assert_that(subject).extracting("id", filter="name", sort="id"),
+            "filter-from-a-variable": lambda: assert_that(subject).extracting("id", filter=criteria),
+            "filter-from-a-mapping": lambda: assert_that(subject).extracting(
+                "id", filter=MappingProxyType({"name": "a"})
+            ),
+            "a-slice": lambda: assert_that([(1, 2, 3)]).extracting(slice(0, 2)),
+            "an-unhashable-selector": lambda: assert_that([_TakesAnyKey()]).extracting([]),
+        }
+        for description, build in forms.items():
+            assert_that(type(build().value)).described_as(f"extracting {description}").is_equal_to(list)
+
+    def test_the_call_forms_here_match_the_ones_the_typed_suite_records(self):
+        """The two halves of the same claim, compared as sets of named forms.
+
+        `typing_cases.py` records each accepted call form as a case a checker must accept, and the test
+        above runs each one.  They drifted once already: the runtime side was missing the mapping filter
+        and the multi-key sort while the report said both were covered.
+
+        The keys are read out of the syntax of that test's own dictionary, not by searching the file for
+        text: a second variable named `forms` anywhere above would have won the search, and the answer
+        would have been about the wrong dictionary.
+        """
+        here = _form_names("test_every_call_form_of_extraction_ends_on_a_list")
+        assert_that(here).described_as("call forms named twice").does_not_contain_duplicates()
+
+        recorded = pathlib.Path(__file__).with_name("typing_cases.py").read_text(encoding="utf-8")
+        # the marker has to sit on a line that actually calls `extracting`: a label left behind after
+        # its call was deleted would otherwise keep the two sets equal while the form was gone
+        marked = [
+            found.group(1)
+            for line in recorded.splitlines()
+            if (found := re.search(r"# case: (valid-extracting-[\w-]+)", line)) and ".extracting(" in line
+        ]
+        every_marker = re.findall(r"# case: (valid-extracting-[\w-]+)", recorded)
+        assert_that(marked).described_as("markers that no longer sit on a call").is_equal_to(every_marker)
+        assert_that(marked).described_as("cases marked twice").does_not_contain_duplicates()
+
+        typed = {name.removeprefix("valid-extracting-") for name in marked}
+        assert_that(set(here)).described_as(
+            "call forms exercised here, against the ones typing_cases.py records"
+        ).is_equal_to(typed)
+
+    @given(keys=st.lists(st.text(alphabet="abc", min_size=1, max_size=3), max_size=6))
+    def test_extraction_from_a_mapping_walks_its_keys(self, keys):
+        """What extraction does to a mapping, recorded as measured rather than as intended.
+
+        A mapping is walked over its keys, so `extracting(0)` indexes into the key itself and a mapping
+        with integer keys raises.  Whether that is the API anyone wants is an open question, and this
+        test deliberately asserts only the part the typed surface depends on, that the result is a list.
+        Pinning the extracted values here would turn an unreviewed behaviour into a contract and make
+        fixing it look like a regression.
+        """
+        extracted = assert_that(dict.fromkeys(keys, 0)).extracting(0)
+        assert_that(type(extracted.value)).is_equal_to(list)
