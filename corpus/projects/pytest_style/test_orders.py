@@ -67,3 +67,10 @@ def test_numbers_and_dates_keep_their_own_assertions():
     assert_that(120.5).is_close_to(120, 1)
     assert_that(7).is_between(1, 10)
     assert_that([1, 2, 3]).contains_sequence(1, 2)
+
+
+def test_subset_reads_both_ways_round():
+    assert_that(["pen"]).is_subset_of(["book", "pen"])
+    assert_that([1, 2]).is_subset_of(1, 2, 3)
+    assert_that("ab").is_subset_of("abc")
+    assert_that({"id": 1}).is_subset_of({"id": 1, "customer": "alice"})
