@@ -3,14 +3,19 @@
 The neighbouring guards each answer a different question. `test_public_surface` holds a hand-written
 list of exported names and record fields, `test_protocol_parity` holds the typed surface against the
 runtime, `test_typing` pins overload resolution. None of them notices a *signature* moving: a parameter
-renamed, a default changed, a keyword becoming positional, two positional parameters swapping places.
-Those break a caller silently, and they are what this module collects.
+renamed, a default changed, a keyword becoming positional, two positional parameters swapping places,
+an overload disappearing. Those break a caller silently, and they are what this module collects.
 
 The collection is derived rather than hand-written, unlike the name list next door, and that is a
 deliberate difference. A hand-written list of two hundred and fifty signatures would not be read on
 review; a generated snapshot with a reviewable diff is. What keeps it honest is that the snapshot is
 committed: changing the package without changing the snapshot fails, and changing the snapshot shows up
 in the diff as its own decision.
+
+One thing is deliberately outside: the *value* of an exported constant. The only ones are `__version__`,
+which changes every release by design, and the `match` namespace, whose contents are collected in full
+under `matchers`. Checking the value there would fail on every version bump and teach everyone to
+re-record without reading, which is the failure mode this file exists to avoid.
 """
 
 from __future__ import annotations
@@ -18,8 +23,10 @@ from __future__ import annotations
 import ast
 import contextlib
 import dataclasses
+import enum
 import inspect
 import pathlib
+import types
 from typing import Any
 
 import assertpy2
@@ -27,23 +34,37 @@ import assertpy2.assertpy
 from assertpy2.assertpy import AssertionBuilder
 from assertpy2.matchers import Matcher
 
-_UNSET = object()
+_SIMPLE = (bool, int, float, str, bytes, type(None))
+_DESCRIPTORS = (property, staticmethod, classmethod, types.MemberDescriptorType, types.GetSetDescriptorType)
+
+
+def _value(value: Any, depth: int = 0) -> str:
+    """A default value as a stable string, deep enough that two different values look different.
+
+    `[]` and `[1]` reduced to the same text once, which made a changed default invisible, and the whole
+    reason defaults are recorded is that `timeout=1` becoming `timeout=None` changes what an existing
+    call does.  So containers are walked, enums are named by member, callables by qualified name, and
+    only a genuinely opaque object falls back to its type, where the type at least is still compared.
+    """
+    if isinstance(value, _SIMPLE):
+        return repr(value)
+    if isinstance(value, enum.Enum):
+        return f"{type(value).__name__}.{value.name}"
+    if isinstance(value, (list, tuple, set, frozenset)) and depth < 3:
+        items = [_value(item, depth + 1) for item in value]
+        if isinstance(value, (set, frozenset)):
+            items = sorted(items)  # a set has no order of its own, and its iteration order is not news
+        return f"{type(value).__name__}[{', '.join(items)}]"
+    if isinstance(value, dict) and depth < 3:
+        pairs = ", ".join(f"{_value(key, depth + 1)}: {_value(item, depth + 1)}" for key, item in value.items())
+        return f"dict[{pairs}]"
+    if callable(value):
+        return f"<callable {getattr(value, '__qualname__', type(value).__name__)}>"
+    return f"<{type(value).__module__}.{type(value).__name__}>"
 
 
 def _default(parameter: inspect.Parameter) -> str | None:
-    """The default as a stable string, or ``None`` when there is none.
-
-    Recorded rather than reduced to "has a default", because `timeout=1` becoming `timeout=None` changes
-    what an existing call does while leaving the arity untouched.  A repr is used so the snapshot stays
-    JSON, and a sentinel object without a stable repr is reduced to its type, which still moves when the
-    sentinel is replaced by a different kind of thing.
-    """
-    if parameter.default is inspect.Parameter.empty:
-        return None
-    value = parameter.default
-    if value is None or isinstance(value, (bool, int, float, str, bytes, tuple, frozenset)):
-        return repr(value)
-    return f"<{type(value).__name__}>"
+    return None if parameter.default is inspect.Parameter.empty else _value(parameter.default)
 
 
 def _parameters(target: Any) -> list[dict[str, Any]]:
@@ -67,11 +88,7 @@ def _parameters(target: Any) -> list[dict[str, Any]]:
 
 
 def _text(annotation: Any, empty: Any) -> str | None:
-    """An annotation as a stable string, or ``None`` when there is none.
-
-    Stringified rather than kept as an object so the snapshot survives being written to JSON and read
-    back, and so a diff shows the change rather than a repr with a memory address in it.
-    """
+    """An annotation as a stable string, or ``None`` when there is none."""
     if annotation is empty:
         return None
     if isinstance(annotation, str):
@@ -100,26 +117,29 @@ def _member_entry(owner: type, name: str) -> dict[str, Any]:
     return _callable_entry(attribute)
 
 
+def _defining_module(exported: type) -> str:
+    """Where the call is defined: this class, or whichever base first provides a constructor."""
+    for base in exported.__mro__:
+        if "__init__" in vars(base) or "__new__" in vars(base):
+            return f"{base.__module__}.{base.__qualname__}"
+    return "object"  # pragma: no cover - object always provides both
+
+
 def _class_entry(exported: type) -> dict[str, Any]:
-    """A class as its callable form plus what inheritance and construction promise.
+    """A class as its call signature plus what inheritance and construction promise.
 
-    The parameters are taken from the class itself rather than from `__init__`, because calling a class
-    may be defined by `__new__` or by a metaclass, and a caller writes the call, not the method that
-    happens to implement it.  They live under the same key as every other callable so the comparison
-    treats them the same way rather than needing a rule of their own, which is how a whole constructor
-    once went uncompared.
-
-    A constructor inherited from elsewhere is recorded as inherited rather than copied, and that is not
-    tidiness: `WarningLoggingAdapter` takes its `__init__` from `logging.LoggerAdapter`, which gained a
-    parameter in 3.13, so copying it made the snapshot disagree with itself across the supported Python
-    versions.  What this package promises there is the base class, which the `bases` list already holds.
+    The signature comes from the class rather than from `__init__`, because calling a class may be
+    defined by `__new__` or by a metaclass, and a caller writes the call, not the method that implements
+    it.  Where the constructor comes from is recorded beside it, and that is not bookkeeping:
+    `WarningLoggingAdapter` inherits `__init__` from `logging.LoggerAdapter`, which gained a parameter in
+    3.13, so a snapshot that copied it disagreed with itself across the supported Python versions.  The
+    comparison uses this to stay quiet about a signature the package does not own, while still reporting
+    the day the base itself is swapped.
     """
-    own = any(name in vars(exported) for name in ("__init__", "__new__"))
-    entry = _callable_entry(exported) if own else {"kind": "class", "parameters": [], "returns": None}
-    return entry | {
+    return _callable_entry(exported) | {
         "kind": "class",
-        "construction": "own" if own else "inherited",
-        "bases": [base.__name__ for base in exported.__mro__[1:] if base is not object],
+        "construction": _defining_module(exported),
+        "bases": [f"{base.__module__}.{base.__qualname__}" for base in exported.__mro__[1:] if base is not object],
         "fields": _fields(exported),
     }
 
@@ -134,7 +154,7 @@ def collect() -> dict[str, Any]:
         elif callable(value):
             exported[name] = _callable_entry(value)
         else:
-            exported[name] = {"kind": type(value).__name__, "parameters": [], "returns": None}
+            exported[name] = {"kind": f"{type(value).__module__}.{type(value).__name__}", "parameters": []}
 
     return {
         "exports": sorted(assertpy2.__all__),
@@ -156,36 +176,77 @@ def collect() -> dict[str, Any]:
     }
 
 
+def _is_overload(decorator: ast.expr) -> bool:
+    """`@overload`, `@typing.overload`, or whatever name it was imported under."""
+    if isinstance(decorator, ast.Name):
+        return decorator.id.endswith("overload")
+    return isinstance(decorator, ast.Attribute) and decorator.attr == "overload"
+
+
 def _entry_overloads() -> list[str]:
     """The `assert_that` overloads as text, in declaration order.
 
-    The runtime knows nothing about them: it sees one implementation, while a checker sees fourteen, and
-    dropping one changes which protocol a caller gets without changing anything the runtime can be asked
-    about.  `test_typing` pins the resolution of chosen calls, which is a different question: it would
-    stay green if an overload nobody wrote an `assert_type` for disappeared.
+    Order carries meaning: where two overloads both match, the first wins, so a reshuffle changes which
+    protocol a caller gets while every declaration survives.  Hence a list compared as a sequence.
+
+    The runtime knows nothing about any of it - it sees one implementation where a checker sees fourteen.
+    `test_typing` pins the resolution of chosen calls, a different question: it would stay green if an
+    overload nobody wrote an `assert_type` for disappeared.
     """
     source = pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8")
-    declarations = []
-    for node in ast.walk(ast.parse(source)):
-        if not isinstance(node, ast.FunctionDef) or node.name != "assert_that":
-            continue
-        if any(isinstance(decorator, ast.Name) and decorator.id == "overload" for decorator in node.decorator_list):
-            arguments = ", ".join(
-                f"{argument.arg}: {ast.unparse(argument.annotation) if argument.annotation else '?'}"
-                for argument in node.args.args
-            )
-            returns = ast.unparse(node.returns) if node.returns else "?"
-            declarations.append(f"({arguments}) -> {returns}")
-    return declarations
+    return [
+        _signature_text(node)
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "assert_that"
+        and any(_is_overload(decorator) for decorator in node.decorator_list)
+    ]
 
 
-def _matcher_protocol() -> list[str]:
-    """The methods a custom matcher must provide, read off the protocol rather than repeated here.
+def _signature_text(node: ast.FunctionDef) -> str:
+    """The whole declared signature, not only the plain arguments.
 
-    Repeating them as a constant made the check tautological: renaming a method in the library would
-    have changed nothing in the snapshot, because the snapshot was the constant.
+    Positional-only, keyword-only, `*args` and `**kwargs` each change what a call may look like, and the
+    first version of this collected `node.args.args` alone, which ignored every one of them.
     """
-    return sorted(name for name in vars(Matcher) if not name.startswith("_"))
+    arguments = node.args
+    parts = [_argument_text(argument) for argument in arguments.posonlyargs]
+    if arguments.posonlyargs:
+        parts.append("/")
+    parts += [_argument_text(argument) for argument in arguments.args]
+    if arguments.vararg:
+        parts.append(f"*{_argument_text(arguments.vararg)}")
+    elif arguments.kwonlyargs:
+        parts.append("*")
+    parts += [_argument_text(argument) for argument in arguments.kwonlyargs]
+    if arguments.kwarg:
+        parts.append(f"**{_argument_text(arguments.kwarg)}")
+    returns = ast.unparse(node.returns) if node.returns else "?"
+    return f"({', '.join(parts)}) -> {returns}"
+
+
+def _argument_text(argument: ast.arg) -> str:
+    return f"{argument.arg}: {ast.unparse(argument.annotation) if argument.annotation else '?'}"
+
+
+def _matcher_protocol() -> dict[str, Any]:
+    """What a custom matcher must provide, with signatures rather than names alone.
+
+    Names were not enough twice over: they were first repeated from a constant in this file, which made
+    the check tautological, and then read without signatures, so `matches(self, value)` losing its
+    argument would have passed.  The MRO is walked, because a protocol may inherit a member, and
+    annotation-only members are recorded too, since a protocol may require an attribute rather than a
+    method.
+    """
+    members: dict[str, Any] = {}
+    for base in reversed(Matcher.__mro__):
+        members.update(
+            {name: _member_entry(Matcher, name) for name in vars(base) if not name.startswith("_")},
+        )
+        for name, annotation in getattr(base, "__annotations__", {}).items():
+            if not name.startswith("_"):
+                members.setdefault(name, {"kind": "annotation", "annotation": _text(annotation, None)})
+    return dict(sorted(members.items()))
 
 
 def _fields(record: type) -> list[str]:
@@ -196,17 +257,18 @@ def _fields(record: type) -> list[str]:
 
 
 def _failure_attributes() -> list[str]:
-    """What a caller can read off a failure, from the class and from failures of several shapes.
+    """What a caller can read off a failure, from the whole hierarchy and from real failures.
 
-    Two sources on purpose.  The class gives properties, slots and inherited descriptors, which a single
-    instance never shows; the instances give attributes set in `__init__`, which the class does not
-    carry.  And more than one failure is raised, because `trace` is filled by polling and `failures` by
-    a soft block, so a snapshot built from one plain failure would call the others new every time.
+    Two sources, and the class side walks the MRO rather than one `vars()`: a property or a slot
+    descriptor inherited from a base is as readable as one declared here, and `vars()` on the leaf class
+    sees neither.  The instance side raises three shapes of failure, because `trace` is filled only by
+    polling and `failures` only by a soft block.
     """
     from_class = {
         name
-        for name, value in vars(assertpy2.AssertionFailure).items()
-        if not name.startswith("_") and isinstance(value, (property, staticmethod, classmethod))
+        for base in assertpy2.AssertionFailure.__mro__
+        for name, value in vars(base).items()
+        if not name.startswith("_") and isinstance(value, _DESCRIPTORS)
     }
     return sorted(from_class | _attributes_of_real_failures())
 
@@ -237,4 +299,10 @@ def _polling_failure() -> None:
 
 
 def _has_py_typed() -> bool:
+    """Whether the marker is in the tree.
+
+    Whether it reaches the wheel is a different question, answered by the consumer run that installs the
+    built artifact into a clean environment.  Asking it here would mean building the package inside the
+    suite.
+    """
     return (pathlib.Path(assertpy2.__file__).parent / "py.typed").exists()

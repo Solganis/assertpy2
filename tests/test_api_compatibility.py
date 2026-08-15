@@ -95,6 +95,11 @@ def _callable_changes(path: str, before: dict, after: dict) -> list[tuple[str, s
     return changes
 
 
+def _owned(construction: str | None) -> bool:
+    """Whether the package itself defines the call, rather than inheriting it from somewhere else."""
+    return construction is None or construction.startswith("assertpy2")
+
+
 def _need(parameter: dict) -> str:
     return "required" if parameter["required"] else "optional"
 
@@ -124,7 +129,14 @@ def _section_changes(section: str, before: dict, after: dict) -> list[tuple[str,
     changes.extend(("addition", f"{section}.{name} added") for name in sorted(set(after) - set(before)))
     for name in sorted(set(before) & set(after)):
         old, new = before[name], after[name]
-        changes.extend(_callable_changes(f"{section}.{name}", old, new))
+        if old.get("construction") != new.get("construction"):
+            changes.append(("breaking", f"{section}.{name}: construction moved to {new.get('construction')}"))
+        elif _owned(old.get("construction")):
+            changes.extend(_callable_changes(f"{section}.{name}", old, new))
+        else:
+            # the signature belongs to a base outside this package: it moves when the standard library
+            # moves, which is not a promise this package made and not a change it can make
+            pass
         for field in ("fields", "bases"):
             # order matters for both: fields carry positional construction and unpacking, bases carry
             # the method resolution order, so a reshuffle changes behaviour while keeping every name
@@ -139,6 +151,22 @@ def _section_changes(section: str, before: dict, after: dict) -> list[tuple[str,
     return changes
 
 
+def _overload_changes(before: list[str], after: list[str]) -> list[tuple[str, str]]:
+    """Overloads compared as a sequence, because the first matching one wins.
+
+    Reordering keeps every declaration and still changes which protocol a caller gets, so it is reported
+    rather than passing as "the same set".
+    """
+    changes: list[tuple[str, str]] = []
+    changes.extend(("breaking", f"overload gone: {text}") for text in before if text not in after)
+    changes.extend(("typing", f"overload added: {text}") for text in after if text not in before)
+    kept_before = [text for text in before if text in after]
+    kept_after = [text for text in after if text in before]
+    if kept_before != kept_after:
+        changes.append(("breaking", "overloads reordered, so an overlapping call may resolve elsewhere"))
+    return changes
+
+
 def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     """Every way the surface moved, classified. Empty when the two describe the same package."""
     changes: list[tuple[str, str]] = []
@@ -150,19 +178,8 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     old_read, new_read = set(before["failure_attributes"]), set(after["failure_attributes"])
     changes.extend(("breaking", f"AssertionFailure.{name} no longer readable") for name in sorted(old_read - new_read))
     changes.extend(("addition", f"AssertionFailure.{name} now readable") for name in sorted(new_read - old_read))
-    old_overloads, new_overloads = before.get("entry_overloads", []), after.get("entry_overloads", [])
-    changes.extend(
-        ("breaking", f"assert_that overload gone: {declaration}")
-        for declaration in old_overloads
-        if declaration not in new_overloads
-    )
-    changes.extend(
-        ("typing", f"assert_that overload added: {declaration}")
-        for declaration in new_overloads
-        if declaration not in old_overloads
-    )
-    lost = set(before["matcher_protocol"]) - set(after["matcher_protocol"])
-    changes.extend(("breaking", f"matcher protocol lost '{name}'") for name in sorted(lost))
+    changes.extend(_overload_changes(before.get("entry_overloads", []), after.get("entry_overloads", [])))
+    changes.extend(_section_changes("matcher_protocol", before["matcher_protocol"], after["matcher_protocol"]))
     if before["py_typed"] and not after["py_typed"]:
         changes.append(("breaking", "py.typed is gone, so every consumer silently loses the types"))
     return changes
@@ -247,7 +264,11 @@ class TestTheClassificationItself:
         },
         "matchers": {},
         "entry_overloads": ["(val: str) -> _StringAssertion"],
-        "matcher_protocol": ["matches", "describe", "describe_mismatch"],
+        "matcher_protocol": {
+            "matches": {"kind": "callable", "parameters": [], "returns": "bool"},
+            "describe": {"kind": "callable", "parameters": [], "returns": "str"},
+            "describe_mismatch": {"kind": "callable", "parameters": [], "returns": "str"},
+        },
         "failure_attributes": ["actual"],
     }
 
@@ -311,7 +332,7 @@ class TestTheClassificationItself:
             ),
             (
                 "a matcher protocol method disappears",
-                lambda s: s.update(matcher_protocol=["matches"]),
+                lambda s: s["matcher_protocol"].pop("describe"),
                 "breaking",
             ),
             (
