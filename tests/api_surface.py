@@ -177,23 +177,38 @@ def collect() -> dict[str, Any]:
     }
 
 
-def _overload_names(tree: ast.Module) -> set[str]:
+def _overload_names(tree: ast.Module) -> tuple[set[str], set[str]]:
     """The names `typing.overload` was actually imported under in this module.
 
     Guessing by suffix accepted `@custom_overload` and rejected `from typing import overload as ov`,
     which is two errors in opposite directions.  The imports say it exactly.
     """
-    names = set()
+    names: set[str] = set()
+    modules: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module in ("typing", "typing_extensions"):
             names |= {alias.asname or alias.name for alias in node.names if alias.name == "overload"}
-    return names
+        if isinstance(node, ast.Import):
+            modules |= {
+                alias.asname or alias.name for alias in node.names if alias.name in ("typing", "typing_extensions")
+            }
+    return names, modules
 
 
-def _is_overload(decorator: ast.expr, names: set[str]) -> bool:
+def _is_overload(decorator: ast.expr, names: set[str], modules: set[str]) -> bool:
+    """Only the real thing: `@overload`, its import alias, or `<known module alias>.overload`.
+
+    A bare `endswith` accepted `@custom_overload`, and accepting any `X.overload` would accept a
+    decorator from some other library that happens to have a method of that name.
+    """
     if isinstance(decorator, ast.Name):
         return decorator.id in names
-    return isinstance(decorator, ast.Attribute) and decorator.attr == "overload"
+    return (
+        isinstance(decorator, ast.Attribute)
+        and decorator.attr == "overload"
+        and isinstance(decorator.value, ast.Name)
+        and decorator.value.id in modules
+    )
 
 
 def _entry_overloads() -> list[str]:
@@ -207,7 +222,7 @@ def _entry_overloads() -> list[str]:
     overload nobody wrote an `assert_type` for disappeared.
     """
     tree = ast.parse(pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8"))
-    names = _overload_names(tree)
+    names, modules = _overload_names(tree)
     # taken from `tree.body` rather than `ast.walk`: the latter has no documented order and would also
     # find a nested function of the same name, and order is exactly what this list is compared by
     declared = [
@@ -215,7 +230,7 @@ def _entry_overloads() -> list[str]:
         for node in tree.body
         if isinstance(node, ast.FunctionDef)
         and node.name == "assert_that"
-        and any(_is_overload(decorator, names) for decorator in node.decorator_list)
+        and any(_is_overload(decorator, names, modules) for decorator in node.decorator_list)
     ]
     return [_signature_text(node) for node in sorted(declared, key=lambda node: node.lineno)]
 
@@ -294,24 +309,41 @@ def _fields(record: type) -> list[str]:
     return list(getattr(record, "_fields", []))
 
 
-def _failure_attributes() -> list[str]:
-    """What a caller can read off a failure, from the whole hierarchy and from real failures.
+def _failure_attributes() -> dict[str, str]:
+    """What a caller can read off a failure, each with what kind of member it is.
 
-    Two sources, and the class side walks the MRO rather than one `vars()`: a property or a slot
-    descriptor inherited from a base is as readable as one declared here, and `vars()` on the leaf class
-    sees neither.  The instance side raises three shapes of failure, because `trace` is filled only by
-    polling and `failures` only by a soft block.
+    Names alone let a property become a plain constant, or a read-only descriptor become a writable
+    attribute, without a word from the gate.  The kind is recorded beside the name so those show up.
+
+    Two sources.  The class side walks the MRO, because a property or a slot inherited from a base is as
+    readable as one declared here and `vars()` on the leaf class sees neither.  The instance side raises
+    three shapes of failure, because `trace` is filled only by polling and `failures` only by a soft
+    block.
+
+    What the standard library puts on every exception is left out: `args` and its neighbours move with
+    the Python version rather than with this package, and a gate reporting them reports someone else's
+    decision as though it were ours.
     """
-    from_class = {
-        name
-        for base in assertpy2.AssertionFailure.__mro__
-        for name, value in vars(base).items()
-        # every public member that is not a plain method: properties, slots, class attributes and any
-        # descriptor of someone else's making.  Narrowing this to three descriptor types once meant a
-        # public class attribute could disappear without a word
-        if not name.startswith("_") and not inspect.isroutine(value)
-    }
-    return sorted(from_class | _attributes_of_real_failures())
+    inherited = {name for name in dir(BaseException) if not name.startswith("_")}
+    members: dict[str, str] = {}
+    for base in reversed(assertpy2.AssertionFailure.__mro__):
+        for name, value in vars(base).items():
+            if name.startswith("_") or inspect.isroutine(value) or name in inherited:
+                continue
+            members[name] = _member_kind(value)
+    for name in sorted(_attributes_of_real_failures() - inherited):
+        members.setdefault(name, "instance attribute")
+    return dict(sorted(members.items()))
+
+
+def _member_kind(value: object) -> str:
+    if isinstance(value, property):
+        return "property"
+    if isinstance(value, _DESCRIPTORS):
+        return type(value).__name__
+    if hasattr(type(value), "__get__") or hasattr(type(value), "__set__"):
+        return f"descriptor {type(value).__module__}.{type(value).__qualname__}"
+    return f"class attribute ({type(value).__name__})"
 
 
 def _attributes_of_real_failures() -> set[str]:

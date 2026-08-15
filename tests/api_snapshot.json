@@ -3128,14 +3128,13 @@
   "soft_fail",
   "unregister_matcher"
  ],
- "failure_attributes": [
-  "actual",
-  "args",
-  "diff",
-  "expected",
-  "failures",
-  "trace"
- ],
+ "failure_attributes": {
+  "actual": "instance attribute",
+  "diff": "instance attribute",
+  "expected": "instance attribute",
+  "failures": "instance attribute",
+  "trace": "instance attribute"
+ },
  "matcher_protocol": {
   "describe": {
    "kind": "callable",
