@@ -27,7 +27,16 @@ import assertpy2
 from assertpy2 import assert_that
 
 # the stability page spells small counts as words, the way prose does
-_WORDS = {9: "nine", 10: "ten", 11: "eleven", 12: "twelve"}
+_WORDS = {
+    9: "nine",
+    10: "ten",
+    11: "eleven",
+    12: "twelve",
+    13: "thirteen",
+    14: "fourteen",
+    18: "eighteen",
+    19: "nineteen",
+}
 
 EXPECTED_EXPORTS = [
     "AssertionFailure",
