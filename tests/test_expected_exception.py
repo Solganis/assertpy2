@@ -61,6 +61,16 @@ def test_expected_exception_no_arg_wrong_exception_failure():
     )
 
 
+@pytest.mark.parametrize("wrong", [42, ValueError("instance")])
+def test_expectation_that_is_not_a_class_is_refused(wrong):
+    # `issubclass()` reports its own argument position and never names the assertion, so anything that is
+    # not a class at all used to read as "issubclass() arg 1 must be a class"
+    with pytest.raises(TypeError, match="must be an exception type"):
+        assert_that(func_noop).raises(wrong)
+    with pytest.raises(TypeError, match="must be an exception type"):
+        assert_that(func_noop).does_not_raise(wrong)
+
+
 def test_expected_exception_no_arg_missing_raises_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(func_noop).when_called_with()

@@ -104,10 +104,9 @@ class ExceptionMixin(_MixinBase):
         """
         if not callable(self.val):
             refuse(self.val, "callable")
-        if not issubclass(ex, BaseException):
-            refuse(ex, "an exception type", subject=argument("exception"))
+        expected = _require_exception_type(ex)
 
-        return self.builder(self.val, self.description, self.kind, ex, self.logger)
+        return self.builder(self.val, self.description, self.kind, expected, self.logger)
 
     def when_called_with(self, *some_args: object, **some_kwargs: object) -> Self:
         """Asserts that val, when invoked with the given args and kwargs, meets the set expectation.
@@ -459,9 +458,8 @@ class ExceptionMixin(_MixinBase):
         """
         if not callable(self.val):
             refuse(self.val, "callable")
-        if not issubclass(ex, BaseException):
-            refuse(ex, "an exception type", subject=argument("exception"))
+        unwanted = _require_exception_type(ex)
 
-        new_builder = self.builder(self.val, self.description, self.kind, ex, self.logger)
+        new_builder = self.builder(self.val, self.description, self.kind, unwanted, self.logger)
         new_builder._not_expected = True
         return new_builder
