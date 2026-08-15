@@ -454,12 +454,10 @@ def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytear
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
-# Fallback returns the concrete AssertionBuilder so object- and union-typed values keep the full API.
-# It is generic over the value type, so `.value` gives the input type back and the narrowing terminals
-# (`is_not_none()`, `is_instance_of()`) refine it. The specific protocols are not assignable to
-# AssertionBuilder, so mypy --strict reports overload-overlap for each specific overload and pyright one
-# reportOverlappingOverload; ty (the gate) does not flag it. Kept intentionally - returning _CoreAssertion
-# here would strip type-specific assertions from object/union values.
+# Fallback returns the concrete AssertionBuilder, generic over the value type, so object- and
+# union-typed values keep the full API and `.value` gives the input type back. The specific protocols
+# are not assignable to it, so mypy and pyright report overload overlap and ty does not. Kept: returning
+# `_CoreAssertion` here would strip type-specific assertions from those values.
 @overload
 def assert_that(val: _T, description: str = "") -> AssertionBuilder[_T]: ...
 

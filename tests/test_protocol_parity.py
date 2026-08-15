@@ -62,14 +62,8 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     }
 )
 
-# Which protocol carries which capability, written by hand, and checked for *equality* rather than for
-# containment.  One direction catches a carrier quietly dropping a base: removing `_FilesystemAssertion`
-# from the string leaves exactly nine assertions unreachable for every `str` a caller holds, and no other
-# guard notices, because the reverse check maps `FileMixin` to the path protocol alone.  The other
-# direction catches the opposite mistake, which is just as quiet: giving a byte string the filesystem
-# assertions offers `exists()` on a value that has no path, and a checker would then bless it.
 # The protocols that are a narrowed view of one kind of value, as `assert_that` returns them.  Kept
-# beside the capability register so the two together account for every protocol in the file.
+# beside the capability register below so the two together account for every protocol in the file.
 _VALUE_VIEWS: frozenset[str] = frozenset(
     {
         "_CoreAssertion",
@@ -94,6 +88,9 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
 # the string protocol whole, which handed it `_FilesystemAssertion` and offered `exists()` on the text
 # of an exception: a call that type-checked and then went looking on disk.  Writing this register down
 # is what made that visible, and `_TextAssertion` is what separates the two.
+# Which protocol carries which capability, checked for *equality* rather than containment.  Both
+# directions are quiet failures: dropping `_FilesystemAssertion` from the string leaves nine assertions
+# unreachable for every `str`, and adding it to a byte string offers `exists()` on a value with no path.
 _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_SizedAssertion": (
         "_TextAssertion",
