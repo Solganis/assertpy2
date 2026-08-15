@@ -115,9 +115,10 @@ def _parameter_changes(path: str, name: str, before: dict, after: dict) -> list[
     if not after["required"] and before["required"]:
         changes.append(("addition", f"{path}: parameter '{name}' gained a default"))
     if after.get("default") != before.get("default") and after["required"] == before["required"]:
-        changes.append(
-            ("behaviour", f"{path}: parameter '{name}' defaults to {after.get('default')}, was {before.get('default')}")
-        )
+        # both labels on purpose: the call still binds, and it now does something else.  Whoever reads
+        # the gate has to see that this is not a free minor
+        moved = f"{path}: parameter '{name}' defaults to {after.get('default')}, was {before.get('default')}"
+        changes.extend([("behaviour", moved), ("breaking", moved)])
     if after["annotation"] != before["annotation"]:
         changes.append(("typing", f"{path}: parameter '{name}' is now typed {after['annotation']}"))
     return changes
@@ -175,9 +176,18 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     changes.extend(("addition", f"export '{name}' added") for name in sorted(new_exports - old_exports))
     for section in ("exported", "builder", "matchers"):
         changes.extend(_section_changes(section, before[section], after[section]))
-    old_read, new_read = set(before["failure_attributes"]), set(after["failure_attributes"])
-    changes.extend(("breaking", f"AssertionFailure.{name} no longer readable") for name in sorted(old_read - new_read))
-    changes.extend(("addition", f"AssertionFailure.{name} now readable") for name in sorted(new_read - old_read))
+    old_read, new_read = before["failure_attributes"], after["failure_attributes"]
+    changes.extend(
+        ("breaking", f"AssertionFailure.{name} no longer readable") for name in sorted(set(old_read) - set(new_read))
+    )
+    changes.extend(
+        ("addition", f"AssertionFailure.{name} now readable") for name in sorted(set(new_read) - set(old_read))
+    )
+    changes.extend(
+        ("breaking", f"AssertionFailure.{name} is now a {new_read[name]}, was a {old_read[name]}")
+        for name in sorted(set(old_read) & set(new_read))
+        if old_read[name] != new_read[name]
+    )
     changes.extend(_overload_changes(before.get("entry_overloads", []), after.get("entry_overloads", [])))
     changes.extend(_section_changes("matcher_protocol", before["matcher_protocol"], after["matcher_protocol"]))
     if before["py_typed"] and not after["py_typed"]:
@@ -269,7 +279,7 @@ class TestTheClassificationItself:
             "describe": {"kind": "callable", "parameters": [], "returns": "str"},
             "describe_mismatch": {"kind": "callable", "parameters": [], "returns": "str"},
         },
-        "failure_attributes": ["actual"],
+        "failure_attributes": {"actual": "instance attribute"},
     }
 
     def _after(self, **changes):
@@ -342,7 +352,7 @@ class TestTheClassificationItself:
             ),
             (
                 "a readable failure attribute disappears",
-                lambda s: s.update(failure_attributes=[]),
+                lambda s: s.update(failure_attributes={}),
                 "breaking",
             ),
             (
