@@ -95,24 +95,16 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
     return "unparsed JSON text"
 
 
-# Ordered, and the order decides which of two sufficient explanations gets named: stripping a string
-# also hides a difference in its line endings, so the narrower claim has to be tried first.
+# Ordered: the first sufficient explanation is the one named, so the narrower claim goes first
+# (stripping a string also hides a difference in its line endings).  A label describes the
+# *normalisation* rather than guessing a cause, because one normalisation can resolve several.
 #
-# A label describes the *normalisation*, not a guess at the cause, because one normalisation can
-# resolve more than one cause.  Replacing enum members by their values equalises both a member against
-# its value and two different enum types that happen to share one, and only the first of those is what
-# "one side holds members" would claim.  Where the shapes differ enough to matter, the label is a
-# function of them instead of a fixed string.
+# Two rules for anything added here, the second learned from a shipped bug:
 #
-# Two rules hold for anything added here, and the second one cost a shipped bug to learn:
-#
-# 1. A step explains a pair only if the pair differed *before* it ran.  A pair whose two sides already
-#    compare equal is a difference for some other reason - `strict_types` is the only one there is -
-#    and then every normalisation "resolves" it by doing nothing.  `_explains` enforces this.  It is a
-#    rule about normalisations, not about explanations at large: `_typed` below deliberately speaks
-#    about pairs that compare equal, because their types are exactly what it is reporting.
-# 2. A step here outranks the general claim that the two sides differ in type, which is why `_typed`
-#    runs after this ladder.  `[1, 2]` against `"[1, 2]"` differs in type and is better called JSON.
+# 1. A step explains a pair only if the pair differed *before* it ran, which `_explains` enforces.
+#    Otherwise every normalisation "resolves" a `strict_types` failure by doing nothing.
+# 2. A step here outranks the claim that the sides differ in type, so `_typed` runs after this ladder:
+#    `[1, 2]` against `"[1, 2]"` differs in type and is better called JSON.
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),

@@ -190,15 +190,11 @@ def test_over_cap_list_diff(benchmark):
     benchmark(run)
 
 
-# Everything above hands the library a payload - 200 records, a wide dict, a 2000-element list - and
-# measures how well it walks it. The fixed price of a single assertion disappears into that. It is
-# also the only price most consuming suites ever pay: thousands of small assertions on small values,
-# where nothing is walked and the whole cost is getting in and out of the builder. A regression in
-# `assert_that()` itself, in the soft-mode ContextVar read, or in the per-link chaining overhead moves
-# nothing in the benchmarks above and everything in a real test run.
-#
-# One assertion is too small to read on its own, so these repeat a fixed count and are read as the
-# cost of that many assertions.
+# Everything above measures how the library walks a payload. These measure the fixed price of one
+# assertion, which is what most suites actually pay: thousands of small assertions where nothing is
+# walked. A regression in `assert_that()`, in the soft-mode ContextVar read or in per-link chaining
+# moves nothing above and everything in a real run. One assertion is too small to time, so each
+# repeats a fixed count.
 _ASSERTIONS = 1000
 
 

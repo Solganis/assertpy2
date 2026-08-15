@@ -50,13 +50,11 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 3,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
     ("assertpy2/assertpy.py", "reportOverlappingOverload"): 4,
-    # Two variance suggestions, both refused on purpose. `_N` is a constrained TypeVar read back
-    # through `value`, and covariance would break its inputs. `_E` in `_RepeatableAssertion` is asked
-    # to become contravariant because it only ever appears in parameters, but one of those parameters
-    # is `Matcher[_E]`, and `Matcher` is itself contravariant: the two flips cancel, so declaring it
-    # would make `_IterableAssertion[Animal]` pass where `_RepeatableAssertion[Dog]` is expected and
-    # let a `Matcher[Dog]` reach an assertion over animals. Measured: both pyright and mypy accept
-    # that substitution silently once the parameter is contravariant.
+    # Two variance suggestions, both refused on purpose. `_N` is read back through `value`, so
+    # covariance would break its inputs. `_E` appears only in parameters, but one of them is
+    # `Matcher[_E]`, and `Matcher` is contravariant: the flips cancel, and declaring it would let a
+    # `Matcher[Dog]` reach an assertion over animals. Measured: pyright and mypy both accept that
+    # substitution silently. `typing_cases.py` holds the case.
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 2,
     # --- mixin composition -------------------------------------------------------------------------
     # The mixins each declare the shared helpers over their own value type, and `AssertionBuilder` is

@@ -1224,11 +1224,9 @@ def test_a_value_is_strictly_equal_to_itself(value):
 
 # --- rendering invariants: the one place a property test has paid for itself here ---
 #
-# A wide oracle over comparison *semantics* was measured net-negative: 12800 generated pairs found no
-# bug the example suite had missed, because semantics is densely covered by examples. Rendering is the
-# opposite. There is no natural example for "a caret row with nothing above it" or "a block that grew
-# past its budget" - the case has to be invented before it can be written down, which is exactly what
-# generation does for free.
+# A wide oracle over comparison *semantics* measured net-negative: 12800 generated pairs found nothing
+# the example suite had missed. Rendering is the opposite: there is no natural example for "a caret row
+# with nothing above it", so the case has to be invented, which is what generation does for free.
 
 # ESC is excluded from every generated string on purpose, paths included: a `kind="string"` diff
 # prints its values raw and a path is echoed verbatim, so data carrying an escape puts one in the

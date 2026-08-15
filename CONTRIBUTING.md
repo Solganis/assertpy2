@@ -53,15 +53,9 @@ Write tests for every new feature or bug fix. Use `assertpy2` assertions in test
 
 ## Documentation examples
 
-Guide code blocks are executed (`tests/test_docs_examples.py`) and type-checked
-(`tests/test_docs_typing.py`). To skip one, put an HTML comment above the fence:
-
-| Marker | Executed | Type-checked | Use it for |
-|---|---|---|---|
-| `<!-- docs-guard: skip -->` | no | no | pseudo-context, neither runnable nor checkable |
-| `<!-- docs-guard: untyped -->` | yes | no | a dynamic assertion (`has_<attr>()`) |
-| `<!-- docs-guard: raises -->` | no | yes | a block showing what a failure looks like |
-| `<!-- docs-guard: type-error -->` | no | yes, and it **must** fail | a counter-example the page presents as rejected |
+Guide code blocks are executed and type-checked in CI, so an example you add has to run. A block that
+cannot (pseudo-context, a deliberate failure, a rejected counter-example) is marked with an HTML comment
+above the fence: `tests/test_docs_examples.py` lists the markers and what each one exempts.
 
 Setup a page assumes (a domain class, a repository, an HTTP response) goes in
 `tests/docs_fixtures.py`, not into an extra block on the page.
