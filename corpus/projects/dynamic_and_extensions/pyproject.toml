@@ -1,0 +1,9 @@
+[tool.pyright]
+typeCheckingMode = "standard"
+exclude = ["dynamic_only"]
+
+[tool.mypy]
+exclude = "dynamic_only"
+
+[tool.ty.src]
+exclude = ["dynamic_only"]

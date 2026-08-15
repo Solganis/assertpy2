@@ -1,0 +1,5 @@
+# The parts that are deliberately dynamic: has_* attributes, registered matchers, add_extension.
+[consumer]
+shape = "dynamic has_* assertions, a registered custom matcher and an added extension"
+extras = []
+requires = []

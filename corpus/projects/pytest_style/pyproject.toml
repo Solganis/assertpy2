@@ -1,0 +1,3 @@
+# A first-time user's settings: the defaults, not a hardened configuration.
+[tool.pyright]
+typeCheckingMode = "standard"

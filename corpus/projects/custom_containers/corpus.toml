@@ -1,0 +1,6 @@
+# Containers written by the consumer rather than by Python: the shape that keeps refusing every
+# narrowing of a selector or a filter type.
+[consumer]
+shape = "user-defined Mapping and Sequence implementations, plus an unusual __getitem__"
+extras = []
+requires = []

@@ -1,0 +1,5 @@
+# The shape most suites have: plain pytest, ordinary Python values, no typing gymnastics.
+[consumer]
+shape = "a plain pytest suite over builtin values, written the way a first-time user writes it"
+extras = []
+requires = []
