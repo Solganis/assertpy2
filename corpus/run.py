@@ -46,13 +46,13 @@ _BUILDS = _CORPUS / ".builds" / _RUN
 # strictly is the project's own business: a first-time user does not run `mypy --strict`, and a typed
 # codebase does, and a surface that only fits one of them fits neither in practice
 _CHECKERS = {
-    "mypy": ("mypy", "."),
+    "mypy": ("mypy", "--cache-dir", "{cache}/mypy", "."),
     "pyright": ("pyright", "--pythonpath", "{python}", "."),
     "ty": ("ty", "check", "--python", "{python}", "."),
 }
 # only mypy takes its strictness from the command line; pyright reads `typeCheckingMode` from the
 # project's own configuration, which is where a strict consumer would put it anyway
-_STRICT = {"mypy": ("mypy", "--strict", ".")}
+_STRICT = {"mypy": ("mypy", "--strict", "--cache-dir", "{cache}/mypy", ".")}
 
 # the tools are constrained to a major line and their resolved versions are recorded with the results.
 # Not pinned to an exact version: a checker release inside the line can change a diagnostic, and finding
@@ -121,8 +121,14 @@ def _run(command: tuple[str, ...], cwd: pathlib.Path) -> tuple[bool, str]:
 
 
 def _spoke(command: tuple[str, ...], cwd: pathlib.Path) -> tuple[bool, str, str]:
-    """The same, with the streams kept apart: a warning on stderr must not glue itself onto an answer."""
-    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+    """The same, with the streams kept apart: a warning on stderr must not glue itself onto an answer.
+
+    Byte-code writing is off, because it is the last thing that would land in a project directory: the
+    caches of the tools already go beside the environment, and a run has no business editing the
+    repository it is measuring.
+    """
+    environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False, env=environment)
     return completed.returncode == 0, completed.stdout.strip(), completed.stderr.strip()
 
 
@@ -463,14 +469,18 @@ def versions(environment: pathlib.Path, ran: tuple[str, ...]) -> dict[str, str]:
 def check(project: Project, environment: pathlib.Path, wanted: tuple[str, ...]) -> list[Result]:
     """Run the project's own tests, then every checker it asks for."""
     interpreter = _python(environment)
-    results = [Result(project.name, "pytest", *_run((str(interpreter), "-m", "pytest", "-q"), cwd=project.path))]
+    cache = environment / "caches"
+    # `-p no:cacheprovider` for the same reason: pytest writes `.pytest_cache` into the directory it
+    # runs in, and the project directory belongs to the repository rather than to this run
+    running = (str(interpreter), "-m", "pytest", "-q", "-p", "no:cacheprovider")
+    results = [Result(project.name, "pytest", *_run(running, cwd=project.path))]
     for name in project.checkers:
         if name not in wanted:
             continue
         module, *arguments = (_STRICT if project.mypy_strict else _CHECKERS).get(name, _CHECKERS[name])
         # each checker is handed the interpreter explicitly: run from the project directory they look
         # for a `.venv` beside the code, find none, and report the package as missing
-        spelled = [argument.format(python=interpreter) for argument in arguments]
+        spelled = [argument.format(python=interpreter, cache=cache) for argument in arguments]
         results.append(Result(project.name, name, *_run((str(interpreter), "-m", module, *spelled), cwd=project.path)))
     return results
 

@@ -97,3 +97,15 @@ def test_a_soft_block_keeps_the_annotations_of_its_body() -> None:
 def test_the_value_of_an_extraction_is_a_list() -> None:
     extracted: list[object] = assert_that(orders()).extracting("customer").value
     assert_that(extracted).is_equal_to(["alice", "bob"])
+
+
+def test_subset_leaves_the_chain_on_the_same_view() -> None:
+    """The argument is untyped by measurement, but what comes back still knows its element."""
+    names: list[str] = [order.customer for order in orders()]
+    # the chain continues on the sequence view, so the next call is still checked against `str`
+    assert_that(names).is_subset_of(["alice", "bob", "carol"]).contains("alice")
+    # `.value` on a view `assert_that` handed back is the union of the containers it may hold; only a
+    # pipeline step narrows it to a list, which is what the next line uses
+    kept: list[str] = assert_that(names).is_subset_of(["alice", "bob", "carol"]).filtered_on(lambda name: True).value
+    assert_that(kept).is_equal_to(names)
+    assert_that(orders()[0].items).is_subset_of({"book", "pen"}).is_length(2)

@@ -80,3 +80,9 @@ def test_selectors_that_are_not_strings_still_work() -> None:
 def test_a_one_shot_iterable_is_read_once() -> None:
     assert_that(list(iter([1, 2, 3]))).is_length(3)
     assert_that([value for value in range(4) if value]).is_equal_to([1, 2, 3])
+
+
+def test_subset_against_containers_of_our_own() -> None:
+    assert_that(["first"]).is_subset_of(Page(["first", "second"]))
+    assert_that({"alpha": 1}).is_subset_of(Registry({"alpha": 1, "beta": 2}))
+    assert_that(b"ab").is_subset_of(bytearray(b"abc"))
