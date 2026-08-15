@@ -1,0 +1,3374 @@
+{
+ "builder": {
+  "all_fields_satisfy": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "all_satisfy": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "any_satisfy": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "at_json_path": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "builder": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "description",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "kind",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "logger",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "origin",
+     "required": false
+    }
+   ],
+   "returns": null
+  },
+  "caused_by": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "ex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "check": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "CheckBuilder"
+  },
+  "conforms_to_openapi": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "dict[str, Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "spec",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "method",
+     "required": true
+    },
+    {
+     "annotation": "str | int | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "status",
+     "required": false
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "content_type",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_any_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_bytes": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "bytes",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "sub",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_duplicates": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "contains_entry": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_error": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "VAR_POSITIONAL",
+     "name": "ex_types",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_exactly": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_exactly_in_any_order": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_ignoring_case": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_in_order": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_key": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "keys",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_none_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_only": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_only_once": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_sequence": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "contains_value": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "values",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "decoded_as": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "encoding",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "described_as": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "description",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_contain": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_contain_duplicates": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "does_not_contain_entry": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_contain_key": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "keys",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_contain_value": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "values",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_exist": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "does_not_have_json_path": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_match": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "pattern",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_raise": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "ex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "does_not_warn": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type[Warning]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "warning",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "each": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "element": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "index",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "ends_with": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "suffix",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "ends_with_ignoring_case": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "suffix",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "error": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "msg",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "KEYWORD_ONLY",
+     "name": "actual",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "KEYWORD_ONLY",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "KEYWORD_ONLY",
+     "name": "diff",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "KEYWORD_ONLY",
+     "name": "suppress_context",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "eventually": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "timeout",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "interval",
+     "required": false
+    },
+    {
+     "annotation": "type[Exception] | tuple[type[Exception], ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignoring",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    }
+   ],
+   "returns": "AsyncAssertionBuilder"
+  },
+  "eventually_sync": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "timeout",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "interval",
+     "required": false
+    },
+    {
+     "annotation": "type[Exception] | tuple[type[Exception], ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignoring",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    }
+   ],
+   "returns": "SyncAssertionBuilder"
+  },
+  "exists": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "extracting": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "names",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "extracting_group": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "pattern",
+     "required": true
+    },
+    {
+     "annotation": "int | str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "group",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "filtered_on": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[[Any], bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "predicate",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "first": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "flat_mapped": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Callable[[Any], Iterable[Any]]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_byte_at": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "index",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_json_path": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_no_none_fields": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_root_cause": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "ex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_same_size_as": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_size_between": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "low",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "high",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_size_greater_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "size",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "has_size_less_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "size",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_after": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_after_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_alpha": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_alphanumeric": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_array_close_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "rtol",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "atol",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "equal_nan",
+     "required": false
+    },
+    {
+     "annotation": "Any",
+     "kind": "VAR_KEYWORD",
+     "name": "options",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_array_equal": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    },
+    {
+     "annotation": "Any",
+     "kind": "VAR_KEYWORD",
+     "name": "options",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_before": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_before_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_between": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "low",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "high",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_callable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_child_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "parent",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_close_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "tolerance",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_digit": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_directory": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_divisible_by": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "divisor",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_empty": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_equal_to_ignoring_case": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_equal_to_ignoring_milliseconds": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_equal_to_ignoring_seconds": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_equal_to_ignoring_time": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_equal_to_ignoring_whitespace": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_even": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_executable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_false": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_file": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_frame_equal": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    },
+    {
+     "annotation": "Any",
+     "kind": "VAR_KEYWORD",
+     "name": "options",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_greater_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_greater_than_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_hex_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected_hex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_in": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_inf": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_instance_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "some_class",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_instance_of_any": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "VAR_POSITIONAL",
+     "name": "some_classes",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_iterable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_length": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "length",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_length_between": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "low",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "high",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_less_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_less_than_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_lower": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_named": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "filename",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_nan": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_negative": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_none": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_between": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "low",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "high",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_not_callable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_close_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "tolerance",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_not_empty": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_not_in": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_not_inf": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_iterable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_nan": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_none": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_not_same_as": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_not_zero": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_odd": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_positive": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_readable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_same_as": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_sorted": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "key",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "reverse",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_subclass_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "some_class",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_subset_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "supersets",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_true": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_type_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "some_type",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_unicode": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_upper": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_valid_encoding": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "encoding",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "is_valid_utf8": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_whitespace": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_writable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "is_zero": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "last": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "mapped": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Callable[[Any], Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "pattern",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_contract_snapshot": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "id",
+     "required": false
+    },
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_inline": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignore",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "include",
+     "required": false
+    },
+    {
+     "annotation": "float | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "tolerance",
+     "required": false
+    },
+    {
+     "annotation": "dict[object, Callable[..., bool]] | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "comparators",
+     "required": false
+    },
+    {
+     "annotation": "dict[object, object] | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "placeholders",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_json_schema": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "dict[str, Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "schema",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_json_schema_from_file": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | Path",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_structure": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "dict[Any, Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "spec",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "matches_with_groups": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "pattern",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "none_satisfy": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "not_": {
+   "kind": "property",
+   "parameters": [],
+   "returns": "NegatedBuilder[Self]"
+  },
+  "raised": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "raises": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "ex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "returned": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "satisfies": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "satisfies_exactly": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "VAR_POSITIONAL",
+     "name": "matchers",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "satisfies_exactly_in_any_order": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any] | Callable[..., bool]",
+     "kind": "VAR_POSITIONAL",
+     "name": "matchers",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "single": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
+  "snapshot": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "id",
+     "required": false
+    },
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "path",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignore",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "include",
+     "required": false
+    },
+    {
+     "annotation": "float | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "tolerance",
+     "required": false
+    },
+    {
+     "annotation": "dict | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "comparators",
+     "required": false
+    },
+    {
+     "annotation": "dict | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "placeholders",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "starts_with": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "prefix",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "starts_with_bytes": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "bytes",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "prefix",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "starts_with_ignoring_case": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "prefix",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "value": {
+   "kind": "property",
+   "parameters": [],
+   "returns": "_T"
+  },
+  "warns": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type[Warning]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "warning",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "when_called_with": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "some_args",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "VAR_KEYWORD",
+     "name": "some_kwargs",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
+  "zip_satisfies": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Iterable[object]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    },
+    {
+     "annotation": "Callable[..., bool]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "predicate",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "allow_empty",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  }
+ },
+ "exported": {
+  "AssertionFailure": {
+   "bases": [
+    "AssertionError",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "message",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "actual",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": "DiffResult | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "diff",
+     "required": false
+    },
+    {
+     "annotation": "PollTrace | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    },
+    {
+     "annotation": "tuple[AssertionOutcome, ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "failures",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "AssertionOutcome": {
+   "bases": [],
+   "fields": [
+    "passed",
+    "message",
+    "actual",
+    "actual_provided",
+    "expected",
+    "diff",
+    "trace",
+    "group",
+    "location",
+    "hint"
+   ],
+   "init": [
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "passed",
+     "required": false
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "message",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "actual",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "actual_provided",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": "DiffResult | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "diff",
+     "required": false
+    },
+    {
+     "annotation": "PollTrace | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    },
+    {
+     "annotation": "str | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "group",
+     "required": false
+    },
+    {
+     "annotation": "tuple[str, int] | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "location",
+     "required": false
+    },
+    {
+     "annotation": "str | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "hint",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "AsyncAssertionBuilder": {
+   "bases": [],
+   "fields": [],
+   "init": [
+    {
+     "annotation": "Callable",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    },
+    {
+     "annotation": "Callable",
+     "kind": "KEYWORD_ONLY",
+     "name": "builder_func",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "description",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "timeout",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "interval",
+     "required": false
+    },
+    {
+     "annotation": "tuple[type[Exception], ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignoring",
+     "required": false
+    },
+    {
+     "annotation": "str | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "kind",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "logger",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "BaseMatcher": {
+   "bases": [],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "CheckBuilder": {
+   "bases": [],
+   "fields": [],
+   "init": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "target",
+     "required": true
+    },
+    {
+     "annotation": "AssertionBuilder",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "builder",
+     "required": true
+    }
+   ],
+   "kind": "class"
+  },
+  "DanglingAssertionWarning": {
+   "bases": [
+    "UserWarning",
+    "Warning",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "DiffEntry": {
+   "bases": [],
+   "fields": [
+    "path",
+    "actual",
+    "expected",
+    "absent",
+    "steps"
+   ],
+   "init": [
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "path",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "actual",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "expected",
+     "required": false
+    },
+    {
+     "annotation": "Literal['actual', 'expected'] | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "absent",
+     "required": false
+    },
+    {
+     "annotation": "tuple[Step, ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "steps",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "DiffResult": {
+   "bases": [],
+   "fields": [
+    "kind",
+    "entries"
+   ],
+   "init": [
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "kind",
+     "required": true
+    },
+    {
+     "annotation": "list[DiffEntry]",
+     "kind": "KEYWORD_ONLY",
+     "name": "entries",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "MatchResult": {
+   "bases": [],
+   "fields": [
+    "matched",
+    "description",
+    "mismatch",
+    "diff"
+   ],
+   "init": [
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "matched",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "description",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "mismatch",
+     "required": false
+    },
+    {
+     "annotation": "DiffResult | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "diff",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "Matcher": {
+   "bases": [
+    "Protocol",
+    "Generic"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "NegatedBuilder": {
+   "bases": [
+    "Generic"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": "AssertionBuilder",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "builder",
+     "required": true
+    }
+   ],
+   "kind": "class"
+  },
+  "PollSample": {
+   "bases": [],
+   "fields": [
+    "elapsed",
+    "outcome",
+    "value",
+    "detail",
+    "repeats"
+   ],
+   "init": [
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "elapsed",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "outcome",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "value",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "detail",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "KEYWORD_ONLY",
+     "name": "repeats",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "PollTrace": {
+   "bases": [],
+   "fields": [
+    "samples",
+    "total_polls",
+    "dropped",
+    "elapsed",
+    "summary"
+   ],
+   "init": [
+    {
+     "annotation": "list[PollSample]",
+     "kind": "KEYWORD_ONLY",
+     "name": "samples",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "KEYWORD_ONLY",
+     "name": "total_polls",
+     "required": true
+    },
+    {
+     "annotation": "int",
+     "kind": "KEYWORD_ONLY",
+     "name": "dropped",
+     "required": true
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "elapsed",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "summary",
+     "required": true
+    }
+   ],
+   "kind": "class"
+  },
+  "SnapshotCreatedWarning": {
+   "bases": [
+    "UserWarning",
+    "Warning",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "SnapshotKeyReusedWarning": {
+   "bases": [
+    "UserWarning",
+    "Warning",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "SnapshotUpdatedWarning": {
+   "bases": [
+    "UserWarning",
+    "Warning",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "SoftAssertionCollector": {
+   "bases": [],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "Step": {
+   "bases": [
+    "tuple"
+   ],
+   "fields": [
+    "kind",
+    "value",
+    "side"
+   ],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "SyncAssertionBuilder": {
+   "bases": [],
+   "fields": [],
+   "init": [
+    {
+     "annotation": "Callable",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    },
+    {
+     "annotation": "Callable",
+     "kind": "KEYWORD_ONLY",
+     "name": "builder_func",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "KEYWORD_ONLY",
+     "name": "description",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "timeout",
+     "required": false
+    },
+    {
+     "annotation": "float",
+     "kind": "KEYWORD_ONLY",
+     "name": "interval",
+     "required": false
+    },
+    {
+     "annotation": "tuple[type[Exception], ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "ignoring",
+     "required": false
+    },
+    {
+     "annotation": "str | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "kind",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "KEYWORD_ONLY",
+     "name": "logger",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "trace",
+     "required": false
+    },
+    {
+     "annotation": "tuple[_Step, ...]",
+     "kind": "KEYWORD_ONLY",
+     "name": "steps",
+     "required": false
+    },
+    {
+     "annotation": "Any",
+     "kind": "KEYWORD_ONLY",
+     "name": "last",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "VacuousAssertionWarning": {
+   "bases": [
+    "UserWarning",
+    "Warning",
+    "Exception",
+    "BaseException"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "args",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "VAR_KEYWORD",
+     "name": "kwargs",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "WarningLoggingAdapter": {
+   "bases": [
+    "LoggerAdapter"
+   ],
+   "fields": [],
+   "init": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "logger",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "extra",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "merge_extra",
+     "required": false
+    }
+   ],
+   "kind": "class"
+  },
+  "add_extension": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "override",
+     "required": false
+    }
+   ],
+   "returns": null
+  },
+  "assert_all": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Callable[[], object]",
+     "kind": "VAR_POSITIONAL",
+     "name": "callables",
+     "required": false
+    }
+   ],
+   "returns": "None"
+  },
+  "assert_conforms": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    },
+    {
+     "annotation": "type[_U]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "model",
+     "required": true
+    },
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "description",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "exact",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "each",
+     "required": false
+    }
+   ],
+   "returns": "AssertionBuilder[Any]"
+  },
+  "assert_that": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "description",
+     "required": false
+    }
+   ],
+   "returns": "_CoreAssertion"
+  },
+  "assert_warn": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "description",
+     "required": false
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "logger",
+     "required": false
+    }
+   ],
+   "returns": null
+  },
+  "clear_custom_matchers": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "None"
+  },
+  "contents_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "file",
+     "required": true
+    },
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "encoding",
+     "required": false
+    }
+   ],
+   "returns": "str"
+  },
+  "fail": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "msg",
+     "required": false
+    }
+   ],
+   "returns": null
+  },
+  "register_matcher": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "name",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "KEYWORD_ONLY",
+     "name": "override",
+     "required": false
+    }
+   ],
+   "returns": "Callable[[Callable[..., BaseMatcher]], Callable[..., BaseMatcher]]"
+  },
+  "register_snapshot_serializer": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "cls",
+     "required": true
+    },
+    {
+     "annotation": "Callable[[Any], object]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "encode",
+     "required": true
+    },
+    {
+     "annotation": "Callable[[Any], object]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "decode",
+     "required": true
+    },
+    {
+     "annotation": "str | None",
+     "kind": "KEYWORD_ONLY",
+     "name": "tag",
+     "required": false
+    }
+   ],
+   "returns": "None"
+  },
+  "remove_extension": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "func",
+     "required": true
+    }
+   ],
+   "returns": null
+  },
+  "soft_assertions": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "_SoftAssertions"
+  },
+  "soft_fail": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "msg",
+     "required": false
+    }
+   ],
+   "returns": null
+  },
+  "unregister_matcher": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "name",
+     "required": true
+    }
+   ],
+   "returns": "None"
+  }
+ },
+ "exports": [
+  "AssertionFailure",
+  "AssertionOutcome",
+  "AsyncAssertionBuilder",
+  "BaseMatcher",
+  "CheckBuilder",
+  "DanglingAssertionWarning",
+  "DiffEntry",
+  "DiffResult",
+  "MatchResult",
+  "Matcher",
+  "NegatedBuilder",
+  "PollSample",
+  "PollTrace",
+  "SnapshotCreatedWarning",
+  "SnapshotKeyReusedWarning",
+  "SnapshotUpdatedWarning",
+  "SoftAssertionCollector",
+  "Step",
+  "SyncAssertionBuilder",
+  "VacuousAssertionWarning",
+  "WarningLoggingAdapter",
+  "__version__",
+  "add_extension",
+  "assert_all",
+  "assert_conforms",
+  "assert_that",
+  "assert_warn",
+  "clear_custom_matchers",
+  "contents_of",
+  "fail",
+  "match",
+  "register_matcher",
+  "register_snapshot_serializer",
+  "remove_extension",
+  "soft_assertions",
+  "soft_fail",
+  "unregister_matcher"
+ ],
+ "failure_attributes": [
+  "actual",
+  "diff",
+  "expected",
+  "failures",
+  "trace"
+ ],
+ "matcher_protocol": [
+  "matches",
+  "describe",
+  "describe_mismatch"
+ ],
+ "matchers": {
+  "all_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any]",
+     "kind": "VAR_POSITIONAL",
+     "name": "matchers",
+     "required": false
+    }
+   ],
+   "returns": "AllOfMatcher"
+  },
+  "any_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any]",
+     "kind": "VAR_POSITIONAL",
+     "name": "matchers",
+     "required": false
+    }
+   ],
+   "returns": "AnyOfMatcher"
+  },
+  "between": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "low",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "high",
+     "required": true
+    }
+   ],
+   "returns": "BetweenMatcher"
+  },
+  "close_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    },
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "tolerance",
+     "required": true
+    }
+   ],
+   "returns": "CloseToMatcher"
+  },
+  "contains": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "_Item",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Matcher[Iterable[_Item]]"
+  },
+  "contains_only": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "_Item",
+     "kind": "VAR_POSITIONAL",
+     "name": "items",
+     "required": false
+    }
+   ],
+   "returns": "Matcher[Iterable[_Item]]"
+  },
+  "contains_string": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | bytes",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "substring",
+     "required": true
+    }
+   ],
+   "returns": "Matcher[str | bytes]"
+  },
+  "each_item": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    }
+   ],
+   "returns": "EachMatcher"
+  },
+  "ends_with": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | bytes",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "suffix",
+     "required": true
+    }
+   ],
+   "returns": "Matcher[str | bytes]"
+  },
+  "equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected",
+     "required": true
+    },
+    {
+     "annotation": "bool",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "strict_types",
+     "required": false
+    },
+    {
+     "annotation": "object",
+     "kind": "VAR_KEYWORD",
+     "name": "options",
+     "required": false
+    }
+   ],
+   "returns": "EqualToMatcher"
+  },
+  "greater_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    }
+   ],
+   "returns": "GreaterThanMatcher"
+  },
+  "greater_than_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    }
+   ],
+   "returns": "GreaterThanOrEqualToMatcher"
+  },
+  "has_length": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "length",
+     "required": true
+    }
+   ],
+   "returns": "HasLengthMatcher"
+  },
+  "has_property": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "name",
+     "required": true
+    },
+    {
+     "annotation": "Matcher | None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": false
+    }
+   ],
+   "returns": "HasPropertyMatcher"
+  },
+  "ignore": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IgnoreMatcher"
+  },
+  "is_after": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "datetime",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "IsAfterMatcher"
+  },
+  "is_before": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "datetime",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "other",
+     "required": true
+    }
+   ],
+   "returns": "IsBeforeMatcher"
+  },
+  "is_callable": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsCallableMatcher"
+  },
+  "is_divisible_by": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "divisor",
+     "required": true
+    }
+   ],
+   "returns": "IsDivisibleByMatcher"
+  },
+  "is_empty": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsEmptyMatcher"
+  },
+  "is_even": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsEvenMatcher"
+  },
+  "is_falsy": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsFalsyMatcher"
+  },
+  "is_in": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "values",
+     "required": false
+    }
+   ],
+   "returns": "IsInMatcher"
+  },
+  "is_instance_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "ClassInfo",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected_type",
+     "required": true
+    }
+   ],
+   "returns": "IsInstanceOfMatcher"
+  },
+  "is_length": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "int",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "length",
+     "required": true
+    }
+   ],
+   "returns": "HasLengthMatcher"
+  },
+  "is_negative": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsNegativeMatcher"
+  },
+  "is_non_empty_string": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsNonEmptyStringMatcher"
+  },
+  "is_none": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsNoneMatcher"
+  },
+  "is_not_empty": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsNotEmptyMatcher"
+  },
+  "is_not_none": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsNotNoneMatcher"
+  },
+  "is_now": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "float | timedelta",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "delta",
+     "required": false
+    }
+   ],
+   "returns": "IsNowMatcher"
+  },
+  "is_odd": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsOddMatcher"
+  },
+  "is_positive": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsPositiveMatcher"
+  },
+  "is_sorted": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Callable[[Any], Any] | None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "key",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "reverse",
+     "required": false
+    }
+   ],
+   "returns": "Matcher[Iterable[Any]]"
+  },
+  "is_subset_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "VAR_POSITIONAL",
+     "name": "superset",
+     "required": false
+    }
+   ],
+   "returns": "Matcher[Iterable[Any]]"
+  },
+  "is_truthy": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsTruthyMatcher"
+  },
+  "is_type_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "expected_type",
+     "required": true
+    }
+   ],
+   "returns": "IsTypeOfMatcher"
+  },
+  "is_uuid": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsUuidMatcher"
+  },
+  "is_zero": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "IsZeroMatcher"
+  },
+  "less_than": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    }
+   ],
+   "returns": "LessThanMatcher"
+  },
+  "less_than_or_equal_to": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "object",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "val",
+     "required": true
+    }
+   ],
+   "returns": "LessThanOrEqualToMatcher"
+  },
+  "matches_regex": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "pattern",
+     "required": true
+    }
+   ],
+   "returns": "Matcher[str]"
+  },
+  "not_": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "Matcher[Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "matcher",
+     "required": true
+    }
+   ],
+   "returns": "NotMatcher"
+  },
+  "starts_with": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "str | bytes",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "prefix",
+     "required": true
+    }
+   ],
+   "returns": "Matcher[str | bytes]"
+  },
+  "structure": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "dict[Any, Any]",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "spec",
+     "required": true
+    }
+   ],
+   "returns": "StructureMatcher"
+  }
+ },
+ "py_typed": true
+}
