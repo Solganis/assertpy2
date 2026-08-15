@@ -47,6 +47,7 @@ from assertpy2.assertpy import _format_soft_errors
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _diff_sides, _disambiguated
 from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
+from tests.group_compat import BaseExceptionGroup, ExceptionGroup, needs_groups
 
 try:  # the OpenAPI properties need the [json] extra; the rest of the file does not
     import jsonschema  # noqa: F401  # presence gate only
@@ -1996,3 +1997,85 @@ class TestEveryPipelineStepHandsBackAList:
         """
         extracted = assert_that(dict.fromkeys(keys, 0)).extracting(0)
         assert_that(type(extracted.value)).is_equal_to(list)
+
+
+@needs_groups
+class TestEveryLeafOfAGroupIsReachable:
+    """What the group pivots promise on a tree of arbitrary shape.
+
+    The example-based tests use one flat group and one with a single nested level, which is the shape
+    anyone writes by hand.  Real groups come out of `asyncio.TaskGroup` and retry loops, where nesting
+    is whatever the failures happened to produce.  Two invariants: the leaves pivot loses nothing and
+    invents nothing, and the three type questions answer with one voice.
+    """
+
+    @staticmethod
+    def _tree(draw):
+        """A group whose members are leaves or further groups, drawn to an arbitrary depth.
+
+        The leaf types vary so that a drawn question has no fixed answer: with every leaf a `ValueError`
+        the agreement below would hold on a constant, which is close to asserting nothing.
+        """
+        leaf = st.builds(
+            lambda kind, text: kind(text),
+            st.sampled_from([ValueError, KeyError, TypeError]),
+            st.integers(min_value=0, max_value=99).map(str),
+        )
+        return draw(
+            st.recursive(
+                leaf,
+                lambda inner: st.builds(
+                    lambda members: ExceptionGroup("generated", members),
+                    st.lists(inner, min_size=1, max_size=4),
+                ),
+                max_leaves=12,
+            )
+        )
+
+    @staticmethod
+    def _flatten(exc):
+        """The leaves, computed the obvious way, to compare the implementation against."""
+        if not isinstance(exc, BaseExceptionGroup):
+            return [exc]
+        return [leaf for member in exc.exceptions for leaf in TestEveryLeafOfAGroupIsReachable._flatten(member)]
+
+    @given(data=st.data())
+    @settings(max_examples=50)
+    def test_the_pivot_reaches_every_leaf_and_no_more(self, data):
+        group = self._tree(data.draw)
+        assume(isinstance(group, BaseExceptionGroup))
+
+        def raise_it():
+            raise group
+
+        caught = assert_that(raise_it).raises(type(group)).when_called_with()
+        expected = self._flatten(group)
+        assert_that(caught.errors().value).is_length(len(expected))
+        assert_that([id(leaf) for leaf in caught.errors().value]).is_equal_to([id(leaf) for leaf in expected])
+
+    @given(data=st.data(), asked=st.sampled_from([ValueError, KeyError, TypeError, LookupError, Exception]))
+    @settings(max_examples=100)
+    def test_the_three_group_forms_agree_on_whatever_is_asked(self, data, asked):
+        """One verdict, three spellings.
+
+        All three walk the same nodes, groups included, so a type one of them finds the others have to
+        agree about. A type the group holds has to be found
+        by both and refused by `does_not_contain_error`, and a type it does not hold the other way round.
+        The drawn types include a base class and a group type on purpose: those are the two shapes that
+        told the leaves-only version of `error_of` apart from this one.
+        """
+        group = self._tree(data.draw)
+        assume(isinstance(group, BaseExceptionGroup))
+
+        def raise_it():
+            raise group
+
+        for wanted in (asked, type(group)):
+            caught = assert_that(raise_it).raises(type(group)).when_called_with()
+            present = caught.check().contains_error(wanted).passed
+            assert_that(caught.check().error_of(wanted).passed).described_as(
+                f"error_of({wanted.__name__}) against contains_error"
+            ).is_equal_to(present)
+            assert_that(caught.check().does_not_contain_error(wanted).passed).described_as(
+                f"does_not_contain_error({wanted.__name__}) against contains_error"
+            ).is_equal_to(not present)

@@ -176,6 +176,16 @@ if TYPE_CHECKING:
     assert_type(assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().contains_error(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().raised(), _CoreAssertion)
+    # the group pivots leave the exception cluster: the leaves are a list, one leaf's message is text
+    invoked = assert_that(len).raises(ValueError).when_called_with()
+    assert_type(invoked.does_not_contain_error(KeyError), _InvokedAssertion)
+    assert_type(invoked.errors(), _ListAssertion[BaseException])
+    assert_type(invoked.errors().value, list[BaseException])
+    # the leaf pivot keeps the invoked view: its value is the message, and `raised()` still reaches the
+    # object, which is the pair `caused_by` already promises
+    assert_type(invoked.error_of(KeyError), _InvokedAssertion)
+    assert_type(invoked.error_of(KeyError).value, str)
+    assert_type(invoked.error_of(KeyError).raised(), _CoreAssertion)
 
     # Typed extract-and-continue: the generic fallback tracks the input type, `.value` hands it back,
     # and the narrowing terminals refine it (is_not_none strips None, is_instance_of narrows to the class).

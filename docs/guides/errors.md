@@ -489,15 +489,30 @@ assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(
 ).is_equal_to("db timeout")
 ```
 
-**Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`) - `contains_error()`
-asserts the caught group contains, recursively, an exception of each given type:
+**Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`). `contains_error()`
+asserts the caught group holds an exception of each given type, and `does_not_contain_error()` asserts it
+holds none of them. Both search the whole tree, so a group nested inside a group is reached.
 
-<!-- docs-guard: skip -->
+To ask about the failures rather than their types, pivot. `errors()` hands back the leaves as a list, so
+every collection assertion applies to them, and `error_of()` picks the first exception of a type and
+continues on its message, with the object itself still one `raised()` away:
+
+<!-- docs-guard: untyped -->
 ```python
-assert_that(run_tasks).raises(ExceptionGroup).when_called_with().contains_error(
-    ValueError, KeyError
-)
+def run_tasks():
+    raise ExceptionGroup("2 tasks failed", [ValueError("bad id"), KeyError("missing")])
+
+
+caught = assert_that(run_tasks).raises(ExceptionGroup).when_called_with()
+caught.contains_error(ValueError, KeyError)
+caught.does_not_contain_error(TimeoutError)
+caught.errors().is_length(2)
+caught.error_of(ValueError).contains("bad id")
 ```
+
+`errors()` flattens nesting, so a count is over the failures themselves and not over the shape the group
+happened to take. `contains_error()` and `error_of()` search the wider set, groups included, so the two
+always agree about whether a type is in there.
 
 ### Expected warnings
 

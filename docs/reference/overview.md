@@ -17,7 +17,8 @@ For a task-oriented view organized by value type instead, see the
 - [Core & objects](core.md) - assertions available on every value (equality, identity, ``satisfies``, ...).
 - Type-specific pages - strings, numbers, collections, dicts, dates, files, bytes.
 - [Dynamic assertions](dynamic.md) - the ``has_<name>()`` family.
-- [Exception & callable assertions](exceptions.md) - ``raises()``, ``caused_by()``, ``contains_error()``, ``raised()``.
+- [Exception & callable assertions](exceptions.md) - ``raises()``, ``caused_by()``, ``contains_error()``,
+  ``errors()``, ``raised()``.
 - [Extracting](extracting.md), [JSON assertions](json.md), [Data frame & array assertions](dataframes.md), and [Snapshot assertions](snapshots.md).
 - [Structured failures](errors.md), [Warning assertions](warnings.md), and [Async & eventual assertions](async.md).
 
