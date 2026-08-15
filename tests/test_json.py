@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("jsonpath_ng", reason="jsonpath-ng not installed")
 pytest.importorskip("jsonschema", reason="jsonschema not installed")
 
-from assertpy2 import assert_that, json_mixin, soft_assertions
+from assertpy2 import assert_that, json_mixin, match, soft_assertions
 from assertpy2.json_mixin import _ensure_jsonpath_ng, _ensure_jsonschema
 
 DATA = {
@@ -56,7 +56,7 @@ class TestAtJsonPath:
             assert_that(DATA).at_json_path("$.nonexistent")
 
     def test_chaining_after_extract(self):
-        assert_that(DATA).at_json_path("$.users[0].roles").contains("admin")
+        assert_that(DATA).at_json_path("$.users[0].roles").satisfies(match.contains("admin"))
 
     def test_on_list_root(self):
         items = [{"id": 1}, {"id": 2}]

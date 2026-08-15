@@ -14,6 +14,7 @@ package happens to say, which gates nothing: the point is that a human edits the
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import json
 import pathlib
@@ -26,6 +27,26 @@ import pytest
 import assertpy2
 from assertpy2 import assert_that
 
+
+def _protocol_count(source: str) -> int:
+    """How many Protocols the typed surface declares, asked of the syntax rather than of a name pattern.
+
+    Counting class declarations whose name ends in ``Assertion`` by regex would count any class that
+    happens to be named that way, protocol or not, while the page's claim is about protocols.
+    """
+    return sum(
+        isinstance(node, ast.ClassDef) and any(_names_protocol(base) for base in node.bases)
+        for node in ast.walk(ast.parse(source))
+    )
+
+
+def _names_protocol(base: ast.expr) -> bool:
+    """Whether a base is ``Protocol``, written plain or parameterised."""
+    if isinstance(base, ast.Subscript):
+        base = base.value
+    return isinstance(base, ast.Name) and base.id == "Protocol"
+
+
 # the stability page spells small counts as words, the way prose does
 _WORDS = {
     9: "nine",
@@ -36,6 +57,8 @@ _WORDS = {
     14: "fourteen",
     18: "eighteen",
     19: "nineteen",
+    20: "twenty",
+    21: "twenty-one",
 }
 
 EXPECTED_EXPORTS = [
@@ -186,10 +209,7 @@ class TestTheCountsTheDocsQuote:
             "exported names": (re.search(r"The (\d+) names", page), len(assertpy2.__all__)),
             "assert_type checks": (re.search(r"(\d+) `assert_type` checks", page), typing_suite.count("assert_type(")),
             # spelled as a word on the page, so the guard reads the word rather than a digit
-            "protocols": (
-                re.search(r"walks all (\w+) protocols", page),
-                len(re.findall(r"class _\w+Assertion", protocols)),
-            ),
+            "protocols": (re.search(r"walks all ([\w-]+) protocols", page), _protocol_count(protocols)),
         }
         wrong = {}
         for what, (found, real) in quoted.items():

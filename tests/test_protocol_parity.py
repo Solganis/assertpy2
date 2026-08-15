@@ -58,7 +58,7 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
         # narrowing `satisfies` means redeclaring the whole overload pair, and the first half of that
         # pair is the same everywhere by construction: it is the `TypeIs` form the core already has.
         # Only the second half narrows, to `Matcher[str]` and `Matcher[_N]` respectively
-        ("satisfies", "_NumericAssertion", "_StringAssertion"),
+        ("satisfies", "_NumericAssertion", "_TextAssertion"),
     }
 )
 
@@ -84,42 +84,68 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
         "_BytesAssertion",
         "_CallableAssertion",
         "_InvokedAssertion",
+        # not a type `assert_that` dispatches to, but what every pipeline step hands back: a collection
+        # this library built, which is always a `list` whatever went in
+        "_ListAssertion",
     }
 )
 
-# `_InvokedAssertion` appears wherever `_StringAssertion` does, because the invoked view inherits the
-# string protocol whole: what a raised exception hands back is its message.  That is inherited, not
-# chosen, and it includes `_FilesystemAssertion`, which offers `exists()` on the text of an exception.
-# The edge predates the capability protocols and is measured as such: the same call type-checks at the
-# revision before them.  Writing the register down is what made it visible, and it stays here until the
-# invoked view is narrowed deliberately, which is a change to what callers can type rather than to what
-# they can run.
+# `_InvokedAssertion` carries what a message is, and no longer what a filename is.  It used to inherit
+# the string protocol whole, which handed it `_FilesystemAssertion` and offered `exists()` on the text
+# of an exception: a call that type-checked and then went looking on disk.  Writing this register down
+# is what made that visible, and `_TextAssertion` is what separates the two.
 _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_SizedAssertion": (
+        "_TextAssertion",
         "_StringAssertion",
         "_InvokedAssertion",
         "_IterableAssertion",
+        "_ListAssertion",
         "_DictAssertion",
         "_BytesAssertion",
     ),
-    "_FilesystemAssertion": ("_StringAssertion", "_InvokedAssertion", "_PathAssertion"),
+    "_FilesystemAssertion": ("_StringAssertion", "_PathAssertion"),
     "_RealNumberAssertion": ("_NumericAssertion", "_BoolAssertion"),
     "_ZeroAssertion": ("_NumericAssertion", "_BoolAssertion", "_ComplexAssertion"),
-    "_StructureAssertion": ("_IterableAssertion", "_DictAssertion"),
-    "_RepeatableAssertion": ("_StringAssertion", "_InvokedAssertion", "_IterableAssertion"),
+    "_StructureAssertion": ("_IterableAssertion", "_ListAssertion", "_DictAssertion"),
+    "_RepeatableAssertion": (
+        "_TextAssertion",
+        "_StringAssertion",
+        "_InvokedAssertion",
+        "_IterableAssertion",
+        "_ListAssertion",
+    ),
     "_MembershipAssertion": (
+        "_TextAssertion",
         "_StringAssertion",
         "_InvokedAssertion",
         "_DictAssertion",
         "_BytesAssertion",
     ),
+    # what a message and a string share, which is everything except reading the value as a path
+    "_TextAssertion": ("_StringAssertion", "_InvokedAssertion"),
 }
 
 # Where a protocol deliberately redeclares what it inherits in order to narrow it.  The pair of
 # overloads has to be repeated whole, so its unchanged half looks like a copy while the other half is
 # the entire point: `Matcher[str]` and `Matcher[_N]` instead of the core's `Matcher`.
 _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
-    {("_NumericAssertion", "satisfies"), ("_StringAssertion", "satisfies")}
+    {
+        ("_NumericAssertion", "satisfies"),
+        ("_TextAssertion", "satisfies"),
+        # the string view keeps its own result type on the pivots: text for a message, `str` for a
+        # string, which is what lets one be read as a path and the other not
+        ("_StringAssertion", "first"),
+        ("_StringAssertion", "last"),
+        ("_StringAssertion", "element"),
+        ("_StringAssertion", "single"),
+        # the quantifiers, narrowed to the element each view knows: the structure capability is shared
+        # by a mapping and a sequence, so there it can only say `Any`
+        ("_IterableAssertion", "each"),
+        ("_IterableAssertion", "all_satisfy"),
+        ("_DictAssertion", "each"),
+        ("_DictAssertion", "all_satisfy"),
+    }
 )
 
 # Which Protocols must, between them, declare every public method of each mixin.  Several mixins are
@@ -170,7 +196,7 @@ def _base_name(base: ast.expr) -> str | None:
     every check in this file stayed green: the whole point here is that a lost edge is loud.
     """
     if isinstance(base, ast.Subscript):
-        base = base.value
+        base = base.value  # `Protocol[_E]` and `_RepeatableAssertion[str]` both arrive this way
     if isinstance(base, ast.Name):
         if base.id in _NOT_A_PROTOCOL_BASE:
             return None
@@ -322,7 +348,7 @@ class TestProtocolParity:
     def test_collected_a_meaningful_surface(self):
         # guards the collector itself: an ast/refactor slip yielding nothing would pass vacuously
         assert_that(len(_CASES)).is_greater_than(100)
-        assert_that({protocol for protocol, _ in _CASES}).contains("_CoreAssertion", "_StringAssertion")
+        assert_that({protocol for protocol, _ in _CASES}).contains("_CoreAssertion", "_TextAssertion")
 
     @pytest.mark.parametrize(("protocol", "method_def"), _CASES, ids=_CASE_IDS)
     def test_declared_method_exists_on_concrete_builder(self, protocol, method_def):

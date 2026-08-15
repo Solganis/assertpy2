@@ -55,7 +55,24 @@ JSON assertions chain and work with soft assertions:
 ```python
 with soft_assertions():
     assert_that(response).has_json_path("$.data")
-    assert_that(response).at_json_path("$.data.id").is_positive()
+    assert_that(response).at_json_path("$.data.id").satisfies(match.is_positive())
+```
+
+A path lands on whatever the document holds there, so what comes back offers the assertions every value
+has. Reach further with a matcher, as above, or state the type you expect and continue in it. The
+predicate below is a `TypeIs`, so the type checker takes its word: `satisfies()` runs it and reads the
+verdict, it cannot confirm that the claim matches the check inside.
+
+```python
+from typing_extensions import TypeIs
+
+
+def is_int(value: object) -> TypeIs[int]:
+    return isinstance(value, int)
+
+
+payload = {"data": {"id": 7}}
+assert_that(payload).at_json_path("$.data.id").satisfies(is_int).is_between(1, 99)
 ```
 
 ### conforms_to_openapi

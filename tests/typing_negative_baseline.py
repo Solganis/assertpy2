@@ -122,6 +122,45 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # makes this substitution legal in both pyright and mypy, and a matcher for the narrower element
     # then reaches an assertion over the wider one
     "repeats-of-a-wider-element-substituted": _ARGUMENT,
+    # --- the shape at a json path is unknowable statically, so the view carries no shape -----------
+    # each of these used to type-check and raise at runtime, which is the pairing this file exists for
+    "numeric-assertion-after-a-json-path": _MISSING,
+    "mapping-assertion-after-a-json-path": _MISSING,
+    "membership-assertion-after-a-json-path": _MISSING,
+    "reading-a-json-path-value-as-a-type": _MISSING,
+    # --- the two extraction mistakes the runtime refuses by name, refused before the run now -------
+    # the verdict is `object`, but the input is the element: a predicate may only ask the element what
+    # the element has
+    "predicate-reading-a-field-the-element-lacks": _MISSING,
+    "mapping-predicate-reading-a-missing-field": _MISSING,
+    "quantifier-reading-a-missing-field": _MISSING,
+    "byte-predicate-reading-a-missing-field": _MISSING,
+    "each-reading-a-missing-field": _MISSING,
+    "all-satisfy-reading-a-missing-field": _MISSING,
+    "extracting-with-no-selector": {
+        "ty": frozenset({"missing-argument"}),
+        "mypy": frozenset({"call-arg"}),
+        "pyright": frozenset({"reportCallIssue"}),
+    },
+    "extracting-with-an-unknown-option": {
+        "ty": frozenset({"unknown-argument"}),
+        "mypy": frozenset({"call-arg"}),
+        "pyright": frozenset({"reportCallIssue"}),
+    },
+    # mypy adds `misc` beside `arg-type` on a callable of the wrong arity, which is its way of saying
+    # the lambda itself does not fit rather than only its result
+    "extracting-filter-of-wrong-arity": {
+        "ty": frozenset({"invalid-argument-type"}),
+        "mypy": frozenset({"arg-type", "misc"}),
+        "pyright": frozenset({"reportArgumentType"}),
+    },
+    # the arity, not the verdict: `sort` and `filter` are handed one item each, so a two-parameter
+    # callable is refused before the run rather than during it
+    "extracting-sort-of-wrong-arity": {
+        "ty": frozenset({"invalid-argument-type"}),
+        "mypy": frozenset({"arg-type", "misc"}),
+        "pyright": frozenset({"reportArgumentType"}),
+    },
     # --- the method is not on this value's protocol ------------------------------------------------
     "complex-ordered": _MISSING,
     "complex-signed": _MISSING,
@@ -180,6 +219,26 @@ VALID: frozenset[str] = frozenset(
         "valid-membership-in-a-wide-collection",
         "valid-membership-of-a-subclass",
         "valid-repeats-of-the-exact-element",
+        "valid-equality-after-a-json-path",
+        "valid-narrowed-json-path",
+        "valid-matcher-after-json-path",
+        "valid-extracting-one-name",
+        "valid-extracting-several-names",
+        "valid-extracting-filter-by-key",
+        "valid-extracting-filter-by-mapping",
+        "valid-extracting-filter-callable",
+        "valid-extracting-sort-by-key",
+        "valid-extracting-sort-by-keys",
+        "valid-extracting-sort-callable",
+        "valid-extracting-filter-and-sort",
+        "valid-extracting-filter-from-a-variable",
+        "valid-extracting-filter-from-a-mapping",
+        "valid-extracting-a-slice",
+        "valid-filter-option-verdict-not-a-bool",
+        "valid-quantifier-predicate-returning-an-int",
+        "valid-filter-predicate-returning-an-int",
+        "valid-quantifier-predicate-returning-a-numpy-bool",
+        "valid-extracting-an-unhashable-selector",
         "valid-subset-of-a-wide-collection",
         "valid-only-in-a-union-collection",
         "valid-numpy-integer",
