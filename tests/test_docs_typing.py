@@ -7,8 +7,10 @@ Executing the snippets (test_docs_examples.py) cannot catch that, because the co
 Three markers steer this guard, all invisible in the rendered page:
 
 * ``<!-- docs-guard: skip -->``       the block is illustrative and not runnable, so neither guard reads it
-* ``<!-- docs-guard: untyped -->``    the block runs but uses a dynamic assertion (``has_<attr>``), which
-  is deliberately outside the typed surface. It is executed, and excluded from here.
+* ``<!-- docs-guard: untyped -->``    the block runs, and is excluded from here for a reason this guard
+  cannot resolve: a dynamic assertion (``has_<attr>``), which is deliberately outside the typed surface,
+  or a name that only exists above the supported floor. ``ty`` reads ``requires-python``, so a 3.11
+  builtin like ``ExceptionGroup`` is undefined to it even where the example is correct.
 * ``<!-- docs-guard: type-error -->`` the block demonstrates a rejection, so it has to fail the check.
   A counter-example that silently starts passing is how a page's promise rots unnoticed.
 

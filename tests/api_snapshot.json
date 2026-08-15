@@ -444,6 +444,19 @@
    ],
    "returns": "Self"
   },
+  "does_not_contain_error": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "default": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "ex_types",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
   "does_not_contain_key": {
    "kind": "callable",
    "parameters": [
@@ -632,6 +645,24 @@
      "required": false
     }
    ],
+   "returns": "Self"
+  },
+  "error_of": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "ex",
+     "required": true
+    }
+   ],
+   "returns": "Self"
+  },
+  "errors": {
+   "kind": "callable",
+   "parameters": [],
    "returns": "Self"
   },
   "eventually": {

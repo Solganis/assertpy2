@@ -126,8 +126,8 @@ assert_that(load).raises(RuntimeError).when_called_with("x").caused_by(ValueErro
 ```
 
 `raised()` pivots to the exception object, `has_root_cause()` walks the whole chain, and
-`contains_error()` matches inside an `ExceptionGroup` - see
-[Expected exceptions](guides/errors.md#expected-exceptions).
+`contains_error()` matches inside an `ExceptionGroup`, where `errors()` hands back the failures
+themselves - see [Expected exceptions](guides/errors.md#expected-exceptions).
 
 ## Wait for eventual consistency
 

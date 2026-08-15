@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
@@ -8,11 +8,58 @@ from ._engine._require import argument, refuse
 from .errors import _callable_name
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from ._engine._compat import Self
 
 __tracebackhide__ = True
 
 _UNSET: Final = object()  # sentinel: no return value / exception captured yet
+
+
+def _nodes(exc: BaseException) -> Iterator[BaseException]:
+    """Every exception in the tree, groups included, the group itself before its members.
+
+    What `BaseExceptionGroup.subgroup()` matches against, in the order it meets them.
+
+    Iterative, and lazy, for the depth: `subgroup()` is written in C and answers on a group nested three
+    thousand deep, where a recursive walk in Python gives up around five hundred.  Yielding also lets a
+    caller looking for one exception stop at it instead of building the whole tree first.
+    """
+    pending = [exc]
+    while pending:
+        node = pending.pop()
+        yield node
+        if isinstance(node, BaseExceptionGroup):
+            pending.extend(reversed(node.exceptions))
+
+
+def _leaves(exc: BaseException) -> list[BaseException]:
+    """The same walk without the groups: what actually failed, rather than what holds it."""
+    return [node for node in _nodes(exc) if not isinstance(node, BaseExceptionGroup)]
+
+
+def _require_exception_type(ex: object) -> type[BaseException]:
+    """Refuse anything that is not an exception class, in the shape `raises()` already refuses it.
+
+    `isinstance()` and `issubclass()` each report their own argument position and neither names the
+    assertion, and `isinstance(node, str)` does not complain at all: it answers False, so a mistyped
+    argument would read as "the group does not contain <str>" rather than as the mistake it is.
+    """
+    if not (isinstance(ex, type) and issubclass(ex, BaseException)):
+        refuse(ex, "an exception type", subject=argument("exception"))
+    # handed back so the caller keeps the narrowing, the way `_engine._require.require_type` does
+    return ex
+
+
+def _first_of(exc: BaseException, ex: type) -> BaseException | None:
+    """The first exception of type *ex* in the tree, or ``None``.
+
+    The one place the three group assertions ask their question, so they cannot answer it differently.
+    `BaseExceptionGroup.subgroup()` answers the same on a stock group, but it is a method a subclass may
+    override, which would split the verdicts between whichever assertions called it.
+    """
+    return next((node for node in _nodes(exc) if isinstance(node, ex)), None)
 
 
 def _effective_cause(exc: BaseException) -> BaseException | None:
@@ -237,16 +284,138 @@ class ExceptionMixin(_MixinBase):
 
         Returns:
             AssertionBuilder: this instance, to chain further assertions on the group
+
+        Raises:
+            ValueError: if called with no types at all, which nothing could fail
+            TypeError: if given anything but an exception class
         """
-        exc = self._require_raised("contains_error")
-        if not isinstance(exc, BaseExceptionGroup):
-            self.error(f"Expected the raised <{type(exc).__name__}> to be an exception group, but it was not.")
+        if len(ex_types) == 0:
+            raise ValueError("one or more args must be given")
+        for ex in ex_types:
+            _require_exception_type(ex)
+        exc = self._require_group("contains_error")
+        if exc is None:
             return cast("Self", _InertBuilder())
         for ex in ex_types:
-            if exc.subgroup(ex) is None:
+            if _first_of(exc, ex) is None:
                 self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.")
                 return cast("Self", _InertBuilder())
         return self
+
+    def does_not_contain_error(self, *ex_types: type) -> Self:
+        """Asserts the caught exception group holds none of the given types, at any depth.
+
+        The none-of counterpart to [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error]
+        rather than its negation: that one asks for every type given, this one refuses every type given.
+        With several arguments both can fail on the same group, which is what "some but not all" means.
+
+        Examples:
+            Usage:
+
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().does_not_contain_error(KeyError)
+
+        Args:
+            *ex_types: the exception types the group must not contain
+
+        Returns:
+            AssertionBuilder: this instance, to chain further assertions on the group
+
+        Raises:
+            ValueError: if called with no types at all, which nothing could fail
+            TypeError: if given anything but an exception class
+        """
+        if len(ex_types) == 0:
+            raise ValueError("one or more args must be given")
+        for ex in ex_types:
+            _require_exception_type(ex)
+        exc = self._require_group("does_not_contain_error")
+        if exc is None:
+            return cast("Self", _InertBuilder())
+        for ex in ex_types:
+            if _first_of(exc, ex) is not None:
+                self.error(f"Expected the raised exception group to not contain <{ex.__name__}>, but it did.")
+                return cast("Self", _InertBuilder())
+        return self
+
+    def errors(self) -> Self:
+        """Pivots the chain to the list of leaf exceptions in the caught group, nested ones flattened.
+
+        Flattened rather than one level deep, because that is what
+        [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error] already searches: a group
+        holding a group is an implementation detail of whoever raised it, and a suite asking "what
+        failed" means the leaves.  The view this was reached from still holds the group, so
+        [`raised()`][assertpy2.exception.ExceptionMixin.raised] on *that* answers with the whole tree when
+        the shape itself is the point.  It is not offered on the leaves, which are a collection.
+
+        Examples:
+            Usage:
+
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().errors().is_length(2)
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().errors().extracting(
+                    "args"
+                ).contains(("bad id",))
+
+        Returns:
+            AssertionBuilder: a new instance wrapping the leaves as a list, to ask a collection anything
+
+        Raises:
+            TypeError: if no exception was captured
+        """
+        exc = self._require_group("errors")
+        if exc is None:
+            return cast("Self", _InertBuilder())
+        return self.builder(_leaves(exc), self.description, self.kind, logger=self.logger)
+
+    def error_of(self, ex: type) -> Self:
+        """Asserts the caught group holds an exception of type ``ex``, then pivots to that one's message.
+
+        The step [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error] cannot take: after
+        it the chain still holds the *group's* message, so asking what one failure said meant reaching into
+        the tree by hand.
+
+        Both search the same exceptions, groups included, so whatever one finds the other pivots to.  Asking
+        for a group type therefore answers with that group, and for the outermost one that is the message
+        the chain already held.
+
+        Examples:
+            Usage:
+
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().error_of(ValueError).contains("bad id")
+
+        Args:
+            ex: the type to pivot to, the first one found, the group itself before its members
+
+        Returns:
+            AssertionBuilder: a new instance wrapping that exception's message (chain on it, or
+                `raised()` to reach the object itself)
+
+        Raises:
+            TypeError: if given anything but an exception class
+        """
+        _require_exception_type(ex)
+        exc = self._require_group("error_of")
+        if exc is None:
+            return cast("Self", _InertBuilder())
+        found = _first_of(exc, ex)
+        if found is None:
+            self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.")
+            return cast("Self", _InertBuilder())
+        pivoted = self.builder(str(found), self.description, self.kind, logger=self.logger)
+        pivoted._raised_exception = found
+        return pivoted
+
+    def _require_group(self, method: str) -> Any:
+        """The caught exception as a group, or ``None`` after reporting that it was not one.
+
+        Returns ``Any`` rather than the group type: on the 3.10 floor the compat name falls back to an
+        empty tuple, which is a value and not a type, so an annotation naming it is rejected outright.
+        Callers walk `.exceptions` on the result, which is why the check has to happen before they do.
+        """
+        exc = self._require_raised(method)
+        if not isinstance(exc, BaseExceptionGroup):
+            self.error(f"Expected the raised <{type(exc).__name__}> to be an exception group, but it was not.")
+            return None
+        return exc
 
     def _require_raised(self, method: str) -> BaseException:
         if self._raised_exception is _UNSET:

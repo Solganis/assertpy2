@@ -1,11 +1,13 @@
 import logging
-import sys
 from functools import partial
 from io import StringIO
 
 import pytest
 
 from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_assertions
+from tests.group_compat import BaseExceptionGroup as _BaseExceptionGroup
+from tests.group_compat import ExceptionGroup as _ExceptionGroup
+from tests.group_compat import needs_groups
 
 
 def test_expected_exception():
@@ -273,13 +275,12 @@ def _raise_deep_chain():
         raise ValueError("top") from exc
 
 
-# Exception groups are a 3.11+ feature; alias the builtin once and gate the group tests on the version.
-if sys.version_info >= (3, 11):
-    _ExceptionGroup = ExceptionGroup  # noqa: F821  # 3.11+ builtin; TestContainsError is skipped below on 3.10
-
-
 def _raise_group():
     raise _ExceptionGroup("boom", [ValueError("v"), KeyError("k")])
+
+
+def _raise_nested_group():
+    raise _ExceptionGroup("boom", [ValueError("v"), _ExceptionGroup("inner", [TypeError("deep")])])
 
 
 class TestRaisedPivot:
@@ -388,7 +389,7 @@ class TestHasRootCause:
         chain.raised().is_instance_of(KeyError)
 
 
-@pytest.mark.skipif(sys.version_info < (3, 11), reason="ExceptionGroup requires Python 3.11+")
+@needs_groups
 class TestContainsError:
     def test_group_contains_all(self):
         assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().contains_error(ValueError, KeyError)
@@ -411,6 +412,172 @@ class TestContainsError:
     def test_not_a_group_soft_collects(self):
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(_raise_config).raises(_ConfigError).when_called_with().contains_error(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+
+@needs_groups
+class TestGroupPivots:
+    def test_errors_yields_the_leaves(self):
+        # the types, in order: a length alone would hold just as well if the view kept the group and
+        # dropped a leaf, which is the mistake this is here to catch
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        assert_that([type(leaf) for leaf in caught.errors().value]).is_equal_to([ValueError, KeyError])
+
+    def test_errors_flattens_nesting(self):
+        caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
+        # the inner group is walked through rather than handed over, so what comes back is two leaves
+        assert_that([type(leaf) for leaf in caught.errors().value]).is_equal_to([ValueError, TypeError])
+        caught.errors().extracting("args").is_equal_to([("v",), ("deep",)])
+
+    def test_errors_reaches_collection_assertions(self):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        caught.errors().extracting("args").contains(("v",), ("k",))
+
+    def test_errors_on_a_plain_exception_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().errors()
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_error_of_pivots_to_that_message(self):
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(KeyError).contains("k")
+
+    def test_error_of_reaches_into_nesting(self):
+        caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
+        caught.error_of(TypeError).contains("deep")
+
+    def test_error_of_carries_the_object(self):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        caught.error_of(KeyError).raised().is_instance_of(KeyError)
+
+    def test_error_of_missing_type_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(TypeError)
+        assert_that(str(exc_info.value)).contains("to contain <TypeError>")
+
+    def test_error_of_on_a_plain_exception_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().error_of(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_does_not_contain_error_passes(self):
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().does_not_contain_error(TypeError)
+
+    def test_does_not_contain_error_present_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().does_not_contain_error(ValueError)
+        assert_that(str(exc_info.value)).contains("to not contain <ValueError>")
+
+    def test_does_not_contain_error_on_a_plain_exception_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().does_not_contain_error(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_soft_collects_every_group_failure(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(TypeError)
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().does_not_contain_error(ValueError)
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().errors()
+        collected = str(exc_info.value)
+        assert_that(collected).contains("to contain <TypeError>", "to not contain <ValueError>")
+        assert_that(collected).contains("to be an exception group")
+
+    def test_the_leaves_view_does_not_carry_the_exception(self):
+        # `_ListAssertion` declares no `raised()`, so the runtime must not offer one either: a path the
+        # typed surface refuses is the hole this library keeps closing, and it closes both ways
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        with pytest.raises(TypeError, match="no exception captured"):
+            caught.errors().raised()
+
+    def test_a_pivot_without_a_caught_exception_names_itself(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(lambda: 1).does_not_raise(ValueError).when_called_with().errors()
+        assert_that(str(exc_info.value)).contains("errors() is only valid after")
+
+    def test_an_empty_call_is_refused_by_both_forms(self):
+        # the rest of the contains family refuses a call with nothing to look for, and these two used
+        # to pass on it: an assertion that asks nothing cannot fail, which is the failure mode itself
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        with pytest.raises(ValueError, match="one or more args"):
+            caught.contains_error()
+        with pytest.raises(ValueError, match="one or more args"):
+            caught.does_not_contain_error()
+
+    def test_a_deeply_nested_group_is_still_answered(self):
+        # `subgroup()` is written in C and walks a group thousands deep; the walk that replaced it has to
+        # hold the same ground, and a recursive one gave up around five hundred
+        group = _ExceptionGroup("leaf", [ValueError("v")])
+        for _ in range(3000):
+            group = _ExceptionGroup("outer", [group])
+
+        def raise_deep():
+            raise group
+
+        caught = assert_that(raise_deep).raises(_ExceptionGroup).when_called_with()
+        caught.contains_error(ValueError)
+        caught.error_of(ValueError).contains("v")
+        caught.errors().is_length(1)
+
+    def test_a_group_that_lies_about_its_own_members_is_answered_the_same_way(self):
+        # `subgroup()` is a method a subclass can override, and two of the three used to trust it while
+        # `error_of` walked the tree. One shared walk is what keeps the verdicts from splitting.
+        class _LyingGroup(_ExceptionGroup):
+            def subgroup(self, condition):
+                return None
+
+        def raise_lying():
+            raise _LyingGroup("boom", [ValueError("v")])
+
+        caught = assert_that(raise_lying).raises(_LyingGroup).when_called_with()
+        caught.contains_error(ValueError)
+        caught.error_of(ValueError).contains("v")
+        with pytest.raises(AssertionError):
+            caught.does_not_contain_error(ValueError)
+
+    @pytest.mark.parametrize("wrong", [str, 42, ValueError("instance"), (TypeError, KeyError)])
+    def test_anything_but_an_exception_type_is_refused(self, wrong):
+        # `isinstance(node, str)` answers False rather than complaining, so without this the mistake
+        # would read as a verdict about the group. A tuple is refused too: the declared type is one class
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        for call in (caught.contains_error, caught.does_not_contain_error, caught.error_of):
+            with pytest.raises(TypeError, match="must be an exception type"):
+                call(wrong)
+
+    def test_a_group_type_reaches_the_group_itself_from_every_form(self):
+        # `subgroup()` matches group nodes as well as leaves, so `error_of` walks the same nodes: the
+        # three used to disagree here, with `contains_error` passing and `error_of` reporting a miss
+        caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
+        caught.contains_error(_ExceptionGroup)
+        caught.error_of(_ExceptionGroup).contains("boom")  # str() of a group adds its sub-exception count
+        with pytest.raises(AssertionError):
+            caught.does_not_contain_error(_ExceptionGroup)
+
+    def test_the_first_leaf_of_a_type_is_the_one_pivoted_to(self):
+        first, second = ValueError("first"), ValueError("second")
+
+        def raise_two():
+            raise _ExceptionGroup("boom", [_ExceptionGroup("inner", [first]), second])
+
+        caught = assert_that(raise_two).raises(_ExceptionGroup).when_called_with()
+        # depth-first, so the nested one comes before the sibling that follows its group
+        assert caught.error_of(ValueError).raised().value is first
+
+    def test_a_bare_base_exception_is_a_leaf_like_any_other(self):
+        # `errors()` is typed `list[BaseException]` rather than `list[Exception]`, which is what a
+        # cancelled task group hands over: KeyboardInterrupt and SystemExit are not Exceptions
+        def raise_base():
+            raise _BaseExceptionGroup("cancelled", [KeyboardInterrupt(), ValueError("v")])
+
+        caught = assert_that(raise_base).raises(_BaseExceptionGroup).when_called_with()
+        caught.errors().is_length(2)
+        caught.contains_error(KeyboardInterrupt)
+        caught.error_of(KeyboardInterrupt).raised().is_instance_of(KeyboardInterrupt)
+
+    def test_soft_keeps_chaining_after_a_pivot_on_a_plain_exception(self):
+        # under soft assertions `error()` collects instead of raising, so each pivot has to hand back
+        # something chainable: the inert builder, which records the first failure and swallows the rest
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().error_of(ValueError).contains("nope")
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().does_not_contain_error(ValueError)
         assert_that(str(exc_info.value)).contains("to be an exception group")
 
 

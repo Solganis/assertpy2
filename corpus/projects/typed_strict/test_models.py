@@ -7,6 +7,7 @@ typed codebase cannot adopt, and that is the audience this library sells its ove
 from __future__ import annotations
 
 import dataclasses
+import sys
 from collections.abc import Sequence  # noqa: TC003  # consumer code, written plainly on purpose
 
 import attrs
@@ -109,3 +110,24 @@ def test_subset_leaves_the_chain_on_the_same_view() -> None:
     kept: list[str] = assert_that(names).is_subset_of(["alice", "bob", "carol"]).filtered_on(lambda name: True).value
     assert_that(kept).is_equal_to(names)
     assert_that(orders()[0].items).is_subset_of({"book", "pen"}).is_length(2)
+
+
+# Exception groups are 3.11+, and the corpus runs the 3.10 floor too. A module-level version guard is
+# what a consumer would write: mypy and pyright both read it, so the block is checked where it applies
+# and invisible where the builtin does not exist.
+if sys.version_info >= (3, 11):
+
+    def failing_tasks() -> None:
+        raise ExceptionGroup(  # noqa: F821  # ruff reads the repo floor of 3.10, where it is not a builtin
+            "2 tasks failed", [ValueError("bad id"), KeyError("missing")]
+        )
+
+    def test_a_group_answers_through_the_typed_surface() -> None:
+        caught = assert_that(failing_tasks).raises(ExceptionGroup).when_called_with()  # noqa: F821  # as above
+        caught.contains_error(ValueError, KeyError).does_not_contain_error(TimeoutError)
+        leaves: list[BaseException] = caught.errors().value
+        assert_that(leaves).is_length(2)
+        # the pivot hands back the leaf's message, and the exception itself stays one call away
+        message: str = caught.error_of(ValueError).value
+        assert_that(message).contains("bad id")
+        caught.error_of(ValueError).raised().is_instance_of(ValueError)

@@ -233,7 +233,7 @@ is open to anything else you build.
 
 - [**Soft assertions**](https://solganis.github.io/assertpy2/guides/testing/#soft-assertions): thread-safe and async-safe via `contextvars`, each failure reported with its `file:line`. Group with `sa.group()` or `assert_all()`.
 - [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace on timeout.
-- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), match `ExceptionGroup` (`contains_error()`), or pivot to the object (`raised()`).
+- [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), search an `ExceptionGroup` (`contains_error()`, `errors()`, `error_of()`), or pivot to the object (`raised()`).
 - [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected` and `.diff`, and the diff renders into the message, so it shows off pytest too.
 - [**Assertions as values**](https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting): `check()` runs the next assertion for its verdict instead of raising, handing back an `AssertionOutcome`.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings.

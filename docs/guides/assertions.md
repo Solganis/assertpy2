@@ -813,5 +813,6 @@ assert_that(deprecated_func).warns(DeprecationWarning).when_called_with("foo")
 See [Errors & Reporting](errors.md) for the full set:
 
 - [expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings)
-- the cause chain (`caused_by()`, `has_root_cause()`) and `ExceptionGroup` matching (`contains_error()`)
+- the cause chain (`caused_by()`, `has_root_cause()`) and exception groups (`contains_error()`,
+  `does_not_contain_error()`, `errors()`, `error_of()`)
 - pivoting to the raised exception (`raised()`) or the call's return value (`returned()`).

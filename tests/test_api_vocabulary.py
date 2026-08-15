@@ -56,6 +56,8 @@ _BARE_NAMES = frozenset(
         "flat_mapped",
         "single",
         "returned",
+        "errors",
+        "error_of",
         # entry points and terminals, not assertions
         "builder",
         "check",
