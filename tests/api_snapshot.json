@@ -5,12 +5,14 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -23,12 +25,14 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -41,6 +45,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
@@ -53,6 +58,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": true
@@ -65,36 +71,42 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
     },
     {
      "annotation": null,
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "kind",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "logger",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "origin",
      "required": false
@@ -107,6 +119,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "ex",
      "required": true
@@ -124,30 +137,35 @@
    "parameters": [
     {
      "annotation": "dict[str, Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "spec",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "method",
      "required": true
     },
     {
      "annotation": "str | int | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "status",
      "required": false
     },
     {
      "annotation": "str",
+     "default": "'application/json'",
      "kind": "KEYWORD_ONLY",
      "name": "content_type",
      "required": false
@@ -160,6 +178,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -172,6 +191,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -184,6 +204,7 @@
    "parameters": [
     {
      "annotation": "bytes",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "sub",
      "required": true
@@ -201,12 +222,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "args",
      "required": false
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
      "required": false
@@ -219,6 +242,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "ex_types",
      "required": false
@@ -231,6 +255,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -243,6 +268,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -255,6 +281,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -267,6 +294,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -279,6 +307,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "keys",
      "required": false
@@ -291,6 +320,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -303,6 +333,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -315,6 +346,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -327,6 +359,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -339,6 +372,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "values",
      "required": false
@@ -351,6 +385,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": "'utf-8'",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "encoding",
      "required": false
@@ -363,6 +398,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": true
@@ -375,6 +411,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -392,12 +429,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "args",
      "required": false
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
      "required": false
@@ -410,6 +449,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "keys",
      "required": false
@@ -422,6 +462,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "values",
      "required": false
@@ -439,6 +480,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": true
@@ -451,6 +493,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
      "required": true
@@ -463,6 +506,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "ex",
      "required": true
@@ -475,6 +519,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
+     "default": "<type>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -487,12 +532,14 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -505,6 +552,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "index",
      "required": true
@@ -517,6 +565,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "suffix",
      "required": true
@@ -529,6 +578,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "suffix",
      "required": true
@@ -541,36 +591,42 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": true
     },
     {
      "annotation": null,
+     "default": "<_Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
      "annotation": null,
+     "default": "<_Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     },
     {
      "annotation": null,
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "suppress_context",
      "required": false
@@ -583,24 +639,28 @@
    "parameters": [
     {
      "annotation": "float",
+     "default": "5.0",
      "kind": "KEYWORD_ONLY",
      "name": "timeout",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "0.5",
      "kind": "KEYWORD_ONLY",
      "name": "interval",
      "required": false
     },
     {
      "annotation": "type[Exception] | tuple[type[Exception], ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "True",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
@@ -613,24 +673,28 @@
    "parameters": [
     {
      "annotation": "float",
+     "default": "5.0",
      "kind": "KEYWORD_ONLY",
      "name": "timeout",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "0.5",
      "kind": "KEYWORD_ONLY",
      "name": "interval",
      "required": false
     },
     {
      "annotation": "type[Exception] | tuple[type[Exception], ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "True",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
@@ -648,12 +712,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "names",
      "required": false
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
      "required": false
@@ -666,12 +732,14 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
      "required": true
     },
     {
      "annotation": "int | str",
+     "default": "0",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "group",
      "required": false
@@ -684,6 +752,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[[Any], bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "predicate",
      "required": true
@@ -701,6 +770,7 @@
    "parameters": [
     {
      "annotation": "Callable[[Any], Iterable[Any]]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
@@ -713,12 +783,14 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "index",
      "required": true
     },
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
@@ -731,6 +803,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": true
@@ -743,6 +816,7 @@
    "parameters": [
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -755,6 +829,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "ex",
      "required": true
@@ -767,6 +842,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -779,12 +855,14 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "low",
      "required": true
     },
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "high",
      "required": true
@@ -797,6 +875,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "size",
      "required": true
@@ -809,6 +888,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "size",
      "required": true
@@ -821,6 +901,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -833,6 +914,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -855,30 +937,35 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
     },
     {
      "annotation": "float",
+     "default": "1e-05",
      "kind": "KEYWORD_ONLY",
      "name": "rtol",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "1e-08",
      "kind": "KEYWORD_ONLY",
      "name": "atol",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "equal_nan",
      "required": false
     },
     {
      "annotation": "Any",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "options",
      "required": false
@@ -891,12 +978,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
     },
     {
      "annotation": "Any",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "options",
      "required": false
@@ -909,6 +998,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -921,6 +1011,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -933,12 +1024,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "low",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "high",
      "required": true
@@ -956,6 +1049,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "parent",
      "required": true
@@ -968,12 +1062,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "tolerance",
      "required": true
@@ -996,6 +1092,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "divisor",
      "required": true
@@ -1013,12 +1110,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
      "required": false
@@ -1031,6 +1130,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1043,6 +1143,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1055,6 +1156,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1067,6 +1169,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1079,6 +1182,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1111,12 +1215,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
     },
     {
      "annotation": "Any",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "options",
      "required": false
@@ -1129,6 +1235,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1141,6 +1248,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1153,6 +1261,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected_hex",
      "required": true
@@ -1165,6 +1274,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -1182,6 +1292,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "some_class",
      "required": true
@@ -1194,6 +1305,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "some_classes",
      "required": false
@@ -1211,6 +1323,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "length",
      "required": true
@@ -1223,12 +1336,14 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "low",
      "required": true
     },
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "high",
      "required": true
@@ -1241,6 +1356,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1253,6 +1369,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1270,6 +1387,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "filename",
      "required": true
@@ -1297,12 +1415,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "low",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "high",
      "required": true
@@ -1320,12 +1440,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "tolerance",
      "required": true
@@ -1343,6 +1465,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1355,6 +1478,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -1387,6 +1511,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1419,6 +1544,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -1431,18 +1557,21 @@
    "parameters": [
     {
      "annotation": null,
+     "default": "<function>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "key",
      "required": false
     },
     {
      "annotation": null,
+     "default": "False",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "reverse",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -1455,6 +1584,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "some_class",
      "required": true
@@ -1467,12 +1597,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "supersets",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -1490,6 +1622,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "some_type",
      "required": true
@@ -1512,6 +1645,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "encoding",
      "required": true
@@ -1549,6 +1683,7 @@
    "parameters": [
     {
      "annotation": "Callable[[Any], Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
@@ -1561,6 +1696,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
      "required": true
@@ -1573,12 +1709,14 @@
    "parameters": [
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "id",
      "required": false
     },
     {
      "annotation": "str",
+     "default": "'__snapshots'",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": false
@@ -1591,36 +1729,42 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": "<object>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "ignore",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "include",
      "required": false
     },
     {
      "annotation": "float | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "tolerance",
      "required": false
     },
     {
      "annotation": "dict[object, Callable[..., bool]] | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "comparators",
      "required": false
     },
     {
      "annotation": "dict[object, object] | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "placeholders",
      "required": false
@@ -1633,6 +1777,7 @@
    "parameters": [
     {
      "annotation": "dict[str, Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "schema",
      "required": true
@@ -1645,6 +1790,7 @@
    "parameters": [
     {
      "annotation": "str | Path",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": true
@@ -1657,6 +1803,7 @@
    "parameters": [
     {
      "annotation": "dict[Any, Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "spec",
      "required": true
@@ -1669,6 +1816,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
      "required": true
@@ -1681,6 +1829,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
@@ -1703,6 +1852,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "ex",
      "required": true
@@ -1720,6 +1870,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
@@ -1732,6 +1883,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "matchers",
      "required": false
@@ -1744,6 +1896,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any] | Callable[..., bool]",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "matchers",
      "required": false
@@ -1761,42 +1914,49 @@
    "parameters": [
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "id",
      "required": false
     },
     {
      "annotation": "str",
+     "default": "'__snapshots'",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "path",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "ignore",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "include",
      "required": false
     },
     {
      "annotation": "float | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "tolerance",
      "required": false
     },
     {
      "annotation": "dict | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "comparators",
      "required": false
     },
     {
      "annotation": "dict | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "placeholders",
      "required": false
@@ -1809,6 +1969,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",
      "required": true
@@ -1821,6 +1982,7 @@
    "parameters": [
     {
      "annotation": "bytes",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",
      "required": true
@@ -1833,6 +1995,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",
      "required": true
@@ -1850,6 +2013,7 @@
    "parameters": [
     {
      "annotation": "type[Warning]",
+     "default": "<type>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "warning",
      "required": false
@@ -1862,12 +2026,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "some_args",
      "required": false
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "some_kwargs",
      "required": false
@@ -1880,18 +2046,21 @@
    "parameters": [
     {
      "annotation": "Iterable[object]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
      "annotation": "Callable[..., bool]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "predicate",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "allow_empty",
      "required": false
@@ -1900,6 +2069,22 @@
    "returns": "Self"
   }
  },
+ "entry_overloads": [
+  "(val: str, description: str) -> _StringAssertion",
+  "(val: bool, description: str) -> _BoolAssertion",
+  "(val: int, description: str) -> _NumericAssertion[int]",
+  "(val: float, description: str) -> _NumericAssertion[float]",
+  "(val: complex, description: str) -> _ComplexAssertion",
+  "(val: dict[_K, _V], description: str) -> _DictAssertion[_K, _V]",
+  "(val: list[_E] | tuple[_E, ...], description: str) -> _IterableAssertion[_E]",
+  "(val: set[_E] | frozenset[_E], description: str) -> _IterableAssertion[_E]",
+  "(val: datetime.date, description: str) -> _DateAssertion",
+  "(val: pathlib.Path, description: str) -> _PathAssertion",
+  "(val: bytes, description: str) -> _BytesAssertion[bytes]",
+  "(val: bytearray, description: str) -> _BytesAssertion[bytearray]",
+  "(val: Callable[..., object], description: str) -> _CallableAssertion",
+  "(val: _T, description: str) -> AssertionBuilder[_T]"
+ ],
  "exported": {
   "AssertionFailure": {
    "bases": [
@@ -1907,49 +2092,58 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "message",
      "required": true
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
     },
     {
      "annotation": "DiffResult | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
      "required": false
     },
     {
      "annotation": "PollTrace | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     },
     {
      "annotation": "tuple[AssertionOutcome, ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "failures",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": null
   },
   "AssertionOutcome": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "passed",
     "message",
@@ -1962,168 +2156,183 @@
     "location",
     "hint"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "passed",
      "required": false
     },
     {
      "annotation": "str",
+     "default": "''",
      "kind": "KEYWORD_ONLY",
      "name": "message",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "actual_provided",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "<_Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
     },
     {
      "annotation": "DiffResult | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
      "required": false
     },
     {
      "annotation": "PollTrace | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     },
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "group",
      "required": false
     },
     {
      "annotation": "tuple[str, int] | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "location",
      "required": false
     },
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "hint",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "AsyncAssertionBuilder": {
    "bases": [],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "Callable",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
     },
     {
      "annotation": "Callable",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "builder_func",
      "required": true
     },
     {
      "annotation": "str",
+     "default": "''",
      "kind": "KEYWORD_ONLY",
      "name": "description",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "5.0",
      "kind": "KEYWORD_ONLY",
      "name": "timeout",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "0.5",
      "kind": "KEYWORD_ONLY",
      "name": "interval",
      "required": false
     },
     {
      "annotation": "tuple[type[Exception], ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
     },
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "kind",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "logger",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "True",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": null
   },
   "BaseMatcher": {
    "bases": [],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "CheckBuilder": {
    "bases": [],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "target",
      "required": true
     },
     {
      "annotation": "AssertionBuilder",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "builder",
      "required": true
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "DanglingAssertionWarning": {
    "bases": [
@@ -2132,25 +2341,15 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "DiffEntry": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "path",
     "actual",
@@ -2158,137 +2357,161 @@
     "absent",
     "steps"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "path",
      "required": true
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
     },
     {
      "annotation": "Literal['actual', 'expected'] | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "absent",
      "required": false
     },
     {
      "annotation": "tuple[Step, ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "steps",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "DiffResult": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "kind",
     "entries"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "kind",
      "required": true
     },
     {
      "annotation": "list[DiffEntry]",
+     "default": "<_HAS_DEFAULT_FACTORY_CLASS>",
      "kind": "KEYWORD_ONLY",
      "name": "entries",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "MatchResult": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "matched",
     "description",
     "mismatch",
     "diff"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "bool",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "matched",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "description",
      "required": true
     },
     {
      "annotation": "str",
+     "default": "''",
      "kind": "KEYWORD_ONLY",
      "name": "mismatch",
      "required": false
     },
     {
      "annotation": "DiffResult | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "Matcher": {
    "bases": [
     "Protocol",
     "Generic"
    ],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "args",
      "required": false
     },
     {
      "annotation": null,
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": null
   },
   "NegatedBuilder": {
    "bases": [
     "Generic"
    ],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "AssertionBuilder",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "builder",
      "required": true
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "PollSample": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "elapsed",
     "outcome",
@@ -2296,42 +2519,49 @@
     "detail",
     "repeats"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "float",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "elapsed",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "outcome",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "value",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "detail",
      "required": true
     },
     {
      "annotation": "int",
+     "default": "1",
      "kind": "KEYWORD_ONLY",
      "name": "repeats",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "PollTrace": {
    "bases": [],
+   "construction": "own",
    "fields": [
     "samples",
     "total_polls",
@@ -2339,39 +2569,45 @@
     "elapsed",
     "summary"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "list[PollSample]",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "samples",
      "required": true
     },
     {
      "annotation": "int",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "total_polls",
      "required": true
     },
     {
      "annotation": "int",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "dropped",
      "required": true
     },
     {
      "annotation": "float",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "elapsed",
      "required": true
     },
     {
      "annotation": "str",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "summary",
      "required": true
     }
    ],
-   "kind": "class"
+   "returns": "None"
   },
   "SnapshotCreatedWarning": {
    "bases": [
@@ -2380,22 +2616,11 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "SnapshotKeyReusedWarning": {
    "bases": [
@@ -2404,22 +2629,11 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "SnapshotUpdatedWarning": {
    "bases": [
@@ -2428,139 +2642,141 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "SoftAssertionCollector": {
    "bases": [],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "Step": {
    "bases": [
     "tuple"
    ],
+   "construction": "own",
    "fields": [
     "kind",
     "value",
     "side"
    ],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
+     "annotation": "ForwardRef(\"Literal['key', 'index', 'attr', 'item', 'line']\")",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "kind",
+     "required": true
     },
     {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
+     "annotation": "ForwardRef('object')",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "value",
+     "required": true
+    },
+    {
+     "annotation": "ForwardRef(\"Literal['actual', 'expected'] | None\")",
+     "default": "None",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "side",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": null
   },
   "SyncAssertionBuilder": {
    "bases": [],
+   "construction": "own",
    "fields": [],
-   "init": [
+   "kind": "class",
+   "parameters": [
     {
      "annotation": "Callable",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
     },
     {
      "annotation": "Callable",
+     "default": null,
      "kind": "KEYWORD_ONLY",
      "name": "builder_func",
      "required": true
     },
     {
      "annotation": "str",
+     "default": "''",
      "kind": "KEYWORD_ONLY",
      "name": "description",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "5.0",
      "kind": "KEYWORD_ONLY",
      "name": "timeout",
      "required": false
     },
     {
      "annotation": "float",
+     "default": "0.5",
      "kind": "KEYWORD_ONLY",
      "name": "interval",
      "required": false
     },
     {
      "annotation": "tuple[type[Exception], ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "ignoring",
      "required": false
     },
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "kind",
      "required": false
     },
     {
      "annotation": "object",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "logger",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "True",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     },
     {
      "annotation": "tuple[_Step, ...]",
+     "default": "()",
      "kind": "KEYWORD_ONLY",
      "name": "steps",
      "required": false
     },
     {
      "annotation": "Any",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "last",
      "required": false
     }
    ],
-   "kind": "class"
+   "returns": null
   },
   "VacuousAssertionWarning": {
    "bases": [
@@ -2569,61 +2785,40 @@
     "Exception",
     "BaseException"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "VAR_POSITIONAL",
-     "name": "args",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "VAR_KEYWORD",
-     "name": "kwargs",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
   },
   "WarningLoggingAdapter": {
    "bases": [
     "LoggerAdapter"
    ],
+   "construction": "inherited",
    "fields": [],
-   "init": [
-    {
-     "annotation": null,
-     "kind": "POSITIONAL_OR_KEYWORD",
-     "name": "logger",
-     "required": true
-    },
-    {
-     "annotation": null,
-     "kind": "POSITIONAL_OR_KEYWORD",
-     "name": "extra",
-     "required": false
-    },
-    {
-     "annotation": null,
-     "kind": "POSITIONAL_OR_KEYWORD",
-     "name": "merge_extra",
-     "required": false
-    }
-   ],
-   "kind": "class"
+   "kind": "class",
+   "parameters": [],
+   "returns": null
+  },
+  "__version__": {
+   "kind": "str",
+   "parameters": [],
+   "returns": null
   },
   "add_extension": {
    "kind": "callable",
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "override",
      "required": false
@@ -2636,6 +2831,7 @@
    "parameters": [
     {
      "annotation": "Callable[[], object]",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "callables",
      "required": false
@@ -2648,30 +2844,35 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
     },
     {
      "annotation": "type[_U]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "model",
      "required": true
     },
     {
      "annotation": "str",
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "exact",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "each",
      "required": false
@@ -2684,12 +2885,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
     },
     {
      "annotation": null,
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
@@ -2702,18 +2905,21 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
     },
     {
      "annotation": null,
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
     },
     {
      "annotation": null,
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "logger",
      "required": false
@@ -2731,12 +2937,14 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "file",
      "required": true
     },
     {
      "annotation": null,
+     "default": "'utf-8'",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "encoding",
      "required": false
@@ -2749,6 +2957,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": false
@@ -2756,17 +2965,24 @@
    ],
    "returns": null
   },
+  "match": {
+   "kind": "_MatchNamespace",
+   "parameters": [],
+   "returns": null
+  },
   "register_matcher": {
    "kind": "callable",
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "name",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "override",
      "required": false
@@ -2779,24 +2995,28 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "cls",
      "required": true
     },
     {
      "annotation": "Callable[[Any], object]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "encode",
      "required": true
     },
     {
      "annotation": "Callable[[Any], object]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "decode",
      "required": true
     },
     {
      "annotation": "str | None",
+     "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "tag",
      "required": false
@@ -2809,6 +3029,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
@@ -2826,6 +3047,7 @@
    "parameters": [
     {
      "annotation": null,
+     "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": false
@@ -2838,6 +3060,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "name",
      "required": true
@@ -2893,9 +3116,9 @@
   "trace"
  ],
  "matcher_protocol": [
-  "matches",
   "describe",
-  "describe_mismatch"
+  "describe_mismatch",
+  "matches"
  ],
  "matchers": {
   "all_of": {
@@ -2903,6 +3126,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any]",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "matchers",
      "required": false
@@ -2915,6 +3139,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any]",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "matchers",
      "required": false
@@ -2927,12 +3152,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "low",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "high",
      "required": true
@@ -2945,12 +3172,14 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "tolerance",
      "required": true
@@ -2963,6 +3192,7 @@
    "parameters": [
     {
      "annotation": "_Item",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -2975,6 +3205,7 @@
    "parameters": [
     {
      "annotation": "_Item",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "items",
      "required": false
@@ -2987,6 +3218,7 @@
    "parameters": [
     {
      "annotation": "str | bytes",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "substring",
      "required": true
@@ -2999,6 +3231,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
@@ -3011,6 +3244,7 @@
    "parameters": [
     {
      "annotation": "str | bytes",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "suffix",
      "required": true
@@ -3023,18 +3257,21 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": true
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "strict_types",
      "required": false
     },
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_KEYWORD",
      "name": "options",
      "required": false
@@ -3047,6 +3284,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
@@ -3059,6 +3297,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
@@ -3071,6 +3310,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "length",
      "required": true
@@ -3083,12 +3323,14 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "name",
      "required": true
     },
     {
      "annotation": "Matcher | None",
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": false
@@ -3106,6 +3348,7 @@
    "parameters": [
     {
      "annotation": "datetime",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -3118,6 +3361,7 @@
    "parameters": [
     {
      "annotation": "datetime",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
@@ -3135,6 +3379,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "divisor",
      "required": true
@@ -3162,6 +3407,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "values",
      "required": false
@@ -3174,6 +3420,7 @@
    "parameters": [
     {
      "annotation": "ClassInfo",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected_type",
      "required": true
@@ -3186,6 +3433,7 @@
    "parameters": [
     {
      "annotation": "int",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "length",
      "required": true
@@ -3223,6 +3471,7 @@
    "parameters": [
     {
      "annotation": "float | timedelta",
+     "default": "2.0",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "delta",
      "required": false
@@ -3245,12 +3494,14 @@
    "parameters": [
     {
      "annotation": "Callable[[Any], Any] | None",
+     "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "key",
      "required": false
     },
     {
      "annotation": "bool",
+     "default": "False",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "reverse",
      "required": false
@@ -3263,6 +3514,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "superset",
      "required": false
@@ -3280,6 +3532,7 @@
    "parameters": [
     {
      "annotation": "type",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected_type",
      "required": true
@@ -3302,6 +3555,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
@@ -3314,6 +3568,7 @@
    "parameters": [
     {
      "annotation": "object",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
@@ -3326,6 +3581,7 @@
    "parameters": [
     {
      "annotation": "str",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
      "required": true
@@ -3338,6 +3594,7 @@
    "parameters": [
     {
      "annotation": "Matcher[Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
      "required": true
@@ -3350,6 +3607,7 @@
    "parameters": [
     {
      "annotation": "str | bytes",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",
      "required": true
@@ -3362,6 +3620,7 @@
    "parameters": [
     {
      "annotation": "dict[Any, Any]",
+     "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "spec",
      "required": true
