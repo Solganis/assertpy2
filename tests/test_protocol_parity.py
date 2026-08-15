@@ -62,6 +62,59 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     }
 )
 
+# Which protocol carries which capability, written by hand, and checked for *equality* rather than for
+# containment.  One direction catches a carrier quietly dropping a base: removing `_FilesystemAssertion`
+# from the string leaves exactly nine assertions unreachable for every `str` a caller holds, and no other
+# guard notices, because the reverse check maps `FileMixin` to the path protocol alone.  The other
+# direction catches the opposite mistake, which is just as quiet: giving a byte string the filesystem
+# assertions offers `exists()` on a value that has no path, and a checker would then bless it.
+# The protocols that are a narrowed view of one kind of value, as `assert_that` returns them.  Kept
+# beside the capability register so the two together account for every protocol in the file.
+_VALUE_VIEWS: frozenset[str] = frozenset(
+    {
+        "_CoreAssertion",
+        "_StringAssertion",
+        "_NumericAssertion",
+        "_ComplexAssertion",
+        "_BoolAssertion",
+        "_IterableAssertion",
+        "_DictAssertion",
+        "_DateAssertion",
+        "_PathAssertion",
+        "_BytesAssertion",
+        "_CallableAssertion",
+        "_InvokedAssertion",
+    }
+)
+
+# `_InvokedAssertion` appears wherever `_StringAssertion` does, because the invoked view inherits the
+# string protocol whole: what a raised exception hands back is its message.  That is inherited, not
+# chosen, and it includes `_FilesystemAssertion`, which offers `exists()` on the text of an exception.
+# The edge predates the capability protocols and is measured as such: the same call type-checks at the
+# revision before them.  Writing the register down is what made it visible, and it stays here until the
+# invoked view is narrowed deliberately, which is a change to what callers can type rather than to what
+# they can run.
+_CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
+    "_SizedAssertion": (
+        "_StringAssertion",
+        "_InvokedAssertion",
+        "_IterableAssertion",
+        "_DictAssertion",
+        "_BytesAssertion",
+    ),
+    "_FilesystemAssertion": ("_StringAssertion", "_InvokedAssertion", "_PathAssertion"),
+    "_RealNumberAssertion": ("_NumericAssertion", "_BoolAssertion"),
+    "_ZeroAssertion": ("_NumericAssertion", "_BoolAssertion", "_ComplexAssertion"),
+    "_StructureAssertion": ("_IterableAssertion", "_DictAssertion"),
+    "_RepeatableAssertion": ("_StringAssertion", "_InvokedAssertion", "_IterableAssertion"),
+    "_MembershipAssertion": (
+        "_StringAssertion",
+        "_InvokedAssertion",
+        "_DictAssertion",
+        "_BytesAssertion",
+    ),
+}
+
 # Where a protocol deliberately redeclares what it inherits in order to narrow it.  The pair of
 # overloads has to be repeated whole, so its unchanged half looks like a copy while the other half is
 # the entire point: `Matcher[str]` and `Matcher[_N]` instead of the core's `Matcher`.
@@ -100,6 +153,10 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
 # ``has_*`` assertions take, and it has no Protocol by construction.
 _UNTYPED: frozenset[str] = frozenset({"is_array_equal", "is_array_close_to", "is_frame_equal"})
 
+# The bases that carry no assertions and so contribute no edge to the inheritance graph.  Written out
+# because everything not on this list has to be either a protocol of this file or an error.
+_NOT_A_PROTOCOL_BASE: frozenset[str] = frozenset({"Protocol", "Generic"})
+
 
 def _base_name(base: ast.expr) -> str | None:
     """The name of a protocol base, whether it is written plain or parameterised.
@@ -107,10 +164,22 @@ def _base_name(base: ast.expr) -> str | None:
     `_RepeatableAssertion[str]` is a `Subscript`, not a `Name`, and reading only names made this walk
     quietly skip an inherited capability: the reverse check then reported four methods as declared
     nowhere while a caller could reach all four.
+
+    Anything else is refused out loud rather than skipped.  A base written `other.SomeAssertion` is an
+    `ast.Attribute`, and returning ``None`` for it would erase an inheritance edge from the graph while
+    every check in this file stayed green: the whole point here is that a lost edge is loud.
     """
     if isinstance(base, ast.Subscript):
         base = base.value
-    return base.id if isinstance(base, ast.Name) and base.id.endswith("Assertion") else None
+    if isinstance(base, ast.Name):
+        if base.id in _NOT_A_PROTOCOL_BASE:
+            return None
+        if base.id.endswith("Assertion"):
+            return base.id
+    raise AssertionError(
+        f"unrecognised base {ast.unparse(base)!r} in the typed surface: this walk resolves plain names "
+        "only, so either name it locally or teach _base_name how to reach it"
+    )
 
 
 def _protocol_classes():
@@ -125,6 +194,14 @@ def _protocol_classes():
 
 
 _PROTOCOLS = _protocol_classes()
+
+
+# Union spellings this file refuses to read.  Six rounds of review established that following what a
+# name means at a point in a module cannot be done from the syntax alone: `setattr`, `__dict__`, `exec`
+# and a conditional import all rebind without an assignment an `ast` walk can see.  The typed surface
+# writes every union with `|` already, so the cheap rule is to require it, and to canonicalise that one
+# form properly rather than approximate three.
+_LEGACY_UNIONS: tuple[str, str] = ("Optional", "Union")
 
 
 def _visible(protocol: str) -> set[str]:
@@ -185,6 +262,39 @@ def _declarations_of(protocol: str) -> dict[str, list]:
 
 
 _CASE_IDS = [f"{protocol}.{method.name}" for protocol, method in _CASES]
+
+
+def _canonical(annotation) -> str:
+    """An annotation as text, with a union folded into one form.
+
+    `A | B` and `B | A` are one promise written two ways, nesting makes no difference, and a member
+    repeated is still that member.  Without folding them, moving a copy between protocols and reordering
+    its union would slip past the duplication gate while promising exactly the same thing.
+
+    Only the `|` spelling is folded, and that is not an approximation: a separate check refuses
+    `Optional` and `Union` in this file outright, so there is no second spelling to miss.  Everything
+    outside a union is compared as written, which is the honest limit: an alias and the type it names
+    read as different here, and so do `int` and a `TypeVar` bound to it.
+    """
+    if annotation is None:
+        return "?"
+    members = _union_members(annotation)
+    if members is None:
+        return ast.unparse(annotation)
+    return " | ".join(sorted(set(members)))
+
+
+def _members_of(annotation) -> list[str]:
+    """One side of a union, itself flattened when it is a union again."""
+    nested = _union_members(annotation)
+    return nested if nested is not None else [ast.unparse(annotation)]
+
+
+def _union_members(annotation) -> list[str] | None:
+    """The members of a `|` union, flattened, or ``None`` when the annotation is not one."""
+    if isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+        return _members_of(annotation.left) + _members_of(annotation.right)
+    return None
 
 
 def _is_overload_declaration(method_def) -> bool:
@@ -302,9 +412,10 @@ class TestTheProtocolsStayComposed:
         promises to a caller, and its default, because a required parameter and one with a default are
         two more.  Flattening those into a list of names would let disagreeing bases pass as identical.
 
-        The normalisation is syntactic, and honestly so: `T | None` and `Optional[T]` mean the same to a
-        checker and read as different here.  Catching that would need type evaluation, and this file
-        parses text.
+        The normalisation is syntactic, with one exception where syntax alone would let a copy through:
+        every spelling of a union is folded to one form, nested ones included, and so are member order
+        and repeats.  Everything else is compared as written, which is the honest limit: an alias and the
+        type it aliases read as different here, and so do `int` and a `TypeVar` bound to it.
         """
         arguments = method_def.args
         positional = arguments.posonlyargs + arguments.args
@@ -313,7 +424,7 @@ class TestTheProtocolsStayComposed:
         defaults.update(dict(zip(arguments.kwonlyargs, arguments.kw_defaults, strict=True)))
 
         def one(argument, kind: str) -> str:
-            annotation = ast.unparse(argument.annotation) if argument.annotation else "?"
+            annotation = _canonical(argument.annotation)
             default = defaults.get(argument)
             return f"{kind}:{argument.arg}:{annotation}" + (f"={ast.unparse(default)}" if default is not None else "")
 
@@ -324,8 +435,7 @@ class TestTheProtocolsStayComposed:
         parts += [one(argument, "kw-only") for argument in arguments.kwonlyargs]
         if arguments.kwarg is not None:
             parts.append(one(arguments.kwarg, "var-kw"))
-        returns = ast.unparse(method_def.returns) if method_def.returns else "?"
-        return f"({','.join(parts)})->{returns}"
+        return f"({','.join(parts)})->{_canonical(method_def.returns)}"
 
     def test_no_declaration_is_repeated_across_sibling_protocols(self):
         """Every unrelated pair carrying the same signature, not "the group contains one related pair".
@@ -398,3 +508,82 @@ class TestTheProtocolsStayComposed:
                 if len(plain) > 1 or (len(declarations) > 1 and plain):
                     shadowed[f"{protocol}.{name}"] = f"{len(declarations)} declarations, {len(plain)} without @overload"
         assert_that(shadowed).described_as("names declared more than once inside one protocol").is_empty()
+
+    @pytest.mark.parametrize(
+        ("capability", "carriers"), sorted(_CAPABILITY_CARRIERS.items()), ids=sorted(_CAPABILITY_CARRIERS)
+    )
+    def test_every_capability_reaches_exactly_the_types_the_register_lists(self, capability, carriers):
+        """The register and the inheritance graph say the same thing, so neither drifts in silence.
+
+        Both directions matter and only one is obvious.  Dropping a base is a one-word edit that removes
+        assertions from a whole family of values while every other guard stays green.  Adding one is the
+        same edit in reverse and offers a value something it cannot do.
+
+        What this does *not* claim is that the register is right.  A capability wrongly given to a type,
+        and written down here as well, stays green: the register is a structural gate over the topology,
+        not a judgement about it.  `_FilesystemAssertion` on `_InvokedAssertion` is the live example, and
+        the comment on the register says where that edge came from.
+        """
+        actual = {name for name in _PROTOCOLS if _inherits(name, capability)}
+        assert_that(actual).described_as(f"the types that carry {capability}").is_equal_to(set(carriers))
+
+    def test_the_two_registers_describe_the_same_set_of_protocols(self):
+        """Every protocol is either a value's own view or a capability, and the registers say which.
+
+        The first version of this guessed by "is anybody's base" and then subtracted two names by hand,
+        which is the shape of a rule that will be wrong the next time someone adds a protocol.  Two
+        hand-written registers, checked against the classes the file actually declares, say it outright.
+        """
+        assert_that(set(_VALUE_VIEWS) | set(_CAPABILITY_CARRIERS)).described_as(
+            "every protocol has to be registered as a value view or as a capability"
+        ).is_equal_to(set(_PROTOCOLS))
+        assert_that(set(_VALUE_VIEWS) & set(_CAPABILITY_CARRIERS)).described_as(
+            "a protocol cannot be both a value view and a capability"
+        ).is_empty()
+
+    def test_every_base_the_walk_recorded_is_a_protocol_of_this_file(self):
+        """The inheritance graph has no dangling parent, so a missing edge cannot pass as an absent one.
+
+        Everything else here reasons over `_PROTOCOLS`, and a name in it that no class defines would make
+        `_visible` raise rather than answer.  Asserting it directly says which of the two went wrong.
+        """
+        parents = {parent for _methods, bases in _PROTOCOLS.values() for parent in bases}
+        assert_that(parents).described_as("every base has to be a protocol declared here").is_subset_of(set(_PROTOCOLS))
+
+    @pytest.mark.parametrize("base", ["other.SomeAssertion", "other.SomeAssertion[str]", "make_base()"])
+    def test_a_base_this_walk_cannot_resolve_is_refused_rather_than_skipped(self, base):
+        """An unresolvable base is an error, not a shrug.
+
+        Returning ``None`` for it would drop an inheritance edge, and every check in this file would then
+        agree about a graph that is missing a line.  That is the exact failure this file exists to catch,
+        so the walk refuses instead.
+        """
+        assert_that(_base_name).raises(AssertionError).when_called_with(ast.parse(base, mode="eval").body).starts_with(
+            "unrecognised base"
+        )
+
+    def test_the_typed_surface_writes_every_union_with_a_pipe(self):
+        """`Optional` and `Union` are refused here, and the refusal is what makes the folding sound.
+
+        Reading what a name means at a point in a module cannot be done from syntax alone.  An import can
+        be renamed, shadowed by a `def`, replaced through `setattr` or `tp.__dict__`, or arrive from one
+        branch of an `if` and not the other, and a gate that guesses wrong folds a stranger's `Optional`
+        into typing's.  That is worse than a gap: annotations are compared for *equality* below, so a
+        wrong fold reports two different signatures as duplicates of one another.
+
+        Requiring `|` removes the question instead of answering it.  The file already writes every union
+        that way, so the rule costs nothing today and keeps the one spelling that `_canonical` folds
+        exactly.
+        """
+        source = Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+        legacy = {
+            f"line {node.lineno}: {ast.unparse(node)}"
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Subscript)
+            for name in [node.value]
+            if (isinstance(name, ast.Name) and name.id in _LEGACY_UNIONS)
+            or (isinstance(name, ast.Attribute) and name.attr in _LEGACY_UNIONS)
+        }
+        assert_that(legacy).described_as(
+            "the typed surface spells unions with `|`, so this gate folds one form and reads no imports"
+        ).is_empty()
