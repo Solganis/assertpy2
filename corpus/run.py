@@ -4,7 +4,12 @@
 the two questions that cannot be asked from inside the repository: does the wheel carry what it
 promises, and does the typed surface fit code written by someone who has not read it.
 
-    python corpus/run.py [--from wheel|sdist] [--only NAME ...] [--checkers NAME ...] [--keep]
+    python corpus/run.py [--from wheel|sdist] [--only NAME ...] [--checkers NAME ...]
+                         [--python 3.10] [--keep] [--json FILE]
+
+A project is a directory under `corpus/projects/` with a `corpus.toml`; nothing else is wired by hand.
+What earns a new one is a *shape of consumer code not already exercised*, named in its `shape` field,
+rather than more assertions.
 """
 
 from __future__ import annotations
@@ -31,6 +36,9 @@ _PROJECTS = _CORPUS / "projects"
 # a pid alone is not enough: the OS reuses them, so a `--keep` directory could be removed by a
 # later run that happened to be given the same number
 _RUN = f"{os.getpid()}-{secrets.token_hex(4)}"
+# the Python the consumer environments are built on, which is not the one running this script: `tomllib`
+# needs 3.11, while a consumer may well be on 3.10
+_CONSUMER_PYTHON: str | None = None
 _ENVIRONMENTS = _CORPUS / ".envs" / _RUN
 _BUILDS = _CORPUS / ".builds" / _RUN
 
@@ -39,8 +47,8 @@ _BUILDS = _CORPUS / ".builds" / _RUN
 # codebase does, and a surface that only fits one of them fits neither in practice
 _CHECKERS = {
     "mypy": ("mypy", "."),
-    "pyright": ("pyright", "."),
-    "ty": ("ty", "check", "."),
+    "pyright": ("pyright", "--pythonpath", "{python}", "."),
+    "ty": ("ty", "check", "--python", "{python}", "."),
 }
 # only mypy takes its strictness from the command line; pyright reads `typeCheckingMode` from the
 # project's own configuration, which is where a strict consumer would put it anyway
@@ -422,9 +430,10 @@ def _wanted(artefact: pathlib.Path, extras: tuple[str, ...]) -> str:
 
 
 def _install(environment: pathlib.Path, packages: list[str]) -> tuple[bool, str]:
-    """A fresh environment holding exactly `packages`."""
+    """A fresh environment holding exactly `packages`, on the Python a consumer would use."""
     shutil.rmtree(environment, ignore_errors=True)
-    passed, output = _run(("uv", "venv", str(environment)), cwd=_CORPUS)
+    version = ("--python", _CONSUMER_PYTHON) if _CONSUMER_PYTHON else ()
+    passed, output = _run(("uv", "venv", *version, str(environment)), cwd=_CORPUS)
     if not passed:
         return False, output
     return _run(("uv", "pip", "install", "--python", str(_python(environment)), *packages), cwd=_CORPUS)
@@ -459,9 +468,10 @@ def check(project: Project, environment: pathlib.Path, wanted: tuple[str, ...]) 
         if name not in wanted:
             continue
         module, *arguments = (_STRICT if project.mypy_strict else _CHECKERS).get(name, _CHECKERS[name])
-        results.append(
-            Result(project.name, name, *_run((str(interpreter), "-m", module, *arguments), cwd=project.path))
-        )
+        # each checker is handed the interpreter explicitly: run from the project directory they look
+        # for a `.venv` beside the code, find none, and report the package as missing
+        spelled = [argument.format(python=interpreter) for argument in arguments]
+        results.append(Result(project.name, name, *_run((str(interpreter), "-m", module, *spelled), cwd=project.path)))
     return results
 
 
@@ -492,8 +502,12 @@ def main() -> int:
     parser.add_argument("--only", nargs="+", default=None, help="project names, all of them by default")
     parser.add_argument("--checkers", nargs="*", default=tuple(_CHECKERS), choices=tuple(_CHECKERS))
     parser.add_argument("--keep", action="store_true", help="leave the environments in place afterwards")
+    parser.add_argument("--python", default=None, help="the Python a consumer would use, e.g. 3.10")
     parser.add_argument("--json", type=pathlib.Path, default=None, help="also write the results as JSON")
     arguments = parser.parse_args()
+
+    global _CONSUMER_PYTHON  # one setting, read by every environment this run builds
+    _CONSUMER_PYTHON = arguments.python
 
     projects = [Project.read(path) for path in sorted(_PROJECTS.iterdir()) if (path / "corpus.toml").exists()]
     if arguments.only:
