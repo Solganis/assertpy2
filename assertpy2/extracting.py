@@ -243,9 +243,14 @@ class ExtractingMixin(_MixinBase):
             refuse(sort, "a str, an iterable, or a callable", subject=argument("sort"))
 
         # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
+        # and the source is walked as it comes, which keeps the extractor seeing it at the same point
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
         extracted = []
+        # counted here rather than from the source afterwards: the walk spends a generator, and asking a
+        # spent one for its length answered zero, so the note said an emptied source had been empty
+        seen = 0
         for index, item in enumerate(source):
+            seen += 1
             if _filter(item):
                 try:
                     extracted_values = [_extract(item, name) for name in names]
@@ -262,5 +267,5 @@ class ExtractingMixin(_MixinBase):
             self.description,
             self.kind,
             logger=self.logger,
-            origin=f"extracting() produced {len(extracted)} of {len(list(source))} items",
+            origin=f"extracting() produced {len(extracted)} of {seen} items",
         )
