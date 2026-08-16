@@ -55,10 +55,14 @@ What that promise covers exactly, so the edges are decided rather than assumed:
 
 Semantic versioning, read strictly: a new assertion is a minor, a patch carries fixes only.
 
-Three kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
+Four kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
 
 - **an input that was silently wrong starts raising**, such as an empty prefix that no value could fail
 - **a wrong verdict is corrected**, so an assertion that passed and should not have begins to fail
+- **a diagnostic that was wrong is corrected**, so a failure says something different while failing for
+  the same reason. A count that described more than it had measured is the usual case, and the fix moves
+  the number rather than the verdict. Nothing about the pass or fail changes, and a test matching the old
+  text with `pytest.raises(match=...)` does
 - **a type stops offering what the value cannot answer**, so a call that type-checked and then raised
   becomes a type error instead. Runtime behaviour does not change and your tests keep passing, but a CI
   stage running mypy, Pyright or ty can go red before them, which is the half worth planning for. The
@@ -67,7 +71,7 @@ Three kinds of change ship in a minor, and the release notes list each one under
   assertions instead of a shape it cannot know, `extracting()` requiring its first selector, and the
   predicate parameters naming the element they are handed
 
-All three are the reason to read that section before upgrading. Nothing else in a minor is designed to
+All four are the reason to read that section before upgrading. Nothing else in a minor is designed to
 change what your suite reports.
 
 ## Not part of the API
