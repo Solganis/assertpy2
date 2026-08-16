@@ -935,16 +935,20 @@ class TestTheDenominatorCountsEveryRedResult:
                 hook.send(outcome)
         assert_that(config._assertpy2_failure_count).described_as("one test, two red reports").is_equal_to(1)
 
-    def test_an_exception_that_fights_back_is_still_only_a_failure(self):
+    @pytest.mark.parametrize("base", [RuntimeError, AssertionError], ids=["someone-elses", "one-of-ours"])
+    def test_an_exception_that_fights_back_is_still_only_a_failure(self, base):
         """`diff` is this library's attribute name on somebody else's exception.
 
         Reading it runs their code, and a property that raises took the whole run down with
-        INTERNALERROR: the reader lost every result to a summary they did not ask for. The reads belong
-        inside the net, not in front of it.
+        INTERNALERROR: the reader lost every result to a summary they did not ask for.
+
+        Both bases on purpose.  An `AssertionError` subclass goes further into the hook, past the point
+        where the report sections are built from those same attributes, and that second set of reads was
+        outside its own barrier until this test went looking for it.
         """
         from assertpy2 import pytest_plugin
 
-        class HostileError(RuntimeError):
+        class HostileError(base):
             @property
             def diff(self):
                 raise ValueError("reading this raises")
