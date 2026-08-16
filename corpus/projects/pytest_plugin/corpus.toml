@@ -1,0 +1,12 @@
+# The one part of the package that is not a library call: the pytest plugin.  Its hooks, its ini
+# options and its xdist transport are the code most tied to somebody else's internals, and until this
+# project existed none of it had ever run from an installed wheel - only from the source tree, under
+# the repository's own conftest, with its own defaults pinned.
+#
+# The suite here passes.  What fails is a suite it writes and runs in a child process, which is the
+# only way to read what the plugin prints without failing this project's own run.
+[consumer]
+shape = "a suite that turns the plugin's optional reports on and reads what a red run prints"
+extras = ["inline"]
+requires = ["pytest-xdist>=3,<4"]
+checkers = []
