@@ -3,6 +3,8 @@ import contextlib
 import itertools
 import logging
 import threading
+from collections import Counter, OrderedDict, defaultdict
+from dataclasses import dataclass, field
 from io import StringIO
 
 import pytest
@@ -10,14 +12,15 @@ import pytest
 import assertpy2.async_assertions as aa
 from assertpy2 import (
     AssertionFailure,
-    PollSample,
     WarningLoggingAdapter,
     assert_that,
     assert_warn,
+    errors,
     soft_assertions,
     soft_fail,
 )
-from assertpy2.async_assertions import _RETRIES, AsyncAssertionBuilder, _PollRecorder, _summarize
+from assertpy2.async_assertions import _RETRIES, AsyncAssertionBuilder, _change_key, _PollRecorder
+from assertpy2.errors import _json_safe
 
 
 class TestEventuallyBasic:
@@ -321,94 +324,562 @@ class TestSummaryUnderWindowOverflow:
     def test_a_long_monotonic_walk_with_plateaus_is_not_mistaken_for_a_cycle(self):
         assert_that(self._summary_of([f"step{i // 4}" for i in range(120)])).does_not_contain("cycles")
 
+    def test_the_change_count_is_over_the_run_not_over_the_window(self):
+        """The one sentence a reader acts on, and it was counting the wrong polls.
+
+        A probe returning a new value every poll for 1337 polls was summarised as "value changed 24
+        times", because the window keeps 25 samples and the count came from those.  Steady drift is what
+        that reads as; a value that never settled at all is what it was.
+        """
+        recorder = _PollRecorder()
+        for index in range(60):
+            recorder.record(elapsed=index * 0.1, outcome="fail", value=f"v{index}", detail=f"got v{index}")
+        trace = recorder.build(elapsed=6.0)
+        assert_that(trace.dropped).described_as("the guard: without a drop this proves nothing").is_positive()
+        assert_that(trace.summary).contains("value changed 59 times")
+
+    def test_a_change_the_snapshot_cuts_away_is_still_a_change(self):
+        """The sample kept per poll is a diagnostic snapshot, and it is cut.
+
+        Containers lose everything past their hundredth item, so a queue that only moved past that point
+        compared equal to itself and the run read as `value unchanged` while the value changed on every
+        poll.  Measured on a 200-item list whose 151st entry moves: 29 polls, 28 changes, and `unchanged`
+        before the fix.
+        """
+        step = [0]
+
+        def probing():
+            step[0] += 1
+            rows = list(range(200))
+            rows[150] = f"changed on poll {step[0]}"
+            return rows
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(probing).eventually_sync(timeout=0.15, interval=0.005).is_equal_to("never")
+        assert_that(failure.value.trace.summary).does_not_contain("unchanged")
+        assert_that(failure.value.trace.summary).contains("value changed")
+
+    def test_a_value_that_returns_to_itself_is_not_called_unchanged(self):
+        # the same count decides the "unchanged" sentence, which a dropped middle could make false
+        recorder = _PollRecorder()
+        for index in range(60):
+            recorder.record(elapsed=index * 0.1, outcome="fail", value=index % 2, detail=f"got {index % 2}")
+        trace = recorder.build(elapsed=6.0)
+        assert_that(trace.summary).does_not_contain("unchanged")
+
+    def test_the_polls_kept_are_counted_as_polls(self):
+        """A retained sample can stand for many polls, so counting samples is not counting polls.
+
+        The recorder collapses identical consecutive polls into one record with a repeat count, and the
+        cycle sentence names polls.  Over a probe alternating every other poll, "in the 25 polls kept"
+        described fifty of them.
+        """
+        recorder = _PollRecorder()
+        for index in range(120):
+            value = "up" if (index // 2) % 2 else "down"
+            recorder.record(elapsed=index * 0.1, outcome="fail", value=value, detail=f"got {value}")
+        trace = recorder.build(elapsed=12.0)
+        assert_that(trace.dropped).described_as("the guard: without a drop this proves nothing").is_positive()
+        kept_polls = sum(sample.repeats for sample in trace.samples)
+        assert_that(kept_polls).described_as("samples stand for more polls than there are samples").is_greater_than(
+            len(trace.samples)
+        )
+        assert_that(trace.summary).is_equal_to(f"value cycles between 2 states in the {kept_polls} polls kept")
+
+    def test_values_that_differ_past_the_snapshot_are_not_a_cycle(self):
+        """Recurrence was read off the sample, and the sample is cut.
+
+        Five hundred-item lists whose first entry alternates and whose last is unique to each poll are
+        five different values.  Compared as snapshots they looked like two states repeating, and the
+        summary's cycle line is the one that tells a reader waiting longer will not help.
+        """
+        recorder = _PollRecorder()
+        for index in range(5):
+            value = ["up" if index % 2 else "down", *range(99), f"unique {index}"]
+            recorder.record(
+                elapsed=index * 0.1,
+                outcome="fail",
+                value=_json_safe(value),
+                detail="Expected <...> to be equal to <ready>, but was not.",
+                raw=value,
+            )
+        summary = recorder.build(elapsed=0.5).summary
+        assert_that(summary).does_not_contain("cycles")
+        assert_that(summary).contains("value changed 4 times")
+
+    def test_polls_that_differ_only_past_the_snapshot_are_not_one_poll(self):
+        # the timeline collapses identical consecutive polls, and identical has to mean identical: two
+        # values differing past the cut were folded into one record with a repeat count
+        recorder = _PollRecorder()
+        for index in range(3):
+            value = [*range(150), f"unique {index}"]
+            recorder.record(
+                elapsed=index * 0.1,
+                outcome="fail",
+                value=_json_safe(value),
+                detail="Expected <...> to be equal to <ready>, but was not.",
+                raw=value,
+            )
+        assert_that(recorder.build(elapsed=0.3).samples).is_length(3)
+
     def test_a_cycle_is_still_detected_after_samples_are_dropped(self):
+        # the shape is read off the window, so once anything was dropped the sentence says which polls
+        # it is about rather than pairing what it saw with a count of polls it did not
         values = ["up" if i % 2 else "down" for i in range(40)]
-        assert_that(self._summary_of(values)).is_equal_to("value cycles between 2 states across 40 polls")
+        assert_that(self._summary_of(values)).is_equal_to("value cycles between 2 states in the 25 polls kept")
 
 
 class TestTraceSummary:
-    def _sample(self, **overrides):
-        base = {"elapsed": 0.0, "outcome": "fail", "value": 1, "detail": "d", "repeats": 1}
-        base.update(overrides)
-        return PollSample(**base)
+    """Driven through the recorder rather than through hand-built samples.
 
-    def _summary(self, samples, total_polls, elapsed):
-        fail_polls = sum(sample.repeats for sample in samples if sample.outcome == "fail")
-        error_polls = sum(sample.repeats for sample in samples if sample.outcome == "error")
-        return _summarize(samples, total_polls, elapsed, fail_polls, error_polls)
+    The summary states facts about the run and reads shape off the samples that survived the window, so a
+    test that hands it a sample list decides both halves itself.  One of them was wrong that way: repeats
+    collapse identical polls, so a count of retained samples is not a count of polls, and only a recorder
+    that actually collapsed something shows the difference.
+    """
+
+    @staticmethod
+    def _summary(events, elapsed=5.0, recorder=None):
+        """Feed polls to a recorder and return the summary it builds.
+
+        An error poll carries the exception itself, not a string that looks like one: the type in the
+        summary is taken from the exception now, and a test that hands over `"ConnectionError('boot')"`
+        proves nothing about where that name came from.
+        """
+        recorder = recorder or _PollRecorder()
+        for index, (outcome, value, exc) in enumerate(events):
+            recorder.record(
+                elapsed=float(index),
+                outcome=outcome,
+                value=value,
+                detail=repr(exc) if outcome == "error" else f"got {value}",
+                raw=value,
+                error_type=type(exc) if outcome == "error" else None,
+            )
+        return recorder.build(elapsed=elapsed).summary
+
+    @staticmethod
+    def _error(exc=None):
+        return ("error", None, exc or ConnectionError("boot"))
+
+    @staticmethod
+    def _fail(value):
+        return ("fail", value, None)
 
     def test_all_errors_single_type(self):
-        samples = [self._sample(outcome="error", detail="ConnectionError('boot')", value=None)]
-        assert_that(self._summary(samples, 7, 5.0)).is_equal_to("probe raised ConnectionError on all 7 polls")
+        assert_that(self._summary([self._error()] * 7)).is_equal_to("probe raised ConnectionError on all 7 polls")
 
     def test_all_errors_mixed_types(self):
-        samples = [
-            self._sample(outcome="error", detail="ConnectionError('boot')", value=None),
-            self._sample(outcome="error", detail="TimeoutError('slow')", value=None, elapsed=0.5),
-        ]
-        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("probe raised exceptions on all 4 polls")
+        events = [self._error(), self._error(TimeoutError("slow")), self._error(), self._error()]
+        assert_that(self._summary(events)).is_equal_to("probe raised exceptions on all 4 polls")
+
+    def test_two_exception_classes_that_print_alike_are_still_two_types(self):
+        """The type comes from the exception, not from the text its `__repr__` produced.
+
+        Parsing the rendering called two classes one type whenever their reprs agreed, and one class
+        several whenever its repr varied, which is the caller's code deciding what our summary claims.
+        """
+
+        class FirstError(RuntimeError):
+            def __repr__(self):
+                return "same text"
+
+        class SecondError(RuntimeError):
+            def __repr__(self):
+                return "same text"
+
+        events = [("error", None, FirstError()), ("error", None, SecondError())]
+        assert_that(self._summary(events)).is_equal_to("probe raised exceptions on all 2 polls")
+
+    def test_one_class_printing_differently_is_still_one_type(self):
+        class VaryingError(RuntimeError):
+            def __repr__(self):
+                return f"varies {id(self)}"
+
+        events = [("error", None, VaryingError()) for _ in range(3)]
+        assert_that(self._summary(events)).is_equal_to("probe raised VaryingError on all 3 polls")
+
+    def test_a_type_only_in_the_dropped_middle_is_still_counted(self):
+        """The universal half of that sentence, over a run whose middle is gone.
+
+        Reading the type off the retained samples claimed `ConnectionError on all 60 polls` for a run
+        that also raised a `ValueError`, because the one poll that did fell out of the window.
+        """
+        events = [self._error(ConnectionError(f"h{i}")) for i in range(5)]
+        events.append(self._error(ValueError("only in the middle")))
+        events += [self._error(ConnectionError(f"t{i}")) for i in range(54)]
+        recorder = _PollRecorder()
+        summary = self._summary(events, recorder=recorder)
+        assert_that(recorder.dropped).described_as("the guard: without a drop this proves nothing").is_positive()
+        assert_that(summary).is_equal_to("probe raised exceptions on all 60 polls")
+
+    def test_many_distinct_messages_of_one_type_still_name_that_type(self):
+        # the sentence needs "one type" or "several", and holding a set of what it saw would grow with
+        # the run, which is the one thing the bounded sample window exists to prevent
+        events = [self._error(ConnectionError(f"attempt {index}")) for index in range(200)]
+        recorder = _PollRecorder()
+        assert_that(self._summary(events, recorder=recorder)).is_equal_to(
+            "probe raised ConnectionError on all 200 polls"
+        )
+        assert_that(recorder.mixed_error_types).is_false()
 
     def test_recovered_then_stable(self):
-        samples = [
-            self._sample(outcome="error", detail="ConnectionError('boot')", value=None, repeats=3),
-            self._sample(elapsed=1.5, value={"s": 1}),
-        ]
-        assert_that(self._summary(samples, 5, 5.0)).is_equal_to(
+        events = [self._error()] * 3 + [self._fail({"s": 1})] * 2
+        assert_that(self._summary(events)).is_equal_to(
             "probe recovered after 3 raising polls; value then never changed"
         )
 
     def test_recovered_then_changing(self):
-        samples = [
-            self._sample(outcome="error", detail="ConnectionError('boot')", value=None),
-            self._sample(elapsed=1.0, value={"s": 1}),
-            self._sample(elapsed=2.0, value={"s": 2}),
-        ]
-        assert_that(self._summary(samples, 3, 5.0)).is_equal_to(
+        events = [self._error(), self._fail({"s": 1}), self._fail({"s": 2})]
+        assert_that(self._summary(events)).is_equal_to(
             "probe recovered after 1 raising poll; value then changed 1 time"
         )
 
+    def test_a_probe_that_ended_raising_is_not_called_recovered(self):
+        # "recovered" is a claim about order, and the count of raising polls is a total: a probe that
+        # raised, returned a value and raised again ended raising, whatever the totals say
+        events = [self._fail("A"), self._error(), self._fail("A"), self._error()]
+        assert_that(self._summary(events)).is_equal_to("probe raised on 2 of 4 polls; value then never changed")
+
+    def test_the_recovery_line_counts_only_what_followed_the_last_error(self):
+        # "value *then* changed" is a claim about what happened after the probe recovered, and the
+        # run-wide total counted movement from before the exception as well
+        events = [self._fail("A"), self._fail("B"), self._error(), self._fail("C")]
+        assert_that(self._summary(events)).is_equal_to(
+            "probe recovered after 1 raising poll; value then changed 1 time"
+        )
+
+    def test_a_run_that_mostly_raised_still_says_it_raised(self):
+        """One unrenderable value must not swallow the account of the polls that raised.
+
+        The sentence about comparison used to come first and use the whole poll count, so five raising
+        polls beside one hostile value read as `value could not be compared across 6 polls`, describing
+        values that existed on one of them.
+        """
+
+        class HostileValue:
+            def __repr__(self):
+                raise ValueError("no repr")
+
+        recorder = _PollRecorder()
+        for index in range(5):
+            recorder.record(
+                elapsed=index * 0.1,
+                outcome="error",
+                value=None,
+                detail="ConnectionError('x')",
+                error_type=ConnectionError,
+            )
+        recorder.record(elapsed=0.5, outcome="fail", value=None, detail="got it", raw=HostileValue())
+        summary = recorder.build(elapsed=1.0).summary
+        assert_that(summary).contains("probe recovered after 5 raising polls")
+        assert_that(summary).contains("value could not be compared")
+
+    def test_a_value_that_moved_across_a_raising_poll_is_not_called_unchanged(self):
+        # the change is between the two polls that returned, not between neighbours
+        events = [self._fail("A"), self._error(), self._fail("B")]
+        assert_that(self._summary(events)).contains("value then changed 1 time")
+
     def test_value_never_changed(self):
-        samples = [self._sample(repeats=9)]
-        assert_that(self._summary(samples, 9, 5.0)).is_equal_to("value unchanged across 9 polls")
+        assert_that(self._summary([self._fail(1)] * 9)).is_equal_to("value unchanged across 9 polls")
 
     def test_value_changed_reports_last_change(self):
-        samples = [
-            self._sample(elapsed=0.0, value=1),
-            self._sample(elapsed=1.0, value=2),
-            self._sample(elapsed=3.5, value=3),
-        ]
-        assert_that(self._summary(samples, 3, 5.0)).is_equal_to(
-            "value changed 2 times; last change 1.5s before the deadline"
+        assert_that(self._summary([self._fail(1), self._fail(2), self._fail(3)], elapsed=5.0)).is_equal_to(
+            "value changed 2 times; last change 3.0s before the deadline"
         )
 
     def test_a_repeating_value_is_reported_as_a_cycle(self):
         # "changed 4 times" reads like slow progress; the probe is really stuck alternating
-        samples = [self._sample(elapsed=float(i), value="up" if i % 2 else "down") for i in range(5)]
-        assert_that(self._summary(samples, 5, 5.0)).is_equal_to("value cycles between 2 states across 5 polls")
+        events = [self._fail("up" if index % 2 else "down") for index in range(5)]
+        assert_that(self._summary(events)).is_equal_to("value cycles between 2 states across 5 polls")
 
     def test_returning_to_an_earlier_value_once_is_a_cycle(self):
-        samples = [
-            self._sample(elapsed=0.0, value=1),
-            self._sample(elapsed=1.0, value=2),
-            self._sample(elapsed=2.0, value=3),
-            self._sample(elapsed=3.0, value=1),
-        ]
-        assert_that(self._summary(samples, 4, 5.0)).is_equal_to("value cycles between 3 states across 4 polls")
+        events = [self._fail(1), self._fail(2), self._fail(3), self._fail(1)]
+        assert_that(self._summary(events)).is_equal_to("value cycles between 3 states across 4 polls")
 
     def test_steady_progress_is_not_reported_as_a_cycle(self):
         # the guard that matters: a value walking through new states must keep the last-change wording
-        samples = [self._sample(elapsed=float(i), value=i) for i in range(4)]
-        assert_that(self._summary(samples, 4, 5.0)).is_equal_to(
+        events = [self._fail(index) for index in range(4)]
+        assert_that(self._summary(events, elapsed=5.0)).is_equal_to(
             "value changed 3 times; last change 2.0s before the deadline"
         )
 
     def test_dropped_fail_samples_not_reported_as_all_raised(self):
-        # fail_polls counts every poll, so even when the retained window holds only error samples the
-        # summary must not claim the probe raised on all polls (some polls returned a value and failed)
-        error_only = [self._sample(outcome="error", detail="ConnectionError('x')", value=None)]
-        summary = _summarize(error_only, 30, 5.0, fail_polls=4, error_polls=26)
+        # a run whose window holds only error samples still had polls that returned a value and failed,
+        # and the sentence about "all polls" is decided by the counts rather than by what was kept
+        events = [self._fail(index) for index in range(4)] + [
+            self._error(f"ConnectionError('e{i}')") for i in range(26)
+        ]
+        summary = self._summary(events)
         assert_that(summary).does_not_contain("on all")
-        assert_that(summary).contains("recovered after 26 raising polls")
+        assert_that(summary).contains("raised on 26 of 30 polls")
+
+
+class _OrderedChild(OrderedDict):
+    """An ordered mapping by inheritance: the comparison comes with the class."""
+
+
+class _LooksLikeAList:
+    """A value whose repr is this rendering's own punctuation, which it must not be read as."""
+
+    def __repr__(self):
+        return "[1,2]"
+
+
+class _Prints:
+    """A leaf that prints exactly what it is told to, for building renderings that could run together."""
+
+    def __init__(self, text):
+        self.text = text
+
+    def __repr__(self):
+        return self.text
+
+
+class TestACollectedTimeoutKeepsItsStructuredData:
+    """A collected timeout is the same failure as a raised one, minus the raising.
+
+    The values and the diff used to reach the reader only by being rendered inside the text the message
+    quotes, which happens off pytest and nowhere else: under pytest the collected timeout carried no
+    structured data at all, and once that rendering stopped duplicating the diff it carried none anywhere.
+    """
+
+    @staticmethod
+    def _collected(expected={"n": -1}, probe=None):  # noqa: B006  # read, never mutated
+        # the value is fixed and the number of polls is not: how many a real clock fits into 50ms is the
+        # machine's business, and a test that pins it fails on a loaded CI rather than on a defect
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(probe or (lambda: {"n": 5})).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(expected)
+        return failure.value
+
+    def test_the_difference_travels_with_the_collected_failure(self):
+        outcome = self._collected().failures[0]
+        assert_that(outcome.diff).is_not_none()
+        assert_that(str(self._collected())).contains("n: 5 != -1")
+
+    def test_the_trace_still_travels_too(self):
+        assert_that(str(self._collected())).contains("value unchanged")
+
+    def test_an_assertion_that_named_nothing_adds_nothing(self):
+        # `is_not_empty()` names neither side, and a collected timeout for it must not grow a block of
+        # values nobody asked about: `error()` decides that from which arguments arrive
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(list).eventually_sync(timeout=0.05, interval=0.01).is_not_empty()
+        outcome = failure.value.failures[0]
+        assert_that(outcome.actual_provided).is_false()
+        assert_that(outcome.has_expected).is_false()
+
+    def test_a_failure_built_by_hand_falls_back_to_its_values(self):
+        # `eventually()` and the snapshot re-wraps build failures directly, so there is no record of what
+        # they named: then the values themselves are all there is to go on, which is what the plugin does
+        built = AssertionFailure("no record here", actual={"a": 1}, expected={"a": 2})
+        assert_that(aa._structured_of(built)).is_equal_to({"actual": {"a": 1}, "expected": {"a": 2}})
+        assert_that(aa._structured_of(AssertionFailure("nothing named"))).is_empty()
+
+    def test_a_probe_whose_value_cannot_be_rendered_claims_nothing_about_movement(self):
+        """The key is built from somebody else's object, and reading it runs their code.
+
+        A value that cannot be rendered at all leaves nothing to compare, and every such value used to
+        come back as the same placeholder: a probe returning a fresh unequal object every poll read as
+        `value unchanged`.  Now the run says what it knows.
+        """
+
+        class HostileValue:
+            def __repr__(self):
+                raise RuntimeError("repr is not available")
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(HostileValue).eventually_sync(timeout=0.05, interval=0.01).is_equal_to("never")
+        assert_that(failure.value.trace.total_polls).is_positive()
+        assert_that(failure.value.trace.summary).is_equal_to(
+            f"value could not be compared across {failure.value.trace.total_polls} polls"
+        )
+
+    @pytest.mark.parametrize(
+        ("left", "right", "equal"),
+        [
+            pytest.param((1,), [1], False, id="a-tuple-is-not-a-list"),
+            pytest.param({1: "x"}, {"1": "x"}, False, id="an-int-key-is-not-a-string-key"),
+            pytest.param({1: "a", "b": 2}, {"b": 2, 1: "a"}, True, id="mixed-keys-in-another-order"),
+            pytest.param({"a": {1, 2}}, {"a": {2, 1}}, True, id="a-nested-set-in-another-order"),
+            pytest.param("x", type("StrSubclass", (str,), {})("x"), True, id="a-str-subclass"),
+            pytest.param(({"a": 1, "b": 2},), ({"b": 2, "a": 1},), True, id="a-dict-inside-a-tuple"),
+            # built from lists in opposite orders on purpose: 0 and 8 land in one bucket, so the two
+            # equal sets really do iterate differently and the sort is what keeps them one value
+            pytest.param({*[0, 8]}, {*[8, 0]}, True, id="a-set-whose-members-collide"),
+            pytest.param(_LooksLikeAList(), [1, 2], False, id="a-leaf-that-prints-like-a-list"),
+            pytest.param(["a,b"], ["a", "b"], False, id="a-string-holding-the-separator"),
+            # two leaves whose renderings would run together into the one below without their lengths
+            pytest.param([_Prints("a"), _Prints("bc")], [_Prints("avbc")], False, id="parts-that-would-run-together"),
+            # the one mapping whose own `==` reads order, so sorting it hid a real transition
+            pytest.param(
+                OrderedDict([("a", 1), ("b", 2)]), OrderedDict([("b", 2), ("a", 1)]), False, id="an-ordered-dict"
+            ),
+            # a subclass inherits that comparison along with the class
+            pytest.param(
+                _OrderedChild([("a", 1), ("b", 2)]),
+                _OrderedChild([("b", 2), ("a", 1)]),
+                False,
+                id="a-subclass-of-an-ordered-dict",
+            ),
+            # and the ones that compare like a dict, which must keep the sort
+            pytest.param(
+                defaultdict(int, {"a": 1, "b": 2}), defaultdict(int, {"b": 2, "a": 1}), True, id="a-defaultdict"
+            ),
+            pytest.param(Counter("ab"), Counter("ba"), True, id="a-counter"),
+        ],
+    )
+    def test_the_change_key_follows_equality_not_rendering(self, left, right, equal):
+        """What the key has to agree with is `==`, as far as a rendering can.
+
+        JSON was the first attempt and erased the two unequal pairs here: `(1,)` and `[1]` both render as
+        `[1]`, and a mapping's keys all become strings. Plain `repr` is the other direction, and calls two
+        equal dicts different because their insertion order is.
+        """
+        assert_that(_change_key(left) == _change_key(right)).described_as(f"{left!r} vs {right!r}").is_equal_to(equal)
+
+    def test_a_hard_timeout_carries_which_side_was_named(self):
+        """A raised timeout is the same failure as a collected one, so it needs the same record.
+
+        Without it the report falls back to reading "was this named" off a test against `None`, which is
+        wrong in both directions: `is_equal_to(None)` lost its expected value, a probe returning `None`
+        lost its actual one, and an assertion naming neither gained a block of values.
+        """
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(lambda: 5).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(None)
+        assert_that(failure.value._outcome.has_expected).is_true()
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(lambda: None).eventually_sync(timeout=0.05, interval=0.01).is_equal_to("something")
+        assert_that(failure.value._outcome.actual_provided).is_true()
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(list).eventually_sync(timeout=0.05, interval=0.01).is_not_empty()
+        assert_that(failure.value._outcome.actual_provided).is_false()
+        assert_that(failure.value._outcome.has_expected).is_false()
+
+    def test_two_values_that_print_alike_are_one_value_to_this_key(self):
+        """The recorded boundary, not an accident: a rendering cannot reproduce `==`.
+
+        A dataclass that hides a field from its own repr has two unequal instances that print the same,
+        and this key calls them one value.  The alternative, refusing to compare anything that is not a
+        scalar or a builtin container, would silence the trend line for every probe that returns an
+        object of the caller's own, which is most of them.
+        """
+
+        @dataclass(frozen=True)
+        class State:
+            visible: int = 0
+            hidden: int = field(default=0, repr=False)
+
+        assert_that(_change_key(State(hidden=1))).is_equal_to(_change_key(State(hidden=2)))
+        assert_that(State(hidden=1)).is_not_equal_to(State(hidden=2))
+
+    def test_a_value_that_reaches_back_to_itself_is_still_a_key(self):
+        # a probe returning a structure that contains itself must not send the walk round forever
+        cyclic: list = [1]
+        cyclic.append(cyclic)
+        assert_that(_change_key(cyclic)).is_not_none()
+
+    def test_two_values_that_differ_only_in_key_order_did_not_change(self):
+        # a dict is not ordered, so two of them that compare equal did not move, whatever their reprs do
+        recorder = _PollRecorder()
+        for value in ({"a": 1, "b": 2}, {"b": 2, "a": 1}, {"a": 1, "b": 2}):
+            recorder.record(elapsed=0.1, outcome="fail", value=value, detail="got it", raw=value)
+        assert_that(recorder.build(elapsed=1.0).summary).is_equal_to("value unchanged across 3 polls")
+
+    def test_the_type_reaches_the_summary_from_the_exception_not_its_text(self):
+        """End to end, because the recorder is told the type by the polling loop.
+
+        Two classes whose `__repr__` agrees are two types, and the loop is where that is decided: a test
+        that hands the recorder a type name proves nothing about the hand-off.
+        """
+
+        class FirstError(RuntimeError):
+            def __repr__(self):
+                return "same text"
+
+        class SecondError(RuntimeError):
+            def __repr__(self):
+                return "same text"
+
+        raised = itertools.count(1)
+
+        def probe():
+            raise FirstError() if next(raised) % 2 else SecondError()
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(probe).eventually_sync(
+                timeout=0.05, interval=0.01, ignoring=(FirstError, SecondError)
+            ).is_equal_to("never")
+        assert_that(failure.value.trace.summary).contains("probe raised exceptions on all")
+
+    def test_a_probe_that_raises_its_own_assert_is_a_raise_not_a_value(self):
+        """The probe never returned, so there is no value to call unchanged.
+
+        `AssertionError` from inside the probe is indistinguishable from one raised by the assertion if
+        you look only at the exception: a probe that never got past its own `assert` was recorded as a
+        failed value and the run read as `value unchanged across N polls`.
+        """
+
+        def broken_probe():
+            raise AssertionError("the probe itself is broken")
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(broken_probe).eventually_sync(timeout=0.05, interval=0.01).is_equal_to("ready")
+        assert_that(failure.value.trace.summary).contains("probe raised AssertionError on all")
+
+    def test_an_ignored_exception_that_cannot_be_reprd_is_still_retried(self):
+        # `ignoring=` promises to poll past it, and rendering it for the trace runs the caller's code
+        class HostileError(RuntimeError):
+            def __repr__(self):
+                raise ValueError("repr is not available")
+
+        calls = itertools.count(1)
+
+        def probe():
+            if next(calls) < 3:
+                raise HostileError("not ready")
+            return "ready"
+
+        assert_that(probe).eventually_sync(timeout=0.5, interval=0.01, ignoring=HostileError).is_equal_to("ready")
+
+    def test_an_expected_none_is_still_a_named_expectation(self):
+        # "was this named" cannot be read off a test against None: `is_equal_to(None)` names one, and a
+        # probe returning None provides one. Both were being dropped from the collected record
+        outcome = self._collected(expected=None).failures[0]
+        assert_that(outcome.has_expected).is_true()
+        assert_that(outcome.expected).is_none()
+
+    def test_an_actual_none_is_still_a_provided_value(self):
+        outcome = self._collected(expected="something", probe=lambda: None).failures[0]
+        assert_that(outcome.actual_provided).is_true()
+        assert_that(outcome.actual).is_none()
+
+
+class TestTheTimeoutMessageQuotesOnlyTheHeadline:
+    """Outside pytest a failure renders its diff into `str()`, and the timeout message quotes that text.
+
+    Carrying the same diff itself, the timed-out failure then printed the block twice: once inside the
+    sentence and once under it.  Under pytest the plugin turns the in-message rendering off, so this only
+    ever showed up on the surface that rendering was added for.
+    """
+
+    @staticmethod
+    def _timed_out(monkeypatch):
+        # the suite pins the flag off, the way the plugin does; this is about the surface where it is on
+        monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+        counter = itertools.count()
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(lambda: next(counter)).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(-1)
+        return str(failure.value)
+
+    def test_the_diff_is_rendered_once(self, monkeypatch):
+        assert_that(self._timed_out(monkeypatch).count("diff (scalar)")).is_equal_to(1)
+
+    def test_the_quoted_failure_is_still_there(self, monkeypatch):
+        text = self._timed_out(monkeypatch)
+        assert_that(text).contains("Last failure: Expected <").contains("to be equal to <-1>")
 
 
 class TestEventuallyTrace:

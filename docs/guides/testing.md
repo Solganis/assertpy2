@@ -202,6 +202,12 @@ out. The message opens with a one-line trend that pins the failure mode:
 | `value unchanged across 12 polls` | it converged to the wrong value |
 | `value changed 3 times; last change 0.4s before the deadline` | the timeout is too short |
 | `value cycles between 2 states across 12 polls` | it keeps returning to earlier values, so waiting longer will not help |
+| `value could not be compared across 12 polls` | the probe returns something that cannot be rendered, so movement is unknown |
+
+Every count in that line is over the whole run, not over the samples the trace kept: a long poll drops
+middle samples, and a value that moved on every one of a thousand polls has to read as a thousand rather
+than as the two dozen still in hand. Where a line describes the *shape* of what was kept rather than
+counting, it says so (`value cycles between 2 states in the 25 polls kept`).
 
 The raised `AssertionFailure` carries the full timeline as `.trace`, a
 [`PollTrace`][assertpy2.errors.PollTrace] of per-poll samples with identical consecutive polls

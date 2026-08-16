@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import inspect
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
-from .errors import AssertionFailure, PollSample, PollTrace, _json_safe
+from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -17,6 +18,80 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 _PROBE_UNSET = object()
+
+
+def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
+    """A type-faithful rendering of *value*, with containers ordered where their type has no order.
+
+    Not for reading: this exists so one poll's value can be told from the next's.  JSON was tried first
+    and erases exactly what matters here, since `(1,)` and `[1]` both render as `[1]` and a mapping's
+    keys all become strings.  A tag carries the container's type instead, and every part is written with
+    its own length in front, so nothing a value prints can be read as this rendering's punctuation: a
+    leaf whose repr is `[1,2]` used to render exactly as the list `[1, 2]` did.
+
+    Dicts and sets are sorted by their rendered parts: they have no order to preserve, and two equal ones
+    can still iterate differently, since a set built from `[0, 8]` and one built from `[8, 0]` collide
+    into the same bucket in opposite orders.
+
+    The boundary, since a rendering cannot reproduce `==`: two values that are equal and print
+    differently, `1` against `1.0`, count as a change, and two that are unequal and print alike, a
+    dataclass hiding a field from its own repr, count as one value.  A leaf carries no type tag of its
+    own for the same reason, or a `str` subclass would differ from the string it equals.
+
+    One case cannot be got right by any key of this shape, rather than being a choice made here:
+    `OrderedDict([a, b]) == {a: ..., b: ...} == OrderedDict([b, a])` while the two `OrderedDict`s are
+    unequal, so Python's own relation is not transitive there and nothing that digests one value at a
+    time can follow it.  The ordered pair is the one honoured, because that is where the order carries
+    the meaning.
+    """
+    if id(value) in _seen:
+        return "c"  # a container that reaches back to its own root, as `repr` marks with `...`
+    inner = _seen | {id(value)}
+    if isinstance(value, dict):
+        pairs = (_framed(_canonical(k, inner)) + _framed(_canonical(v, inner)) for k, v in value.items())
+        # sorted for every mapping but the one whose own `==` reads order: `OrderedDict` is the only
+        # mapping in the standard library where two with the same items in another order are unequal,
+        # and sorting it turned a real transition into "value unchanged". `isinstance`, not an exact
+        # type test, because a subclass inherits that comparison along with the class. `defaultdict` and
+        # `Counter` compare like a dict, so they keep the sort rather than reading a reorder as a change
+        return "o" + "".join(pairs) if isinstance(value, OrderedDict) else "d" + "".join(sorted(pairs))
+    if isinstance(value, (set, frozenset)):
+        return "s" + "".join(sorted(_framed(_canonical(member, inner)) for member in value))
+    if isinstance(value, tuple):
+        return "t" + "".join(_framed(_canonical(member, inner)) for member in value)
+    if isinstance(value, list):
+        # the tag is redundant for a list once every part carries its length, and it stays for the shape:
+        # each branch reads the same way, and a rendering nobody can parse is easier to trust when it is
+        # written the same everywhere
+        return "l" + "".join(_framed(_canonical(member, inner)) for member in value)
+    return "v" + _framed(repr(value))
+
+
+def _framed(text: str) -> str:
+    """*text* with its own length in front, so no rendering can be mistaken for a longer one."""
+    return f"{len(text)}:{text}"
+
+
+def _change_key(value: object) -> str | None:
+    """A bounded stand-in for what a probe returned, for deciding whether the value moved.
+
+    ``None`` where no faithful one can be made, which is what stops the summary claiming a value moved,
+    or held still, on evidence it does not have.
+
+    Four things have to hold at once.  It must be **complete**, because the sample kept per poll is a
+    diagnostic snapshot cut after a hundred items, and comparing those called a queue that grew past its
+    hundredth entry unchanged for the rest of the run.  It must be **type-faithful**, since a probe that
+    started returning a list where it returned a tuple did change.  It must not depend on **order** a
+    value does not have, since two dicts that differ only in insertion order are equal.  And it must
+    survive a **live** object, because probes commonly mutate and return the same one, so anything that
+    compares the object rather than a rendering of it answers "unchanged" whatever it did.
+    """
+    try:
+        text = _canonical(value)
+    except Exception:  # their `__repr__` raised, or their container did when walked
+        return None
+    return hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=16).hexdigest()
+
 
 # one call recorded on a polling chain, as (name, args, kwargs); `None` args mark a step that was
 # read rather than called, which is `not_`
@@ -47,19 +122,70 @@ class _PollRecorder:
         self._head: list[PollSample] = []
         self._head_limit = head
         self._tail: deque[PollSample] = deque(maxlen=tail)
+        # the change key of each retained sample, pushed and dropped in lockstep with it. The samples
+        # themselves hold the cut snapshot, and reading recurrence off that called five distinct
+        # hundred-item lists a cycle between two states, which tells a reader to stop waiting
+        self._head_keys: list[str | None] = []
+        self._tail_keys: deque[str | None] = deque(maxlen=tail)
         self.dropped = 0
         self.total_polls = 0
-        self.fail_polls = 0  # counted across all polls, not just the retained window
+        # everything below is counted as it happens, because the window keeps 25 samples and the summary
+        # is the headline of the failure: a probe returning a new value on every one of 1337 polls was
+        # summarised as "value changed 24 times", which reads as drift where the truth was a value that
+        # never settled. Anything the summary states as a fact about the run is recorded here; what it
+        # reads off the retained samples is the *shape*, and says so
+        self.fail_polls = 0
         self.error_polls = 0
+        self.value_changes = 0
+        # the same count since the last raising poll, because "value *then* changed" is a claim about
+        # what happened after the probe recovered, and a run-wide total answers a different question
+        self.changes_after_last_error = 0
+        self.uncomparable = False
+        self.last_change_elapsed: float | None = None
+        self.error_type: type | None = None
+        self.mixed_error_types = False
+        self.last_outcome: str | None = None
+        self._last_fail_key: str | None = None
 
-    def record(self, elapsed, outcome, value, detail):
+    def record(self, elapsed, outcome, value, detail, raw=_PROBE_UNSET, error_type=None):
         self.total_polls += 1
+        self.last_outcome = outcome
+        key = None
         if outcome == "fail":
             self.fail_polls += 1
+            # against the last value a poll *returned*, not against the previous poll: a probe that
+            # raises in between still moved from A to B, and comparing neighbours called that unchanged.
+            # Keyed off the raw value where the caller has one, since the sample it keeps is cut
+            key = _change_key(value if raw is _PROBE_UNSET else raw)
+            if key is None:
+                self.uncomparable = True
+            elif self._last_fail_key is not None and key != self._last_fail_key:
+                self.value_changes += 1
+                self.changes_after_last_error += 1
+                self.last_change_elapsed = elapsed
+            if key is not None:
+                self._last_fail_key = key
         else:  # the only other outcome is "error"
             self.error_polls += 1
+            self.changes_after_last_error = 0
+            # the type is part of a sentence about every poll, so it cannot come from the samples kept.
+            # Two fields rather than a set: the sentence needs "one type" or "several", and a set would
+            # be the one thing here that grows with the run the bounded window exists to stop.  Taken
+            # the class itself, compared by identity: two classes can share a `__name__`, and the name
+            # is for printing. Parsed out of the rendering it was the caller's text deciding our claim
+            if error_type is not None:
+                if self.error_type is None:
+                    self.error_type = error_type
+                elif error_type is not self.error_type:
+                    self.mixed_error_types = True
         last = self._tail[-1] if self._tail else (self._head[-1] if self._head else None)
-        if last is not None and (last.outcome, last.value, last.detail) == (outcome, value, detail):
+        last_key = self._tail_keys[-1] if self._tail_keys else (self._head_keys[-1] if self._head_keys else None)
+        # "identical consecutive polls" is decided by the key where there is one, not by the snapshot:
+        # two polls whose values differ past the cut are two polls, and collapsing them lost that
+        same_value = (
+            key == last_key and key is not None if outcome == "fail" else last is not None and last.value == value
+        )
+        if last is not None and last.outcome == outcome and last.detail == detail and same_value:
             collapsed = dataclasses.replace(last, repeats=last.repeats + 1)
             if self._tail:
                 self._tail[-1] = collapsed
@@ -69,51 +195,96 @@ class _PollRecorder:
         sample = PollSample(elapsed=elapsed, outcome=outcome, value=value, detail=detail)
         if len(self._head) < self._head_limit:
             self._head.append(sample)
+            self._head_keys.append(key)
             return
         if len(self._tail) == self._tail.maxlen:
             self.dropped += 1
         self._tail.append(sample)
+        self._tail_keys.append(key)
 
     def build(self, elapsed) -> PollTrace:
         samples = self._head + list(self._tail)
+        self.kept_keys = self._head_keys + list(self._tail_keys)
         return PollTrace(
             samples=samples,
             total_polls=self.total_polls,
             dropped=self.dropped,
             elapsed=elapsed,
-            summary=_summarize(samples, self.total_polls, elapsed, self.fail_polls, self.error_polls),
+            summary=_summarize(samples, self, elapsed),
         )
 
 
-def _summarize(samples, total_polls, elapsed, fail_polls, error_polls) -> str:
+def _summarize(samples, recorder, elapsed) -> str:
     """Classify the convergence trend of a timed-out poll into one diagnostic sentence.
 
-    ``fail_polls``/``error_polls`` count every poll, not just the retained samples, so the summary
-    stays correct even when the bounded window dropped some fail samples.
+    Every count and every type here comes from the recorder, which saw all of the run.  The retained
+    samples are read for one thing only, the *shape* of what repeated, and that sentence names the polls
+    it was read from rather than borrowing the run's total.
     """
-    if fail_polls == 0:
-        types = {sample.detail.split("(", 1)[0] for sample in samples}
-        raised = types.pop() if len(types) == 1 else "exceptions"
+    total_polls = recorder.total_polls
+    if recorder.fail_polls == 0:
+        raised = (
+            "exceptions" if recorder.mixed_error_types or recorder.error_type is None else recorder.error_type.__name__
+        )
         return f"probe raised {raised} on all {total_polls} polls"
-    fails = [sample for sample in samples if sample.outcome == "fail"]
-    changes = [current for previous, current in pairwise(fails) if current.value != previous.value]
-    change_word = "time" if len(changes) == 1 else "times"
-    if error_polls:
-        poll_word = "poll" if error_polls == 1 else "polls"
-        trend = f"value then changed {len(changes)} {change_word}" if changes else "value then never changed"
-        return f"probe recovered after {error_polls} raising {poll_word}; {trend}"
-    if not changes:
+    change_word = "time" if recorder.value_changes == 1 else "times"
+    if recorder.error_polls:
+        poll_word = "poll" if recorder.error_polls == 1 else "polls"
+        since = recorder.changes_after_last_error
+        # "then" is a claim about what followed the last raising poll, and the run-wide total counts
+        # movement that happened before it as well
+        if recorder.uncomparable:
+            trend = "value could not be compared"
+        elif since:
+            trend = f"value then changed {since} {'time' if since == 1 else 'times'}"
+        else:
+            trend = "value then never changed"
+        # "recovered" is a claim about order, and the count is a total: a probe that raised, returned a
+        # value and raised again ended raising, whatever the totals say
+        if recorder.last_outcome == "fail":
+            return f"probe recovered after {recorder.error_polls} raising {poll_word}; {trend}"
+        return f"probe raised on {recorder.error_polls} of {total_polls} polls; {trend}"
+    if recorder.uncomparable:
+        # a probe whose values cannot be rendered at all: any count of movement would be one this
+        # recorder never took.  Reached only where every poll returned, since a run with raising polls is
+        # answered above, and the clause there carries the same admission
+        return f"value could not be compared across {total_polls} polls"
+    if not recorder.value_changes:
         return f"value unchanged across {total_polls} polls"
-    distinct: list[object] = []
-    for sample in fails:
-        if not any(sample.value == seen for seen in distinct):
-            distinct.append(sample.value)
+    kept = [(sample, key) for sample, key in zip(samples, recorder.kept_keys, strict=True) if sample.outcome == "fail"]
+    fails = [sample for sample, _ in kept]
+    keys = [key for _, key in kept]
+    kept_changes = [right for left, right in pairwise(keys) if left != right]
+    distinct = {key for key in keys if key is not None}
     # a simple path through k values takes k-1 changes, so any surplus means the probe came back to a
-    # value it already reported: a cycle, which reads nothing like steady progress that ran out of time
-    if len(changes) >= len(distinct):
-        return f"value cycles between {len(distinct)} states across {total_polls} polls"
-    last_change = elapsed - changes[-1].elapsed
-    return f"value changed {len(changes)} {change_word}; last change {last_change:.1f}s before the deadline"
+    # value it already reported: a cycle, which reads nothing like steady progress that ran out of time.
+    # Both sides of this are read off the retained samples, so the sentence says which polls it saw:
+    # they are collapsed runs, and one of them can stand for many polls
+    if len(kept_changes) >= len(distinct):
+        kept_polls = sum(sample.repeats for sample in fails)
+        over = f"in the {kept_polls} polls kept" if recorder.dropped else f"across {total_polls} polls"
+        return f"value cycles between {len(distinct)} states {over}"
+    # recorded when it happened rather than read back off the retained samples.  Those two agree today,
+    # because a collapsed run keeps the elapsed of its first poll and the newest change is always in the
+    # tail, but the agreement rests on both of those and neither is what this sentence is about
+    last_change = elapsed - (recorder.last_change_elapsed or 0.0)
+    return f"value changed {recorder.value_changes} {change_word}; last change {last_change:.1f}s before the deadline"
+
+
+def _last_failure_text(exc: BaseException) -> str:
+    """The inner failure's headline, without whatever its own rendering would append.
+
+    Outside pytest a failure renders its diff into ``str()``, and the timeout message quotes that text
+    while carrying the same diff itself: the reader saw the block twice, once inside the sentence and
+    once under it.  Under pytest the plugin turns that rendering off, so the doubling only ever showed
+    up where the message is all there is, which is the surface it was added for.
+    """
+    if isinstance(exc, AssertionFailure):
+        # our own class, and the only undecorated form of its message
+        return exc._message
+    # total on both paths: an ignored exception is one the caller asked to retry past, and reading its
+    # `__repr__` is running their code. One that raised escaped the poll instead of being retried
+    return _safe_str(exc) if isinstance(exc, AssertionError) else _safe_repr(exc)
 
 
 def _timeout_failure(recorder: _PollRecorder | None, timeout: float, elapsed: float, failure: str):
@@ -125,6 +296,32 @@ def _timeout_failure(recorder: _PollRecorder | None, timeout: float, elapsed: fl
     return message, trace
 
 
+def _structured_of(last_error: Exception | None) -> dict[str, Any]:
+    """The values and the diff of the assertion that kept failing, as `error()` keyword arguments.
+
+    Only the ones it actually named: `error()` reads "was this named" from whether the argument is there
+    at all, so passing everything would put an empty block under every collected timeout.  Which ones
+    those were comes from the failure's own record rather than from a test against `None`, because
+    `is_equal_to(None)` names an expected value and a probe returning `None` provides an actual one.
+    """
+    outcome = getattr(last_error, "_outcome", None)
+    fields: dict[str, Any] = {}
+    if outcome is not None:
+        if outcome.actual_provided:
+            fields["actual"] = getattr(last_error, "actual", None)
+        if outcome.has_expected:
+            fields["expected"] = getattr(last_error, "expected", None)
+    else:  # built by hand, by a snapshot re-wrap or by `eventually()` itself: the values are all there is
+        for name in ("actual", "expected"):
+            value = getattr(last_error, name, None)
+            if value is not None:
+                fields[name] = value
+    diff = getattr(last_error, "diff", None)
+    if diff is not None:
+        fields["diff"] = diff
+    return fields
+
+
 def _timed_out(message: str, trace: PollTrace | None, last_error: Exception | None) -> AssertionFailure:
     """The timeout failure, carrying the structured payload of the assertion that kept failing.
 
@@ -132,14 +329,21 @@ def _timed_out(message: str, trace: PollTrace | None, last_error: Exception | No
     values and the diff on the way out left the two surfaces unequal where it mattered most: under
     pytest the diff section is built from `exc.diff`, and a timed-out equality printed no section at all
     while the same equality outside a poll printed the full one.
+
+    The record travels with them.  Without it the report falls back to reading "was this named" off a
+    test against `None`, which is wrong in both directions: `is_equal_to(None)` lost its expected value,
+    a probe returning `None` lost its actual one, and `is_not_empty()`, which names neither, gained a
+    block of values nobody asked about.
     """
-    return AssertionFailure(
+    failure = AssertionFailure(
         message,
         actual=getattr(last_error, "actual", None),
         expected=getattr(last_error, "expected", None),
         diff=getattr(last_error, "diff", None),
         trace=trace,
     )
+    failure._outcome = getattr(last_error, "_outcome", None)
+    return failure
 
 
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
@@ -262,24 +466,32 @@ class AsyncAssertionBuilder:
                     ) as exc:  # retry-on-failure needs the try/except per poll iteration
                         last_error = exc
                         # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
-                        failure = str(exc) if isinstance(exc, AssertionError) else repr(exc)
+                        failure = _last_failure_text(exc)
                         if recorder is not None:
                             recorder.record(
                                 elapsed=loop.time() - start,
-                                outcome="fail" if isinstance(exc, AssertionError) else "error",
+                                # a probe that raised never returned a value, so this is not a value
+                                # that failed: `AssertionError` from inside the probe used to be
+                                # recorded as one, and a probe that never got past its own assert read
+                                # as "value unchanged across N polls"
+                                outcome="fail" if probed is not _PROBE_UNSET else "error",
                                 # sanitized eagerly: probes often mutate and return the same live object,
                                 # so each sample must be a point-in-time snapshot, not a reference
                                 value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
                                 detail=failure,
+                                raw=probed,
+                                error_type=None if probed is not _PROBE_UNSET else type(exc),
                             )
                         if loop.time() >= deadline:
                             message, trace = _timeout_failure(recorder, self._timeout, loop.time() - start, failure)
                             if self._kind in ("soft", "warn"):
                                 # inner failures already carry the description; an empty one here
                                 # avoids a double prefix in the collected/logged message.  the trace goes
-                                # with it: a collected timeout kept the text and dropped the telemetry
+                                # with it: a collected timeout kept the text and dropped the telemetry,
+                                # and so do the values and the diff, which used to reach the reader only
+                                # by being rendered inside the quoted text and so only off pytest
                                 return self._builder_func(None, "", self._kind, None, self._logger).error(
-                                    message, trace=trace
+                                    message, **_structured_of(last_error), trace=trace
                                 )
                             raise _timed_out(message, trace, last_error) from last_error
                         await asyncio.sleep(self._interval)
@@ -443,24 +655,26 @@ class SyncAssertionBuilder:
                 ) as exc:  # retry-on-failure needs the try/except per poll iteration
                     last_error = exc
                     # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
-                    failure = str(exc) if isinstance(exc, AssertionError) else repr(exc)
+                    failure = _last_failure_text(exc)
                     if recorder is not None:
                         recorder.record(
                             elapsed=time.monotonic() - start,
-                            outcome="fail" if isinstance(exc, AssertionError) else "error",
+                            # as in the async branch: an exception from the probe is not a failed value
+                            outcome="fail" if probed is not _PROBE_UNSET else "error",
                             # sanitized eagerly: probes often mutate and return the same live object,
                             # so each sample must be a point-in-time snapshot, not a reference
                             value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
                             detail=failure,
+                            raw=probed,
+                            error_type=None if probed is not _PROBE_UNSET else type(exc),
                         )
                     if time.monotonic() >= deadline:
                         message, trace = _timeout_failure(recorder, self._timeout, time.monotonic() - start, failure)
                         if self._kind in ("soft", "warn"):
-                            # inner failures already carry the description; an empty one here
-                            # avoids a double prefix in the collected/logged message.  the trace goes
-                            # with it: a collected timeout kept the text and dropped the telemetry
+                            # as in the async branch above: the values and the diff travel with the
+                            # message rather than only inside the text it quotes
                             return self._builder_func(None, "", self._kind, None, self._logger).error(
-                                message, trace=trace
+                                message, **_structured_of(last_error), trace=trace
                             )
                         raise _timed_out(message, trace, last_error) from last_error
                     time.sleep(self._interval)
