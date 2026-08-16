@@ -9,24 +9,30 @@ name: Consumer corpus
 # `slice` that stopped type-checking on 3.10, an unparameterised `Matcher` that made every member
 # "partially unknown" under pyright strict. Each was invisible from inside the repository.
 #
+# One project is not about the typed surface at all: the pytest plugin has no API to call, and its
+# hooks, ini options and xdist transport had never run from an installed wheel until it existed.
+#
 # Not in the main gate: it builds the package and creates one environment per project, which takes
-# minutes rather than seconds. It runs on a schedule, on demand, and on anything touching the typed
-# surface or the packaging, which is where its findings come from.
+# minutes rather than seconds. It runs on a schedule, on demand, and on anything touching the package
+# or its packaging, which is where its findings come from.
 
 on:
+  # the whole package, rather than the files that looked relevant: this corpus reads *behaviour* from an
+  # installed wheel, and what produces a diff or a report reaches back through the engine, the snapshot
+  # machinery and the polling. A hand-kept list of those was already wrong twice, once for the module
+  # that records late polls and once for the ones that build the diff a section prints
   push:
     paths:
-      - "assertpy2/_engine/_typing.py"
-      - "assertpy2/assertpy.py"
+      - "assertpy2/**"
       - "pyproject.toml"
       - "corpus/**"
       - ".github/workflows/corpus.yml"
   pull_request:
     paths:
-      - "assertpy2/_engine/_typing.py"
-      - "assertpy2/assertpy.py"
+      - "assertpy2/**"
       - "pyproject.toml"
       - "corpus/**"
+      - ".github/workflows/corpus.yml"
   schedule:
     - cron: "0 5 * * 2" # weekly, Tuesday 05:00 UTC
   workflow_dispatch: {}
