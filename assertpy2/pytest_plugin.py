@@ -737,6 +737,17 @@ def pytest_runtest_makereport(item, call):
     if call.excinfo is None or report.when != "call" or not isinstance(exc, AssertionError):
         return
 
+    try:
+        _attach_report_sections(item, report, exc)
+    except Exception:  # pragma: no cover - the barrier; everything under it is tested directly
+        # the sections are built from attributes of somebody else's exception, and reading one runs
+        # their code: an `AssertionError` subclass whose `diff` property raised took the whole run down
+        # with INTERNALERROR. A failure that cannot be decorated is still a failure worth reporting
+        return
+
+
+def _attach_report_sections(item, report, exc) -> None:
+    """Build the report sections a failure of ours can add to its own entry."""
     actual = getattr(exc, "actual", None)
     expected = getattr(exc, "expected", None)
     diff = getattr(exc, "diff", None)
