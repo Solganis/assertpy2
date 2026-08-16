@@ -346,17 +346,23 @@ class CollectionMixin(_MixinBase):
         # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher`
         # subclass check: a custom matcher written against the documented shape was called as a
         # plain function here, and works everywhere else
-        if _is_matcher(predicate):
-            filtered = [item for item in self.val if predicate.matches(item)]
-        else:
-            narrowed = cast("Callable[..., object]", predicate)
-            filtered = [item for item in self.val if narrowed(item)]
+        matches = predicate.matches if _is_matcher(predicate) else cast("Callable[..., object]", predicate)
+        # counted in the pass that filters, rather than by asking the value for its length afterwards: a
+        # generator is spent by that pass, so the note that exists to say "the source had items and the
+        # filter dropped them" said the source was empty. Counting here also leaves the predicate seeing
+        # the source at the same point it always did, which draining it first would not
+        seen = 0
+        filtered = []
+        for item in self.val:
+            seen += 1
+            if matches(item):
+                filtered.append(item)
         return self.builder(
             filtered,
             self.description,
             self.kind,
             logger=self.logger,
-            origin=f"filtered_on() kept {len(filtered)} of {len(list(self.val))} items",
+            origin=f"filtered_on() kept {len(filtered)} of {seen} items",
         )
 
     def mapped(self, func: Callable[[Any], Any]) -> Self:

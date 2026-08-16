@@ -212,6 +212,51 @@ def test_extracting_that_empties_the_subject_says_so():
     assert_that(str(exc_info.value)).contains("extracting() produced 0 of 0 items")
 
 
+def test_the_source_is_walked_as_it_comes():
+    """Counting the source must not turn the walk into two phases.
+
+    Draining it first to count it moved every predicate call after the whole producer had run, which
+    changes the order side effects happen in and which failure a broken producer surfaces.
+    """
+    order = []
+
+    def watched():
+        for index in range(3):
+            order.append(f"produced {index}")
+            yield index
+
+    assert_that(watched()).filtered_on(lambda n: order.append(f"tested {n}") or n > 1).is_length(1)
+    assert_that(order).is_equal_to(["produced 0", "tested 0", "produced 1", "tested 1", "produced 2", "tested 2"])
+
+
+def test_a_broken_producer_does_not_replace_the_extraction_failure():
+    # the first item cannot be extracted from and the second kills the producer: the reader is owed the
+    # error about their data, not the one that came of reading ahead to count
+    def hostile():
+        yield {"name": "first"}
+        raise RuntimeError("the producer broke on the second item")
+
+    with pytest.raises(ValueError, match="did not contain key <missing>"):
+        assert_that(hostile()).extracting("missing")
+
+
+@pytest.mark.parametrize("source", [iter, lambda rows: (row for row in rows)], ids=["iterator", "generator"])
+def test_a_one_shot_source_is_still_counted(source):
+    """The note exists to say the source had items and the step emptied it.
+
+    Counted from a second pass over the value, it said the opposite: a generator is spent by the pass
+    that filters it, so the source read as empty and the reader was pointed at the wrong cause.
+    """
+    rows = [{"n": 1}, {"n": 2}, {"n": 3}]
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(source(rows)).filtered_on(lambda item: False).is_not_empty()
+    assert_that(str(exc_info.value)).contains("filtered_on() kept 0 of 3 items")
+
+    with pytest.raises(AssertionError) as exc_info:
+        assert_that(source(rows)).extracting("n", filter=lambda item: False).is_not_empty()
+    assert_that(str(exc_info.value)).contains("extracting() produced 0 of 3 items")
+
+
 def _navigations():
     """The four hops that hand back a new builder, each of which must carry the context forward."""
     return {
