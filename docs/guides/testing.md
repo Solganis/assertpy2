@@ -259,10 +259,18 @@ whether the value moved. The second walk covers the whole value rather than the 
 past the hundredth item of a container is still seen. A poll that passes, or one whose probe raised,
 walks nothing. Over a scalar a failing poll is a few microseconds. Over a payload of two hundred records
 it measured about 2 ms, and it grows with the payload, so a tight interval over a large response is
-where turning the recorder off is worth it.
+where turning the recorder off is worth it. Ten failing polls over those two hundred records measured
+22 ms with the recorder on against 1.2 ms with it off, which is most of what the failing poll costs.
+Over the scalar the same pair is 118 µs against 85 µs. A chain that settles on its first probe walks
+nothing either way, having produced no failed poll to record.
 
 That is for the rare case where a near-zero interval meets a heavy probed value and even point-in-time
 snapshots cost too much. The timeout failure then reports just the last failure.
+
+Every step of a chain is replayed against a fresh probe on each poll, so steps multiply by polls. One
+scalar probe settling on its eleventh call measured 117 µs polled by a one-step chain and 150 µs by a
+five-step one. A step that fails ends that poll and the steps behind it do not run, so the cheap check
+that tells the common failure apart is worth putting first.
 
 #### Polls that nearly timed out
 
