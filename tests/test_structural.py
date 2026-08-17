@@ -883,6 +883,13 @@ class TestShape:
         cyclic.append(cyclic)
         assert_that(shape(cyclic)).is_equal_to(["mixed"])
 
+    def test_a_self_referential_dict_keeps_the_marker(self):
+        # a list merges the marker away into "mixed", so a dict is the only place it reaches the stored
+        # shape, and its wording is the one every other walker in the package prints for a cycle
+        cyclic = {"a": 1}
+        cyclic["self"] = cyclic
+        assert_that(shape(cyclic)).is_equal_to({"a": "number", "self": "<circular ref>"})
+
 
 class TestShapeDiff:
     def test_no_drift_and_null_wildcard(self):
