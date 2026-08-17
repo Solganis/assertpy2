@@ -22,6 +22,7 @@ from types import MappingProxyType
 import pytest
 from hypothesis import assume, find, given, settings
 from hypothesis import strategies as st
+from hypothesis.errors import HypothesisWarning
 
 import assertpy2._engine._typing
 import assertpy2.assertpy
@@ -1148,14 +1149,17 @@ _wide_values = st.recursive(
 def _reachable(predicate):
     """The minimal value in `_wide_values` satisfying *predicate*, or ``NoSuchExample``.
 
-    ``find`` is not deprecated; the filter is for one unrelated ``DeprecationWarning`` about a missing
-    ``__spec__.loader``, which hypothesis's module introspection raises on 3.15 and this suite's
-    ``filterwarnings = error`` would otherwise turn into a failure.  Matched by message rather than by
-    category, so a real deprecation raised in here still fails the run, and scoped to this helper
-    rather than the project config, so it never covers the library itself.
+    ``find`` is not deprecated.  The filters are for two warnings hypothesis raises about itself, which
+    this suite's ``filterwarnings = error`` would otherwise turn into failures: a ``DeprecationWarning``
+    about a missing ``__spec__.loader`` from its module introspection on 3.15, and a notice that a value
+    it drew renders to a very large repr, which is about what its own reporting would cost and says
+    nothing about the value this lattice is being asked to reach.  Both are matched by message rather
+    than by category, so another warning of either class still fails the run, and both are scoped to this
+    helper rather than to the project config, so neither ever covers the library itself.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="Module globals is missing", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", message="Generating overly large repr", category=HypothesisWarning)
         return find(_wide_values, predicate)
 
 
