@@ -19,14 +19,21 @@ import pytest
 from assertpy2 import AssertionFailure, assert_that, match
 from assertpy2._clustering import (
     _EXAMPLE_LIMIT,
+    _VALUE_LIMIT,
     MINIMUM_SIZE,
     Observation,
     Signature,
+    _bounded,
+    _identity,
     _made_unique,
-    canonical_path,
+    _side,
+    _spelled_out,
     clusters,
+    is_well_formed,
     observations_of,
     render,
+    render_path,
+    signature,
     stable_repr,
 )
 from assertpy2.pytest_plugin import (
@@ -234,9 +241,6 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(first[0].where).is_equal_to("line [n]")
         assert_that(first).is_equal_to(second)
 
-    def test_canonical_path_is_none_where_there_is_no_path(self):
-        assert_that(canonical_path(SimpleNamespace(steps=()))).is_none()
-
 
 class TestNothingHereMayRaise:
     """A summary is a convenience, and this code runs inside a pytest report hook.
@@ -423,7 +427,9 @@ class TestTheSummaryText:
         assert_that(lines).described_as("the words replace the two value lines").is_length(2)
 
     def test_a_kind_without_a_place_is_marked_as_one(self):
-        key = Signature(False, "contains", values=("None", "9"))
+        # keyed on its diagnostic, the only way `contains` reaches a cluster: its two fields hold
+        # presence rather than values, so a pair of them is a signature this module never builds
+        key = Signature(False, "contains", label="every difference here is one of bytes against text")
         assert_that(render(clusters(recorded(5, key), 5), 5)[0]).is_equal_to(
             "5 of 5 failing tests share one contains difference"
         )
@@ -1141,7 +1147,7 @@ class TestTheSummaryHasBounds:
         key = located("total", (("key", "'total'"),))
         return [(f"t{index}", [Observation(key, str(index).zfill(6), expected)]) for index in range(count)]
 
-    def test_a_side_keeps_no_more_than_the_cap(self):
+    def test_a_side_keeps_one_past_the_cap_so_its_length_says_it_was_capped(self):
         found = clusters(self._many(500), 500)[0]
         assert_that(found.actuals).is_length(_EXAMPLE_LIMIT + 1)
         assert_that(found.expecteds).described_as("one expected value, kept whole").is_length(1)
@@ -1221,3 +1227,215 @@ class TestTheSummaryNeverTakesTheRunDown:
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             pytest_terminal_summary(SimpleNamespace(write_line=explode), 1, config)
+
+
+class TestEveryCapAtItsOwnBoundary:
+    """A cap is wrong at exactly its limit or nowhere, and that is the value no test was using."""
+
+    def test_a_value_of_exactly_the_limit_is_kept_whole(self):
+        assert_that(_bounded("x" * _VALUE_LIMIT)).is_equal_to("x" * _VALUE_LIMIT)
+
+    def test_one_character_over_the_limit_is_cut(self):
+        assert_that(_bounded("x" * (_VALUE_LIMIT + 1))).is_equal_to("x" * _VALUE_LIMIT + "... (1 more chars)")
+
+    def test_the_dropped_count_is_what_was_dropped(self):
+        assert_that(_bounded("x" * (_VALUE_LIMIT + 300))).ends_with("... (300 more chars)")
+
+    def test_a_spelling_of_exactly_the_limit_keeps_no_digest(self):
+        spelled = _spelled_out((("key", "x" * (_VALUE_LIMIT - len("key="))),))
+        assert_that(spelled).is_length(_VALUE_LIMIT).does_not_contain("[")
+
+    def test_a_spelling_one_over_the_limit_carries_one(self):
+        spelled = _spelled_out((("key", "x" * (_VALUE_LIMIT - len("key=") + 1)),))
+        assert_that(spelled).matches(r"^key=x{196}\.\.\. \[[0-9a-f]{8}\]$")
+
+    def test_a_cluster_holding_exactly_the_example_limit_counts_them(self):
+        assert_that(_side(tuple(f"v{index:03d}" for index in range(_EXAMPLE_LIMIT)))).is_equal_to(
+            f"v000 and {_EXAMPLE_LIMIT - 1} other values"
+        )
+
+    def test_one_value_past_it_reads_as_a_floor(self):
+        assert_that(_side(tuple(f"v{index:03d}" for index in range(_EXAMPLE_LIMIT + 1)))).is_equal_to(
+            f"v000 and {_EXAMPLE_LIMIT}+ other values"
+        )
+
+
+class TestTheSpellingThatTellsTwoLocationsApart:
+    """`key=3` against `key='3'`, which is the whole reason this spelling exists beside the path."""
+
+    def test_the_hops_are_separated(self):
+        assert_that(_spelled_out((("key", "'a'"), ("attr", "b")))).is_equal_to("key='a'.attr=b")
+
+    def test_two_long_locations_sharing_a_prefix_stay_apart(self):
+        first = _spelled_out((("key", "'" + "x" * 400 + "'"),))
+        second = _spelled_out((("key", "'" + "x" * 399 + "y'"),))
+        assert_that(first).is_not_equal_to(second)
+        assert_that(first[:_VALUE_LIMIT]).is_equal_to(second[:_VALUE_LIMIT])
+
+
+class TestNoRenderingRaisesOnASurrogate:
+    """`repr` escapes a lone surrogate in a string, but a `__repr__` of somebody's own can return one.
+
+    Both digests encode that text, and a codec asked to refuse would take the summary hook down.
+    """
+
+    class _LoneSurrogate:
+        def __repr__(self):
+            return "lone " + chr(0xD800) + " surrogate"
+
+    def test_a_value_key_survives_it(self):
+        assert_that(_identity(self._LoneSurrogate())).is_length(32)
+
+    def test_a_spelling_survives_it(self):
+        spelled = _spelled_out((("key", chr(0xD800) + "x" * 400),))
+        assert_that(spelled).ends_with("]")
+
+    def test_a_value_key_is_sixteen_bytes(self):
+        # the wire carries one per failure, so its width is a promise rather than an implementation note
+        assert_that(_identity("anything")).is_length(32).matches(r"^[0-9a-f]{32}$")
+
+
+class TestALocationRendersForAReader:
+    """Quotes come off a mapping key so the path reads as one, which two lengths of key get wrong."""
+
+    def test_an_empty_key_loses_its_quotes(self):
+        assert_that(render_path((("key", "''"),))).is_equal_to("")
+
+    def test_a_key_that_is_one_quote_keeps_it(self):
+        # arrives only over the wire: `repr` never produces a bare quote, and `is_well_formed` compares
+        # what it renders against the `where` the payload claims
+        assert_that(render_path((("key", "'"),))).is_equal_to("'")
+
+    def test_a_quoted_key_loses_its_quotes(self):
+        assert_that(render_path((("key", "'role'"),))).is_equal_to("role")
+
+    def test_an_unquoted_key_is_left_alone(self):
+        assert_that(render_path((("key", "3"),))).is_equal_to("3")
+
+
+class TestALocationFreeSignatureCarriesExactlyTwoValues:
+    """`signature()` sets a pair, so a payload with any other count describes a difference it cannot."""
+
+    def test_a_pair_is_well_formed(self):
+        assert_that(is_well_formed(Signature(False, "scalar", values=("a", "b")))).is_true()
+
+    @pytest.mark.parametrize("values", [(), ("a",), ("a", "b", "c")])
+    def test_any_other_count_is_not(self, values):
+        assert_that(is_well_formed(Signature(False, "scalar", values=values))).is_false()
+
+    @pytest.mark.parametrize("kind", ["contains", "set"])
+    def test_a_kind_whose_fields_hold_presence_carries_no_values(self, kind):
+        # `signature()` refuses to pair values for these, and a payload that did would print the
+        # `None` standing for a missing item as though it were the value under test
+        assert_that(is_well_formed(Signature(False, kind, values=("a", "b")))).is_false()
+
+    @pytest.mark.parametrize("kind", ["contains", "set", "scalar", "string"])
+    def test_a_diagnostic_keys_any_kind(self, kind):
+        assert_that(is_well_formed(Signature(False, kind, label="one of bytes"))).is_true()
+
+
+class TestTheShapeOfAValueKeyedSignature:
+    """The values family is the one `signature()` builds by hand, and every field of it was unasserted."""
+
+    @staticmethod
+    def _entry(actual, expected):
+        return SimpleNamespace(steps=(), actual=actual, expected=expected)
+
+    def test_it_is_not_located_and_names_its_kind(self):
+        key = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 2))
+        # exactly False, not merely falsy: the flag crosses the xdist wire as itself
+        assert_that(key.located).is_equal_to(False)
+        assert_that(key.where).is_equal_to("scalar")
+        assert_that(key.values).is_length(2)
+
+    def test_both_sides_decide_identity(self):
+        one = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 2))
+        other = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 3))
+        assert_that(one).is_not_equal_to(other)
+
+    def test_what_it_builds_is_well_formed(self):
+        key = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 2))
+        assert_that(is_well_formed(key)).is_true()
+
+
+class _HashableList(list):
+    """Mutable and hashable at once, which is what lets a cycle run through a set member or a dict key."""
+
+    __hash__ = object.__hash__
+    __eq__ = object.__eq__
+
+
+class TestWalkingAValueThatReachesBackIntoItself:
+    """A container holding itself has to be marked rather than followed, on every branch of the walk."""
+
+    def test_a_tuple_that_reaches_itself(self):
+        holder = []
+        pair = (1, holder)
+        holder.append(pair)
+        assert_that(stable_repr(pair)).is_equal_to("(1, [...])")
+
+    def test_a_list_that_reaches_itself(self):
+        inner = [1]
+        inner.append(inner)
+        assert_that(stable_repr(inner)).is_equal_to("[1, ...]")
+
+    def test_a_dict_that_reaches_itself(self):
+        inner = {}
+        inner["self"] = inner
+        assert_that(stable_repr(inner)).is_equal_to("{'self': ...}")
+
+    def test_a_set_member_that_reaches_the_set(self):
+        """A mutable container is hashable when it borrows `object.__hash__`, so it can be a member."""
+        member = _HashableList()
+        outer = {member}
+        member.append(outer)
+        assert_that(stable_repr(outer)).is_equal_to("{[...]}")
+
+    def test_a_dict_key_that_reaches_the_dict(self):
+        key = _HashableList()
+        mapping = {key: 0}
+        key.append(mapping)
+        assert_that(stable_repr(mapping)).is_equal_to("{[...]: 0}")
+
+    def test_a_set_inside_a_tuple_is_still_ordered(self):
+        assert_that(stable_repr((frozenset({2, 1}),))).is_equal_to("({1, 2},)")
+        assert_that(stable_repr((frozenset({2, 1}), 3))).is_equal_to("({1, 2}, 3)")
+
+
+class TestWhatTheDenominatorAllows:
+    """`total_failures` is the run's own count, and a summary over nothing is not a summary."""
+
+    @staticmethod
+    def _recorded(count):
+        key = Signature(True, "role", (("attr", "'role'"),))
+        return [(f"t{index}", [Observation(key, "a", "b")]) for index in range(count)]
+
+    def test_no_failures_means_no_clusters(self):
+        assert_that(clusters(self._recorded(3), 0, minimum=1)).is_empty()
+
+    def test_a_negative_count_means_the_same(self):
+        assert_that(clusters(self._recorded(3), -1, minimum=1)).is_empty()
+
+    def test_one_failure_can_still_be_a_cluster(self):
+        # only under a floor of one, which the ini option allows: the denominator does not decide it
+        assert_that(clusters(self._recorded(1), 1, minimum=1)).is_length(1)
+
+
+class TestTheSmallestExampleSurvivesTheCap:
+    """Past the cap a cluster keeps the smallest value, whatever order the failures arrived in."""
+
+    @staticmethod
+    def _recorded(values):
+        key = Signature(True, "role", (("attr", "'role'"),))
+        return [(f"t{index}", [Observation(key, value, "b")]) for index, value in enumerate(values)]
+
+    def test_a_later_smaller_value_replaces_the_largest(self):
+        values = [f"v{index:03d}" for index in range(1, _EXAMPLE_LIMIT + 2)] + ["v000"]
+        found = clusters(self._recorded(values), len(values))
+        assert_that(found[0].actuals[0]).is_equal_to("v000")
+
+    def test_a_repeat_of_the_smallest_evicts_nothing(self):
+        values = [f"v{index:03d}" for index in range(_EXAMPLE_LIMIT + 1)] + ["v000"]
+        found = clusters(self._recorded(values), len(values))
+        assert_that(found[0].actuals).is_length(_EXAMPLE_LIMIT + 1)
+        assert_that(found[0].actuals[-1]).is_equal_to(f"v{_EXAMPLE_LIMIT:03d}")
