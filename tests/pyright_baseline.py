@@ -14,9 +14,7 @@ from __future__ import annotations
 
 BASELINE: dict[tuple[str, str], int] = {
     # --- values typed `object`, asked things only their runtime type can answer -------------------
-    # The recursive walk decides what a value is at runtime, then reads it. Pyright judges each read
-    # against the declared `object`, where ty accepts it after the narrowing predicate. Closing them
-    # would mean a cast at every hop.
+    # ty accepts these after the narrowing predicate, pyright judges them against the declared `object`
     ("assertpy2/_engine/_diff.py", "reportAttributeAccessIssue"): 14,
     ("assertpy2/_satisfies.py", "reportArgumentType"): 1,
     ("assertpy2/base.py", "reportArgumentType"): 2,
@@ -45,18 +43,13 @@ BASELINE: dict[tuple[str, str], int] = {
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
     # --- the overload sets, all deliberate ---------------------------------------------------------
-    # `assert_that` dispatches on value type, so per-type overloads overlap the generic fallback and
-    # the implementation is typed to the core protocol. The `satisfies` narrowing pair is the same
-    # trade taken once more, now in three places: the core protocol, and the string and numeric ones
-    # that narrow it to `Matcher[str]` / `Matcher[_N]` so a matcher built for another type is caught.
+    # per-type overloads overlap the generic fallback by construction, and the `satisfies` narrowing
+    # pair takes the same trade in three protocols so a matcher built for another type is caught
     ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 3,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
     ("assertpy2/assertpy.py", "reportOverlappingOverload"): 4,
-    # Two variance suggestions, both refused on purpose. `_N` is read back through `value`, so
-    # covariance would break its inputs. `_E` appears only in parameters, but one of them is
-    # `Matcher[_E]`, and `Matcher` is contravariant: the flips cancel, and declaring it would let a
-    # `Matcher[Dog]` reach an assertion over animals. Measured: pyright and mypy both accept that
-    # substitution silently. `typing_cases.py` holds the case.
+    # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
+    # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 2,
     # --- mixin composition -------------------------------------------------------------------------
     # The mixins each declare the shared helpers over their own value type, and `AssertionBuilder` is
@@ -64,9 +57,8 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
     ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
     # --- dynamic attribute resolution ---------------------------------------------------------------
-    # `__getattr__` builds the check/negation proxies, so what it returns cannot match a declared
-    # return type. Each site carries its own ty suppression.  There used to be a fourth here, from
-    # writing `__tracebackhide__` onto the contextlib module; that patch is gone and so is the report.
+    # `__getattr__` builds the check and negation proxies, so what it returns matches no declared
+    # return type.  Each site carries its own ty suppression
     ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
     ("assertpy2/assertpy.py", "reportReturnType"): 4,
     # the failure record is `| None` in general and never None at this call, as the comment there says

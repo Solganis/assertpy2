@@ -83,10 +83,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
     # --- a type parameter substituted by a wider one -----------------------------------------------
-    # the element of `_RepeatableAssertion` is invariant on purpose, and this line is what that buys.
-    # Declaring it contravariant, which pyright suggests and `pyright_baseline.py` records as refused,
-    # makes this substitution legal in both pyright and mypy, and a matcher for the narrower element
-    # then reaches an assertion over the wider one
+    # what the invariant element of `_RepeatableAssertion` buys: the contravariance pyright suggests
+    # makes this legal, and a matcher for the narrower element then reaches the wider assertion
     "repeats-of-a-wider-element-substituted": _ARGUMENT,
     # --- the shape at a json path is unknowable statically, so the view carries no shape -----------
     # each of these used to type-check and raise at runtime, which is the pairing this file exists for

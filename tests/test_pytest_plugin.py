@@ -794,10 +794,8 @@ class TestSnapshotUpdateOption:
         assert_that(names).contains("--assertpy2-snapshot-update")
 
     def test_the_boolean_flags_are_opt_in(self):
-        # nothing pinned the defaults, so each of these flipped to default=True unnoticed: update mode
-        # would silently rewrite a changed snapshot, and CI mode would fail a first local capture.
-        # named one by one rather than swept over every registered option, which would also forbid ever
-        # adding one that takes a value
+        # unpinned, these flipped to default=True unnoticed: update mode rewrites a changed snapshot.
+        # Named one by one rather than swept, which would forbid ever adding an option that takes a value
         parser = MagicMock()
         pytest_addoption(parser)
         registered = {call[0][0]: call[1] for call in parser.addoption.call_args_list}
@@ -1245,10 +1243,8 @@ class TestSnapshotKeyReuseWarning:
         assert_that(str(caught[0].message)).contains("snapshot(id=...)")
 
     def test_the_warning_points_at_the_line_that_reused_the_key(self, monkeypatch, tmp_path):
-        # catch_warnings records the message but not where pytest will attribute it, so the stack
-        # level was free to drift onto our own frame or into pytest internals, where a module-scoped
-        # filterwarnings rule would stop matching it. driven through snapshot() because the depth is
-        # only right on the real call path
+        # catch_warnings records the message, not where pytest attributes it, so the stack level was
+        # free to drift.  Driven through snapshot(), since the depth is only right on the real path
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             assert_that({"u": 1}).snapshot(id="shared", path=str(tmp_path))
@@ -1450,11 +1446,8 @@ class TestSnapshotKeyReuseUnderXdist:
                 str(tmp_path / "test_reuse.py"),
                 "-q",
                 "--no-header",
-                # keep the child inside tmp_path. without these it finds no ini file above the
-                # generated module, settles on the home directory as its rootdir, and then walks every
-                # directory from tmp_path up to there looking for conftest files. That walk crosses the
-                # shared temp directory, and anything else on the machine creating or removing a
-                # directory in it mid-walk makes two xdist workers collect different sets
+                # keep the child inside tmp_path: without these it takes the home directory as rootdir
+                # and walks the shared temp directory, where anything else on the machine can move
                 "--rootdir",
                 str(tmp_path),
                 "--confcutdir",

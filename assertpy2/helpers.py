@@ -430,10 +430,8 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import, paid by
-            # every pytest run wherever attrs is installed, whether or not an attrs instance ever
-            # reached a comparison.  The guard above already proved the library is present, since
-            # nothing carries `__attrs_attrs__` unless attrs built it.
+            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import, on every run
+            # where attrs is installed.  The guard above already proved it is present
             import attrs
 
             # asdict recurses like dataclasses.asdict, flattening nested attrs for ignore/include

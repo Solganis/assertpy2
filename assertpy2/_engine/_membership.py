@@ -61,11 +61,8 @@ def is_walkable(value: object) -> bool:
     return isinstance(value, Iterable)
 
 
-# the built-in types whose `__hash__` and `__eq__` are defined together and agree, so asking a set is
-# the same question as walking a list.  `bool` is here with `int` on purpose: `1 in {True}` and
-# `1 in [True]` both answer True, which is the equality Python itself uses.  `bytearray` is not here
-# although it looks like it belongs: it is mutable and therefore unhashable, and listing it turned
-# `assert_that([bytearray(b"a")]).contains_only(...)` into a TypeError
+# types whose `__hash__` and `__eq__` agree, so asking a set is the same question as walking a list.
+# `bytearray` looks like it belongs and is not hashable, which turned a `contains_only` into TypeError
 _HASH_SAFE = frozenset(
     {
         int,
@@ -76,12 +73,8 @@ _HASH_SAFE = frozenset(
         bytes,
         frozenset,
         type(None),
-        # the numeric tower and the calendar types: Python guarantees that equal values hash equally
-        # across them, which is the whole rule here.  `Decimal` earns its place by measurement - a
-        # collection of two thousand of them cost 53 ms on the walk and a tenth of a millisecond here -
-        # and both modules are already imported by the comparison core, so this costs no import time.
-        # `Fraction` is deliberately absent despite the same guarantee: `fractions` pulls in thirteen
-        # more modules, and import cost is a promise this package keeps
+        # the numeric tower and the calendar types, where equal values are guaranteed to hash equally.
+        # `Fraction` qualifies and is left out: `fractions` drags in thirteen modules at import
         decimal.Decimal,
         datetime.date,
         datetime.datetime,
@@ -91,16 +84,11 @@ _HASH_SAFE = frozenset(
 )
 
 
-# below this many comparisons the walk is cheaper than deciding whether to avoid it.  A set costs a pass
-# to build and a pass to classify, and on the collections most assertions actually see - a handful of
-# elements - that preparation is the whole cost.  Measured: at ten elements the shortcut made the
-# assertion twice as slow, at a hundred it paid for itself several times over
+# below this many comparisons the walk beats preparing a set: measured 2x slower at ten elements,
+# several times faster at a hundred
 _WALK_UNDER = 400
 
-# the one classified type that hashes for almost every value and refuses for one: `Decimal("snan")`
-# raises, because a signalling NaN is meant to be noticed rather than compared quietly.  Everything else
-# on the safe list either always hashes or is excluded by the rule, so only this needs looking at, and
-# looking costs a pass that would otherwise be paid on every search
+# the one safe-list type that refuses to hash for a single value: `Decimal("snan")` raises
 _HASH_MAY_REFUSE = frozenset({decimal.Decimal})
 
 

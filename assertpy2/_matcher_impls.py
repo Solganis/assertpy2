@@ -490,10 +490,8 @@ def _type_expression_name(expected: object) -> str:
 
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
-        # Probed here rather than in `matches()`, for the reason `MatchesRegexMatcher` compiles its
-        # pattern eagerly: a matcher must not raise on use.  Without this, `list[int]` was accepted and
-        # blew up inside `matches()`, and a tuple of classes matched fine and then blew up inside
-        # `describe()` - only when a failure was being rendered.
+        # eagerly, like the regex matcher compiles its pattern: a matcher must not raise on use, and
+        # `list[int]` used to blow up inside `matches()` or, worse, inside `describe()`
         try:
             isinstance(None, expected_type)
         except TypeError as exc:
@@ -727,10 +725,8 @@ class HasPropertyMatcher(BaseMatcher):
 # --- String matchers ---
 
 
-# `str` and `bytes` are each other's neighbours and never each other's operands, so the three text
-# matchers below take the two apart rather than trying an operation and catching the TypeError.  They
-# used to accept `str` alone, and answered False where the method of the same name passed: the one place
-# a matcher and its method disagreed on the verdict rather than on strictness
+# `str` and `bytes` are never each other's operands, so the three text matchers below take them apart
+# rather than catching a TypeError.  Accepting `str` alone made a matcher disagree with its own method
 def _textlike_noun(operand: object) -> str:
     """What to call the operand in a description, so a bytes match does not read as a string one."""
     return "bytes" if isinstance(operand, (bytes, bytearray)) else "a string"

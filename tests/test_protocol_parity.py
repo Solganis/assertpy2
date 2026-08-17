@@ -46,10 +46,8 @@ from assertpy2.assertpy import AssertionBuilder
 
 _SENTINEL = object()
 
-# Pairs that say the same thing and must stay apart, with the reason.  Without this the anti-duplication
-# gate below would force a shared base for any two matching signatures, and one of those bases already
-# widened a type once: lifting the untyped `contains` out of the mapping and the byte string took the
-# string's `str | Matcher[str]` with it, so `assert_that("abc").contains(123)` stopped being an error.
+# Pairs that say the same thing and must stay apart, with the reason: the gate below would otherwise
+# force a shared base, and one such base widened `contains` until `"abc".contains(123)` type-checked.
 _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     {
         # a mapping searches keys and a byte string searches bytes: one spelling, two questions, and a
@@ -84,13 +82,8 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
     }
 )
 
-# `_InvokedAssertion` carries what a message is, and no longer what a filename is.  It used to inherit
-# the string protocol whole, which handed it `_FilesystemAssertion` and offered `exists()` on the text
-# of an exception: a call that type-checked and then went looking on disk.  Writing this register down
-# is what made that visible, and `_TextAssertion` is what separates the two.
-# Which protocol carries which capability, checked for *equality* rather than containment.  Both
-# directions are quiet failures: dropping `_FilesystemAssertion` from the string leaves nine assertions
-# unreachable for every `str`, and adding it to a byte string offers `exists()` on a value with no path.
+# Which protocol carries which capability, checked for equality rather than containment: both
+# directions fail quietly, and one of them offered `exists()` on the text of an exception.
 _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_SizedAssertion": (
         "_TextAssertion",
@@ -170,11 +163,8 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     dataframe.DataFrameMixin: (),
 }
 
-# The one family with no narrowed view, and the reason is structural rather than a matter of extras:
-# every ``assert_that`` overload keys on a concrete type (``str``, ``dict``, ``bytes``, ...), and a
-# DataFrame or an ndarray matches none of them, so the call resolves to ``AssertionBuilder[_T]``.  That
-# fallback is the concrete class, which carries these methods - it is the same path the dynamic
-# ``has_*`` assertions take, and it has no Protocol by construction.
+# The one family with no narrowed view: every ``assert_that`` overload keys on a concrete type, and a
+# DataFrame matches none, so the call lands on the fallback, which is the class carrying these methods.
 _UNTYPED: frozenset[str] = frozenset({"is_array_equal", "is_array_close_to", "is_frame_equal"})
 
 # The bases that carry no assertions and so contribute no edge to the inheritance graph.  Written out
@@ -220,11 +210,8 @@ def _protocol_classes():
 _PROTOCOLS = _protocol_classes()
 
 
-# Union spellings this file refuses to read.  Six rounds of review established that following what a
-# name means at a point in a module cannot be done from the syntax alone: `setattr`, `__dict__`, `exec`
-# and a conditional import all rebind without an assignment an `ast` walk can see.  The typed surface
-# writes every union with `|` already, so the cheap rule is to require it, and to canonicalise that one
-# form properly rather than approximate three.
+# Union spellings this file refuses to read: what a name means cannot be followed from the syntax
+# alone, and the typed surface writes every union with `|`, so the cheap rule is to require it.
 _LEGACY_UNIONS: tuple[str, str] = ("Optional", "Union")
 
 

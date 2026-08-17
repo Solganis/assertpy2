@@ -31,10 +31,8 @@ import tomllib
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _CORPUS = _ROOT / "corpus"
 _PROJECTS = _CORPUS / "projects"
-# one directory per run rather than one shared: two corpora running at once were deleting each other's
-# environments, and the failure looked like a flaky install
-# a pid alone is not enough: the OS reuses them, so a `--keep` directory could be removed by a
-# later run that happened to be given the same number
+# one directory per run: two at once were deleting each other's environments, and a pid alone is not
+# enough, since the OS reuses them
 _RUN = f"{os.getpid()}-{secrets.token_hex(4)}"
 # the Python the consumer environments are built on, which is not the one running this script: `tomllib`
 # needs 3.11, while a consumer may well be on 3.10
@@ -54,10 +52,8 @@ _CHECKERS = {
 # project's own configuration, which is where a strict consumer would put it anyway
 _STRICT = {"mypy": ("mypy", "--strict", "--cache-dir", "{cache}/mypy", ".")}
 
-# the tools are constrained to a major line and their resolved versions are recorded with the results.
-# Not pinned to an exact version: a checker release inside the line can change a diagnostic, and finding
-# that out is part of what this corpus is for.  What matters is that the artefact says which version
-# produced the verdict, so "green" is never "green against something unknown"
+# constrained to a major line, not pinned: a release inside the line changing a diagnostic is part of
+# what this corpus is for, and the artefact records which version produced the verdict
 _TOOLS_BY_NAME = {
     "mypy": "mypy>=2.3,<3",
     "pyright": "pyright>=1.1.411,<2",
@@ -177,10 +173,8 @@ def _python(environment: pathlib.Path) -> pathlib.Path:
     return windows if windows.exists() else environment / "bin" / "python"
 
 
-# What each extra brings, named by distribution rather than by import name: a distribution is what an
-# environment actually holds, and one package can install a module named after something else entirely.
-# An optional dependency that becomes mandatory by accident is invisible from inside the repository,
-# where the whole development environment is installed.
+# what each extra brings, by distribution rather than import name, since a distribution is what an
+# environment holds.  An optional dependency turned mandatory is invisible from inside the repository
 _EXTRA_DISTRIBUTIONS: dict[str, tuple[str, ...]] = {
     "numpy": ("numpy",),
     "pandas": ("pandas",),
@@ -299,10 +293,8 @@ def _named(requirement: str) -> str:
     return _canonical(re.split(r"[\s\[<>=!;~]", requirement.strip(), maxsplit=1)[0])
 
 
-# What this library promises to require at runtime, written here rather than read from `pyproject.toml`.
-# Reading it there would make the check circular: a dependency added by mistake would arrive already
-# "declared", and the plain install would go on being green.  A deliberate addition changes this line,
-# which is the point at which somebody has to agree it belongs.
+# written here rather than read from `pyproject.toml`, which would make the check circular: a
+# dependency added by mistake would arrive already declared and the plain install would stay green
 _PROMISED_DEPENDENCIES = frozenset({"typing-extensions"})
 
 

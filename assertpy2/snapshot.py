@@ -257,10 +257,8 @@ def _record_access(snapname: str, key: str, site: str) -> None:
         return
     nodes = _ACCESS_NODES.setdefault((snapname, key), set())
     nodes.add(_CURRENT_NODE)
-    # `>= 2` with `_WARNED` doing the once-only work, rather than `== 2` catching the exact moment the
-    # second test arrives. Both warn once, but the equality is a knife-edge: it holds only because a
-    # set of node ids grows one at a time, and it would start dropping warnings the day anything
-    # cleared or repopulated the registry mid-run
+    # `>= 2` with `_WARNED` doing the once-only work: `== 2` warns once too, but only because the set
+    # grows one node at a time, and it would drop warnings the day anything repopulated the registry
     if len(nodes) >= 2 and (snapname, key) not in _WARNED:
         _WARNED.add((snapname, key))
         warnings.warn(
@@ -692,10 +690,8 @@ class SnapshotMixin(_MixinBase):
                     comparators=comparators,
                 )
             except AssertionFailure as mismatch:
-                # name the snapshot the value was compared against: without it the failure is
-                # indistinguishable from a plain is_equal_to, and the reader has no file to open
-                # without a custom id the file holds one entry per line number, so the file alone does
-                # not say which of them was compared
+                # name the snapshot, or the failure reads as a plain is_equal_to with no file to open.
+                # The line number goes with it, since without a custom id the file holds one per line
                 located = snapname if id else f"{snapname}::{lineno}"
                 raise _rewrapped(
                     mismatch,

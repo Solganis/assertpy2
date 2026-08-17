@@ -167,10 +167,8 @@ def _alignment_opcodes_if_useful(actual, expected):
     this count picks the same winner as the exact one every time.
     """
     if len(actual) == len(expected):
-        # a shift changes the length, and asked before anything is counted this keeps the whole cost
-        # off the common failure: two sequences of records, same length, one field different.  Equal
-        # lengths can still shift - a rotation - but measured over 13 640 random pairs that is 8% of
-        # the cases alignment wins, against a doubled comparison on every equal-length diff
+        # equal lengths can still hide a rotation, but over 13 640 random pairs that is 8% of the wins
+        # against a doubled comparison on every equal-length diff
         return None
     if max(len(actual), len(expected)) > _ALIGN_MAX_ELEMENTS:
         return None  # over the cap nothing here can be used anyway
@@ -205,10 +203,8 @@ def _sequence_diff_entries(actual, expected, prefix: _Path, seen, config=None) -
         elif i >= len(expected):
             entries.append(prefix.index(i).entry(actual=actual[i], expected=None, absent="expected"))
         else:
-            # inlined rather than routed through `_element_entries()`: this runs once per element of
-            # every sequence diff, and returning an empty list for an equal element cost 15% of the
-            # walk in allocations alone.  the path is built after the decision for the same reason:
-            # an equal element is the common case and it has no path anyone will read
+            # inlined, and the path built after the decision: an empty list per equal element cost 15%
+            # of the walk in allocations alone
             decision = _node_decision(actual[i], expected[i], config)
             if decision == "leaf":
                 entries.append(prefix.index(i).entry(actual=actual[i], expected=expected[i]))
@@ -461,13 +457,8 @@ def _sub_diff_entries(
         actual_keys = set(actual)
         expected_keys = set(expected)
         if config is not None and config.strict_types:
-            # a key is matched by hash before the walk reaches it, so two mappings keyed `True` and `1`
-            # present identical values and no difference at all. Reported against the key, since that is
-            # what differs: the value under it is the same.
-            #
-            # Keyed lookup rather than an intersection of the two key sets: `{True} & {1}` hands back
-            # whichever side the set implementation drew from, so the type under comparison was already
-            # gone. A dict indexed by the expected keys answers with the key it actually stores
+            # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs.
+            # A dict keyed by the expected side answers with the key it actually stores
             stored = {key: key for key in expected}
             for key in actual:
                 counterpart = stored.get(key, key)

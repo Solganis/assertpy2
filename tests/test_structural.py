@@ -1126,10 +1126,8 @@ class TestStructureWalkPathsAndCycles:
         assert_that(_texts(mismatches)).is_equal_to([("a.a.n", 1, "<2>")])
 
     def test_the_mismatch_detail_comes_from_the_matcher(self):
-        # `describe_mismatch` renders the detail of the first mismatch; handing the matcher the wrong
-        # value still produces a sentence, so only reading it catches that
-        # a matcher whose own wording differs from the generic "was <...>" fallback, so the two
-        # branches are distinguishable: `greater_than` would render identically either way
+        # a matcher whose wording differs from the generic "was <...>" fallback, or the two branches
+        # would render identically and the sentence would pass either way
         described = StructureMatcher({"a": match.is_even()}).describe_mismatch({"a": "x"})
         assert_that(described).is_equal_to(
             "at <a>: expected an even integer, but was <'x'> of type <str>, not an integer"

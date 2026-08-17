@@ -26,10 +26,8 @@ from tests.pyright_baseline import BASELINE
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Which variance suggestions are refused, named rather than counted.  A count says "two of this rule in
-# this file" and would stay green if one of them were replaced by an unrelated diagnostic of the same
-# rule, which is exactly what a recorded refusal must not allow: the reason each is refused is written
-# in `pyright_baseline.py` and applies to that TypeVar, not to a number.
+# Named rather than counted: a count of two stays green when one is replaced by an unrelated
+# diagnostic of the same rule, and each refusal is about its TypeVar rather than about a number.
 _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_typing.py", "_RepeatableAssertion", "_E", "contravariant"),
     ("assertpy2/_engine/_typing.py", "_NumericAssertion", "_N", "covariant"),
