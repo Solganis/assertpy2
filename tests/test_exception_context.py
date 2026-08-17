@@ -19,8 +19,10 @@ from assertpy2 import assert_that
 # Sites that deliberately let the caught exception through. An entry is a decision, and it carries
 # its reason; a new one that appears without a reason is the bug this module exists to catch.
 KEEPS_THE_CAUGHT_EXCEPTION = {
-    ("async_assertions.py", "_poll"): "soft/warn branch only, where error() collects or logs and never raises",
-    ("async_assertions.py", "_run"): "same, and the strict branch beside it already raises `from last_error`",
+    ("async_assertions.py", "_out_of_time"): (
+        "soft/warn branch only, where error() collects or logs and never raises; the strict branch "
+        "beside it already raises `from last_error`"
+    ),
     ("bytes_mixin.py", "is_valid_utf8"): "the decode error names the offending byte and offset, our message does not",
     ("bytes_mixin.py", "is_valid_encoding"): "same, and it also names an unknown codec",
     ("exception.py", "when_called_with"): "the caught exception is the caller's own bug, its traceback is the point",
@@ -28,33 +30,49 @@ KEEPS_THE_CAUGHT_EXCEPTION = {
 }
 
 
-def _error_calls_in_except_blocks(node, module, function="<module>", in_handler=False):
-    """Yield ``(module, function, suppresses)`` for every ``error()`` call written inside an except block."""
+def _module_functions(tree):
+    """The module's own top-level functions by name, so a call inside a handler can be followed."""
+    return {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+
+
+def _error_calls_in_except_blocks(node, module, functions, function="<module>", in_handler=False, followed=frozenset()):
+    """Yield ``(module, function, suppresses)`` for every ``error()`` call reached from an except block.
+
+    Reached, not written: a handler that delegates to a helper still runs it with the exception being
+    handled, so the helper is a site too.  One hop, and only into this module's own top-level functions,
+    since deeper than that the call graph stops being readable from the syntax.
+    """
     for child in ast.iter_child_nodes(node):
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            yield from _error_calls_in_except_blocks(child, module, child.name, in_handler)
+            yield from _error_calls_in_except_blocks(child, module, functions, child.name, in_handler, followed)
             continue
         if isinstance(child, ast.ExceptHandler):
-            yield from _error_calls_in_except_blocks(child, module, function, True)
+            yield from _error_calls_in_except_blocks(child, module, functions, function, True, followed)
             continue
-        if (
+        if in_handler and isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+            if child.func.attr == "error":
+                yield module, function, any(keyword.arg == "suppress_context" for keyword in child.keywords)
+        elif (
             in_handler
             and isinstance(child, ast.Call)
-            and isinstance(child.func, ast.Attribute)
-            and child.func.attr == "error"
+            and isinstance(child.func, ast.Name)
+            and child.func.id in functions
+            and child.func.id not in followed
         ):
-            yield module, function, any(keyword.arg == "suppress_context" for keyword in child.keywords)
-        yield from _error_calls_in_except_blocks(child, module, function, in_handler)
+            target = functions[child.func.id]
+            yield from _error_calls_in_except_blocks(
+                target, module, functions, target.name, True, followed | {child.func.id}
+            )
+        yield from _error_calls_in_except_blocks(child, module, functions, function, in_handler, followed)
 
 
 def _sites_keeping_the_caught_exception() -> set[tuple[str, str]]:
     package = pathlib.Path(assertpy2.__file__).parent
+    trees = [(source.name, ast.parse(source.read_text(encoding="utf-8"))) for source in sorted(package.rglob("*.py"))]
     return {
         (module, function)
-        for source in sorted(package.rglob("*.py"))
-        for module, function, suppresses in _error_calls_in_except_blocks(
-            ast.parse(source.read_text(encoding="utf-8")), source.name
-        )
+        for name, tree in trees
+        for module, function, suppresses in _error_calls_in_except_blocks(tree, name, _module_functions(tree))
         if not suppresses
     }
 

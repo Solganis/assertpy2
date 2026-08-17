@@ -14,14 +14,20 @@ modes must say the same thing belongs here.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import io
 import logging
 import re
+from typing import TYPE_CHECKING, NamedTuple
 
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, assert_warn, match, soft_assertions
+from assertpy2.async_assertions import AsyncAssertionBuilder
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # `[file.py:12]`, which the compact surfaces append to a collected entry and the block form has no use
 # for. Stripped before comparing headlines, since a location is about where, not about what
@@ -172,6 +178,32 @@ def test_a_named_path_is_never_invented(case: Case):
     assert_that(set(_soft(case).paths)).is_subset_of(set(_hard(case).paths))
 
 
+def _finish(chain):
+    """Run a polling chain to its verdict, whichever surface built it."""
+    return asyncio.run(chain) if isinstance(chain, AsyncAssertionBuilder) else chain
+
+
+class _Polling(NamedTuple):
+    """One polling surface: how a chain starts on it, and how it is brought to a verdict."""
+
+    start: Callable[..., object]
+    finish: Callable[[object], object]
+
+
+@pytest.fixture(params=["eventually_sync", "eventually"])
+def polling(request) -> _Polling:
+    """Both polling surfaces under one name, so every question about a chain is asked of each.
+
+    The four tests below describe what waiting *is*, and all four used to be asked of the sync surface
+    only, which is how the async one came to do none of them.
+    """
+
+    def start(probe, **kwargs):
+        return getattr(assert_that(probe), request.param)(**kwargs)
+
+    return _Polling(start, _finish)
+
+
 class TestPollingSurvivesTheChain:
     """Waiting is the whole point of the polling surface, and a chained call used to end it silently.
 
@@ -189,27 +221,28 @@ class TestPollingSurvivesTheChain:
 
         return probe
 
-    def test_a_second_assertion_keeps_waiting(self):
+    def test_a_second_assertion_keeps_waiting(self, polling):
         counter = {"polls": 0}
-        assert_that(self._counting_probe(counter)).eventually_sync(timeout=2, interval=0.01).is_instance_of(
-            int
-        ).is_equal_to(4)
+        polling.finish(
+            polling.start(self._counting_probe(counter), timeout=2, interval=0.01).is_instance_of(int).is_equal_to(4)
+        )
         assert_that(counter["polls"]).described_as("polls spent").is_greater_than(1)
 
-    def test_a_navigation_step_keeps_waiting(self):
+    def test_a_navigation_step_keeps_waiting(self, polling):
         counter = {"polls": 0}
-        assert_that(self._counting_probe(counter)).eventually_sync(timeout=2, interval=0.01).described_as(
-            "label"
-        ).is_equal_to(4)
+        polling.finish(
+            polling.start(self._counting_probe(counter), timeout=2, interval=0.01).described_as("label").is_equal_to(4)
+        )
         assert_that(counter["polls"]).described_as("polls spent").is_greater_than(1)
 
-    def test_negation_polls_instead_of_raising_an_attribute_error(self):
+    def test_negation_polls_instead_of_raising_an_attribute_error(self, polling):
         states = iter(["pending", "pending", "ready"])
-        assert_that(lambda: next(states, "ready")).eventually_sync(timeout=2, interval=0.01).not_.is_equal_to("pending")
+        chain = polling.start(lambda: next(states, "ready"), timeout=2, interval=0.01)
+        polling.finish(chain.not_.is_equal_to("pending"))
 
-    def test_a_negated_expectation_that_never_holds_times_out(self):
+    def test_a_negated_expectation_that_never_holds_times_out(self, polling):
         with pytest.raises(AssertionFailure, match="Expected condition not met"):
-            assert_that(lambda: 1).eventually_sync(timeout=0.05, interval=0.01).not_.is_equal_to(1)
+            polling.finish(polling.start(lambda: 1, timeout=0.05, interval=0.01).not_.is_equal_to(1))
 
 
 def test_a_long_line_keeps_its_position_of_change_everywhere():

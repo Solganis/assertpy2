@@ -4,6 +4,7 @@ import dataclasses
 import hashlib
 import inspect
 import time
+import warnings
 from collections import OrderedDict, deque
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from ._engine._compat import Self
 
@@ -49,11 +50,8 @@ def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
     inner = _seen | {id(value)}
     if isinstance(value, dict):
         pairs = (_framed(_canonical(k, inner)) + _framed(_canonical(v, inner)) for k, v in value.items())
-        # sorted for every mapping but the one whose own `==` reads order: `OrderedDict` is the only
-        # mapping in the standard library where two with the same items in another order are unequal,
-        # and sorting it turned a real transition into "value unchanged". `isinstance`, not an exact
-        # type test, because a subclass inherits that comparison along with the class. `defaultdict` and
-        # `Counter` compare like a dict, so they keep the sort rather than reading a reorder as a change
+        # sorted for every mapping but `OrderedDict`, the one whose own `==` reads order, where sorting
+        # turned a real transition into "value unchanged".  `isinstance`, since a subclass inherits it
         return "o" + "".join(pairs) if isinstance(value, OrderedDict) else "d" + "".join(sorted(pairs))
     if isinstance(value, (set, frozenset)):
         return "s" + "".join(sorted(_framed(_canonical(member, inner)) for member in value))
@@ -129,11 +127,8 @@ class _PollRecorder:
         self._tail_keys: deque[str | None] = deque(maxlen=tail)
         self.dropped = 0
         self.total_polls = 0
-        # everything below is counted as it happens, because the window keeps 25 samples and the summary
-        # is the headline of the failure: a probe returning a new value on every one of 1337 polls was
-        # summarised as "value changed 24 times", which reads as drift where the truth was a value that
-        # never settled. Anything the summary states as a fact about the run is recorded here; what it
-        # reads off the retained samples is the *shape*, and says so
+        # counted as it happens, since the window keeps 25 samples: a new value on each of 1337 polls
+        # was summarised as "value changed 24 times".  What the summary reads off the samples is shape
         self.fail_polls = 0
         self.error_polls = 0
         self.value_changes = 0
@@ -168,11 +163,8 @@ class _PollRecorder:
         else:  # the only other outcome is "error"
             self.error_polls += 1
             self.changes_after_last_error = 0
-            # the type is part of a sentence about every poll, so it cannot come from the samples kept.
-            # Two fields rather than a set: the sentence needs "one type" or "several", and a set would
-            # be the one thing here that grows with the run the bounded window exists to stop.  Taken
-            # the class itself, compared by identity: two classes can share a `__name__`, and the name
-            # is for printing. Parsed out of the rendering it was the caller's text deciding our claim
+            # two fields rather than a set, which would be the one thing here that grows with the run.
+            # The class itself, by identity: two classes can share a `__name__`
             if error_type is not None:
                 if self.error_type is None:
                     self.error_type = error_type
@@ -256,10 +248,8 @@ def _summarize(samples, recorder, elapsed) -> str:
     keys = [key for _, key in kept]
     kept_changes = [right for left, right in pairwise(keys) if left != right]
     distinct = {key for key in keys if key is not None}
-    # a simple path through k values takes k-1 changes, so any surplus means the probe came back to a
-    # value it already reported: a cycle, which reads nothing like steady progress that ran out of time.
-    # Both sides of this are read off the retained samples, so the sentence says which polls it saw:
-    # they are collapsed runs, and one of them can stand for many polls
+    # a simple path through k values takes k-1 changes, so a surplus means the probe returned to a
+    # value it already reported.  Read off the retained samples, so the sentence says which polls
     if len(kept_changes) >= len(distinct):
         kept_polls = sum(sample.repeats for sample in fails)
         over = f"in the {kept_polls} polls kept" if recorder.dropped else f"across {total_polls} polls"
@@ -359,10 +349,58 @@ def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:
     return exceptions
 
 
+def _replay(builder_func: Callable, val: object, description: str, steps: tuple[_Step, ...]) -> Any:
+    """Run a chain's recorded calls against a fresh builder over *val*, returning the last result."""
+    builder = builder_func(val, description)
+    for step, step_args, step_kwargs in steps:
+        attribute = getattr(builder, step)
+        # `not_` is read, not called, so it has no arguments
+        builder = attribute if step_args is None or step_kwargs is None else attribute(*step_args, **step_kwargs)
+    return builder
+
+
+def _record_poll(recorder: _PollRecorder | None, exc: Exception, probed: object, elapsed: float) -> str:
+    """Record one failed poll, when this chain is recording, and hand back the inner failure's text."""
+    failure = _last_failure_text(exc)
+    if recorder is not None:
+        recorder.record(
+            elapsed=elapsed,
+            # a probe that raised returned no value, so nothing here failed a check
+            outcome="fail" if probed is not _PROBE_UNSET else "error",
+            # snapshot now: probes commonly mutate and return the same object
+            value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
+            detail=failure,
+            raw=probed,
+            error_type=None if probed is not _PROBE_UNSET else type(exc),
+        )
+    return failure
+
+
+def _out_of_time(
+    chain: AsyncAssertionBuilder | SyncAssertionBuilder,
+    recorder: _PollRecorder | None,
+    elapsed: float,
+    failure: str,
+    last_error: Exception | None,
+) -> Any:
+    """Deliver the timeout the way this chain's mode asks for: collected, logged, or raised."""
+    message, trace = _timeout_failure(recorder, chain._timeout, elapsed, failure)
+    if chain._kind in ("soft", "warn"):
+        # empty description: the inner failure already carries it, and two would read as a double prefix
+        return chain._builder_func(None, "", chain._kind, None, chain._logger).error(
+            message, **_structured_of(last_error), trace=trace
+        )
+    raise _timed_out(message, trace, last_error) from last_error
+
+
 class AsyncAssertionBuilder:
     """Async assertion builder that polls a callable until an assertion passes or timeout expires.
 
     Do not instantiate directly; use [`eventually()`][assertpy2.assertpy.AssertionBuilder.eventually] instead.
+
+    A chain records the calls made on it and runs them together when awaited, so the wait covers every
+    link rather than only the first.  The four coroutine methods below make it a coroutine to
+    `asyncio.run()` and `Task`, which take nothing else below 3.15.
 
     Args:
         func: a sync or async callable that produces the value to test
@@ -390,6 +428,7 @@ class AsyncAssertionBuilder:
         kind: str | None = None,
         logger: object = None,
         trace: bool = True,
+        steps: tuple[_Step, ...] = (),
     ):
         self._func = func
         self._builder_func = builder_func
@@ -400,6 +439,29 @@ class AsyncAssertionBuilder:
         self._kind = kind
         self._logger = logger
         self._trace = trace
+        self._steps = steps  # replayed as a whole on every poll, see `_replay`
+        self._coro: Any = None
+        self._awaited = False
+        self._superseded = False
+
+    def _chained(self, steps: tuple[_Step, ...]) -> AsyncAssertionBuilder:
+        """A copy carrying one more step, so awaiting the chain waits for all of them together.
+
+        Marks the link it grew out of as handed on, or `__del__` would call it an abandoned chain.
+        """
+        self._superseded = True
+        return AsyncAssertionBuilder(
+            self._func,
+            builder_func=self._builder_func,
+            description=self._description,
+            timeout=self._timeout,
+            interval=self._interval,
+            ignoring=self._ignoring,
+            kind=self._kind,
+            logger=self._logger,
+            trace=self._trace,
+            steps=steps,
+        )
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
@@ -426,79 +488,124 @@ class AsyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: `not_` hands back a builder while every other name hands
-        # back a callable, and a checker reading that union refused the call in `eventually_sync().
-        # is_equal_to(1)` as "SyncAssertionBuilder is not callable". Found by type-checking third-party
-        # code against the built wheel, where it broke chains that had always been valid
+        # `Any` rather than the inferred union: `not_` hands back a builder and every other name a
+        # callable, and a checker reading that union refused `eventually().is_equal_to(1)` outright
         if name.startswith("_"):
             raise AttributeError(name)
+        # forwarded whole rather than answered name by name: `inspect.getcoroutinestate` reads
+        # `cr_suspended` on 3.11 and `cr_state` on 3.14, and a chain answering only the names known
+        # here reports a state it is not in.  `gi_` refuses: a coroutine has no generator attributes
+        if name.startswith("gi_"):
+            raise AttributeError(name)
+        if name.startswith("cr_"):
+            if not self._steps:
+                raise AttributeError(name)  # nothing recorded yet, so there is no coroutine to describe
+            return getattr(self._coroutine(), name)
+        if name == "val":
+            raise AttributeError("val is available on the builder that awaiting this chain returns")
+        if name == "not_":
+            return self._chained((*self._steps, (name, None, None)))  # read, not called: no arguments
 
-        def _make_coroutine(*args, **kwargs):
-            async def _poll():
-                # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms
-                # import, dragging in socket/ssl/select, and only the async polling path needs it.
-                # Anyone reaching this line is already inside a running loop, so it is a dict lookup.
-                import asyncio
+        def _add(*args: Any, **kwargs: Any) -> AsyncAssertionBuilder:
+            return self._chained((*self._steps, (name, args, kwargs)))
 
-                loop = asyncio.get_running_loop()
-                start = loop.time()
-                deadline = start + self._timeout
-                recorder = _PollRecorder() if self._trace else None
-                last_error: Exception | None = None
-                while True:
-                    probed = _PROBE_UNSET
-                    try:
-                        val = self._func()
-                        if inspect.isawaitable(val):
-                            val = await val
-                        probed = val
-                        builder = self._builder_func(val, self._description)
-                        method = getattr(builder, name)
-                        method(*args, **kwargs)
-                        if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
-                            # it passed, but not on the first look: a probe that only converges after
-                            # retrying is the one that goes flaky in CI
-                            _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
-                        return builder
-                    except (
-                        AssertionError,
-                        *self._ignoring,
-                    ) as exc:  # retry-on-failure needs the try/except per poll iteration
-                        last_error = exc
-                        # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
-                        failure = _last_failure_text(exc)
-                        if recorder is not None:
-                            recorder.record(
-                                elapsed=loop.time() - start,
-                                # a probe that raised never returned a value, so this is not a value
-                                # that failed: `AssertionError` from inside the probe used to be
-                                # recorded as one, and a probe that never got past its own assert read
-                                # as "value unchanged across N polls"
-                                outcome="fail" if probed is not _PROBE_UNSET else "error",
-                                # sanitized eagerly: probes often mutate and return the same live object,
-                                # so each sample must be a point-in-time snapshot, not a reference
-                                value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
-                                detail=failure,
-                                raw=probed,
-                                error_type=None if probed is not _PROBE_UNSET else type(exc),
-                            )
-                        if loop.time() >= deadline:
-                            message, trace = _timeout_failure(recorder, self._timeout, loop.time() - start, failure)
-                            if self._kind in ("soft", "warn"):
-                                # inner failures already carry the description; an empty one here
-                                # avoids a double prefix in the collected/logged message.  the trace goes
-                                # with it: a collected timeout kept the text and dropped the telemetry,
-                                # and so do the values and the diff, which used to reach the reader only
-                                # by being rendered inside the quoted text and so only off pytest
-                                return self._builder_func(None, "", self._kind, None, self._logger).error(
-                                    message, **_structured_of(last_error), trace=trace
-                                )
-                            raise _timed_out(message, trace, last_error) from last_error
-                        await asyncio.sleep(self._interval)
+        return _add
 
-            return _poll()
+    def _coroutine(self) -> Any:
+        """The coroutine this chain runs, made on first use and kept, since a coroutine runs only once."""
+        if self._coro is None:
+            self._coro = self._poll()
+        return self._coro
 
-        return _make_coroutine
+    def _started(self) -> Any:
+        """The coroutine, marked as somebody's responsibility, which is what running it makes it.
+
+        A closed chain needs no guard here: `close()` closes the coroutine, and awaiting a closed one
+        already raises the "cannot reuse already awaited coroutine" a plain coroutine raises.
+        """
+        if not self._steps:
+            raise TypeError("no assertion was called on this eventually() chain, so awaiting it would wait for nothing")
+        coro = self._coroutine()
+        self._awaited = True
+        return coro
+
+    def __await__(self) -> Generator[Any, None, Any]:
+        """Poll until every call recorded on this chain passes together, or the timeout expires.
+
+        Returns the ordinary builder over the value that passed, so anything asked of it afterwards is
+        a plain assertion on that settled value rather than a new wait.
+        """
+        return self._started().__await__()
+
+    # these three with `__await__` are what `collections.abc.Coroutine` checks for structurally, so
+    # `asyncio.iscoroutine` says yes and `asyncio.run(chain)` works below 3.15, where it takes nothing
+    # else.  A base class of that name would add nothing: the hook is what answers, and the call site
+    # reads `Any` either way
+    def send(self, value: Any) -> Any:
+        return self._started().send(value)
+
+    def throw(self, *args: Any, **kwargs: Any) -> Any:
+        return self._started().throw(*args, **kwargs)
+
+    def close(self) -> None:
+        self._awaited = True  # an asked-for discard, and Python says nothing about a closed coroutine
+        if self._steps:  # made if it does not exist, so it refuses to run and reads as closed
+            self._coroutine().close()
+
+    def __del__(self) -> None:
+        """Warn about a chain built and never awaited: only its end is awaited, so only its end warns."""
+        coro = getattr(self, "_coro", None)  # a construction that raised leaves none of these fields
+        # asked of the coroutine rather than tracked by a flag: `__await__()` can be called and its
+        # iterator dropped, which took responsibility for a poll that then never ran
+        unstarted = False
+        if coro is not None and inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
+            coro.close()  # or Python warns about it too, naming this module rather than the chain
+            unstarted = True
+        steps = getattr(self, "_steps", ())
+        if not steps or self._superseded or warnings is None:  # None once shutdown clears it
+            return
+        if self._awaited and not unstarted:
+            return
+        # unguarded: under `filterwarnings = error` this raises, and that raise is the point
+        warnings.warn(
+            f"an eventually() chain ending in {steps[-1][0]}() was never awaited, so nothing was asserted",
+            RuntimeWarning,
+            stacklevel=1,  # the stack at collection time is not the code that built the chain
+        )
+
+    async def _poll(self) -> Any:
+        # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms import,
+        # dragging in socket/ssl/select, and only the async polling path needs it. Anyone reaching this
+        # line is already inside a running loop, so it is a dict lookup.
+        import asyncio
+
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        deadline = start + self._timeout
+        recorder = _PollRecorder() if self._trace else None
+        last_error: Exception | None = None
+        while True:
+            probed = _PROBE_UNSET
+            try:
+                val = self._func()
+                if inspect.isawaitable(val):
+                    val = await val
+                probed = val
+                builder = _replay(self._builder_func, val, self._description, self._steps)
+                if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
+                    # it passed, but not on the first look: a probe that only converges after retrying
+                    # is the one that goes flaky in CI
+                    _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
+                return builder
+            except (
+                AssertionError,
+                *self._ignoring,
+            ) as exc:  # retry-on-failure needs the try/except per poll iteration
+                last_error = exc
+                failure = _record_poll(recorder, exc, probed, loop.time() - start)
+                if loop.time() >= deadline:
+                    return _out_of_time(self, recorder, loop.time() - start, failure, last_error)
+                await asyncio.sleep(self._interval)
 
 
 class SyncAssertionBuilder:
@@ -545,11 +652,7 @@ class SyncAssertionBuilder:
         self._kind = kind
         self._logger = logger
         self._trace = trace
-        # every call made on this chain, replayed against a fresh builder on each poll.  Handing back
-        # the builder of the last poll instead used to end the polling silently: `.is_instance_of(int)`
-        # passed once and returned an ordinary builder, so `.is_equal_to(4)` after it ran against that
-        # single snapshot and failed without ever waiting
-        self._steps = steps
+        self._steps = steps  # replayed as a whole on every poll, see `_replay`
         self._last = last
 
     @property
@@ -607,10 +710,8 @@ class SyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: `not_` hands back a builder while every other name hands
-        # back a callable, and a checker reading that union refused the call in `eventually_sync().
-        # is_equal_to(1)` as "SyncAssertionBuilder is not callable". Found by type-checking third-party
-        # code against the built wheel, where it broke chains that had always been valid
+        # `Any` rather than the inferred union: `not_` hands back a builder and every other name a
+        # callable, and a checker reading that union refused `eventually_sync().is_equal_to(1)` outright
         if name.startswith("_"):
             raise AttributeError(name)
         if name == "val":  # reached only when the property above found no poll to read it from
@@ -638,14 +739,7 @@ class SyncAssertionBuilder:
                             "given probe returned an awaitable; use eventually() and await it for async probes"
                         )
                     probed = val
-                    builder = self._builder_func(val, self._description)
-                    for step, step_args, step_kwargs in steps:
-                        attribute = getattr(builder, step)
-                        # a step read rather than called, which is `not_`, carries no arguments at all
-                        if step_args is None or step_kwargs is None:
-                            builder = attribute
-                        else:
-                            builder = attribute(*step_args, **step_kwargs)
+                    builder = _replay(self._builder_func, val, self._description, steps)
                     if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
                         _RETRIES.append((recorder.total_polls + 1, time.monotonic() - start, self._timeout))
                     return self._chained(steps, builder)
@@ -654,29 +748,9 @@ class SyncAssertionBuilder:
                     *self._ignoring,
                 ) as exc:  # retry-on-failure needs the try/except per poll iteration
                     last_error = exc
-                    # repr for ignored exceptions: their type name is the diagnostic, str() may be empty
-                    failure = _last_failure_text(exc)
-                    if recorder is not None:
-                        recorder.record(
-                            elapsed=time.monotonic() - start,
-                            # as in the async branch: an exception from the probe is not a failed value
-                            outcome="fail" if probed is not _PROBE_UNSET else "error",
-                            # sanitized eagerly: probes often mutate and return the same live object,
-                            # so each sample must be a point-in-time snapshot, not a reference
-                            value=_json_safe(probed) if probed is not _PROBE_UNSET else None,
-                            detail=failure,
-                            raw=probed,
-                            error_type=None if probed is not _PROBE_UNSET else type(exc),
-                        )
+                    failure = _record_poll(recorder, exc, probed, time.monotonic() - start)
                     if time.monotonic() >= deadline:
-                        message, trace = _timeout_failure(recorder, self._timeout, time.monotonic() - start, failure)
-                        if self._kind in ("soft", "warn"):
-                            # as in the async branch above: the values and the diff travel with the
-                            # message rather than only inside the text it quotes
-                            return self._builder_func(None, "", self._kind, None, self._logger).error(
-                                message, **_structured_of(last_error), trace=trace
-                            )
-                        raise _timed_out(message, trace, last_error) from last_error
+                        return _out_of_time(self, recorder, time.monotonic() - start, failure, last_error)
                     time.sleep(self._interval)
 
         return _run

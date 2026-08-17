@@ -58,6 +58,7 @@ A project that registered its own wrapper reads `check(1)` on the offending line
 `assert_that()` there costs a moment of "that is not what my code says" on every finding.
 """
 _NOT_CALLED: Final = "assertion is looked up and never called (missing parentheses)"
+_NOT_AWAITED: Final = "eventually() chain is never awaited, so nothing is polled (missing await)"
 
 
 class Finding(NamedTuple):
@@ -180,6 +181,31 @@ def _reaches_entry(node: ast.expr, bindings: _Bindings) -> bool:
             return False
 
 
+def _polls(node: ast.expr) -> bool:
+    """True when an attribute chain calls ``eventually()``, the async one, anywhere along it."""
+    current: ast.expr = node
+    while True:
+        if isinstance(current, ast.Call):
+            if isinstance(current.func, ast.Attribute) and current.func.attr == "eventually":
+                return True
+            current = current.func
+        elif isinstance(current, ast.Attribute):
+            current = current.value
+        else:
+            return False
+
+
+def _closed(node: ast.expr) -> bool:
+    """True when the statement ends in a bare ``close()``, the discard the chain itself stays quiet about."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "close"
+        and not node.args
+        and not node.keywords
+    )
+
+
 def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr, tuple[str, ...]]]:
     """Every expression statement with the scope it sits in, as the chain of names around it.
 
@@ -254,10 +280,13 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
         if _silenced(statement, marked):
             continue
         value = statement.value
+        awaited = isinstance(value, ast.Await)
         while isinstance(value, ast.Await):  # `await assert_that(x).eventually()...` unwraps to the chain
             value = value.value
         if name := _entry_call(value, bindings):
             found.append(Finding(path, statement.lineno, _NO_ASSERTION.format(name=name), scope))
         elif isinstance(value, ast.Attribute) and _reaches_entry(value, bindings):
             found.append(Finding(path, statement.lineno, _NOT_CALLED, scope))
+        elif not awaited and _polls(value) and not _closed(value) and _reaches_entry(value, bindings):
+            found.append(Finding(path, statement.lineno, _NOT_AWAITED, scope))
     return sorted(found, key=lambda finding: finding.lineno)

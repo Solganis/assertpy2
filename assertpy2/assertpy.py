@@ -75,11 +75,9 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 
-# assertpy2 source files, used to strip internal frames when locating the caller for warn-mode messages.
-# Derived from the package directory so new modules are covered automatically (no hand-maintained list).
-# Absolute paths in a set, not suffixes in a list: membership is one hash lookup per frame where the
-# suffix scan ran `endswith` once per module, thirty string comparisons a frame on a path taken for
-# every collected soft failure.  Exact paths also stop a user file of the same name from shadowing ours.
+# our own source files, for stripping internal frames when locating the caller.  Absolute paths in a
+# set rather than suffixes in a list: one hash lookup a frame instead of thirty string comparisons,
+# and a user file of the same name cannot shadow ours
 ASSERTPY_FILES: Final = frozenset(
     os.path.join(os.path.dirname(__file__), name)
     for name in os.listdir(os.path.dirname(__file__))
@@ -214,10 +212,8 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
         # a scalar: the header already carries both values, so a path of "." would only repeat them
         return lines
     if only is not None and only.steps == (Step("line", 1),):
-        # one line of text, which the header carries in full as well.  Repeating it is worth nothing
-        # until the line is long enough that the change cannot be found by eye: two 180-character
-        # payloads differing at character 91 were reported by the block form with a caret and by this
-        # one with nothing at all.  A window around the change is that caret, spent as a line
+        # the header already carries a short line in full.  Past that width the change cannot be found
+        # by eye, and a window around it is this form of the caret the block rendering draws
         actual_text, expected_text = _safe_str(only.actual), _safe_str(only.expected)
         if len(actual_text) <= _SCANNABLE_WIDTH and len(expected_text) <= _SCANNABLE_WIDTH:
             return lines
@@ -247,10 +243,8 @@ def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
             if group is not None:
                 lines.append(f"  [{group}]")
         indent = ("    " if group is not None else "  ") if has_groups else ""
-        # a message can be more than one line: a one-cause hint sits under the headline, and a polling
-        # failure carries its whole timeline. Numbering the first line and indenting the rest keeps one
-        # entry looking like one entry. Written flat, the location landed at the end of the *last* line
-        # and the continuation started at column zero, so the second failure read as a new section
+        # a message can run to several lines, so the number goes on the first and the rest is indented:
+        # written flat, the location landed on the last line and the next entry read as a new section
         headline, *continuation = outcome.message.splitlines() or [""]
         lines.append(f"{indent}{counter}. {_located(outcome.location, headline)}")
         lines.extend(f"{indent}   {line}" for line in continuation)
@@ -303,11 +297,8 @@ class _SoftAssertions:
     def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, *_rest: object) -> None:
         _soft_ctx.set(_soft_ctx.get() - 1)
         if exc_type is not None:
-            # an error out of the block still wins, because replacing it would hide why the block
-            # stopped and would break `except ValueError` around it. But the failures collected before
-            # it are the reader's own data, and dropping them silently is a second loss on top of the
-            # first: a soft block exists to gather them, and a timeout three assertions in used to take
-            # all three with it. They travel as a note, which changes neither the type nor the message
+            # the escaping error still wins, or `except ValueError` around the block would break.  The
+            # failures collected before it travel as a note rather than being dropped with it
             if exc is not None and (block := _soft_err.get(None)) is not None and _soft_ctx.get() == 0:
                 block.active = False
                 errs, block.failures = block.failures, []
@@ -454,10 +445,8 @@ def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytear
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
-# Fallback returns the concrete AssertionBuilder, generic over the value type, so object- and
-# union-typed values keep the full API and `.value` gives the input type back. The specific protocols
-# are not assignable to it, so mypy and pyright report overload overlap and ty does not. Kept: returning
-# `_CoreAssertion` here would strip type-specific assertions from those values.
+# the fallback keeps the full API for object- and union-typed values, at the price of an overload
+# overlap mypy and pyright report and ty does not
 @overload
 def assert_that(val: _T, description: str = "") -> AssertionBuilder[_T]: ...
 
@@ -744,6 +733,16 @@ _extensions = {}
 _extensions_lock = threading.Lock()
 
 
+# names a polling chain resolves itself, where an extension of that name never reaches the assertion.
+# `not_` is answered inside `__getattr__` rather than declared, so it is named here
+_POLLING_NAMES: Final = frozenset(
+    name
+    for builder in (AsyncAssertionBuilder, SyncAssertionBuilder)
+    for name in vars(builder)
+    if not name.startswith("_")
+) | {"not_"}
+
+
 def add_extension(func, *, override: bool = False):
     """Add a new user-defined custom assertion to assertpy.
 
@@ -787,6 +786,13 @@ def add_extension(func, *, override: bool = False):
     name = getattr(func, "__name__", None)
     if not isinstance(name, str) or not name.isidentifier():
         raise ValueError(f"the assertion's __name__ must be a valid Python identifier, got {name!r}")
+    # outside the override branch: there is nothing to override here, the name is simply out of reach
+    # after `eventually()`, and `override=True` only bought a chain that asserts nothing in silence
+    if name in _POLLING_NAMES or name.startswith(("_", "cr_", "gi_")):
+        raise ValueError(
+            f"{name!r} is how a polling chain spells one of its own, so an extension of that name "
+            f"would be unreachable after eventually(); give it another name"
+        )
     with _extensions_lock:
         # re-adding the same implementation is a no-op, not a clash
         same = is_same_implementation(vars(_ExtendedBuilder).get(name), func) or is_same_implementation(
@@ -1119,10 +1125,8 @@ class AssertionBuilder(
         self._expected_warning = None
         self._return_value = _UNSET
         self._raised_exception = _UNSET
-        # holds the failure message when an assertion on this builder collects/logs a failure under
-        # soft/warn mode (first failure wins = the root cause, not its consequences); makes `.value`
-        # refuse to hand back an unverified value and surface that root failure instead of silently
-        # breaking its narrowed type
+        # the first collected failure, so `.value` refuses an unverified value and names the root
+        # cause rather than breaking its narrowed type in silence
         self._value_taint_reason: str | None = None
         self._value_origin: str | None = None
         # where a failure lands while `check()` has this builder in verdict mode, instead of being
@@ -1229,11 +1233,8 @@ class AssertionBuilder(
         def is_instance_of(self, some_class: type) -> Any:  # overload impl stub, never executed
             ...
 
-        # satisfies() narrows when given a `TypeIs` predicate (user-extensible refinement narrowing):
-        # a predicate typed `Callable[..., TypeIs[U]]` refines the tracked value to U, so a domain
-        # predicate (class + condition) narrows the chain to its target type. Solved by ty/pyright/mypy;
-        # PyCharm does not yet solve TypeVars through TypeIs (tracked in JetBrains PY-89124), so this
-        # narrowing is advertised as advanced/checker-dependent. Runtime behavior lives in BaseMixin.
+        # a `TypeIs` predicate narrows the chain to its target type.  Solved by ty, pyright and mypy;
+        # PyCharm does not solve TypeVars through `TypeIs` yet (JetBrains PY-89124)
         @overload
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
@@ -1345,10 +1346,8 @@ class AssertionBuilder(
             block.failures.append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
             return None
         if self.kind == "check":
-            # deliberately no taint: the caller asked for a verdict rather than asserting, so reading
-            # `.value` afterwards is not reading an unverified value, it is reading the value they asked
-            # a question about.  one assignment, not a first-wins guard: every `self.error(...)` in the
-            # package returns on the same line or the next, so one call composes at most one failure
+            # no taint: a verdict was asked for, not asserted.  One assignment rather than a first-wins
+            # guard, since every `self.error(...)` in the package returns at once
             self._check_sink = outcome
             return None
         return self._failure(outcome)
@@ -1388,10 +1387,11 @@ class AssertionBuilder(
         methods are coroutines that poll ``val()`` until the assertion passes or
         ``timeout`` expires.
 
-        By default only a failing assertion is retried: any exception raised by ``val()`` itself
-        propagates immediately.  A probe that signals "not ready yet" by raising (a connection refused
-        while a service boots, a record not yet visible) can be retried too by listing those exception
-        types in ``ignoring``.
+        By default only a failing assertion is retried: any other exception raised by ``val()`` itself
+        propagates immediately.  An ``AssertionError`` from ``val()`` reaches the same place a failing
+        assertion does and is retried the same way, which the timeout message names.  A probe that
+        signals "not ready yet" by raising something else (a connection refused while a service boots,
+        a record not yet visible) can be retried too by listing those types in ``ignoring``.
 
         Polling itself is always strict - retrying *requires* hard failures - but the final timeout
         failure honors the builder's mode: inside

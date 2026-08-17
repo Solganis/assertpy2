@@ -4,7 +4,7 @@ import difflib
 import math
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 
 if TYPE_CHECKING:
     from .outcome import AssertionOutcome
@@ -54,7 +54,12 @@ def _disambiguated(actual: object, other: object) -> tuple[str, str]:
     return actual_str, other_str
 
 
-def _json_safe(value, _depth=0, _seen=None):
+_JsonSafe: TypeAlias = "bool | int | float | str | list[_JsonSafe] | dict[str, _JsonSafe] | None"
+"""Declared rather than inferred: a recursive return type is resolved per call site, and moving one
+call moved two unrelated diagnostics in another module."""
+
+
+def _json_safe(value, _depth=0, _seen=None) -> _JsonSafe:
     """Convert *value* to JSON-native data for an attachment: typed where possible, bounded and total.
 
     Scalars and containers pass through as real JSON values so the Allure viewer renders a tree and
