@@ -137,15 +137,15 @@ source_paths = ["assertpy2/"]
 # into the mutants tree, and the typing-claims guard scans the package's own `.py` files - which under
 # mutation are the trampoline's rewrite of them, not the source anybody ships.
 #
-# The two subprocess classes are excluded for a third: they re-invoke `uv run pytest`, and the child
-# starts from the `mutants/` tree, where there is no project for uv to run. It exits non-zero, the
-# assertions read an empty stdout, and the baseline goes red. A subprocess would carry the unmutated
-# installed package in any case, so nothing is lost by leaving them out.
+# The three subprocess classes are excluded for a third: they run pytest as a child, which starts from
+# the `mutants/` tree. It exits non-zero, the assertions read an empty stdout, and the baseline goes
+# red. A subprocess carries the unmutated package in any case, so nothing is lost by leaving them out.
 pytest_add_cli_args = [
     "-k",
     """\
     not TestPytestPluginDiffRendering \
     and not TestSnapshotKeyReuseUnderXdist \
+    and not TestAForgottenAwaitUnderErrorFilters \
     and not test_the_warning_points_at_the_line_that_reused_the_key \
     and not test_no_vararg_assertion_passes_with_nothing_to_assert \
     and not snapshot_roundtrip_all_types \
@@ -159,6 +159,9 @@ pytest_add_cli_args = [
     and not test_starts_with_bad_prefix_failure \
     and not test_ends_with_bad_prefix_failure \
     and not test_the_warning_points_at_the_caller \
+    and not test_a_record_knows_where_it_was_collected \
+    and not TestTheCountsTheDocsQuote \
+    and not test_every_type_refusal_has_the_same_shape \
     and not TestRecordedPosition\
     """,
     # both enumerate the package's own public surface, which the trampoline's renamed functions join
