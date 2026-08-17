@@ -161,6 +161,9 @@ pytest_add_cli_args = [
     and not test_the_warning_points_at_the_caller \
     and not TestRecordedPosition\
     """,
+    # both enumerate the package's own public surface, which the trampoline's renamed functions join
+    "--ignore=tests/test_api_compatibility.py",
+    "--ignore=tests/test_api_vocabulary.py",
     "--ignore=tests/test_docs_examples.py",
     "--ignore=tests/test_exception_context.py",
     "--ignore=tests/test_extensions.py",
