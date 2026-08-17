@@ -154,8 +154,8 @@ class Cluster(NamedTuple):
     They are counted separately on purpose: forty tests differing at `role` can hold forty actual
     values against a single expected one, and reporting that expected value is the useful half.
 
-    Past `_EXAMPLE_LIMIT` distinct values a side keeps that many and no more, so the tuple's own length
-    is what says the count was capped.
+    A side keeps at most one past `_EXAMPLE_LIMIT` distinct values, so the tuple's own length is what
+    says the count was capped: see that constant for why the extra one is held.
     """
 
     signature: Signature
@@ -185,11 +185,13 @@ def stable_repr(value: object, _seen: frozenset[int] = frozenset()) -> str:
     which pytest answers with INTERNALERROR, so a whole run reported nothing at all.
     """
     if id(value) in _seen:
-        return "..."  # what `repr` itself prints for a container that reaches back to its own root
+        return "..."  # `repr` marks the same thing, wrapped in the container's own brackets
     inner = _seen | {id(value)}
     try:
         if isinstance(value, (set, frozenset)):
             members = sorted(stable_repr(member, inner) for member in value)
+            # an empty one falls back to `repr`, since `{}` is a dict; the price is that `set()`
+            # and the `frozenset()` it equals read apart, where two non-empty equal ones read alike
             return "{" + ", ".join(members) + "}" if value else _safe_repr(value)
         if isinstance(value, dict):
             pairs = (f"{stable_repr(key, inner)}: {stable_repr(item, inner)}" for key, item in value.items())
@@ -214,12 +216,6 @@ def canonical_steps(entry: DiffEntry) -> tuple[tuple[str, str], ...] | None:
     if not steps or any(step.kind not in _COORDINATE for step in steps):
         return None
     return tuple((step.kind, _ANY_POSITION if step.kind in _POSITIONAL else stable_repr(step.value)) for step in steps)
-
-
-def canonical_path(entry: DiffEntry) -> str | None:
-    """The same location written for a reader, or ``None`` when it has no location."""
-    steps = canonical_steps(entry)
-    return None if steps is None else render_path(steps)
 
 
 def render_path(steps: tuple[tuple[str, str], ...]) -> str:
@@ -294,8 +290,11 @@ def is_well_formed(key: Signature) -> bool:
     if key.steps:
         return False
     # exactly one of the two, which is what `signature()` sets: the diagnostic replaces the values,
-    # never joins them
-    return (bool(key.label) and not key.values) or (not key.label and len(key.values) == 2)
+    # never joins them.  A pair of values only for the kinds whose fields hold the compared values, or
+    # a `contains` payload would print the `None` that stands for a missing item as somebody's value
+    if key.label:
+        return not key.values
+    return len(key.values) == 2 and key.where in _VALUES_ARE_VALUES
 
 
 def observations_of(diff: DiffResult | None, label: str | None = None) -> list[Observation]:
