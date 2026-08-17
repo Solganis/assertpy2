@@ -2330,6 +2330,13 @@
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
+    },
+    {
+     "annotation": "tuple[_Step, ...]",
+     "default": "tuple[]",
+     "kind": "KEYWORD_ONLY",
+     "name": "steps",
+     "required": false
     }
    ],
    "returns": null

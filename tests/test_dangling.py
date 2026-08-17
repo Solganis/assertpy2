@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from assertpy2 import DanglingAssertionWarning, assert_that
-from assertpy2._dangling import _NO_ASSERTION, _NOT_CALLED, ALLOW_MARKER, findings
+from assertpy2._dangling import _NO_ASSERTION, _NOT_AWAITED, _NOT_CALLED, ALLOW_MARKER, findings
 from assertpy2.pytest_plugin import (
     _dangling_enabled,
     _dangling_entries,
@@ -742,3 +742,69 @@ class TestEveryFindingReachesExactlyOneTest:
         # is either a warning of its own or named inside one
         reported = result.stdout.count("DanglingAssertionWarning") + result.stdout.count("more in this test")
         assert_that(reported).described_as(f"{expected} findings in the file").is_equal_to(expected)
+
+
+class TestAPollThatIsNeverAwaited:
+    """The runtime warning needs the chain to be reclaimed; the source says it at collection."""
+
+    def test_a_chain_written_without_await(self):
+        found = scan("""
+            async def test_x():
+                assert_that(probe).eventually().is_equal_to(1)
+            """)
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_NOT_AWAITED)
+        assert_that(found[0].scope).is_equal_to(("test_x",))
+
+    def test_a_longer_chain_written_without_await(self):
+        found = scan("""
+            async def test_x():
+                assert_that(probe).eventually(timeout=2).not_.is_empty().is_length(3)
+            """)
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_NOT_AWAITED)
+
+    def test_an_awaited_chain_is_not_reported(self):
+        assert_that(scan("async def test_x():\n    await assert_that(p).eventually().is_equal_to(1)\n")).is_empty()
+
+    def test_the_synchronous_poll_needs_no_await(self):
+        assert_that(scan("def test_x():\n    assert_that(p).eventually_sync().is_equal_to(1)\n")).is_empty()
+
+    def test_a_chain_handed_to_a_runner_is_not_reported(self):
+        """It is an argument rather than a statement, so whether it is awaited is that call's business."""
+        assert_that(scan("def test_x():\n    asyncio.run(assert_that(p).eventually().is_equal_to(1))\n")).is_empty()
+
+    def test_a_chain_bound_to_a_name_is_not_reported(self):
+        assert_that(scan("async def test_x():\n    chain = assert_that(p).eventually().is_equal_to(1)\n")).is_empty()
+
+    def test_a_chain_closed_on_the_spot_is_not_reported(self):
+        """The chain itself stays quiet about a `close()`, so the two halves of the rule agree."""
+        found = scan("""
+            async def test_x():
+                assert_that(p).eventually().is_equal_to(1).close()
+            """)
+        assert_that(found).is_empty()
+
+    def test_a_close_that_takes_arguments_is_not_the_discard(self):
+        """Only a bare `close()` is the coroutine one; anything taking arguments is somebody else's."""
+        found = scan("""
+            async def test_x():
+                assert_that(p).eventually().is_equal_to(1).close(wait=True)
+            """)
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_NOT_AWAITED)
+
+    def test_a_chain_that_calls_something_else_is_still_reported(self):
+        found = scan("""
+            async def test_x():
+                assert_that(p).eventually().is_equal_to(1).described_as("x")
+            """)
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_NOT_AWAITED)
+
+    def test_the_marker_silences_it(self):
+        found = scan("""
+            async def test_x():
+                assert_that(probe).eventually().is_equal_to(1)  # assertpy2: allow-dangling
+            """)
+        assert_that(found).is_empty()

@@ -122,8 +122,34 @@ await assert_that(get_name).eventually().starts_with("Al")
 await assert_that(get_count).eventually().is_between(10, 20)
 ```
 
-By default only a failing assertion is retried. Any exception raised by the probe itself propagates
-immediately.
+A chain keeps polling for as long as it is written. Every call on it, whether a navigation step like
+`described_as()` or another assertion, is replayed against a fresh probe on each poll, and the whole
+chain is awaited once at the end:
+
+<!-- docs-guard: skip -->
+```python
+await assert_that(get_order).eventually(timeout=10).is_instance_of(Order).has_status("PAID")
+```
+
+Negation is part of that chain too, which is how you wait for something to stop being true:
+
+<!-- docs-guard: skip -->
+```python
+await assert_that(get_status).eventually(timeout=10).not_.is_equal_to("pending")
+```
+
+The `await` is what runs the chain, so leaving it out polls nothing. A chain that is dropped without
+being awaited raises a `RuntimeWarning`, the same way a dropped coroutine does, and
+[`--assertpy2-dangling`](assertions.md#assertions-that-never-ran) reports it from the source at
+collection.
+
+Awaiting hands back the ordinary builder over the value that settled, so anything asserted on the
+result afterwards is a plain assertion against that value rather than a new wait.
+
+By default only a failing assertion is retried, and any other exception raised by the probe itself
+propagates immediately. The one exception is an `AssertionError` raised by the probe: it arrives at
+the same place a failing assertion does and is retried the same way, which is what a probe asserting
+its own preconditions usually wants. The timeout message says so, naming the type and the count.
 
 When "not ready yet" arrives as an exception, such as a refused connection while a service boots,
 list those exception types in `ignoring`:
@@ -165,21 +191,12 @@ assert_that(get_order).eventually_sync().within(10).ignoring(ConnectionError).ha
 )
 ```
 
-Retry rules, soft/warn behavior, and the polling trace are identical to `eventually()`.
-
-A chain keeps polling for as long as it is written. Every call on it, whether a navigation step like
-`described_as()` or another assertion, is replayed against a fresh probe on each poll, so the wait
-covers the chain as a whole rather than only its first link:
+Retry rules, chaining, negation, soft/warn behavior, and the polling trace are identical to
+`eventually()`:
 
 <!-- docs-guard: skip -->
 ```python
 assert_that(get_order).eventually_sync(timeout=10).is_instance_of(Order).has_status("PAID")
-```
-
-Negation is part of that chain too, which is how you wait for something to stop being true:
-
-<!-- docs-guard: skip -->
-```python
 assert_that(get_status).eventually_sync(timeout=10).not_.is_equal_to("pending")
 ```
 

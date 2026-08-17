@@ -1,14 +1,23 @@
 import asyncio
 import contextlib
+import gc
+import inspect
 import itertools
 import logging
+import os
+import pathlib
+import subprocess
+import sys
+import textwrap
 import threading
+import warnings
 from collections import Counter, OrderedDict, defaultdict
 from dataclasses import dataclass, field
 from io import StringIO
 
 import pytest
 
+import assertpy2
 import assertpy2.async_assertions as aa
 from assertpy2 import (
     AssertionFailure,
@@ -1197,3 +1206,285 @@ class TestATaskThatOutlivesItsSoftBlock:
         with pytest.raises(AssertionFailure) as failure:
             asyncio.run(scenario())
         assert_that(str(failure.value)).contains("fresh").does_not_contain("orphan")
+
+
+class TestAChainIsACoroutine:
+    """Below 3.15 `asyncio.run()` and `Task` accept a coroutine and nothing else."""
+
+    @staticmethod
+    def _slow_chain(timeout: float = 5.0):
+        """A chain over a value that never satisfies it, so it is still polling when asked about."""
+        return assert_that(lambda: 1).eventually(timeout=timeout, interval=0.01).is_equal_to(2)
+
+    def test_a_chain_is_a_coroutine_to_asyncio(self):
+        chain = assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1)
+        assert_that(asyncio.iscoroutine(chain)).described_as("asyncio.iscoroutine").is_true()
+        assert_that(asyncio.run(chain).val).is_equal_to(1)
+
+    def test_chains_run_together_through_gather(self):
+        async def scenario():
+            done = await asyncio.gather(
+                assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1),
+                assert_that(lambda: 2).eventually(timeout=1, interval=0.01).is_equal_to(2),
+            )
+            return [one.val for one in done]
+
+        assert_that(asyncio.run(scenario())).is_equal_to([1, 2])
+
+    def test_a_task_describes_itself_without_reading_a_step_as_a_code_object(self):
+        """`Task.__repr__` probes the coroutine attributes of whatever it drives."""
+
+        async def scenario():
+            chain = self._slow_chain()
+            task = asyncio.ensure_future(chain)
+            await asyncio.sleep(0.05)
+            shown = repr(task)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            return shown
+
+        assert_that(asyncio.run(scenario())).contains("Task").contains("pending")
+
+    def test_a_running_chain_answers_the_coroutine_attributes(self):
+        async def scenario():
+            chain = self._slow_chain()
+            task = asyncio.ensure_future(chain)
+            await asyncio.sleep(0.05)
+            seen = {
+                "running": chain.cr_running,  # False while suspended at its own sleep, as for a coroutine
+                "code": chain.cr_code is not None,
+                "frame": chain.cr_frame is not None,
+                "await": chain.cr_await is not None,
+            }
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            return seen
+
+        assert_that(asyncio.run(scenario())).is_equal_to({"running": False, "code": True, "frame": True, "await": True})
+
+    def test_a_chain_reports_the_state_a_coroutine_would(self):
+        """Which attributes `inspect` reads changed in 3.11 and again in 3.14, so the family forwards."""
+
+        async def real():
+            await asyncio.sleep(5)
+
+        chain, coro = self._slow_chain(), real()
+        assert_that(inspect.getcoroutinestate(chain)).is_equal_to(inspect.getcoroutinestate(coro))
+        chain.close()
+        coro.close()
+        assert_that(inspect.getcoroutinestate(chain)).is_equal_to(inspect.getcoroutinestate(coro))
+
+    def test_a_suspended_chain_says_so(self):
+        async def scenario():
+            chain = self._slow_chain()
+            task = asyncio.ensure_future(chain)
+            await asyncio.sleep(0.05)
+            seen = inspect.getcoroutinestate(chain)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            return seen
+
+        assert_that(asyncio.run(scenario())).is_equal_to(inspect.CORO_SUSPENDED)
+
+    def test_a_chain_with_nothing_recorded_has_no_coroutine_to_describe(self):
+        with pytest.raises(AttributeError):
+            assert_that(lambda: 1).eventually(timeout=1).cr_code  # noqa: B018 - reading it is the point
+
+    def test_a_generator_probe_refuses_instead_of_joining_the_chain(self):
+        """A coroutine has no generator attributes, so a probe for one must not join the chain."""
+        chain = self._slow_chain()
+        for name in ("gi_code", "gi_frame", "gi_running", "gi_yieldfrom"):
+            assert_that(hasattr(chain, name)).described_as(name).is_false()
+        chain.close()
+
+    def test_a_cancelled_chain_stops_where_it_was(self):
+        async def scenario():
+            task = asyncio.ensure_future(self._slow_chain(timeout=30))
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            return task.cancelled()
+
+        assert_that(asyncio.run(scenario())).is_true()
+
+    def test_awaiting_the_same_chain_twice_refuses_the_way_a_coroutine_does(self):
+        async def scenario():
+            chain = assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1)
+            await chain
+            await chain
+
+        with pytest.raises(RuntimeError, match="already awaited"):
+            asyncio.run(scenario())
+
+    def test_awaiting_a_chain_that_asserts_nothing_refuses(self):
+        with pytest.raises(TypeError, match="no assertion was called"):
+            asyncio.run(assert_that(lambda: 1).eventually(timeout=1, interval=0.01))
+
+    def test_closing_a_chain_that_recorded_nothing_is_quiet(self):
+        assert_that(lambda: 1).eventually(timeout=1).close()
+
+    def test_a_closed_chain_refuses_to_run(self):
+        chain = assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(2)
+        chain.close()
+        with pytest.raises(RuntimeError, match="already awaited"):
+            asyncio.run(chain)
+
+    def test_a_chain_closed_after_it_ran_refuses_too(self):
+        chain = assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1)
+        asyncio.run(chain)
+        chain.close()
+        with pytest.raises(RuntimeError, match="already awaited"):
+            asyncio.run(chain)
+
+    def test_the_settled_value_is_not_read_off_the_chain(self):
+        chain = assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1)
+        with pytest.raises(AttributeError, match="val is available on the builder"):
+            chain.val  # noqa: B018 - reading it is the whole point
+        chain.close()
+
+
+class TestAForgottenAwaitStaysLoud:
+    """A recording has no coroutine to raise Python's own "never awaited", so it raises its own."""
+
+    @staticmethod
+    def _dropped(build):
+        gc.collect()  # a chain that materialised its coroutine sits in a cycle, so clear those first
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            build()
+            gc.collect()
+        return [str(one.message) for one in caught]
+
+    def test_a_dropped_chain_warns_and_names_its_last_call(self):
+        warned = self._dropped(lambda: assert_that(lambda: 1).eventually(timeout=1).is_equal_to(2))
+        assert_that(warned).is_length(1)
+        assert_that(warned[0]).contains("never awaited").contains("is_equal_to()")
+
+    def test_a_chain_of_several_calls_warns_once(self):
+        """Every call builds a new link, and warning per link would put three lines under one mistake."""
+        warned = self._dropped(
+            lambda: assert_that(lambda: 1).eventually(timeout=1).is_instance_of(int).not_.is_equal_to(2).is_positive()
+        )
+        assert_that(warned).is_length(1)
+        assert_that(warned[0]).contains("is_positive()")
+
+    def test_a_chain_that_only_got_introspected_warns_once(self):
+        """Reading `cr_code` makes the coroutine, and Python warns about one it collects unawaited."""
+
+        def introspected():
+            chain = assert_that(lambda: 1).eventually(timeout=1).is_equal_to(2)
+            assert_that(chain.cr_code).is_not_none()
+
+        warned = self._dropped(introspected)
+        assert_that(warned).is_length(1)
+        assert_that(warned[0]).contains("never awaited")
+
+    def test_an_introspected_link_that_handed_its_steps_on_is_quiet(self):
+        """A link keeps the coroutine introspection made, and Python warns about one it collects."""
+
+        def introspected_link():
+            base = assert_that(lambda: 1).eventually(timeout=1).is_equal_to(1)
+            assert_that(base.cr_code).is_not_none()
+            base.is_positive().close()
+
+        assert_that(self._dropped(introspected_link)).is_empty()
+
+    def test_an_await_that_never_advanced_is_the_chain_warning_not_pythons(self):
+        """`__await__()` can be called and its iterator dropped, which runs no poll."""
+
+        def unadvanced():
+            chain = assert_that(lambda: 1).eventually(timeout=1).is_equal_to(2)
+            chain.__await__()
+
+        warned = self._dropped(unadvanced)
+        assert_that(warned).is_length(1)
+        assert_that(warned[0]).contains("never awaited").contains("is_equal_to()")
+
+    def test_a_chain_that_asserts_nothing_yet_is_quiet(self):
+        assert_that(self._dropped(lambda: assert_that(lambda: 1).eventually(timeout=1))).is_empty()
+
+    def test_an_awaited_chain_is_quiet(self):
+        def awaited():
+            asyncio.run(assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1))
+
+        assert_that(self._dropped(awaited)).is_empty()
+
+    def test_a_closed_chain_is_quiet(self):
+        """Closing is a discard somebody asked for, and Python says nothing about a closed coroutine."""
+
+        def closed():
+            assert_that(lambda: 1).eventually(timeout=1).is_equal_to(2).close()
+
+        assert_that(self._dropped(closed)).is_empty()
+
+    def test_a_chain_closed_after_it_started_is_quiet(self):
+        async def scenario():
+            chain = assert_that(lambda: 1).eventually(timeout=30, interval=0.01).is_equal_to(2)
+            task = asyncio.ensure_future(chain)
+            await asyncio.sleep(0.05)
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            chain.close()
+
+        assert_that(self._dropped(lambda: asyncio.run(scenario()))).is_empty()
+
+
+class TestAForgottenAwaitUnderErrorFilters:
+    """Raised from `__del__`, so pytest reports it through the unraisable hook, not to the caller.
+
+    A child process rather than `catch_warnings` for that reason.
+    """
+
+    SUITE = textwrap.dedent("""
+        import gc
+
+        from assertpy2 import assert_that
+
+
+        def test_a_forgotten_await():
+            assert_that(lambda: 1).eventually(timeout=1).is_equal_to(2)
+            gc.collect()
+
+
+        def test_an_awaited_chain():
+            import asyncio
+
+            asyncio.run(assert_that(lambda: 1).eventually(timeout=1, interval=0.01).is_equal_to(1))
+            gc.collect()
+    """)
+
+    @staticmethod
+    def _run(tmp_path, ini):
+        (tmp_path / "pytest.ini").write_text(ini, encoding="utf-8")
+        (tmp_path / "test_forgotten.py").write_text(TestAForgottenAwaitUnderErrorFilters.SUITE, encoding="utf-8")
+        # the child runs from tmp_path, so it is told where the package is rather than left to find it
+        environment = {**os.environ, "PYTHONPATH": str(pathlib.Path(assertpy2.__file__).parent.parent)}
+        return subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:randomly", "--rootdir", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=tmp_path,
+            env=environment,
+        )
+
+    def test_the_run_goes_red(self, tmp_path):
+        result = self._run(tmp_path, "[pytest]\nfilterwarnings = error\n")
+        assert_that(result.stdout).described_as("child stdout").does_not_contain("INTERNALERROR")
+        assert_that(result.returncode).described_as("child exit code").is_not_zero()
+        assert_that(result.stdout).contains("1 failed", "1 passed")
+
+    def test_only_the_forgotten_one_goes_red(self, tmp_path):
+        result = self._run(tmp_path, "[pytest]\nfilterwarnings = error\n")
+        assert_that(result.stdout).contains("test_a_forgotten_await")
+        assert_that(result.stdout).does_not_contain("test_an_awaited_chain -")
+
+    def test_without_the_filter_it_is_a_warning(self, tmp_path):
+        result = self._run(tmp_path, "[pytest]\n")
+        assert_that(result.returncode).described_as("child exit code").is_zero()
+        assert_that(result.stdout).contains("2 passed")

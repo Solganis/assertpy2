@@ -189,15 +189,16 @@ is an assertion that never ran at all:
 
 <!-- docs-guard: skip -->
 ```python
-def test_the_user_is_active():
-    assert_that(user)                     # builds a builder and asserts nothing
-    assert_that(user.age).is_positive     # looked up, never called
+async def test_the_user_is_active():
+    assert_that(user)                              # builds a builder and asserts nothing
+    assert_that(user.age).is_positive              # looked up, never called
+    assert_that(probe).eventually().is_positive()  # never awaited, so it polls nothing
 ```
 
-Both are green forever. Neither is possible with a bare `assert`, which is the price of a fluent API,
-so the library owes you a way to find them. The second line is already reported by
-[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/). The first is reported by
-nothing, because a call may have side effects and no linter can know this one does not.
+All three are green forever. None is possible with a bare `assert`, which is the price of a fluent
+API, so the library owes you a way to find them. The second line is already reported by
+[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/). The other two are reported by
+nothing, because a call may have side effects and no linter can know these do not.
 
 ```bash
 pytest --assertpy2-dangling

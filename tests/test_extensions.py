@@ -280,6 +280,45 @@ def test_replacing_a_built_in_assertion_has_to_be_deliberate():
         add_extension(is_type_of)
 
 
+class TestNamesAPollingChainAnswersItself:
+    """Refused at registration, since after `eventually()` such an extension is unreachable."""
+
+    @pytest.mark.parametrize("name", ["close", "send", "throw", "within", "every", "ignoring", "val", "not_"])
+    def test_a_name_the_chain_owns_is_refused(self, name):
+        def extension(self):
+            return self.error("shadowed")
+
+        extension.__name__ = name
+        with pytest.raises(ValueError, match="polling chain spells one of its own"):
+            add_extension(extension)
+
+    @pytest.mark.parametrize("name", ["cr_code", "gi_frame", "_custom"])
+    def test_a_coroutine_attribute_name_is_refused(self, name):
+        def extension(self):
+            return self.error("shadowed")
+
+        extension.__name__ = name
+        with pytest.raises(ValueError, match="polling chain spells one of its own"):
+            add_extension(extension)
+
+    def test_override_does_not_get_past_it(self):
+        def close(self):
+            return self.error("shadowed")
+
+        with pytest.raises(ValueError, match="polling chain spells one of its own"):
+            add_extension(close, override=True)
+
+    def test_a_name_of_its_own_still_registers(self):
+        def is_closed(self):
+            return self.error("mine")
+
+        add_extension(is_closed)
+        try:
+            assert_that(assert_that(1)).is_not_none()
+        finally:
+            remove_extension(is_closed)
+
+
 class TestExtensionBindingMechanics:
     """Plain functions bind to the extension host class once; exotic callables fall back to
     per-instance grafting; removal never damages the original API."""
