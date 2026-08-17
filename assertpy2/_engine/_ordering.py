@@ -117,12 +117,9 @@ def first_out_of_order(
     for index, current in enumerate(items):
         current_key = key(current)
         if index > 0:
-            # asked through `compare` rather than with the operator directly: it is the same rule the
-            # rest of this module keeps, and it tells an unorderable pair from a `__lt__` of the user's
-            # own that raises. Compared here with `<`, the raise happened inside *this* frame, where the
-            # origin check reads it as somebody else's code and lets a plain type mismatch escape
-            # each element's key is computed once and carried to the next round: recomputing it for
-            # the left-hand side doubled the calls, which a key with a cost or a side effect would feel
+            # through `compare`, not `<`: raising here would put a broken `__lt__` in this frame, where
+            # the origin check mistakes it for a plain type mismatch.  The key is carried to the next
+            # round rather than recomputed, which doubled the calls
             broken = holds(current_key, previous_key, "gt" if reverse else "lt")
             if broken:
                 return index - 1, previous, current

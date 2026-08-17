@@ -475,10 +475,8 @@ def _fail_on_reused_key(session, message: str) -> None:
     of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
     message the reader needs under a stack that points at the wrong place.  Print it and go red.
     """
-    # only a run that otherwise succeeded. this hook is reached from a ``finally``, so it also runs
-    # after Ctrl-C, an internal error and a usage error, and each of those carries an exit code that
-    # says more than "tests failed". overwriting one would report a run that never finished as one
-    # that did. anything already non-zero is red for its own reason and needs nothing from here
+    # only a run that otherwise succeeded: this hook is reached from a `finally`, so Ctrl-C and an
+    # internal error land here too, each with an exit code that says more than "tests failed"
     if session.exitstatus == pytest.ExitCode.OK:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -726,11 +724,8 @@ def pytest_runtest_makereport(item, call):
     if not report.failed:
         return
 
-    # before the "call" gate, before the AssertionError one, and before an exception is even required,
-    # all three deliberately: the summary says how much of the run it accounts for, and that is only
-    # honest against every red result. A broken fixture erroring thirty tests is what a live red run is
-    # mostly made of, and a passing test under `xfail(strict=True)` is red with no exception at all -
-    # each of those, left out, printed "3 of 3 failing tests differ at role" over a larger run
+    # ahead of the "call" and AssertionError gates, and without requiring an exception at all: the
+    # summary counts against every red result, including an erroring fixture and a strict xpass
     exc = call.excinfo.value if call.excinfo is not None else None
     _record_for_clustering(item.config, report.nodeid, exc)
 
@@ -753,10 +748,8 @@ def _attach_report_sections(item, report, exc) -> None:
     diff = getattr(exc, "diff", None)
     trace = getattr(exc, "trace", None)
 
-    # what the report can show is what the assertion named, and "the attribute is not None" stopped
-    # being able to answer that on either side. `actual` is filled on every failure now, so it would
-    # put a block under all of them; `expected` was never able to tell "compared against None" from
-    # "no expected at all", and lost the line on both
+    # read from the record, not from a test against `None`: `actual` is filled on every failure, and
+    # `expected` cannot tell "compared against None" from "no expected value at all"
     outcome = getattr(exc, "_outcome", None)
     if outcome is None:
         # built by hand, by `eventually()` or by a snapshot re-wrap: the values are all there is to go on
@@ -882,10 +875,8 @@ def _entry_to_json(entry):
         item["absent"] = absent
     steps = getattr(entry, "steps", ())
     if steps:
-        # `path` is written for a person and cannot be read back: a mapping key goes through `str()`, so
-        # `{3: ...}` and `{"3": ...}` render alike.  A consumer that wants to walk back into the payload
-        # needs the keys themselves, which is what these are.  Absent where there is no location to
-        # give: the root, and a containment entry whose path is a label
+        # `path` is lossy, since a mapping key goes through `str()`, so a consumer that wants to walk
+        # back into the payload needs the keys themselves.  Absent at the root, which has no location
         item["steps"] = [_step_to_json(step) for step in steps]
     return item
 

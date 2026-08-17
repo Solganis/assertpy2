@@ -284,10 +284,8 @@ def _keyed_types_differ(actual, expected) -> bool:
     different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
     Values are left alone here: they do become pairs, and the walk judges them.
     """
-    # `is_mapping_like` rather than `isinstance(..., dict)`: everything else in this engine judges a
-    # mapping structurally, so a `UserDict` or a `MappingProxyType` is compared key by key like any
-    # other. Checking only the concrete type left those passing here while the matcher, which walks the
-    # same values through the diff, refused them - the two spellings of one relation disagreeing again
+    # structural, like everything else in this engine: the concrete-type check let a `UserDict` pass
+    # here while the matcher walking the same values refused it
     if is_mapping_like(actual) and is_mapping_like(expected):
         return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
@@ -316,11 +314,8 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             return "equal" if comparator(actual, expected) else "leaf"
         if config.strict_types:
             if actual is expected and not at_root:
-                # identity, which `PyObject_RichCompareBool` gives a container for free and the walk
-                # below would take away: `[nan] == [nan]` holds when both elements are the same float.
-                #
-                # Not at the root, where nothing inherits it. Applied there it made `strict_types`
-                # *weaker* than plain equality, which inverts what the flag means
+                # identity, which a container gets free from `PyObject_RichCompareBool` and the walk
+                # below would take away.  Not at the root, where it made `strict_types` the weaker rule
                 return "equal"
             if _types_differ(actual, expected):
                 # ahead of tolerance on purpose: a tolerance says how far apart two numbers may be, it
@@ -332,10 +327,8 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
                 # values, and two mappings keyed `True` and `1` present it with the same set of values
                 return "leaf"
             if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
-                # a container's own `==` says nothing about the types inside it: `[True] == [1]`.  The
-                # walk normally stops here, so under strict types it has to keep going.  Whether the
-                # walker can actually take this value apart is not predicted here: `"strict"` tells the
-                # caller that a value it cannot decompose is one that is already equal
+                # `[True] == [1]`: a container says nothing about the types inside it, so the walk that
+                # normally stops here keeps going.  A value it cannot decompose is already equal
                 return "strict"
         if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
             return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"

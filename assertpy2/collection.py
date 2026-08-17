@@ -347,10 +347,8 @@ class CollectionMixin(_MixinBase):
         # subclass check: a custom matcher written against the documented shape was called as a
         # plain function here, and works everywhere else
         matches = predicate.matches if _is_matcher(predicate) else cast("Callable[..., object]", predicate)
-        # counted in the pass that filters, rather than by asking the value for its length afterwards: a
-        # generator is spent by that pass, so the note that exists to say "the source had items and the
-        # filter dropped them" said the source was empty. Counting here also leaves the predicate seeing
-        # the source at the same point it always did, which draining it first would not
+        # counted in the filtering pass: a generator is spent by it, so asking its length afterwards
+        # made the note about a filter that emptied a non-empty source claim the source was empty
         seen = 0
         filtered = []
         for item in self.val:

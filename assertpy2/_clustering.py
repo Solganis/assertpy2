@@ -488,11 +488,8 @@ def render(
             lines.append(f"    actual:   {_side(cluster.actuals)}")
             lines.append(f"    expected: {_side(cluster.expecteds)}")
     if omitted:
-        # said rather than silently dropped: a summary that shows five of eleven causes without saying
-        # so reads as "these are the causes", which is the one thing it must never imply.
-        # "more" rather than "smaller": clusters of equal size are ordered by their signature, so what
-        # falls past the limit is regularly the same size as what printed, and a run where every failure
-        # differs at two thousand fields makes that the ordinary case rather than the corner one
+        # said rather than dropped: five of eleven causes shown silently reads as "these are the
+        # causes".  "more" rather than "smaller", since equal-sized clusters are ordered by signature
         lines.append(f"{len(omitted)} more cluster{'' if len(omitted) == 1 else 's'} not shown")
     covered = len({nodeid for cluster in found for nodeid in cluster.nodeids})
     if covered < total_failures:

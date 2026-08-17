@@ -1000,9 +1000,8 @@ def test_is_after_is_the_exact_complement_of_is_before_or_equal_to(left, right):
 
 # --- the parts of a failure message this library composes itself ---
 #
-# Not "no message ever shows an address": rendering the value's own repr is inherited behaviour, and
-# `is_equal_to` on a plain object does print `<Foo object at 0x...>`. The invariant covers the text
-# assertpy2 writes around that value, which is where a leak is ours to prevent.
+# Not "no message shows an address": a value's own repr is inherited behaviour.  This covers the text
+# written around it, which is where a leak is ours to prevent.
 
 _ADDRESS = re.compile(r"0x[0-9a-fA-F]{6,}")
 
@@ -1121,11 +1120,8 @@ class _Money:
         return f"_Money({self.amount})"
 
 
-# Every type the walker dispatches on, not just the JSON-shaped subset `_values` covers. Only a property
-# comparing a value against a copy of itself may use this. `_values` grows no sets on purpose, and a
-# property that compares two *different* generated values would otherwise trip over the documented
-# hash-matching gap, where a set element or dict key of a different type but the same hash is matched
-# before anything looks at its type. Against a copy the values are identical, so the gap cannot arise.
+# Every type the walker dispatches on, for properties comparing a value against a copy of itself only:
+# two different generated values would trip over the documented hash-matching gap, a copy cannot.
 _wide_atoms = (
     _atoms
     | st.binary()
@@ -1216,19 +1212,16 @@ def test_strictness_only_ever_refines_equality(left, right):
 @settings(deadline=None)
 @given(value=_wide_values)  # must stay the same symbol the two reach guards above assert on
 def test_a_value_is_strictly_equal_to_itself(value):
-    # the first line pins the identity shortcut forced descent would otherwise take away; the second
-    # pins that strictness does not depend on it, since a deep copy keeps every type and no identity.
-    # The wide strategy belongs to this property in particular: a copy is type-identical, so widening
-    # it costs nothing and covers the shapes nobody thought to write down - a set inside a list was one
+    # the first line pins the identity shortcut, the second that strictness does not depend on it.
+    # The wide strategy is free here, and it covers shapes nobody wrote down, a set inside a list first
     assert_that(value).is_equal_to(value, strict_types=True)
     assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
 
 
 # --- rendering invariants: the one place a property test has paid for itself here ---
 #
-# A wide oracle over comparison *semantics* measured net-negative: 12800 generated pairs found nothing
-# the example suite had missed. Rendering is the opposite: there is no natural example for "a caret row
-# with nothing above it", so the case has to be invented, which is what generation does for free.
+# A wide oracle over comparison semantics measured net-negative, 12800 pairs finding nothing.  For
+# rendering there is no natural example of "a caret row with nothing above it", so it must be invented.
 
 # ESC is excluded from every generated string on purpose, paths included: a `kind="string"` diff
 # prints its values raw and a path is echoed verbatim, so data carrying an escape puts one in the

@@ -95,16 +95,9 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
     return "unparsed JSON text"
 
 
-# Ordered: the first sufficient explanation is the one named, so the narrower claim goes first
-# (stripping a string also hides a difference in its line endings).  A label describes the
-# *normalisation* rather than guessing a cause, because one normalisation can resolve several.
-#
-# Two rules for anything added here, the second learned from a shipped bug:
-#
-# 1. A step explains a pair only if the pair differed *before* it ran, which `_explains` enforces.
-#    Otherwise every normalisation "resolves" a `strict_types` failure by doing nothing.
-# 2. A step here outranks the claim that the sides differ in type, so `_typed` runs after this ladder:
-#    `[1, 2]` against `"[1, 2]"` differs in type and is better called JSON.
+# Ordered: the first sufficient explanation is the one named, so the narrower claim goes first.  Two
+# rules for anything added here: a step explains a pair only if the pair differed *before* it ran
+# (`_explains`), and a step here outranks `_typed`, which is why that ladder runs after this one.
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),
@@ -183,10 +176,8 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
         return None
     entries = diff.entries
 
-    # One pass over the entries for everything that needs one, written flat rather than as four
-    # comprehensions.  A failure over a two-thousand element sequence has two thousand entries, and
-    # this is the only part of the layer whose cost grows with them, so it is worth the plainness:
-    # `value != value` in place of `math.isnan` keeps two function calls per entry out of the loop.
+    # one flat pass rather than four comprehensions: this is the only part of the layer whose cost
+    # grows with the entry count, and `value != value` keeps two calls per entry out of the loop
     pairs: list[tuple[object, object]] = []
     absent_seen = False
     absent_expected_only = True
@@ -213,13 +204,8 @@ def diagnose(diff: DiffResult | None, actual: object = None, expected: object = 
             positional = False
 
     if diff.kind == "string":
-        # a string diff is built line by line, and `splitlines()` treats "\r\n" and "\n" as the same
-        # break: a file that differs in its line endings *and* in one line produces an entry for the
-        # line only. Reading that entry would have this claim that trailing whitespace is the whole
-        # story, the reader would strip it, and the assertion would fail again on the endings. The
-        # two strings themselves are the complete account, and comparing them costs nothing
-        # bytes reach this kind too, and the reasoning above is theirs unchanged: their own
-        # `splitlines()` folds the two line endings together in exactly the same way
+        # the whole strings, not the entries: `splitlines()` folds "\r\n" into "\n", so a text that
+        # differs in both its endings and one line yields an entry for the line alone
         if not isinstance(actual, (str, bytes)) or not isinstance(expected, (str, bytes)):
             return None
         return _named([(actual, expected)])

@@ -252,10 +252,8 @@ if TYPE_CHECKING:
     assert_type(assert_that((1, 2)).filtered_on(lambda n: True).value, list[int])
     assert_type(assert_that({1, 2}).mapped(str).value, list[str])
 
-    # The same pivots on the other walkable types.  A character of a string is a string and a byte is
-    # an int, so both stay on their own protocol instead of widening to the generic builder.  The
-    # invoked view inherits the same pivots and lands on text instead, which is what keeps a caught
-    # message from being asked whether it exists on disk.
+    # a character of a string is a string and a byte is an int, so both stay on their own protocol.
+    # The invoked view lands on text, which keeps a caught message from being asked to exist on disk
     assert_type(assert_that("abc").first(), _StringAssertion)
     assert_type(assert_that("abc").last(), _StringAssertion)
     assert_type(assert_that("abc").element(1), _StringAssertion)
@@ -298,10 +296,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., object])
 
-    # A type with no overload of its own falls through to the full surface rather than to a narrowed
-    # view.  This is what lets the DataFrame and ndarray assertions carry no Protocol: they are
-    # reachable because the fallback returns the concrete class.  tests/test_protocol_parity.py
-    # exempts them from its reverse check on exactly this premise, so it is pinned here.
+    # a type with no overload of its own falls through to the full surface, which is what makes the
+    # DataFrame assertions reachable with no Protocol.  test_protocol_parity.py exempts them on this
     class _FakeFrame:  # stands in for a DataFrame / ndarray: a type no assert_that overload keys on
         pass
 
@@ -313,11 +309,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(frame).is_array_equal(frame), AssertionBuilder[_FakeFrame])
     assert_type(assert_that(frame).is_array_close_to(frame, rtol=0.1), AssertionBuilder[_FakeFrame])
 
-    # `match.is_instance_of` forwards straight to `isinstance`, so it accepts a class, a union, or a
-    # tuple of either.  The builder assertion of the same name stays narrow on purpose: its overloads
-    # refine the tracked value to the given class, and a union has no single class to refine to.  Both
-    # halves of that split are pinned here, because widening one without meaning to would silently
-    # cost the narrowing that is the whole point of the typed surface.
+    # `match.is_instance_of` forwards to `isinstance` and takes a union; the builder assertion stays
+    # narrow, since its overloads refine the value and a union has no single class to refine to
     assert_type(match.is_instance_of(int), IsInstanceOfMatcher)
     assert_type(match.is_instance_of(int | str), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int, str)), IsInstanceOfMatcher)

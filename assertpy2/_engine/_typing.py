@@ -27,18 +27,12 @@ if TYPE_CHECKING:
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)  # tracked bytes type (output-only -> covariant)
     _U = TypeVar("_U")  # the type a TypeIs predicate refines the tracked value to
 
-    # what a number may be compared against: anything that can produce a float. Named as a capability
-    # rather than as a list of types, because the list was wrong the first time - it said
-    # `float | Decimal | Fraction` and rejected `numpy.int64`, which this library documents support for
-    # and which the runtime compares happily. `str`, `complex`, `date` and containers have no
-    # `__float__`, so the mistakes worth catching stay caught
+    # a capability rather than a list of types: the list said `float | Decimal | Fraction` and refused
+    # `numpy.int64`. `str`, `complex`, `date` and containers have no `__float__` and stay caught
     _Number = SupportsFloat
 
     # Predicates read `Callable[[Any], object]`, or `[Any, Any]` where the runtime hands over a pair.
-    # The verdict is `object` because the runtime reads it for truth: `bool` refused a `numpy.bool_`
-    # verdict, the same mistake the numeric bound made once by naming types and rejecting `numpy.int64`.
-    # The arity is the runtime's: `each` and its neighbours call with one argument, `zip_satisfies` and
-    # `comparators` with two, and either raises when handed the other.
+    # The verdict is `object` and not `bool`, which refused a `numpy.bool_`.
 
     class _MembershipAssertion(Protocol):
         """ "Is every one of my elements in there", asked the same way by three types.
@@ -124,18 +118,12 @@ if TYPE_CHECKING:
         # ExtractingMixin and JsonMixin: both drop the subject's own shape, so both fit here
         def extracting(
             self,
-            # a selector stays `object`: whether one works depends on the row, and every narrowing
-            # refused working code.  `str | int` refuses tuple, float, bytes and `None` keys;
-            # `Hashable` refuses `slice(0, 2)`, unhashable before 3.12 and accepted at runtime;
-            # `Hashable | slice` refuses a list key on a mapping whose `__getitem__` takes one.
-            # The first selector is required: without one the runtime raises anyway
+            # a selector stays `object`: whether one works depends on the row, and every narrowing tried
+            # refused working code, down to `Hashable | slice` refusing a list key
             name: object,
             *names: object,
-            # named rather than `**kwargs`, because the runtime accepts exactly these two and rejects
-            # anything else by name: a typo like `filtr=` should not have to wait for the run to say so
-            # `Mapping` rather than `dict`, which is invariant and refuses a `dict[str, str]` variable.
-            # `str` keys are a stated limit: other keys are accepted and then skipped, so a wider type
-            # would describe a filter that does nothing
+            # named rather than `**kwargs`, so a typo like `filtr=` is caught before the run.  `Mapping`
+            # because `dict` is invariant, and `str` keys because other keys are accepted then skipped
             filter: str | Mapping[str, object] | Callable[[Any], object] = ...,  # noqa: A002  # public keyword
             # `sort` is narrower by the runtime's own rule: a single index is refused, the same index
             # inside a list is honoured
@@ -214,10 +202,8 @@ if TYPE_CHECKING:
         def is_none(self) -> Self: ...
         def is_not_none(self) -> Self: ...
         def is_type_of(self, some_type: type) -> Self: ...
-        # deliberately not the narrowing overload pair the generic fallback carries.  Refining by class
-        # from an already concrete type has no caller: a `dict[str, Any]` is never an instance of a
-        # domain class, and the case that is real (`object` / `Any` narrowed by isinstance) resolves on
-        # the fallback, where it always worked.  The pair costs two `reportOverlappingOverload` for that
+        # not the narrowing pair the generic fallback carries: refining by class from an already
+        # concrete type has no caller, and it would cost two `reportOverlappingOverload`
         def is_instance_of(self, some_class: type) -> Self: ...
         def is_instance_of_any(self, *some_classes: type) -> Self: ...
         def is_subclass_of(self, some_class: type) -> Self: ...
@@ -225,10 +211,8 @@ if TYPE_CHECKING:
         def is_length_between(self, low: int, high: int) -> Self: ...
         def is_callable(self) -> Self: ...
         def is_not_callable(self) -> Self: ...
-        # CollectionMixin - a question about any value, like the callable pair above it: asking whether a
-        # date or a number can be walked is a fair question with a plain answer, not a domain error.  Held
-        # here rather than copied into eleven protocols, which is what having it on the collection view
-        # alone amounted to
+        # a fair question about any value, not a domain error, so it is held here rather than copied
+        # into eleven protocols
         def is_iterable(self) -> Self: ...
         def is_not_iterable(self) -> Self: ...
         # the same refinement the generic fallback offers, so a domain predicate narrows the chain
@@ -359,10 +343,8 @@ if TYPE_CHECKING:
         `str` at least as often as it is written as a `Path`.
         """
 
-        # the pivots are redeclared to keep their result a `str` rather than the text capability: a
-        # character of a string is a string, and a caller who had a path has one afterwards.  The
-        # inherited form returns text, which is what a caught message needs and what keeps `exists()`
-        # away from it
+        # redeclared so a pivot keeps its result a `str`: the inherited form returns the text
+        # capability, which is what a caught message needs and what keeps `exists()` away from it
         def first(self) -> _StringAssertion: ...
         def last(self) -> _StringAssertion: ...
         def element(self, index: int) -> _StringAssertion: ...
@@ -485,11 +467,8 @@ if TYPE_CHECKING:
     class _DictAssertion(_StructureAssertion, _SizedAssertion, _CoreAssertion, Protocol[_K, _V]):
         """Assertions available for ``dict`` values, generic over the key and value types."""
 
-        # the one view where narrowing holds: the runtime refuses a superset without `keys()` by name,
-        # rather than comparing and failing.  Both spellings, because neither covers the other: the
-        # structural one takes a class carrying only `keys`, `__iter__` and `__getitem__`, measured, and
-        # `Mapping` takes what typeshed types more tightly than the protocol can, such as a mapping
-        # proxy.  Neither key nor value is bound: a superset may carry keys the subject does not have
+        # the one view where narrowing holds, since the runtime refuses a superset without `keys()`.
+        # Both spellings, as neither covers the other, and neither key nor value is bound
         def is_subset_of(self, *supersets: Mapping[Any, Any] | MappingLike, allow_empty: bool = ...) -> Self: ...
 
         def contains(self, *items: object) -> Self: ...
