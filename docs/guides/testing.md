@@ -254,6 +254,13 @@ keeps nothing, having nothing to keep it on.
 The recorder can be switched off per assertion with `trace=False`, on both `eventually()` and
 `eventually_sync()`.
 
+On every poll that fails with a value it reads that value twice, once for the sample and once to tell
+whether the value moved. The second walk covers the whole value rather than the cut sample, so a change
+past the hundredth item of a container is still seen. A poll that passes, or one whose probe raised,
+walks nothing. Over a scalar a failing poll is a few microseconds. Over a payload of two hundred records
+it measured about 2 ms, and it grows with the payload, so a tight interval over a large response is
+where turning the recorder off is worth it.
+
 That is for the rare case where a near-zero interval meets a heavy probed value and even point-in-time
 snapshots cost too much. The timeout failure then reports just the last failure.
 
