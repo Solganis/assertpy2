@@ -97,10 +97,13 @@ docs = [
 # otherwise skips these tests); pandas/polars/numpy come from the [data] extra instead.
 integrations = [
     "attrs>=25.0",
+    "django>=5.0",
+    "flask>=3.0",
     "httpx>=0.28",
     "httpx2>=2.11",
     "pydantic>=2.0",
     "requests>=2.32",
+    "starlette>=0.40",
 ]
 typecheck = [
     "mypy>=2.3.0",

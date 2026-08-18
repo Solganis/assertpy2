@@ -246,6 +246,27 @@ class TestTheStepIntoTheBody:
         with pytest.raises(ValueError, match="no content type was declared"):
             assert_that(response).decoded_as_json()
 
+    def test_headers_that_yield_pairs_rather_than_names(self):
+        # werkzeug's Headers iterate as (name, value), and reading a pair as a name is how this once
+        # reported that no content type had been declared when one had
+        class Paired:
+            def __init__(self, items):
+                self._items = items
+
+            def keys(self):
+                return [name for name, _ in self._items]
+
+            def __getitem__(self, key):
+                return next(value for name, value in self._items if name == key)
+
+            def __iter__(self):
+                return iter(self._items)
+
+        response = Fetched(body="nope")
+        response.headers = Paired([("Content-Type", "text/html; charset=utf-8")])
+        with pytest.raises(ValueError, match="text/html; charset=utf-8"):
+            assert_that(response).decoded_as_json()
+
     def test_headers_that_raise_when_read(self):
         # the content type is a nicety and the refusal is not: one must not take the other down
         class Hostile:
@@ -319,6 +340,34 @@ class TestTheStepIntoTheBody:
             assert_that(Fetched()).not_.decoded_as_json()
 
 
+def _configure_django(django):
+    """Settings and a URLconf, once per session: django refuses to work without them."""
+    from django.conf import settings
+
+    if not settings.configured:
+        settings.configure(
+            DEBUG=True,
+            ALLOWED_HOSTS=["*"],
+            DATABASES={},
+            INSTALLED_APPS=[],
+            ROOT_URLCONF=__name__,
+            LOGGING_CONFIG=None,
+        )
+        django.setup()
+        from django.urls import path
+
+        # the URLconf django resolves against: it reads `urlpatterns` off the module named above, and
+        # importing `path` before `setup()` is not allowed
+        globals()["urlpatterns"] = [path("orders/<int:order_id>/", order_view)]
+
+
+def order_view(request, order_id):
+    """The one view the django test client calls, reached through ``urlpatterns`` below."""
+    from django.http import JsonResponse
+
+    return JsonResponse({"id": order_id, "status": "refunded"}, status=500)
+
+
 class TestTheClientsThemselves:
     """The stand-ins above are shapes; these are the libraries, so the claim is measured not asserted.
 
@@ -373,3 +422,65 @@ class TestTheClientsThemselves:
         with pytest.raises(AssertionFailure) as failure:
             assert_that(response).decoded_as_json().is_equal_to({"error": "none"})
         assert_that(str(failure.value)).contains("from POST https://api.example.com/orders -> 502")
+
+    def test_a_flask_response(self):
+        flask = pytest.importorskip("flask")
+        app = flask.Flask(__name__)
+
+        @app.route("/orders/<int:order_id>")
+        def order(order_id):
+            return flask.jsonify({"id": order_id, "status": "refunded"}), 500
+
+        with app.test_client() as client, pytest.raises(AssertionFailure) as failure:
+            assert_that(client.get("/orders/7")).decoded_as_json().at_json_path("$.status").is_equal_to("paid")
+        assert_that(str(failure.value)).contains("from GET http://localhost/orders/7 -> 500")
+
+    def test_a_flask_response_that_is_not_json(self):
+        # the expired-session case, and the one that reads the content type out of a real container
+        flask = pytest.importorskip("flask")
+        app = flask.Flask(__name__)
+
+        @app.route("/private")
+        def private():
+            return "<!doctype html><html>Session expired</html>", 200
+
+        with app.test_client() as client, pytest.raises(ValueError) as failure:
+            assert_that(client.get("/private")).decoded_as_json()
+        assert_that(str(failure.value)).contains("text/html").contains("Session expired")
+
+    def test_a_django_response(self):
+        django = pytest.importorskip("django")
+        _configure_django(django)
+        from django.http import JsonResponse
+
+        response = JsonResponse({"error": "locked"}, status=502)
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(response).decoded_as_json().is_equal_to({"error": "open"})
+        # a response built on its own answers to nobody, so there is no request to name
+        assert_that(str(failure.value)).contains("from a response with status 502")
+
+    def test_a_django_response_through_its_test_client(self):
+        django = pytest.importorskip("django")
+        _configure_django(django)
+        from django.test import Client
+
+        response = Client().get("/orders/7/", {"q": "alice"})
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(response).decoded_as_json().at_json_path("$.status").is_equal_to("paid")
+        # django keeps the request as its WSGI environ rather than as an object
+        assert_that(str(failure.value)).contains("from GET /orders/7/?q=alice -> 500")
+
+    def test_a_starlette_test_client_response(self):
+        starlette = pytest.importorskip("starlette")
+        pytest.importorskip("httpx2")
+        from starlette.applications import Starlette
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+        from starlette.testclient import TestClient
+
+        app = Starlette(routes=[Route("/orders/{order_id:int}", lambda request: JSONResponse({"id": 7}, 500))])
+        client = TestClient(app, raise_server_exceptions=False)
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(client.get("/orders/7")).decoded_as_json().is_equal_to({"id": 9})
+        assert_that(str(failure.value)).contains("-> 500")
+        assert_that(starlette.__name__).is_equal_to("starlette")

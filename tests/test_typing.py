@@ -316,3 +316,16 @@ if TYPE_CHECKING:
     assert_type(match.is_instance_of((int, str)), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int | str, float)), IsInstanceOfMatcher)
     assert_type(match.is_type_of(int), IsTypeOfMatcher)
+
+    # the HTTP pivot: the builder it hands back holds the parsed document, so it must not go on
+    # claiming the response, the way `at_json_path` stopped claiming the shape of its own subject
+    class _FakeResponse:
+        status_code: int
+        headers: dict[str, str]
+
+        def json(self) -> Any: ...
+
+    response = _FakeResponse()
+    assert_type(assert_that(response), AssertionBuilder[_FakeResponse])
+    assert_type(assert_that(response).decoded_as_json(), AssertionBuilder[object])
+    assert_type(assert_that(response).decoded_as_json().value, object)

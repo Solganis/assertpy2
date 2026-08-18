@@ -41,9 +41,9 @@ assert_that(resp).decoded_as_json()
 #             and it starts with '<!doctype html><html><body>Login required</body></html>'
 ```
 
-It works on any client that keeps a status code and headers, which is httpx, requests, the Starlette
-and FastAPI test clients, Flask and Django. None of them is imported, and none of them needs to be
-installed.
+It works on any client that keeps a status code and headers. The suite exercises six of them against
+the real library rather than a stand-in: httpx, httpx2, requests, Flask, Django and Starlette, whose
+test client is what FastAPI's is. None of them is imported, and none has to be installed.
 
 The body check itself is an ordinary value assertion, so it runs without a live server:
 

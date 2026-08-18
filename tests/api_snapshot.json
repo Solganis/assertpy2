@@ -396,7 +396,7 @@
   "decoded_as_json": {
    "kind": "callable",
    "parameters": [],
-   "returns": "Self"
+   "returns": "AssertionBuilder[object]"
   },
   "described_as": {
    "kind": "callable",
