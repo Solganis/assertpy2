@@ -25,7 +25,7 @@ from ._engine._require import refuse
 from .errors import _truncated
 
 if TYPE_CHECKING:
-    from ._engine._compat import Self
+    from .assertpy import AssertionBuilder
 
 
 class _Response(Protocol):
@@ -101,11 +101,23 @@ def response_note(response: _Response) -> str | None:
 
 
 def _content_type(response: _Response) -> str:
+    """The declared content type, or ``""``.
+
+    Three shapes, because header containers disagree about what they are.  ``get()`` where there is one,
+    since every client's container is case-insensitive through it.  Then iteration, which yields names
+    in a plain mapping and ``(name, value)`` pairs in werkzeug's ``Headers``: reading a pair as a name
+    is how this silently reported that no type had been declared when one had.
+    """
     try:
         headers = cast("dict[str, str]", response.headers)
-        for name in headers:
+        getter = getattr(headers, "get", None)
+        found = getter("content-type") if callable(getter) else None
+        if found:
+            return str(found)
+        for item in headers:
+            name, value = item if isinstance(item, tuple) and len(item) == 2 else (item, None)
             if str(name).lower() == "content-type":
-                return str(headers[name])
+                return str(headers[name] if value is None else value)
     except Exception:  # a header mapping of somebody else's may raise from anything
         return ""
     return ""
@@ -165,7 +177,7 @@ def _parsed(response: _Response) -> object:
 class HttpMixin(_MixinBase):
     """Assertions and steps for an HTTP response."""
 
-    def decoded_as_json(self) -> Self:
+    def decoded_as_json(self) -> AssertionBuilder[object]:
         """Parse the response body and return a new builder holding the parsed document.
 
         The step every API test takes, made part of the chain so that what it finds is asserted on with
@@ -179,7 +191,10 @@ class HttpMixin(_MixinBase):
                 assert_that(response).decoded_as_json().at_json_path("$.items[0].sku").is_equal_to("A-1")
 
         Returns:
-            AssertionBuilder: a new instance holding the parsed body
+            AssertionBuilder: a new instance holding the parsed body.  Typed over ``object`` rather than
+                over the response, for the reason `at_json_path()` is typed the way it is: a document is
+                whatever the body held, so a step that cannot know its result must not go on promising
+                the shape of its subject.
 
         Raises:
             TypeError: if val is not an HTTP response
@@ -204,4 +219,6 @@ class HttpMixin(_MixinBase):
                 raise ValueError(f"the response body could not be read: {named}") from exc
             shown = f"it starts with {preview!r}" if preview else "it is empty"
             raise ValueError(f"the response body is not JSON: {named} and {shown}") from exc
-        return self.builder(document, self.description, self.kind)
+        # `builder()` is declared to hand back the same kind of builder, which is right for every step
+        # that keeps its subject and wrong for this one: what comes back holds the document
+        return cast("AssertionBuilder[object]", self.builder(document, self.description, self.kind))
