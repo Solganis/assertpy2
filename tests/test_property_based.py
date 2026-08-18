@@ -289,6 +289,161 @@ def test_diff_is_well_formed_for_unequal_dataclasses(left, right):
         assert isinstance(_format_diff(diff, color=True), str)
 
 
+# === Diff completeness: a failing sequence accounts for every one of its positions ===
+# Well-formedness above says the diff renders.  This says it is complete, which is a claim about the
+# layer underneath: pairing decides which element is compared with which, and the walk only ever sees
+# the pairs handed to it.  A pair the pairing calls equal is never examined, so a wrong match takes a
+# real difference out of the diff and out of the message's elision at once, and the failure names a
+# smaller difference than the one that caused it.  Two defects of exactly that shape shipped, both
+# because difflib's notion of a match is not this library's: keyed on reprs it matches values that
+# print alike, keyed on the values it matches on ``==``, and every verdict here is reached with ``!=``.
+#
+# The atoms below are chosen for that: a homogeneous generator only exercises the half everyone sees.
+
+
+class _Twin:
+    """Unhashable and printed the same whatever it holds, so an alignment can only key on the repr."""
+
+    __hash__ = None
+
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return isinstance(other, _Twin) and self.value == other.value
+
+    def __repr__(self):
+        return "<twin>"
+
+
+class _Split:
+    """Hashable, with ``==`` and ``!=`` that disagree: difflib reads the first, the walk the second."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def __hash__(self):
+        return 7
+
+    def __eq__(self, other):
+        return isinstance(other, _Split)
+
+    def __ne__(self, other):
+        return not isinstance(other, _Split) or self.value != other.value
+
+    def __repr__(self):
+        return f"_Split({self.value})"
+
+
+_drift_atoms = st.one_of(
+    st.integers(min_value=-2, max_value=2),
+    st.sampled_from([0.0, 1.0, 2.0, True, False, None, "", "a", "b"]),
+    st.builds(float, st.just("nan")),
+    st.builds(_Twin, st.integers(min_value=0, max_value=2)),
+    st.builds(_Split, st.integers(min_value=0, max_value=2)),
+    st.lists(st.integers(min_value=0, max_value=2), max_size=2),
+    st.dictionaries(st.sampled_from(["id", "name"]), st.integers(min_value=0, max_value=2), max_size=2),
+)
+
+
+@st.composite
+def _drifted_pair(draw):
+    """Two sequences sharing a run, which is the only shape that reaches the alignment at all.
+
+    Pairing by index is used whenever the two are the same length, so a strategy drawing both sides
+    independently spends most of its examples never touching the code under test.  Here one side is
+    the other with a run inserted and a few positions rewritten, which is what a shifted payload looks
+    like and what makes a matched run long enough for a wrong match inside it to hide something.
+
+    Drawing every element from one small pool is load-bearing rather than a way to get repeats.  A dict
+    lookup settles identity before it asks ``==``, so difflib matches a pair like ``nan`` against ``nan``
+    only when both sides hold the same object - and that pair, matched and then never compared, is the
+    whole failure this is looking for.  Redraw the elements per side and the case stops being generated.
+    """
+    element = st.sampled_from(draw(st.lists(_drift_atoms, min_size=1, max_size=3)))
+    base = draw(st.lists(element, min_size=1, max_size=6))
+    cut = draw(st.integers(min_value=0, max_value=len(base)))
+    expected = [*base[:cut], *draw(st.lists(element, max_size=3)), *base[cut:]]
+    for index in draw(st.lists(st.integers(min_value=0, max_value=len(expected) - 1), max_size=2)):
+        expected[index] = draw(element)
+    return (expected, base) if draw(st.booleans()) else (base, expected)
+
+
+_pairs_of_sequences = st.one_of(
+    st.tuples(st.lists(_drift_atoms, max_size=6), st.lists(_drift_atoms, max_size=6)),
+    _drifted_pair(),
+)
+
+
+def _sequence_diff_of(actual, expected):
+    """The sequence diff of a failing pair, or ``None`` when there is nothing of that shape to read."""
+    try:
+        assert_that(actual).is_equal_to(expected)
+    except AssertionFailure as failure:
+        diff = failure.diff
+    else:
+        return None
+    return diff if diff is not None and diff.kind == "sequence" else None
+
+
+def _edits(entries):
+    """Which actual indices the diff dropped, which expected indices it added, and which it named.
+
+    Only a one-step entry can be one-sided about the sequence itself: deeper down, ``absent`` belongs
+    to the nested key or index it names, and the position above it was compared like any other.
+    """
+    dropped, added, named = set(), set(), set()
+    for entry in entries:
+        assert entry.steps, "a sequence entry has to say where it sits"
+        step = entry.steps[0]
+        assert step.kind == "index"
+        if len(entry.steps) == 1 and entry.absent == "expected":
+            dropped.add(step.value)
+        elif len(entry.steps) == 1 and entry.absent == "actual":
+            added.add(step.value)
+        else:
+            named.add(step.value)
+    return dropped, added, named
+
+
+@settings(deadline=None)
+@given(pair=_pairs_of_sequences)
+def test_a_sequence_diff_pairs_off_every_position_it_leaves_unnamed(pair):
+    actual, expected = pair
+    diff = _sequence_diff_of(actual, expected)
+    if diff is None:
+        return
+    dropped, added, named = _edits(diff.entries)
+    kept_actual = [index for index in range(len(actual)) if index not in dropped]
+    kept_expected = [index for index in range(len(expected)) if index not in added]
+    assert len(kept_actual) == len(kept_expected)  # what is left over on each side has to pair up
+    unaccounted = [
+        (left, right)
+        for left, right in zip(kept_actual, kept_expected, strict=True)
+        if left not in named and actual[left] != expected[right]
+    ]
+    assert unaccounted == []
+
+
+@settings(deadline=None)
+@given(pair=_pairs_of_sequences)
+def test_a_one_sided_sequence_entry_carries_the_element_it_names(pair):
+    actual, expected = pair
+    diff = _sequence_diff_of(actual, expected)
+    if diff is None:
+        return
+    for entry in diff.entries:
+        if len(entry.steps) != 1 or entry.absent is None:
+            continue
+        index = entry.steps[0].value
+        if entry.absent == "expected":
+            assert entry.actual is actual[index]
+            assert entry.expected is None
+        else:
+            assert entry.expected is expected[index]
+            assert entry.actual is None
+
+
 # === Point 2: multiset / ordering semantics of collection assertions ===
 
 
