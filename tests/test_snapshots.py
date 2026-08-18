@@ -3,6 +3,7 @@ import contextlib
 import datetime
 import decimal
 import enum
+import functools
 import json
 import os
 import shutil
@@ -14,6 +15,7 @@ import uuid
 import pytest
 
 from assertpy2 import (
+    AssertionFailure,
     SnapshotCreatedWarning,
     SnapshotUpdatedWarning,
     assert_that,
@@ -205,6 +207,18 @@ class TestSharedKeyHint:
         with pytest.raises(AssertionError) as failure:
             assert_that({"a": 2}).snapshot(id="once", path=str(tmp_path))
         assert_that(str(failure.value)).does_not_contain("more than once")
+
+    def test_the_hint_is_empty_when_the_key_was_reached_once(self, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_SCOPE_REPEATS", set())
+        assert_that(_snapshot._shared_key_hint("snap-mod.json", "17")).is_equal_to("")
+
+    def test_the_hint_spells_out_the_repeat(self, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_SCOPE_REPEATS", {("snap-mod.json", "17")})
+        assert_that(_snapshot._shared_key_hint("snap-mod.json", "17")).is_equal_to(
+            " This test reached <snap-mod.json::17> more than once, so the value above was compared"
+            " against what an earlier call in the same test stored."
+            " Give each call its own snapshot(id=...)."
+        )
 
     def test_the_scope_is_dropped_when_the_test_changes(self, monkeypatch, tmp_path):
         _snapshot._record_access(str(tmp_path / "s.json"), "9", "s:9")
@@ -674,6 +688,22 @@ class TestSnapshotOrphanDetection:
         assert_that(sub).is_empty()
         assert_that(whole).is_empty()
 
+    def test_the_whole_directory_is_scanned_past_every_kind_of_skip(self, tmp_path):
+        """One run touching two directories, one of them gone, and a live directory holding in listing
+        order a non-snapshot file, a plain .json, a dead snapshot, a live custom-id one, and a live
+        default-id one with a stale key."""
+        gone = str(tmp_path / "aaa_gone" / "snap-x.json")
+        live_dir = tmp_path / "bbb_real"
+        live_dir.mkdir()
+        (live_dir / "aaa.txt").write_text("x")
+        (live_dir / "other.json").write_text("{}")
+        dead = self._write(live_dir, "a-dead", {"10": 1})
+        custom = self._write(live_dir, "b-custom", {"any": "value"})
+        live = self._write(live_dir, "c-live", {"10": 1, "20": 2})
+        sub, whole = _snapshot._find_orphans({(gone, "10"), (custom, ""), (live, "10")})
+        assert_that(whole).is_equal_to([dead])
+        assert_that(sub).is_equal_to([(live, "20")])
+
     def test_prune_removes_key_keeping_others(self, tmp_path):
         keep = self._write(tmp_path, "keep", {"10": 1, "30": 3})
         _snapshot._prune_sub_key_orphans([(keep, "30")])
@@ -1096,6 +1126,13 @@ class TestMismatchNamesItsSnapshot:
             assert_that({"a": {"b": 2}}).snapshot(id="diff-snap", path=str(tmp_path))
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("a.b")
 
+    def test_the_rewrap_keeps_the_values_the_comparison_measured(self, tmp_path):
+        _save(os.path.join(str(tmp_path), "snap-rewrap.json"), {"a": 1})
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": 2}).snapshot(id="rewrap", path=str(tmp_path))
+        assert_that(failure.value.actual).is_equal_to({"a": 2})
+        assert_that(failure.value.expected).is_equal_to({"a": 1})
+
 
 class TestContractSnapshotNamesItself:
     """The drift report says which contract it measured against, like both sibling snapshot kinds."""
@@ -1145,3 +1182,377 @@ class TestCyclicValues:
         node["self"] = node
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(node).matches_contract_snapshot(id="cyc-shape", path=str(tmp_path))
+
+
+class TestReuseMessage:
+    """The reuse warning names the key, where it was first reached, and what sharing it costs."""
+
+    def test_the_in_test_wording_states_the_fact_without_a_count(self):
+        assert_that(_snapshot._reuse_message("snap-mod.json", "17", "test_mod.py:17")).is_equal_to(
+            "snapshot key <snap-mod.json::17> from test_mod.py:17 is reached by more than one test."
+            " Only the first value is stored, so the others are compared against it and their own values"
+            " are never asserted. Give each test its own snapshot(id=...)."
+        )
+
+    def test_the_sweep_wording_carries_the_total(self):
+        assert_that(_snapshot._reuse_message("snap-mod.json", "17", "test_mod.py:17", tests=4)).contains(
+            "snapshot key <snap-mod.json::17> from test_mod.py:17 is shared by 4 tests."
+        )
+
+    def test_a_whole_file_key_without_a_site_still_names_itself(self):
+        assert_that(_snapshot._reuse_message("snap-mod.json", "", "")).starts_with(
+            "snapshot key <snap-mod.json::<whole file>> is reached by more than one test."
+        )
+
+
+class TestAccessRecord:
+    """What a reached key records, and what the second test to reach it is told."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_registries(self, monkeypatch):
+        for name in ("_ACCESS_NODES", "_ACCESS_SITES"):
+            monkeypatch.setattr(_snapshot, name, {})
+        for name in ("_WARNED", "_SCOPE_SEEN", "_SCOPE_REPEATS", "_TOUCHED"):
+            monkeypatch.setattr(_snapshot, name, set())
+        monkeypatch.setattr(_snapshot, "_SCOPE", None)
+
+    def test_the_second_test_on_one_key_warns_with_the_first_site(self, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CURRENT_NODE", "test_mod.py::one")
+        _snapshot._record_access("snap-mod.json", "17", "test_mod.py:17")
+        monkeypatch.setattr(_snapshot, "_CURRENT_NODE", "test_mod.py::two")
+        with pytest.warns(_snapshot.SnapshotKeyReusedWarning) as caught:
+            _snapshot._record_access("snap-mod.json", "17", "test_mod.py:99")
+        assert_that(str(caught[0].message)).is_equal_to(
+            _snapshot._reuse_message("snap-mod.json", "17", "test_mod.py:17")
+        )
+
+    def test_a_repeat_inside_one_test_survives_to_the_next_call(self, monkeypatch):
+        # the suite runs with `-p no:assertpy2`, so `_CURRENT_NODE` is None and the scope marker and it
+        # coincide; naming the node is what separates them
+        monkeypatch.setattr(_snapshot, "_CURRENT_NODE", "test_mod.py::one")
+        _snapshot._record_access("snap-mod.json", "17", "test_mod.py:17")
+        _snapshot._record_access("snap-mod.json", "17", "test_mod.py:17")
+        assert_that(_snapshot._SCOPE_REPEATS).contains(("snap-mod.json", "17"))
+
+    def test_a_custom_id_snapshot_records_its_file_key_and_site(self, tmp_path):
+        snapname = os.path.join(str(tmp_path), "snap-site.json")
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).snapshot(id="site", path=str(tmp_path))
+        assert_that(_snapshot._TOUCHED).contains((snapname, ""))
+        assert_that(_snapshot._ACCESS_SITES[snapname, ""]).is_equal_to("id='site'")
+
+    def test_a_custom_id_contract_snapshot_records_its_file_key_and_site(self, tmp_path):
+        snapname = os.path.join(str(tmp_path), "snap-ct-site.json")
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(id="ct-site", path=str(tmp_path))
+        assert_that(_snapshot._TOUCHED).contains((snapname, ""))
+        assert_that(_snapshot._ACCESS_SITES[snapname, ""]).is_equal_to("id='ct-site'")
+
+
+class TestUpdateFlagVocabulary:
+    """The environment switch reads words, and every existing test spelled it `1`."""
+
+    @pytest.mark.parametrize("value", ["1", "true", "TRUE", " Yes ", "on"])
+    def test_every_truthy_spelling_turns_update_mode_on(self, monkeypatch, value):
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", value)
+        assert_that(_snapshot._update_enabled()).is_true()
+
+    @pytest.mark.parametrize("value", ["0", "false", "OFF", "", "maybe"])
+    def test_everything_else_leaves_it_off(self, monkeypatch, value):
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", value)
+        assert_that(_snapshot._update_enabled()).is_false()
+
+
+class TestCiRefusalMessage:
+    """The refusal names the snapshot that is missing and both ways out, on all four paths."""
+
+    def test_no_ci_marker_at_all_leaves_ci_mode_off(self, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", None)
+        monkeypatch.delenv("ASSERTPY2_SNAPSHOT_CI", raising=False)
+        monkeypatch.delenv("CI", raising=False)
+        assert_that(_ci_mode_enabled()).is_false()
+
+    def test_a_missing_whole_file_is_named_with_both_ways_out(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        snapname = os.path.join(str(tmp_path), "snap-ci-msg.json")
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 1}).snapshot(id="ci-msg", path=str(tmp_path))
+        assert_that(str(failure.value)).is_equal_to(
+            f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the snapshot"
+            " to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or unset CI /"
+            " ASSERTPY2_SNAPSHOT_CI)"
+        )
+
+    def test_a_missing_line_key_in_an_existing_file_names_that_file(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-test_snapshots.json")
+        _save(snapname, {"1": "another call site"})
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 1}).snapshot(path=str(tmp_path))
+        assert_that(str(failure.value)).starts_with(f"snapshot <{snapname}> does not exist")
+
+    def test_a_missing_contract_file_is_named(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        snapname = os.path.join(str(tmp_path), "snap-ci-ct.json")
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 1}).matches_contract_snapshot(id="ci-ct", path=str(tmp_path))
+        assert_that(str(failure.value)).starts_with(f"snapshot <{snapname}> does not exist")
+
+    def test_a_missing_contract_line_key_names_its_file(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-test_snapshots.json")
+        _save(snapname, {"1": {}})
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 1}).matches_contract_snapshot(path=str(tmp_path))
+        assert_that(str(failure.value)).starts_with(f"snapshot <{snapname}> does not exist")
+
+
+class TestSnapshotFilenames:
+    """Where a snapshot lands and what it is called, read back off the filesystem."""
+
+    def test_a_spaced_id_becomes_a_lowercased_underscored_filename(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).snapshot(id="My Order Id", path=str(tmp_path))
+        assert_that(os.listdir(str(tmp_path))).is_equal_to(["snap-my_order_id.json"])
+
+    def test_the_default_directory_is_named_snapshots(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).snapshot(id="dflt")
+        assert_that(os.listdir(".")).is_equal_to(["__snapshots"])
+
+    def test_the_default_contract_directory_is_named_snapshots(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(id="dflt-ct")
+        assert_that(os.listdir(".")).is_equal_to(["__snapshots"])
+
+    def test_a_default_key_contract_file_is_named_after_the_calling_module(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(path=str(tmp_path))
+        assert_that(os.listdir(str(tmp_path))).is_equal_to(["snap-test_snapshots.json"])
+
+
+class TestShapeDriftReport:
+    """One line per entry, two-space indented, joined by a newline."""
+
+    def test_each_entry_is_its_own_two_space_indented_line(self):
+        rendered = _snapshot._format_shape_drift(
+            [("added", "promo", ""), ("removed", "total", ""), ("retyped", "id", "number -> str")]
+        )
+        assert_that(rendered).is_equal_to("  + promo\n  - total\n  ~ id number -> str")
+
+
+class TestUpdateModeHonorsEveryComparisonOption:
+    """A knob that makes the two values equal must also make them not stale, or update mode rewrites a
+    snapshot that never drifted."""
+
+    def test_include_narrows_the_staleness_decision(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-upd-inc.json")
+        _save(snapname, {"a": 1, "b": 2})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that({"a": 1, "b": 999}).snapshot(id="upd-inc", path=str(tmp_path), include="a")
+        assert_that(_load(snapname)).is_equal_to({"a": 1, "b": 2})
+
+    def test_tolerance_absorbs_noise_before_the_rewrite(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-upd-tol.json")
+        _save(snapname, {"price": 1.0})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that({"price": 1.0004}).snapshot(id="upd-tol", path=str(tmp_path), tolerance=0.001)
+        assert_that(_load(snapname)).is_equal_to({"price": 1.0})
+
+    def test_a_comparator_owns_its_field_before_the_rewrite(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-upd-cmp.json")
+        _save(snapname, {"name": "Alice"})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        assert_that({"name": "ALICE"}).snapshot(
+            id="upd-cmp",
+            path=str(tmp_path),
+            comparators={"name": lambda actual, expected: actual.lower() == expected.lower()},
+        )
+        assert_that(_load(snapname)).is_equal_to({"name": "Alice"})
+
+    def test_bad_comparators_fail_on_the_capturing_first_run(self, tmp_path):
+        with pytest.raises(TypeError, match="comparators arg must be a dict"):
+            assert_that({"a": 1}).snapshot(id="opt-bad-cmp", path=str(tmp_path), comparators="nope")
+        assert_that(os.path.isfile(os.path.join(str(tmp_path), "snap-opt-bad-cmp.json"))).is_false()
+
+
+class TestSnapshotWarningsPointAtTheCaller:
+    """A capture warning attributed to the library rather than the test is unusable under ``-W error``."""
+
+    def test_the_created_warning_points_at_the_calling_test(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning) as caught:
+            assert_that({"a": 1}).snapshot(id="stack-new", path=str(tmp_path))
+        assert_that(os.path.basename(caught[0].filename)).is_equal_to("test_snapshots.py")
+
+    def test_the_updated_warning_points_at_the_calling_test(self, tmp_path, monkeypatch):
+        _save(os.path.join(str(tmp_path), "snap-stack-upd.json"), {"a": 1})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 2}).snapshot(id="stack-upd", path=str(tmp_path))
+        assert_that(os.path.basename(caught[0].filename)).is_equal_to("test_snapshots.py")
+
+    def test_the_created_contract_warning_points_at_the_calling_test(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning) as caught:
+            assert_that({"a": 1}).matches_contract_snapshot(id="stack-ct-new", path=str(tmp_path))
+        assert_that(os.path.basename(caught[0].filename)).is_equal_to("test_snapshots.py")
+
+    def test_the_updated_contract_warning_points_at_the_calling_test(self, tmp_path, monkeypatch):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(id="stack-ct-upd", path=str(tmp_path))
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 1, "b": 2}).matches_contract_snapshot(id="stack-ct-upd", path=str(tmp_path))
+        assert_that(os.path.basename(caught[0].filename)).is_equal_to("test_snapshots.py")
+
+
+class TestSnapshotFileLock:
+    """The read-modify-write is serialized on the snapshot file itself, not on some other name."""
+
+    def test_a_held_lock_on_the_snapshot_file_blocks_the_write(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "snap-locked.json.lock").write_text("held")
+        monkeypatch.setattr(_snapshot, "_file_lock", functools.partial(_file_lock, timeout=0.05, poll=0.01))
+        with pytest.raises(TimeoutError) as failure:
+            assert_that({"a": 1}).snapshot(id="locked", path=str(tmp_path))
+        assert_that(str(failure.value)).contains("snap-locked.json.lock")
+
+    def test_a_held_lock_blocks_a_contract_snapshot_too(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "snap-ct-locked.json.lock").write_text("held")
+        monkeypatch.setattr(_snapshot, "_file_lock", functools.partial(_file_lock, timeout=0.05, poll=0.01))
+        with pytest.raises(TimeoutError) as failure:
+            assert_that({"a": 1}).matches_contract_snapshot(id="ct-locked", path=str(tmp_path))
+        assert_that(str(failure.value)).contains("snap-ct-locked.json.lock")
+
+
+class TestContractLineKeys:
+    """A line-keyed contract file has to stay a map of shapes through a create and through an update."""
+
+    def test_a_new_line_key_stores_a_shape_the_next_run_compares_against(self, tmp_path):
+        _save(os.path.join(str(tmp_path), "snap-test_snapshots.json"), {"1": {}})
+        payloads = iter([{"a": 1}, {"a": 2}])
+        with pytest.warns(SnapshotCreatedWarning):
+            for _ in range(2):
+                assert_that(next(payloads)).matches_contract_snapshot(path=str(tmp_path))
+
+    def test_an_update_leaves_the_line_key_holding_the_new_shape(self, tmp_path, monkeypatch):
+        def snap(value):
+            assert_that(value).matches_contract_snapshot(path=str(tmp_path))
+
+        with pytest.warns(SnapshotCreatedWarning):
+            snap({"a": 1})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning):
+            snap({"a": 1, "b": 2})
+        monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE")
+        snap({"a": 9, "b": 9})
+
+
+class TestSnapshotMessages:
+    """Every sentence the snapshot surface raises or warns with, stated whole rather than searched."""
+
+    def test_the_registry_refuses_a_non_type_by_name(self):
+        with pytest.raises(TypeError) as failure:
+            register_snapshot_serializer("not a type", str, str)
+        assert_that(str(failure.value)).is_equal_to("cls must be a type")
+
+    def test_the_registry_refuses_a_non_callable_codec_by_name(self):
+        with pytest.raises(TypeError) as failure:
+            register_snapshot_serializer(int, "nope", str)
+        assert_that(str(failure.value)).is_equal_to("encode and decode must be callable")
+
+    def test_the_placeholder_failure_shows_the_value_it_rejected(self, tmp_path):
+        _save(os.path.join(str(tmp_path), "snap-msg-ph.json"), {"id": {"__placeholder__": "a valid UUID string"}})
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"id": "not-a-uuid"}).snapshot(
+                id="msg-ph", path=str(tmp_path), placeholders={"id": match.is_uuid()}
+            )
+        assert_that(str(failure.value)).is_equal_to(
+            "Expected snapshot placeholder <id> to satisfy a valid UUID string, but was 'not-a-uuid'."
+        )
+
+    def test_a_non_matcher_placeholder_is_refused_by_name(self, tmp_path):
+        with pytest.raises(TypeError) as failure:
+            assert_that({"id": 1}).snapshot(id="msg-ph2", path=str(tmp_path), placeholders={"id": "nope"})
+        assert_that(str(failure.value)).is_equal_to("placeholder values must be Matcher instances or callables")
+
+    def test_a_non_dict_val_is_refused_as_val(self, tmp_path):
+        with pytest.raises(TypeError) as failure:
+            assert_that([1, 2, 3]).snapshot(id="msg-ph3", path=str(tmp_path), placeholders={"id": match.is_uuid()})
+        assert_that(str(failure.value)).starts_with("val must be dict-like")
+
+    def test_the_created_warning_states_what_it_did(self, tmp_path):
+        snapname = os.path.join(str(tmp_path), "snap-msg-new.json")
+        with pytest.warns(SnapshotCreatedWarning) as caught:
+            assert_that({"a": 1}).snapshot(id="msg-new", path=str(tmp_path))
+        assert_that(str(caught[0].message)).is_equal_to(
+            f"created snapshot <{snapname}>: this run captured the value instead of comparing;"
+            " subsequent runs compare against it (delete the file to re-capture)"
+        )
+
+    def test_the_updated_warning_states_what_it_did(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-msg-upd.json")
+        _save(snapname, {"a": 1})
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 2}).snapshot(id="msg-upd", path=str(tmp_path))
+        assert_that(str(caught[0].message)).is_equal_to(
+            f"updated snapshot <{snapname}>: this run overwrote the stored value instead of comparing;"
+            " subsequent runs compare against it"
+        )
+
+    def test_a_mismatch_ends_by_naming_the_snapshot_and_the_way_to_accept_it(self, tmp_path):
+        # seeded rather than captured here: a second call in one test adds the shared-key hint, and the
+        # hint names the snapshot too, so the assertion would pass with the name gone from its own clause
+        snapname = os.path.join(str(tmp_path), "snap-msg-diff.json")
+        _save(snapname, {"a": 1})
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 2}).snapshot(id="msg-diff", path=str(tmp_path))
+        assert_that(str(failure.value)).ends_with(
+            f" Snapshot <{snapname}>; rerun with --assertpy2-snapshot-update to accept the new value."
+        )
+
+    def test_the_created_contract_warning_states_what_it_did(self, tmp_path):
+        snapname = os.path.join(str(tmp_path), "snap-ct-msg-new.json")
+        with pytest.warns(SnapshotCreatedWarning) as caught:
+            assert_that({"a": 1}).matches_contract_snapshot(id="ct-msg-new", path=str(tmp_path))
+        assert_that(str(caught[0].message)).is_equal_to(
+            f"created contract snapshot <{snapname}>: this run captured the shape instead of comparing;"
+            " subsequent runs compare against it (delete the file to re-capture)"
+        )
+
+    def test_the_updated_contract_warning_states_what_it_did(self, tmp_path, monkeypatch):
+        snapname = os.path.join(str(tmp_path), "snap-ct-msg-upd.json")
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"a": 1}).matches_contract_snapshot(id="ct-msg-upd", path=str(tmp_path))
+        monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
+        with pytest.warns(SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 1, "b": 2}).matches_contract_snapshot(id="ct-msg-upd", path=str(tmp_path))
+        assert_that(str(caught[0].message)).is_equal_to(
+            f"updated contract snapshot <{snapname}>: this run overwrote the stored shape instead of"
+            " comparing; subsequent runs compare against it"
+        )
+
+    def test_a_contract_drift_shows_the_value_and_names_the_snapshot(self, tmp_path):
+        snapname = os.path.join(str(tmp_path), "snap-ct-msg-drift.json")
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": 1}).matches_contract_snapshot(id="ct-msg-drift", path=str(tmp_path))
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"id": "one"}).matches_contract_snapshot(id="ct-msg-drift", path=str(tmp_path))
+        assert_that(str(failure.value)).is_equal_to(
+            "Expected <{'id': 'one'}> to match contract snapshot, but the structure drifted:\n"
+            "  ~ id number -> str\n"
+            f"Contract snapshot <{snapname}>; rerun with --assertpy2-snapshot-update to accept the new shape."
+        )
+
+    def test_a_contract_drift_carries_the_value_it_measured(self, tmp_path):
+        drifted = {"id": "one"}
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that({"id": 1}).matches_contract_snapshot(id="ct-actual", path=str(tmp_path))
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(drifted).matches_contract_snapshot(id="ct-actual", path=str(tmp_path))
+        assert_that(failure.value.actual).is_equal_to(drifted)
+        # named rather than filled in, which is what puts it in the plugin's own report section
+        assert_that(failure.value._outcome.actual_provided).is_true()

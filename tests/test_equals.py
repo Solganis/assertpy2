@@ -397,6 +397,21 @@ class TestFindAmbiguousOperand:
     def test_plain_scalars_return_none(self):
         assert_that(_find_ambiguous_operand(1, 2)).is_none()
 
+    def test_the_cycle_key_pairs_the_two_operands(self):
+        """Keyed on one operand alone, the guard fires at the first node that repeats that side and the
+        array reachable through the other side is never looked at."""
+        arr = _FakeArray()
+        loop = {}
+        loop["k"] = loop
+        assert_that(_find_ambiguous_operand({"k": {"k": arr}}, loop)).is_same_as(arr)
+        assert_that(_find_ambiguous_operand(loop, {"k": {"k": arr}})).is_same_as(arr)
+
+    def test_the_nested_guard_names_the_assertion_that_was_called(self):
+        """The top-level gate is handed the name; only the nested search takes it from the default."""
+        with pytest.raises(TypeError) as exc_info:
+            assert_that({"k": [1, 2]}).is_equal_to({"k": [_FakeArray(), 2]})
+        assert_that(str(exc_info.value)).starts_with("is_equal_to() cannot directly compare")
+
 
 def test_is_equal_shifted_list_failure_elides_the_aligned_run():
     # the message elides on the same alignment the diff pairs on: eliding by position would shift every

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest.config.argparsing import Parser
 
 from assertpy2 import _satisfies as _satisfies_module
 from assertpy2 import assert_that, async_assertions, match
@@ -773,7 +774,8 @@ class TestPytestConfigure:
             pytest_configure(config)
         assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
         assert_that(caught).is_length(1)
-        assert_that(str(caught[0].message)).contains("unknown")
+        # the message names what was written and the modes that would have worked
+        assert_that(str(caught[0].message)).contains("unknown").contains("(diff, full, off)")
 
     def test_configure_disables_diff_in_message_and_unconfigure_restores(self, monkeypatch):
         # under a real session the plugin renders the diff itself, so it keeps it out of the message; the
@@ -1211,17 +1213,22 @@ class TestVacuityGuardSwitch:
         assert_that(_satisfies_module._VACUOUS_GUARD).is_false()
 
 
+@pytest.fixture
+def _clean_registries(monkeypatch):
+    """The snapshot access registries are module-level, so a test that fills them has to empty them."""
+    monkeypatch.setattr(snapshot_module, "_ACCESS_NODES", {})
+    monkeypatch.setattr(snapshot_module, "_ACCESS_SITES", {})
+    monkeypatch.setattr(snapshot_module, "_WARNED", set())
+    monkeypatch.setattr(snapshot_module, "_TOUCHED", set())
+    monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_a")
+    pytest_plugin._controller_accesses.clear()
+    yield
+    pytest_plugin._controller_accesses.clear()
+
+
+@pytest.mark.usefixtures("_clean_registries")
 class TestSnapshotKeyReuseWarning:
     """One key reached by two tests means only the first one's value was ever asserted."""
-
-    @pytest.fixture(autouse=True)
-    def _clean_registries(self, monkeypatch):
-        monkeypatch.setattr(snapshot_module, "_ACCESS_NODES", {})
-        monkeypatch.setattr(snapshot_module, "_ACCESS_SITES", {})
-        monkeypatch.setattr(snapshot_module, "_WARNED", set())
-        monkeypatch.setattr(snapshot_module, "_TOUCHED", set())
-        monkeypatch.setattr(snapshot_module, "_CURRENT_NODE", "test_mod.py::test_a")
-        pytest_plugin._controller_accesses.clear()
 
     def test_runtest_setup_names_the_running_test(self, monkeypatch):
         pytest_runtest_setup(SimpleNamespace(nodeid="test_mod.py::test_z"))
@@ -1506,3 +1513,565 @@ class TestSnapshotKeyReuseUnderXdist:
         # red for any other reason, which is how a broken environment reads as a working sweep
         report.contains("3 passed")
         assert_that(result.returncode).described_as(f"child stderr:\n{result.stderr}").is_equal_to(1)
+
+
+def _registered_parser():
+    """The plugin's options on the parser pytest itself hands to `pytest_addoption`.
+
+    A `MagicMock` records any call at all, so it cannot tell a registration pytest accepts from one it
+    refuses: an unknown action, an ini type outside the supported set, a missing help.
+    """
+    parser = Parser(_ispytest=True)
+    pytest_addoption(parser)
+    return parser
+
+
+def _addoption_calls():
+    """The switches as they were registered, which is where the action and the default are visible."""
+    parser = MagicMock()
+    pytest_addoption(parser)
+    return parser.addoption.call_args_list
+
+
+class _RegisteredConfig:
+    """A config that answers only the keys the plugin registered, refusing others as pytest does."""
+
+    def __init__(self, *, ini=None, options=None):
+        parser = _registered_parser()
+        self._ini = {name: spec[-1] for name, spec in parser._inidict.items()} | dict(ini or {})
+        self._options = vars(parser.parse([])) | dict(options or {})
+
+    def getini(self, name):
+        if name not in self._ini:
+            raise ValueError(f"unknown configuration value: {name!r}")
+        return self._ini[name]
+
+    def getoption(self, name):
+        if name not in self._options:
+            raise ValueError(f"no option named {name!r}")
+        return self._options[name]
+
+
+def _configured_item(**settings):
+    """An item whose config carries exactly the attributes named, as a real config would."""
+    option = SimpleNamespace(**settings.pop("option", {}))
+    return SimpleNamespace(config=SimpleNamespace(option=option, **settings))
+
+
+def _diff_of(count):
+    entries = [DiffEntry(path=f"k{index}", actual=index, expected=index + 1) for index in range(count)]
+    return DiffResult(kind="dict", entries=entries)
+
+
+def _one_sample_trace(**sample):
+    base = {"elapsed": 0.0, "outcome": "fail", "value": 1, "detail": "d"}
+    return PollTrace(samples=[PollSample(**(base | sample))], total_polls=1, dropped=0, elapsed=0.5, summary="s")
+
+
+class TestTheOptionsRegisterWithPytestItself:
+    """Every switch and ini key has to survive the parser pytest builds, not only a recording mock."""
+
+    def test_the_switches_are_flags_the_parser_accepts_bare(self):
+        options = _registered_parser().parse(["--assertpy2-dangling", "--assertpy2-snapshot-update"])
+        assert_that(options.assertpy2_dangling).is_true()
+        assert_that(options.assertpy2_snapshot_update).is_true()
+
+    def test_every_switch_and_key_documents_itself(self):
+        # help text is what `pytest --help` prints; an option registered without it is undiscoverable
+        parser = _registered_parser()
+        documented = [(option.names()[0], option.attrs().get("help")) for option in parser._anonymous.options]
+        documented += [(name, spec[0]) for name, spec in parser._inidict.items()]
+        assert_that([name for name, help_text in documented if not help_text]).is_empty()
+
+    def test_the_wrapper_names_key_is_shell_split_rather_than_one_string(self):
+        # registered as a plain string, `_dangling_entries` would iterate a configured value's characters
+        assert_that(_registered_parser()._inidict["assertpy2_dangling_entries"][1]).is_equal_to("args")
+
+    def test_the_dangling_switch_is_opt_in_like_the_others(self):
+        registered = {call[0][0]: call[1] for call in _addoption_calls()}
+        assert_that(registered).contains_key("--assertpy2-dangling")
+        assert_that(registered["--assertpy2-dangling"]).contains_entry({"action": "store_true"}, {"default": False})
+
+
+class TestTheSettingsAProjectGets:
+    """What `pytest_configure` reads, against a config that refuses a key it never registered."""
+
+    def test_a_project_that_configures_nothing_gets_the_documented_defaults(self):
+        config = _RegisteredConfig()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # a default that needs a fallback warning is not a default
+            pytest_configure(config)
+        try:
+            assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
+            assert_that(config._assertpy2_dangling_enabled).is_equal_to(False)
+            assert_that(config._assertpy2_dangling_entries).is_equal_to(frozenset())
+            assert_that(config._assertpy2_diff_enabled).is_equal_to(True)
+            assert_that(config._assertpy2_diff_max).is_equal_to(50)
+            assert_that(config._assertpy2_cluster_minimum).is_none()
+            assert_that(config._assertpy2_poll_threshold).is_equal_to(0.7)
+        finally:
+            pytest_unconfigure(config)
+
+    def test_every_key_reaches_the_setting_it_names(self):
+        config = _RegisteredConfig(
+            ini={
+                "assertpy2_allure": "full",
+                "assertpy2_dangling": "on",
+                "assertpy2_dangling_entries": ["check_that"],
+                "assertpy2_diff": "off",
+                "assertpy2_diff_max_entries": "5",
+                "assertpy2_failure_clusters": "4",
+                "assertpy2_poll_report": "0.9",
+            }
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_configure(config)
+        try:
+            assert_that(config._assertpy2_allure_mode).is_equal_to("full")
+            assert_that(config._assertpy2_dangling_enabled).is_equal_to(True)
+            assert_that(config._assertpy2_dangling_entries).is_equal_to(frozenset({"check_that"}))
+            assert_that(config._assertpy2_diff_enabled).is_equal_to(False)
+            assert_that(config._assertpy2_diff_max).is_equal_to(5)
+            assert_that(config._assertpy2_cluster_minimum).is_equal_to(4)
+            assert_that(config._assertpy2_poll_threshold).is_equal_to(0.9)
+        finally:
+            pytest_unconfigure(config)
+
+    def test_an_unusable_entry_cap_falls_back_to_the_documented_fifty(self):
+        config = _RegisteredConfig(ini={"assertpy2_diff_max_entries": "lots"})
+        try:
+            pytest_configure(config)
+            assert_that(config._assertpy2_diff_max).is_equal_to(50)
+        finally:
+            pytest_unconfigure(config)
+
+    def test_configure_opens_the_run_with_an_empty_ledger_and_claims_the_session(self):
+        # a second session in one process would otherwise open with the first one's failures counted
+        config = _RegisteredConfig()
+        try:
+            pytest_configure(config)
+            assert_that(config._assertpy2_failures).is_equal_to([])
+            assert_that(config._assertpy2_failure_count).is_equal_to(0)
+            assert_that(pytest_plugin._session_config[0]).is_same_as(config)
+        finally:
+            pytest_unconfigure(config)
+
+    def test_the_no_ci_switch_forces_ci_mode_off_rather_than_back_to_autodetection(self, monkeypatch):
+        # tri-state: None means "read the environment", which is what the switch exists to overrule
+        monkeypatch.setattr(snapshot_module, "_CI_MODE", True)
+        config = _RegisteredConfig(options={"assertpy2_snapshot_no_ci": True})
+        try:
+            pytest_configure(config)
+            assert_that(snapshot_module._CI_MODE).is_equal_to(False)
+        finally:
+            pytest_unconfigure(config)
+        assert_that(snapshot_module._CI_MODE).is_none()
+
+
+class TestUnconfigureLeavesTheProcessAsItFoundIt:
+    """A second session in the same process must not inherit the first one's state."""
+
+    def test_the_diff_in_message_setting_goes_back_to_what_it_was_not_to_on(self, monkeypatch):
+        # forcing True back would switch the diff into every message for a run that had it off
+        monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", False)
+        config = _RegisteredConfig()
+        pytest_configure(config)
+        pytest_unconfigure(config)
+        assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_equal_to(False)
+
+    def test_unconfigure_without_configure_leaves_the_diff_in_the_message(self, monkeypatch):
+        # off pytest the message is the only carrier, so the standalone default is what has to come back
+        monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", False)
+        pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+        assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_equal_to(True)
+
+    def test_poll_samples_stop_being_collected(self, monkeypatch):
+        monkeypatch.setattr(async_assertions, "_COLLECT_RETRIES", False)
+        config = _RegisteredConfig()
+        pytest_configure(config)
+        pytest_unconfigure(config)
+        assert_that(async_assertions._COLLECT_RETRIES).is_false()
+
+    def test_the_controller_tallies_are_released(self):
+        # consumed by a hook that may not run at all, so a stale count would land in the next summary
+        pytest_plugin._controller_lost_workers[0] = 2
+        pytest_plugin._controller_unreadable_workers[0] = 3
+        pytest_plugin._controller_collect_errors[0] = 4
+        pytest_plugin._controller_failure_count[0] = 5
+        pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+        assert_that(
+            [
+                pytest_plugin._controller_lost_workers[0],
+                pytest_plugin._controller_unreadable_workers[0],
+                pytest_plugin._controller_collect_errors[0],
+                pytest_plugin._controller_failure_count[0],
+            ]
+        ).is_equal_to([0, 0, 0, 0])
+
+    def test_without_a_saved_value_the_vacuous_guard_comes_back_from_the_environment(self, monkeypatch):
+        monkeypatch.setenv("ASSERTPY2_VACUOUS", "1")
+        monkeypatch.setattr(_satisfies_module, "_VACUOUS_GUARD", False)
+        pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
+        assert_that(_satisfies_module._VACUOUS_GUARD).is_true()
+
+
+class TestTheBarsAtTheEdgeOfTheirRange:
+    """Both parsers accept their extreme value rather than warning it away."""
+
+    def test_a_poll_bar_of_one_means_only_a_poll_that_used_the_whole_budget(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert_that(pytest_plugin._poll_threshold("1.0")).is_equal_to(1.0)
+
+    def test_a_cluster_of_two_is_a_cluster(self):
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert_that(pytest_plugin._cluster_minimum("2")).is_equal_to(2)
+
+
+class TestFullRunDetectionOnAStrippedDownConfig:
+    """Every selector is read with a default, and only a namespace missing them can show it."""
+
+    def test_a_run_whose_plugins_registered_none_of_the_selectors_is_still_a_full_run(self):
+        # -p no:cacheprovider leaves no --lf/--ff on the namespace at all, and orphan pruning depends
+        # on the answer: read as a subset run, it stops reporting and stops pruning for good
+        assert_that(_is_full_run(SimpleNamespace(option=SimpleNamespace()))).is_true()
+
+
+class TestTheNearTimeoutReportReachesTheTerminal:
+    """The report goes to the terminal reporter by name, and measures a poll against its own budget."""
+
+    @staticmethod
+    def _lines(monkeypatch, rows, threshold=0.7):
+        monkeypatch.setattr(pytest_plugin, "_retried", list(rows))
+        reporter = MagicMock()
+        config = SimpleNamespace(
+            # named, not "whatever plugin you are asked for": the report goes to the terminal reporter
+            pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None),
+            _assertpy2_poll_threshold=threshold,
+        )
+        pytest_plugin._report_retries(config)
+        return [call.args[0] for call in reporter.write_line.call_args_list]
+
+    def test_the_report_names_itself_and_the_share_of_the_budget_the_poll_used(self, monkeypatch):
+        lines = self._lines(monkeypatch, [("t.py::test_x", 7, 1.8, 2.0)])
+        assert_that(lines[0]).described_as("held off the run's output by a blank line").is_empty()
+        assert_that(lines).contains("assertpy2 polls that nearly timed out:")
+        assert_that("\n".join(lines)).contains("90% of the budget")
+
+    def test_a_poll_measured_against_its_own_budget_not_against_the_product(self, monkeypatch):
+        # a fifth of a generous budget is healthy; multiplying the two calls it late instead
+        assert_that(self._lines(monkeypatch, [("t.py::test_x", 3, 0.4, 2.0)])).is_empty()
+
+    def test_a_poll_landing_exactly_on_the_bar_is_named(self, monkeypatch):
+        lines = self._lines(monkeypatch, [("t.py::test_x", 3, 0.7, 1.0)])
+        assert_that("\n".join(lines)).contains("t.py::test_x")
+
+
+class TestTheDiffSectionReadsItsSettingsOffTheConfig:
+    """Every setting the sections read comes off the config, including the defaults for a config
+    that never went through configure."""
+
+    def test_the_entry_cap_the_ini_set_reaches_the_section(self):
+        report = _make_report()
+        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=2)
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
+        assert_that(dict(report.sections)["Structured Diff"]).contains("and 3 more entries")
+
+    def test_turning_the_sections_off_drops_both_the_diff_and_the_trace(self):
+        report = _make_report()
+        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=False, _assertpy2_diff_max=50)
+        exc = AssertionFailure("fail", diff=_diff_of(5), trace=_make_trace())
+        _run_hook(report, _make_call(exc=exc), item=item)
+        assert_that([title for title, _ in report.sections]).does_not_contain("Structured Diff", "Polling Trace")
+
+    def test_a_config_that_never_configured_still_gets_its_sections(self):
+        # the hooks are driven directly in tests, and a plugin loaded mid-run has no configure behind it
+        report = _make_report()
+        exc = AssertionFailure("fail", diff=_diff_of(51), trace=_make_trace())
+        _run_hook(report, _make_call(exc=exc), item=_configured_item())
+        body = dict(report.sections)
+        assert_that(body).contains_key("Structured Diff", "Polling Trace")
+        assert_that(body["Structured Diff"]).does_not_contain("\x1b[").contains("and 1 more entries")
+
+    def test_a_terminal_that_takes_colour_gets_a_coloured_diff(self):
+        report = _make_report()
+        item = _configured_item(option={"color": "yes"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=50)
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
+        assert_that(dict(report.sections)["Structured Diff"]).contains("\x1b[")
+
+    def test_a_terminal_without_colour_gets_none(self):
+        report = _make_report()
+        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=50)
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
+        assert_that(dict(report.sections)["Structured Diff"]).does_not_contain("\x1b[")
+
+
+class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
+    """The attachment reads the same settings, and survives an allure that raises."""
+
+    def test_a_config_that_never_configured_attaches_in_diff_mode(self):
+        mock = _mock_allure()
+        item = _configured_item()
+        exc = AssertionFailure("fail", actual=1, expected=2, diff=_diff_of(51))
+        with (
+            patch("assertpy2.pytest_plugin._HAS_ALLURE", True),
+            patch("assertpy2.pytest_plugin.allure", mock, create=True),
+        ):
+            _run_hook(_make_report(), _make_call(exc=exc), item=item)
+        names = [call.kwargs["name"] for call in mock.attach.call_args_list]
+        assert_that(names).is_equal_to(["Structured Diff"])  # "diff" mode: no AssertionFailure body
+        assert_that(json.loads(mock.attach.call_args_list[0].kwargs["body"])["truncated"]).is_equal_to(1)
+
+    def test_the_entry_cap_the_ini_set_reaches_the_attachment(self):
+        mock = _mock_allure()
+        item = _configured_item(option={"color": "no"}, _assertpy2_allure_mode="diff", _assertpy2_diff_max=2)
+        exc = AssertionFailure("fail", diff=_diff_of(5))
+        with (
+            patch("assertpy2.pytest_plugin._HAS_ALLURE", True),
+            patch("assertpy2.pytest_plugin.allure", mock, create=True),
+        ):
+            _run_hook(_make_report(), _make_call(exc=exc), item=item)
+        body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
+        assert_that(body["entries"]).is_length(2)
+        assert_that(body["truncated"]).is_equal_to(3)
+
+    def test_an_allure_that_raises_is_swallowed_where_it_happens(self):
+        # the outer hook barrier catches it too, but only after skipping whatever came next
+        mock = _mock_allure()
+        mock.attach.side_effect = RuntimeError("allure broken")
+        report = _make_report()
+        with (
+            patch("assertpy2.pytest_plugin._HAS_ALLURE", True),
+            patch("assertpy2.pytest_plugin.allure", mock, create=True),
+        ):
+            exc = AssertionFailure("f", actual=1, expected=2, diff=_diff_of(5))
+            pytest_plugin._attach_report_sections(_make_item(), report, exc)
+        assert_that(report.sections).is_length(2)
+
+
+class TestTheValuesSectionOnAForeignException:
+    """`actual` and friends are read off somebody else's `AssertionError`, which may carry only some."""
+
+    def test_an_exception_carrying_only_actual_still_gets_its_section(self):
+        exc = AssertionError("fail")
+        exc.actual = 42
+        report = _make_report()
+        _run_hook(report, _make_call(exc=exc))
+        assert_that(dict(report.sections)["AssertionFailure"]).contains("42")
+
+    def test_an_exception_carrying_only_a_diff_still_gets_its_section(self):
+        exc = AssertionError("fail")
+        exc.diff = _diff_of(5)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=exc))
+        assert_that(dict(report.sections)).contains_key("Structured Diff")
+
+    def test_an_exception_carrying_only_a_trace_still_gets_its_section(self):
+        exc = AssertionError("fail")
+        exc.trace = _make_trace()
+        report = _make_report()
+        _run_hook(report, _make_call(exc=exc))
+        assert_that(dict(report.sections)).contains_key("Polling Trace")
+
+    def test_the_pair_is_windowed_together_so_neither_side_is_dropped(self):
+        # each side capped on its own hides the difference when it sits past the cap, printing two
+        # values that look identical under a heading saying they are not
+        exc = AssertionFailure("fail", actual="a" * 400 + "L", expected="a" * 400 + "R")
+        report = _make_report()
+        _run_hook(report, _make_call(exc=exc))
+        lines = dict(report.sections)["AssertionFailure"].splitlines()
+        assert_that(lines).is_length(2)
+        assert_that(lines[0].strip()).starts_with("actual:").contains("L")
+        assert_that(lines[1].strip()).starts_with("expected:").contains("R")
+
+
+class TestTheTerminalTimeline:
+    """A repeat count is marked only where a sample was seen more than once, one line per sample."""
+
+    def test_a_sample_seen_once_carries_no_repeat_count(self):
+        lines = _format_trace(_one_sample_trace()).splitlines()
+        assert_that(lines).is_length(2)
+        assert_that(lines[1]).starts_with("  t=+").contains("fail: d")
+
+    def test_a_sample_seen_twice_carries_one(self):
+        assert_that(_format_trace(_one_sample_trace(repeats=2))).contains("fail x2: d")
+
+
+class TestTheTraceAttachmentSchema:
+    """The attachment is a documented wire format; a consumer branches on `format` and reads by name."""
+
+    def test_every_field_a_consumer_reads_is_named(self):
+        body = json.loads(_trace_to_json(_make_trace()))
+        assert_that(body).contains_key("format", "kind", "total_polls", "elapsed", "summary", "samples")
+        assert_that(body["samples"][0]).contains_key("t", "outcome", "detail", "repeats")
+        assert_that(body["samples"][1]).contains_key("value")
+        assert_that(body["deltas"][0]).contains_key("from_t", "to_t", "entries")
+
+    def test_timings_are_rounded_to_the_millisecond(self):
+        samples = [
+            PollSample(elapsed=0.123456, outcome="fail", value=1, detail="d"),
+            PollSample(elapsed=0.987654, outcome="fail", value=2, detail="d"),
+        ]
+        trace = PollTrace(samples=samples, total_polls=2, dropped=0, elapsed=1.234567, summary="s")
+        body = json.loads(_trace_to_json(trace))
+        assert_that(body["elapsed"]).is_equal_to(1.235)
+        assert_that(body["samples"][0]["t"]).is_equal_to(0.123)
+        assert_that(body["deltas"][0]["from_t"]).is_equal_to(0.123)
+        assert_that(body["deltas"][0]["to_t"]).is_equal_to(0.988)
+
+    def test_a_sample_seen_once_carries_its_value_and_no_repeat_count(self):
+        sample = json.loads(_trace_to_json(_one_sample_trace()))["samples"][0]
+        assert_that(sample["value"]).is_equal_to(1)
+        assert_that(sample).does_not_contain_key("repeats")
+
+    def test_an_unchanged_pair_is_skipped_without_ending_the_walk(self):
+        samples = [
+            PollSample(elapsed=0.0, outcome="fail", value=1, detail="d"),
+            PollSample(elapsed=0.4, outcome="fail", value=1, detail="d"),
+            PollSample(elapsed=0.8, outcome="fail", value=2, detail="d"),
+        ]
+        trace = PollTrace(samples=samples, total_polls=3, dropped=0, elapsed=1.0, summary="s")
+        assert_that(json.loads(_trace_to_json(trace))["deltas"]).is_length(1)
+
+    def test_a_non_ascii_detail_stays_readable_in_the_attachment(self):
+        assert_that(_trace_to_json(_one_sample_trace(detail="значение"))).contains("значение")
+
+    def test_the_attachment_is_indented_for_a_person_to_read(self):
+        assert_that(_trace_to_json(_make_trace())).contains('\n  "')
+
+    def test_a_sample_value_json_cannot_express_is_refused_rather_than_written(self):
+        # the caller suppresses this, so the trace attachment is dropped; a body holding a bare `NaN`
+        # would be attached and then fail to parse wherever it was read
+        with pytest.raises(ValueError):
+            _trace_to_json(_one_sample_trace(value=float("nan")))
+
+
+class TestTheDiffAttachmentOnForeignObjects:
+    """`diff` is read off somebody else's exception, so every field is asked for rather than assumed."""
+
+    def test_an_entry_with_no_fields_at_all_degrades_rather_than_raising(self):
+        assert_that(pytest_plugin._entry_to_json(SimpleNamespace())).is_equal_to(
+            {"path": "", "actual": None, "expected": None}
+        )
+
+    def test_a_diff_without_entries_attaches_nothing(self):
+        assert_that(_diff_to_json(SimpleNamespace())).is_none()
+
+    def test_a_diff_that_does_not_name_its_kind_is_marked_unknown(self):
+        diff = SimpleNamespace(entries=[DiffEntry(path="k", actual=1, expected=2)])
+        assert_that(json.loads(_diff_to_json(diff))["kind"]).is_equal_to("unknown")
+
+    def test_a_cap_of_zero_means_unlimited(self):
+        assert_that(json.loads(_diff_to_json(_diff_of(5), max_entries=0))["entries"]).is_length(5)
+
+    def test_a_cap_of_one_shows_one_and_counts_the_rest(self):
+        body = json.loads(_diff_to_json(_diff_of(3), max_entries=1))
+        assert_that(body["entries"]).is_length(1)
+        assert_that(body["truncated"]).is_equal_to(2)
+
+    def test_the_default_cap_is_the_documented_fifty(self):
+        assert_that(json.loads(_diff_to_json(_diff_of(51)))["entries"]).is_length(50)
+
+    def test_a_non_ascii_value_stays_readable_in_the_attachment(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual="значение", expected="✓")])
+        assert_that(_diff_to_json(diff)).contains("значение").contains("✓")
+
+    def test_the_attachment_is_indented_for_a_person_to_read(self):
+        assert_that(_diff_to_json(_diff_of(2))).contains('\n  "')
+
+
+class TestTheAllureBodiesCarryWhatTheyClaim:
+    """The name alone left the body and the attachment type of every attachment unasserted."""
+
+    @staticmethod
+    def _attached(exc, *, mode="diff"):
+        mock = _mock_allure()
+        _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode=mode)
+        return {call.kwargs["name"]: call.kwargs for call in mock.attach.call_args_list}
+
+    def test_the_trace_attachment_carries_the_trace_as_typed_json(self):
+        attached = self._attached(AssertionFailure("fail", trace=_make_trace()))["Polling Trace"]
+        assert_that(attached["attachment_type"]).is_equal_to("json")
+        assert_that(json.loads(attached["body"])["kind"]).is_equal_to("polling-trace")
+
+    def test_a_non_ascii_value_stays_readable_in_the_values_attachment(self):
+        exc = AssertionFailure("fail", actual="значение", expected="✓")
+        assert_that(self._attached(exc, mode="full")["AssertionFailure"]["body"]).contains("значение").contains("✓")
+
+    def test_the_values_attachment_is_indented_for_a_person_to_read(self):
+        exc = AssertionFailure("fail", actual=1, expected=2)
+        assert_that(self._attached(exc, mode="full")["AssertionFailure"]["body"]).contains('\n  "')
+
+
+@pytest.mark.usefixtures("_clean_registries")
+class TestTheSweepMessageIsActionable:
+    """A count alone is not: the reader needs the key and the line that reached it."""
+
+    @staticmethod
+    def _swept():
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
+        return [str(one.message) for one in caught if one.category is snapshot_module.SnapshotKeyReusedWarning]
+
+    def test_it_names_the_key_and_where_it_was_reached(self):
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        snapshot_module._ACCESS_SITES["/x/s.json", "9"] = "test_mod.py:9"
+        assert_that(self._swept()[0]).contains("/x/s.json::9").contains("from test_mod.py:9")
+
+    def test_a_key_whose_site_was_never_recorded_names_no_site(self):
+        # the site comes off the worker, and one that shipped none must not be given an invented one
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        assert_that(self._swept()[0]).contains("/x/s.json::9").does_not_contain(" from ")
+
+    def test_the_escalated_warning_is_printed_in_red(self):
+        # it stands in for a failed test, and the closing block is where a reader looks for red
+        pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
+        reporter = MagicMock()
+        session = SimpleNamespace(config=_controller_config(reporter), exitstatus=0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_sessionfinish(session, 0)
+        written = reporter.write_line.call_args_list
+        assert_that(written[0].args[0]).described_as("held off the run's output by a blank line").is_empty()
+        error_line = [call for call in written if "ERROR" in str(call.args[0])]
+        assert_that(error_line[0].kwargs).is_equal_to({"red": True})
+
+
+@pytest.mark.usefixtures("_clean_registries")
+class TestWhatAWorkerShipsWhenItRecordedNothing:
+    """A worker that recorded nothing ships zeroes and empties, not invented values."""
+
+    def test_a_worker_that_never_configured_ships_a_count_of_zero(self):
+        # the controller adds it to the denominator, and a made-up one prints a run bigger than it was
+        config = SimpleNamespace(workeroutput={})
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_failure_count"]).is_equal_to(0)
+
+    def test_an_access_whose_site_was_never_recorded_ships_an_empty_one(self, monkeypatch):
+        # the controller feeds this straight into the reuse message
+        monkeypatch.setattr(snapshot_module, "_ACCESS_NODES", {("/x/s.json", "9"): {"t.py::test_a"}})
+        monkeypatch.setattr(snapshot_module, "_ACCESS_SITES", {})
+        config = SimpleNamespace(workeroutput={})
+        pytest_sessionfinish(SimpleNamespace(config=config), 0)
+        assert_that(config.workeroutput["assertpy2_accesses"]).is_equal_to([["/x/s.json", "9", ["t.py::test_a"], ""]])
+
+
+@pytest.mark.usefixtures("_clean_registries")
+class TestTheSnapshotReportNamesItself:
+    """The orphan block opens with a blank separator and its own heading, read line by line."""
+
+    def test_the_orphan_report_carries_its_own_heading(self, tmp_path, monkeypatch):
+        snapname = str(tmp_path / "snap-mod.json")
+        with open(snapname, "w") as handle:
+            json.dump({"10": 1, "30": 3}, handle)
+        monkeypatch.setattr(snapshot_module, "_TOUCHED", {(snapname, "10")})
+        monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", False)
+        monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE", raising=False)
+        reporter = MagicMock()
+        pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter)), 0)
+        lines = [call.args[0] for call in reporter.write_line.call_args_list]
+        assert_that(lines[0]).described_as("held off the run's output by a blank line").is_empty()
+        assert_that(lines).contains("assertpy2 snapshots:")

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2 import AssertionFailure, assert_that, match, pytest_plugin
 from assertpy2._clustering import (
     _EXAMPLE_LIMIT,
     _VALUE_LIMIT,
@@ -1439,3 +1439,140 @@ class TestTheSmallestExampleSurvivesTheCap:
         found = clusters(self._recorded(values), len(values))
         assert_that(found[0].actuals).is_length(_EXAMPLE_LIMIT + 1)
         assert_that(found[0].actuals[-1]).is_equal_to(f"v{_EXAMPLE_LIMIT:03d}")
+
+
+@pytest.fixture
+def _released_controller_state():
+    """The controller accumulators are module-level, so a test that fills them has to empty them."""
+    counters = (
+        pytest_plugin._controller_failure_count,
+        pytest_plugin._controller_lost_workers,
+        pytest_plugin._controller_unreadable_workers,
+        pytest_plugin._controller_collect_errors,
+    )
+
+    def release():
+        pytest_plugin._controller_failures.clear()
+        for counter in counters:
+            counter[0] = 0
+        pytest_plugin._session_config[0] = None
+
+    release()
+    yield
+    release()
+
+
+@pytest.mark.usefixtures("_released_controller_state")
+class TestTheSummaryOnAControllerThatRanNothingItself:
+    """Under xdist every failure arrives over the wire, so the controller's own tallies stay empty."""
+
+    @staticmethod
+    def _shipped(count):
+        found = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        pytest_plugin._controller_failures.extend((f"gw0::t.py::test_{index}", found) for index in range(count))
+        pytest_plugin._controller_failure_count[0] = count
+
+    def test_the_whole_run_is_what_the_workers_reported_and_nothing_more(self):
+        # a controller counted as failing on its own turns "3 of 3" into "3 of 4 failing tests"
+        self._shipped(3)
+        printed: list[str] = []
+        pytest_plugin._write_cluster_summary(
+            SimpleNamespace(write_line=printed.append), SimpleNamespace(_assertpy2_cluster_minimum=3)
+        )
+        assert_that(printed[0]).described_as("held off the run's output by a blank line").is_empty()
+        assert_that(printed).contains("assertpy2 failure clusters:")
+        assert_that(printed).contains("  3 of 3 failing tests differ at u.role")
+
+    def test_a_run_of_exactly_the_configured_size_is_a_cluster(self):
+        self._shipped(2)
+        pytest_plugin._controller_collect_errors[0] = 1
+        printed: list[str] = []
+        pytest_plugin._write_cluster_summary(
+            SimpleNamespace(write_line=printed.append), SimpleNamespace(_assertpy2_cluster_minimum=2)
+        )
+        assert_that(printed).contains("  2 of 2 failing tests differ at u.role")
+        assert_that(printed).contains("  1 collection error, not counted below")
+
+    def test_a_config_the_hook_was_handed_without_configure_writes_nothing(self):
+        printed: list[str] = []
+        pytest_plugin._write_cluster_summary(SimpleNamespace(write_line=printed.append), SimpleNamespace())
+        assert_that(printed).is_empty()
+
+
+@pytest.mark.usefixtures("_released_controller_state")
+class TestWhatTheSummaryDoesNotExplain:
+    """The leftover count names the bar that left them out, so it has to be the run's own bar."""
+
+    def test_the_leftover_is_counted_against_the_bar_the_run_configured(self):
+        shared = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        lonely = observations(lambda: assert_that({"other": 1}).is_equal_to({"other": 2}))
+        pytest_plugin._controller_failures.extend(
+            [("gw0::t.py::test_0", shared), ("gw0::t.py::test_1", shared), ("gw0::t.py::test_2", lonely)]
+        )
+        pytest_plugin._controller_failure_count[0] = 3
+        printed: list[str] = []
+        pytest_plugin._write_cluster_summary(
+            SimpleNamespace(write_line=printed.append), SimpleNamespace(_assertpy2_cluster_minimum=2)
+        )
+        assert_that(printed).contains("  1 of 3 outside any cluster of 2")
+
+
+class TestWhatComesOffTheWireIsCheckedFieldByField:
+    """A coordinate is two names, and both halves of that have to be checked or the summary raises."""
+
+    def test_a_step_whose_parts_are_not_both_names_is_refused_as_a_type_error(self):
+        # `len(step) == 2` alone lets a coordinate through whose value is not a string, and the summary
+        # then raises out of the grouping instead of reporting the worker as unreadable
+        with pytest.raises(TypeError):
+            _observation_from_wire([True, "role", [["key", 5]], "", [], "'a'", "'b'"])
+
+    def test_a_step_of_the_wrong_length_is_refused_as_a_type_error(self):
+        with pytest.raises(TypeError):
+            _observation_from_wire([True, "role", [["key", "'role'", "extra"]], "", [], "'a'", "'b'"])
+
+
+@pytest.mark.usefixtures("_released_controller_state")
+class TestTheControllerSideBookkeeping:
+    """What the controller records off a node, and what it records off a config that never configured."""
+
+    def test_a_node_that_shipped_no_output_at_all_is_counted_rather_than_raising(self):
+        # an exception out of `testnodedown` is answered with INTERNALERROR, which costs the whole run
+        pytest_plugin._collect_worker_failures(SimpleNamespace())
+        assert_that(pytest_plugin._controller_unreadable_workers[0]).is_equal_to(1)
+
+    def test_two_unreadable_workers_are_two(self):
+        for _ in range(2):
+            pytest_plugin._collect_worker_failures(SimpleNamespace(workeroutput={}))
+        assert_that(pytest_plugin._controller_unreadable_workers[0]).is_equal_to(2)
+
+    def test_a_node_with_no_name_of_its_own_prefixes_with_nothing(self):
+        # the prefix exists to tell two workers running the same test apart, and an invented one would
+        # make a node id nobody can look up
+        wire = [["t.py::test_x", [[True, "user.role", [["key", "'user'"], ["key", "'role'"]], "", [], "'s'", "'a'"]]]]
+        node = SimpleNamespace(workeroutput={"assertpy2_failures": wire, "assertpy2_failure_count": 1})
+        pytest_plugin._collect_worker_failures(node)
+        assert_that([nodeid for nodeid, _ in pytest_plugin._controller_failures]).is_equal_to(["::t.py::test_x"])
+
+    def test_two_failed_collections_are_two(self):
+        pytest_plugin._session_config[0] = SimpleNamespace(_assertpy2_cluster_minimum=3)
+        for name in ("broken.py", "also-broken.py"):
+            pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid=name))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_equal_to(2)
+
+    def test_a_session_config_from_before_the_summary_existed_is_tolerated(self):
+        pytest_plugin._session_config[0] = SimpleNamespace()
+        pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
+        assert_that(pytest_plugin._controller_collect_errors[0]).is_zero()
+
+    def test_a_failure_with_a_diff_but_no_record_behind_it_is_still_grouped(self):
+        # `eventually()` and a snapshot re-wrap raise a failure carrying a diff and no `_outcome`
+        config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
+        failure = AssertionError("re-wrapped")
+        failure.diff = diff_of(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))
+        _record_for_clustering(config, "t.py::test_x", failure)
+        assert_that(config._assertpy2_failures).is_length(1)
+
+    def test_a_config_the_hook_was_handed_without_configure_records_nothing(self):
+        config = SimpleNamespace()
+        _record_for_clustering(config, "t.py::test_x", AssertionError("x"))
+        assert_that(vars(config)).is_empty()

@@ -2,7 +2,7 @@ import pytest
 
 import assertpy2._inline as _inline
 import assertpy2.snapshot as _snap
-from assertpy2 import AssertionFailure, assert_that
+from assertpy2 import AssertionFailure, assert_that, match
 from assertpy2._inline import is_literalable
 
 
@@ -43,9 +43,34 @@ class TestSelective:
         with pytest.raises(TypeError, match="Matcher instances or callables"):
             assert_that({"id": 1}).matches_inline({"id": 1}, placeholders={"id": 42})
 
+    def test_a_non_matcher_placeholder_is_refused_by_name(self):
+        with pytest.raises(TypeError) as failure:
+            assert_that({"id": 1}).matches_inline({"id": 1}, placeholders={"id": "nope"})
+        assert_that(str(failure.value)).is_equal_to("placeholder values must be Matcher instances or callables")
+
     def test_placeholder_requires_dict_like(self):
         with pytest.raises((TypeError, AssertionError)):
             assert_that([1, 2]).matches_inline([1, 2], placeholders={"id": lambda value: True})
+
+    def test_a_non_dict_val_is_refused_as_val(self):
+        with pytest.raises(TypeError) as failure:
+            assert_that([1, 2]).matches_inline([1, 2], placeholders={"id": lambda value: True})
+        assert_that(str(failure.value)).starts_with("val must be dict-like")
+
+    def test_a_matcher_placeholder_is_accepted(self):
+        # the shape the docs recommend, and a Matcher is not callable, so only the guard's first half
+        # can let it through
+        assert_that({"id": "550e8400-e29b-41d4-a716-446655440000", "name": "Alice"}).matches_inline(
+            {"id": "", "name": "Alice"}, placeholders={"id": match.is_uuid()}
+        )
+
+    def test_include_restricts_the_comparison(self):
+        assert_that({"id": 99, "name": "Alice"}).matches_inline({"id": 0, "name": "Alice"}, include="name")
+
+    def test_a_comparator_owns_its_field(self):
+        assert_that({"name": "ALICE"}).matches_inline(
+            {"name": "Alice"}, comparators={"name": lambda actual, expected: actual.lower() == expected.lower()}
+        )
 
 
 class TestEmpty:
@@ -58,6 +83,23 @@ class TestEmpty:
         monkeypatch.setattr(_snap, "_CI_MODE", True)
         with pytest.raises(AssertionError, match="CI mode forbids"):
             assert_that(1).matches_inline()
+
+    def test_the_message_without_update_mode_is_exact(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_CI_MODE", False)
+        with pytest.raises(AssertionError) as failure:
+            assert_that(1).matches_inline()
+        assert_that(str(failure.value)).is_equal_to(
+            "inline snapshot is empty; run --assertpy2-snapshot-update to record it"
+        )
+
+    def test_the_ci_message_is_exact(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_CI_MODE", True)
+        with pytest.raises(AssertionError) as failure:
+            assert_that(1).matches_inline()
+        assert_that(str(failure.value)).is_equal_to(
+            "inline snapshot is empty and CI mode forbids recording it - record it locally with"
+            " --assertpy2-snapshot-update and commit the source"
+        )
 
 
 class TestLiteralable:
@@ -90,6 +132,14 @@ def test_inline_mismatch_names_its_kind_and_the_update_flag():
     message = str(exc_info.value)
     assert_that(message).contains("Inline snapshot")
     assert_that(message).contains("--assertpy2-snapshot-update")
+
+
+def test_the_inline_mismatch_ends_by_naming_its_kind_and_the_way_to_accept_it():
+    with pytest.raises(AssertionError) as failure:
+        assert_that({"id": 7}).matches_inline({"id": 8})
+    assert_that(str(failure.value)).ends_with(
+        " Inline snapshot; rerun with --assertpy2-snapshot-update to rewrite the literal here."
+    )
 
 
 def test_inline_mismatch_keeps_the_diff():

@@ -120,6 +120,12 @@ class TestVariants:
             assert_that(Nested(Frozen(1, 2), "a")).is_equal_to(Nested(Frozen(1, 9), "a"), ignore="tag")
 
 
+@attrs.define
+class Knot:
+    tag: str
+    child: object = None
+
+
 class TestFieldWalk:
     def test_all_fields_satisfy_walks_into_attrs(self):
         assert_that(Line(Point(1, 2), Point(3, 4))).all_fields_satisfy(lambda leaf: isinstance(leaf, int))
@@ -137,6 +143,15 @@ class TestFieldWalk:
         assert_that(Maybe(1, 2)).has_no_none_fields()
         with pytest.raises(AssertionError):
             assert_that(Maybe(1, None)).has_no_none_fields()
+
+    def test_the_leaf_walk_names_attrs_fields_bare_and_stops_at_a_cycle(self):
+        """A field of the value under test is named bare, and a self-reference yields one marker."""
+        knot = Knot("a")
+        knot.child = knot
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(knot).all_fields_satisfy(lambda leaf: leaf == 42)
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("tag", "a"), ("child", "<circular ref>")])
 
 
 class TestMatchesStructure:

@@ -39,10 +39,10 @@ def _message(actual, expected, **kwargs):
     return str(failure.value)
 
 
-def _hint(actual, expected):
+def _hint(actual, expected, **kwargs):
     """The diagnostic line alone, or ``None``, without the message it would be printed under."""
     with pytest.raises(AssertionFailure) as failure:
-        assert_that(actual).is_equal_to(expected)
+        assert_that(actual).is_equal_to(expected, **kwargs)
     return diagnose(failure.value.diff, actual, expected, identity=identity_candidate(actual, expected))
 
 
@@ -352,6 +352,12 @@ class TestOnlyTheTypesDiffer:
         # one pair differs in type and the other in value, so no single statement covers the failure
         assert_that(_message({"a": 7, "b": 1}, {"a": "7", "b": 2})).does_not_contain("another type")
 
+    def test_a_scalar_whose_two_sides_read_differently_still_gets_the_line(self):
+        # the headline names both types only where the two render alike, and `1` against `1.0` does not
+        assert_that(_hint(1, 1.0, strict_types=True)).is_equal_to(
+            "the values on both sides are equal, and only their types differ"
+        )
+
 
 class TestStrictTypesNoLongerBlamesJson:
     """The first invariant of the ladder: a normalisation explains a pair only if the pair differed.
@@ -423,6 +429,10 @@ class TestTheContractOfTheExplanationLadder:
         assert_that(message).contains("unparsed JSON text")
         assert_that(message).does_not_contain("another type")
 
+    def test_a_step_is_paired_only_with_the_steps_under_it(self):
+        """A pair runs in ladder order, so a bytes payload against the document it holds gets no line."""
+        assert_that(_hint(b'{"a": 1}', {"a": 1})).is_none()
+
 
 class TestBytesReadTheSameAsText:
     """A difference of whitespace or line endings is the same difference in either type.
@@ -461,6 +471,11 @@ class TestBytesReadTheSameAsText:
 
     def test_one_side_bytes_still_reads_as_encoding(self):
         assert_that(_message(b"x", "x")).contains("bytes against decoded text")
+
+    def test_a_bytearray_on_the_other_side_is_not_read_as_text(self):
+        # what this branch is handed is the two values the assertion compared, and a `bytearray` is
+        # neither of the two types the steps under it know how to normalise
+        assert_that(_hint(b"payload\n", bytearray(b"payload"))).is_none()
 
 
 class _NoEq:
@@ -674,3 +689,100 @@ class TestEqualityDecidedByIdentity:
                 self.value = value
 
         assert_that(_message(Guarded(1), Guarded(1))).contains("to be equal to")
+
+    def test_a_class_tree_that_names_no_equality_at_all_is_not_read_as_identity(self):
+        # the walk answers "not object's" when it finds no definition anywhere, which is the safe
+        # direction: a line claiming identity is worse than no line
+        class Meta(type):
+            @property
+            def __mro__(cls):
+                return ()
+
+        class Blank(metaclass=Meta):
+            def __init__(self, value):
+                self.value = value
+
+        assert_that(identity_candidate(Blank(1), Blank(1))).is_false()
+
+    def test_a_metaclass_descriptor_raising_on_the_equality_lookup_is_survived(self):
+        # a data descriptor on the metaclass is read before the class tree is, so the cheap look does
+        # run code of the caller's and can raise, and the failure has to survive that
+        class Raising:
+            def __get__(self, instance, owner=None):
+                raise RuntimeError("no lookups here")
+
+            def __set__(self, instance, value):
+                raise RuntimeError("no lookups here")
+
+        class Meta(type):
+            __eq__ = Raising()
+
+        class Guarded(metaclass=Meta):
+            def __init__(self, value):
+                self.value = value
+
+        assert_that(identity_candidate(Guarded(1), Guarded(1))).is_false()
+
+
+class _SameText:
+    """Two instances that read alike and are never equal, so only their text could pass for a type difference."""
+
+    def __repr__(self):
+        return "<same>"
+
+    def __eq__(self, other):
+        return False
+
+    __hash__ = None
+
+
+@dataclasses.dataclass
+class _MappingRow:
+    """A dataclass that is also a mapping, so its fields match its own contents without a second type."""
+
+    name: str
+
+    def keys(self):
+        return ("name",)
+
+    def __iter__(self):
+        return iter(("name",))
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+
+class TestATypeDifferenceIsClaimedOnlyWhereTheTypesDiffer:
+    """Both lines about types read the two sides of one comparison, and one side is not enough."""
+
+    def test_two_sides_of_one_type_that_read_alike_are_left_alone(self):
+        # the pair the text branch looks at: same rendering, never equal, and one type between them
+        assert_that(_hint({"a": _SameText()}, {"a": _SameText()})).is_none()
+
+    def test_field_for_field_is_not_said_when_both_sides_are_the_same_type(self):
+        # built rather than compared: the walk descends into two mappings, so a pair of them reaches
+        # the leaf check only when it is handed one
+        entry = DiffEntry(path="row", actual=_MappingRow("a"), expected=_MappingRow("a"))
+        assert_that(diagnose(DiffResult(kind="dict", entries=[entry]))).is_none()
+
+
+class TestEachLineIsStatedInFull:
+    """The whole sentence rather than a phrase out of it, which is what the reader is left holding."""
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "line"),
+        [
+            ('{"a": 1}', '{"a":1}', "every difference here is one of the same JSON written differently"),
+            ('{"a": 1}', {"a": 1}, "every difference here is one of unparsed JSON text"),
+            ({"id": 7}, {"id": "7"}, "every difference here is the same text against a value of another type"),
+            (
+                {"name": "a", "city": "b"},
+                _User("a", "b"),
+                "the contents match field for field, and only the type of the two sides differs",
+            ),
+            ([1, 2, 3], [3, 1, 2], "both sides hold the same elements, in a different order"),
+        ],
+        ids=["json formatting", "unparsed json", "text against another type", "field for field", "reordered"],
+    )
+    def test_the_line_reads_exactly_as_written(self, actual, expected, line):
+        assert_that(_hint(actual, expected)).is_equal_to(line)

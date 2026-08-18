@@ -21,6 +21,7 @@ from assertpy2._dangling import _NO_ASSERTION, _NOT_AWAITED, _NOT_CALLED, ALLOW_
 from assertpy2.pytest_plugin import (
     _dangling_enabled,
     _dangling_entries,
+    _item_scope,
     _report_dangling,
     pytest_collection_modifyitems,
 )
@@ -490,14 +491,18 @@ class TestReadingTheEntriesSetting:
             entries = _dangling_entries(self._config("check", "helpers.verify"))
         assert_that(entries).is_equal_to({"check"})
         assert_that(caught).is_length(1)
-        assert_that(str(caught[0].message)).contains("'helpers.verify'").contains("is not a plain name")
+        assert_that(str(caught[0].message)).contains("'helpers.verify'").contains(
+            "is not a plain name and cannot be matched"
+        )
 
     def test_several_bad_names_are_reported_together_and_read_as_plural(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             assert_that(_dangling_entries(self._config("a.b", "c d"))).is_empty()
         assert_that(caught).is_length(1)
-        assert_that(str(caught[0].message)).contains("'a.b', 'c d'").contains("are not plain names")
+        assert_that(str(caught[0].message)).contains("'a.b', 'c d'").contains(
+            "are not plain names and cannot be matched"
+        )
 
 
 class TestANameThisModuleBindsItselfIsNotOurs:
@@ -808,3 +813,94 @@ class TestAPollThatIsNeverAwaited:
                 assert_that(probe).eventually().is_equal_to(1)  # assertpy2: allow-dangling
             """)
         assert_that(found).is_empty()
+
+
+class TestTheScopeChainReadOffTheItem:
+    """The chain has to line up with what the static pass recorded, part for part."""
+
+    @staticmethod
+    def _item(qualname):
+        return SimpleNamespace(function=SimpleNamespace(__qualname__=qualname))
+
+    def test_a_method_of_a_nested_class_keeps_every_class_in_the_chain(self):
+        # `item.cls` names only the innermost, and the two chains then failed to line up
+        assert_that(_item_scope(self._item("TestOuter.TestInner.test_it"))).is_equal_to(
+            ("TestOuter", "TestInner", "test_it")
+        )
+
+    def test_the_locals_marker_a_nested_def_adds_is_dropped(self):
+        assert_that(_item_scope(self._item("TestOne.helper.<locals>.test_it"))).is_equal_to(
+            ("TestOne", "helper", "test_it")
+        )
+
+    def test_an_item_with_no_function_at_all_has_no_scope(self):
+        assert_that(_item_scope(SimpleNamespace())).is_equal_to(())
+
+
+class TestOneWarningNamesAllOfThem:
+    """The head of the one warning is the first finding's own message, and the rest are listed after it."""
+
+    def test_three_findings_in_one_test_are_one_warning_naming_the_rest(self, tmp_path):
+        source = tmp_path / "t.py"
+        body = textwrap.dedent("""
+            def test_x():
+                assert_that(1)
+                assert_that(2)
+                assert_that(3)
+            """)
+        source.write_text(PREAMBLE + body, encoding="utf-8")
+        config = SimpleNamespace(_assertpy2_dangling_enabled=True, _assertpy2_dangling_entries=frozenset())
+        item = SimpleNamespace(
+            config=config, path=source, function=SimpleNamespace(__qualname__="test_x"), nodeid="t.py::test_x"
+        )
+        pytest_collection_modifyitems(None, config, [item])
+        first = config._assertpy2_dangling[source][0].message
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _report_dangling(item)
+        message = str(caught[0].message)
+        assert_that(message).starts_with(first)
+        assert_that(message).contains("and 2 more in this test, at lines 5, 6")
+
+
+class TestCollectionScansEveryFileItWasGiven:
+    """Every file handed to collection is read, and the four getattr defaults on the way are live."""
+
+    def test_a_second_file_is_still_read_after_one_that_was_already_seen(self, tmp_path):
+        # the repeat is skipped, not the rest of the collection
+        first, second = tmp_path / "a.py", tmp_path / "b.py"
+        for path in (first, second):
+            path.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
+        config = SimpleNamespace(_assertpy2_dangling_enabled=True, _assertpy2_dangling_entries=frozenset())
+        items = [
+            SimpleNamespace(config=config, path=first, function=None, nodeid="a"),
+            SimpleNamespace(config=config, path=first, function=None, nodeid="a2"),
+            SimpleNamespace(config=config, path=second, function=None, nodeid="b"),
+        ]
+        pytest_collection_modifyitems(None, config, items)
+        assert_that(config._assertpy2_dangling).contains_key(first, second)
+
+    def test_an_item_that_carries_no_path_is_stepped_over(self, tmp_path):
+        source = tmp_path / "t.py"
+        source.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
+        config = SimpleNamespace(_assertpy2_dangling_enabled=True, _assertpy2_dangling_entries=frozenset())
+        pathless = SimpleNamespace(config=config, function=None, nodeid="?")
+        real = SimpleNamespace(config=config, path=source, function=None, nodeid="t")
+        pytest_collection_modifyitems(None, config, [pathless, real])
+        assert_that(config._assertpy2_dangling).contains_key(source)
+
+    def test_a_config_that_never_configured_scans_nothing(self, tmp_path):
+        # off is the default, and a config with none of the attributes must not read as on
+        source = tmp_path / "t.py"
+        source.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
+        config = SimpleNamespace()
+        pytest_collection_modifyitems(None, config, [SimpleNamespace(config=config, path=source, function=None)])
+        assert_that(config._assertpy2_dangling).is_empty()
+
+    def test_the_scan_runs_without_the_wrapper_names_setting(self, tmp_path):
+        # the setting arrived after the check did, and a config from before it must still scan
+        source = tmp_path / "t.py"
+        source.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
+        config = SimpleNamespace(_assertpy2_dangling_enabled=True)
+        pytest_collection_modifyitems(None, config, [SimpleNamespace(config=config, path=source, function=None)])
+        assert_that(config._assertpy2_dangling[source]).is_length(1)

@@ -182,3 +182,75 @@ class TestRecordedPosition:
         column = start - (source.rfind("\n", 0, start) + 1)
         assert_that(text).contains("\n")
         assert_that(text).is_equal_to(_inline._format_literal(wide, column))
+
+
+class TestRecordingMessages:
+    """What the recorder says it did, stated whole: the category alone left every word unasserted."""
+
+    @pytest.fixture(autouse=True)
+    def _recording(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+
+    def test_a_value_that_cannot_be_a_literal_names_its_type_and_the_way_out(self):
+        with pytest.raises(TypeError) as failure:
+            assert_that(datetime.datetime(2020, 1, 1)).matches_inline()
+        assert_that(str(failure.value)).is_equal_to(
+            "an inline snapshot literal must be a dict/list/tuple/set of scalars, not"
+            " datetime - use snapshot() to store it in a file instead"
+        )
+
+    def test_the_created_warning_states_what_it_did(self):
+        with pytest.warns(_snap.SnapshotCreatedWarning) as caught:
+            assert_that(1).matches_inline()
+        assert_that(str(caught[0].message)).is_equal_to(
+            "recorded inline snapshot: this run captured the value into the test source;"
+            " subsequent runs compare against it"
+        )
+
+    def test_the_updated_warning_states_what_it_did(self):
+        with pytest.warns(_snap.SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 2}).matches_inline({"a": 1})
+        assert_that(str(caught[0].message)).is_equal_to(
+            "updated inline snapshot: this run overwrote the stored literal instead of comparing;"
+            " subsequent runs compare against it"
+        )
+
+    def test_the_created_warning_points_at_the_calling_test(self):
+        # under `-W error` a warning attributed to the library blames the wrong file
+        with pytest.warns(_snap.SnapshotCreatedWarning) as caught:
+            assert_that(1).matches_inline()
+        assert_that(pathlib.Path(caught[0].filename).name).is_equal_to("test_inline_record.py")
+
+    def test_the_updated_warning_points_at_the_calling_test(self):
+        with pytest.warns(_snap.SnapshotUpdatedWarning) as caught:
+            assert_that({"a": 2}).matches_inline({"a": 1})
+        assert_that(pathlib.Path(caught[0].filename).name).is_equal_to("test_inline_record.py")
+
+
+class TestUpdateHonorsTheComparisonOptions:
+    """A knob that makes the two values equal must also make them not stale, or update mode rewrites a
+    literal that never drifted."""
+
+    @pytest.fixture(autouse=True)
+    def _recording(self, monkeypatch):
+        monkeypatch.setattr(_snap, "_UPDATE_ALL", True)
+        monkeypatch.setattr(_inline, "_RECORDS", [])
+
+    def test_ignore_keeps_the_literal(self):
+        assert_that({"id": 99, "name": "Alice"}).matches_inline({"id": 0, "name": "Alice"}, ignore="id")
+        assert_that(_inline._RECORDS).is_empty()
+
+    def test_include_keeps_the_literal(self):
+        assert_that({"id": 99, "name": "Alice"}).matches_inline({"id": 0, "name": "Alice"}, include="name")
+        assert_that(_inline._RECORDS).is_empty()
+
+    def test_tolerance_keeps_the_literal(self):
+        assert_that({"x": 1.001}).matches_inline({"x": 1.0}, tolerance=0.01)
+        assert_that(_inline._RECORDS).is_empty()
+
+    def test_a_comparator_keeps_the_literal(self):
+        assert_that({"name": "ALICE"}).matches_inline(
+            {"name": "Alice"}, comparators={"name": lambda actual, expected: actual.lower() == expected.lower()}
+        )
+        assert_that(_inline._RECORDS).is_empty()
