@@ -60,6 +60,13 @@ class TestBuildEqualityDiffSequence:
 
 
 class TestBuildEqualityDiffSet:
+    def test_a_set_against_a_non_set_is_a_scalar_difference(self):
+        # the membership diff needs two sets: reaching it with one turns the failure into a TypeError
+        with pytest.raises(AssertionError):
+            assert_that({1, 2}).is_equal_to([1, 2])
+        assert_that(_build_equality_diff({1, 2}, [1, 2]).kind).is_equal_to("scalar")
+        assert_that(_build_equality_diff(frozenset({1, 2}), 7).kind).is_equal_to("scalar")
+
     def test_extra_items(self):
         result = _build_equality_diff({1, 2, 3}, {1})
         assert_that(result.kind).is_equal_to("set")
@@ -373,6 +380,12 @@ class TestContainsDiff:
 
 
 class TestIsEqualToWithDiff:
+    def test_a_key_only_actual_has_carries_the_value_it_holds(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1})
+        rows = [(entry.path, entry.actual, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("b", 2, "expected")])
+
     def test_list_failure_includes_diff(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).is_equal_to([1, 9, 3])
@@ -1036,6 +1049,13 @@ class TestModelDumpDiff:
 
 
 class TestSubDiffNamedtupleCoverage:
+    def test_a_namedtuple_against_a_plain_tuple_is_diffed_as_a_sequence(self):
+        # only two namedtuples read as fields; against a plain tuple the pair stays positional
+        Point = namedtuple("Point", "x y")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"p": Point(1, 2)}).is_equal_to({"p": (1, 9)})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["p[1]"])
+
     def test_namedtuple_in_sub_diff_extra_field(self):
         A = namedtuple("A", ["x", "y"])
         B = namedtuple("B", ["x"])
@@ -1303,6 +1323,11 @@ class TestDiffEngineHarmonization:
 
     def _paths(self, actual, expected, **kwargs):
         return [entry.path for entry in self._diff_of(actual, expected, **kwargs).entries]
+
+    def test_a_key_only_the_actual_side_has_keeps_its_value(self):
+        diff = self._diff_of({"a": 1, "b": 2}, {"a": 1})
+        rows = [(entry.path, entry.actual, entry.absent) for entry in diff.entries]
+        assert_that(rows).is_equal_to([("b", 2, "expected")])
 
     def test_dict_with_dataclass_value_decomposes(self):
         @dataclass
@@ -1625,6 +1650,67 @@ class TestMixedKindPairsStayAssertions:
 class TestSequenceAlignment:
     """A shifted sequence is paired by alignment, so one insertion reads as one entry."""
 
+    def test_an_aligned_equal_block_the_config_accepts_adds_no_row(self):
+        # the config is asked about the matched block, and an answer of "equal" has to stay silent
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1.0, 2.0, 3.0]).is_equal_to([0.0, 1.0, 2.0, 3.0], tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("expected[0]", None, 0.0)])
+
+    def test_an_aligned_equal_block_adds_no_rows(self):
+        # the config was asked about the matched block and agreed, so the insertion is the only row
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1.0, 2.0, 3.0, 4.0]).is_equal_to([0.0, 1.0, 2.0, 3.0, 4.0], tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("expected[0]", None, 0.0)])
+
+    def test_a_truncated_tail_keeps_the_index_reading(self):
+        # a dropped tail reads as the same count either way, and a tie keeps the index reading: the
+        # entries stay [3]/[4] instead of naming a side that has not shifted
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3, 4, 5]).is_equal_to([1, 2, 3])
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[3]", "[4]"])
+        assert_that([entry.steps[-1].side for entry in exc_info.value.diff.entries]).is_equal_to([None, None])
+
+    def test_an_unequal_length_tie_keeps_the_index_reading(self):
+        # the alignment reports the same two positions the index pairing does, and a tie keeps the
+        # index reading, so neither path names a side
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2, 3, 4, 5]).is_equal_to([1, 2, 3])
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[3]", "[4]"])
+
+    def test_an_aligned_pair_is_still_decomposed_to_the_field_that_differs(self):
+        # the shift is reported once and the pair the alignment matched is walked into, not dumped
+        # whole as one row
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([{"a": 1}, {"a": 2}]).is_equal_to([{"a": 0}, {"a": 1}, {"a": 9}])
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).contains(("[1].a", 2, 9))
+
+    def test_a_sequence_at_exactly_the_cap_is_still_aligned(self):
+        # the cap is the last length that still aligns, and the test above it pins only the first that does not
+        size = _diff_module._ALIGN_MAX_ELEMENTS
+        result = _build_equality_diff(list(range(1, size)), list(range(size)))
+        assert_that(result.entries).is_length(1)
+        assert_that(result.entries[0].path).is_equal_to("expected[0]")
+
+    def test_a_repeated_element_is_never_treated_as_junk(self):
+        # difflib's autojunk calls any value filling over 1% of a 200+ element sequence junk, which is
+        # exactly the repeated value an alignment has to match on
+        expected = ["a"] * 250
+        result = _build_equality_diff(["x", *expected], expected)
+        assert_that([entry.path for entry in result.entries]).is_equal_to(["actual[0]"])
+
+    def test_a_repeated_unhashable_element_is_never_treated_as_junk(self):
+        expected = [{"v": "a"} for _ in range(250)]
+        result = _build_equality_diff([{"v": "x"}, *expected], expected)
+        assert_that([entry.path for entry in result.entries]).is_equal_to(["actual[0]"])
+
+    def test_two_differing_positions_still_buy_an_alignment(self):
+        # one differing position cannot be beaten and never asks; two can, and has to
+        result = _build_equality_diff([1, 2, 3], [1, 2, 9, 3])
+        assert_that([(entry.path, entry.expected) for entry in result.entries]).is_equal_to([("expected[2]", 9)])
+
     def test_an_element_inserted_at_the_head(self):
         result = _build_equality_diff([0, *range(1, 40)], list(range(1, 40)))
         assert_that(result.kind).is_equal_to("sequence")
@@ -1887,3 +1973,320 @@ class TestTheBlockBudgetCutsRatherThanDrops:
 
     def test_a_cut_past_a_reset_adds_no_second_one(self):
         assert_that(_cut("\033[31mabc\033[0mdef", 30)).is_equal_to("\033[31mabc\033[0mdef...")
+
+
+class TestConfigLeafRowsHoldBothSides:
+    """A leaf the config rejected is one row, and the row carries the pair that earned the verdict."""
+
+    def test_a_sequence_element_beyond_tolerance(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1.0, 2.0, 3.0]).is_equal_to([1.0, 9.0, 3.0], tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("[1]", 2.0, 9.0)])
+
+    def test_a_dataclass_field_beyond_tolerance(self):
+        @dataclass
+        class Reading:
+            value: float
+            unit: str
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Reading(1.0, "m")).is_equal_to(Reading(2.0, "m"), tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".value", 1.0, 2.0)])
+
+    def test_strict_types_refuses_a_pair_a_comparator_called_equal(self):
+        # the type check runs before the comparator is consulted, so the failure carries a scalar diff
+        # with nothing to show rather than a row claiming the two values differ
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: True})
+        assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
+        assert_that(exc_info.value.diff.entries).is_empty()
+
+    def test_a_strict_type_difference_at_the_root(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(1).is_equal_to("1", strict_types=True)
+        diff = exc_info.value.diff
+        assert_that(diff.kind).is_equal_to("scalar")
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in diff.entries]).is_equal_to([(".", 1, "1")])
+
+    def test_a_namedtuple_field_beyond_tolerance(self):
+        Point = namedtuple("Point", ["x", "y"])
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Point(1.0, 2.0)).is_equal_to(Point(1.0, 9.0), tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".y", 2.0, 9.0)])
+
+
+class TestCycleGuardOnEveryDescent:
+    """A value that contains itself is reported at the index or field that closes the loop."""
+
+    def test_a_self_referential_list_reports_the_cycle_at_its_own_index(self):
+        actual = [1, 2]
+        actual.append(actual)
+        expected = [1, 9]
+        expected.append(expected)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("[1]", 2), ("[2]", "<circular ref>")])
+
+    def test_a_self_referential_list_survives_an_aligned_pairing(self):
+        # the aligned walk is a second descent, with its own copy of the guard
+        actual = [1, 2, 3]
+        actual.append(actual)
+        expected = [0, 1, 2, 3]
+        expected.append(expected)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("expected[0]", None), ("[3]", "<circular ref>")])
+
+    def test_a_self_referential_dataclass_reports_the_cycle_at_its_own_field(self):
+        @dataclass
+        class Node:
+            tag: str
+            child: object = None
+
+        actual, expected = Node("a"), Node("b")
+        actual.child, expected.child = actual, expected
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".tag", "a"), (".child", "<circular ref>")])
+
+    def test_a_self_referential_dataclass_nested_in_a_dict_reports_the_cycle(self):
+        # under a key the nested walker owns the guard, and it keeps its own copy of it
+        @dataclass
+        class Node:
+            tag: str
+            child: object = None
+
+        actual, expected = Node("a"), Node("b")
+        actual.child, expected.child = actual, expected
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"n": actual}).is_equal_to({"n": expected})
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("n.tag", "a"), ("n.child", "<circular ref>")])
+
+    def test_a_self_referential_namedtuple_reports_the_cycle_at_its_own_field(self):
+        Box = namedtuple("Box", "tag holder")
+        actual_holder, expected_holder = [], []
+        actual, expected = Box("a", actual_holder), Box("b", expected_holder)
+        actual_holder.append(actual)
+        expected_holder.append(expected)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".tag", "a"), (".holder[0]", "<circular ref>")])
+
+    def test_a_self_referential_namedtuple_nested_in_a_dict_reports_the_cycle(self):
+        Box = namedtuple("Box", "tag holder")
+        actual_holder, expected_holder = [], []
+        actual, expected = Box("a", actual_holder), Box("b", expected_holder)
+        actual_holder.append(actual)
+        expected_holder.append(expected)
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"b": actual}).is_equal_to({"b": expected})
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("b.tag", "a"), ("b.holder[0]", "<circular ref>")])
+
+    def test_a_cycle_on_the_expected_side_alone_is_reported(self):
+        # the guard fires on either side being seen; only the actual side was ever pinned
+        expected = {"tag": "x"}
+        expected["child"] = expected
+        actual = {"tag": "y", "child": {"tag": "x", "child": {"tag": "x"}}}
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(actual).is_equal_to(expected)
+        entry = next(entry for entry in exc_info.value.diff.entries if entry.path == "child")
+        assert_that(entry.expected).is_equal_to("<circular ref>")
+
+    def test_a_cycle_on_only_one_side_of_a_nested_namedtuple_is_reported(self):
+        # the guard fires on either side, and a namedtuple under a key is guarded by the nested walker
+        Box = namedtuple("Box", "tag holder")
+        holder = []
+        looping = Box("a", holder)
+        holder.append(looping)
+        finite = Box("c", [Box("d", [])])
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"b": looping}).is_equal_to({"b": finite})
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("b.tag", "a"), ("b.holder[0]", "<circular ref>")])
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"b": finite}).is_equal_to({"b": looping})
+        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("b.tag", "c"), ("b.holder[0]", "<circular ref>")])
+
+
+class TestOneSidedEntriesNameTheAbsentSide:
+    """``absent`` is what tells a position nobody has from one holding ``None``."""
+
+    def test_a_sequence_position_only_the_expected_side_has(self):
+        entries = _build_equality_diff([1, 2], [1, 2, 3]).entries
+        assert_that([(entry.path, entry.absent) for entry in entries]).is_equal_to([("[2]", "actual")])
+
+    def test_a_sequence_position_only_the_actual_side_has(self):
+        entries = _build_equality_diff([1, 2, 3], [1, 2]).entries
+        assert_that([(entry.path, entry.absent) for entry in entries]).is_equal_to([("[2]", "expected")])
+
+    def test_an_aligned_insertion_and_deletion(self):
+        inserted = _build_equality_diff([0, *range(1, 40)], list(range(1, 40))).entries
+        assert_that([(entry.path, entry.absent) for entry in inserted]).is_equal_to([("actual[0]", "expected")])
+        deleted = _build_equality_diff([1, 2, 4, 5], [1, 2, 3, 4, 5]).entries
+        assert_that([(entry.path, entry.absent) for entry in deleted]).is_equal_to([("expected[2]", "actual")])
+
+    def test_a_dataclass_field_only_one_side_declares(self):
+        @dataclass
+        class Wide:
+            a: int
+            b: int
+
+        @dataclass
+        class Narrow:
+            a: int
+
+        extra = _build_equality_diff(Wide(1, 2), Narrow(1)).entries
+        assert_that([(entry.path, entry.actual, entry.absent) for entry in extra]).is_equal_to([(".b", 2, "expected")])
+        missing = _build_equality_diff(Narrow(1), Wide(1, 2)).entries
+        assert_that([(entry.path, entry.expected, entry.absent) for entry in missing]).is_equal_to(
+            [(".b", 2, "actual")]
+        )
+
+    def test_a_namedtuple_field_only_one_side_declares(self):
+        Point = namedtuple("Point", "x y")
+        Wide = namedtuple("Wide", "x y z")
+        extra = _build_equality_diff(Wide(1, 2, 3), Point(1, 2)).entries
+        assert_that([(entry.path, entry.actual, entry.absent) for entry in extra]).is_equal_to([(".z", 3, "expected")])
+        missing = _build_equality_diff(Point(1, 2), Wide(1, 2, 3)).entries
+        assert_that([(entry.path, entry.expected, entry.absent) for entry in missing]).is_equal_to(
+            [(".z", 3, "actual")]
+        )
+
+    def test_a_dict_key_only_the_expected_side_has(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": 1}).is_equal_to({"a": 1, "b": 2})
+        entries = exc_info.value.diff.entries
+        assert_that([(entry.path, entry.expected, entry.absent) for entry in entries]).is_equal_to([("b", 2, "actual")])
+
+    def test_a_model_field_only_one_side_declares(self):
+        class Model:
+            def __init__(self, **fields):
+                self._fields = fields
+
+            def model_dump(self):
+                return dict(self._fields)
+
+            def __eq__(self, other):
+                return False
+
+        extra = _build_equality_diff(Model(a=1, b=2), Model(a=1)).entries
+        assert_that([(entry.path, entry.actual, entry.absent) for entry in extra]).is_equal_to([(".b", 2, "expected")])
+        missing = _build_equality_diff(Model(a=1), Model(a=1, b=2)).entries
+        assert_that([(entry.path, entry.expected, entry.absent) for entry in missing]).is_equal_to(
+            [(".b", 2, "actual")]
+        )
+
+    def test_a_nested_namedtuple_field_only_one_side_declares(self):
+        # the nested walker has its own copy of the one-sided branch, reached only under a key
+        Point = namedtuple("Point", "x y")
+        Wide = namedtuple("Wide", "x y z")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"p": Wide(1, 2, 3)}).is_equal_to({"p": Point(1, 2)})
+        extra = [(entry.path, entry.actual, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(extra).is_equal_to([("p.z", 3, "expected")])
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"p": Point(1, 2)}).is_equal_to({"p": Wide(1, 2, 3)})
+        missing = [(entry.path, entry.expected, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(missing).is_equal_to([("p.z", 3, "actual")])
+
+
+class TestFieldNamedConfigReachesRecordFields:
+    """``ignore_null`` and a comparator keyed by name match on the field's own name."""
+
+    def test_ignore_null_reaches_a_namedtuple_field_by_name(self):
+        Point = namedtuple("Point", "x y")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Point(1, 2)).is_equal_to(Point(9, None), ignore_null=True)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to([".x"])
+
+    def test_a_comparator_keyed_by_name_reaches_a_namedtuple_field(self):
+        Point = namedtuple("Point", "x y")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Point(1, 2)).is_equal_to(Point(9, 5), comparators={"y": lambda left, right: True})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to([".x"])
+
+    def test_ignore_null_reaches_a_nested_namedtuple_field_by_name(self):
+        Point = namedtuple("Point", "x y")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"p": Point(1, 2)}).is_equal_to({"p": Point(9, None)}, ignore_null=True)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["p.x"])
+
+    def test_ignore_null_reaches_a_model_field_by_name(self):
+        class Model:
+            def __init__(self, **fields):
+                self._fields = fields
+
+            def model_dump(self):
+                return dict(self._fields)
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Model(a=1, b=2)).is_equal_to(Model(a=9, b=None), ignore_null=True)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to([".a"])
+
+    def test_a_config_reaches_a_value_inside_a_namedtuple_field(self):
+        # the tolerance has to survive the descent into the field, not just be offered to the field
+        Bag = namedtuple("Bag", "name items")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Bag("a", [1.0, 5.0])).is_equal_to(Bag("b", [1.0, 5.0001]), tolerance=0.001)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".name", "a", "b")])
+
+
+class TestTextDiffLineNumbers:
+    def test_lines_only_one_side_has_are_numbered_from_one(self):
+        shorter = _build_equality_diff("a", "a\nb\nc").entries
+        assert_that([(entry.path, entry.absent) for entry in shorter]).is_equal_to(
+            [("line 2", "actual"), ("line 3", "actual")]
+        )
+        longer = _build_equality_diff("a\nb\nc", "a").entries
+        assert_that([(entry.path, entry.absent) for entry in longer]).is_equal_to(
+            [("line 2", "expected"), ("line 3", "expected")]
+        )
+
+    def test_two_strings_differing_only_in_a_trailing_newline_keep_both_sides(self):
+        # splitlines() drops the difference, so the fallback entry is the only place it survives
+        entries = _build_equality_diff("a\n", "a").entries
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in entries]).is_equal_to([(".", "a\n", "a")])
+
+
+class TestAComparatorOwnsTheWholeValue:
+    """A comparator asked about a container answers for the container, not for its parts."""
+
+    def test_a_comparator_verdict_on_a_list_field_is_one_row(self):
+        @dataclass
+        class Basket:
+            name: str
+            items: list
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Basket("a", [1, 2])).is_equal_to(
+                Basket("b", [1, 3]), comparators={list: lambda left, right: False}
+            )
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".name", "a", "b"), (".items", [1, 2], [1, 3])])
+
+    def test_a_comparator_verdict_on_a_namedtuple_list_field_is_one_row(self):
+        Bag = namedtuple("Bag", "name items")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(Bag("a", [1, 2])).is_equal_to(Bag("b", [1, 3]), comparators={list: lambda left, right: False})
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".name", "a", "b"), (".items", [1, 2], [1, 3])])
+
+    def test_a_comparator_verdict_on_a_nested_namedtuple_list_field_is_one_row(self):
+        Bag = namedtuple("Bag", "name items")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"bag": Bag("a", [1, 2])}).is_equal_to(
+                {"bag": Bag("b", [1, 3])}, comparators={list: lambda left, right: False}
+            )
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("bag.name", "a", "b"), ("bag.items", [1, 2], [1, 3])])

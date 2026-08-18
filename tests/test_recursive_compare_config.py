@@ -30,6 +30,12 @@ class FakeModel:
 
 
 class TestToleranceScalar:
+    def test_a_scalar_beyond_tolerance_reports_both_sides(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(1.0).is_equal_to(9.0, tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".", 1.0, 9.0)])
+
     def test_within_tolerance_passes(self):
         assert_that(1.0).is_equal_to(1.0001, tolerance=0.001)
 
@@ -68,6 +74,24 @@ class TestToleranceScalar:
 
 
 class TestToleranceNested:
+    def test_a_list_element_beyond_tolerance_reports_both_sides(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([1.0, 2.0]).is_equal_to([1.0, 5.0], tolerance=0.001)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("[1]", 2.0, 5.0)])
+
+    def test_a_dataclass_field_beyond_tolerance_reports_both_sides(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(Point(1.0, 2.0)).is_equal_to(Point(1.0, 9.0), tolerance=0.001)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".y", 2.0, 9.0)])
+
+    def test_a_namedtuple_field_beyond_tolerance_reports_both_sides(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(Pair(1.0, 2.0)).is_equal_to(Pair(1.0, 9.0), tolerance=0.001)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".b", 2.0, 9.0)])
+
     def test_dict_all_within_tolerance(self):
         assert_that({"a": 1.0, "b": 2.0}).is_equal_to({"a": 1.0005, "b": 2.0}, tolerance=0.001)
 
@@ -520,6 +544,13 @@ class TestStrictTypes:
         assert_that(actual).is_equal_to(expected)  # plain equality accepts all of these
         with pytest.raises(AssertionError):
             assert_that(actual).is_equal_to(expected, strict_types=True)
+
+    def test_a_comparator_settling_the_root_leaves_a_scalar_diff_with_no_rows(self):
+        """The pair is decided at the root, so the diff keeps its category and has nothing to show."""
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: True})
+        assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
+        assert_that(exc_info.value.diff.entries).is_empty()
 
     def test_equal_payload_still_passes(self):
         payload = {"id": 1, "tags": ["a"], "meta": {"ok": True, "n": None}}
