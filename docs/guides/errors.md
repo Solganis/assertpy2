@@ -336,7 +336,19 @@ cannot help. Exceptions are the everyday case, since they carry identity equalit
 `comparators=` entry of your own owning the values silences it, the verdict there being your
 predicate's rather than the type's.
 
-Like the settings echo above, both sit below the sentence, so anything written against the original
+A third line appears when the value came from an HTTP response, naming the request it answered:
+
+```text
+Expected <500> to be equal to <200> on attribute <status_code>, but was not.
+from GET https://api.example.com/orders/7 -> 500
+```
+
+It survives the step into the body, so a failure under
+[`decoded_as_json()`](../recipes.md#test-an-http-api-response) still says which call produced it. It
+reads no body and starts no I/O, which is why a streaming response that has never been read is safe to
+assert on.
+
+Like the settings echo above, these sit below the sentence, so anything written against the original
 message keeps working.
 
 ### Polling failures carry a trace

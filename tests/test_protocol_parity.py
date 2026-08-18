@@ -35,6 +35,7 @@ from assertpy2 import (
     extracting,
     file,
     helpers,
+    http_mixin,
     json_mixin,
     numeric,
     snapshot,
@@ -161,11 +162,13 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     dynamic.DynamicMixin: (),
     helpers.HelpersMixin: (),
     dataframe.DataFrameMixin: (),
+    http_mixin.HttpMixin: (),
 }
 
-# The one family with no narrowed view: every ``assert_that`` overload keys on a concrete type, and a
-# DataFrame matches none, so the call lands on the fallback, which is the class carrying these methods.
-_UNTYPED: frozenset[str] = frozenset({"is_array_equal", "is_array_close_to", "is_frame_equal"})
+# The two families with no narrowed view: every ``assert_that`` overload keys on a concrete type, and
+# neither a DataFrame nor an HTTP response matches any, so the call lands on the fallback, which is the
+# class carrying these methods.
+_UNTYPED: frozenset[str] = frozenset({"is_array_equal", "is_array_close_to", "is_frame_equal", "decoded_as_json"})
 
 # The bases that carry no assertions and so contribute no edge to the inheritance graph.  Written out
 # because everything not on this list has to be either a protocol of this file or an error.

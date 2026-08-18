@@ -158,6 +158,7 @@ nav:
       - Async & eventual assertions: reference/async.md
       - Extracting: reference/extracting.md
       - JSON assertions: reference/json.md
+      - HTTP response assertions: reference/http.md
       - Data frame & array assertions: reference/dataframes.md
       - Snapshot assertions: reference/snapshots.md
       - Structured failures: reference/errors.md

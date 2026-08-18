@@ -12,13 +12,38 @@ test brittle. Use a [matcher](guides/matchers.md) per volatile field and a liter
 ```python
 resp = client.get("/orders/42")
 
-assert_that(resp.status_code).is_equal_to(200)
-assert_that(resp.json()).matches_structure({
+assert_that(resp).has_status_code(200)
+assert_that(resp).decoded_as_json().matches_structure({
     "id": match.is_positive(),
     "status": match.is_in("paid", "pending", "shipped"),
     "customer": {"name": match.is_non_empty_string()},
 })
 ```
+
+Assert on the response rather than on `resp.status_code` and `resp.json()`, and every failure below
+says which response it came from, with the request line where the client kept one:
+
+```text
+Expected <{'id': 42, 'status': 'refunded'}> to match structure ..., but at <status>: ...
+from GET https://api.example.com/orders/42 -> 200
+```
+
+That line reads no body and starts no I/O, so a streaming response that has not been read is safe to
+assert on. `decoded_as_json()` is where the body is read, since calling it is you asking for it, and a
+body that is not JSON fails with the content type and how the body starts rather than with a
+`JSONDecodeError` from your own test. A body that could not be read at all is said to be exactly that,
+since an unread body may well have been JSON:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(resp).decoded_as_json()
+# ValueError: the response body is not JSON: content-type is 'text/html; charset=utf-8'
+#             and it starts with '<!doctype html><html><body>Login required</body></html>'
+```
+
+It works on any client that keeps a status code and headers, which is httpx, requests, the Starlette
+and FastAPI test clients, Flask and Django. None of them is imported, and none of them needs to be
+installed.
 
 The body check itself is an ordinary value assertion, so it runs without a live server:
 
