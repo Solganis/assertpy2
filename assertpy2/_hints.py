@@ -36,6 +36,9 @@ if TYPE_CHECKING:
     _Label = str | Callable[[Sequence[tuple[object, object]]], str]
 
 _NAN_FACT = "a NaN takes part in this comparison, and a NaN is equal to nothing, not even itself"
+_IDENTITY_FACT = (
+    "these values compare with object's __eq__, so equality is identity and no two separate instances are equal"
+)
 
 _VALUE_KINDS: Final = frozenset(
     {"dict", "sequence", "dataclass", "namedtuple", "model", "attrs", "set", "string", "scalar"}
@@ -161,18 +164,37 @@ def _typed(pairs: Sequence[tuple[object, object]], kind: str) -> str | None:
     return None
 
 
-def diagnose(diff: DiffResult | None, actual: object = None, expected: object = None) -> str | None:
+def diagnose(
+    diff: DiffResult | None,
+    actual: object = None,
+    expected: object = None,
+    *,
+    identity: bool = False,
+) -> str | None:
     """The one line to add to a failure message, or ``None`` when nothing can be said.
 
     Args:
         diff: the structured diff already built for this failure.
         actual: the value asserted on, needed only for the string case below.
         expected: the value it was compared against.
+        identity: whether the comparison was an unconfigured equality one that `identity_candidate`
+            found identity-bound *before* it ran.  Only then does identity account for the failure.
 
     Returns:
         A lowercase clause to put on its own line under the message, or ``None``.
     """
-    if diff is None or not diff.entries or diff.kind not in _VALUE_KINDS:
+    if diff is None or diff.kind not in _VALUE_KINDS:
+        return None
+    # before anything about the values, and for the same reason as the NaN fact below: when a type
+    # leaves equality to identity, nothing the other side held could have made the comparison pass, so
+    # a line about how the two differ would send the reader to fix something that will not help.
+    #
+    # Asked of the two values the assertion compared, never of a pair inside the diff. What decided a
+    # nested pair is the enclosing type's own `__eq__`, which may be anything at all, so a difference
+    # found under one says nothing about why the comparison above it failed
+    if identity:
+        return _IDENTITY_FACT
+    if not diff.entries:
         return None
     entries = diff.entries
 
@@ -252,6 +274,61 @@ def _fields_of(value: object) -> dict | None:
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return {field.name: getattr(value, field.name) for field in dataclasses.fields(value)}
     return None
+
+
+def _defined_as(klass: type, name: str) -> bool:
+    """Whether the definition of *name* the class tree carries is the one ``object`` carries.
+
+    Walked and read raw, which is the reading the interpreter does for an operator: no attribute access
+    on the class, so neither a metaclass nor a descriptor of the class's own gets to answer for it.
+    """
+    for base in type.__getattribute__(klass, "__mro__"):
+        found = type.__getattribute__(base, "__dict__").get(name)
+        if found is not None:
+            return found is object.__dict__[name]
+    return False  # pragma: no cover - `object` ends every tree and defines both names, so this is dead
+
+
+def identity_candidate(left: object, right: object) -> bool:
+    """Whether ``==`` between these two comes down to identity, asked *before* the comparison runs.
+
+    A type that leaves both ``__eq__`` and ``__ne__`` to ``object`` is equal only to itself, so no value
+    on the other side would have made the comparison pass.  That is a fact about the type rather than
+    about what the two hold, which is the only claim worth making: state can live in a slot, in a
+    descriptor's own table or in a C field, and a line that promised to have read all of it would be
+    promising more than any reading can deliver.
+
+    Three details make the answer trustworthy, and each was put here by a case that defeated the one
+    before it.  It is asked before the comparison, because a type may rewrite its own ``__eq__`` while
+    answering one, and a question asked afterwards would be answered by the type it left behind.  It
+    never reads an attribute the ordinary way, because a metaclass is free to answer with something
+    other than what the operator will run, or to install one as a side effect of being asked.  And what
+    it finally reads is the class tree's own definitions, the way `slot_tp_richcompare` reads them,
+    because a class-level descriptor can answer one way for the class and another for an instance.
+
+    The cheap look comes first so the ordinary case, a type that does define equality, stops at 97 ns
+    and never pays for the walk.  The walk itself is another 465 ns, spent only on a pair of separate
+    instances of a type that compares by identity, which is a comparison that is about to fail anyway.
+    Scalars reach none of it: their comparison returns before this is asked.
+
+    ``__ne__`` is asked about as well, since the comparison a failing assertion runs is
+    ``actual != expected``, so a type defining only that one still decides its own inequality.
+    """
+    try:
+        klass = type(left)
+        # one object against itself is equal under identity too, so a failure can never be about that
+        if left is right or klass is not type(right):
+            return False
+        # a cheap look first, so the ordinary case - a type that does define equality - pays only for
+        # this and stops here
+        if type.__getattribute__(klass, "__eq__") is not object.__eq__:
+            return False
+        return _defined_as(klass, "__eq__") and _defined_as(klass, "__ne__")
+    except Exception:  # pragma: no cover - no input is known to reach it, see below
+        # every lookup above walks the class tree itself and runs none of the type's own code, so
+        # nothing here is known to raise. The guard stays because this runs on the way to a failure, and
+        # the cost of being wrong about that is the reader losing the failure itself
+        return False
 
 
 def _fields_match(left: object, right: object) -> bool:

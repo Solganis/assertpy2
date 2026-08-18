@@ -1307,7 +1307,7 @@ class AssertionBuilder(
         if self._value_origin and not len(self.val):
             # an empty derived value carries no context of its own, so name the step that produced it
             out = f"{out} The value is empty because {self._value_origin}."
-        hint = _hints.diagnose(diff, actual, expected)
+        hint = _hints.diagnose(diff, actual, expected, identity=self._equality_comparison)
         if hint is not None:
             # on its own line, like the comparison-settings echo, so the original message stays a
             # prefix and a `match=` or `startswith` written against it keeps working

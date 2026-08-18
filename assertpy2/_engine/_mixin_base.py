@@ -11,6 +11,14 @@ if TYPE_CHECKING:
 
 
 class _MixinBase:
+    _equality_comparison = False
+    """Whether the failure being reported came from asking whether two values are equal.
+
+    Read by the failure composer.  Only there does it follow from a type comparing by identity that
+    nothing on the other side could have passed: a containment failure over the same values is about
+    where they sit, and a comparator of the caller's own owns its leaves outright.
+    """
+
     if TYPE_CHECKING:
         val: Any
         description: str
