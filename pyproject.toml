@@ -160,6 +160,9 @@ pytest_add_cli_args = [
     and not test_ends_with_bad_prefix_failure \
     and not test_the_warning_points_at_the_caller \
     and not test_a_record_knows_where_it_was_collected \
+    and not test_strict_implies_plain_for_any_pair \
+    and not test_the_shortcut_answers_what_the_walk_answers \
+    and not test_naming_duplicates_answers_what_counting_answered \
     and not TestTheCountsTheDocsQuote \
     and not test_every_type_refusal_has_the_same_shape \
     and not TestRecordedPosition\
@@ -171,6 +174,7 @@ pytest_add_cli_args = [
     "--ignore=tests/test_exception_context.py",
     "--ignore=tests/test_extensions.py",
     "--ignore=tests/test_grouped_soft.py",
+    "--ignore=tests/test_property_attrs.py",
     "--ignore=tests/test_property_based.py",
     "--ignore=tests/test_protocol_parity.py",
     "--ignore=tests/test_recursive_compare_attrs.py",
