@@ -164,6 +164,13 @@ pytest_add_cli_args = [
     and not test_starts_with_bad_prefix_failure \
     and not test_ends_with_bad_prefix_failure \
     and not test_the_warning_points_at_the_caller \
+    and not test_the_created_warning_points_at_the_calling_test \
+    and not test_the_updated_warning_points_at_the_calling_test \
+    and not test_the_created_contract_warning_points_at_the_calling_test \
+    and not test_the_updated_contract_warning_points_at_the_calling_test \
+    and not test_a_missing_line_key_in_an_existing_file_names_that_file \
+    and not test_a_missing_contract_line_key_names_its_file \
+    and not test_a_default_key_contract_file_is_named_after_the_calling_module \
     and not test_a_record_knows_where_it_was_collected \
     and not test_strict_implies_plain_for_any_pair \
     and not test_the_shortcut_answers_what_the_walk_answers \

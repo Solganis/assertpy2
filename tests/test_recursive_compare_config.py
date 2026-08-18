@@ -11,6 +11,7 @@ from typing import ClassVar
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2._engine._compare import _build_compare_config
 
 Pair = namedtuple("Pair", ["a", "b"])
 
@@ -27,6 +28,18 @@ class FakeModel:
 
     def model_dump(self):
         return dict(self._data)
+
+
+@dataclass
+class Row:
+    box: dict
+    tag: str
+
+
+@dataclass
+class Bag:
+    items: set
+    tag: str
 
 
 class TestToleranceScalar:
@@ -204,6 +217,22 @@ class TestComparators:
             )
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("m.b")
 
+    def test_a_comparator_owns_an_aligned_element_the_walker_would_decompose(self):
+        # a comparator that rejects the pair reports it whole: a rejected node is never recursed into
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([{"v": 1}, {"pad": 1}]).is_equal_to(
+                [{"v": 1}, {"extra": 9}, {"pad": 1}],
+                comparators={dict: lambda actual, expected: False},
+            )
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).contains(("[0]", {"v": 1}, {"v": 1}), ("[1]", {"pad": 1}, {"pad": 1}))
+
+    def test_an_exact_type_outranks_a_supertype_registered_before_it(self):
+        """Field name, then exact type, then isinstance: a `bool` leaf belongs to the `bool` entry even
+        though the `int` entry was written first and `isinstance` would accept it."""
+        comparators = {int: lambda actual, expected: False, bool: lambda actual, expected: True}
+        assert_that({"n": True}).is_equal_to({"n": False}, comparators=comparators)
+
 
 class TestConfigValidation:
     def test_tolerance_not_real_raises(self):
@@ -238,6 +267,24 @@ class TestConfigValidation:
         with pytest.raises(TypeError) as exc_info:
             assert_that(1).is_equal_to(1, comparators={int: "nope"})
         assert_that(str(exc_info.value)).is_equal_to("each comparator must be callable")
+
+    def test_ignore_null_not_a_bool_raises(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(1).is_equal_to(1, ignore_null="yes")
+        assert_that(str(exc_info.value)).is_equal_to("given ignore_null arg must be a bool")
+
+    def test_strict_types_not_a_bool_raises(self):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(1).is_equal_to(1, strict_types="yes")
+        assert_that(str(exc_info.value)).is_equal_to("given strict_types arg must be a bool")
+
+    def test_the_two_argument_form_leaves_both_flags_off(self):
+        """Snapshot capture builds a config from tolerance and comparators alone, and neither flag may
+        switch itself on there: with one defaulted on, nothing is ever at its defaults."""
+        assert_that(_build_compare_config(None, None)).is_none()
+        config = _build_compare_config(0.5, None)
+        assert_that(config.ignore_null).is_false()
+        assert_that(config.strict_types).is_false()
 
 
 class TestRegexTypeIgnoreInclude:
@@ -505,6 +552,20 @@ class TestConfigThroughNestedContainers:
         with pytest.raises(AssertionError):
             assert_that({"d": [1, 2], "k": 1}).is_equal_to({"d": [1, 9], "k": 2}, ignore="k")
 
+    def test_tolerance_reaches_a_dict_inside_a_shifted_list(self):
+        # the shift routes the elements through the alignment, which must carry the config into them
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([{"v": 1.0}, {"pad": 1}]).is_equal_to([{"v": 1.2}, {"extra": 9}, {"pad": 1}], tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("expected[1]", None, {"extra": 9})])
+
+    def test_tolerance_reaches_a_dict_inside_a_record_field(self):
+        # a record field holding a container is walked with the config, not with plain equality
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that(Row({"v": 1.0}, "a")).is_equal_to(Row({"v": 1.2}, "b"), tolerance=0.5)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".tag", "a", "b")])
+
 
 class _Opaque:
     """A value the diff ladder cannot take apart and no atomic list will ever name."""
@@ -694,6 +755,21 @@ class TestStrictTypes:
         with pytest.raises(TypeError, match="strict_types arg must be a bool"):
             assert_that(1).is_equal_to(1, strict_types=bad)
 
+    def test_an_aligned_equal_element_with_no_inside_is_not_reported(self):
+        """The aligned pairing descends on its own, and a strict descent into a value it cannot take
+        apart means the pair was already equal."""
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([_Opaque(1), _Opaque(2)]).is_equal_to([_Opaque(0), _Opaque(1), _Opaque(2)], strict_types=True)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("expected[0]", None, _Opaque(0))])
+
+    def test_a_key_only_one_side_has_is_not_reported_as_a_key_type_difference(self):
+        """A key with no counterpart is a missing key, and the type check has no pair to make of it."""
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1}, strict_types=True)
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("b", 2, None)])
+
     def test_a_self_referential_pair_behaves_the_same_either_way(self):
         # forcing the walk into a container whose own `==` was true raises the question of what happens
         # on a cycle. Nothing new: two distinct self-referential structures already exhaust the stack
@@ -742,6 +818,22 @@ class TestStrictTypes:
         assert_that({"a": True}).not_.is_equal_to({"a": 1}, strict_types=True)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             assert_that(True).is_not_equal_to(1, strict_types=True)
+
+    def test_two_equal_sets_in_a_record_field_are_not_reported(self):
+        # strict_types looks past a container whose own `==` was true, and a set has nothing to look at
+        assert_that(Bag({1, 2}, "a")).is_equal_to(Bag({1, 2}, "a"), strict_types=True)
+
+    def test_a_matcher_stays_exempt_on_the_actual_side_too(self):
+        # the exemption reads both operands, so the spelling with the spec on the left is exempt as well
+        assert_that(match.greater_than(0)).is_equal_to(5, strict_types=True)
+        assert_that({"id": match.greater_than(0)}).is_equal_to({"id": 7}, strict_types=True)
+        assert_that([match.greater_than(4)]).is_equal_to([5], strict_types=True)
+
+    def test_the_keyed_type_check_needs_both_sides_to_be_that_container(self):
+        """An exempt matcher reaches the key comparison as the counterpart of a real container, and
+        nothing there can iterate it: both sides have to be the container kind."""
+        assert_that({"cfg": {"a": 1}}).is_equal_to({"cfg": match.is_instance_of(dict)}, strict_types=True)
+        assert_that({"tags": {1, 2}}).is_equal_to({"tags": match.is_instance_of(set)}, strict_types=True)
 
 
 class TestStrictTypesOnStdlibScalars:
@@ -882,6 +974,13 @@ class TestConfigEchoedOnFailure:
         first_line = str(exc_info.value).splitlines()[0]
         assert_that(first_line).is_equal_to("Expected <{'a': 1.0}> to be equal to <{'a': 9.0}>, but was not.")
 
+    def test_a_config_with_nothing_in_it_adds_nothing_to_the_sentence(self):
+        # an empty `comparators` dict is the one spelling that builds a config with no setting to name
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": 1}).is_equal_to({"a": 2}, comparators={})
+        first_line = str(exc_info.value).splitlines()[0]
+        assert_that(first_line).is_equal_to("Expected <{'a': 1}> to be equal to <{'a': 2}>, but was not.")
+
 
 class TestDecisionSentinelsReachTheDiff:
     """`_node_decision` answers with a sentinel string the walkers branch on.  A leaf verdict that
@@ -914,6 +1013,14 @@ class TestDecisionSentinelsReachTheDiff:
         # inside it" part company: the path is the field, not a key underneath it.
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": {"x": 1}}).is_equal_to({"a": {"x": 2}}, comparators={"a": lambda actual, expected: False})
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
+
+    def test_the_same_nan_on_both_sides_is_still_outside_the_tolerance(self):
+        """The mapping walk short-circuits on identity, so a tolerance verdict that does not arrive as
+        a leaf is never asked for again, and the one value unequal to itself passes."""
+        nan = float("nan")
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that({"a": nan}).is_equal_to({"a": nan}, tolerance=0.5)
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
 
 

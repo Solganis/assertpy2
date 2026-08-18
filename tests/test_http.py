@@ -9,6 +9,8 @@ test is that it imports none of them. The shapes are taken from httpx and reques
 from __future__ import annotations
 
 import json
+from decimal import Decimal
+from wsgiref.headers import Headers
 
 import pytest
 
@@ -80,6 +82,60 @@ class Streaming:
 
     def json(self):
         raise RuntimeError("attempted to read the body of a streaming response")
+
+
+class Served:
+    """The Starlette shape: the body under ``body``, and no parser of its own."""
+
+    def __init__(self, status_code=200, body=b'{"id": 7}'):
+        self.status_code = status_code
+        self.body = body
+        self.headers = {"Content-Type": "application/json"}
+
+
+class Reading:
+    """A client whose ``text`` is a reader to call rather than the body it would hand back."""
+
+    def __init__(self, body=b'{"id": 7}'):
+        self.status_code = 200
+        self.content = body
+        self.headers = {"Content-Type": "application/json"}
+
+    def text(self):
+        return self.content.decode()
+
+
+class Decoding(Fetched):
+    """A client parsing with a decoder of its own: money as ``Decimal`` rather than as a float."""
+
+    def json(self):
+        return json.loads(self.text, parse_float=Decimal)
+
+
+class DecodingFlask(Flasked):
+    """The same client, under Flask's name for the parser."""
+
+    def get_json(self):
+        return json.loads(self.data, parse_float=Decimal)
+
+
+class RawHeaders:
+    """The ASGI shape: names arrive lowercased off the wire, and are matched as they came."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def keys(self):
+        return [name.decode() for name, _ in self._raw]
+
+    def __getitem__(self, key):
+        return next(value.decode() for name, value in self._raw if name == key.encode())
+
+    def __iter__(self):
+        return iter(self._raw)
+
+    def get(self, name, default=None):
+        return next((value.decode() for found, value in self._raw if found == name.encode()), default)
 
 
 class TestTheFailureSaysWhichResponseItCameFrom:
@@ -173,10 +229,19 @@ class TestWhatCountsAsAResponse:
             (True, {"Content-Type": "application/json"}),
             (42, {"Content-Type": "application/json"}),
             (999, {"Content-Type": "application/json"}),
+            (200.0, {"Content-Type": "application/json"}),
             (200, ["Content-Type"]),
             (200, None),
         ],
-        ids=["text status", "bool status", "below any status", "above any status", "headers as a list", "no headers"],
+        ids=[
+            "text status",
+            "bool status",
+            "below any status",
+            "above any status",
+            "float status",
+            "headers as a list",
+            "no headers",
+        ],
     )
     def test_an_impostor_is_not_read_as_a_response(self, status, headers):
         # a DataFrame answers to both names through its columns, and a mock answers to anything at all
@@ -218,8 +283,8 @@ class TestWhatCountsAsAResponse:
 class TestTheStepIntoTheBody:
     @pytest.mark.parametrize(
         "response",
-        [Fetched(), Flasked(), Django()],
-        ids=["a parser of its own", "get_json", "raw bytes"],
+        [Fetched(), Flasked(), Django(), Served()],
+        ids=["a parser of its own", "get_json", "raw bytes", "the body under body"],
     )
     def test_every_client_shape_is_parsed(self, response):
         assert_that(response).decoded_as_json().is_equal_to({"id": 7})
@@ -237,8 +302,11 @@ class TestTheStepIntoTheBody:
     def test_a_body_that_is_not_json_and_declares_no_type(self):
         response = Fetched(body="nope")
         response.headers = {}
-        with pytest.raises(ValueError, match="no content type was declared"):
+        with pytest.raises(ValueError) as failure:
             assert_that(response).decoded_as_json()
+        assert_that(str(failure.value)).is_equal_to(
+            "the response body is not JSON: no content type was declared and it starts with 'nope'"
+        )
 
     def test_headers_that_carry_no_content_type(self):
         response = Fetched(body="nope")
@@ -289,8 +357,11 @@ class TestTheStepIntoTheBody:
             status_code = 204
             headers = {"Content-Type": "application/json"}  # noqa: RUF012 - a stand-in, see above
 
-        with pytest.raises(TypeError, match="carries no body"):
+        with pytest.raises(TypeError) as failure:
             assert_that(Empty()).decoded_as_json()
+        assert_that(str(failure.value)).is_equal_to(
+            "the response carries no body this can read, under text, content, data or body"
+        )
 
     def test_a_parser_that_answers_none_rather_than_raising(self):
         # Flask's get_json() returns None for a body it will not parse, so its answer alone settles
@@ -321,12 +392,18 @@ class TestTheStepIntoTheBody:
 
     def test_an_empty_body_is_called_empty_rather_than_unreadable(self):
         response = Fetched(body="")
-        with pytest.raises(ValueError, match="it is empty"):
+        with pytest.raises(ValueError) as failure:
             assert_that(response).decoded_as_json()
+        assert_that(str(failure.value)).is_equal_to(
+            "the response body is not JSON: content-type is 'application/json' and it is empty"
+        )
 
     def test_a_value_that_is_not_a_response_is_refused(self):
-        with pytest.raises(TypeError, match="val must be an HTTP response"):
+        with pytest.raises(TypeError) as failure:
             assert_that(7).decoded_as_json()
+        assert_that(str(failure.value)).is_equal_to(
+            "val must be an HTTP response, with a status code and headers, but was <7> (int)"
+        )
 
     def test_the_preview_of_a_long_body_is_capped(self):
         response = Fetched(body="x" * 500, content_type="text/plain")
@@ -338,6 +415,42 @@ class TestTheStepIntoTheBody:
         # it transforms rather than asserts, so "to NOT decode" would be a message about nothing
         with pytest.raises(TypeError):
             assert_that(Fetched()).not_.decoded_as_json()
+
+    def test_a_body_name_that_is_a_reader_is_not_read_as_the_body(self):
+        """``text`` that has to be called is a reader, and the body is under the next name along."""
+        assert_that(Reading()).decoded_as_json().is_equal_to({"id": 7})
+
+    def test_the_step_keeps_the_failure_mode_it_was_given(self):
+        """A pivot inside a soft block stays soft, so the second failure is collected rather than raised."""
+        with pytest.raises(AssertionFailure) as failure, soft_assertions():
+            assert_that(Fetched()).decoded_as_json().is_equal_to({"id": 8})
+            assert_that(Fetched()).decoded_as_json().is_equal_to({"id": 9})
+        assert_that(str(failure.value)).contains("{'id': 8}").contains("{'id': 9}")
+
+    @pytest.mark.parametrize(
+        "response",
+        [Decoding(body='{"amount": 1.10}'), DecodingFlask(body=b'{"amount": 1.10}')],
+        ids=["json", "get_json"],
+    )
+    def test_the_clients_own_parser_is_what_parses(self, response):
+        """A decoder the client configured is honoured, so the document is its answer and not a re-parse."""
+        assert_that(response).decoded_as_json().is_equal_to({"amount": Decimal("1.10")})
+
+    @pytest.mark.parametrize(
+        "headers",
+        [
+            Headers([("Content-Type", "text/html; charset=utf-8")]),
+            RawHeaders([(b"content-type", b"text/html; charset=utf-8")]),
+        ],
+        ids=["wsgiref, which does not iterate at all", "raw ASGI pairs, which iterate as bytes"],
+    )
+    def test_a_header_container_that_answers_only_through_get(self, headers):
+        """Iteration finds nothing in either container, so the declared type comes from ``get()``."""
+        response = Fetched(body="nope")
+        response.headers = headers
+        with pytest.raises(ValueError) as failure:
+            assert_that(response).decoded_as_json()
+        assert_that(str(failure.value)).contains("content-type is 'text/html; charset=utf-8'")
 
 
 def _configure_django(django):
