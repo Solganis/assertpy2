@@ -15,6 +15,21 @@ from assertpy2.helpers import HelpersMixin
 from assertpy2.pytest_plugin import _format_diff
 
 
+class _Boxed:
+    """Unhashable, so the alignment keys on the repr - which every instance shares."""
+
+    __hash__ = None
+
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return isinstance(other, _Boxed) and self.value == other.value
+
+    def __repr__(self):
+        return "<boxed>"
+
+
 class _FakeModel:
     """A pydantic-shaped object: the engine reads ``model_dump()`` and never imports pydantic."""
 
@@ -1959,6 +1974,58 @@ class TestSequenceAlignment:
         assert_that(rendered).is_empty()
         assert_that(_diff_module._alignment_opcodes_if_useful(actual, [Counted(0), *actual])).is_not_none()
         assert_that(rendered).is_not_empty()
+
+    def test_a_repr_matched_pair_that_is_not_equal_is_still_reported(self):
+        """Reprs decide the pairing, so a pair difflib calls equal has only been shown to print alike."""
+
+        result = _build_equality_diff([_Boxed(1), _Boxed(2)], [_Boxed(3)])
+        rows = [(entry.path, entry.actual, entry.expected) for entry in result.entries]
+        assert_that(rows).is_equal_to([("[0]", _Boxed(1), _Boxed(3)), ("[1]", _Boxed(2), None)])
+
+    def test_a_value_keyed_pair_is_rechecked_with_the_operator_the_walk_uses(self):
+        """difflib matches hashable elements on ``==``, which a type may define apart from ``!=``."""
+
+        class Split:
+            def __hash__(self):
+                return 7
+
+            def __eq__(self, other):
+                return isinstance(other, Split)
+
+            def __ne__(self, other):
+                return True
+
+        result = _build_equality_diff([0, Split(), 2, 3], [9, 0, Split(), 2, 3])
+        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to(
+            [("expected[0]", "actual"), ("[1]", None)]
+        )
+
+    def test_elements_that_are_equal_but_print_differently_are_paired_by_value(self):
+        """`2 == 2.0` is a match difflib finds only on the values; on the reprs it reads as a third
+        difference, and the shift the reader wanted disappears into it."""
+
+        result = _build_equality_diff([1, "a", 2], [3, 2.0])
+        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to(
+            [("[0]", None), ("actual[1]", "expected")]
+        )
+
+    def test_a_repr_matched_run_is_revalidated_against_the_element_it_was_paired_with(self):
+        """Pairing the run against any other element can call a differing pair equal and drop it."""
+
+        result = _build_equality_diff([_Boxed(1), _Boxed(2)], [_Boxed(1), _Boxed(3), _Boxed(9), _Boxed(2)])
+        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to(
+            [("[1]", None), ("[2]", "actual"), ("[3]", "actual")]
+        )
+
+    def test_a_repr_matched_pair_inside_a_winning_alignment_is_reported_with_the_shift(self):
+        """Splitting the matched run must report the odd pair without costing the shift its win."""
+
+        actual = [{"id": 0}, {"id": 1}, _Boxed(1), {"id": 3}, {"id": 4}]
+        expected = [{"id": 9}, {"id": 0}, {"id": 1}, _Boxed(2), {"id": 3}, {"id": 4}]
+        result = _build_equality_diff(actual, expected)
+        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to(
+            [("expected[0]", "actual"), ("[2]", None)]
+        )
 
 
 class TestCaretsReachNestedTextLeaves:

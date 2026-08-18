@@ -219,6 +219,14 @@ class TestArrayLikeEqualityGuard:
             assert_that(5).is_equal_to(_FakeArray())
         assert_that(str(exc_info.value)).contains("_FakeArray")
 
+    def test_an_array_inside_two_sequences_of_different_lengths_is_still_named(self):
+        # the top-level `!=` that admitted the failure short-circuits on the first element and never
+        # reaches the array, so the diff is where it surfaces: unequal lengths send it through the
+        # alignment, which pairs by index before it can pair by anything else
+        with pytest.raises(TypeError) as exc_info:
+            assert_that([0, 1, _FakeArray(), 3, 4]).is_equal_to([9, 0, 1, _FakeArray(), 3, 4])
+        assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
+
     def test_scalar_array_like_is_not_rejected(self):
         # has __array__ but a truth-testable ==, so it must compare normally (no regression)
         assert_that(_FakeScalarArray()).is_equal_to(_FakeScalarArray())

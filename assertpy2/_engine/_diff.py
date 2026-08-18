@@ -32,7 +32,7 @@ import difflib
 from typing import TYPE_CHECKING, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
-from ._compare import _node_decision
+from ._compare import _guarded_not_equal, _node_decision
 from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
 from ._path import _ROOT, _Path
 
@@ -96,21 +96,71 @@ def _alignment_opcodes(actual, expected):
     calls any value filling more than 1% of a 200+ element sequence junk, which is exactly the repeated
     value an alignment has to match on.
 
+    `_rechecked_equal_runs()` is what makes the first paragraph true rather than merely intended, and
+    both branches go through it: neither of difflib's two notions of a match is this library's.  The
+    repr keying matches values that print alike, and the hashable keying matches on ``==``, while every
+    verdict here is reached with ``!=``.
+
     The length cap lives in the caller, which reaches it before paying for anything here.
     """
     try:
-        return difflib.SequenceMatcher(None, actual, expected, autojunk=False).get_opcodes()
+        opcodes = difflib.SequenceMatcher(None, actual, expected, autojunk=False).get_opcodes()
     except (TypeError, ValueError):
         pass
+    else:
+        return _rechecked_equal_runs(opcodes, actual, expected)
     try:
         keyed_actual = [_safe_repr(item) for item in actual]
         keyed_expected = [_safe_repr(item) for item in expected]
-        return difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
+        opcodes = difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
     # pragma: no cover - not reachable through a broken __repr__: `_safe_repr` swallows everything and
     # returns a str, and strs are always hashable. What is left is a value whose iteration fails after
     # `len()` on it succeeded, so the guard keeps that degrading to a positional diff instead of raising.
     except (TypeError, ValueError):  # pragma: no cover
         return None
+    return _rechecked_equal_runs(opcodes, actual, expected)
+
+
+def _rechecked_equal_runs(opcodes, actual, expected):
+    """Opcodes whose ``equal`` runs survive the comparison this library reaches its verdicts with.
+
+    A run difflib calls equal was matched on whatever it was keyed with, and neither key is the
+    verdict.  Keyed on reprs, the run is only known to *print* the same, and a shared repr is not
+    exotic: `_safe_repr()` renders every value of a type whose ``__repr__`` raises as the same string.
+    Keyed on the values, it is known to satisfy ``==``, which a type is free to define apart from
+    ``!=``.  Either way the pair would drop out of the diff and out of the message's elision, and the
+    failure would name a smaller difference than the one that caused it.
+
+    Compared through `_guarded_not_equal()`, the same operator `_node_decision()` reaches its verdict
+    with, so a run split back into a substitution is exactly a pair the walk will then report.  That
+    costs one comparison per matched element, on the failing path only and under the caller's length
+    cap.  Measured on 200 records with one inserted at the head: 0.38 ms to 0.48 ms for unhashable rows,
+    and 0.15 ms to 0.20 ms for hashable ones, which is the path most sequences take.
+    """
+    revalidated = []
+    for tag, actual_start, actual_stop, expected_start, expected_stop in opcodes:
+        if tag != "equal":
+            revalidated.append((tag, actual_start, actual_stop, expected_start, expected_stop))
+            continue
+        holds = [
+            not _guarded_not_equal(actual[actual_start + offset], expected[expected_start + offset])
+            for offset in range(actual_stop - actual_start)
+        ]
+        run_start = 0
+        for offset in range(1, len(holds) + 1):
+            if offset < len(holds) and holds[offset] == holds[run_start]:
+                continue
+            revalidated.append(
+                (
+                    "equal" if holds[run_start] else "replace",
+                    actual_start + run_start,
+                    actual_start + offset,
+                    expected_start + run_start,
+                    expected_start + offset,
+                )
+            )
+            run_start = offset
+    return revalidated
 
 
 def _aligned_match_indices(seq, counterpart) -> set[int] | None:
@@ -131,11 +181,17 @@ def _aligned_match_indices(seq, counterpart) -> set[int] | None:
 
 
 def _positional_difference_count(actual, expected) -> int:
-    """How many positions the two sequences differ at when paired by index."""
+    """How many positions the two sequences differ at when paired by index.
+
+    Guarded rather than bare ``!=``: an array member reached here has an element-wise ``==`` with no
+    single truth value, and the operand gate on the assertion never saw it - the top-level ``!=`` that
+    admitted the failure short-circuited on an earlier element.  Without the guard numpy's own
+    ``ValueError`` leaves the library in place of the actionable ``TypeError`` it promises.
+    """
     return sum(
         1
         for index in range(max(len(actual), len(expected)))
-        if index >= len(actual) or index >= len(expected) or actual[index] != expected[index]
+        if index >= len(actual) or index >= len(expected) or _guarded_not_equal(actual[index], expected[index])
     )
 
 
@@ -228,7 +284,7 @@ def _aligned_diff_entries(actual, expected, prefix, seen, config, opcodes) -> li
     entries: list[DiffEntry] = []
     for tag, actual_start, actual_stop, expected_start, expected_stop in opcodes:
         if tag == "equal" and config is None:
-            continue  # difflib matched these on ``==``, which is the whole test when no config narrows it
+            continue  # `_alignment_opcodes()` guarantees these compare equal, the whole test when no config narrows it
         for offset in range(max(actual_stop - actual_start, expected_stop - expected_start)):
             actual_index, expected_index = actual_start + offset, expected_start + offset
             if actual_index >= actual_stop:
