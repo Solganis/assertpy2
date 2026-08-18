@@ -54,6 +54,7 @@ from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
 from .helpers import HelpersMixin
+from .http_mixin import HttpMixin, response_note, response_of
 from .json_mixin import JsonMixin
 from .numeric import NumericMixin
 from .outcome import MISSING, AssertionOutcome
@@ -890,6 +891,7 @@ _TRANSFORMER_STEPS: Final = frozenset(
         "single",
         "decoded_as",
         "at_json_path",
+        "decoded_as_json",
     }
 )
 
@@ -1085,6 +1087,7 @@ class AssertionBuilder(
     SnapshotMixin,
     NumericMixin,
     JsonMixin,
+    HttpMixin,
     HelpersMixin,
     FileMixin,
     ExtractingMixin,
@@ -1257,6 +1260,11 @@ class AssertionBuilder(
         """
         pivoted = _builder(val, description, kind, expected, logger)
         pivoted._value_origin = origin
+        # the response this value came from, kept across the pivot: by the time an assertion on a parsed
+        # body fails, the response itself is out of reach of everything downstream
+        # `is not None` and not `or`: a `requests.Response` is falsey for every 4xx and 5xx, which is
+        # exactly the response whose provenance a reader needs
+        pivoted._response = self._response if self._response is not None else response_of(self.val)
         return pivoted
 
     def error(self, msg, *, actual=MISSING, expected=MISSING, diff=None, trace=None, suppress_context=False) -> Self:
@@ -1312,6 +1320,11 @@ class AssertionBuilder(
             # on its own line, like the comparison-settings echo, so the original message stays a
             # prefix and a `match=` or `startswith` written against it keeps working
             out = f"{out}\n{hint}"
+        response = self._response if self._response is not None else response_of(self.val)
+        note = response_note(response) if response is not None else None
+        if note is not None:
+            # last, under the explanation: it says where the value came from, not why it differs
+            out = f"{out}\n{note}"
         return AssertionOutcome(
             message=out,
             actual=actual if provided else self.val,

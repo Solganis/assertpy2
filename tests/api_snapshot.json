@@ -393,6 +393,11 @@
    ],
    "returns": "Self"
   },
+  "decoded_as_json": {
+   "kind": "callable",
+   "parameters": [],
+   "returns": "Self"
+  },
   "described_as": {
    "kind": "callable",
    "parameters": [

@@ -6,11 +6,19 @@ if TYPE_CHECKING:
     import logging
 
     from ..errors import DiffResult
+    from ..http_mixin import _Response
     from ._compare import _CompareConfig
     from ._compat import Self
 
 
 class _MixinBase:
+    _response: _Response | None = None
+    """The HTTP response this value came from, when it came from one.
+
+    Carried by every pivot rather than looked up at the end, because the response is gone by the time a
+    failure is composed over its parsed body.
+    """
+
     _equality_comparison = False
     """Whether the failure being reported came from asking whether two values are equal.
 
