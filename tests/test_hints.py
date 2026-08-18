@@ -15,7 +15,7 @@ import pytest
 
 from assertpy2 import assert_that
 from assertpy2._engine._path import _ROOT
-from assertpy2._hints import _explains, diagnose
+from assertpy2._hints import _explains, diagnose, identity_candidate
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 
 
@@ -43,7 +43,7 @@ def _hint(actual, expected):
     """The diagnostic line alone, or ``None``, without the message it would be printed under."""
     with pytest.raises(AssertionFailure) as failure:
         assert_that(actual).is_equal_to(expected)
-    return diagnose(failure.value.diff, actual, expected)
+    return diagnose(failure.value.diff, actual, expected, identity=identity_candidate(actual, expected))
 
 
 class TestTheHintNamesTheWholeDifference:
@@ -461,3 +461,216 @@ class TestBytesReadTheSameAsText:
 
     def test_one_side_bytes_still_reads_as_encoding(self):
         assert_that(_message(b"x", "x")).contains("bytes against decoded text")
+
+
+class _NoEq:
+    """A class that leaves equality alone, which is what every class does until it does not."""
+
+    def __init__(self, name, city):
+        self.name, self.city = name, city
+
+
+class _AlwaysUnequal:
+    def __init__(self, value):
+        self.value = value
+
+    def __eq__(self, other):
+        return False
+
+    __hash__ = None
+
+
+@dataclasses.dataclass(eq=False)
+class _OptedOut:
+    name: str
+
+
+class TestEqualityDecidedByIdentity:
+    """The failure that can never pass, and whose message gives the reader nothing to act on.
+
+    A type that leaves ``==`` to ``object`` is equal only to itself, so an expected value a test built
+    is not equal to the one the code returned however well the two agree. Said before anything about
+    the values, like the NaN fact, because no value on the other side would have helped.
+    """
+
+    def test_two_objects_of_a_type_that_defines_no_equality(self):
+        assert_that(_message(_NoEq("ada", "london"), _NoEq("ada", "london"))).contains("compare with object's __eq__")
+
+    def test_it_is_said_where_the_values_differ_too(self):
+        # the reader would otherwise fix the field and fail again on the same line
+        assert_that(_hint(_NoEq("ada", "london"), _NoEq("ada", "paris"))).contains("equality is identity")
+
+    def test_a_dataclass_that_opted_out_of_equality(self):
+        # the diff has no entries at all here: every field agrees and the walk has nothing to report
+        assert_that(_message(_OptedOut("ada"), _OptedOut("ada"))).contains("equality is identity")
+
+    def test_a_dataclass_that_opted_out_and_whose_fields_differ(self):
+        # the diff does show the field, and fixing it would still not make the comparison pass
+        assert_that(_message(_OptedOut("ada"), _OptedOut("grace"))).contains("equality is identity")
+
+    def test_two_exceptions_of_one_class(self):
+        # the everyday form of this trap: exceptions carry identity equality and tests compare them
+        assert_that(_hint(ValueError("boom"), ValueError("boom"))).contains("equality is identity")
+
+    def test_an_object_nested_in_a_structure_is_left_alone(self):
+        # what decided the comparison above the pair is the enclosing type's own `__eq__`, which may be
+        # anything, so a difference found under one says nothing about why the comparison failed
+        left, right = {"user": _NoEq("ada", "london")}, {"user": _NoEq("ada", "london")}
+        assert_that(_message(left, right)).does_not_contain("identity")
+
+    def test_a_type_that_defines_equality_is_not_blamed_for_identity(self):
+        assert_that(_hint(_AlwaysUnequal(1), _AlwaysUnequal(1))).is_none()
+
+    def test_a_type_deciding_its_own_inequality_is_not_blamed_either(self):
+        # the comparison a failing assertion runs is `actual != expected`, which this type answers
+        class Contrary:
+            def __init__(self, value):
+                self.value = value
+
+            def __ne__(self, other):
+                return True
+
+            __hash__ = None
+
+        assert_that(_hint(Contrary(1), Contrary(1))).is_none()
+
+    @pytest.mark.parametrize(
+        "options",
+        [
+            {"comparators": {_NoEq: lambda actual, expected: False}},
+            {"tolerance": 0.1},
+            {"strict_types": True},
+            {"ignore_null": True},
+            {"ignore": "nothing"},
+            {"include": "city"},
+        ],
+        ids=["comparators", "tolerance", "strict types", "ignore null", "ignore", "include"],
+    )
+    def test_a_walked_comparison_is_not_blamed_on_identity(self, options):
+        # every option replaces `==` with a walk over keys or fields, under which two separate instances
+        # of this type do compare equal, so nothing here is decided by identity
+        message = _message(_NoEq("ada", "london"), _NoEq("ada", "paris"), **options)
+        assert_that(message).does_not_contain("identity")
+
+    def test_a_mapping_of_its_own_is_walked_and_so_is_not_blamed_either(self):
+        # a duck-typed mapping goes down the key walk rather than to `==`
+        class Headers:
+            def __init__(self, data):
+                self._data = data
+
+            def keys(self):
+                return self._data.keys()
+
+            def items(self):
+                return self._data.items()
+
+            def __getitem__(self, key):
+                return self._data[key]
+
+            def __iter__(self):
+                return iter(self._data)
+
+            def __len__(self):
+                return len(self._data)
+
+        assert_that(_message(Headers({"a": 1}), Headers({"a": 2}))).does_not_contain("identity")
+
+    def test_a_containment_failure_over_the_same_values_is_not_it(self):
+        # the items are the same objects and only their order differs, which the message already says,
+        # and identity had nothing to do with it
+        left, right = _NoEq("ada", "london"), _NoEq("grace", "london")
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([left, right]).contains_exactly(right, left)
+        assert_that(str(failure.value)).does_not_contain("identity")
+
+    def test_a_mixture_with_an_ordinary_difference_says_nothing(self):
+        left = {"user": _NoEq("ada", "london"), "id": 1}
+        right = {"user": _NoEq("ada", "london"), "id": 2}
+        assert_that(_message(left, right)).does_not_contain("identity")
+
+    def test_two_sides_of_different_types_are_not_it(self):
+        assert_that(_hint(_NoEq("ada", "london"), _AlwaysUnequal(1))).is_none()
+
+    def test_the_same_object_on_both_sides_is_not_it(self):
+        # it compares equal under identity, so a failure can never be about that
+        value = _NoEq("ada", "london")
+        assert_that(identity_candidate(value, value)).is_false()
+
+    def test_a_type_that_rewrites_its_own_equality_mid_comparison_is_not_it(self):
+        # the question is asked before the comparison runs, so the type that decided the failure is the
+        # one answering it, not the one it left behind
+        class Sneaky:
+            def __init__(self, value):
+                self.value = value
+
+            def __ne__(self, other):
+                Sneaky.__ne__ = object.__ne__
+                return True
+
+            __hash__ = None
+
+        assert_that(_message(Sneaky(1), Sneaky(1))).does_not_contain("identity")
+
+    def test_a_descriptor_answering_for_the_class_is_not_believed(self):
+        # what an operator runs is the definition the class tree carries, and a descriptor can answer
+        # one way for the class and another for an instance
+        class Deceptive:
+            class Equality:
+                def __get__(self, instance, owner=None):
+                    return object.__eq__ if instance is None else (lambda other: False)
+
+            __eq__ = Equality()
+            __hash__ = None
+
+            def __init__(self, value):
+                self.value = value
+
+        assert_that(_hint(Deceptive(1), Deceptive(1))).is_none()
+
+    def test_a_type_inheriting_its_equality_is_still_read(self):
+        # the walk stops at the first class that defines the name, which may be a base
+        class Base:
+            def __eq__(self, other):
+                return False
+
+            __hash__ = None
+
+        class Child(Base):
+            def __init__(self, value):
+                self.value = value
+
+        assert_that(_hint(Child(1), Child(1))).is_none()
+
+    def test_the_operator_is_asked_about_rather_than_the_class_attribute(self):
+        # a metaclass can answer for `__eq__` with something other than what the operator runs, so the
+        # lookup is static: this type compares by value and must not be called identity-based
+        class Sneaky(type):
+            def __getattribute__(cls, name):
+                if name in ("__eq__", "__ne__"):
+                    return getattr(object, name)
+                return super().__getattribute__(name)
+
+        class ByValue(metaclass=Sneaky):
+            def __init__(self, value):
+                self.value = value
+
+            def __eq__(self, other):
+                return isinstance(other, ByValue) and self.value == other.value
+
+            __hash__ = None
+
+        assert_that(_hint(ByValue(1), ByValue(2))).is_none()
+
+    def test_a_type_that_cannot_be_asked_about_its_equality_is_survived(self):
+        # the failure is already on its way out, and a diagnostic that raises would replace it
+        class Hostile(type):
+            def __getattribute__(cls, name):
+                if name == "__eq__":
+                    raise RuntimeError("no lookups here")
+                return super().__getattribute__(name)
+
+        class Guarded(metaclass=Hostile):
+            def __init__(self, value):
+                self.value = value
+
+        assert_that(_message(Guarded(1), Guarded(1))).contains("to be equal to")

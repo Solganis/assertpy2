@@ -310,7 +310,33 @@ except AssertionError as failure:
     # a NaN takes part in this comparison, and a NaN is equal to nothing, not even itself
 ```
 
-Like the settings echo above, it sits below the sentence, so anything written against the original
+The other failure that leaves a reader stuck is two values that print the same and are not equal. A
+class that defines no `__eq__` compares by identity, so an expected value your test built is never
+equal to the one the code returned, however well they agree:
+
+```python
+from assertpy2 import assert_that
+
+
+class Order:
+    def __init__(self, id, total):
+        self.id, self.total = id, total
+
+
+try:
+    assert_that(Order(7, 10.0)).is_equal_to(Order(7, 10.0))
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # these values compare with object's __eq__, so equality is identity and no two separate instances are equal
+```
+
+It is said before anything about the values, for the reason `NaN` is: no value on the other side would
+have made the comparison pass, so a line about how the two differ would send you to fix something that
+cannot help. Exceptions are the everyday case, since they carry identity equality too. A
+`comparators=` entry of your own owning the values silences it, the verdict there being your
+predicate's rather than the type's.
+
+Like the settings echo above, both sit below the sentence, so anything written against the original
 message keeps working.
 
 ### Polling failures carry a trace

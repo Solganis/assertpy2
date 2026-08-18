@@ -18,11 +18,13 @@ from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len
+from ._hints import identity_candidate
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
+    from ._engine._compare import _CompareConfig
     from ._engine._compat import Self
 
 __tracebackhide__ = True
@@ -222,6 +224,15 @@ class BaseMixin(SatisfiesMixin):
         if operand is not None:
             raise _array_equality_error("is_equal_to", operand)
 
+        # the flag `_compare_to` may set is cleared however this leaves, since a soft block goes on
+        # using the builder after a failure it collected
+        try:
+            return self._compare_to(other, ignore=ignore, include=include, config=config)
+        finally:
+            self._equality_comparison = False
+
+    def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
+        """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
         if config is not None and config.strict_types and _types_differ(self.val, other):
             # the dispatch below routes two dict-likes straight into the key walk, which never sees the
             # pair itself, so an OrderedDict against a dict would otherwise pass a strict comparison
@@ -259,6 +270,11 @@ class BaseMixin(SatisfiesMixin):
                     diff=diff,
                 )
         else:
+            # the one branch that decides with `==`, which is what makes identity worth reporting: every
+            # path above walks keys or fields instead, and under a walk two separate instances of a type
+            # that defines no `__eq__` do compare equal. Asked before the comparison, since a type is
+            # free to rewrite its own `__eq__` while answering one
+            self._equality_comparison = identity_candidate(self.val, other)
             if _guarded_not_equal(self.val, other):
                 if _both_list_like(self.val, other):
                     actual_repr = _truncated(_elided_seq_repr(self.val, other))
