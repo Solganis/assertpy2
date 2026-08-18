@@ -31,8 +31,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # Pinned, because the gate compares one commit to the next and nothing else should move between
+      # them. Left to resolve, `uv run` takes whatever interpreter the runner image happens to carry,
+      # and a change there shifts every benchmark at once. 3.14 is the release the rest of CI already
+      # standardises on; a beta is the wrong choice here, since every beta build moves the numbers.
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          python-version: "3.14"
 
       - name: Run benchmarks under CodSpeed
         uses: CodSpeedHQ/action@4296e51e7041e24dadb86d1d6e8b9320d223dbe8 # v5.0.3
