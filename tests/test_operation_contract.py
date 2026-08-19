@@ -1,0 +1,299 @@
+"""Hold the two proxies to the operations that actually reach a verdict.
+
+`not_` inverts a verdict and `check()` reports one, so an operation that reaches neither means nothing
+through either.  Both used to take them: `assert_that(1).not_.check()` failed with "Expected <1> to NOT
+satisfy: check()", and `assert_that([1]).check().first()` answered `passed=True` for a pivot that had
+asserted nothing at all.  The second is the worse of the two, because it reads as a verdict.
+
+Two halves.  The register in `assertpy2/_engine/_operations.py` is re-derived from the source here, so
+an operation that stops asserting cannot quietly stay negatable.  And the refusals are exercised, so
+the register is not just a list that agrees with itself.
+"""
+
+from __future__ import annotations
+
+import ast
+import pathlib
+
+import pytest
+
+from assertpy2 import add_extension, assert_that, assert_warn, remove_extension, soft_assertions
+from assertpy2._engine._operations import (
+    CONFIGURES,
+    DESCRIBES,
+    NOT_AN_OPERATION,
+    POLLS,
+    TRANSFORMS,
+    WITHOUT_A_VERDICT,
+)
+
+_PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "assertpy2"
+
+
+def _self_calls(method: ast.FunctionDef) -> set[str]:
+    return {
+        node.func.attr
+        for node in ast.walk(method)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "self"
+    }
+
+
+def _bodies() -> tuple[dict[str, ast.FunctionDef], set[str]]:
+    """Every method of the classes `AssertionBuilder` is composed of, and the public names among them.
+
+    Only the mixins.  Reading every class in the package puts the matcher API in the same namespace,
+    where `equal_to` and `is_positive` exist too, and the last definition walked wins: the collision
+    that made the first version of this classify `is_positive` as a describer.
+    """
+    bodies: dict[str, ast.FunctionDef] = {}
+    public: set[str] = set()
+    for path in sorted(_PACKAGE.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for klass in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
+            # and the builder itself, which declares a few operations of its own rather than
+            # inheriting them: the two polls live there, and a mixin-only walk called them asserting
+            if not klass.name.endswith("Mixin") and klass.name != "AssertionBuilder":
+                continue
+            for method in (item for item in klass.body if isinstance(item, ast.FunctionDef)):
+                bodies[method.name] = method
+                if not method.name.startswith("_"):
+                    public.add(method.name)
+    return bodies, public
+
+
+def _reaches_a_verdict(name: str, bodies: dict[str, ast.FunctionDef], seen: frozenset[str]) -> bool:
+    """Whether *name* can reach `self.error()`, the one failure entry point every assertion goes through.
+
+    Delegation is followed through public names as well as private ones, because an assertion often
+    delegates to another: `is_positive()` calls `is_greater_than(0)` and reaches the failure through
+    it.  Following only the private helpers read a third of the surface as asserting nothing.
+    """
+    if name in seen or name not in bodies:
+        return False
+    calls = _self_calls(bodies[name])
+    if "error" in calls:
+        return True
+    return any(_reaches_a_verdict(call, bodies, seen | {name}) for call in calls)
+
+
+@pytest.fixture(scope="module")
+def derived() -> set[str]:
+    """The public operations that reach no verdict, read from the source rather than from the register."""
+    bodies, public = _bodies()
+    return {name for name in public if not _reaches_a_verdict(name, bodies, frozenset())}
+
+
+class TestTheRegisterDescribesTheSurface:
+    def test_the_derivation_itself_ran(self, derived):
+        # a walk that found nothing would agree with any register, so the counts come first
+        _bodies_unused, public = _bodies()
+        assert_that(public).described_as("public operations found").is_length_between(120, 200)
+        assert_that(derived).described_as("operations reaching no verdict").is_not_empty()
+
+    def test_every_operation_without_a_verdict_is_registered(self, derived):
+        assert_that(sorted(derived)).described_as(
+            "an operation that asserts nothing and is not in WITHOUT_A_VERDICT would be negatable"
+        ).is_equal_to(sorted(set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION))
+
+    def test_no_registered_operation_actually_asserts(self, derived):
+        bodies, _public = _bodies()
+        asserting = [
+            name for name in set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION if _reaches_a_verdict(name, bodies, frozenset())
+        ]
+        assert_that(asserting).described_as("registered as reaching no verdict, but it does").is_empty()
+
+    def test_each_category_has_members(self):
+        # a category nothing uses is a category nobody maintains, and its message rots unread
+        for category in (CONFIGURES, TRANSFORMS, DESCRIBES, POLLS):
+            members = [name for name, kind in WITHOUT_A_VERDICT.items() if kind == category]
+            assert_that(members).described_as(f"operations registered as {category}").is_not_empty()
+
+
+class TestWhatTheProxiesRefuse:
+    """The other half: the register is exercised rather than only compared against itself."""
+
+    @pytest.mark.parametrize(
+        ("call", "expected"),
+        [
+            (lambda: assert_that(lambda: None).not_.raises(ValueError), "only sets an expectation"),
+            (lambda: assert_that(lambda: None).not_.warns(UserWarning), "only sets an expectation"),
+            (lambda: assert_that([1]).not_.first(), "hands back a different value"),
+            (lambda: assert_that([1]).not_.mapped(str), "hands back a different value"),
+            (lambda: assert_that(1).not_.described_as("x"), "only sets the failure description"),
+            (lambda: assert_that(lambda: 1).not_.eventually(), "runs a whole chain"),
+        ],
+        ids=["configures", "configures-warning", "transforms", "transforms-pivot", "describes", "polls"],
+    )
+    def test_negating_an_operation_that_reaches_no_verdict_is_refused(self, call, expected):
+        with pytest.raises(TypeError, match=expected) as caught:
+            call()
+        assert_that(str(caught.value)).described_as("the refusal has to say what to do instead").contains("instead")
+
+    @pytest.mark.parametrize(
+        ("call", "expected"),
+        [
+            (lambda: assert_that(lambda: None).check().raises(ValueError), "only sets an expectation"),
+            (lambda: assert_that([1]).check().first(), "hands back a different value"),
+            (lambda: assert_that(1).check().described_as("x"), "only sets the failure description"),
+            (lambda: assert_that(lambda: 1).check().eventually(), "runs a whole chain"),
+        ],
+        ids=["configures", "transforms", "describes", "polls"],
+    )
+    def test_asking_for_a_verdict_where_there_is_none_is_refused(self, call, expected):
+        # the worse half of the two: this used to answer `passed=True`, which reads as an assertion
+        # that ran and held rather than as one that never happened
+        with pytest.raises(TypeError, match=expected):
+            call()
+
+    def test_the_proxies_refuse_each_other_where_the_order_is_wrong(self):
+        with pytest.raises(TypeError, match=r"call check\(\)\.not_ before the assertion"):
+            assert_that(1).not_.check()
+        with pytest.raises(TypeError, match=r"one check\(\) is enough"):
+            assert_that(1).check().check()
+
+    def test_two_negations_are_refused_rather_than_cancelling_or_doubling(self):
+        """They used to behave as one, which is neither what a reader expects nor an error.
+
+        Refused rather than treated as the identity: `not_.not_` reads as a puzzle either way, and a
+        silent no-op is the shape a generated or copy-pasted chain arrives in.
+        """
+        with pytest.raises(TypeError, match="two negations cancel"):
+            _ = assert_that(1).not_.not_
+
+    def test_what_the_proxies_still_accept(self):
+        assert_that(-1).not_.is_positive()
+        assert_that(assert_that(1).check().is_positive().passed).is_true()
+        assert_that(assert_that(1).check().not_.is_positive().passed).is_false()
+        # the pivot itself keeps working, and so does asking the assertion after it for a verdict
+        assert_that(assert_that([1, 2]).first().check().is_positive().passed).is_true()
+        # the configurer keeps working through the ordinary path, which is the whole point of
+        # refusing it through the proxies rather than removing it
+        assert_that(lambda: None).does_not_raise(ValueError).when_called_with()
+        assert_that(assert_that(lambda: None).does_not_raise(ValueError).check().when_called_with().passed).is_true()
+
+
+class TestTheRefusalHoldsInEveryMode:
+    """A refusal that only fires in strict mode is a refusal half the suites never see.
+
+    The proxies are reached the same way under `soft_assertions()` and `assert_warn()`, where a failure
+    is collected rather than raised.  The refusal is not a failure of the assertion, though: it says the
+    call itself is a mistake, so it raises in every mode rather than being collected as a result.
+    """
+
+    def test_a_refusal_raises_under_soft_assertions(self):
+        with soft_assertions(), pytest.raises(TypeError, match="hands back a different value"):
+            assert_that([1]).not_.first()
+
+    def test_a_refusal_raises_under_assert_warn(self):
+        with pytest.raises(TypeError, match="hands back a different value"):
+            assert_warn([1]).not_.first()
+
+    def test_a_refusal_raises_inside_the_check_proxy_too(self):
+        with pytest.raises(TypeError, match="only sets the failure description"):
+            assert_that(1).check().not_.described_as("x")
+
+    def test_an_extension_is_negatable_because_it_asserts(self):
+        """A registered extension reaches the failure path, so nothing here should stand in its way."""
+
+        def is_five(self):
+            if self.val != 5:
+                self.error(f"Expected <{self.val}> to be five")
+            return self
+
+        add_extension(is_five)
+        try:
+            assert_that(4).not_.is_five()
+            assert_that(assert_that(5).check().is_five().passed).is_true()
+        finally:
+            remove_extension(is_five)
+
+    def test_an_override_takes_the_name_out_of_the_register(self):
+        """The register describes *this library's* operations, and an override replaces one.
+
+        `add_extension(..., override=True)` is documented, and an extension that asserts under a name
+        the register calls a pivot has to stay negatable: refusing it would judge somebody else's
+        method by what ours used to do.  Both registration paths are read, because a plain function
+        lands on the extended builder through the descriptor protocol and a callable object does not.
+        """
+
+        def first(self):
+            if not self.val:
+                self.error("empty")
+            return self
+
+        class _Mapped:
+            __name__ = "mapped"
+
+            def __call__(self, builder, *args):
+                builder.error("nope")
+                return builder
+
+        replaced_mapped = _Mapped()
+        add_extension(first, override=True)
+        add_extension(replaced_mapped, override=True)
+        try:
+            # the override fails on an empty value, so negating it there is what holds
+            assert_that([]).not_.first()
+            assert_that(assert_that([1]).check().first().passed).is_true()
+            assert_that([1]).not_.mapped()
+        finally:
+            remove_extension(first)
+            remove_extension(replaced_mapped)
+        # and the refusal comes back once the override is gone, so this is not a one-way door
+        with pytest.raises(TypeError, match="hands back a different value"):
+            assert_that([1]).not_.first()
+
+    def test_a_callable_override_is_judged_per_builder_rather_than_per_registry(self):
+        """The two ways an extension is applied have different lifetimes, and the guard follows them.
+
+        A plain function is set on the extended builder and every instance sees it at once.  A
+        non-function callable is grafted per instance at construction, so a builder made before the
+        extension was registered keeps the built-in and one made before it was removed keeps the
+        override.  Reading a global registry got both backwards, and the first of them then failed with
+        `CollectionMixin.mapped() missing 1 required positional argument`, which describes nothing a
+        caller did.
+        """
+
+        class _Mapped:
+            __name__ = "mapped"
+
+            def __call__(self, builder, *args):
+                builder.error("nope")
+                return builder
+
+        override = _Mapped()
+        made_before = assert_that([1])
+        add_extension(override, override=True)
+        made_during = assert_that([1])
+        try:
+            with pytest.raises(TypeError, match="hands back a different value"):
+                made_before.not_.mapped()
+            made_during.not_.mapped()
+        finally:
+            remove_extension(override)
+        # the grafted method is still on that instance, so it stays negatable after the removal
+        made_during.not_.mapped()
+
+    def test_an_override_of_a_proxy_entry_follows_the_same_rule(self):
+        """`check` and `not_` are refused as entrances, and an extension over one is not ours to refuse.
+
+        Overriding them is a strange thing to write.  The point is that the rule is one rule: the guard
+        judges what the builder holds, and applying it to the register while the proxy entries kept
+        judging by name would have left exactly the inconsistency this contract exists to remove.
+        """
+
+        def check(self):
+            if self.val != 5:
+                self.error("not five")
+            return self
+
+        add_extension(check, override=True)
+        try:
+            assert_that(4).not_.check()
+        finally:
+            remove_extension(check)
+        with pytest.raises(TypeError, match=r"call check\(\)\.not_ before the assertion"):
+            assert_that(1).not_.check()
