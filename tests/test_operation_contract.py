@@ -19,6 +19,7 @@ import pytest
 
 from assertpy2 import add_extension, assert_that, assert_warn, remove_extension, soft_assertions
 from assertpy2._engine._operations import (
+    ALSO_ASSERTS,
     CONFIGURES,
     DESCRIBES,
     NOT_AN_OPERATION,
@@ -79,11 +80,47 @@ def _reaches_a_verdict(name: str, bodies: dict[str, ast.FunctionDef], seen: froz
     return any(_reaches_a_verdict(call, bodies, seen | {name}) for call in calls)
 
 
+def _hands_back_another_value(name: str, bodies: dict[str, ast.FunctionDef], seen: frozenset[str]) -> bool:
+    """Whether *name* builds its next step around a value other than the one under test.
+
+    Derived rather than judged, and it is the reliable half: a pivot is visible in the call it makes.
+    Whether a pivot *also* tests an expectation on the way is not derivable, which is why the register
+    names those and this gate refuses anything it has not been told about.
+    """
+    if name in seen or name not in bodies:
+        return False
+    for node in ast.walk(bodies[name]):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "builder"
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "self"
+            and node.args
+            and ast.unparse(node.args[0]) != "self.val"
+        ):
+            return True
+    return any(_hands_back_another_value(call, bodies, seen | {name}) for call in _self_calls(bodies[name]))
+
+
 @pytest.fixture(scope="module")
 def derived() -> set[str]:
-    """The public operations that reach no verdict, read from the source rather than from the register."""
+    """The public operations that reach no verdict, read from the source rather than from the register.
+
+    Two signals, because one was not enough.  An operation that never reaches `self.error()` clearly
+    reports nothing.  An operation that *pivots* reports nothing either, unless it tests an expectation
+    on the way, and reaching the failure path does not tell those apart: `errors()` reaches it only
+    through the gate that refuses a subject which is not a group.  Which pivots also assert is named in
+    `ALSO_ASSERTS` rather than derived, and `test_every_operation_that_pivots_has_been_decided_about`
+    is what stops that register from going stale.
+    """
     bodies, public = _bodies()
-    return {name for name in public if not _reaches_a_verdict(name, bodies, frozenset())}
+    return {
+        name
+        for name in public
+        if not _reaches_a_verdict(name, bodies, frozenset())
+        or (_hands_back_another_value(name, bodies, frozenset()) and name not in ALSO_ASSERTS)
+    }
 
 
 class TestTheRegisterDescribesTheSurface:
@@ -99,11 +136,59 @@ class TestTheRegisterDescribesTheSurface:
         ).is_equal_to(sorted(set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION))
 
     def test_no_registered_operation_actually_asserts(self, derived):
+        # a registered pivot may still reach the failure path through a precondition, so what would be
+        # wrong is a *non-pivot* in the register that asserts: that one has a verdict and is being hidden
         bodies, _public = _bodies()
         asserting = [
-            name for name in set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION if _reaches_a_verdict(name, bodies, frozenset())
+            name
+            for name in set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION
+            if _reaches_a_verdict(name, bodies, frozenset())
+            and not _hands_back_another_value(name, bodies, frozenset())
         ]
         assert_that(asserting).described_as("registered as reaching no verdict, but it does").is_empty()
+
+    def test_every_operation_that_pivots_has_been_decided_about(self):
+        """The gate that would have caught `errors()`, which the first version could not.
+
+        `errors()` hands the leaves of a caught group over as a list and takes no expectation, so once
+        a group has been caught there is nothing it can be wrong about: `check().errors()` answered
+        `passed=True` for every group and `not_.errors()` failed for every group.  It reached
+        `self.error()` all the same, through the gate that refuses a subject which is not a group, and
+        "reaches the failure path" cannot tell that apart from a verdict.
+
+        So the derivation is narrowed to the half that is reliable, and the register carries the half
+        that is not.  A new pivot lands here until someone says whether it also asserts.
+        """
+        bodies, public = _bodies()
+        pivots = {name for name in public if _hands_back_another_value(name, bodies, frozenset())}
+        decided = {name for name, kind in WITHOUT_A_VERDICT.items() if kind == TRANSFORMS} | ALSO_ASSERTS
+        assert_that(sorted(pivots)).described_as(
+            "an operation that hands back another value and nobody said whether it also asserts"
+        ).is_equal_to(sorted(decided))
+
+    def test_every_hybrid_can_be_wrong_about_something(self):
+        """The other direction: a name in `ALSO_ASSERTS` that asserts nothing is `errors()` again.
+
+        Read from the arguments rather than from the call graph.  An operation with an expectation to
+        test takes it as a parameter, and `errors()` is the one that took none.
+        """
+        bodies, _public = _bodies()
+        # every way a parameter can be spelled, not the two the current six happen to use: a hybrid
+        # written `def caused_by(self, *, ex: type)` would otherwise be rejected for taking nothing
+        without_an_expectation = [
+            name
+            for name in ALSO_ASSERTS
+            if name in bodies
+            and not (
+                bodies[name].args.args[1:]
+                or bodies[name].args.vararg
+                or bodies[name].args.kwonlyargs
+                or bodies[name].args.kwarg
+            )
+        ]
+        assert_that(without_an_expectation).described_as(
+            "registered as also asserting, but it takes nothing to be wrong about"
+        ).is_empty()
 
     def test_each_category_has_members(self):
         # a category nothing uses is a category nobody maintains, and its message rots unread
