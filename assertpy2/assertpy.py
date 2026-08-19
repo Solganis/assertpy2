@@ -960,12 +960,32 @@ class NegatedBuilder(Generic[_S]):
         desc = f"[{self._builder.description}] " if self._builder.description else ""
         return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}()"
 
+    def _verdict(self, attr: Callable[..., object], *args: object, **kwargs: object) -> AssertionOutcome | None:
+        """What the underlying assertion decided, or ``None`` when it held.
+
+        Run in check mode, the one mode that hands a verdict back instead of delivering it.  That is
+        what separates a verdict from an accident: anything still raised by the call came out of the
+        value or out of an assertion nested inside it, and inverting *that* turns a break into a pass.
+
+        Catching an exception class cannot make the distinction, whatever class is chosen.  A comparator
+        that asserts with this library raises this library's own failure, and it is still not the
+        verdict of the assertion being negated.  `_negated_check()` has always read the sink instead;
+        the other three modes now do the same.
+        """
+        builder = self._builder
+        kind, sink = builder.kind, builder._check_sink
+        builder.kind = "check"
+        builder._check_sink = None
+        try:
+            attr(*args, **kwargs)
+            return builder._check_sink
+        finally:
+            builder.kind, builder._check_sink = kind, sink
+
     def _negated_strict(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        try:
-            attr(*args, **kwargs)
-        except (AssertionError, AssertionFailure):
+        if self._verdict(attr, *args, **kwargs) is not None:
             return self._builder
         # the message is composed here rather than by `error()`, which would prefix the description a
         # second time, but the exception is the builder's own: a negated failure is a failure
@@ -974,17 +994,10 @@ class NegatedBuilder(Generic[_S]):
     def _negated_soft(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
+        if self._verdict(attr, *args, **kwargs) is not None:
+            return self._builder  # the assertion failed, so the negation held
         block = _collecting()
         err_list = block.failures if block is not None else []
-        before = len(err_list)
-        taint_before = self._builder._value_taint_reason
-        attr(*args, **kwargs)
-        if len(err_list) > before:
-            # underlying assertion failed, so the negation passed: roll back the collected soft
-            # error and the taint that failure set, keeping any pre-existing taint
-            del err_list[before:]
-            self._builder._value_taint_reason = taint_before
-            return self._builder
         # underlying assertion passed, so the negation failed: collect it and taint .value
         msg = self._make_msg(name)
         if self._builder._value_taint_reason is None:
@@ -1002,11 +1015,7 @@ class NegatedBuilder(Generic[_S]):
     def _negated_check(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        # the underlying assertion is in verdict mode too, so it lands in the sink rather than raising,
-        # and reading the sink is how this tells which way it went
-        self._builder._check_sink = None
-        attr(*args, **kwargs)
-        if self._builder._check_sink is not None:
+        if self._verdict(attr, *args, **kwargs) is not None:
             self._builder._check_sink = None  # it failed, so the negation held
             return self._builder
         self._builder._check_sink = AssertionOutcome(message=self._make_msg(name), actual=self._builder.val)
@@ -1015,13 +1024,8 @@ class NegatedBuilder(Generic[_S]):
     def _negated_warn(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        self._builder.kind = None
-        try:
-            attr(*args, **kwargs)
-        except (AssertionError, AssertionFailure):
-            return self._builder
-        finally:
-            self._builder.kind = "warn"
+        if self._verdict(attr, *args, **kwargs) is not None:
+            return self._builder  # the assertion failed, so the negation held
         # underlying assertion passed, so the negation failed: taint .value like error() does
         msg = self._make_msg(name)
         if self._builder._value_taint_reason is None:
@@ -1273,8 +1277,10 @@ class AssertionBuilder(
         If an error description is set by [`described_as()`][assertpy2.base.BaseMixin.described_as], then that
         description is prepended to the error message.
 
-        When structured data (``actual``, ``expected``, or ``diff``) is provided, raises
-        [`AssertionFailure`][assertpy2.errors.AssertionFailure] instead of plain ``AssertionError``.
+        Always raises [`AssertionFailure`][assertpy2.errors.AssertionFailure], which is an
+        ``AssertionError``.  Structured data (``actual``, ``expected``, ``diff``) is carried on it when
+        given, and the class is the same either way, which is why nothing reads the class to learn who
+        raised it: `NegatedBuilder._verdict()` asks in check mode instead.
 
         Args:
             msg: the error message
@@ -1288,11 +1294,12 @@ class AssertionBuilder(
                 it alone when the caught exception is the caller's, which is context they want.
 
         Raises:
-            AssertionError: always raised unless ``kind`` is ``warn`` or ``soft``.
+            AssertionFailure: unless ``kind`` is ``warn``, ``soft`` or ``check``, which log it, collect
+                it and record it respectively.
 
         Returns:
-            AssertionBuilder: returns this instance to chain to the next assertion, but only when
-                ``AssertionError`` is not raised, as is the case when ``kind`` is ``warn`` or ``soft``.
+            AssertionBuilder: this instance, to chain the next assertion, whenever the failure was
+                delivered some other way than by raising.
         """
         failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace))
         if failure is None:

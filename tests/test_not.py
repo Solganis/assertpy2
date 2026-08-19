@@ -3,7 +3,16 @@ from io import StringIO
 
 import pytest
 
-from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, match, soft_assertions
+from assertpy2 import (
+    AssertionFailure,
+    WarningLoggingAdapter,
+    add_extension,
+    assert_that,
+    assert_warn,
+    match,
+    remove_extension,
+    soft_assertions,
+)
 
 
 class TestNotBasic:
@@ -168,6 +177,143 @@ class TestNotWarnMode:
         out = capture.getvalue()
         capture.close()
         assert_that(out).is_empty()
+
+
+class TestNotDoesNotInvertAnErrorFromTheValue:
+    """Negation inverts this library's verdict, and an ``AssertionError`` from your code is not one.
+
+    The proxy used to catch every ``AssertionError``, so a comparison that broke while being negated
+    read as "the assertion failed, so the negation held" and the test went green over the break.  The
+    four sources below are the four places user code runs inside an assertion.
+    """
+
+    @staticmethod
+    def _foreign(caught):
+        """The error travelled out as it was raised, rather than being read as a verdict."""
+        # spelled without `not_`, which is the thing under test here
+        assert_that(isinstance(caught.value, AssertionFailure)).is_false()
+        return assert_that(str(caught.value))
+
+    def test_an_equality_that_raises(self):
+        class Broken:
+            __hash__ = None
+
+            def __eq__(self, other):
+                raise AssertionError("comparison implementation broke")
+
+        with pytest.raises(AssertionError) as caught:
+            assert_that(Broken()).not_.is_equal_to(1)
+        self._foreign(caught).is_equal_to("comparison implementation broke")
+
+    def test_a_comparator_that_raises(self):
+        def broken(left, right):
+            raise AssertionError("comparator broke")
+
+        with pytest.raises(AssertionError) as caught:
+            assert_that({"n": 1}).not_.is_equal_to({"n": 2}, comparators={int: broken})
+        self._foreign(caught).is_equal_to("comparator broke")
+
+    def test_a_property_that_raises(self):
+        # this one never reached the catch even before it was narrowed: a dynamic `has_*` reads the
+        # property while the proxy is resolving the attribute, which is before there is anything to
+        # invert. Pinned so a refactor that moves resolution inside the try does not lose it silently
+        class Record:
+            @property
+            def name(self):
+                raise AssertionError("property broke")
+
+        with pytest.raises(AssertionError) as caught:
+            assert_that(Record()).not_.has_name("ada")
+        self._foreign(caught).is_equal_to("property broke")
+
+    def test_an_extension_that_raises_on_its_own(self, _broken_extension):
+        with pytest.raises(AssertionError) as caught:
+            assert_that(1).not_.breaks_outright()
+        self._foreign(caught).is_equal_to("extension broke")
+
+    def test_warn_mode_does_not_invert_it_either(self):
+        class Broken:
+            __hash__ = None
+
+            def __eq__(self, other):
+                raise AssertionError("comparison implementation broke")
+
+        with pytest.raises(AssertionError) as caught:
+            assert_warn(Broken()).not_.is_equal_to(1)
+        self._foreign(caught).is_equal_to("comparison implementation broke")
+
+    def test_a_nested_assertion_inside_a_comparator(self):
+        # the class of the exception cannot answer this one: a comparator that asserts with this
+        # library raises this library's own failure, and it is still not the verdict being negated
+        def asserts_inside(left, right):
+            assert_that(left).is_equal_to(right)
+            return True
+
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that({"n": 1}).not_.is_equal_to({"n": 2}, comparators={int: asserts_inside})
+        assert_that(str(caught.value)).starts_with("Expected <1> to be equal to <2>")
+
+    def test_a_nested_assertion_inside_a_comparator_in_warn_mode(self):
+        def asserts_inside(left, right):
+            assert_that(left).is_equal_to(right)
+            return True
+
+        with pytest.raises(AssertionFailure) as caught:
+            assert_warn({"n": 1}).not_.is_equal_to({"n": 2}, comparators={int: asserts_inside})
+        assert_that(str(caught.value)).starts_with("Expected <1> to be equal to <2>")
+
+    def test_a_nested_assertion_in_a_soft_block_is_collected_rather_than_lost(self):
+        # soft collects rather than raises, so the honest outcome here is both failures, not silence
+        def asserts_inside(left, right):
+            assert_that(left).is_equal_to(right)
+            return True
+
+        with pytest.raises(AssertionFailure) as caught, soft_assertions():
+            assert_that({"n": 1}).not_.is_equal_to({"n": 2}, comparators={int: asserts_inside})
+        collected = [outcome.message.splitlines()[0] for outcome in caught.value.failures]
+        assert_that(collected).is_length(2)
+        assert_that(collected[0]).is_equal_to("Expected <1> to be equal to <2>, but was not.")
+
+    def test_the_library_own_failure_still_inverts(self):
+        # the other half of the same rule: a real verdict is what negation is for
+        assert_that(5).not_.is_equal_to(6)
+        assert_warn(5).not_.is_equal_to(6)
+
+    def test_an_extension_reporting_a_verdict_still_inverts(self, _five_extension):
+        # the documented way an extension fails is `self.error(...)`, and that is a verdict
+        assert_that(6).not_.is_five()
+        with pytest.raises(AssertionFailure, match=r"to NOT satisfy: is_five\(\)"):
+            assert_that(5).not_.is_five()
+
+
+@pytest.fixture
+def _five_extension():
+    """The extension from the guide, which reports its verdict with `self.error(...)`."""
+
+    def is_five(self):
+        if self.val != 5:
+            return self.error(f"{self.val} is NOT 5!")
+        return self
+
+    add_extension(is_five)
+    try:
+        yield
+    finally:
+        remove_extension(is_five)
+
+
+@pytest.fixture
+def _broken_extension():
+    """An extension that raises rather than reporting a verdict, taken back off the global registry."""
+
+    def breaks_outright(self):
+        raise AssertionError("extension broke")
+
+    add_extension(breaks_outright)
+    try:
+        yield
+    finally:
+        remove_extension(breaks_outright)
 
 
 class TestNotAttributes:
