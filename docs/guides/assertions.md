@@ -486,16 +486,15 @@ both sides is matched by identity and not walked again, exactly as Python does i
 a config object placed in two expected blocks stays cheap and a container holding the same `NaN` on
 both sides keeps comparing equal.
 
-Two limits.
+Anything matched **by hash** is covered too, which means dictionary keys and set members. `1`, `1.0`
+and `True` hash alike and compare equal, so a mapping finds the pair before anything looks at its
+type, and reaching it takes a second pass keyed on the type. `{True: "a"}` against `{1: "a"}` and
+`{1}` against `{1.0}` both fail a strict comparison.
 
-Anything matched **by hash** is outside it, which means dictionary keys and set elements. `1`, `1.0`
-and `True` hash alike and compare equal, so the pair is found before anything looks at its type and
-the walk never sees it. `{True: "a"}` against `{1: "a"}` and `{1}` against `{1.0}` both pass a strict
-comparison. Values, list elements and object fields are all covered normally.
-
-Strictness also turns off the fast path: a container's own `==` says nothing about the types inside
-it, so every comparison walks the whole structure in Python. On a list of 20 000 dicts that is about
-0.3 ms against 29 ms, which matters only if you are comparing large dumps in a loop.
+The one limit is cost. Strictness turns off the fast path: a container's own `==` says nothing about
+the types inside it, so every comparison walks the whole structure in Python. On a list of 20 000
+dicts that is about 0.3 ms against 41 ms, which matters only if you are comparing large dumps in a
+loop.
 
 Inside a [structural spec](matchers.md#structural-matching) the same relation is spelled
 `match.equal_to(value, strict_types=True)`, one matcher covering value and type together:

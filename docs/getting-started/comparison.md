@@ -154,8 +154,8 @@ whole differing container. assertpy2 keeps a path-level diff on either.
 | | pytest assert | PyHamcrest | assertpy | dirty-equals | **assertpy2** |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Paradigm | rewritten `assert` | matchers | fluent chain | `==` objects | **[fluent + matchers + `==`](#all-three-styles-one-import)** |
-| Mix styles in one suite | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
-| Static typing (`py.typed`, overloads) | n/a | `py.typed` only | No | **Typed** | **[Yes](../concepts/type-safety.md)** |
+| All three styles from one import | No | No | No | No | **[Yes](#all-three-styles-one-import)** |
+| Static typing | n/a | **generic matchers** | No | **Typed** | **[Typed + per-type overloads](../concepts/type-safety.md)** |
 | Autocomplete filtered by value type | No | No | No | No | **[Yes](../concepts/type-safety.md#type-aware-autocomplete)** |
 | Typed narrowing (the assertion returns the value, narrowed) | No | No | No | No | **[Yes](../concepts/type-safety.md#typed-narrowing-with-value)** |
 | Contract testing (validate a payload and narrow to the model) | No | No | No | No | **[Yes](../concepts/type-safety.md#contract-narrowing-with-assert_conforms)** |
