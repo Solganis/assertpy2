@@ -136,6 +136,13 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "bool-parity": _MISSING,
     "bool-divisibility": _MISSING,
     "numeric-assertion-on-text": _MISSING,
+    # the same four questions asked through `check()`, which used to answer every one of them with a
+    # callable.  Its `__getattr__` typed any name as available, so a typo was invisible too, and the
+    # runtime named it only when the test ran.  Each view now hands back its own verdict twin
+    "text-assertion-on-a-number-through-check": _MISSING,
+    "numeric-assertion-on-text-through-check": _MISSING,
+    "mapping-assertion-on-a-list-through-check": _MISSING,
+    "a-name-that-exists-nowhere-through-check": _MISSING,
     "dynamic-attribute-on-a-mapping": _MISSING,
     # --- a step hands back `Self`, so the narrowing holds for the whole chain ----------------------
     "complex-widened-by-chaining": _MISSING,

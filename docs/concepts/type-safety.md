@@ -67,6 +67,24 @@ assert_that(date.today()).is_before(5)             # a date against a number
 assert_that(1).satisfies(match.starts_with("a"))   # a matcher built for another type
 ```
 
+Where the ordering assertions stop is worth knowing before you rely on them. The line above catches a
+number compared against text, because a numeric value reaches a numeric view whose operand is bound.
+A value that reaches no view of its own is a different case: it keeps ordering with an operand of any
+type, and nothing there is refused.
+
+```python
+def what_a_checker_allows(anything: object, someone: Person) -> None:
+    assert_that(anything).is_greater_than("text")   # accepted: `object` claims no ordering of its own
+    assert_that(someone).is_between(1, 10)          # accepted: so does a class with no view
+```
+
+Both run and both fail, with the message the value's own comparison produced. This is deliberate and
+it is the second attempt: the first spelling bound the operand to a list of types and rejected
+`numpy.int64`, which is a value this library documents support for. A capability covers what a list of
+types cannot, and the capability an ordering has is one no annotation can name, so the choice was
+between refusing correct comparisons and accepting incorrect ones. Refusing correct code is the worse
+of the two, and `tests/typing_cases.py` holds the spellings that were tried.
+
 Comparing an `int` against a `float`, passing a matcher where an item is expected, and every other
 ordinary combination keep working. Which relations are refused and which stay accepted is measured
 rather than asserted: the file lives in

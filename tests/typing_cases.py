@@ -232,6 +232,14 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_Person()).is_positive()  # case: numeric-assertion-on-an-object
     assert_that(_Person()).has_name("x")  # case: dynamic-attribute-on-an-object
     assert_that("text").is_close_to(1, 2)  # case: numeric-assertion-on-text
+
+    # the same question asked through the verdict proxy, which used to accept every name there is:
+    # `check()` hands back the twin of the view it was reached from, so a wrong-domain assertion is
+    # refused there for the same reason it is refused on the ordinary path
+    assert_that(1).check().starts_with("x")  # case: text-assertion-on-a-number-through-check
+    assert_that("text").check().is_positive()  # case: numeric-assertion-on-text-through-check
+    assert_that([1]).check().contains_key("a")  # case: mapping-assertion-on-a-list-through-check
+    assert_that(1).check().no_such_assertion()  # case: a-name-that-exists-nowhere-through-check
     assert_that({"id": 1}).has_id("no such comparison")  # case: dynamic-attribute-on-a-mapping
 
 
