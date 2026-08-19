@@ -2119,6 +2119,8 @@
   "(val: bytes, description: str = '') -> _BytesAssertion[bytes]",
   "(val: bytearray, description: str = '') -> _BytesAssertion[bytearray]",
   "(val: Callable[..., object], description: str = '') -> _CallableAssertion",
+  "(val: _FrameT_co, description: str = '') -> _FrameAssertion[_FrameT_co]",
+  "(val: _ArrayT_co, description: str = '') -> _ArrayAssertion[_ArrayT_co]",
   "(val: _T, description: str = '') -> AssertionBuilder[_T]"
  ],
  "exported": {

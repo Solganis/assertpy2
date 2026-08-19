@@ -106,16 +106,14 @@ if TYPE_CHECKING:
         def is_less_than(self, other: _Number) -> Self: ...
         def is_less_than_or_equal_to(self, other: _Number) -> Self: ...
 
-    class _StructureAssertion(Protocol):
-        """Quantifiers, the JSON family and the two pivots, which a mapping and a sequence share.
+    class _WalkAssertion(Protocol):
+        """The quantifiers and the extraction pivot, which anything walkable answers.
 
-        That sharing is what a JSON document is made of, and the reason these never belonged to either
-        one alone.  `extracting` and `at_json_path` joined them once both stopped promising the shape of
-        their own subject: a path lands on whatever the document holds there, and extraction builds a
-        list out of either.
+        Apart from the JSON family below because the two domains are not the same: a frame walks
+        and is not a document, and offering it `at_json_path` promises a refusal.  `_StructureAssertion`
+        keeps both together for the mapping and sequence views, which are inside both.
         """
 
-        # ExtractingMixin and JsonMixin: both drop the subject's own shape, so both fit here
         def extracting(
             self,
             # a selector stays `object`: whether one works depends on the row, and every narrowing tried
@@ -129,6 +127,12 @@ if TYPE_CHECKING:
             # inside a list is honoured
             sort: str | Iterable[object] | Callable[[Any], object] = ...,
         ) -> _ListAssertion[Any]: ...
+        def each(self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...) -> Self: ...
+        def all_satisfy(self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...) -> Self: ...
+
+    class _JsonAssertion(Protocol):
+        """The document family, for a value the JSON assertions accept: a `dict` or a `list`."""
+
         def at_json_path(self, path: str) -> _CoreAssertion:
             """Navigate into the document and continue on whatever is there.
 
@@ -143,8 +147,6 @@ if TYPE_CHECKING:
             """
             ...
 
-        def each(self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...) -> Self: ...
-        def all_satisfy(self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...) -> Self: ...
         def has_json_path(self, path: str) -> Self: ...
         def does_not_have_json_path(self, path: str) -> Self: ...
         def matches_json_schema(self, schema: dict[str, Any]) -> Self: ...
@@ -158,6 +160,14 @@ if TYPE_CHECKING:
             status: str | int | None = ...,
             content_type: str = ...,
         ) -> Self: ...
+
+    class _StructureAssertion(_WalkAssertion, _JsonAssertion, Protocol):
+        """Quantifiers, the JSON family and the two pivots, which a mapping and a sequence share.
+
+        That sharing is what a JSON document is made of, and the reason these never belonged to
+        either one alone.  Kept as one name so the views that are inside both domains compose it
+        rather than listing halves.
+        """
 
     class _RepeatableAssertion(Protocol[_E]):
         """What a value with repeatable elements can be asked about its repeats and their order.
@@ -511,6 +521,66 @@ if TYPE_CHECKING:
         # the same quantifier under its other name, which delegates here.  Declared alongside rather
         # than only on the sequence view: a delegate reachable in fewer places than what it delegates
         # to is a difference the runtime does not have
+
+    class _FrameShape(Protocol):
+        def pivot(self, *args: Any, **kwargs: Any) -> Any: ...
+        @property
+        def shape(self) -> Any: ...
+
+    class _ArrayShape(Protocol):
+        def __array__(self) -> Any: ...
+        @property
+        def strides(self) -> Any: ...
+
+    # covariant: the view only ever hands the subject back, through `.value`
+    _FrameT_co = TypeVar("_FrameT_co", bound=_FrameShape, covariant=True)
+    _ArrayT_co = TypeVar("_ArrayT_co", bound=_ArrayShape, covariant=True)
+
+    class _CollectionShapedAssertion(_SizedAssertion, _MembershipAssertion, _WalkAssertion, Protocol):
+        """What a frame, a series and an array all answer, measured rather than assumed.
+
+        Every family here is one their runtime gates accept: they are sized, they are walked, and they
+        answer membership.  What is deliberately absent is as measured: the JSON family refuses them,
+        `matches_structure` refuses a polars frame, and the ordering assertions refuse them through
+        `is_between` while `is_greater_than` leaks the library's own ambiguity error instead.
+
+        One boundary the shapes cannot express: a zero-dimensional array carries `__array__` and
+        `strides` like any other, and `numpy.ndarray[Any, Any]` covers it, yet it has no length and
+        cannot be iterated.  So `is_not_empty`, `is_length`, `contains_only` and `each` are offered on
+        `numpy.array(1)` and raise there.  Separating it statically would need a shape keyed on the
+        dimension, which the stubs do not carry, and `tests/test_dataframe.py` holds what it does
+        instead.
+        """
+
+        def contains(self, *items: object) -> Self: ...
+        def contains_only(self, *items: object) -> Self: ...
+
+    class _ArrayLikeAssertion(_CollectionShapedAssertion, _CoreAssertion, Protocol):
+        """The two numpy assertions, which every array-like the runtime accepts can answer."""
+
+        def is_array_equal(self, expected: object, **options: Any) -> Self: ...
+        def is_array_close_to(
+            self,
+            expected: object,
+            *,
+            rtol: float = ...,
+            atol: float = ...,
+            equal_nan: bool = ...,
+            **options: Any,
+        ) -> Self: ...
+
+    class _FrameAssertion(_ArrayLikeAssertion, Protocol[_FrameT_co]):
+        """Assertions available for a pandas or polars frame, which is array-like as well."""
+
+        @property
+        def value(self) -> _FrameT_co: ...
+        def is_frame_equal(self, expected: object, **options: Any) -> Self: ...
+
+    class _ArrayAssertion(_ArrayLikeAssertion, Protocol[_ArrayT_co]):
+        """Assertions available for a numpy array, which is everything a frame has but `is_frame_equal`."""
+
+        @property
+        def value(self) -> _ArrayT_co: ...
 
     class _DateAssertion(_CoreAssertion, Protocol):
         """Assertions available for ``datetime.date`` and ``datetime.datetime`` values."""

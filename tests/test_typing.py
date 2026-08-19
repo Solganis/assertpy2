@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
     from assertpy2._engine._typing import (
+        _ArrayAssertion,
+        _ArrayShape,
         _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
@@ -28,6 +30,8 @@ if TYPE_CHECKING:
         _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
+        _FrameAssertion,
+        _FrameShape,
         _InvokedAssertion,
         _IterableAssertion,
         _ListAssertion,
@@ -296,18 +300,35 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., object])
 
-    # a type with no overload of its own falls through to the full surface, which is what makes the
-    # DataFrame assertions reachable with no Protocol.  test_protocol_parity.py exempts them on this
-    class _FakeFrame:  # stands in for a DataFrame / ndarray: a type no assert_that overload keys on
-        pass
+    # the frame and array views are keyed on shape rather than on a named type, so no optional
+    # dependency appears in a signature and these stand-ins are enough to pin the resolution.  The real
+    # libraries are pinned separately, where they are installed
+    class _FakeFrame:  # what pandas and polars frames have and neither a series nor an Index does
+        def pivot(self, *args: object, **kwargs: object) -> object: ...
+
+        @property
+        def shape(self) -> object: ...
+
+    class _FakeArray:  # `strides` rather than `dtype`: a series carries `dtype` and is not an array
+        def __array__(self) -> object: ...
+
+        @property
+        def strides(self) -> object: ...
 
     # cast from `object()` rather than `None`: the value is never read, and basedpyright rightly
     # calls a `None` -> _FakeFrame cast a likely mistake since neither type overlaps the other
+    assert_type(assert_that(cast("_FrameShape", object())), _FrameAssertion[_FrameShape])
+    assert_type(assert_that(cast("_ArrayShape", object())), _ArrayAssertion[_ArrayShape])
     frame = cast("_FakeFrame", object())
-    assert_type(assert_that(frame), AssertionBuilder[_FakeFrame])
-    assert_type(assert_that(frame).is_frame_equal(frame), AssertionBuilder[_FakeFrame])
-    assert_type(assert_that(frame).is_array_equal(frame), AssertionBuilder[_FakeFrame])
-    assert_type(assert_that(frame).is_array_close_to(frame, rtol=0.1), AssertionBuilder[_FakeFrame])
+    array = cast("_FakeArray", object())
+    assert_type(assert_that(frame), _FrameAssertion[_FakeFrame])
+    assert_type(assert_that(array), _ArrayAssertion[_FakeArray])
+    # the subject survives the narrowing, which is what the generic parameter is for
+    assert_type(assert_that(frame).value, _FakeFrame)
+    assert_type(assert_that(array).value, _FakeArray)
+    assert_type(assert_that(frame).is_frame_equal(frame), _FrameAssertion[_FakeFrame])
+    assert_type(assert_that(array).is_array_equal(array), _ArrayAssertion[_FakeArray])
+    assert_type(assert_that(array).is_array_close_to(array, rtol=0.1), _ArrayAssertion[_FakeArray])
 
     # `match.is_instance_of` forwards to `isinstance` and takes a union; the builder assertion stays
     # narrow, since its overloads refine the value and a union has no single class to refine to

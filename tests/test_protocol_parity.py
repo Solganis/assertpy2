@@ -51,9 +51,11 @@ _SENTINEL = object()
 # force a shared base, and one such base widened `contains` until `"abc".contains(123)` type-checked.
 _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # a mapping searches keys and a byte string searches bytes: one spelling, two questions, and a
-        # shared base for them would have to be untyped to fit both
+        # a mapping searches keys, a byte string searches bytes and a frame or an array searches its
+        # elements: one spelling, three questions, and a shared base would have to be untyped to fit all
         ("contains", "_BytesAssertion", "_DictAssertion"),
+        ("contains", "_BytesAssertion", "_CollectionShapedAssertion"),
+        ("contains", "_CollectionShapedAssertion", "_DictAssertion"),
         # narrowing `satisfies` means redeclaring the whole overload pair, and the first half of that
         # pair is the same everywhere by construction: it is the `TypeIs` form the core already has.
         # Only the second half narrows, to `Matcher[str]` and `Matcher[_N]` respectively
@@ -76,6 +78,8 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
         "_PathAssertion",
         "_BytesAssertion",
         "_CallableAssertion",
+        "_FrameAssertion",
+        "_ArrayAssertion",
         "_InvokedAssertion",
         # not a type `assert_that` dispatches to, but what every pipeline step hands back: a collection
         # this library built, which is always a `list` whatever went in
@@ -86,6 +90,24 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
 # Which protocol carries which capability, checked for equality rather than containment: both
 # directions fail quietly, and one of them offered `exists()` on the text of an exception.
 _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
+    "_WalkAssertion": (
+        "_StructureAssertion",
+        "_IterableAssertion",
+        "_ListAssertion",
+        "_DictAssertion",
+        "_CollectionShapedAssertion",
+        "_ArrayLikeAssertion",
+        "_FrameAssertion",
+        "_ArrayAssertion",
+    ),
+    "_JsonAssertion": (
+        "_StructureAssertion",
+        "_IterableAssertion",
+        "_ListAssertion",
+        "_DictAssertion",
+    ),
+    "_CollectionShapedAssertion": ("_ArrayLikeAssertion", "_FrameAssertion", "_ArrayAssertion"),
+    "_ArrayLikeAssertion": ("_FrameAssertion", "_ArrayAssertion"),
     "_SizedAssertion": (
         "_TextAssertion",
         "_StringAssertion",
@@ -94,6 +116,10 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_ListAssertion",
         "_DictAssertion",
         "_BytesAssertion",
+        "_ArrayAssertion",
+        "_ArrayLikeAssertion",
+        "_CollectionShapedAssertion",
+        "_FrameAssertion",
     ),
     "_FilesystemAssertion": ("_StringAssertion", "_PathAssertion"),
     "_RealNumberAssertion": ("_NumericAssertion", "_BoolAssertion"),
@@ -105,6 +131,10 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_IterableAssertion",
         "_ListAssertion",
         "_BytesAssertion",
+        "_ArrayAssertion",
+        "_ArrayLikeAssertion",
+        "_CollectionShapedAssertion",
+        "_FrameAssertion",
     ),
     "_StructureAssertion": ("_IterableAssertion", "_ListAssertion", "_DictAssertion"),
     "_RepeatableAssertion": (
@@ -161,14 +191,14 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     _satisfies.SatisfiesMixin: ("_IterableAssertion", "_CoreAssertion", "_DictAssertion"),
     dynamic.DynamicMixin: (),
     helpers.HelpersMixin: (),
-    dataframe.DataFrameMixin: (),
+    dataframe.DataFrameMixin: ("_FrameAssertion", "_ArrayAssertion"),
     http_mixin.HttpMixin: (),
 }
 
 # The two families with no narrowed view: every ``assert_that`` overload keys on a concrete type, and
 # neither a DataFrame nor an HTTP response matches any, so the call lands on the fallback, which is the
 # class carrying these methods.
-_UNTYPED: frozenset[str] = frozenset({"is_array_equal", "is_array_close_to", "is_frame_equal", "decoded_as_json"})
+_UNTYPED: frozenset[str] = frozenset({"decoded_as_json"})
 
 # The bases that carry no assertions and so contribute no edge to the inheritance graph.  Written out
 # because everything not on this list has to be either a protocol of this file or an error.

@@ -1822,11 +1822,35 @@ def _literal_type(expression) -> str:
             return "set"
         case ast.Lambda():
             return "Callable"
+        case ast.Call(func=ast.Name(id="cast"), args=[ast.Constant(value=str(name)), *_]):
+            # the only way to write a value of a protocol type: a shape-keyed overload has no literal
+            return name
         case ast.Call(func=ast.Attribute(value=ast.Name(id=module), attr=name)):
             return f"{module}.{name}"
         case ast.Call(func=ast.Name(id=name)):
             return name
     return ""
+
+
+def _shape_bounds() -> dict[str, str]:
+    """``{type variable: the shape it is bound to}``, for the overloads that key on a bound variable.
+
+    A shape-keyed overload names a type variable rather than the protocol, so the view can carry the
+    subject through to `.value`.  Resolving the bound is what keeps the subject readable here, and
+    `tests/test_overload_order.py` reads the same declarations for the order it holds.
+    """
+    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    bounds = {}
+    for node in ast.walk(ast.parse(source)):
+        match node:
+            case ast.Assign(
+                targets=[ast.Name(id=name)],
+                value=ast.Call(func=ast.Name(id="TypeVar"), keywords=keywords),
+            ):
+                for keyword in keywords:
+                    if keyword.arg == "bound" and isinstance(keyword.value, ast.Name):
+                        bounds[name] = keyword.value.id
+    return bounds
 
 
 def _dispatch_relation() -> dict[str, str]:
@@ -1864,7 +1888,8 @@ def _dispatch_relation() -> dict[str, str]:
         # relation is the whole claim: refuse instead, the same way the protocol walk refuses a base
         if not subjects:
             raise AssertionError(f"an assert_that overload returning {view} has a subject this walk cannot read")
-        for subject in subjects:
+        bounds = _shape_bounds()
+        for subject in (bounds.get(name, name) for name in subjects):
             # a repeat is an error even when it agrees: two overloads naming one subject is a
             # duplicate to remove, and letting the agreeing case through would hide it
             if subject in relation:
