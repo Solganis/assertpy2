@@ -30,6 +30,7 @@ import types
 from typing import Any
 
 import assertpy2
+import assertpy2._engine._typing
 import assertpy2.assertpy
 from assertpy2.assertpy import AssertionBuilder
 from assertpy2.matchers import Matcher
@@ -171,10 +172,104 @@ def collect() -> dict[str, Any]:
             for name in sorted(dir(assertpy2.match))
             if not name.startswith("_")
         },
+        "typed_views": _typed_views(),
+        "view_shapes": _view_shapes(),
         "entry_overloads": _entry_overloads(),
         "matcher_protocol": _matcher_protocol(),
         "failure_attributes": _failure_attributes(),
     }
+
+
+def _typed_views() -> dict[str, list[str]]:
+    """``{protocol: the assertions it offers}``, resolved through its bases.
+
+    Recorded because the rest of this file could not see the commonest typing-breaking change there is.
+    A name leaving a view stops a call type-checking while the runtime keeps answering it, and the
+    snapshot noticed only when an `assert_that` overload moved: removing `is_alpha` from the string
+    view left every section here identical.
+
+    Resolved rather than declared, since a caller sees what a view inherits exactly as they see what it
+    declares, and moving a name to a base is not a change to anybody.
+    """
+    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    declared: dict[str, tuple[set[str], list[str]]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ClassDef) or not node.name.endswith("Assertion"):
+            continue
+        names = {item.name for item in node.body if isinstance(item, ast.FunctionDef)}
+        bases = []
+        for base in node.bases:
+            target = base.value if isinstance(base, ast.Subscript) else base
+            if isinstance(target, ast.Name) and target.id.endswith("Assertion"):
+                bases.append(target.id)
+        declared[node.name] = (names, bases)
+
+    def resolved(name: str, seen: frozenset[str]) -> set[str]:
+        if name in seen or name not in declared:
+            return set()
+        names, bases = declared[name]
+        return names.union(*(resolved(base, seen | {name}) for base in bases)) if bases else names
+
+    return {name: sorted(resolved(name, frozenset())) for name in sorted(declared)}
+
+
+def _view_shapes() -> dict[str, str]:
+    """``{"View.method": how that view takes its parameters}``, resolved through bases.
+
+    Names alone missed the other half of the same class: a parameter turning keyword-only breaks every
+    caller who passed it positionally.
+
+    Resolved rather than recorded where the declaration sits, and that distinction is the whole point.
+    Keyed by the declaring class, a parameter narrowed by *adding* an override to a subclass produced a
+    key that had not existed before, while the base's key stayed as it was, and a comparison over the
+    intersection saw nothing.  This file already carries that pattern: `check` and `value` are
+    redeclared in every leaf to narrow their type.
+
+    Kinds only, not annotations: a name or an alias moving is not a promise this package made, and the
+    annotations are compared against the runtime by `tests/test_typing_conformance.py`.
+    """
+    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    declared: dict[str, tuple[dict[str, str], list[str]]] = {}
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ClassDef) or not node.name.endswith("Assertion"):
+            continue
+        rungs: dict[str, list[str]] = {}
+        for item in node.body:
+            if isinstance(item, ast.FunctionDef):
+                rungs.setdefault(item.name, []).append(_spelled(item.args))
+        bases = []
+        for base in node.bases:
+            target = base.value if isinstance(base, ast.Subscript) else base
+            if isinstance(target, ast.Name) and target.id.endswith("Assertion"):
+                bases.append(target.id)
+        declared[node.name] = ({name: " | ".join(forms) for name, forms in rungs.items()}, bases)
+
+    def resolved(name: str, seen: frozenset[str]) -> dict[str, str]:
+        if name in seen or name not in declared:
+            return {}
+        own, bases = declared[name]
+        found: dict[str, str] = {}
+        for base in bases:
+            found.update(resolved(base, seen | {name}))
+        found.update(own)  # a view's own declaration wins over what it inherits, as it does at runtime
+        return found
+
+    return {
+        f"{view}.{method}": shape
+        for view in sorted(declared)
+        for method, shape in sorted(resolved(view, frozenset()).items())
+    }
+
+
+def _spelled(arguments: ast.arguments) -> str:
+    """One declaration reduced to how each parameter may be passed, `self` dropped."""
+    return ", ".join(
+        [f"{argument.arg}/" for argument in arguments.posonlyargs if argument.arg != "self"]
+        + [argument.arg for argument in arguments.args if argument.arg != "self"]
+        + ([f"*{arguments.vararg.arg}"] if arguments.vararg else [])
+        + [f"*{argument.arg}" for argument in arguments.kwonlyargs]
+        + ([f"**{arguments.kwarg.arg}"] if arguments.kwarg else [])
+    )
 
 
 def _overload_names(tree: ast.Module) -> tuple[set[str], set[str]]:

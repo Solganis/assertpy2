@@ -168,6 +168,30 @@ def _overload_changes(before: list[str], after: list[str]) -> list[tuple[str, st
     return changes
 
 
+def _view_changes(before: dict[str, list[str]], after: dict[str, list[str]]) -> list[tuple[str, str]]:
+    """What each typed view stopped or started offering.
+
+    `typing` rather than `breaking`, and the difference is the whole policy.  A name leaving a view
+    stops a call type-checking while the runtime keeps answering it, so a suite goes on passing and a
+    type-check stage goes red: a migration exists, it is mechanical, and it ships in a minor.  A name
+    leaving the *runtime* is the other thing and is classified above.
+
+    A view disappearing is the same severity for the same reason: whatever used it now resolves
+    somewhere wider, and nothing stops running.
+    """
+    changes: list[tuple[str, str]] = []
+    changes.extend(("typing", f"typed view {name} is gone") for name in sorted(set(before) - set(after)))
+    changes.extend(("addition", f"typed view {name} added") for name in sorted(set(after) - set(before)))
+    for name in sorted(set(before) & set(after)):
+        old, new = set(before[name]), set(after[name])
+        changes.extend(
+            ("typing", f"{name} no longer offers {gone}, so a call that type-checked stops")
+            for gone in sorted(old - new)
+        )
+        changes.extend(("addition", f"{name} now offers {added}") for added in sorted(new - old))
+    return changes
+
+
 def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     """Every way the surface moved, classified. Empty when the two describe the same package."""
     changes: list[tuple[str, str]] = []
@@ -187,6 +211,21 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
         ("breaking", f"AssertionFailure.{name} is now a {new_read[name]}, was a {old_read[name]}")
         for name in sorted(set(old_read) & set(new_read))
         if old_read[name] != new_read[name]
+    )
+    changes.extend(_view_changes(before.get("typed_views", {}), after.get("typed_views", {})))
+    old_shapes, new_shapes = before.get("view_shapes", {}), after.get("view_shapes", {})
+    changes.extend(
+        ("typing", f"{name} takes its parameters differently: {new_shapes[name]}, was {old_shapes[name]}")
+        for name in sorted(set(old_shapes) & set(new_shapes))
+        if old_shapes[name] != new_shapes[name]
+    )
+    # both directions, not the intersection alone: a view that stops offering a method loses its key,
+    # and one that starts gains a key that was never there to compare against
+    changes.extend(
+        ("typing", f"{name} is gone from the typed surface") for name in sorted(set(old_shapes) - set(new_shapes))
+    )
+    changes.extend(
+        ("addition", f"{name} added to the typed surface") for name in sorted(set(new_shapes) - set(old_shapes))
     )
     changes.extend(_overload_changes(before.get("entry_overloads", []), after.get("entry_overloads", [])))
     changes.extend(_section_changes("matcher_protocol", before["matcher_protocol"], after["matcher_protocol"]))
@@ -280,6 +319,8 @@ class TestTheClassificationItself:
             "describe_mismatch": {"kind": "callable", "parameters": [], "returns": "str"},
         },
         "failure_attributes": {"actual": "instance attribute"},
+        "typed_views": {"_StringAssertion": ["is_alpha", "starts_with"]},
+        "view_shapes": {"_StringAssertion.is_alpha": "", "_StringAssertion.starts_with": "prefix"},
     }
 
     def _after(self, **changes):
@@ -292,6 +333,33 @@ class TestTheClassificationItself:
         ("label", "mutate", "severity"),
         [
             ("an export disappears", lambda s: s.update(exports=[]), "breaking"),
+            # the typing severity, which is the whole of the policy this snapshot exists to enforce:
+            # the runtime goes on answering and a type-check stage goes red, so it ships in a minor
+            (
+                "a view stops offering an assertion",
+                lambda s: s["typed_views"].update(_StringAssertion=["starts_with"]),
+                "typing",
+            ),
+            (
+                "a whole view is gone",
+                lambda s: s.update(typed_views={}),
+                "typing",
+            ),
+            (
+                "a parameter turns keyword-only",
+                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "*prefix"}),
+                "typing",
+            ),
+            (
+                "a declaration leaves the typed surface",
+                lambda s: s["view_shapes"].pop("_StringAssertion.is_alpha"),
+                "typing",
+            ),
+            (
+                "a view starts offering an assertion",
+                lambda s: s["typed_views"].update(_StringAssertion=["is_alpha", "is_digit", "starts_with"]),
+                "addition",
+            ),
             ("py.typed disappears", lambda s: s.update(py_typed=False), "breaking"),
             (
                 "an existing parameter loses its default",
