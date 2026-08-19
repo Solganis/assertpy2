@@ -49,9 +49,14 @@ run with them installed collects a different set:
 
 ```bash
 uv run --group typecheck mypy --strict --follow-imports=silent tests/test_typing.py
-uv run --group typecheck pyright tests/test_typing.py
+uv run --group typecheck pyright --pythonversion 3.14 tests/test_typing.py
 uv run --group typecheck pytest tests/test_pyright_baseline.py
 ```
+
+`--pythonversion 3.14` is not decoration. Pyright reports against the interpreter it finds unless told
+otherwise, and the count moves with it: 108 diagnostics for this package on 3.10 against 102 on 3.14.
+Without it a contributor on the supported floor meets a red baseline that says nothing about their
+change. The baseline test passes the same target itself, so it gives one answer everywhere.
 
 Three details that cost time if you meet them the hard way:
 

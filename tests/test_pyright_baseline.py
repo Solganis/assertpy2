@@ -21,6 +21,8 @@ import pytest
 
 pytest.importorskip("pyright")
 
+from typing import Final
+
 from assertpy2 import assert_that
 from tests.pyright_baseline import BASELINE
 
@@ -42,11 +44,18 @@ _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
+# The target this baseline was recorded against, passed explicitly rather than taken from whichever
+# interpreter happens to be running.  It is not cosmetic: pyright reports 108 diagnostics against 3.10
+# and 102 against 3.14, so a contributor on the supported floor met a red gate that said nothing about
+# their change.  3.14 because that is what the type-check job runs; 3.15 gives the same answer.
+_TARGET: Final = "3.14"
+
+
 @functools.cache
 def _diagnostics() -> tuple[dict[str, str], ...]:
     """Every pyright diagnostic over the package, as ``{file, rule, message}``, run once for the module."""
     result = subprocess.run(
-        [sys.executable, "-m", "pyright", "--outputjson", "assertpy2/"],
+        [sys.executable, "-m", "pyright", "--outputjson", "--pythonversion", _TARGET, "assertpy2/"],
         capture_output=True,
         text=True,
         check=False,
