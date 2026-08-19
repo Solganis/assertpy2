@@ -191,6 +191,12 @@ jobs:
       - name: Type check (the generated verdict twins are in step)
         run: uv run pytest tests/test_check_protocols.py tests/test_operation_contract.py -q
 
+      # the two halves of every signature: the runtime and the type it is described by. Parity asks
+      # whether a declared method exists; this asks whether the two agree about its parameters, how
+      # they may be passed, and which of them are required
+      - name: Type check (the runtime and the typed surface agree, parameter by parameter)
+        run: uv run pytest tests/test_typing_conformance.py -q
+
   ci-ok:
     timeout-minutes: 5
     needs: [test, optional-integrations, lint]
