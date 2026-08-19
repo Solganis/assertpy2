@@ -153,10 +153,17 @@ def _chaining_must_not_widen_what_the_value_offers() -> None:
     """
     assert_that(1 + 2j).is_not_zero().is_positive()  # case: complex-widened-by-chaining
     assert_that(True).is_greater_than(0).is_even()  # case: bool-widened-by-chaining
-    # `.not_` is the exception, and it is a known one: the proxy resolves any name through
-    # `__getattr__`, so the negated branch accepts what the protocol does not. Closing it means a
-    # second protocol per type, which is a doubling of the typed surface for one inverted call
+    # `.not_` used to be the exception: the proxy resolves any name through `__getattr__`, so the
+    # negated branch accepted what the protocol does not. It is declared as the protocol it was
+    # reached from instead, which costs nothing and refuses the same calls the un-negated chain does
     assert_that(1 + 2j).not_.is_greater_than(0)  # case: negation-widens-the-protocol
+    # what that declaration does allow and the runtime refuses: the fourteen names that transform or
+    # configure rather than assert. The runtime says so by name, which is the tolerable direction
+    assert_that(1).not_.described_as("x")  # case: negation-allows-a-non-negatable-name
+    # an ordering matcher takes and judges anything its `<` accepts, and neither half is typed. A
+    # boundary of the wrong type is accepted, and so is a matcher built for another subject entirely
+    assert_that(1).satisfies(match.greater_than("x"))  # case: ordering-matcher-takes-any-boundary
+    assert_that("x").satisfies(match.greater_than(0))  # case: ordering-matcher-judges-any-subject
 
 
 def _takes_repeats_of_derived(assertion: _RepeatableAssertion[_Derived]) -> None:

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
     from .._engine._introspection import MappingLike
-    from ..assertpy import AssertionBuilder, CheckBuilder, NegatedBuilder
+    from ..assertpy import AssertionBuilder, CheckBuilder
     from ..async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from ..matchers import Matcher
     from ._compat import Self
@@ -251,9 +251,11 @@ if TYPE_CHECKING:
             comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
             placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> Self: ...
-        # NegatedBuilder
+        # NegatedBuilder, which a checker sees as this very protocol: the proxy accepts what the
+        # value accepts and hands the chain back, so describing it any other way is what let
+        # `assert_that(1).not_.starts_with("x")` type-check
         @property
-        def not_(self) -> NegatedBuilder[Self]: ...
+        def not_(self) -> Self: ...
         # CheckBuilder - run the next assertion for its verdict instead of for its failure
         def check(self) -> CheckBuilder: ...
         # AssertionBuilder - typed extract-and-continue
