@@ -66,6 +66,9 @@ build-backend = "hatchling.build"
 include = [
     "assertpy2",
     "tests",
+    # the suite reads it: `tests/test_check_protocols.py` regenerates the verdict twins and compares.
+    # Without it the shipped sdist carries a test that fails during collection
+    "scripts",
     "docs",
     "benchmarks",
     "mkdocs.yml",
@@ -272,6 +275,11 @@ select = [
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
+# The generated verdict twins mirror the signatures they were generated from, `snapshot(id=...)`
+# among them.  A suppression written into the generator would be a style decision made where nobody
+# reads it, so it lives here instead
+"assertpy2/_engine/_check_typing.py" = ["A002"]
+
 # Tests trade a few style rules for directness and literal fixtures:
 "tests/*" = [
     "E741",    # ambiguous one-letter names (l/I/O) are fine in throwaway test locals

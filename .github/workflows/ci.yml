@@ -186,6 +186,11 @@ jobs:
       - name: Type check (the typed surface as an installed wheel carries it)
         run: uv run pytest tests/test_typing_from_a_wheel.py -q
 
+      # the verdict twins are generated from the protocols; this is where an edit to the generated
+      # file, or a protocol change the twins did not follow, stops being invisible
+      - name: Type check (the generated verdict twins are in step)
+        run: uv run pytest tests/test_check_protocols.py tests/test_operation_contract.py -q
+
   ci-ok:
     timeout-minutes: 5
     needs: [test, optional-integrations, lint]
