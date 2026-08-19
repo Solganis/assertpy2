@@ -141,10 +141,11 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        # `numpy` rather than the whole `data` stack: the rejection gate needs numpy *scalars*, which
-        # guard against the numeric bound being narrowed back to a list of types and rejecting
-        # `numpy.int64`. pandas and polars would only make this job heavier
-        run: uv sync --extra json --extra numpy --extra inline --group typecheck
+        # the whole `data` stack, because the overloads narrow on *structure* and the structures are
+        # pandas', polars' and numpy's to change. A stub release that stops declaring the member a
+        # shape keys on moves those values back to the generic builder, silently: it type-checks, and
+        # the narrowed methods just stop being offered. The integration matrix below is what notices
+        run: uv sync --extra json --extra data --extra inline --group typecheck
 
       - name: Ruff check
         run: uv run ruff check .
@@ -172,6 +173,12 @@ jobs:
       # number, and loosening one shows up at all
       - name: Type check (rejections, all three checkers)
         run: uv run pytest tests/test_typing_negative.py -q
+
+      # the stand-in classes in `test_typing.py` prove the overloads are written correctly and cannot
+      # prove the real libraries still match them. This runs the same question against real pandas,
+      # polars and numpy values, with each checker given its interpreter and target explicitly
+      - name: Type check (real library values, all three checkers)
+        run: uv run pytest tests/test_typing_integrations.py -q
 
   ci-ok:
     timeout-minutes: 5

@@ -1,0 +1,64 @@
+"""What `assert_that()` hands back for values from the real libraries, pinned per case.
+
+`tests/test_typing.py` pins the same relation against stand-in classes, which is what runs everywhere.
+This file needs pandas, polars and numpy installed and is checked by `tests/test_typing_integrations.py`,
+because a stand-in proves the overload is written correctly and says nothing about whether a real
+`DataFrame` still matches it.  Both are needed: the shapes are structural, and the structures belong to
+somebody else.
+
+Each line carries its case name, and `tests/typing_integrations_baseline.py` records which checkers
+report anything on it.  A case every checker agrees with records nothing.
+"""
+
+from __future__ import annotations
+
+from typing import Any, assert_type
+
+import numpy
+import pandas
+import polars
+
+from assertpy2 import assert_that
+from assertpy2._engine._typing import _ArrayAssertion, _FrameAssertion
+from assertpy2.assertpy import AssertionBuilder
+
+
+def resolution(
+    frame: pandas.DataFrame,
+    polars_frame: polars.DataFrame,
+    series: pandas.Series,
+    polars_series: polars.Series,
+    array: numpy.ndarray[Any, Any],
+    index: pandas.Index,
+) -> None:
+    """Which view each real value narrows to, written as the answer the runtime would justify."""
+    assert_type(assert_that(frame), _FrameAssertion[pandas.DataFrame])  # case: pandas-frame
+    assert_type(assert_that(polars_frame), _FrameAssertion[polars.DataFrame])  # case: polars-frame
+    assert_type(assert_that(array), _ArrayAssertion[numpy.ndarray[Any, Any]])  # case: numpy-array
+    # a series and an index keep the builder: nothing separates a series from an index structurally,
+    # and an index is outside `is_frame_equal`, so neither buys a view
+    assert_type(assert_that(series), AssertionBuilder[pandas.Series])  # case: pandas-series
+    assert_type(assert_that(polars_series), AssertionBuilder[polars.Series])  # case: polars-series
+    assert_type(assert_that(index), AssertionBuilder[pandas.Index])  # case: pandas-index
+
+
+def calls_that_must_keep_working(frame: pandas.DataFrame, array: numpy.ndarray[Any, Any]) -> None:
+    """Every family the runtime accepts for these values, which the narrowed view has to carry."""
+    assert_that(frame).is_not_empty()  # case: frame-sized
+    assert_that(frame).contains(1)  # case: frame-membership
+    assert_that(frame).each(lambda item: True)  # case: frame-walk
+    assert_that(frame).is_frame_equal(frame)  # case: frame-own
+    assert_that(frame).is_array_equal(frame)  # case: frame-array
+    assert_type(assert_that(frame).value.columns, pandas.Index[str])  # case: frame-value
+    assert_that(array).is_not_empty()  # case: array-sized
+    assert_that(array).is_array_close_to(array)  # case: array-own
+    # `dtype` reads as `Any` here rather than as a `numpy.dtype`, which is numpy's own typing and
+    # not ours; what this case holds is that the chain reaches the array's own members at all
+    assert_type(assert_that(array).value.size, int)  # case: array-value
+
+
+def calls_the_runtime_refuses(frame: pandas.DataFrame) -> None:
+    """Families a frame is outside, measured from its refusals rather than assumed."""
+    assert_that(frame).at_json_path("$.a")  # case: frame-not-a-document
+    assert_that(frame).is_between(1, 2)  # case: frame-not-ordered
+    assert_that(frame).is_alpha()  # case: frame-not-text

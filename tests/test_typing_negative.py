@@ -17,78 +17,31 @@ type-check job rather than in the main suite.
 
 from __future__ import annotations
 
-import json
-import pathlib
-import re
-import subprocess
-import sys
-
 import pytest
 
 pytest.importorskip("pyright")
 pytest.importorskip("mypy")
 
 from assertpy2 import assert_that
+from tests import typing_harness
 from tests.typing_negative_baseline import CAUGHT, VALID
 
-_ROOT = pathlib.Path(__file__).resolve().parent.parent
-_CASES = _ROOT / "tests" / "typing_cases.py"
-
-
-def _tagged_lines() -> dict[int, str]:
-    """Line number to case name, read from the tags in the source rather than kept in step by hand."""
-    found = {}
-    for number, line in enumerate(_CASES.read_text(encoding="utf-8").splitlines(), 1):
-        tag = re.search(r"# case: ([\w-]+)", line)
-        if tag:
-            found[number] = tag.group(1)
-    return found
-
-
-def _run(*command: str) -> str:
-    result = subprocess.run([sys.executable, "-m", *command], capture_output=True, text=True, cwd=_ROOT, check=False)
-    # every one of them exits non-zero as soon as it reports anything, so the output is what to read
-    return result.stdout + result.stderr
-
-
-def _pyright() -> dict[int, set[str]]:
-    report = json.loads(_run("pyright", "--outputjson", str(_CASES)))
-    found: dict[int, set[str]] = {}
-    for item in report["generalDiagnostics"]:
-        found.setdefault(item["range"]["start"]["line"] + 1, set()).add(item.get("rule", item["severity"]))
-    return found
-
-
-def _mypy() -> dict[int, set[str]]:
-    output = _run("mypy", "--strict", "--follow-imports=silent", str(_CASES))
-    found: dict[int, set[str]] = {}
-    for number, code in re.findall(r"typing_cases\.py:(\d+): error:.*\[([\w-]+)\]", output):
-        found.setdefault(int(number), set()).add(code)
-    return found
-
-
-def _ty() -> dict[int, set[str]]:
-    output = _run("ty", "check", "--output-format", "concise", str(_CASES))
-    found: dict[int, set[str]] = {}
-    for number, code in re.findall(r"typing_cases\.py:(\d+):\d+: error\[([\w-]+)\]", output):
-        found.setdefault(int(number), set()).add(code)
-    return found
+_CASES = typing_harness.ROOT / "tests" / "typing_cases.py"
 
 
 @pytest.fixture(scope="module")
 def reported() -> dict[str, dict[int, set[str]]]:
     """Line number to diagnostic codes, per checker, from one run of each."""
-    return {"ty": _ty(), "mypy": _mypy(), "pyright": _pyright()}
+    return {
+        "ty": typing_harness.ty(_CASES),
+        "mypy": typing_harness.mypy(_CASES),
+        "pyright": typing_harness.pyright(_CASES),
+    }
 
 
 @pytest.fixture(scope="module")
 def by_case(reported) -> dict[str, dict[str, set[str]]]:
-    """Case name to the codes each checker reported for it."""
-    lines = _tagged_lines()
-    return {
-        name: {checker: found.get(number, set()) for checker, found in reported.items()}
-        for number, name in lines.items()
-    }
+    return typing_harness.by_case(reported, _CASES)
 
 
 class TestTheMeasurementItselfRan:
@@ -108,7 +61,7 @@ class TestTheMeasurementItselfRan:
         a diagnostic on the right line, and the case it was meant to prove was never checked. Anything
         reported away from a tagged line means the file itself is broken.
         """
-        lines = _tagged_lines()
+        lines = typing_harness.tagged_lines(_CASES)
         stray = {
             checker: sorted(number for number in found if number not in lines)
             for checker, found in reported.items()
