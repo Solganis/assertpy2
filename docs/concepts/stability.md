@@ -85,6 +85,30 @@ in every case, and the migration is to assert on the attribute rather than throu
 All four are the reason to read that section before upgrading. Nothing else in a minor is designed to
 change what your suite reports.
 
+### Which release a typing change ships in
+
+The fourth kind above is the one that needs its own reading, because a typing change and a runtime
+change are not the same size even when they touch the same method. Three categories, and the test is
+what a caller has to do about it.
+
+- **Patch** for an annotation that was simply wrong, where no correct call changes meaning. A parameter
+  that always accepted a `float` and said `int` is one of these: nothing you wrote stops working, and
+  something you could not write starts.
+- **Minor** for a tightening with a migration, which is where almost all of them land. The runtime does
+  not change, your suite goes on passing, and a type-check stage can go red before it. Taking dynamic
+  `has_<attribute>()` off a plain class is one: the call still runs, and the migration is to assert on
+  the attribute rather than through it.
+- **Major** for removing or changing a documented typed API with no equivalent to move to. A renamed
+  method, a return type that is not a refinement of the old one, a capability that simply goes.
+
+Every typing change in a minor is named in the release notes with the call that stops type-checking,
+the reason, and what to write instead. What is mechanised is the *noticing*, not the category: the API
+snapshot in `tests/api_surface.py` records what each typed view offers and how it takes its parameters,
+both resolved through the bases rather than read where they are written. So a name leaving a view is
+classified as `typing`, and so is a parameter turning keyword-only, whether that happened where it was
+declared or by adding an override further down. Which of the three categories a change belongs to is a
+judgement made in review, and the snapshot does not make it.
+
 ## Not part of the API
 
 Anything whose name starts with `_`, and the module an assertion happens to live in. The reference
