@@ -2121,7 +2121,8 @@
   "(val: Callable[..., object], description: str = '') -> _CallableAssertion",
   "(val: _FrameT_co, description: str = '') -> _FrameAssertion[_FrameT_co]",
   "(val: _ArrayT_co, description: str = '') -> _ArrayAssertion[_ArrayT_co]",
-  "(val: _T, description: str = '') -> AssertionBuilder[_T]"
+  "(val: _CapableT, description: str = '') -> AssertionBuilder[_CapableT]",
+  "(val: _T, description: str = '') -> _ObjectAssertion[_T]"
  ],
  "exported": {
   "AssertionFailure": {

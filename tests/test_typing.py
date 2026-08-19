@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         _IterableAssertion,
         _ListAssertion,
         _NumericAssertion,
+        _ObjectAssertion,
         _PathAssertion,
         _StringAssertion,
     )
@@ -79,12 +80,20 @@ if TYPE_CHECKING:
     # the same view, pinned on a literal callable as well: a name resolves through its own type, and the
     # pair gate reads literals, so this is the line that ties `Callable` to the view it dispatches to
     assert_type(assert_that(lambda: None), _CallableAssertion)
-    assert_type(assert_that(object()), AssertionBuilder[object])
+
+    class _Countable:  # the smallest thing the capability umbrella recognises
+        def __iter__(self) -> object: ...
+
+    assert_type(assert_that(object()), _ObjectAssertion[object])
 
     # a dynamic assertion and an `add_extension` name both resolve through the same `__getattr__`, and
     # no one signature is true of both, so the hook deliberately answers Any. pinned here because both
     # narrower forms were tried and each one rejected code that runs: see DynamicMixin.__getattr__
-    assert_type(assert_that(object()).has_anything("value"), Any)
+    #
+    # The subject is a value with a capability, and that is the whole rule now: the hook lives on the
+    # builder, and only a value the umbrella catches still reaches it.  A plain object gets the object
+    # view, which has no `__getattr__`, so `has_anything` on one is a type error and a documented one
+    assert_type(assert_that(_Countable()).has_anything("value"), Any)
 
     # not_ hands back the assertion it was reached from, so inverting a step does not end the
     # narrowing: the value type survives it and a wrong-domain assertion is still rejected after it.
@@ -195,13 +204,27 @@ if TYPE_CHECKING:
     # and the narrowing terminals refine it (is_not_none strips None, is_instance_of narrows to the class).
     maybe_name = cast("str | None", "fred")
     anything = cast("object", "fred")
-    assert_type(assert_that(maybe_name), AssertionBuilder[str | None])
-    assert_type(assert_that(maybe_name).is_not_none(), AssertionBuilder[str])
+    assert_type(assert_that(maybe_name), _ObjectAssertion[str | None])
+    # the refinement answers with the view the factory would have given for `str`, not with a
+    # narrowed object view: a refinement that ended the narrowing would be a dead end
+    assert_type(assert_that(maybe_name).is_not_none(), _StringAssertion)
     assert_type(assert_that(maybe_name).is_not_none().value, str)
-    assert_type(assert_that(anything).is_instance_of(bool), AssertionBuilder[bool])
+    assert_type(assert_that(anything).is_instance_of(bool), _BoolAssertion)
     assert_type(assert_that(anything).is_instance_of(bool).value, bool)
     assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)
-    assert_type(assert_that(anything).is_not_none(), AssertionBuilder[object])
+    assert_type(assert_that(anything).is_not_none(), _ObjectAssertion[object])
+
+    # a refinement answers with the view the factory would have given, for every type the factory
+    # names.  A value whose only claim is a *shape* is where it stops, and that boundary is measured
+    # rather than chosen: see `_ObjectAssertion` for the two spellings tried and which checker each
+    # one puts in the wrong.  A `TypeIs` predicate is the way back, since it names its target
+    def _is_countable(value: object) -> TypeIs[_Countable]:
+        return isinstance(value, _Countable)
+
+    maybe_bag = cast("_Countable | None", _Countable())
+    assert_type(assert_that(maybe_bag).is_not_none(), _ObjectAssertion[_Countable])
+    assert_type(assert_that(anything).is_instance_of(_Countable), _ObjectAssertion[_Countable])
+    assert_type(assert_that(anything).satisfies(_is_countable), AssertionBuilder[_Countable])
 
     # User-extensible refinement narrowing: a TypeIs predicate narrows satisfies() to the guarded type,
     # so a domain predicate (richer than isinstance) narrows the chain and `.value` hands it back typed.
@@ -213,19 +236,19 @@ if TYPE_CHECKING:
         return isinstance(order, _PaidOrder)
 
     some_order = cast("_Order", _PaidOrder())
-    assert_type(assert_that(some_order).satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    assert_type(assert_that(some_order).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(some_order).satisfies(_is_paid).value, _PaidOrder)
     assert_type(assert_that(anything).is_not_none().satisfies(_is_paid).value, _PaidOrder)
     # a plain (non-TypeIs) predicate does not narrow: the chain keeps its type
-    assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), AssertionBuilder[_Order])
+    assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), _ObjectAssertion[_Order])
 
     # ... and refinement is not confined to the generic fallback. A concretely typed value reaches the
     # per-type Protocol, and it narrows from there too: a JSON payload typed `dict[str, Any]` is where a
     # domain predicate is most often applied, and it used to be the one place refinement stopped.
     payload = cast("dict[str, Any]", {"id": 1})
-    assert_type(assert_that(payload).satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    assert_type(assert_that(payload).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(payload).satisfies(_is_paid).value, _PaidOrder)
-    assert_type(assert_that("x").satisfies(_is_paid), AssertionBuilder[_PaidOrder])
+    assert_type(assert_that("x").satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     # the non-narrowing overload still applies where the argument carries no refinement
     assert_type(assert_that(payload).satisfies(lambda item: bool(item)), _DictAssertion[str, Any])
 

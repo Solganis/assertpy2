@@ -87,84 +87,71 @@ class TestValue:
         assert_that(assert_that(5).is_greater_than(0).value).is_equal_to(5)
 
 
-def test_fmt_items_empty():
-    builder = assert_that(None)
+def test_fmt_items_empty(builder):
     assert_that(builder._fmt_items([])).is_equal_to("<>")
 
 
-def test_fmt_items_single():
-    builder = assert_that(None)
+def test_fmt_items_single(builder):
     assert_that(builder._fmt_items([1])).is_equal_to("<1>")
     assert_that(builder._fmt_items(["foo"])).is_equal_to("<foo>")
     assert_that(builder._fmt_items([("bar", "baz")])).is_equal_to("<('bar', 'baz')>")
 
 
-def test_fmt_items_multiple():
-    builder = assert_that(None)
+def test_fmt_items_multiple(builder):
     assert_that(builder._fmt_items([1, 2, 3])).is_equal_to("<1, 2, 3>")
     assert_that(builder._fmt_items(["a", "b", "c"])).is_equal_to("<'a', 'b', 'c'>")
 
 
-def test_fmt_args_kwargs_empty():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_empty(builder):
     assert_that(builder._fmt_args_kwargs()).is_equal_to("")
 
 
-def test_fmt_args_kwargs_single_arg():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_single_arg(builder):
     assert_that(builder._fmt_args_kwargs(1)).is_equal_to("1")
     assert_that(builder._fmt_args_kwargs("foo")).is_equal_to("'foo'")
 
 
-def test_fmt_args_kwargs_multiple_args():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_multiple_args(builder):
     assert_that(builder._fmt_args_kwargs(1, 2, 3)).is_equal_to("1, 2, 3")
     assert_that(builder._fmt_args_kwargs("a", "b", "c")).is_equal_to("'a', 'b', 'c'")
 
 
-def test_fmt_args_kwargs_single_kwarg():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_single_kwarg(builder):
     assert_that(builder._fmt_args_kwargs(a=1)).is_equal_to("'a': 1")
     assert_that(builder._fmt_args_kwargs(f="foo")).is_equal_to("'f': 'foo'")
 
 
-def test_fmt_args_kwargs_multiple_kwargs():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_multiple_kwargs(builder):
     assert_that(builder._fmt_args_kwargs(a=1, b=2, c=3)).is_equal_to("'a': 1, 'b': 2, 'c': 3")
     assert_that(builder._fmt_args_kwargs(a="a", b="b", c="c")).is_equal_to("'a': 'a', 'b': 'b', 'c': 'c'")
 
 
-def test_fmt_args_kwargs_multiple_both():
-    builder = assert_that(None)
+def test_fmt_args_kwargs_multiple_both(builder):
     assert_that(builder._fmt_args_kwargs(1, 2, 3, a=4, b=5, c=6)).is_equal_to("1, 2, 3, 'a': 4, 'b': 5, 'c': 6")
     assert_that(builder._fmt_args_kwargs("a", "b", "c", d="g", e="h", f="i")).is_equal_to(
         "'a', 'b', 'c', 'd': 'g', 'e': 'h', 'f': 'i'"
     )
 
 
-def test_check_dict_like_empty_dict():
+def test_check_dict_like_empty_dict(builder):
     # the old form was `assert_that(builder._require_dict_like({}))`, which asserted nothing: the method
     # returns None and reports by raising, so the test passed whatever it did
-    builder = assert_that(None)
     assert_that(builder._require_dict_like).does_not_raise(TypeError).when_called_with({})
 
 
-def test_check_dict_like_not_iterable():
-    builder = assert_that(None)
+def test_check_dict_like_not_iterable(builder):
     assert_that(builder._require_dict_like).raises(TypeError).when_called_with(123).is_equal_to(
         "val must be dict-like (this one is not iterable), but was <123> (int)"
     )
 
 
-def test_check_dict_like_missing_keys():
-    builder = assert_that(None)
+def test_check_dict_like_missing_keys(builder):
     assert_that(builder._require_dict_like).raises(TypeError).when_called_with("foo").is_equal_to(
         "val must be dict-like (this one has no keys()), but was <'foo'> (str)"
     )
 
 
-def test_check_dict_like_bool():
-    builder = assert_that(None)
+def test_check_dict_like_bool(builder):
     assert_that(builder._is_dict_like({})).is_true()
     assert_that(builder._is_dict_like(123)).is_false()
     assert_that(builder._is_dict_like("foo")).is_false()

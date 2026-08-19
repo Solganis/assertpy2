@@ -44,10 +44,16 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
     # --- the overload sets, all deliberate ---------------------------------------------------------
     # per-type overloads overlap the generic fallback by construction, and the `satisfies` narrowing
-    # pair takes the same trade in three protocols so a matcher built for another type is caught
-    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 3,
+    # pair takes the same trade in three protocols so a matcher built for another type is caught.
+    #
+    # The count rose with the refinement ladders on the object view and the capability umbrella, and
+    # every one of the additions is the same sentence: an earlier entry is more specific than a later
+    # one and returns something else.  That is what an overload ladder is.  `str | None` overlaps
+    # `_U | None`, a `str` subject overlaps both the umbrella and the fallback, and in each case the
+    # earlier entry is the answer
+    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 28,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
-    ("assertpy2/assertpy.py", "reportOverlappingOverload"): 4,
+    ("assertpy2/assertpy.py", "reportOverlappingOverload"): 5,
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 2,

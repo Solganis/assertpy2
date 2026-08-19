@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
+        _CapableT,
         _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
         _FrameT_co,
         _IterableAssertion,
         _NumericAssertion,
+        _ObjectAssertion,
         _PathAssertion,
         _StringAssertion,
     )
@@ -450,6 +452,8 @@ def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytear
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
+# --- capability overloads, and their order is load-bearing -----------------------------------------
+#
 # A `pandas.DataFrame` satisfies *every* structural protocol, because pandas models column access with
 # a catch-all attribute, so it is assignable to anything a checker is asked about.  The frame overload
 # is therefore first, and everything below it only sees values a frame did not already claim.
@@ -463,10 +467,17 @@ def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_Fram
 def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_ArrayT_co]: ...
 
 
-# the fallback keeps the full API for object- and union-typed values, at the price of an overload
-# overlap mypy and pyright report and ty does not
+# The capability umbrella, below the frame and array pair so it cannot take a value they claim, and
+# above the fallback so a value with any recognised capability keeps the whole surface.  What reaches
+# the fallback is a value that answers to nothing the library knows how to use, and that is the one
+# case where offering 152 assertion names was never anything but a lie.
 @overload
-def assert_that(val: _T, description: str = "") -> AssertionBuilder[_T]: ...
+def assert_that(val: _CapableT, description: str = "") -> AssertionBuilder[_CapableT]: ...
+
+
+# the fallback, at the price of an overload overlap mypy and pyright report and ty does not
+@overload
+def assert_that(val: _T, description: str = "") -> _ObjectAssertion[_T]: ...
 
 
 # Return the common base protocol so each overload stays consistent with the impl (no reportInconsistentOverload).

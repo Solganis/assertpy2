@@ -1763,7 +1763,10 @@ _PIPELINE_STEPS = {
 
 
 # what `assert_that` answers when no concrete overload matches, and so the one overload with no subject
-_FALLBACK_VIEW = "AssertionBuilder"
+# what a value no overload recognises resolves to.  The builder is still a return type here,
+# on the capability umbrella, so naming it as the fallback would collect the wrong overload
+_FALLBACK_VIEW = "_ObjectAssertion"
+_UMBRELLA_VIEW = "AssertionBuilder"
 
 
 def _plain_name(annotation) -> str:
@@ -1848,6 +1851,8 @@ def _shape_bounds() -> dict[str, str]:
                 value=ast.Call(func=ast.Name(id="TypeVar"), keywords=keywords),
             ):
                 for keyword in keywords:
+                    # only a bound written as one name resolves to a subject.  The umbrella's bound is
+                    # a union of shapes written as a string, and it is read where it is dispatched
                     if keyword.arg == "bound" and isinstance(keyword.value, ast.Name):
                         bounds[name] = keyword.value.id
     return bounds
@@ -1866,6 +1871,7 @@ def _dispatch_relation() -> dict[str, str]:
     source = pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8")
     relation: dict[str, str] = {}
     fallbacks: list[list[str]] = []
+    umbrellas: list[list[str]] = []
     for node in ast.parse(source).body:
         if not isinstance(node, ast.FunctionDef) or node.name != "assert_that":
             continue
@@ -1878,6 +1884,12 @@ def _dispatch_relation() -> dict[str, str]:
             # the overload answering for anything unrecognised.  Its subject is a bare TypeVar, and
             # requiring that here is what stops a concrete overload from hiding behind the same return
             fallbacks.append(subjects)
+            continue
+        if view == _UMBRELLA_VIEW:
+            # the capability umbrella, which keeps the whole builder for a value the library recognises
+            # without naming its type.  It dispatches on a union of shapes rather than on one subject,
+            # so it has no row in the relation, and the order guard is what holds its placement
+            umbrellas.append(subjects)
             continue
         # a return this walk cannot decode is refused for the same reason an unreadable subject is: a
         # quoted or qualified annotation would drop its subject out of the relation without a word
@@ -1897,6 +1909,8 @@ def _dispatch_relation() -> dict[str, str]:
             relation[subject] = view
     if fallbacks != [["_T"]]:
         raise AssertionError(f"expected exactly one generic fallback overload, found subjects {fallbacks}")
+    if umbrellas != [["_CapableT"]]:
+        raise AssertionError(f"expected exactly one capability umbrella overload, found subjects {umbrellas}")
     return relation
 
 

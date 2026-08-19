@@ -180,6 +180,12 @@ jobs:
       - name: Type check (real library values, all three checkers)
         run: uv run pytest tests/test_typing_integrations.py -q
 
+      # every gate above reads the working tree, where `py.typed` and every subpackage are present
+      # because they are files on disk. A consumer gets the wheel, and the two agree only for as long
+      # as the packaging says so
+      - name: Type check (the typed surface as an installed wheel carries it)
+        run: uv run pytest tests/test_typing_from_a_wheel.py -q
+
   ci-ok:
     timeout-minutes: 5
     needs: [test, optional-integrations, lint]

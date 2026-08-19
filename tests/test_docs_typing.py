@@ -22,6 +22,7 @@ the docs actually use are declared.
 from __future__ import annotations
 
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -60,20 +61,31 @@ def _snippet(example: CodeExample, doc: str) -> str:
     return PREAMBLE + PAGE_FIXTURES.get(doc, "") + example.source
 
 
-def _write_snippets(target: pathlib.Path) -> tuple[int, list[str]]:
-    """Write every checkable block, and report which of them are the ones that must fail."""
+def _write_snippets(target: pathlib.Path) -> tuple[int, dict[str, set[int]]]:
+    """Write every checkable block, and report the counter-examples as ``{file: lines that must fail}``.
+
+    Per line rather than per file, because a two-line counter-example was passing on one diagnostic:
+    the second line could quietly start type-checking and nothing would say so.  The line numbers are
+    the snippet's own, which is what a checker reports against.
+    """
     written = 0
-    must_fail = []
+    must_fail: dict[str, set[int]] = {}
     for doc in CHECKED_DOCS:
         for example in find_examples(doc):
             markers = _markers(example)
             if any(marker in line for line in markers for marker in SKIP_MARKERS):
                 continue
             name = f"{doc.replace('/', '_').removesuffix('.md')}__{example.start_line}.py"
-            (target / name).write_text(_snippet(example, doc), encoding="utf-8")
+            snippet = _snippet(example, doc)
+            (target / name).write_text(snippet, encoding="utf-8")
             written += 1
             if any(TYPE_ERROR_MARKER in line for line in markers):
-                must_fail.append(name)
+                offset = len(snippet.splitlines()) - len(example.source.splitlines())
+                must_fail[name] = {
+                    offset + number
+                    for number, line in enumerate(example.source.splitlines(), 1)
+                    if line.strip() and not line.lstrip().startswith("#")
+                }
     return written, must_fail
 
 
@@ -87,14 +99,26 @@ def _check(target: pathlib.Path) -> list[str]:
     return [line for line in result.stdout.splitlines() if ": error" in line]
 
 
+def _reported_lines(reported: list[str], name: str) -> set[int]:
+    """The snippet line numbers a checker reported against, for one generated file."""
+    found = set()
+    for line in reported:
+        match = re.search(rf"{re.escape(name)}:(\d+):", line)
+        if match:
+            found.add(int(match.group(1)))
+    return found
+
+
 def test_doc_examples_type_check(tmp_path: pathlib.Path) -> None:
     written, must_fail = _write_snippets(tmp_path)
     # a broken extractor would make this guard pass by checking nothing
     assert_that(written).is_greater_than(20)
     reported = _check(tmp_path)
-    rejected = {name for name in must_fail for line in reported if name in line}
     diagnostics = [line for line in reported if not any(name in line for name in must_fail)]
     assert_that(diagnostics).described_as("type errors in documented examples").is_empty()
-    assert_that(sorted(rejected)).described_as("counter-examples a checker still accepts").is_equal_to(
-        sorted(must_fail)
-    )
+    accepted = {
+        name: sorted(expected - _reported_lines(reported, name))
+        for name, expected in must_fail.items()
+        if expected - _reported_lines(reported, name)
+    }
+    assert_that(accepted).described_as("counter-example lines a checker still accepts").is_empty()
