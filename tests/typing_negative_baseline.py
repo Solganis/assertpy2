@@ -15,9 +15,13 @@ and the argument is missing.  `ty` sometimes answers `no-matching-overload` wher
 argument: same family, different route through an overload set.
 
 **What stays uncaught, and why.** `assert_that(Person()).is_positive()` type-checks, because a value
-with no protocol of its own gets the generic builder, which carries every method there is.  `.not_`
-returns a proxy resolving any name, so the negated branch accepts what the protocol refuses.  Closing
-the second means a second protocol per type, doubling the typed surface for one inverted call.
+with no protocol of its own gets the generic builder, which carries every method there is.  The
+ordering matchers take and judge anything, and the entries below say why every spelling that closes
+that trades a correct call for an incorrect one.
+
+`.not_` used to belong here for the same reason as the first: it returns a proxy resolving any name.
+It is declared as the protocol it was reached from instead, which costs nothing, and what remains is
+the other direction: the fourteen names the proxy refuses at runtime are still spelled as available.
 
 **The trap this file exists to catch.** A numeric comparison is bound to `SupportsFloat` rather than to
 a list of types: the first attempt named `float | Decimal | Fraction` and rejected `numpy.int64`, a
@@ -136,10 +140,22 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # --- a step hands back `Self`, so the narrowing holds for the whole chain ----------------------
     "complex-widened-by-chaining": _MISSING,
     "bool-widened-by-chaining": _MISSING,
-    # --- still open, both for the same reason: a surface reached through `__getattr__` -------------
-    # the generic builder carries every method there is, and `.not_` resolves any name through a proxy
+    # `.not_` is declared as the protocol it was reached from, so the proxy accepts what the value
+    # accepts.  What it still allows and the runtime refuses is the handful of non-negatable names
+    "negation-widens-the-protocol": _MISSING,
+    # --- still open: the generic builder carries every method there is ------------------------------
     "numeric-assertion-on-an-object": {},
-    "negation-widens-the-protocol": {},
+    # and the negation proxy, which is declared as the protocol and so cannot describe the fourteen
+    # names it refuses at runtime
+    "negation-allows-a-non-negatable-name": {},
+    # the ordering matchers, deliberately.  `Matcher` is contravariant and `satisfies()` already refuses
+    # `match.starts_with("a")` over an `int`, so the shape works; what cannot be spelled is the ordering
+    # relation itself.  Typing the boundary as a number refuses `match.greater_than("a")`, which orders
+    # strings at runtime, and typing it as a plain TypeVar refuses `match.greater_than(0)` over a
+    # `float`, since contravariance then asks for `float` to be a subtype of `int`.  Both trade a
+    # correct call for an incorrect one, so the boundary stays `object` and the gap stays recorded
+    "ordering-matcher-takes-any-boundary": {},
+    "ordering-matcher-judges-any-subject": {},
     # --- and the third: `SupportsFloat` is wider than the runtime's `numbers.Number` ----------------
     # both are refused at runtime by name, which is the tolerable direction for an approximation to err
     "convertible-but-not-a-number": {},
