@@ -89,31 +89,41 @@ broadens or changes a return type fails the build. `ty` additionally type-checks
 
 ### Where the typed surface ends
 
-One relation stays invisible, and it is a property of the builder rather than of a signature. A value
-with no overload of its own gets the generic `AssertionBuilder`, which carries every assertion there is,
-so a numeric assertion on a user class type-checks:
+A value the library cannot see a use for gets the core surface, not every assertion there is. So a
+numeric assertion on a user class is a type error rather than a runtime one:
 
-<!-- docs-guard: untyped -->
+<!-- docs-guard: type-error -->
 ```python
-assert_that(person).is_positive()   # accepted: the generic builder carries every method
+assert_that(person).is_positive()   # type error: a plain class has no numeric assertions
 ```
 
-It fails at runtime with a clear message. Closing it statically means splitting the runtime builder,
-which is a larger change than any signature.
+"Cannot see a use for" is meant literally, and it is narrower than it sounds. Two kinds of value are
+unaffected. One is the value with a type of its own, which reaches its own protocol as it always did.
+The other is the value with no such type that still answers to something the library uses: an iterable
+of your own, an HTTP response from any client, a pydantic-style model, a dataclass, a mapping that is
+not a `dict`. Those keep the whole surface, and so does anything typed `Any`, which is what an
+unannotated helper or a `json.loads()` result gives you.
+
+What is left is the value annotated `object` and the class that answers to nothing, and for those the
+shorter surface is the true one.
+
+That second group is a compatibility trade rather than a clean line, and it is worth knowing which way
+it errs. A class that happens to define `__iter__` for a reason of its own keeps all 152 assertion
+names, numeric ones included, exactly as before. The rule is deliberately generous: a value the library
+might be able to use keeps everything, and only a value it certainly cannot use is narrowed. Erring the
+other way would reject calls that work, which is the worse failure of the two.
 
 [Dynamic assertions](../guides/assertions.md#dynamic-assertions-on-objects) (`has_<attribute>()`) are
-resolved at runtime from the value itself, so no overload can declare them ahead of time. A checker
-therefore accepts them on exactly one kind of value: the ones that land on the generic
-`AssertionBuilder`, which carries a `__getattr__`. Values with an overload of their own - `str`, `int`,
-`dict`, `list`, `set`, `date`, `Path`, `bytes`, callables - do not.
+resolved at runtime from the value itself, so no overload can declare them ahead of time. They are
+outside the typed surface by design, and a checker accepts them only where the value keeps the full
+builder:
 
-<!-- docs-guard: untyped -->
+<!-- docs-guard: type-error -->
 ```python
-assert_that(person).has_first_name("Fred")   # clean: a user class falls to the generic builder
-assert_that(payload).has_first_name("Fred")  # type error: _DictAssertion has no attribute has_first_name
+assert_that(person).has_first_name("Fred")   # type error: a plain class has no dynamic assertions
 ```
 
-The runtime behaves identically in both lines, and only the checker differs. On a value with its own
+The runtime accepts it either way, and only the checker differs. On a value with its own
 overload the choice is between `# type: ignore[attr-defined]` and the typed equivalent, which for a
 dict is [`contains_entry()`](../guides/assertions.md#dicts):
 
@@ -129,15 +139,18 @@ mutually satisfiable: for a checker to accept `has_first_name` on a dict, `_Dict
 line, for the same reason. The name is attached at runtime, so it reaches a checker through that one
 `__getattr__` and nowhere else:
 
-<!-- docs-guard: untyped -->
+<!-- docs-guard: type-error -->
 ```python
-assert_that(order).is_paid()  # clean: a user class falls to the generic builder
+assert_that(order).is_paid()  # type error: a plain class has no dynamically attached names
 assert_that(5).is_5()         # type error: _NumericAssertion has no attribute is_5
 ```
 
-Both lines run. If your extension targets a value with an overload of its own, the call needs
-`# type: ignore[attr-defined]` at each site, and the return type a checker infers for it is `Any`
-rather than whatever the extension actually returns.
+Both lines run. An extension needs `# type: ignore[attr-defined]` at each call site, and the return
+type a checker infers for it is `Any` rather than whatever the extension actually returns. A checker
+accepts the name only where the value keeps the full builder, which is narrower than either half of
+the example above: not a `list` or a `dict`, which have overloads of their own, and not a plain class,
+which has no capability. What is left is a value with a capability and no overload, such as an
+iterable of your own or a mapping that is not a `dict`, and anything typed `Any`.
 
 ## Typed narrowing with .value
 
@@ -193,8 +206,11 @@ beyond returning the value.
     Either way nothing unsound escapes: in soft mode you get an exception, never a wrong-typed value.
     Read `.value` in strict mode, or after the soft block has closed.
 
-    (The narrowed builder also exposes the full assertion API rather than the type-filtered subset,
-    since an arbitrary narrowed class has no per-type protocol.)
+    (A refinement hands back the view `assert_that()` would have given for the refined type, so
+    `is_not_none()` on a `str | None` continues as a string. Refining to a class the library does not
+    name continues on the core surface instead, since there is no per-type protocol to hand back. Under
+    `ty` the numeric and sequence refinements come back gradual rather than as their view, so the chain
+    accepts everything from there on instead of narrowing.)
 
 ### Refinement narrowing with a TypeIs predicate (advanced)
 

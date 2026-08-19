@@ -77,9 +77,8 @@ class CustomDict:
         return self._dict.get(key)
 
 
-def test_check_dict_like():
+def test_check_dict_like(builder):
     custom_dict = CustomDict({"a": 1})
-    builder = assert_that(None)
     builder._require_dict_like(custom_dict)
     builder._require_dict_like(custom_dict, True, True, True)
     builder._require_dict_like(custom_dict, True, True, False)
@@ -97,8 +96,7 @@ def test_check_dict_like():
     builder._require_dict_like(CustomDictNoGetitem(), check_getitem=False)
 
 
-def test_check_dict_like_bool():
-    builder = assert_that(None)
+def test_check_dict_like_bool(builder):
     assert_that(builder._is_dict_like(CustomDictNoKeys())).is_false()
     assert_that(builder._is_dict_like(CustomDictNoKeysCallable())).is_false()
     assert_that(builder._is_dict_like(CustomDictNoValues())).is_false()
@@ -106,37 +104,32 @@ def test_check_dict_like_bool():
     assert_that(builder._is_dict_like(CustomDictNoGetitem())).is_false()
 
 
-def test_check_dict_like_no_keys():
+def test_check_dict_like_no_keys(builder):
     with pytest.raises(TypeError) as exc_info:
-        builder = assert_that(None)
         builder._require_dict_like(CustomDictNoKeys())
     assert_that(str(exc_info.value)).contains("must be dict-like (this one has no keys())")
 
 
-def test_check_dict_like_no_keys_callable():
+def test_check_dict_like_no_keys_callable(builder):
     with pytest.raises(TypeError) as exc_info:
-        builder = assert_that(None)
         builder._require_dict_like(CustomDictNoKeysCallable())
     assert_that(str(exc_info.value)).contains("must be dict-like (this one has no keys())")
 
 
-def test_check_dict_like_no_values():
+def test_check_dict_like_no_values(builder):
     with pytest.raises(TypeError) as exc_info:
-        builder = assert_that(None)
         builder._require_dict_like(CustomDictNoValues())
     assert_that(str(exc_info.value)).contains("must be dict-like (this one has no values())")
 
 
-def test_check_dict_like_no_values_callable():
+def test_check_dict_like_no_values_callable(builder):
     with pytest.raises(TypeError) as exc_info:
-        builder = assert_that(None)
         builder._require_dict_like(CustomDictNoValuesCallable())
     assert_that(str(exc_info.value)).contains("must be dict-like (this one has no values())")
 
 
-def test_check_dict_like_no_getitem():
+def test_check_dict_like_no_getitem(builder):
     with pytest.raises(TypeError) as exc_info:
-        builder = assert_that(None)
         builder._require_dict_like(CustomDictNoGetitem())
     assert_that(str(exc_info.value)).contains("must be dict-like (this one has no [] accessor)")
 

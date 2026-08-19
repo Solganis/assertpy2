@@ -143,9 +143,17 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # `.not_` is declared as the protocol it was reached from, so the proxy accepts what the value
     # accepts.  What it still allows and the runtime refuses is the handful of non-negatable names
     "negation-widens-the-protocol": _MISSING,
-    # --- still open: the generic builder carries every method there is ------------------------------
-    "numeric-assertion-on-an-object": {},
-    # and the negation proxy, which is declared as the protocol and so cannot describe the fourteen
+    # --- a value with no capability gets the core surface, not the whole builder -------------------
+    # This was the entry that read `{}` for as long as the fallback handed back the builder.  A plain
+    # class answers to nothing the library can use, so it now gets the object view, and a numeric
+    # assertion on one is a type error in all three checkers
+    "numeric-assertion-on-an-object": _MISSING,
+    # the dynamic hook lives on the builder, so the same narrowing takes `has_<attr>` off a plain
+    # class.  Deliberate, and the docs guard has carried a marker for exactly this since before it:
+    # a dynamic assertion is outside the typed surface by policy
+    "dynamic-attribute-on-an-object": _MISSING,
+    # --- still open ---------------------------------------------------------------------------------
+    # the negation proxy, which is declared as the protocol and so cannot describe the fourteen
     # names it refuses at runtime
     "negation-allows-a-non-negatable-name": {},
     # the ordering matchers, deliberately.  `Matcher` is contravariant and `satisfies()` already refuses
@@ -173,7 +181,6 @@ VALID: frozenset[str] = frozenset(
         "valid-predicate",
         "valid-length",
         "valid-date-order",
-        "valid-dynamic-attribute",
         "valid-int-against-float",
         "valid-float-against-int",
         "valid-decimal-order",

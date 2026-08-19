@@ -40,6 +40,30 @@ def _overload_subjects() -> list[str]:
     return subjects
 
 
+def _shape_names(annotation: ast.expr) -> list[str]:
+    """The shape names a bound is written with, or `[]` when it is not made of shapes.
+
+    A bound is either one name or a union of them, and a union is an `ast.BinOp` tree rather than a
+    list.  Anything with a non-shape in it reads as no shapes at all, so a bound that stops being
+    structural stops being counted rather than being counted wrongly.
+    """
+    match annotation:
+        case ast.Name(id=name) if name.endswith("Shape"):
+            return [name]
+        case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+            parts = _shape_names(left) + _shape_names(right)
+            return parts if len(parts) == _union_width(annotation) else []
+    return []
+
+
+def _union_width(annotation: ast.expr) -> int:
+    """How many operands a `|` tree has, so a union with one non-shape in it cannot read as clean."""
+    match annotation:
+        case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+            return _union_width(left) + _union_width(right)
+    return 1
+
+
 def _shape_bound_typevars() -> dict[str, str]:
     """``{type variable: the shape it is bound to}``, read from where the shapes are declared.
 
@@ -56,12 +80,16 @@ def _shape_bound_typevars() -> dict[str, str]:
                 value=ast.Call(func=ast.Name(id="TypeVar"), keywords=keywords),
             ):
                 for keyword in keywords:
+                    if keyword.arg != "bound":
+                        continue
                     # a bound is either one shape by name, or a union of them written as a string
                     # because it is too long for one line.  Reading only the first form is how the
                     # umbrella overload was invisible to this file on the day it was added
-                    if keyword.arg == "bound" and isinstance(keyword.value, ast.Name):
-                        if keyword.value.id.endswith("Shape"):
-                            bounds[name] = keyword.value.id
+                    # one shape by name, or a union of them.  Reading only the first form is how
+                    # the umbrella overload was invisible to this file on the day it was added
+                    named = _shape_names(keyword.value)
+                    if named:
+                        bounds[name] = " | ".join(named)
     return bounds
 
 
@@ -77,7 +105,7 @@ class TestTheOverloadOrder:
     def test_the_file_declares_overloads_at_all(self):
         # a rename or a refactor that stopped this from finding anything would make every other
         # assertion here vacuous, so the count is asserted before the order is
-        assert_that(_overload_subjects()).described_as("overloads of assert_that").is_length(16)
+        assert_that(_overload_subjects()).described_as("overloads of assert_that").is_length(17)
 
     def test_exactly_one_overload_keys_on_the_frame_shape(self):
         subjects = _overload_subjects()
@@ -95,6 +123,21 @@ class TestTheOverloadOrder:
         assert_that(frame).described_as(
             "a pandas frame satisfies every shape, so it has to be claimed first"
         ).is_equal_to(min(_shape_positions(subjects)))
+
+    def test_the_capability_umbrella_comes_last_among_the_shapes(self):
+        """It matches anything with any capability, so a precise view below it would never be reached.
+
+        The umbrella is the compatibility half of the narrowing: a value the library recognises but no
+        overload names keeps the whole builder.  Its bound is a union, which is exactly why it has to
+        sit under every shape that names one thing.
+        """
+        subjects = _overload_subjects()
+        bounds = _shape_bound_typevars()
+        umbrellas = [index for index, name in enumerate(subjects) if "|" in bounds.get(name, "")]
+        assert_that(umbrellas).described_as("exactly one overload keys on a union of shapes").is_length(1)
+        assert_that(umbrellas[0]).described_as("a precise shape below the umbrella is never reached").is_equal_to(
+            max(_shape_positions(subjects))
+        )
 
     def test_every_shape_comes_before_the_fallback(self):
         subjects = _overload_subjects()

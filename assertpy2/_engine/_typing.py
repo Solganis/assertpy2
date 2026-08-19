@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Callable, Hashable, Iterable, Mapping
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, ClassVar, Protocol, SupportsFloat, TypeVar, overload
 
     from typing_extensions import TypeIs
 
@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     _V = TypeVar("_V")  # tracked dict value type
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)  # tracked bytes type (output-only -> covariant)
     _U = TypeVar("_U")  # the type a TypeIs predicate refines the tracked value to
+    _T_co = TypeVar("_T_co", covariant=True)  # the subject of a value no overload recognises
 
     # a capability rather than a list of types: the list said `float | Decimal | Fraction` and refused
     # `numpy.int64`. `str`, `complex`, `date` and containers have no `__float__` and stay caught
@@ -227,8 +228,40 @@ if TYPE_CHECKING:
         def is_not_iterable(self) -> Self: ...
         # the same refinement the generic fallback offers, so a domain predicate narrows the chain
         # from a concretely typed value too, not only from the untyped one
+        # `satisfies` answers with the view the factory would have given for the guarded type, so a
+        # refinement is a step in a chain rather than the end of one.  The ladder is written out in
+        # each protocol that declares `satisfies`, because a protocol overriding it has to restate the
+        # whole overload set, and two of them do in order to narrow the matcher to their own value
         @overload
-        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
+        def satisfies(self, matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[Any] | Callable[[Any], object]) -> Self: ...
         def all_fields_satisfy(
@@ -272,6 +305,127 @@ if TYPE_CHECKING:
         @property
         def value(self) -> object: ...
 
+    class _ObjectAssertion(_CoreAssertion, Protocol[_T_co]):
+        """What a value no overload recognises can be asked, which is the core surface and ordering.
+
+        The fallback used to hand back the builder itself, carrying all 152 assertion names, so
+        `assert_that(Person()).is_positive()` type-checked and then raised.  This is the other end: a
+        value with no capability any overload can see gets what applies to every value.
+
+        Ordering is here and not in `_CoreAssertion`, and the difference matters.  Every other view
+        spells its own operand (`str` against `str`, a date against a date), which is what makes the
+        comparison worth checking, and a frame is refused outright.  Only an unrecognised value has no
+        operand to name, so it takes `object` and judges anything.  That is a recorded boundary rather
+        than an oversight: `tests/typing_negative_baseline.py` holds why every narrower spelling trades
+        a correct call for an incorrect one, and a `Decimal` compared against an `int` is the case it
+        would break.
+
+        The three refinements are declared here rather than inherited because they have to return this
+        view: they are the reason `.value` can be read without a `cast()`, and a refinement that came
+        back as the builder would put all 152 names back at the first `is_not_none()`.
+        """
+
+        @property
+        def value(self) -> _T_co: ...
+
+        # `matches_structure` for the same reason as ordering, one level further down.  Its subject is
+        # a mapping, a pydantic-style model or an attrs instance, and the last of those is invisible:
+        # `__attrs_attrs__` reaches mypy, which has a plugin for it, and neither ty nor pyright.  A
+        # shape keyed on it would answer three different ways, which is worse than answering widely
+        def matches_structure(self, spec: dict) -> Self: ...
+
+        # ordering, with an operand of any type. See the class docstring for why it is not narrower
+        def is_greater_than(self, other: Any) -> Self: ...
+        def is_greater_than_or_equal_to(self, other: Any) -> Self: ...
+        def is_less_than(self, other: Any) -> Self: ...
+        def is_less_than_or_equal_to(self, other: Any) -> Self: ...
+        def is_between(self, low: Any, high: Any) -> Self: ...
+        def is_not_between(self, low: Any, high: Any) -> Self: ...
+
+        # The refinements: strip `None`, narrow to a class, follow a `TypeIs` predicate.  Each answers
+        # with the view `assert_that()` would have given for the refined type, as far as each checker
+        # solves it (see the measurement below), and the ladder is
+        # that overload set written a second time, because nothing reapplies an overload set to a
+        # TypeVar.  Without it a refinement is a dead end: `.value` comes back typed and the chain has
+        # lost the type's own assertions, so a `str | None` asked `is_not_none()` could no longer be
+        # asked `starts_with`.
+        #
+        # It closes a hole as well as repairing one.  These used to hand back the builder, so
+        # `assert_that(thing).is_instance_of(Person).is_positive()` type-checked.
+        #
+        # "the view the factory would have given" is measured against the factory, not asserted:
+        # mypy and pyright answer identically for all twelve types, and ty resolves eight and answers
+        # `Unknown` for the numeric and sequence rungs without reporting anything.  `Unknown` accepts
+        # every call, so what is lost there is the narrowing rather than a working call.
+        # `bool` before `int`, as in the factory: a `bool` is an `int` and the first match wins.
+        #
+        # No rung for a shape, and the reason is measured rather than assumed.  Two spellings were
+        # tried and each puts a different checker in the wrong.  With a bound type variable, mypy
+        # solves it to `Never` against an `object` subject and takes the rung anyway, handing the
+        # whole builder to the value this narrowing exists for.  With the shape union written out,
+        # mypy and pyright are right and ty takes it for `object` instead.  So `Bag | None` asked
+        # `is_not_none()` gets this view rather than the builder, and the way back to the wider
+        # surface is `.value` or a `TypeIs` predicate, which names its target and does not
+        # degenerate.  One answer from three checkers is worth more than a better answer from one.
+        @overload
+        def is_not_none(self: _ObjectAssertion[str | None]) -> _StringAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[bool | None]) -> _BoolAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[int | None]) -> _NumericAssertion[int]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[float | None]) -> _NumericAssertion[float]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[complex | None]) -> _ComplexAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[dict[_K, _V] | None]) -> _DictAssertion[_K, _V]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[list[_E] | tuple[_E, ...] | None]) -> _IterableAssertion[_E]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[set[_E] | frozenset[_E] | None]) -> _IterableAssertion[_E]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[datetime.date | None]) -> _DateAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[Path | None]) -> _PathAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[bytes | None]) -> _BytesAssertion[bytes]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[bytearray | None]) -> _BytesAssertion[bytearray]: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[Callable[..., object] | None]) -> _CallableAssertion: ...
+        @overload
+        def is_not_none(self: _ObjectAssertion[_U | None]) -> _ObjectAssertion[_U]: ...
+        @overload
+        def is_not_none(self) -> Self: ...
+        @overload
+        def is_instance_of(self, some_class: type[str]) -> _StringAssertion: ...
+        @overload
+        def is_instance_of(self, some_class: type[bool]) -> _BoolAssertion: ...
+        @overload
+        def is_instance_of(self, some_class: type[int]) -> _NumericAssertion[int]: ...
+        @overload
+        def is_instance_of(self, some_class: type[float]) -> _NumericAssertion[float]: ...
+        @overload
+        def is_instance_of(self, some_class: type[complex]) -> _ComplexAssertion: ...
+        @overload
+        def is_instance_of(self, some_class: type[dict[_K, _V]]) -> _DictAssertion[_K, _V]: ...
+        @overload
+        def is_instance_of(self, some_class: type[list[_E] | tuple[_E, ...]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def is_instance_of(self, some_class: type[set[_E] | frozenset[_E]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def is_instance_of(self, some_class: type[datetime.date]) -> _DateAssertion: ...
+        @overload
+        def is_instance_of(self, some_class: type[Path]) -> _PathAssertion: ...
+        @overload
+        def is_instance_of(self, some_class: type[bytes]) -> _BytesAssertion[bytes]: ...
+        @overload
+        def is_instance_of(self, some_class: type[bytearray]) -> _BytesAssertion[bytearray]: ...
+        @overload
+        def is_instance_of(self, some_class: type[_U]) -> _ObjectAssertion[_U]: ...
+        @overload
+        def is_instance_of(self, some_class: type) -> Self: ...
+
     class _TextAssertion(_MembershipAssertion, _RepeatableAssertion[str], _SizedAssertion, _CoreAssertion, Protocol):
         """What a piece of text can be asked, whether a caller passed it in or the library caught it.
 
@@ -284,7 +438,35 @@ if TYPE_CHECKING:
         # narrowed from the core: the value under test is a `str`, so a matcher built for another type
         # is a type error here rather than something only the runtime discovers
         @overload
-        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
+        def satisfies(self, matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[str] | Callable[[Any], object]) -> Self: ...
 
@@ -378,7 +560,35 @@ if TYPE_CHECKING:
         def value(self) -> _N: ...
         # narrowed from the core, for the same reason the string protocol narrows it
         @overload
-        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
+        def satisfies(self, matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT]: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[_N] | Callable[[Any], object]) -> Self: ...
         # `_Number` rather than `_N`: comparing an `int` against a `float` is ordinary and has to keep
@@ -521,6 +731,79 @@ if TYPE_CHECKING:
         # the same quantifier under its other name, which delegates here.  Declared alongside rather
         # than only on the sequence view: a delegate reachable in fewer places than what it delegates
         # to is a difference the runtime does not have
+
+    # --- the shapes a checker can recognise without importing the library that defines them ---------
+    #
+    # These describe a value by what it carries, so no optional dependency is named in a signature and a
+    # user without pandas installed still type-checks against the same package.
+    #
+    # Every member here is one `pandas-stubs` actually declares.  The dataframe interchange method
+    # `__dataframe__` reads better and does not work: the stubs do not declare it, so it arrives through
+    # their catch-all as a `Series[Any]`, and mypy then read a frame as not matching and resolved it to
+    # the array view instead.  `pivot` is declared, both libraries have it on their frame, and neither a
+    # series nor a `pandas.Index` does - which matters, because an `Index` carries `join`, `to_frame`
+    # and `dtype` and would otherwise be offered assertions the runtime refuses it.
+    #
+    # There is deliberately no series shape.  Nothing separates a series from a `pandas.Index`, both
+    # carrying `to_frame` and `dtype`, so a series keeps the generic builder it has always had rather
+    # than buying a narrower view at the price of promising an `Index` something it cannot do.
+    #
+    # `strides` rather than `dtype` on the array for the same reason from the other side: a series and
+    # an `Index` both carry `__array__` and `dtype`, and the array view has no `is_frame_equal`, which
+    # the runtime accepts for a series.  A narrower view that removes a working call is worse than the
+    # builder they have today.
+
+    # The capability umbrella.  Between the fifteen typed overloads and the fallback sits one more,
+    # for a value that answers to *some* capability the library recognises without being a type any
+    # overload names: a custom collection, an HTTP response from any of the six clients, a pydantic
+    # model, an attrs instance, a dataclass, a mapping that is not a `dict`.  Those keep the whole
+    # surface, and only a value with no capability at all is narrowed.
+    #
+    # One overload rather than one per family, because a family-precise view is a permanent claim about
+    # what that family may be asked, and the frame pair is the measure of how much work one such claim
+    # is.  This is the compatibility half, and a family can be lifted out of the union later when its
+    # shape has been shown to hold across the three checkers.
+    #
+    # Every member is keyed on what the runtime gate reads, not on what reads well.  `__dict__` was the
+    # first candidate for the structure member and it is on `object`, so it matched a plain class and
+    # would have made the narrowing do nothing while every gate stayed green.
+
+    class _CollectionShape(Protocol):
+        # `__iter__` alone: `is_length` lives in the core, and a generator has no `__len__` while
+        # `contains()` works on one
+        def __iter__(self) -> Any: ...
+
+    class _HeadersShape(Protocol):
+        def keys(self) -> Any: ...
+        # positional-only: typeshed spells `__getitem__` that way, and a member that also takes the
+        # key by name is one no mapping in the standard library satisfies
+        def __getitem__(self, key: Any, /) -> Any: ...
+
+    class _HttpResponseShape(Protocol):
+        # read-only members, so a client spelling either of these as a property still matches
+        @property
+        def status_code(self) -> int: ...
+        @property
+        def headers(self) -> _HeadersShape: ...
+
+    class _ModelShape(Protocol):
+        def model_dump(self, *args: Any, **kwargs: Any) -> Any: ...
+
+    class _DataclassShape(Protocol):
+        # `ClassVar`, because that is what `__dataclass_fields__` is.  Spelled as an instance variable
+        # it matched no dataclass at all, and mypy is the one that says why in as many words
+        __dataclass_fields__: ClassVar[Any]
+
+    class _MappingLikeShape(Protocol):
+        def keys(self) -> Any: ...
+        # positional-only: typeshed spells `__getitem__` that way, and a member that also takes the
+        # key by name is one no mapping in the standard library satisfies
+        def __getitem__(self, key: Any, /) -> Any: ...
+
+    _CapableT = TypeVar(
+        "_CapableT",
+        bound=_CollectionShape | _HttpResponseShape | _ModelShape | _DataclassShape | _MappingLikeShape,
+    )
 
     class _FrameShape(Protocol):
         def pivot(self, *args: Any, **kwargs: Any) -> Any: ...

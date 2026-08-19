@@ -230,6 +230,7 @@ def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
 def _methods_that_do_not_fit_the_value() -> None:
     """Assertions the value's own type has no business answering."""
     assert_that(_Person()).is_positive()  # case: numeric-assertion-on-an-object
+    assert_that(_Person()).has_name("x")  # case: dynamic-attribute-on-an-object
     assert_that("text").is_close_to(1, 2)  # case: numeric-assertion-on-text
     assert_that({"id": 1}).has_id("no such comparison")  # case: dynamic-attribute-on-a-mapping
 
@@ -282,7 +283,6 @@ def _relations_that_must_keep_working() -> None:
     assert_that(1).satisfies(lambda value: value > 0)  # case: valid-predicate
     assert_that([1, 2, 3]).is_length(3)  # case: valid-length
     assert_that(datetime.date(2026, 1, 1)).is_before(datetime.date(2026, 2, 1))  # case: valid-date-order
-    assert_that(_Person()).has_name("x")  # case: valid-dynamic-attribute
     assert_that(1).is_greater_than(0.5)  # case: valid-int-against-float
     assert_that(1.0).is_greater_than(0)  # case: valid-float-against-int
     assert_that(Decimal("1.1")).is_greater_than(Decimal("1.0"))  # case: valid-decimal-order

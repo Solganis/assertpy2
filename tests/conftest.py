@@ -2,6 +2,7 @@ import pytest
 
 from assertpy2 import errors as _errors
 from assertpy2 import snapshot as _snapshot
+from assertpy2.assertpy import AssertionBuilder
 
 
 @pytest.fixture(autouse=True)
@@ -33,3 +34,16 @@ def _snapshot_isolation(monkeypatch):
     _snapshot._SERIALIZERS[:] = saved_serializers
     _snapshot._TOUCHED.clear()
     _snapshot._TOUCHED.update(saved_touched)
+
+
+@pytest.fixture
+def builder() -> AssertionBuilder:
+    """The builder as a host for its own private helpers, constructed rather than reached through the factory.
+
+    These tests check `_fmt_items`, `_require_dict_like` and their neighbours, which are implementation
+    and are meant to be.  They used to reach them through `assert_that(None)`, and that only worked
+    because the factory handed back the builder itself with all 152 assertion names on it.  It no longer
+    does for a value with no capability, and the fix is to say what the test is really doing: it wants
+    the object, not an assertion.
+    """
+    return AssertionBuilder(None)

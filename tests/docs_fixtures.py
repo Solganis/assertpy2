@@ -68,9 +68,17 @@ class _Response:
         raise NotImplementedError
 
 
+# what the page's counter-examples are written about: a class answering to nothing the library can
+# use, which is the one kind of value the narrowed fallback applies to
+class Person:
+    def __init__(self, first_name: str) -> None:
+        self.first_name = first_name
+
+
 repo = _Repo()
 response = _Response()
 order = PaidOrder()
+person = Person("Fred")
 '''
 
 # Every value here is chosen to make the page's own assertions hold: `users` has exactly the five

@@ -60,6 +60,14 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
         # pair is the same everywhere by construction: it is the `TypeIs` form the core already has.
         # Only the second half narrows, to `Matcher[str]` and `Matcher[_N]` respectively
         ("satisfies", "_NumericAssertion", "_TextAssertion"),
+        # the object view redeclares the pair for a third reason: it puts the refinement ladder in
+        # front of it, so a `TypeIs` predicate answers with the view the factory would have given
+        ("satisfies", "_NumericAssertion", "_ObjectAssertion"),
+        ("satisfies", "_ObjectAssertion", "_TextAssertion"),
+        # `matches_structure` takes a mapping, a pydantic-style model or an attrs instance.  The
+        # mapping half has a view of its own, and the other two do not: only mypy sees an attrs class,
+        # so the object view carries it rather than a shape answering three different ways
+        ("matches_structure", "_DictAssertion", "_ObjectAssertion"),
     }
 )
 
@@ -68,6 +76,8 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
 _VALUE_VIEWS: frozenset[str] = frozenset(
     {
         "_CoreAssertion",
+        # what a value no overload recognises gets, which is a view like any other
+        "_ObjectAssertion",
         "_StringAssertion",
         "_NumericAssertion",
         "_ComplexAssertion",
@@ -155,6 +165,11 @@ _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
     {
         ("_NumericAssertion", "satisfies"),
         ("_TextAssertion", "satisfies"),
+        # the refinements, which answer with the view the factory would have given for the refined
+        # type.  The core declares the plain pair, and this is the same pair with the ladder in front
+        ("_ObjectAssertion", "is_not_none"),
+        ("_ObjectAssertion", "is_instance_of"),
+        ("_ObjectAssertion", "satisfies"),
         # the string view keeps its own result type on the pivots: text for a message, `str` for a
         # string, which is what lets one be read as a path and the other not
         ("_StringAssertion", "first"),

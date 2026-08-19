@@ -33,8 +33,17 @@ def tagged_lines(path: pathlib.Path) -> dict[int, str]:
     return found
 
 
-def run(*command: str) -> str:
-    result = subprocess.run([sys.executable, "-m", *command], capture_output=True, text=True, cwd=ROOT, check=False)
+def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = None) -> str:
+    """Run a checker and hand back everything it said.
+
+    `cwd` defaults to the project root, which is what the gates reading the working tree want.  A gate
+    reading an *installed* package has to pass somewhere else: a checker resolves imports from its
+    working directory first, so run it from the root and it reads this checkout no matter which
+    interpreter it was pointed at.
+    """
+    result = subprocess.run(
+        [python or sys.executable, "-m", *command], capture_output=True, text=True, cwd=cwd or ROOT, check=False
+    )
     # every one of them exits non-zero as soon as it reports anything, so the output is what to read
     return result.stdout + result.stderr
 
