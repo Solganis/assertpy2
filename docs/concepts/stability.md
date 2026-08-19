@@ -68,8 +68,19 @@ Four kinds of change ship in a minor, and the release notes list each one under 
   stage running mypy, Pyright or ty can go red before them, which is the half worth planning for. The
   release notes name every narrowed chain; the ones so far are the invoked view losing the filesystem
   assertions (the text of an exception is not a filename), `at_json_path()` answering with the core
-  assertions instead of a shape it cannot know, `extracting()` requiring its first selector, and the
-  predicate parameters naming the element they are handed
+  assertions instead of a shape it cannot know, `extracting()` requiring its first selector, the
+  predicate parameters naming the element they are handed, and a value the library cannot use losing
+  the assertions it could never answer
+
+The last of those is the widest so far, so it is worth stating plainly what it does and does not touch.
+A value with a type of this library knows is unaffected, and so is a value typed `Any`, which is what an
+unannotated helper or a `json.loads()` result gives you. What narrows is the value annotated `object`
+and the class that answers to nothing the library can use: no length, no iteration, no mapping, not a
+model, not a response. Those now get the assertions every value can answer rather than all 152, so
+`assert_that(person).is_positive()` is a type error instead of a runtime one. Dynamic `has_<attribute>()`
+narrows with it, since the hook it resolves through lives on the full builder. The runtime is unchanged
+in every case, and the migration is to assert on the attribute rather than through it:
+`assert_that(person.name).is_equal_to("Fred")`
 
 All four are the reason to read that section before upgrading. Nothing else in a minor is designed to
 change what your suite reports.
