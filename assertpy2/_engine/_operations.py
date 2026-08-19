@@ -38,6 +38,26 @@ WHAT_IT_DOES: Final = {
 # out silently, so a new one has to be declared here before the gate will accept it
 NOT_AN_OPERATION: Final = frozenset({"builder", "check", "error", "not_", "value"})
 
+# The hybrids: they hand back a different value *and* test an expectation on the way, so both proxies
+# apply to them.  `error_of(KeyError)` says the group contains one and then pivots to it, and negating
+# that is a question with an answer.
+#
+# Named rather than derived, and this is the register that matters most.  "Reaches `self.error()`" does
+# not separate a verdict from a precondition: `errors()` reaches it only through the gate that refuses
+# a subject which is not a group, and so read as asserting for as long as nobody asked what it could be
+# wrong about.  Deriving the pivots is reliable; deciding which of them also assert is not, so a new
+# pivot fails the gate until someone says which side it is on.
+ALSO_ASSERTS: Final = frozenset(
+    {
+        "caused_by",
+        "error_of",
+        "extracting_group",
+        "has_root_cause",
+        "matches_with_groups",
+        "when_called_with",
+    }
+)
+
 WITHOUT_A_VERDICT: Final[dict[str, str]] = {
     # an expectation is set and the call that tests it comes next
     "raises": CONFIGURES,
@@ -57,6 +77,11 @@ WITHOUT_A_VERDICT: Final[dict[str, str]] = {
     "mapped": TRANSFORMS,
     "raised": TRANSFORMS,
     "returned": TRANSFORMS,
+    # `errors()` takes no expectation, so once a group has been caught there is nothing it can be
+    # wrong about: it hands the leaves over as a list and the assertion on them is the next step.  It
+    # reaches `self.error()` all the same, through the gate that refuses a subject which is not a
+    # group, and that is what made the first classification count it as asserting
+    "errors": TRANSFORMS,
     "single": TRANSFORMS,
     "described_as": DESCRIBES,
     "eventually": POLLS,

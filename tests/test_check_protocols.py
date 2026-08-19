@@ -12,6 +12,7 @@ protocols moved without the twins following, and either way the answer is to run
 from __future__ import annotations
 
 import ast
+import dataclasses
 import pathlib
 import subprocess
 import sys
@@ -176,3 +177,31 @@ def _declared(source: str) -> dict[str, tuple[dict[str, list[ast.FunctionDef]], 
         # generator hand back `_CheckIterableAssertion[Any]` without a word
         found[node.name] = (methods, [ast.unparse(base) for base in node.bases])
     return found
+
+
+def test_anything_landing_on_the_builder_reaches_its_own_check_rather_than_a_twin() -> None:
+    """The measured edge of the typed `check()`, kept as a test rather than only as a comment.
+
+    A pivot hands back `AssertionBuilder[_E]` instead of re-deriving the view for the element, so
+    `last().check()` lands on the builder's untyped proxy.  A twin for the builder was tried and
+    dropped: composing one from the capabilities it has puts the text and real-number protocols in one
+    class, whose ordering assertions take different operands, and the runtime has no such conflict
+    because its MRO picks one.  The builder is the widest surface on the ordinary path too, so this is
+    the same width rather than a new hole.
+    """
+    written = pathlib.Path(_typing.__file__).read_text(encoding="utf-8")
+    # both ways in, not only the pivot.  The comment named the pivot alone at first, and the umbrella
+    # path is the one a reader meets sooner: it is every dataclass and every non-`dict` mapping
+    assert_that(written).described_as("the boundary has to be written where the declaration is").contains(
+        "hands back `AssertionBuilder[_E]`", "capability umbrella claims"
+    )
+
+    # and the runtime still names a typo, which is what a checker would have caught here, from both
+    # ways in: after a pivot, and from the first call on a value the umbrella claims
+    @dataclasses.dataclass
+    class _Point:
+        x: int
+
+    for reached in (assert_that([1, 2]).last().check(), assert_that(_Point(1)).check()):
+        with pytest.raises(AttributeError, match="has no assertion"):
+            reached.no_such_assertion()

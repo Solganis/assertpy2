@@ -324,7 +324,21 @@ if TYPE_CHECKING:
         # CheckBuilder - run the next assertion for its verdict instead of for its failure
         # its own verdict twin, so a view narrowing `check()` to *its* twin is a refinement of
         # this rather than an incompatible override.  `CheckBuilder` is the runtime class and
-        # no protocol is a subtype of it
+        # no protocol is a subtype of it.
+        #
+        # Where this stops: anything that lands on `AssertionBuilder` reaches the builder's own
+        # `check()` and its untyped proxy.  Two ways in, and the second is the common one.  A pivot
+        # hands back `AssertionBuilder[_E]` rather than re-deriving the view for the element, so
+        # `last().check()` is untyped.  So is `assert_that(value).check()` for anything the
+        # capability umbrella claims: every dataclass, model, response and non-`dict` mapping
+        # reaches the builder from the first call, with no pivot at all.
+        #
+        # A twin for the builder was tried and dropped: composing one from the capabilities it has
+        # puts `_TextAssertion` and `_RealNumberAssertion` in the same class, and their ordering
+        # assertions take different operands, which is a conflict the runtime does not have because
+        # its MRO picks one.  The builder offers every assertion on the ordinary path too, so a wide
+        # `check()` there is the same width, not a new hole.  What is lost is the typo, which the
+        # runtime still names: "assertpy has no assertion <...>"
         def check(self) -> _CheckCoreAssertion: ...
         # AssertionBuilder - typed extract-and-continue
         @property
