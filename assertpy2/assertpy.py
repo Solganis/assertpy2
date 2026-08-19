@@ -9,12 +9,12 @@ import sys
 import threading
 import types
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Final, Generic, Literal, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Final, Generic, Literal, Protocol, TypeVar, overload
 
 if TYPE_CHECKING:
     import datetime
     import pathlib
-    from collections.abc import Callable
+    from collections.abc import Callable, Collection, Mapping
 
     from typing_extensions import TypeIs
 
@@ -81,12 +81,26 @@ __version__ = "2.22.0"
 # the tracked value type of the generic AssertionBuilder fallback (_U appears only in narrowing stubs)
 _T = TypeVar("_T")
 # the assertion type `not_` was reached from, so an inverted step hands the same narrowed type back
+_E_co = TypeVar("_E_co", covariant=True)  # the element a pivot hands back
 _S = TypeVar("_S")
 if TYPE_CHECKING:
     _U = TypeVar("_U")
     _E = TypeVar("_E")  # element type of a collection, so first()/element()/... narrow to it
+    _R = TypeVar("_R")  # result element type after a mapping pivot
     _K = TypeVar("_K")  # dict key type, so .value keeps dict[K, V]
     _V = TypeVar("_V")  # dict value type
+
+    class _ElementSource(Protocol[_E_co]):
+        """Anything whose value is a collection of `_E_co`, however it was annotated.
+
+        Structural because `AssertionBuilder` is invariant in `_T`: a builder over a `Sequence[int]`
+        is not a builder over a `Collection[int]`, so the nominal self type bound for a mapping and
+        missed every other container.
+        """
+
+        @property
+        def value(self) -> Collection[_E_co]: ...
+
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 
@@ -1322,6 +1336,76 @@ class AssertionBuilder(
         @overload
         def is_instance_of(self, some_class: type) -> Self: ...
         def is_instance_of(self, some_class: type) -> Any:  # overload impl stub, never executed
+            ...
+
+        # The element pivots, declared here for the same reason the refinements above are: the runtime
+        # method returns `self.builder(<an element>)` while `CollectionMixin` declares it `-> Self`,
+        # which is true of no chain at all.  A caller who reached this class rather than a curated view
+        # was told the container came back, so `assert_that(rows).first().value.count(1)` type-checked
+        # under all three checkers and raised `AttributeError`.  Depth is the half a narrowing at
+        # `assert_that()` cannot reach: the second pivot lands back here whatever the first returned.
+        #
+        # The self type is structural rather than `AssertionBuilder[Collection[_E]]`, because `_T` is
+        # invariant: a builder over a `Sequence[int]` is not a builder over a `Collection[int]`, and
+        # the nominal spelling bound for a mapping and silently missed every other container.
+        @overload
+        def first(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def first(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def first(self) -> Self: ...
+        def first(self) -> Any:  # overload impl stub required outside stub files, never executed
+            ...
+
+        @overload
+        def last(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def last(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def last(self) -> Self: ...
+        def last(self) -> Any:  # overload impl stub, never executed
+            ...
+
+        @overload
+        def element(self: AssertionBuilder[Mapping[_K, _V]], index: int) -> AssertionBuilder[_K]: ...
+        @overload
+        def element(self: _ElementSource[_E], index: int) -> AssertionBuilder[_E]: ...
+        @overload
+        def element(self, index: int) -> Self: ...
+        def element(self, index: int) -> Any:  # overload impl stub, never executed
+            ...
+
+        # `mapped()` for the same reason and with one more of its own: it builds a `list` whatever it
+        # was given, so `-> Self` is wrong about the container as well as about the element.  It also
+        # rejects working code rather than only accepting broken code:
+        # `assert_that(rows).mapped(str).value[0].upper()` runs and was refused, because `.value` was
+        # declared as the input rather than as the list that comes back.
+        #
+        # `mapped()` carries a smaller version of the same limit, worth knowing before relying on it:
+        # a named function binds `_R` under both checkers, a lambda binds it under ty and comes back
+        # `AssertionBuilder[Any]` under mypy.  That loses precision rather than rejecting anything, so
+        # it is a boundary rather than the reason the two below are absent.
+        #
+        # `filtered_on()` and `flat_mapped()` are deliberately not declared here, and the reason is
+        # measured.  A predicate parameter spelled `Matcher[_E] | Callable[[_E], object]` gives a
+        # lambda nothing to bind against, so `filtered_on(lambda item: True)` came back `Unknown` under
+        # ty and `Any` under mypy; `flat_mapped()` resolved under ty and stayed `Any` under mypy.  One
+        # answer from three checkers is the bar, and neither reaches it.  A caller who wants them typed
+        # reaches them through a curated view, where the element is already bound.
+        @overload
+        def mapped(self: _ElementSource[_E], func: Callable[[_E], _R]) -> AssertionBuilder[list[_R]]: ...
+        @overload
+        def mapped(self, func: Callable[..., Any]) -> Self: ...
+        def mapped(self, func: Any) -> Any:  # overload impl stub, never executed
+            ...
+
+        @overload
+        def single(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def single(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def single(self) -> Self: ...
+        def single(self) -> Any:  # overload impl stub, never executed
             ...
 
         # a `TypeIs` predicate narrows the chain to its target type.  Solved by ty, pyright and mypy;
