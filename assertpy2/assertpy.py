@@ -44,6 +44,14 @@ if TYPE_CHECKING:
 from . import _hints
 from ._engine._contract import contract_drift
 from ._engine._introspection import is_same_implementation
+from ._engine._operations import (
+    CONFIGURES,
+    DESCRIBES,
+    POLLS,
+    TRANSFORMS,
+    WHAT_IT_DOES,
+    WITHOUT_A_VERDICT,
+)
 from ._engine._path import _ROOT, _Path
 from ._engine._require import argument, refuse
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
@@ -907,39 +915,64 @@ _default_logger = WarningLoggingAdapter(_logger, None)
 # Chain steps that transform the value instead of asserting (their failures are never AssertionError,
 # so negating them can only produce a misleading "Expected ... to NOT satisfy" message).  Hybrids that
 # both assert and pivot (extracting_group, matches_with_groups, when_called_with) stay negatable.
-_TRANSFORMER_STEPS: Final = frozenset(
-    {
-        "extracting",
-        "filtered_on",
-        "mapped",
-        "flat_mapped",
-        "first",
-        "last",
-        "element",
-        "single",
-        "decoded_as",
-        "at_json_path",
-        "decoded_as_json",
-    }
-)
 
 # Chain steps that configure or transform instead of asserting: "inverting" them is meaningless and
 # would otherwise fail later with a misleading "Expected ... to NOT satisfy" message.
-_NON_NEGATABLE: Final = {
-    "eventually": "eventually() cannot be negated with not_; assert the inverted condition instead",
-    "eventually_sync": "eventually_sync() cannot be negated with not_; assert the inverted condition instead",
-    "described_as": (
-        "described_as() only sets the failure description and cannot be negated with not_;"
-        " call described_as() before not_ instead"
-    ),
-    **{
-        name: (
-            f"{name}() transforms the value instead of asserting, so it cannot be negated with not_;"
-            f" negate the assertion after {name}() instead"
-        )
-        for name in _TRANSFORMER_STEPS
-    },
+# What to do instead, per category.  The register in `_engine/_operations.py` says what an operation
+# does; these two say what that means for the proxy the caller reached it through.
+# `{name}` is filled in, because a remedy that says "the assertion after it" makes the reader work out
+# what "it" was; naming the call lets them find it in their own line
+_INSTEAD_OF_NEGATING: Final = {
+    CONFIGURES: "negate the assertion that tests the expectation {name}() set instead",
+    TRANSFORMS: "negate the assertion after {name}() instead",
+    DESCRIBES: "call {name}() before not_ instead",
+    POLLS: "assert the inverted condition instead",
 }
+_INSTEAD_OF_CHECKING: Final = {
+    CONFIGURES: "ask check() for the verdict of the assertion that tests the expectation {name}() set",
+    TRANSFORMS: "ask check() for the verdict of the assertion after {name}()",
+    DESCRIBES: "call {name}() before check() instead",
+    POLLS: "a poll delivers its own failure, so there is no verdict to hand back",
+}
+
+
+# the proxies themselves, which are reached the same way and are not operations at all.  Two `not_`
+# used to behave as one, which is neither the identity a reader would expect nor an error
+_PROXY_ENTRIES: Final = {
+    "check": "check() cannot be negated; call check().not_ before the assertion instead",
+    "not_": "two negations cancel; drop both instead of writing not_.not_",
+}
+
+
+def _is_still_ours(target: object, name: str) -> bool:
+    """Whether *name* on *target* is this library's own operation rather than an extension's.
+
+    Asked of the object rather than of a global register, because the two ways an extension is applied
+    have different lifetimes.  A plain function is set on `_ExtendedBuilder` and every instance sees it
+    at once, but a non-function callable is grafted per instance at construction, so a builder made
+    before the extension was registered keeps the built-in and one made before it was removed keeps the
+    override.  Reading the registry instead let the first of those skip the refusal and then fail with
+    `CollectionMixin.mapped() missing 1 required positional argument`.
+    """
+    return name not in vars(target) and name not in vars(_ExtendedBuilder)
+
+
+def _refuse_without_a_verdict(target: object, name: str, proxy: str, remedies: dict[str, str]) -> None:
+    """Raise for an operation reached through a proxy that has nothing to do with it.
+
+    Both proxies exist to work on a verdict, so an operation that reaches none is a mistake in the
+    call rather than something to invert or report.  Silently accepting one is worse than it sounds:
+    `check()` answered `passed=True` for a pivot, which reads as an assertion that ran and held.
+    """
+    category = WITHOUT_A_VERDICT.get(name)
+    # an extension registered over the name replaces the operation, and with it the reason to refuse:
+    # the register describes what *this library's* operations do, and an override is somebody else's
+    # method under a name we happen to have used.  `add_extension(..., override=True)` is documented
+    # and asserting, so `not_.first()` on one has to keep working
+    if category is None or not _is_still_ours(target, name):
+        return
+    remedy = remedies[category].format(name=name)
+    raise TypeError(f"{name}() {WHAT_IT_DOES[category]}, so it cannot be {proxy}; {remedy}")
 
 
 class NegatedBuilder(Generic[_S]):
@@ -964,8 +997,11 @@ class NegatedBuilder(Generic[_S]):
         self._builder = builder
 
     def __getattr__(self, name: str) -> Callable[..., _S]:
-        if name in _NON_NEGATABLE:
-            raise TypeError(_NON_NEGATABLE[name])
+        _refuse_without_a_verdict(self._builder, name, "negated with not_", _INSTEAD_OF_NEGATING)
+        # the same ownership rule the register follows: an extension over `check` or `not_` is a
+        # strange thing to write and still somebody else's method, so it is not ours to refuse
+        if name in _PROXY_ENTRIES and _is_still_ours(self._builder, name):
+            raise TypeError(_PROXY_ENTRIES[name])
         attr = getattr(self._builder, name)
         if not callable(attr):
             return attr
@@ -1106,6 +1142,9 @@ class CheckBuilder:
         self._builder = builder
 
     def __getattr__(self, name: str) -> Callable[..., AssertionOutcome]:
+        _refuse_without_a_verdict(self._builder, name, "asked for a verdict", _INSTEAD_OF_CHECKING)
+        if name == "check" and _is_still_ours(self._builder, name):
+            raise TypeError("check() is already the verdict proxy; one check() is enough")
         attr = getattr(self._target, name)
         if isinstance(attr, NegatedBuilder):
             # ty: ignore[invalid-return-type]  # `not_` is declared above, where it types as a proxy;
