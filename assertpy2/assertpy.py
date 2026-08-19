@@ -956,9 +956,22 @@ class NegatedBuilder(Generic[_S]):
         # unbound TypeVar has no attributes, so the code above could not read `kind` off it.
         return _negated  # ty: ignore[invalid-return-type]  # see above
 
-    def _make_msg(self, name: str) -> str:
+    def _make_msg(self, name: str, *args: object, **kwargs: object) -> str:
+        """The negated failure, naming the call that held when it should not have.
+
+        The arguments are in it because without them the message says which relation was asked for and
+        not what it was asked about, which is the one thing the reader needs.
+
+        Rendered here rather than by `HelpersMixin._fmt_args_kwargs()`, which spells a keyword as
+        ``'key': value``: that is the shape `when_called_with()` has printed since assertpy and its
+        messages are pinned to it, but this line reads as a call and ``key=value`` is what a call looks
+        like.  Keyword order is the caller's, which Python preserves, so it is stable without sorting.
+        """
         desc = f"[{self._builder.description}] " if self._builder.description else ""
-        return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}()"
+        rendered = ", ".join(
+            [_safe_repr(arg) for arg in args] + [f"{key}={_safe_repr(value)}" for key, value in kwargs.items()]
+        )
+        return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}({rendered})"
 
     def _verdict(self, attr: Callable[..., object], *args: object, **kwargs: object) -> AssertionOutcome | None:
         """What the underlying assertion decided, or ``None`` when it held.
@@ -989,7 +1002,9 @@ class NegatedBuilder(Generic[_S]):
             return self._builder
         # the message is composed here rather than by `error()`, which would prefix the description a
         # second time, but the exception is the builder's own: a negated failure is a failure
-        raise AssertionBuilder._failure(AssertionOutcome(message=self._make_msg(name), actual=self._builder.val))
+        raise AssertionBuilder._failure(
+            AssertionOutcome(message=self._make_msg(name, *args, **kwargs), actual=self._builder.val)
+        )
 
     def _negated_soft(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
@@ -999,7 +1014,7 @@ class NegatedBuilder(Generic[_S]):
         block = _collecting()
         err_list = block.failures if block is not None else []
         # underlying assertion passed, so the negation failed: collect it and taint .value
-        msg = self._make_msg(name)
+        msg = self._make_msg(name, *args, **kwargs)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
         err_list.append(
@@ -1018,7 +1033,9 @@ class NegatedBuilder(Generic[_S]):
         if self._verdict(attr, *args, **kwargs) is not None:
             self._builder._check_sink = None  # it failed, so the negation held
             return self._builder
-        self._builder._check_sink = AssertionOutcome(message=self._make_msg(name), actual=self._builder.val)
+        self._builder._check_sink = AssertionOutcome(
+            message=self._make_msg(name, *args, **kwargs), actual=self._builder.val
+        )
         return self._builder
 
     def _negated_warn(
@@ -1027,7 +1044,7 @@ class NegatedBuilder(Generic[_S]):
         if self._verdict(attr, *args, **kwargs) is not None:
             return self._builder  # the assertion failed, so the negation held
         # underlying assertion passed, so the negation failed: taint .value like error() does
-        msg = self._make_msg(name)
+        msg = self._make_msg(name, *args, **kwargs)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
         self._builder.logger.warning(msg)

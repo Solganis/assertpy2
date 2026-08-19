@@ -179,6 +179,45 @@ class TestNotWarnMode:
         assert_that(out).is_empty()
 
 
+class TestNotNamesWhatItWasAskedAbout:
+    """A negated failure carries the arguments, or it names the relation and not the subject.
+
+    ``starts_with()`` says which relation held; ``starts_with('a')`` says what held.  The direct
+    spellings have always named the operand, and the proxy is the one place that did not.
+    """
+
+    def test_a_positional_argument(self):
+        with pytest.raises(AssertionError) as caught:
+            assert_that("abc").not_.starts_with("a")
+        assert_that(str(caught.value)).is_equal_to("Expected <abc> to NOT satisfy: starts_with('a')")
+
+    def test_several_arguments(self):
+        with pytest.raises(AssertionError) as caught:
+            assert_that(3).not_.is_between(1, 5)
+        assert_that(str(caught.value)).is_equal_to("Expected <3> to NOT satisfy: is_between(1, 5)")
+
+    def test_a_keyword_argument(self):
+        with pytest.raises(AssertionError) as caught:
+            assert_that({"n": 1}).not_.is_equal_to({"n": 1}, strict_types=True)
+        assert_that(str(caught.value)).is_equal_to(
+            "Expected <{'n': 1}> to NOT satisfy: is_equal_to({'n': 1}, strict_types=True)"
+        )
+
+    def test_an_assertion_that_takes_none_reads_as_before(self):
+        with pytest.raises(AssertionError) as caught:
+            assert_that(5).not_.is_positive()
+        assert_that(str(caught.value)).is_equal_to("Expected <5> to NOT satisfy: is_positive()")
+
+    def test_the_soft_block_collects_the_same_sentence(self):
+        with pytest.raises(AssertionFailure) as caught, soft_assertions():
+            assert_that("abc").not_.starts_with("a")
+        assert_that(str(caught.value)).contains("starts_with('a')")
+
+    def test_check_mode_records_the_same_sentence(self):
+        outcome = assert_that("abc").check().not_.starts_with("a")
+        assert_that(outcome.message).is_equal_to("Expected <abc> to NOT satisfy: starts_with('a')")
+
+
 class TestNotDoesNotInvertAnErrorFromTheValue:
     """Negation inverts this library's verdict, and an ``AssertionError`` from your code is not one.
 
@@ -353,7 +392,7 @@ def test_not_rejects_described_as_with_clear_error():
 
 
 def test_described_as_before_not_keeps_working():
-    with pytest.raises(AssertionError, match=r"\[desc\] Expected <1> to NOT satisfy: is_equal_to\(\)"):
+    with pytest.raises(AssertionError, match=r"\[desc\] Expected <1> to NOT satisfy: is_equal_to\(1\)"):
         assert_that(1).described_as("desc").not_.is_equal_to(1)
 
 
