@@ -35,7 +35,9 @@ def _protocol_count(source: str) -> int:
     happens to be named that way, protocol or not, while the page's claim is about protocols.
     """
     return sum(
-        isinstance(node, ast.ClassDef) and any(_names_protocol(base) for base in node.bases)
+        isinstance(node, ast.ClassDef)
+        and node.name.endswith("Assertion")
+        and any(_names_protocol(base) for base in node.bases)
         for node in ast.walk(ast.parse(source))
     )
 
@@ -59,6 +61,12 @@ _WORDS = {
     19: "nineteen",
     20: "twenty",
     21: "twenty-one",
+    22: "twenty-two",
+    23: "twenty-three",
+    24: "twenty-four",
+    25: "twenty-five",
+    26: "twenty-six",
+    27: "twenty-seven",
 }
 
 EXPECTED_EXPORTS = [
@@ -165,7 +173,7 @@ class TestTheCountsTheDocsQuote:
 
     QUOTED_MATCHER_COUNT = 45
     PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
-    QUOTED_PROTOCOL_COUNT = 11
+    QUOTED_PROTOCOL_COUNT = 13
 
     def test_the_matcher_count(self):
         matchers = [name for name in dir(assertpy2.match) if not name.startswith("_")]

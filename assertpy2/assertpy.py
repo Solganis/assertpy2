@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
     from ._engine._compat import Self
     from ._engine._typing import (
+        _ArrayAssertion,
+        _ArrayT_co,
         _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
@@ -27,6 +29,8 @@ if TYPE_CHECKING:
         _CoreAssertion,
         _DateAssertion,
         _DictAssertion,
+        _FrameAssertion,
+        _FrameT_co,
         _IterableAssertion,
         _NumericAssertion,
         _PathAssertion,
@@ -444,6 +448,19 @@ def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytear
 
 @overload
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
+
+
+# A `pandas.DataFrame` satisfies *every* structural protocol, because pandas models column access with
+# a catch-all attribute, so it is assignable to anything a checker is asked about.  The frame overload
+# is therefore first, and everything below it only sees values a frame did not already claim.
+#
+# `tests/test_overload_order.py` holds that order, since nothing announces it when an edit breaks it.
+@overload
+def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_FrameT_co]: ...
+
+
+@overload
+def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_ArrayT_co]: ...
 
 
 # the fallback keeps the full API for object- and union-typed values, at the price of an overload
