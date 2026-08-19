@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     import pathlib
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping, Sequence
     from typing import Any, cast
 
     from typing_extensions import TypeIs, assert_type
@@ -332,6 +332,22 @@ if TYPE_CHECKING:
     assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., object])
+
+    # A pivot on the builder hands back an element, and used to be declared as handing back the
+    # chain.  That is the half a narrowing at `assert_that()` cannot reach: the second pivot lands on
+    # the builder whatever the first returned, so depth is where it shows.
+    rows = cast("Sequence[Sequence[int]]", [[1]])
+    keys = cast("Mapping[str, int]", {"a": 1})
+    assert_type(assert_that(rows).first(), AssertionBuilder[Sequence[int]])
+    assert_type(assert_that(rows).first().first(), AssertionBuilder[int])
+    assert_type(assert_that(rows).last().element(0), AssertionBuilder[int])
+    # a mapping pivots to its keys, which is what iterating one gives
+    assert_type(assert_that(keys).first(), AssertionBuilder[str])
+    assert_type(assert_that(rows).first().single(), AssertionBuilder[int])
+    # and `mapped()` hands back the list it builds, not the container it was given.  A *named* function
+    # binds the result type under all three; a lambda comes back `Any` under mypy, which is why the
+    # pin uses one and the boundary is written where the overload is
+    assert_type(assert_that(rows).first().mapped(str), AssertionBuilder[list[str]])
 
     # the frame and array views are keyed on shape rather than on a named type, so no optional
     # dependency appears in a signature and these stand-ins are enough to pin the resolution.  The real
