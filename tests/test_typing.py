@@ -20,6 +20,11 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs, assert_type
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
+    from assertpy2._engine._check_typing import (
+        _CheckDictAssertion,
+        _CheckNumericAssertion,
+        _CheckStringAssertion,
+    )
     from assertpy2._engine._typing import (
         _ArrayAssertion,
         _ArrayShape,
@@ -104,6 +109,11 @@ if TYPE_CHECKING:
 
     # check() ends the chain with the verdict, from every protocol and through the negation proxy.
     assert_type(assert_that(42).check().is_positive(), AssertionOutcome)
+    # and the proxy itself is the verdict twin of the view it was reached from, so an assertion the
+    # value cannot answer is a type error here as it is on the ordinary path
+    assert_type(assert_that(42).check(), _CheckNumericAssertion[int])
+    assert_type(assert_that("text").check(), _CheckStringAssertion)
+    assert_type(assert_that({"a": 1}).check(), _CheckDictAssertion[str, int])
     assert_type(assert_that("text").check().starts_with("x"), AssertionOutcome)
     assert_type(assert_that({"a": 1}).check().contains_key("a"), AssertionOutcome)
     assert_type(assert_that(42).check().not_.is_positive(), AssertionOutcome)

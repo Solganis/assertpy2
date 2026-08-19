@@ -30,7 +30,15 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 # diagnostic of the same rule, and each refusal is about its TypeVar rather than about a number.
 _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_typing.py", "_RepeatableAssertion", "_E", "contravariant"),
-    ("assertpy2/_engine/_typing.py", "_NumericAssertion", "_N", "covariant"),
+    # `_NumericAssertion` is no longer among them: `check()` reads `_N` back in a return position, so
+    # the covariance suggestion pyright used to make there answers itself
+    # the twins inherit the refusals along with the signatures.  `_CheckDictAssertion` gains one the
+    # original does not have, because dropping the chaining return leaves `_V` read-only there and
+    # pyright then suggests contravariance; the value type is still read back through the assertions
+    # that take it, so the answer is the same
+    ("assertpy2/_engine/_check_typing.py", "_CheckRepeatableAssertion", "_E", "contravariant"),
+    ("assertpy2/_engine/_check_typing.py", "_CheckNumericAssertion", "_N", "covariant"),
+    ("assertpy2/_engine/_check_typing.py", "_CheckDictAssertion", "_V", "contravariant"),
 )
 
 

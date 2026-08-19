@@ -11,9 +11,31 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
     from .._engine._introspection import MappingLike
-    from ..assertpy import AssertionBuilder, CheckBuilder
+    from ..assertpy import AssertionBuilder
     from ..async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from ..matchers import Matcher
+
+    # the verdict twins, generated from the protocols below.  Imported rather than declared here,
+    # because the generator reads this file and importing its own output back would be a cycle a
+    # reader has to hold in their head
+    from ._check_typing import (
+        _CheckArrayAssertion,
+        _CheckBoolAssertion,
+        _CheckBytesAssertion,
+        _CheckCallableAssertion,
+        _CheckComplexAssertion,
+        _CheckCoreAssertion,
+        _CheckDateAssertion,
+        _CheckDictAssertion,
+        _CheckFrameAssertion,
+        _CheckInvokedAssertion,
+        _CheckIterableAssertion,
+        _CheckListAssertion,
+        _CheckNumericAssertion,
+        _CheckObjectAssertion,
+        _CheckPathAssertion,
+        _CheckStringAssertion,
+    )
     from ._compat import Self
 
     # ``ignore``/``include`` accept a single key, a nested-path tuple, or a list/set/frozenset of them.
@@ -300,7 +322,10 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
         # CheckBuilder - run the next assertion for its verdict instead of for its failure
-        def check(self) -> CheckBuilder: ...
+        # its own verdict twin, so a view narrowing `check()` to *its* twin is a refinement of
+        # this rather than an incompatible override.  `CheckBuilder` is the runtime class and
+        # no protocol is a subtype of it
+        def check(self) -> _CheckCoreAssertion: ...
         # AssertionBuilder - typed extract-and-continue
         @property
         def value(self) -> object: ...
@@ -324,6 +349,9 @@ if TYPE_CHECKING:
         view: they are the reason `.value` can be read without a `cast()`, and a refinement that came
         back as the builder would put all 152 names back at the first `is_not_none()`.
         """
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckObjectAssertion[_T_co]: ...
 
         @property
         def value(self) -> _T_co: ...
@@ -537,6 +565,9 @@ if TYPE_CHECKING:
         `str` at least as often as it is written as a `Path`.
         """
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckStringAssertion: ...
+
         # redeclared so a pivot keeps its result a `str`: the inherited form returns the text
         # capability, which is what a caught message needs and what keeps `exists()` away from it
         def first(self) -> _StringAssertion: ...
@@ -555,6 +586,9 @@ if TYPE_CHECKING:
         `complex` and `bool` have protocols of their own, each carrying what the runtime actually
         accepts for that type rather than the whole numeric set.
         """
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckNumericAssertion[_N]: ...
 
         @property
         def value(self) -> _N: ...
@@ -607,6 +641,9 @@ if TYPE_CHECKING:
         the numeric protocol, so a checker suggested a method whose only outcome was a crash.
         """
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckComplexAssertion: ...
+
         @property
         def value(self) -> complex: ...
 
@@ -618,6 +655,9 @@ if TYPE_CHECKING:
         `TypeError: val is not an integer, got bool`, and accepts the rest: `True > 0` is a real
         comparison.  The type now says the same thing.
         """
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckBoolAssertion: ...
 
         @property
         def value(self) -> bool: ...
@@ -635,6 +675,9 @@ if TYPE_CHECKING:
         Generic over the element type ``_E`` so element-access pivots (``first``/``last``/``element``/
         ``single``) narrow the chain to the element, and ``value`` keeps the element type.
         """
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckIterableAssertion[_E]: ...
 
         @property
         def value(self) -> list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]: ...
@@ -683,11 +726,17 @@ if TYPE_CHECKING:
         already been left behind, and made callers narrow a type the library had already settled.
         """
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckListAssertion[_E]: ...
+
         @property
         def value(self) -> list[_E]: ...
 
     class _DictAssertion(_StructureAssertion, _SizedAssertion, _CoreAssertion, Protocol[_K, _V]):
         """Assertions available for ``dict`` values, generic over the key and value types."""
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckDictAssertion[(_K, _V)]: ...
 
         # the one view where narrowing holds, since the runtime refuses a superset without `keys()`.
         # Both spellings, as neither covers the other, and neither key nor value is bound
@@ -855,6 +904,9 @@ if TYPE_CHECKING:
     class _FrameAssertion(_ArrayLikeAssertion, Protocol[_FrameT_co]):
         """Assertions available for a pandas or polars frame, which is array-like as well."""
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckFrameAssertion[_FrameT_co]: ...
+
         @property
         def value(self) -> _FrameT_co: ...
         def is_frame_equal(self, expected: object, **options: Any) -> Self: ...
@@ -862,11 +914,17 @@ if TYPE_CHECKING:
     class _ArrayAssertion(_ArrayLikeAssertion, Protocol[_ArrayT_co]):
         """Assertions available for a numpy array, which is everything a frame has but `is_frame_equal`."""
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckArrayAssertion[_ArrayT_co]: ...
+
         @property
         def value(self) -> _ArrayT_co: ...
 
     class _DateAssertion(_CoreAssertion, Protocol):
         """Assertions available for ``datetime.date`` and ``datetime.datetime`` values."""
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckDateAssertion: ...
 
         @property
         def value(self) -> datetime.date: ...
@@ -888,11 +946,17 @@ if TYPE_CHECKING:
     class _PathAssertion(_FilesystemAssertion, _CoreAssertion, Protocol):
         """Assertions available for ``pathlib.Path`` values."""
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckPathAssertion: ...
+
         @property
         def value(self) -> Path: ...
 
     class _BytesAssertion(_MembershipAssertion, _SizedAssertion, _CoreAssertion, Protocol[_B_co]):
         """Assertions available for ``bytes`` and ``bytearray`` values, generic over which one."""
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckBytesAssertion[_B_co]: ...
 
         def contains(self, *items: object) -> Self: ...
 
@@ -939,6 +1003,9 @@ if TYPE_CHECKING:
         type-safe by construction, never advertising methods that may not apply.
         """
 
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckInvokedAssertion: ...
+
         def returned(self) -> _CoreAssertion: ...
         # raised() pivots to the caught exception object (type-agnostic, like returned());
         # caused_by()/has_root_cause() walk the cause chain and pivot to that cause's message;
@@ -958,6 +1025,9 @@ if TYPE_CHECKING:
 
     class _CallableAssertion(_CoreAssertion, Protocol):
         """Assertions available for callable values."""
+
+        # the verdict twin of this view, so `check()` keeps the value type
+        def check(self) -> _CheckCallableAssertion: ...
 
         @property
         def value(self) -> Callable[..., object]: ...

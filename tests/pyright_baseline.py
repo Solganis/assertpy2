@@ -52,11 +52,17 @@ BASELINE: dict[tuple[str, str], int] = {
     # `_U | None`, a `str` subject overlaps both the umbrella and the fallback, and in each case the
     # earlier entry is the answer
     ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 28,
+    # the verdict twins mirror the protocols, and they mirror their reports with them: the same
+    # overload ladder, the same two variance suggestions plus the one `_DictAssertion` carries, and
+    # one override report for the same reason the original has it
+    ("assertpy2/_engine/_check_typing.py", "reportOverlappingOverload"): 1,
+    ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
+    ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
     ("assertpy2/assertpy.py", "reportOverlappingOverload"): 5,
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
-    ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 2,
+    ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
     # --- mixin composition -------------------------------------------------------------------------
     # The mixins each declare the shared helpers over their own value type, and `AssertionBuilder` is
     # where all of them meet.
