@@ -107,6 +107,9 @@ integrations = [
 ]
 typecheck = [
     "mypy>=2.3.0",
+    # pandas ships no `py.typed`, so its public typing contract lives here.  Without it a checker
+    # either reads pandas' source or gives up, and the frame/array classification changes per checker
+    "pandas-stubs>=2.2",
     "pyright>=1.1.411",
 ]
 # Mutation testing. Its own group because mutmut forks and calls os.wait: it does not run on

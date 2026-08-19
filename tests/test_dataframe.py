@@ -230,6 +230,33 @@ class TestRealLibraries:
         with pytest.raises(AssertionError):
             assert_that(numpy.array([1.0, 2.0])).is_array_close_to(numpy.array([1.0, 2.5]))
 
+    def test_a_zero_dimensional_array_has_no_length_and_no_iteration(self):
+        """The boundary of the array view, kept as a measurement rather than as a claim in a comment.
+
+        `numpy.array(1)` carries `__array__` and `strides` like any other array, so it matches the
+        shape the overload keys on and is offered the sized and walked families.  numpy answers those
+        with its own `TypeError`, which is the value's `__len__` raising rather than a value without
+        one, and `length_of()` is written to let that through.  Nothing static separates the two: the
+        dimension is not in the stubs.
+        """
+        numpy = pytest.importorskip("numpy")
+        scalar = numpy.array(1)
+        for call in (
+            lambda: assert_that(scalar).is_not_empty(),
+            lambda: assert_that(scalar).is_length(1),
+            lambda: assert_that(scalar).contains_only(1),
+            lambda: assert_that(scalar).each(lambda item: True),
+            lambda: assert_that(scalar).extracting("real"),
+        ):
+            with pytest.raises(TypeError, match=r"unsized object|0-d array"):
+                call()
+        # the ones it is really for keep working, which is why the view is worth having on this value.
+        # `contains` is among them and `contains_only` is not, so the boundary does not fall on family
+        # lines: one asks `in`, which numpy answers, and the other iterates, which it refuses
+        assert_that(scalar).is_array_equal(numpy.array(1))
+        assert_that(scalar).is_array_close_to(numpy.array(1))
+        assert_that(scalar).contains(1)
+
     def test_numpy_array_equal_options_passthrough(self):
         numpy = pytest.importorskip("numpy")
         actual = numpy.array([1, 2], dtype="int32")
