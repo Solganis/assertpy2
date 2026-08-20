@@ -214,10 +214,11 @@ def _typed_views() -> dict[str, list[str]]:
 
 
 def _view_shapes() -> dict[str, str]:
-    """``{"View.method": how that view takes its parameters}``, resolved through bases.
+    """``{"View.method": how that view declares itself}``, resolved through bases.
 
     Names alone missed the other half of the same class: a parameter turning keyword-only breaks every
-    caller who passed it positionally.
+    caller who passed it positionally, and a pivot handing back a narrower view ends the chain earlier
+    than it used to.
 
     Resolved rather than recorded where the declaration sits, and that distinction is the whole point.
     Keyed by the declaring class, a parameter narrowed by *adding* an override to a subclass produced a
@@ -225,10 +226,11 @@ def _view_shapes() -> dict[str, str]:
     intersection saw nothing.  This file already carries that pattern: `check` and `value` are
     redeclared in every leaf to narrow their type.
 
-    Kinds only, not annotations: a name or an alias moving is not a promise this package made.  What the
-    annotations do promise is compared elsewhere and only as far as the head of each union member, so
-    `tests/test_typing_conformance.py` will say that a view and the runtime disagree about `bytes`
-    against `bytearray` and will not say that they disagree about `list[str]` against `list[int]`.
+    Annotations as written, alias and all.  Recorded because kinds alone left a whole class of typing
+    change unseen: narrowing the seven chronological methods from `datetime.date` to `datetime.datetime`
+    moved nothing here, and that is exactly the tightening a minor has to name.  The price is that
+    renaming an alias reads as a change to every signature that spells it, which is a re-record and a
+    line in review rather than a defect.
     """
     source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
     declared: dict[str, tuple[dict[str, str], list[str]]] = {}
@@ -238,7 +240,7 @@ def _view_shapes() -> dict[str, str]:
         rungs: dict[str, list[str]] = {}
         for item in node.body:
             if isinstance(item, ast.FunctionDef):
-                rungs.setdefault(item.name, []).append(_spelled(item.args))
+                rungs.setdefault(item.name, []).append(_spelled(item))
         bases = []
         for base in node.bases:
             target = base.value if isinstance(base, ast.Subscript) else base
@@ -263,15 +265,26 @@ def _view_shapes() -> dict[str, str]:
     }
 
 
-def _spelled(arguments: ast.arguments) -> str:
-    """One declaration reduced to how each parameter may be passed, `self` dropped."""
-    return ", ".join(
-        [f"{argument.arg}/" for argument in arguments.posonlyargs if argument.arg != "self"]
-        + [argument.arg for argument in arguments.args if argument.arg != "self"]
-        + ([f"*{arguments.vararg.arg}"] if arguments.vararg else [])
-        + [f"*{argument.arg}" for argument in arguments.kwonlyargs]
-        + ([f"**{arguments.kwarg.arg}"] if arguments.kwarg else [])
+def _spelled(method: ast.FunctionDef) -> str:
+    """One declaration as what it takes and what it hands back, `self` dropped.
+
+    The return is here because a pivot is where a view differs from every other view offering the same
+    name: `first()` takes no parameters at all, so four views declaring four different results recorded
+    one identical empty string between them.
+    """
+    arguments = method.args
+    parameters = ", ".join(
+        [f"{_typed(argument)}/" for argument in arguments.posonlyargs if argument.arg != "self"]
+        + [_typed(argument) for argument in arguments.args if argument.arg != "self"]
+        + ([f"*{_typed(arguments.vararg)}"] if arguments.vararg else [])
+        + [f"*{_typed(argument)}" for argument in arguments.kwonlyargs]
+        + ([f"**{_typed(arguments.kwarg)}"] if arguments.kwarg else [])
     )
+    return f"({parameters}) -> {ast.unparse(method.returns) if method.returns else '?'}"
+
+
+def _typed(argument: ast.arg) -> str:
+    return f"{argument.arg}: {ast.unparse(argument.annotation)}" if argument.annotation else argument.arg
 
 
 def _overload_names(tree: ast.Module) -> tuple[set[str], set[str]]:

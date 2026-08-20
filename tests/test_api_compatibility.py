@@ -215,7 +215,7 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
     changes.extend(_view_changes(before.get("typed_views", {}), after.get("typed_views", {})))
     old_shapes, new_shapes = before.get("view_shapes", {}), after.get("view_shapes", {})
     changes.extend(
-        ("typing", f"{name} takes its parameters differently: {new_shapes[name]}, was {old_shapes[name]}")
+        ("typing", f"{name} is declared differently: {new_shapes[name]}, was {old_shapes[name]}")
         for name in sorted(set(old_shapes) & set(new_shapes))
         if old_shapes[name] != new_shapes[name]
     )
@@ -318,8 +318,12 @@ class TestTheClassificationItself:
             "describe_mismatch": {"kind": "callable", "parameters": [], "returns": "str"},
         },
         "failure_attributes": {"actual": "instance attribute"},
-        "typed_views": {"_StringAssertion": ["is_alpha", "starts_with"]},
-        "view_shapes": {"_StringAssertion.is_alpha": "", "_StringAssertion.starts_with": "prefix"},
+        "typed_views": {"_StringAssertion": ["first", "is_alpha", "starts_with"]},
+        "view_shapes": {
+            "_StringAssertion.is_alpha": "() -> Self",
+            "_StringAssertion.first": "() -> _StringAssertion",
+            "_StringAssertion.starts_with": "(prefix: str) -> Self",
+        },
     }
 
     def _after(self, **changes):
@@ -346,7 +350,17 @@ class TestTheClassificationItself:
             ),
             (
                 "a parameter turns keyword-only",
-                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "*prefix"}),
+                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "(*prefix: str) -> Self"}),
+                "typing",
+            ),
+            (
+                "a parameter is narrowed",
+                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "(prefix: LiteralString) -> Self"}),
+                "typing",
+            ),
+            (
+                "a pivot hands back another view",
+                lambda s: s["view_shapes"].update({"_StringAssertion.first": "() -> _TextAssertion"}),
                 "typing",
             ),
             (
