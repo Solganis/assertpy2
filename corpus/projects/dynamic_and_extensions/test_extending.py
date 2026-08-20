@@ -1,8 +1,12 @@
 """The parts that are deliberately dynamic, used the way the documentation says to use them.
 
-`has_*` resolves through `__getattr__`, matchers are registered at runtime, and `add_extension` adds a
-method that no protocol declares.  All three are documented holes in the typed surface, so what this
-project checks is that they still *work*, and that nothing in the typed part broke reaching them.
+Matchers are registered at runtime and `add_extension` adds a method that no protocol declares.  Both
+are documented holes in the typed surface, so what this project checks is that they still *work*, and
+that nothing in the typed part broke reaching them.
+
+`has_*` used to live here too.  It resolves through `__getattr__` on the builder, and a value with no
+capability no longer reaches that builder, so the calls are type errors while the runtime answers them
+exactly as before.  They moved to `dynamic_only/`, beside the other half no checker can see.
 """
 
 from __future__ import annotations
@@ -24,16 +28,6 @@ class Account:
 
     def is_overdrawn(self) -> bool:
         return self.balance < 0
-
-
-def test_dynamic_attribute_assertions_read_the_object() -> None:
-    account = Account("alice", 120.0)
-    assert_that(account).has_owner("alice")
-    assert_that(account).has_balance(120.0)
-
-
-def test_dynamic_assertions_reach_a_zero_argument_method() -> None:
-    assert_that(Account("bob", -5.0)).has_is_overdrawn(True)
 
 
 class StartsWithVowel(BaseMatcher):

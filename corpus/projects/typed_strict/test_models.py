@@ -73,7 +73,8 @@ def test_structural_comparison_reads_a_model() -> None:
 
 def test_attrs_values_compare_field_by_field() -> None:
     shipment = Shipment(identifier=1, carrier="dhl", delivered=False)
-    assert_that(shipment).has_carrier("dhl")
+    # the documented migration for `has_<attribute>()`, which a strict consumer takes rather than ignores
+    assert_that(shipment.carrier).is_equal_to("dhl")
     assert_that(shipment.delivered).is_false()
 
 
