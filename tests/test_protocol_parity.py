@@ -60,10 +60,6 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
         # pair is the same everywhere by construction: it is the `TypeIs` form the core already has.
         # Only the second half narrows, to `Matcher[str]` and `Matcher[_N]` respectively
         ("satisfies", "_NumericAssertion", "_TextAssertion"),
-        # the object view redeclares the pair for a third reason: it puts the refinement ladder in
-        # front of it, so a `TypeIs` predicate answers with the view the factory would have given
-        ("satisfies", "_NumericAssertion", "_ObjectAssertion"),
-        ("satisfies", "_ObjectAssertion", "_TextAssertion"),
         # `matches_structure` takes a mapping, a pydantic-style model or an attrs instance.  The
         # mapping half has a view of its own, and the other two do not: only mypy sees an attrs class,
         # so the object view carries it rather than a shape answering three different ways
@@ -169,7 +165,6 @@ _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
         # type.  The core declares the plain pair, and this is the same pair with the ladder in front
         ("_ObjectAssertion", "is_not_none"),
         ("_ObjectAssertion", "is_instance_of"),
-        ("_ObjectAssertion", "satisfies"),
         # the string view keeps its own result type on the pivots: text for a message, `str` for a
         # string, which is what lets one be read as a path and the other not
         ("_StringAssertion", "first"),
@@ -599,6 +594,47 @@ class TestTheProtocolsStayComposed:
         assert_that(set(_VALUE_VIEWS) & set(_CAPABILITY_CARRIERS)).described_as(
             "a protocol cannot be both a value view and a capability"
         ).is_empty()
+
+    @pytest.mark.parametrize(
+        ("name", "left", "right"),
+        sorted(_SHARED_ON_PURPOSE),
+        ids=[f"{name}:{left}:{right}" for name, left, right in sorted(_SHARED_ON_PURPOSE)],
+    )
+    def test_every_pair_excused_from_sharing_has_something_to_excuse(self, name, left, right):
+        """An entry naming a declaration that does not exist excuses nothing and says so to nobody.
+
+        Three entries here named `_ObjectAssertion.satisfies`, which that view has never declared: they
+        were written from a description of the design rather than from the file, and the comment above
+        them described a redeclaration that was implemented as the refinement ladder instead.  Nothing
+        noticed, because a register of exclusions is read only by the check it silences.
+        """
+        for protocol in (left, right):
+            assert_that(_PROTOCOLS).described_as(f"{protocol} has to be a protocol of the typed surface").contains_key(
+                protocol
+            )
+            assert_that(_PROTOCOLS[protocol][0]).described_as(
+                f"{protocol} is excused from sharing {name} with a view that declares it"
+            ).contains(name)
+
+    @pytest.mark.parametrize(
+        ("protocol", "method"),
+        sorted(_NARROWED_ON_PURPOSE),
+        ids=[f"{protocol}.{method}" for protocol, method in sorted(_NARROWED_ON_PURPOSE)],
+    )
+    def test_every_narrowing_excused_as_deliberate_is_a_narrowing(self, protocol, method):
+        """Both halves of the claim, since either alone would pass on an entry that means nothing.
+
+        The register says a protocol redeclares what it inherits, so the protocol has to declare the
+        method *and* reach a base that declares it too.  An entry where only the second half holds is
+        the dead one this gate was written for.
+        """
+        assert_that(_PROTOCOLS[protocol][0]).described_as(
+            f"{protocol} is excused for redeclaring {method}, so it has to declare it"
+        ).contains(method)
+        inherited = [base for base in _PROTOCOLS[protocol][1] if method in _declarations_of(base)]
+        assert_that(inherited).described_as(
+            f"{protocol}.{method} is excused as a narrowing, so a base has to declare it as well"
+        ).is_not_empty()
 
     def test_every_base_the_walk_recorded_is_a_protocol_of_this_file(self):
         """The inheritance graph has no dangling parent, so a missing edge cannot pass as an absent one.
