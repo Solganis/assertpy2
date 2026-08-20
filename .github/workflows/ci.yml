@@ -51,11 +51,11 @@ jobs:
 
       - name: Install dependencies
         if: '!matrix.full-deps'
-        run: uv sync --extra json
+        run: uv sync --locked --extra json
 
       - name: Install dependencies (all integrations)
         if: matrix.full-deps
-        run: uv sync --extra json --extra data --extra inline --group integrations --group docs-examples
+        run: uv sync --locked --extra json --extra data --extra inline --group integrations --group docs-examples
 
       - name: Test with coverage
         if: '!matrix.full-deps'
@@ -114,7 +114,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install dependencies
-        run: uv sync --extra json --extra allure --extra behave
+        run: uv sync --locked --extra json --extra allure --extra behave
 
       - name: Contract tests against the real libraries
         run: uv run pytest -v tests/test_optional_integration_contracts.py
@@ -145,7 +145,7 @@ jobs:
         # pandas', polars' and numpy's to change. A stub release that stops declaring the member a
         # shape keys on moves those values back to the generic builder, silently: it type-checks, and
         # the narrowed methods just stop being offered. The integration matrix below is what notices
-        run: uv sync --extra json --extra data --extra inline --group typecheck
+        run: uv sync --locked --extra json --extra data --extra inline --group typecheck
 
       - name: Ruff check
         run: uv run ruff check .
