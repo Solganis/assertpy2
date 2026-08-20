@@ -33,7 +33,7 @@ def _require_comparable_datetimes(first: datetime.datetime, second: datetime.dat
 class DateMixin(_MixinBase):
     """Date and time assertions mixin."""
 
-    def is_before(self, other) -> Self:
+    def is_before(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is before other date.
 
         Args:
@@ -71,7 +71,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_after(self, other) -> Self:
+    def is_after(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is after other date.
 
         Args:
@@ -109,7 +109,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_before_or_equal_to(self, other) -> Self:
+    def is_before_or_equal_to(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is before or equal to other date.
 
         Args:
@@ -142,7 +142,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_after_or_equal_to(self, other) -> Self:
+    def is_after_or_equal_to(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is after or equal to other date.
 
         Args:
@@ -175,7 +175,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_equal_to_ignoring_milliseconds(self, other) -> Self:
+    def is_equal_to_ignoring_milliseconds(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date to the second.
 
         Args:
@@ -212,7 +212,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_equal_to_ignoring_seconds(self, other) -> Self:
+    def is_equal_to_ignoring_seconds(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date to the minute.
 
         Args:
@@ -244,7 +244,7 @@ class DateMixin(_MixinBase):
             )
         return self
 
-    def is_equal_to_ignoring_time(self, other) -> Self:
+    def is_equal_to_ignoring_time(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date ignoring time.
 
         Args:

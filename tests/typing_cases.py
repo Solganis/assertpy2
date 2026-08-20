@@ -122,6 +122,10 @@ def _incompatible_operands() -> None:
     assert_that("text").is_length("3")  # case: length-given-text
     assert_that(b"data").starts_with("text")  # case: bytes-prefixed-with-text
     assert_that(datetime.date(2026, 1, 1)).is_before(5)  # case: date-compared-to-number
+    # the chronological seven take a `datetime` on both sides, and a plain date raises on the value
+    assert_that(datetime.date(2026, 1, 1)).is_before(datetime.date(2026, 2, 1))  # case: date-ordered-as-a-datetime
+    _day = datetime.datetime(2026, 1, 1).date()
+    assert_that(_day).is_after(datetime.date(2020, 1, 1))  # case: date-taken-from-a-datetime
     # ordered against anything, convertible to nothing: the checker and the runtime agree to refuse it,
     # which is the half of the approximation that works
     assert_that(1).is_greater_than(_Ordered())  # case: ordered-but-not-convertible
@@ -195,19 +199,16 @@ def _a_json_path_lands_on_an_unknown_shape() -> None:
     assert_that({"id": 1}).at_json_path("$.id").contains_key("x")  # case: mapping-assertion-after-a-json-path
     assert_that([{"id": 1}]).at_json_path("$[0].id").contains(1)  # case: membership-assertion-after-a-json-path
     assert_that({"id": 1}).at_json_path("$.id").value.bit_length()  # case: reading-a-json-path-value-as-a-type
-    # the two mistakes the runtime refuses by name, now refused before the run
     rows = [{"id": 1}]
     assert_that(rows).extracting("id", filtr=lambda row: True)  # case: extracting-with-an-unknown-option
     assert_that(rows).extracting("id", filter=lambda left, right: True)  # case: extracting-filter-of-wrong-arity
     assert_that(rows).extracting("id", sort=lambda left, right: 0)  # case: extracting-sort-of-wrong-arity
-    # the predicate is handed the element, so the element's own type is what it may be asked about
     assert_that([1, 2]).filtered_on(lambda item: item.missing)  # case: predicate-reading-a-field-the-element-lacks
     assert_that({"a": 1}).filtered_on(lambda key: key.missing)  # case: mapping-predicate-reading-a-missing-field
     assert_that([1, 2]).any_satisfy(lambda item: item.missing)  # case: quantifier-reading-a-missing-field
     assert_that(b"ab").filtered_on(lambda byte: byte.missing)  # case: byte-predicate-reading-a-missing-field
     assert_that([1, 2]).each(lambda item: item.missing)  # case: each-reading-a-missing-field
     assert_that({"a": 1}).all_satisfy(lambda key: key.missing)  # case: all-satisfy-reading-a-missing-field
-    # the runtime refuses a call with no selector, and so does the type now
     assert_that(rows).extracting()  # case: extracting-with-no-selector
 
 
@@ -233,9 +234,6 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_Person()).has_name("x")  # case: dynamic-attribute-on-an-object
     assert_that("text").is_close_to(1, 2)  # case: numeric-assertion-on-text
 
-    # the same question asked through the verdict proxy, which used to accept every name there is:
-    # `check()` hands back the twin of the view it was reached from, so a wrong-domain assertion is
-    # refused there for the same reason it is refused on the ordinary path
     assert_that(1).check().starts_with("x")  # case: text-assertion-on-a-number-through-check
     assert_that("text").check().is_positive()  # case: numeric-assertion-on-text-through-check
     assert_that([1]).check().contains_key("a")  # case: mapping-assertion-on-a-list-through-check
@@ -273,7 +271,6 @@ def _shapes_other_people_write(
     assert_that(subclassed).contains("row")  # case: valid-list-subclass
     assert_that(loose).contains("whatever")  # case: valid-any-element
     assert_that(stamp).is_before(stamp)  # case: valid-datetime-against-datetime
-    assert_that(stamp.date()).is_after(datetime.date(2020, 1, 1))  # case: valid-date-from-datetime
 
 
 def _relations_that_must_keep_working() -> None:
@@ -290,7 +287,6 @@ def _relations_that_must_keep_working() -> None:
     assert_that(b"data").starts_with(b"da")  # case: valid-bytes-prefix
     assert_that(1).satisfies(lambda value: value > 0)  # case: valid-predicate
     assert_that([1, 2, 3]).is_length(3)  # case: valid-length
-    assert_that(datetime.date(2026, 1, 1)).is_before(datetime.date(2026, 2, 1))  # case: valid-date-order
     assert_that(1).is_greater_than(0.5)  # case: valid-int-against-float
     assert_that(1.0).is_greater_than(0)  # case: valid-float-against-int
     assert_that(Decimal("1.1")).is_greater_than(Decimal("1.0"))  # case: valid-decimal-order
@@ -308,7 +304,6 @@ def _relations_that_must_keep_working() -> None:
     assert_that([1, 2]).satisfies(match.contains_only(1, 2))  # case: valid-only-matcher
     assert_that([1, 2]).satisfies(match.is_subset_of([1, 2, 3]))  # case: valid-subset-from-collection
     assert_that([1, 2]).satisfies(match.is_subset_of(1, 2, 3))  # case: valid-subset-from-items
-    # the same two spellings on the assertion itself, which the shared capability could not tell apart
     assert_that([1, 2]).is_subset_of(1, 2, 3)  # case: valid-subset-of-loose-items
     assert_that("ab").is_subset_of("abc")  # case: valid-subset-of-characters
     assert_that({"a": 1}).is_subset_of({"a": 1, "b": 2})  # case: valid-subset-of-a-mapping
@@ -331,12 +326,9 @@ def _relations_that_must_keep_working() -> None:
     _bases: list[_Base] = [_Derived()]
     assert_that(_bases).satisfies(match.contains(_Derived()))  # case: valid-membership-of-a-subclass
     _takes_repeats_of_derived(assert_that([_Derived()]))  # case: valid-repeats-of-the-exact-element
-    # a json path continues in the type the caller states; the runtime runs the predicate and reads
-    # its boolean answer, so the declared narrowing is trusted rather than verified
     assert_that({"id": 1}).at_json_path("$.id").is_equal_to(1)  # case: valid-equality-after-a-json-path
     assert_that({"id": 1}).at_json_path("$.id").satisfies(_is_int).is_positive()  # case: valid-narrowed-json-path
     assert_that({"id": 1}).at_json_path("$.id").satisfies(match.greater_than(0))  # case: valid-matcher-after-json-path
-    # every call form the extraction signature accepts, so the count of them is measured rather than said
     _rows = [{"id": 1, "name": "a"}]
     assert_that(_rows).extracting("id")  # case: valid-extracting-one-name
     assert_that(_rows).extracting("id", "name")  # case: valid-extracting-several-names

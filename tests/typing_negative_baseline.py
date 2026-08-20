@@ -44,7 +44,6 @@ _MISSING: dict[str, frozenset[str]] = {
 }
 
 CAUGHT: dict[str, dict[str, frozenset[str]]] = {
-    # --- the argument cannot be what the value would have to hold ---------------------------------
     "contains-item-of-another-type": _ARGUMENT,
     "numeric-compared-to-text": _ARGUMENT,
     "mapping-key-of-another-type": _ARGUMENT,
@@ -54,6 +53,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # each view says what a superset is for it: characters, a mapping, byte values
     "mapping-subset-of-a-sequence": _ARGUMENT,
     "date-compared-to-number": _ARGUMENT,
+    "date-ordered-as-a-datetime": _ARGUMENT,
+    "date-taken-from-a-datetime": _ARGUMENT,
     "ordered-but-not-convertible": _ARGUMENT,
     "length-given-text": _ARGUMENT,
     "bytes-prefixed-with-text": _ARGUMENT,
@@ -86,19 +87,11 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
-    # --- a type parameter substituted by a wider one -----------------------------------------------
-    # what the invariant element of `_RepeatableAssertion` buys: the contravariance pyright suggests
-    # makes this legal, and a matcher for the narrower element then reaches the wider assertion
     "repeats-of-a-wider-element-substituted": _ARGUMENT,
-    # --- the shape at a json path is unknowable statically, so the view carries no shape -----------
-    # each of these used to type-check and raise at runtime, which is the pairing this file exists for
     "numeric-assertion-after-a-json-path": _MISSING,
     "mapping-assertion-after-a-json-path": _MISSING,
     "membership-assertion-after-a-json-path": _MISSING,
     "reading-a-json-path-value-as-a-type": _MISSING,
-    # --- the two extraction mistakes the runtime refuses by name, refused before the run now -------
-    # the verdict is `object`, but the input is the element: a predicate may only ask the element what
-    # the element has
     "predicate-reading-a-field-the-element-lacks": _MISSING,
     "mapping-predicate-reading-a-missing-field": _MISSING,
     "quantifier-reading-a-missing-field": _MISSING,
@@ -129,7 +122,6 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"arg-type", "misc"}),
         "pyright": frozenset({"reportArgumentType"}),
     },
-    # --- the method is not on this value's protocol ------------------------------------------------
     "complex-ordered": _MISSING,
     "complex-signed": _MISSING,
     "complex-nan": _MISSING,
@@ -144,35 +136,19 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "mapping-assertion-on-a-list-through-check": _MISSING,
     "a-name-that-exists-nowhere-through-check": _MISSING,
     "dynamic-attribute-on-a-mapping": _MISSING,
-    # --- a step hands back `Self`, so the narrowing holds for the whole chain ----------------------
     "complex-widened-by-chaining": _MISSING,
     "bool-widened-by-chaining": _MISSING,
     # `.not_` is declared as the protocol it was reached from, so the proxy accepts what the value
     # accepts.  What it still allows and the runtime refuses is the handful of non-negatable names
     "negation-widens-the-protocol": _MISSING,
-    # --- a value with no capability gets the core surface, not the whole builder -------------------
-    # This was the entry that read `{}` for as long as the fallback handed back the builder.  A plain
-    # class answers to nothing the library can use, so it now gets the object view, and a numeric
-    # assertion on one is a type error in all three checkers
     "numeric-assertion-on-an-object": _MISSING,
     # the dynamic hook lives on the builder, so the same narrowing takes `has_<attr>` off a plain
     # class.  Deliberate, and the docs guard has carried a marker for exactly this since before it:
     # a dynamic assertion is outside the typed surface by policy
     "dynamic-attribute-on-an-object": _MISSING,
-    # --- still open ---------------------------------------------------------------------------------
-    # the negation proxy, which is declared as the protocol and so cannot describe the fourteen
-    # names it refuses at runtime
     "negation-allows-a-non-negatable-name": {},
-    # the ordering matchers, deliberately.  `Matcher` is contravariant and `satisfies()` already refuses
-    # `match.starts_with("a")` over an `int`, so the shape works; what cannot be spelled is the ordering
-    # relation itself.  Typing the boundary as a number refuses `match.greater_than("a")`, which orders
-    # strings at runtime, and typing it as a plain TypeVar refuses `match.greater_than(0)` over a
-    # `float`, since contravariance then asks for `float` to be a subtype of `int`.  Both trade a
-    # correct call for an incorrect one, so the boundary stays `object` and the gap stays recorded
     "ordering-matcher-takes-any-boundary": {},
     "ordering-matcher-judges-any-subject": {},
-    # --- and the third: `SupportsFloat` is wider than the runtime's `numbers.Number` ----------------
-    # both are refused at runtime by name, which is the tolerable direction for an approximation to err
     "convertible-but-not-a-number": {},
     "array-as-a-scalar-operand": {},
 }
@@ -187,7 +163,6 @@ VALID: frozenset[str] = frozenset(
         "valid-bytes-prefix",
         "valid-predicate",
         "valid-length",
-        "valid-date-order",
         "valid-int-against-float",
         "valid-float-against-int",
         "valid-decimal-order",
@@ -259,7 +234,6 @@ VALID: frozenset[str] = frozenset(
         "valid-list-subclass",
         "valid-any-element",
         "valid-datetime-against-datetime",
-        "valid-date-from-datetime",
     }
 )
 """Ordinary usage, which must stay accepted by all three.

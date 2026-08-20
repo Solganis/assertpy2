@@ -510,7 +510,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
@@ -877,7 +877,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "Sized",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -936,7 +936,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -949,7 +949,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1033,7 +1033,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1046,7 +1046,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1097,14 +1097,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "SupportsFloat | datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "SupportsFloat | datetime.timedelta",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "tolerance",
@@ -1178,7 +1178,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1191,7 +1191,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1204,7 +1204,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
@@ -1358,7 +1358,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "int",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "length",
@@ -1475,14 +1475,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "SupportsFloat | datetime.datetime",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "other",
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "SupportsFloat | datetime.timedelta",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "tolerance",
@@ -1592,14 +1592,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "Callable[[Any], Any]",
      "default": "<callable assertpy2.collection.CollectionMixin.<lambda>>",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "key",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "bool",
      "default": "False",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "reverse",
@@ -1657,7 +1657,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "type",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "some_type",
@@ -1731,7 +1731,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "pattern",
@@ -4056,6 +4056,7 @@
    "is_before_or_equal_to",
    "is_between",
    "is_callable",
+   "is_close_to",
    "is_equal_to",
    "is_equal_to_ignoring_milliseconds",
    "is_equal_to_ignoring_seconds",
@@ -4073,6 +4074,7 @@
    "is_less_than_or_equal_to",
    "is_none",
    "is_not_callable",
+   "is_not_close_to",
    "is_not_equal_to",
    "is_not_in",
    "is_not_iterable",
@@ -5127,6 +5129,7 @@
   "_DateAssertion.is_before_or_equal_to": "other",
   "_DateAssertion.is_between": "low, high",
   "_DateAssertion.is_callable": "",
+  "_DateAssertion.is_close_to": "other, tolerance",
   "_DateAssertion.is_equal_to": "other, *ignore, *include, *tolerance, *comparators, *ignore_null, *strict_types",
   "_DateAssertion.is_equal_to_ignoring_milliseconds": "other",
   "_DateAssertion.is_equal_to_ignoring_seconds": "other",
@@ -5144,6 +5147,7 @@
   "_DateAssertion.is_less_than_or_equal_to": "other",
   "_DateAssertion.is_none": "",
   "_DateAssertion.is_not_callable": "",
+  "_DateAssertion.is_not_close_to": "other, tolerance",
   "_DateAssertion.is_not_equal_to": "other",
   "_DateAssertion.is_not_in": "*items",
   "_DateAssertion.is_not_iterable": "",
