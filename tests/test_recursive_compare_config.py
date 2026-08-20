@@ -218,7 +218,6 @@ class TestComparators:
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("m.b")
 
     def test_a_comparator_owns_an_aligned_element_the_walker_would_decompose(self):
-        # a comparator that rejects the pair reports it whole: a rejected node is never recursed into
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that([{"v": 1}, {"pad": 1}]).is_equal_to(
                 [{"v": 1}, {"extra": 9}, {"pad": 1}],
@@ -519,7 +518,6 @@ class TestConfigThroughNestedContainers:
         assert_that({"d": [{"a": 1, "b": 5}]}).is_equal_to({"d": [{"a": 1, "b": None}]}, ignore_null=True)
 
     def test_identical_container_short_circuits_on_identity(self):
-        # identity first, the way Python's own container comparison does, so a self-unequal value matches
         shared = [float("nan")]
         assert_that({"d": shared, "k": 1}).is_equal_to({"d": shared, "k": 2}, ignore="k")
 
@@ -544,7 +542,6 @@ class TestConfigThroughNestedContainers:
             assert_that({"d": [[1.0]]}).is_equal_to({"d": [[9.0]]}, tolerance=0.01)
 
     def test_undecomposable_leaf_difference_still_fails(self):
-        # a string is a leaf the walker does not decompose, so it falls back to the plain check
         with pytest.raises(AssertionError):
             assert_that({"d": "a"}).is_equal_to({"d": "b"}, tolerance=0.01)
 
@@ -553,14 +550,12 @@ class TestConfigThroughNestedContainers:
             assert_that({"d": [1, 2], "k": 1}).is_equal_to({"d": [1, 9], "k": 2}, ignore="k")
 
     def test_tolerance_reaches_a_dict_inside_a_shifted_list(self):
-        # the shift routes the elements through the alignment, which must carry the config into them
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that([{"v": 1.0}, {"pad": 1}]).is_equal_to([{"v": 1.2}, {"extra": 9}, {"pad": 1}], tolerance=0.5)
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).is_equal_to([("expected[1]", None, {"extra": 9})])
 
     def test_tolerance_reaches_a_dict_inside_a_record_field(self):
-        # a record field holding a container is walked with the config, not with plain equality
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that(Row({"v": 1.0}, "a")).is_equal_to(Row({"v": 1.2}, "b"), tolerance=0.5)
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
@@ -602,7 +597,7 @@ class TestStrictTypes:
         ids=str,
     )
     def test_a_type_change_is_caught_at_any_depth(self, actual, expected):
-        assert_that(actual).is_equal_to(expected)  # plain equality accepts all of these
+        assert_that(actual).is_equal_to(expected)
         with pytest.raises(AssertionError):
             assert_that(actual).is_equal_to(expected, strict_types=True)
 
@@ -639,8 +634,6 @@ class TestStrictTypes:
             assert_that({"s": {1}}).is_equal_to({"s": {2}}, strict_types=True)
 
     def test_an_undecomposable_item_survives_the_filtered_sequence_path(self):
-        # ignore/include on a list routes items through their own comparison, which has to read a
-        # forced descent the same way the diff walker does
         assert_that([{1}]).is_equal_to([{1}], strict_types=True, ignore="absent")
         with pytest.raises(AssertionError):
             assert_that([{1}]).is_equal_to([{2}], strict_types=True, ignore="absent")
@@ -679,14 +672,12 @@ class TestStrictTypes:
             assert_that(actual).is_equal_to(expected, strict_types=True)
 
     def test_an_undecomposable_field_of_a_namedtuple_survives(self):
-        # the namedtuple walker has its own descent helper, and it must carry the reason through
         pair = namedtuple("pair", ["first", "second"])
         assert_that(pair(1, {2})).is_equal_to(pair(1, {2}), strict_types=True)
         with pytest.raises(AssertionError):
             assert_that(pair(1, {2})).is_equal_to(pair(1, {3}), strict_types=True)
 
     def test_matchers_stay_exempt(self):
-        # the expected leaf is a Matcher, not a value, so comparing its type would break composition
         assert_that({"id": 7}).is_equal_to({"id": match.greater_than(0)}, strict_types=True)
         assert_that({"u": {"age": 30}}).is_equal_to({"u": {"age": match.between(18, 120)}}, strict_types=True)
         assert_that([1, 5]).is_equal_to([1, match.greater_than(4)], strict_types=True)
@@ -695,7 +686,6 @@ class TestStrictTypes:
         assert_that({"a": True}).is_equal_to({"a": 1}, strict_types=True, comparators={bool: lambda x, y: True})
 
     def test_strictness_wins_over_tolerance(self):
-        # a tolerance says how far apart two numbers may be, not that they may be different types
         assert_that(1).is_equal_to(1.0, tolerance=0.5)
         with pytest.raises(AssertionError):
             assert_that(1).is_equal_to(1.0, tolerance=0.5, strict_types=True)
@@ -730,11 +720,9 @@ class TestStrictTypes:
         ids=str,
     )
     def test_the_same_keys_of_the_same_types_still_match(self, actual, expected):
-        # the other half: a check that only ever fires is a check that broke equality
         assert_that(actual).is_equal_to(expected, strict_types=True)
 
     def test_the_diff_names_the_key_rather_than_the_whole_mapping(self):
-        # a verdict with no diff would read as "these two equal-looking dicts differ, work out why"
         with pytest.raises(AssertionFailure) as failure:
             assert_that({True: "a", "ok": 1}).is_equal_to({1: "a", "ok": 1}, strict_types=True)
         assert_that(str(failure.value)).contains("only their types differ")
@@ -794,7 +782,6 @@ class TestStrictTypes:
         ids=str,
     )
     def test_a_container_type_change_is_caught_below_the_top_level(self, actual, expected):
-        # the top-level guard sits before the dict-like dispatch; these prove the node check covers the rest
         with pytest.raises(AssertionError):
             assert_that(actual).is_equal_to(expected, strict_types=True)
 
@@ -814,13 +801,11 @@ class TestStrictTypes:
         assert_that({"v": nan}).is_equal_to({"v": nan}, strict_types=True)
 
     def test_negation_goes_through_not_(self):
-        # is_not_equal_to takes no comparison kwargs; `.not_` is how the whole family is inverted
         assert_that({"a": True}).not_.is_equal_to({"a": 1}, strict_types=True)
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             assert_that(True).is_not_equal_to(1, strict_types=True)
 
     def test_two_equal_sets_in_a_record_field_are_not_reported(self):
-        # strict_types looks past a container whose own `==` was true, and a set has nothing to look at
         assert_that(Bag({1, 2}, "a")).is_equal_to(Bag({1, 2}, "a"), strict_types=True)
 
     def test_a_matcher_stays_exempt_on_the_actual_side_too(self):
@@ -865,7 +850,6 @@ class TestStrictTypesOnStdlibScalars:
         )
 
     def test_a_subclass_with_structure_is_still_walked(self):
-        # exact types, not isinstance: a subclass that carries fields of its own is not a scalar
         class Stamped(datetime.datetime):
             pass
 
@@ -922,8 +906,6 @@ class TestConfigEchoedOnFailure:
     when a field they thought was tolerated or ignored still failed the comparison."""
 
     def test_a_plain_failure_says_nothing_about_config(self):
-        # the note is the whole point only when something non-default is on: on the ordinary failure
-        # it would be noise, and `_build_compare_config()` returns None there
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": 1}).is_equal_to({"a": 2})
         assert_that(str(exc_info.value)).does_not_contain("compared with")
@@ -954,7 +936,6 @@ class TestConfigEchoedOnFailure:
         assert_that(str(exc_info.value)).contains("compared with tolerance=0.1, strict_types=True")
 
     def test_it_reaches_a_scalar_failure_too(self):
-        # the strict-types short circuit fires before the dict walk and has its own error() call
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that(True).is_equal_to(1, strict_types=True)
         assert_that(str(exc_info.value)).contains("compared with strict_types=True")
@@ -975,7 +956,6 @@ class TestConfigEchoedOnFailure:
         assert_that(first_line).is_equal_to("Expected <{'a': 1.0}> to be equal to <{'a': 9.0}>, but was not.")
 
     def test_a_config_with_nothing_in_it_adds_nothing_to_the_sentence(self):
-        # an empty `comparators` dict is the one spelling that builds a config with no setting to name
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": 1}).is_equal_to({"a": 2}, comparators={})
         first_line = str(exc_info.value).splitlines()[0]
@@ -998,7 +978,6 @@ class TestDecisionSentinelsReachTheDiff:
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
 
     def test_a_comparator_keyed_by_type_owns_its_leaves(self):
-        # keyed by type rather than by field name: nothing reached the type branch of the lookup
         assert_that({"a": 1.4, "b": 2.4}).is_equal_to(
             {"a": 1.0, "b": 2.0}, comparators={float: lambda actual, expected: round(actual) == round(expected)}
         )

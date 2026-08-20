@@ -291,7 +291,6 @@ class TestFormatDiff:
         _run_hook(report, _make_call(exc=exc))
         body = dict(report.sections)["Structured Diff"]
         assert_that(body).contains("line 1:")
-        # string diffs now render the raw line (with intra-line carets), not its repr
         assert_that(body).contains("foo")
         assert_that(body).contains("bar")
 
@@ -328,9 +327,8 @@ class TestDiffToJson:
         assert_that(_diff_to_json(diff)).is_none()
 
     def test_payload_carries_format_version(self):
-        # consumers can branch on the attachment schema: 1 = repr-strings (implicit), 2 = typed
-        # values, 3 = an absent side named rather than inferred from a null, 4 = a machine-readable
-        # path beside the rendered one
+        # consumers branch on the schema: 1 = repr strings, 2 = typed values, 3 = a named absent side, 4 = a machine-
+        # readable path
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
         assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(4)
 
@@ -357,7 +355,6 @@ class TestDiffToJson:
         assert_that({step["side"] for step in sided}).is_subset_of({"actual", "expected"})
 
     def test_an_entry_with_no_location_carries_no_steps(self):
-        # the whole value differing, and a containment failure whose path is a label
         diff = DiffResult(kind="dict", entries=[DiffEntry(path=".", actual=1, expected=2)])
         assert_that(json.loads(_diff_to_json(diff))["entries"][0]).does_not_contain_key("steps")
 
@@ -373,8 +370,6 @@ class TestDiffToJson:
         assert_that(json.loads(_diff_to_json(diff))["entries"][0]["absent"]).is_equal_to("expected")
 
     def test_a_value_that_is_none_carries_no_absent_key(self):
-        # the reason for the bump: under format 2 this entry and the one above were byte-identical,
-        # so a consumer reading `"expected": null` could not tell a missing field from a null one
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=None)])
         entry = json.loads(_diff_to_json(diff))["entries"][0]
         assert_that(entry).does_not_contain_key("absent")
@@ -463,13 +458,9 @@ class TestJsonSafe:
         assert_that(_json_safe(frozenset({"a"}))).is_equal_to({"__type__": "set", "__data__": ["a"]})
 
     def test_a_set_of_composites_still_recurses(self):
-        # the members above are all int/str, which return at the fast path; a tuple member is the only
-        # thing that makes the recursive call, and its arguments, observable
         assert_that(_json_safe({(1, 2)})).is_equal_to({"__type__": "set", "__data__": [[1, 2]]})
 
     def test_a_heterogeneous_set_sorts_by_repr(self):
-        # sorting a mixed set is only possible through the repr key, and dropping the key is silent on
-        # a homogeneous one, so both halves need pinning
         assert_that(_json_safe({1, "a"})).is_equal_to({"__type__": "set", "__data__": ["a", 1]})
         assert_that(_json_safe({2, 10})["__data__"]).is_equal_to([10, 2])
 
@@ -481,8 +472,6 @@ class TestJsonSafe:
         assert_that(blob).contains("__repr__")
 
     def test_the_depth_cap_holds_for_sequences_too(self):
-        # only the dict branch was pinned, so a sequence walker that counted the wrong way stayed
-        # invisible: nesting kept expanding and a deep enough structure would recurse until it blew up
         nested = [1]
         for _ in range(8):
             nested = [nested]
@@ -698,8 +687,6 @@ class TestAllureFullMode:
         assert_that(names).contains("Structured Diff")
 
     def test_a_failure_that_never_named_actual_attaches_no_values(self):
-        # the same rule as the terminal section: an Allure run and a pytest report have to agree on
-        # which values the assertion named, or full mode grows an attachment under every failure
         mock = _mock_allure()
         with pytest.raises(AssertionFailure) as failure:
             assert_that({"a": 1}).contains_key("x")
@@ -741,8 +728,6 @@ class TestAllureOffMode:
 
 
 def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7", clusters="3", dangling="off", entries=()):
-    # a bare MagicMock returns a truthy mock from getoption(), which would flip the snapshot-update
-    # module flag and leak update mode into unrelated tests
     config = MagicMock()
     # dispatch per key: a single return value would feed the allure mode to every other ini reader
     per_key = {
@@ -774,12 +759,9 @@ class TestPytestConfigure:
             pytest_configure(config)
         assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
         assert_that(caught).is_length(1)
-        # the message names what was written and the modes that would have worked
         assert_that(str(caught[0].message)).contains("unknown").contains("(diff, full, off)")
 
     def test_configure_disables_diff_in_message_and_unconfigure_restores(self, monkeypatch):
-        # under a real session the plugin renders the diff itself, so it keeps it out of the message; the
-        # prior value is saved and restored so nested/direct hook calls stay balanced
         monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", True)
         config = _make_config()
         pytest_configure(config)
@@ -796,8 +778,6 @@ class TestSnapshotUpdateOption:
         assert_that(names).contains("--assertpy2-snapshot-update")
 
     def test_the_boolean_flags_are_opt_in(self):
-        # unpinned, these flipped to default=True unnoticed: update mode rewrites a changed snapshot.
-        # Named one by one rather than swept, which would forbid ever adding an option that takes a value
         parser = MagicMock()
         pytest_addoption(parser)
         registered = {call[0][0]: call[1] for call in parser.addoption.call_args_list}
@@ -838,18 +818,16 @@ class TestSnapshotUpdateOption:
         assert_that(snapshot_module._CI_MODE).is_none()
 
     def test_no_ci_flag_sets_mode_false_and_unconfigure_resets(self, monkeypatch):
-        monkeypatch.setattr(snapshot_module, "_CI_MODE", True)  # start from a distinct state
+        monkeypatch.setattr(snapshot_module, "_CI_MODE", True)
         config = _make_config()
         config.getoption.side_effect = lambda name: name == "assertpy2_snapshot_no_ci"
         pytest_configure(config)
-        assert_that(snapshot_module._CI_MODE).is_false()  # elif no-ci branch set it False
+        assert_that(snapshot_module._CI_MODE).is_false()
         pytest_unconfigure(config)
         assert_that(snapshot_module._CI_MODE).is_none()
 
 
 def _controller_config(reporter, *, full=True):
-    # a controller (non-xdist-worker) config: no ``workeroutput`` attr, so pytest_sessionfinish takes
-    # the aggregation-and-report branch instead of the worker ship-out branch
     option = SimpleNamespace(keyword="" if full else "somekeyword", markexpr="", last_failed=False, failed_first=False)
     pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
     return SimpleNamespace(option=option, pluginmanager=pluginmanager)
@@ -870,8 +848,6 @@ class TestSnapshotOrphans:
         pytest_plugin._controller_touched.clear()
 
     def test_testnodedown_collects_worker_failures(self):
-        # the whole point of the transport: the controller writes the summary and runs none of the
-        # failures itself, so a worker's findings have to arrive here or the summary is empty
         pytest_plugin._controller_failures.clear()
         pytest_plugin._controller_failure_count[0] = 0
         node = SimpleNamespace(
@@ -890,7 +866,6 @@ class TestSnapshotOrphans:
         assert_that(pytest_plugin._controller_failures).is_length(1)
         assert_that(pytest_plugin._controller_failure_count[0]).is_equal_to(7)
         nodeid, found = pytest_plugin._controller_failures[0]
-        # the worker's own name is part of the key: `--dist=each` gives two workers the same test
         assert_that(nodeid).is_equal_to("gw3::t.py::test_x")
         assert_that(found[0].signature.where).is_equal_to("user.role")
         pytest_plugin._controller_failures.clear()
@@ -912,8 +887,6 @@ class TestSnapshotOrphans:
         assert_that(pytest_plugin._controller_touched).is_empty()
 
     def test_the_prune_locks_the_file_it_rewrites(self, tmp_path, monkeypatch):
-        # nothing asserted which path the lock was taken on, so it could be taken on a constant and
-        # stop excluding a concurrent write of the same snapshot, littering the cwd on the way
         snapname = str(tmp_path / "snap-mod.json")
         with open(snapname, "w") as handle:
             json.dump({"10": 1, "30": 3}, handle)
@@ -935,9 +908,7 @@ class TestSnapshotOrphans:
         assert_that(_is_full_run(config(markexpr="m"))).is_false()
         assert_that(_is_full_run(config(last_failed=True))).is_false()
         assert_that(_is_full_run(config(failed_first=True))).is_false()
-        # a nodeid selection (path::test) runs only a subset of a file's tests
         assert_that(_is_full_run(config(file_or_dir=["tests/test_x.py::test_a"]))).is_false()
-        # a whole-file or directory selection still runs all of that file's tests
         assert_that(_is_full_run(config(file_or_dir=["tests/test_x.py"]))).is_true()
 
     def test_sessionfinish_no_touches_is_quiet(self, monkeypatch):
@@ -967,7 +938,7 @@ class TestSnapshotOrphans:
         pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter)), 0)
         text = " ".join(str(call) for call in reporter.write_line.call_args_list)
         assert_that(text).contains("::30").contains("full run to remove")
-        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")
 
     def test_prunes_sub_key_under_update_full_run(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
@@ -979,7 +950,7 @@ class TestSnapshotOrphans:
         pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=True)), 0)
         text = " ".join(str(call) for call in reporter.write_line.call_args_list)
         assert_that(text).contains("removed")
-        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).does_not_contain_key("30")  # pruned
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).does_not_contain_key("30")
 
     def test_no_prune_on_filtered_run(self, tmp_path, monkeypatch):
         snapname = str(tmp_path / "snap-mod.json")
@@ -989,11 +960,9 @@ class TestSnapshotOrphans:
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
         reporter = MagicMock()
         pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=False)), 0)
-        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")
 
     def test_no_prune_on_nodeid_selected_run(self, tmp_path, monkeypatch):
-        # nodeid selection (path::test) runs only a subset of a file's tests, so a live but un-run
-        # sibling sub-snap must not be pruned as obsolete even under update mode
         snapname = str(tmp_path / "snap-mod.json")
         with open(snapname, "w") as handle:
             json.dump({"10": 1, "30": 3}, handle)
@@ -1006,7 +975,7 @@ class TestSnapshotOrphans:
         pluginmanager = SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None)
         config = SimpleNamespace(option=option, pluginmanager=pluginmanager)
         pytest_sessionfinish(SimpleNamespace(config=config), 0)
-        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")  # not pruned
+        assert_that(json.loads((tmp_path / "snap-mod.json").read_text())).contains_key("30")
 
     def test_whole_file_orphan_is_report_only_even_under_update(self, tmp_path, monkeypatch):
         live = str(tmp_path / "snap-live.json")
@@ -1018,7 +987,7 @@ class TestSnapshotOrphans:
         monkeypatch.setattr(snapshot_module, "_UPDATE_ALL", True)
         reporter = MagicMock()
         pytest_sessionfinish(SimpleNamespace(config=_controller_config(reporter, full=True)), 0)
-        assert_that(os.path.isfile(dead)).is_true()  # whole file is never auto-pruned
+        assert_that(os.path.isfile(dead)).is_true()
         text = " ".join(str(call) for call in reporter.write_line.call_args_list)
         assert_that(text).contains("obsolete snapshot file")
 
@@ -1077,7 +1046,6 @@ class TestNearTimeoutReport:
         assert_that("\n".join(lines)).contains("t.py::test_x").contains("81% of the budget")
 
     def test_a_healthy_retry_is_not_named(self):
-        # converging at 2% of the budget is eventually() working, not a test about to go flaky
         assert_that(self._lines([("t.py::test_x", 3, 0.04, 2.0)])).is_empty()
 
     def test_nothing_collected_stays_quiet(self):
@@ -1093,8 +1061,6 @@ class TestNearTimeoutReport:
         assert_that(async_assertions._RETRIES).is_empty()
 
     def test_a_teardown_phase_retry_keeps_its_own_test(self):
-        # teardown runs after the call report, so draining only on "call" would leave the retry sitting
-        # in the list until the NEXT test's call phase claimed it
         async_assertions._RETRIES.append((41, 0.81, 1.0))
         report = _make_report(when="teardown", failed=False)
         report.nodeid = "t.py::test_owner"
@@ -1199,7 +1165,6 @@ class TestVacuityGuardSwitch:
         assert_that(_satisfies_module._VACUOUS_GUARD).is_false()
 
     def test_unconfigure_keeps_a_guard_the_environment_turned_on(self, monkeypatch):
-        # without the flag the plugin changes nothing, so restoring must not clear an env-set guard
         monkeypatch.setattr(_satisfies_module, "_VACUOUS_GUARD", True)
         config = _make_config()
         pytest_configure(config)
@@ -1242,16 +1207,13 @@ class TestSnapshotKeyReuseWarning:
             snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
         assert_that(caught).is_length(1)
         assert_that(caught[0].category).is_equal_to(snapshot_module.SnapshotKeyReusedWarning)
-        # the message has to carry the cause, not just the fact: a key alone is not actionable
-        # no count here: this fires on the second reach, a third may follow, and the other xdist
-        # workers are invisible from inside a test. any number would read as a total
         assert_that(str(caught[0].message)).contains("test_mod.py:17").contains("reached by more than one test")
         assert_that(str(caught[0].message)).does_not_contain("shared by")
         assert_that(str(caught[0].message)).contains("snapshot(id=...)")
 
     def test_the_warning_points_at_the_line_that_reused_the_key(self, monkeypatch, tmp_path):
-        # catch_warnings records the message, not where pytest attributes it, so the stack level was
-        # free to drift.  Driven through snapshot(), since the depth is only right on the real path
+        # `catch_warnings` records the message and not where pytest attributes it, so the stack level was free to
+        # drift
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             assert_that({"u": 1}).snapshot(id="shared", path=str(tmp_path))
@@ -1286,7 +1248,7 @@ class TestSnapshotKeyReuseWarning:
             snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
         assert_that(caught).is_empty()
         assert_that(snapshot_module._ACCESS_NODES).is_empty()
-        assert_that(snapshot_module._TOUCHED).contains(("/x/snap.json", "17"))  # orphan tracking is unaffected
+        assert_that(snapshot_module._TOUCHED).contains(("/x/snap.json", "17"))
 
     def test_a_custom_id_reads_as_a_whole_file(self, monkeypatch):
         snapshot_module._record_access("/x/snap.json", "", "id='payload'")
@@ -1297,7 +1259,6 @@ class TestSnapshotKeyReuseWarning:
         assert_that(str(caught[0].message)).contains("<whole file>").contains("id='payload'")
 
     def test_worker_ships_node_ids_and_the_controller_unions_them(self):
-        # two parametrised cases on two workers are one node id each locally, so only the union sees it
         config = SimpleNamespace(workeroutput={})
         snapshot_module._record_access("/x/snap.json", "17", "test_mod.py:17")
         pytest_sessionfinish(SimpleNamespace(config=config), 0)
@@ -1318,14 +1279,9 @@ class TestSnapshotKeyReuseWarning:
             pytest_sessionfinish(SimpleNamespace(config=_controller_config(MagicMock())), 0)
         reported = [str(w.message) for w in caught if w.category is snapshot_module.SnapshotKeyReusedWarning]
         assert_that(reported).is_length(1)
-        # the sweep has counted every test that reached the key, so it states a total rather than the
-        # "at least" the in-test warning has to settle for
         assert_that(reported[0]).contains("shared by 2 tests").does_not_contain("at least")
 
     def test_the_sweep_counts_a_key_a_test_already_reported(self):
-        # the in-test warning says where it happened and cannot say how many, so the sweep runs for
-        # every reused key rather than only for the ones nobody reported. two messages about one key
-        # is the price of the count being right
         snapshot_module._WARNED.add(("/x/s.json", "9"))
         pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b", "test_c"}
         with warnings.catch_warnings(record=True) as caught:
@@ -1336,9 +1292,6 @@ class TestSnapshotKeyReuseWarning:
         assert_that(reported[0]).contains("shared by 3 tests")
 
     def test_a_key_reached_once_does_not_stop_the_sweep(self):
-        # the sweep walks the keys in sorted order and skips the ones reached by a single test. a
-        # `break` in place of that `continue` would report nothing after the first such key, and every
-        # other test here has exactly one key in play, where the two are indistinguishable
         pytest_plugin._controller_accesses[("/x/a.json", "1")] = {"test_a"}
         pytest_plugin._controller_accesses[("/x/b.json", "9")] = {"test_a", "test_b"}
         with warnings.catch_warnings(record=True) as caught:
@@ -1349,8 +1302,6 @@ class TestSnapshotKeyReuseWarning:
         assert_that(reported[0]).contains("/x/b.json")
 
     def test_an_escalated_sweep_warning_fails_the_run_rather_than_the_hook(self):
-        # under `-W error` the warning raises here instead of at a test, and an exception out of a
-        # session-finish hook is an INTERNALERROR whose traceback points at the plugin
         pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
         reporter = MagicMock()
         session = SimpleNamespace(config=_controller_config(reporter), exitstatus=0)
@@ -1362,8 +1313,6 @@ class TestSnapshotKeyReuseWarning:
         assert_that(printed).contains("shared by 2 tests")
 
     def test_a_run_that_died_for_another_reason_keeps_its_own_exit_status(self):
-        # this hook is reached from a `finally`, so Ctrl-C lands here too. rewriting that to
-        # TESTS_FAILED would report a run that never finished as one that ran and failed
         pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
         reporter = MagicMock()
         session = SimpleNamespace(config=_controller_config(reporter), exitstatus=pytest.ExitCode.INTERRUPTED)
@@ -1371,7 +1320,6 @@ class TestSnapshotKeyReuseWarning:
             warnings.simplefilter("error")
             pytest_sessionfinish(session, 0)
         assert_that(session.exitstatus).is_equal_to(pytest.ExitCode.INTERRUPTED)
-        # the key is still worth naming: the exit code is about the run, the message about the snapshot
         printed = " ".join(str(call) for call in reporter.write_line.call_args_list)
         assert_that(printed).contains("shared by 2 tests")
 
@@ -1428,14 +1376,10 @@ class TestSnapshotKeyReuseUnderXdist:
     """
 
     def _run(self, tmp_path, snapshot_id, *extra):
-        # written under tmp_path on purpose: pytest would otherwise find the repository's own ini and
-        # apply its `-p no:assertpy2`, disabling the very plugin under test
         (tmp_path / "test_reuse.py").write_text(_SHARED_KEY_MODULE.format(id=snapshot_id), encoding="utf-8")
         try:
             return self._spawn(tmp_path, extra)
         except subprocess.TimeoutExpired as expired:
-            # the default report for this is the timeout alone, and a hang is exactly the case where
-            # how far the child got is the whole answer
             raise AssertionError(
                 f"the child run did not finish in {expired.timeout}s\n"
                 f"stdout:\n{expired.stdout}\nstderr:\n{expired.stderr}"
@@ -1446,22 +1390,15 @@ class TestSnapshotKeyReuseUnderXdist:
             [
                 "uv",
                 "run",
-                # --no-sync: this runs in the middle of the suite, and a re-resolve here would rebuild
-                # the environment the remaining tests are using
                 "--no-sync",
                 "pytest",
                 str(tmp_path / "test_reuse.py"),
                 "-q",
                 "--no-header",
-                # keep the child inside tmp_path: without these it takes the home directory as rootdir
-                # and walks the shared temp directory, where anything else on the machine can move
                 "--rootdir",
                 str(tmp_path),
                 "--confcutdir",
                 str(tmp_path),
-                # the generated module writes a throwaway snapshot into tmp_path, so the first call has
-                # to create one. CI mode forbids exactly that, and it turns itself on whenever `CI` is
-                # set, which is every run on a build machine and no run on a developer's
                 "--assertpy2-snapshot-no-ci",
                 "-n",
                 "3",
@@ -1491,26 +1428,18 @@ class TestSnapshotKeyReuseUnderXdist:
         report = self._report(self._run(tmp_path, '"one-key"'))
         report.contains("3 passed")
         report.contains("SnapshotKeyReusedWarning").contains("shared by 3 tests")
-        # the sweep's own frame: attribution to the test module would mean a single worker saw both
-        # reaches, which is the case this test exists to rule out
         report.contains("pytest_plugin.py")
 
     def test_a_key_per_case_stays_silent(self, tmp_path):
-        # without this the check above passes just as well against a gate that warns unconditionally
         report = self._report(self._run(tmp_path, 'f"key-{name}"'))
         report.contains("3 passed")
         report.does_not_contain("SnapshotKeyReusedWarning")
 
     def test_the_filters_turning_it_into_an_error_fail_the_run_not_the_hook(self, tmp_path):
-        # `error` in the filters raises the sweep's warning inside session finish, and pytest renders an
-        # exception from there as an INTERNALERROR: exit code aside, the reader gets this plugin's
-        # traceback instead of the snapshot that needs fixing. only a real run shows which one it is
         result = self._run(tmp_path, '"one-key"', "-W", "error::assertpy2.SnapshotKeyReusedWarning")
         report = self._report(result)
         report.does_not_contain("INTERNALERROR")
         report.contains("ERROR: snapshot key").contains("shared by 3 tests")
-        # the tests themselves have to pass: without this the check below is happy with a run that went
-        # red for any other reason, which is how a broken environment reads as a working sweep
         report.contains("3 passed")
         assert_that(result.returncode).described_as(f"child stderr:\n{result.stderr}").is_equal_to(1)
 
@@ -1577,14 +1506,12 @@ class TestTheOptionsRegisterWithPytestItself:
         assert_that(options.assertpy2_snapshot_update).is_true()
 
     def test_every_switch_and_key_documents_itself(self):
-        # help text is what `pytest --help` prints; an option registered without it is undiscoverable
         parser = _registered_parser()
         documented = [(option.names()[0], option.attrs().get("help")) for option in parser._anonymous.options]
         documented += [(name, spec[0]) for name, spec in parser._inidict.items()]
         assert_that([name for name, help_text in documented if not help_text]).is_empty()
 
     def test_the_wrapper_names_key_is_shell_split_rather_than_one_string(self):
-        # registered as a plain string, `_dangling_entries` would iterate a configured value's characters
         assert_that(_registered_parser()._inidict["assertpy2_dangling_entries"][1]).is_equal_to("args")
 
     def test_the_dangling_switch_is_opt_in_like_the_others(self):
@@ -1599,7 +1526,7 @@ class TestTheSettingsAProjectGets:
     def test_a_project_that_configures_nothing_gets_the_documented_defaults(self):
         config = _RegisteredConfig()
         with warnings.catch_warnings():
-            warnings.simplefilter("error")  # a default that needs a fallback warning is not a default
+            warnings.simplefilter("error")
             pytest_configure(config)
         try:
             assert_that(config._assertpy2_allure_mode).is_equal_to("diff")
@@ -1647,7 +1574,6 @@ class TestTheSettingsAProjectGets:
             pytest_unconfigure(config)
 
     def test_configure_opens_the_run_with_an_empty_ledger_and_claims_the_session(self):
-        # a second session in one process would otherwise open with the first one's failures counted
         config = _RegisteredConfig()
         try:
             pytest_configure(config)
@@ -1658,7 +1584,6 @@ class TestTheSettingsAProjectGets:
             pytest_unconfigure(config)
 
     def test_the_no_ci_switch_forces_ci_mode_off_rather_than_back_to_autodetection(self, monkeypatch):
-        # tri-state: None means "read the environment", which is what the switch exists to overrule
         monkeypatch.setattr(snapshot_module, "_CI_MODE", True)
         config = _RegisteredConfig(options={"assertpy2_snapshot_no_ci": True})
         try:
@@ -1673,7 +1598,6 @@ class TestUnconfigureLeavesTheProcessAsItFoundIt:
     """A second session in the same process must not inherit the first one's state."""
 
     def test_the_diff_in_message_setting_goes_back_to_what_it_was_not_to_on(self, monkeypatch):
-        # forcing True back would switch the diff into every message for a run that had it off
         monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", False)
         config = _RegisteredConfig()
         pytest_configure(config)
@@ -1681,7 +1605,6 @@ class TestUnconfigureLeavesTheProcessAsItFoundIt:
         assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_equal_to(False)
 
     def test_unconfigure_without_configure_leaves_the_diff_in_the_message(self, monkeypatch):
-        # off pytest the message is the only carrier, so the standalone default is what has to come back
         monkeypatch.setattr(errors_module, "_RENDER_DIFF_IN_MESSAGE", False)
         pytest_unconfigure(SimpleNamespace(getoption=lambda name: False))
         assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_equal_to(True)
@@ -1694,7 +1617,6 @@ class TestUnconfigureLeavesTheProcessAsItFoundIt:
         assert_that(async_assertions._COLLECT_RETRIES).is_false()
 
     def test_the_controller_tallies_are_released(self):
-        # consumed by a hook that may not run at all, so a stale count would land in the next summary
         pytest_plugin._controller_lost_workers[0] = 2
         pytest_plugin._controller_unreadable_workers[0] = 3
         pytest_plugin._controller_collect_errors[0] = 4
@@ -1734,8 +1656,6 @@ class TestFullRunDetectionOnAStrippedDownConfig:
     """Every selector is read with a default, and only a namespace missing them can show it."""
 
     def test_a_run_whose_plugins_registered_none_of_the_selectors_is_still_a_full_run(self):
-        # -p no:cacheprovider leaves no --lf/--ff on the namespace at all, and orphan pruning depends
-        # on the answer: read as a subset run, it stops reporting and stops pruning for good
         assert_that(_is_full_run(SimpleNamespace(option=SimpleNamespace()))).is_true()
 
 
@@ -1747,7 +1667,6 @@ class TestTheNearTimeoutReportReachesTheTerminal:
         monkeypatch.setattr(pytest_plugin, "_retried", list(rows))
         reporter = MagicMock()
         config = SimpleNamespace(
-            # named, not "whatever plugin you are asked for": the report goes to the terminal reporter
             pluginmanager=SimpleNamespace(get_plugin=lambda name: reporter if name == "terminalreporter" else None),
             _assertpy2_poll_threshold=threshold,
         )
@@ -1761,7 +1680,6 @@ class TestTheNearTimeoutReportReachesTheTerminal:
         assert_that("\n".join(lines)).contains("90% of the budget")
 
     def test_a_poll_measured_against_its_own_budget_not_against_the_product(self, monkeypatch):
-        # a fifth of a generous budget is healthy; multiplying the two calls it late instead
         assert_that(self._lines(monkeypatch, [("t.py::test_x", 3, 0.4, 2.0)])).is_empty()
 
     def test_a_poll_landing_exactly_on_the_bar_is_named(self, monkeypatch):
@@ -1787,7 +1705,6 @@ class TestTheDiffSectionReadsItsSettingsOffTheConfig:
         assert_that([title for title, _ in report.sections]).does_not_contain("Structured Diff", "Polling Trace")
 
     def test_a_config_that_never_configured_still_gets_its_sections(self):
-        # the hooks are driven directly in tests, and a plugin loaded mid-run has no configure behind it
         report = _make_report()
         exc = AssertionFailure("fail", diff=_diff_of(51), trace=_make_trace())
         _run_hook(report, _make_call(exc=exc), item=_configured_item())
@@ -1821,7 +1738,7 @@ class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
         ):
             _run_hook(_make_report(), _make_call(exc=exc), item=item)
         names = [call.kwargs["name"] for call in mock.attach.call_args_list]
-        assert_that(names).is_equal_to(["Structured Diff"])  # "diff" mode: no AssertionFailure body
+        assert_that(names).is_equal_to(["Structured Diff"])
         assert_that(json.loads(mock.attach.call_args_list[0].kwargs["body"])["truncated"]).is_equal_to(1)
 
     def test_the_entry_cap_the_ini_set_reaches_the_attachment(self):
@@ -1838,7 +1755,6 @@ class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
         assert_that(body["truncated"]).is_equal_to(3)
 
     def test_an_allure_that_raises_is_swallowed_where_it_happens(self):
-        # the outer hook barrier catches it too, but only after skipping whatever came next
         mock = _mock_allure()
         mock.attach.side_effect = RuntimeError("allure broken")
         report = _make_report()
@@ -1876,8 +1792,6 @@ class TestTheValuesSectionOnAForeignException:
         assert_that(dict(report.sections)).contains_key("Polling Trace")
 
     def test_the_pair_is_windowed_together_so_neither_side_is_dropped(self):
-        # each side capped on its own hides the difference when it sits past the cap, printing two
-        # values that look identical under a heading saying they are not
         exc = AssertionFailure("fail", actual="a" * 400 + "L", expected="a" * 400 + "R")
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
@@ -1942,8 +1856,6 @@ class TestTheTraceAttachmentSchema:
         assert_that(_trace_to_json(_make_trace())).contains('\n  "')
 
     def test_a_sample_value_json_cannot_express_is_refused_rather_than_written(self):
-        # the caller suppresses this, so the trace attachment is dropped; a body holding a bare `NaN`
-        # would be attached and then fail to parse wherever it was read
         with pytest.raises(ValueError):
             _trace_to_json(_one_sample_trace(value=float("nan")))
 
@@ -2022,12 +1934,10 @@ class TestTheSweepMessageIsActionable:
         assert_that(self._swept()[0]).contains("/x/s.json::9").contains("from test_mod.py:9")
 
     def test_a_key_whose_site_was_never_recorded_names_no_site(self):
-        # the site comes off the worker, and one that shipped none must not be given an invented one
         pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
         assert_that(self._swept()[0]).contains("/x/s.json::9").does_not_contain(" from ")
 
     def test_the_escalated_warning_is_printed_in_red(self):
-        # it stands in for a failed test, and the closing block is where a reader looks for red
         pytest_plugin._controller_accesses[("/x/s.json", "9")] = {"test_a", "test_b"}
         reporter = MagicMock()
         session = SimpleNamespace(config=_controller_config(reporter), exitstatus=0)
@@ -2045,13 +1955,11 @@ class TestWhatAWorkerShipsWhenItRecordedNothing:
     """A worker that recorded nothing ships zeroes and empties, not invented values."""
 
     def test_a_worker_that_never_configured_ships_a_count_of_zero(self):
-        # the controller adds it to the denominator, and a made-up one prints a run bigger than it was
         config = SimpleNamespace(workeroutput={})
         pytest_sessionfinish(SimpleNamespace(config=config), 0)
         assert_that(config.workeroutput["assertpy2_failure_count"]).is_equal_to(0)
 
     def test_an_access_whose_site_was_never_recorded_ships_an_empty_one(self, monkeypatch):
-        # the controller feeds this straight into the reuse message
         monkeypatch.setattr(snapshot_module, "_ACCESS_NODES", {("/x/s.json", "9"): {"t.py::test_a"}})
         monkeypatch.setattr(snapshot_module, "_ACCESS_SITES", {})
         config = SimpleNamespace(workeroutput={})

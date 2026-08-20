@@ -46,7 +46,6 @@ class TestThePinnedTypingSurfaceCarriesNoSuppressions:
         assert_that(self._SURFACE.read_text(encoding="utf-8")).contains("assert_type(")
 
     def test_the_claim_is_still_made(self):
-        # if the sentence goes, the gate above is orphaned and should go with it
         claim = (_ROOT / "docs" / "concepts" / "type-safety.md").read_text(encoding="utf-8")
         assert_that(claim).contains("zero suppressions").contains("tests/test_typing.py")
 

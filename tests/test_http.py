@@ -145,7 +145,6 @@ class TestTheFailureSaysWhichResponseItCameFrom:
         assert_that(str(failure.value)).contains("from GET https://api.example.com/orders/7 -> 500")
 
     def test_a_failure_under_the_parsed_body(self):
-        # the response is out of reach by here, which is the whole reason the note is carried
         with pytest.raises(AssertionFailure) as failure:
             assert_that(Fetched(body='{"id": 7}')).decoded_as_json().is_equal_to({"id": 9})
         assert_that(str(failure.value)).contains("from GET https://api.example.com/orders/7 -> 200")
@@ -173,7 +172,6 @@ class TestTheFailureSaysWhichResponseItCameFrom:
         assert_that(str(failure.value)).contains("from POST /orders -> 400")
 
     def test_a_wsgi_environ_keeps_its_query_string(self):
-        # the environ splits the two, and without the query two different calls read as the same one
         environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/search", "QUERY_STRING": "q=alice"}
         with pytest.raises(AssertionFailure) as failure:
             assert_that(Django(status_code=500, environ=environ)).has_status_code(200)
@@ -186,7 +184,6 @@ class TestTheFailureSaysWhichResponseItCameFrom:
         assert_that(str(failure.value)).contains("from GET /search -> 500")
 
     def test_a_redirect_is_not_reported_as_a_request_to_where_it_points(self):
-        # a Django redirect keeps its destination in `url`, and reading that would name the wrong call
         with pytest.raises(AssertionFailure) as failure:
             assert_that(Redirected()).has_status_code(200)
         assert_that(str(failure.value)).contains("from a response with status 302").does_not_contain("/login")
@@ -244,7 +241,6 @@ class TestWhatCountsAsAResponse:
         ],
     )
     def test_an_impostor_is_not_read_as_a_response(self, status, headers):
-        # a DataFrame answers to both names through its columns, and a mock answers to anything at all
         class Impostor:
             def __init__(self):
                 self.status_code, self.headers = status, headers
@@ -254,7 +250,6 @@ class TestWhatCountsAsAResponse:
         assert_that(str(failure.value)).does_not_contain("from ")
 
     def test_a_request_that_raises_when_read_is_survived(self):
-        # the status passed the check and the request did not, and the failure still has to come out
         class HalfHostile:
             status_code = 500
             headers = {}  # noqa: RUF012 - a stand-in, and the annotation would be about nothing
@@ -336,7 +331,6 @@ class TestTheStepIntoTheBody:
             assert_that(response).decoded_as_json()
 
     def test_headers_that_raise_when_read(self):
-        # the content type is a nicety and the refusal is not: one must not take the other down
         class Hostile:
             def keys(self):
                 return []
@@ -376,7 +370,6 @@ class TestTheStepIntoTheBody:
             assert_that(response).decoded_as_json()
 
     def test_a_body_that_is_the_json_null(self):
-        # the other side of the same coin: `null` is a document, and parsing it answers None honestly
         class Careful(Flasked):
             def get_json(self):
                 return None
@@ -412,7 +405,6 @@ class TestTheStepIntoTheBody:
         assert_that(len(str(failure.value))).is_less_than(300)
 
     def test_negating_the_step_is_refused(self):
-        # it transforms rather than asserts, so "to NOT decode" would be a message about nothing
         with pytest.raises(TypeError):
             assert_that(Fetched()).not_.decoded_as_json()
 
@@ -512,7 +504,6 @@ class TestTheClientsThemselves:
         assert_that(str(failure.value)).contains("from GET https://api.example.com/orders/7 -> 503")
 
     def test_an_httpx2_response(self):
-        # a separate library from httpx, and the same shape, which is the point of duck typing it
         httpx2 = pytest.importorskip("httpx2")
         response = httpx2.Response(
             404,
@@ -549,7 +540,6 @@ class TestTheClientsThemselves:
         assert_that(str(failure.value)).contains("from GET http://localhost/orders/7 -> 500")
 
     def test_a_flask_response_that_is_not_json(self):
-        # the expired-session case, and the one that reads the content type out of a real container
         flask = pytest.importorskip("flask")
         app = flask.Flask(__name__)
 
@@ -569,7 +559,6 @@ class TestTheClientsThemselves:
         response = JsonResponse({"error": "locked"}, status=502)
         with pytest.raises(AssertionFailure) as failure:
             assert_that(response).decoded_as_json().is_equal_to({"error": "open"})
-        # a response built on its own answers to nobody, so there is no request to name
         assert_that(str(failure.value)).contains("from a response with status 502")
 
     def test_a_django_response_through_its_test_client(self):
@@ -580,7 +569,6 @@ class TestTheClientsThemselves:
         response = Client().get("/orders/7/", {"q": "alice"})
         with pytest.raises(AssertionFailure) as failure:
             assert_that(response).decoded_as_json().at_json_path("$.status").is_equal_to("paid")
-        # django keeps the request as its WSGI environ rather than as an object
         assert_that(str(failure.value)).contains("from GET /orders/7/?q=alice -> 500")
 
     def test_a_starlette_test_client_response(self):

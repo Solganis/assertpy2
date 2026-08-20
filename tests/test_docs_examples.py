@@ -73,7 +73,7 @@ def _namespace(doc: str) -> dict[str, object]:
     namespace = dict(DOC_NAMESPACE)
     fixture = PAGE_FIXTURES.get(doc)
     if fixture is not None:
-        exec(fixture, namespace)  # the fixture is repo source, and the block itself is exec'd too
+        exec(fixture, namespace)
     return namespace
 
 

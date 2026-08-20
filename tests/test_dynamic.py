@@ -114,7 +114,6 @@ class TestDynamicDictAccess:
         assert_that({"items": [1, 2]}).has_items([1, 2])
 
     def test_has_name_on_list_fails_cleanly(self):
-        # has_<name>() on a list has no such key: a clean AssertionError, not a raw TypeError
         with pytest.raises(AssertionError):
             assert_that([1, 2, 3]).has_count(1)
 
@@ -124,7 +123,7 @@ def test_has_zero_arg_method_body_typeerror_not_masked():
         prices = None
 
         def total(self):
-            return sum(self.prices)  # raises a genuine TypeError inside the body
+            return sum(self.prices)
 
     # the real TypeError must propagate, not be masked as "does not have zero-arg method"
     with pytest.raises(TypeError, match="not iterable"):

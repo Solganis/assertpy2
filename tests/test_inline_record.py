@@ -145,7 +145,7 @@ class TestRecordedPosition:
             assert_that(1).matches_inline()
         filename, start, end, _text = _inline._RECORDS[0]
         source = self._source_of(filename)
-        assert_that(start).is_equal_to(end)  # an insertion, so the range is empty
+        assert_that(start).is_equal_to(end)
         assert_that(source[start]).is_equal_to(")")
         assert_that(source[start - len("matches_inline(") : start]).is_equal_to("matches_inline(")
 
@@ -165,7 +165,7 @@ class TestRecordedPosition:
             assert_that(wide).matches_inline()
         filename, start, _end, text = _inline._RECORDS[0]
         source = self._source_of(filename)
-        column = start - (source.rfind("\n", 0, start) + 1)  # characters between the line start and here
+        column = start - (source.rfind("\n", 0, start) + 1)
         assert_that(text).contains("\n")
         # the column is read off this file, so an off-by-one in the recorder's own arithmetic surfaces
         # as a different rendering here; `_format_literal` itself is pinned by TestFormatLiteral

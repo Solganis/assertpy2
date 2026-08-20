@@ -148,7 +148,6 @@ class TestWhatItLeavesAlone:
         assert_that(scan("def test_x():\n    self.value.attr\n")).is_empty()
 
     def test_a_chain_whose_head_is_a_call_on_something_else_is_not_ours(self):
-        # the walk has to step through a Call node as well as Attributes before giving up
         assert_that(scan("def test_x():\n    helper(1).attr\n")).is_empty()
 
     def test_a_computed_callee_is_not_ours(self):
@@ -179,7 +178,6 @@ class TestSilencingADeliberateOne:
         assert_that(found).is_empty()
 
     def test_the_marker_reaches_the_end_of_a_wrapped_call(self):
-        # the natural place for it on a call broken over lines is the closing line
         found = scan("""
             def test_x():
                 assert_that(
@@ -228,7 +226,6 @@ class TestAwaitedChains:
 
 
 def test_unparsable_source_raises_rather_than_reporting_nothing():
-    # silently returning [] would read as a clean file
     with pytest.raises(SyntaxError):
         findings("def (:\n", "broken.py")
 
@@ -353,7 +350,6 @@ class TestThePluginWiring:
             _report_dangling(bare)
         assert_that(caught).is_length(1)
         assert_that(caught[0].category).is_equal_to(DanglingAssertionWarning)
-        # warn_explicit puts the reader in their own file, not in the plugin
         assert_that(str(caught[0].filename)).is_equal_to(str(source))
 
     def test_a_finding_outside_any_def_goes_to_the_first_test_to_run(self, tmp_path):
@@ -366,7 +362,6 @@ class TestThePluginWiring:
             warnings.simplefilter("always")
             _report_dangling(item)
         assert_that(caught).is_length(1)
-        # and it is consumed, so a second test from the same file does not repeat it
         with warnings.catch_warnings(record=True) as again:
             warnings.simplefilter("always")
             _report_dangling(item)
@@ -419,7 +414,6 @@ class TestThePluginWiring:
         assert_that(caught).is_length(1)
 
     def test_an_item_without_a_config_is_left_alone(self):
-        # the plugin's own tests drive hooks with a bare namespace, and this one must tolerate that
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             _report_dangling(SimpleNamespace(nodeid="t.py::test_x"))
@@ -707,7 +701,6 @@ class TestEveryFindingReachesExactlyOneTest:
             check=False,
             cwd=pathlib.Path(__file__).resolve().parent.parent,
         )
-        # five tests, every one of them holding at least one dangling statement
         for name in (
             "TestOne::test_same",
             "TestOne::test_two_lines",
@@ -867,7 +860,6 @@ class TestCollectionScansEveryFileItWasGiven:
     """Every file handed to collection is read, and the four getattr defaults on the way are live."""
 
     def test_a_second_file_is_still_read_after_one_that_was_already_seen(self, tmp_path):
-        # the repeat is skipped, not the rest of the collection
         first, second = tmp_path / "a.py", tmp_path / "b.py"
         for path in (first, second):
             path.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
@@ -890,7 +882,6 @@ class TestCollectionScansEveryFileItWasGiven:
         assert_that(config._assertpy2_dangling).contains_key(source)
 
     def test_a_config_that_never_configured_scans_nothing(self, tmp_path):
-        # off is the default, and a config with none of the attributes must not read as on
         source = tmp_path / "t.py"
         source.write_text(PREAMBLE + "def test_x():\n    assert_that(1)\n", encoding="utf-8")
         config = SimpleNamespace()

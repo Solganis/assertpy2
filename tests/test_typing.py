@@ -49,18 +49,13 @@ if TYPE_CHECKING:
     from assertpy2.async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher
 
-    # Each call is a static assertion: it fails type checking if assert_that stops returning the
-    # documented Protocol for that value type. The mapping mirrors the table in docs/type-safety.md.
     assert_type(assert_that("text"), _StringAssertion)
     assert_type(assert_that(42), _NumericAssertion[int])
     assert_type(assert_that(3.14), _NumericAssertion[float])
-    # `complex` and `bool` carry only what the runtime accepts for them: no ordering for a complex
-    # number, no parity for a bool. Both used to resolve to the numeric protocol and be offered methods
-    # whose only outcome was a TypeError
+    # both used to resolve to the numeric protocol and be offered methods whose only outcome was a TypeError
     assert_type(assert_that(complex(1, 2)), _ComplexAssertion)
     assert_type(assert_that(True), _BoolAssertion)
-    # a step hands back `Self`, so the smaller protocol holds for the whole chain rather than for the
-    # first call: `.value` stays `complex` and the assertions after it stay the two that apply
+    # a step hands back `Self`, so the smaller protocol holds for the whole chain rather than the first call
     assert_type(assert_that(complex(1, 2)).is_not_zero().value, complex)
     assert_type(assert_that(complex(1, 2)).not_.is_zero().value, complex)
     assert_type(assert_that(True).is_greater_than(0).value, bool)
@@ -73,44 +68,34 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateAssertion)
     assert_type(assert_that(pathlib.Path("/tmp")), _PathAssertion)
     assert_type(assert_that(b"raw"), _BytesAssertion[bytes])
-    # the prefix/suffix pair handles bytes natively, so both spellings are reachable and typed
     assert_type(assert_that(b"raw").starts_with(b"r"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").ends_with(b"w"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").starts_with_bytes(b"r"), _BytesAssertion[bytes])
-    # the quantifier under both its names, from the dict view as well as the sequence one
     assert_type(assert_that({"a": 1}).each(lambda key: True), _DictAssertion[str, int])
     assert_type(assert_that({"a": 1}).all_satisfy(lambda key: True), _DictAssertion[str, int])
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
     assert_type(assert_that(len), _CallableAssertion)
-    # the same view, pinned on a literal callable as well: a name resolves through its own type, and the
-    # pair gate reads literals, so this is the line that ties `Callable` to the view it dispatches to
+    # the pair gate reads literals, so this is what ties `Callable` to the view it dispatches to
     assert_type(assert_that(lambda: None), _CallableAssertion)
 
-    class _Countable:  # the smallest thing the capability umbrella recognises
+    class _Countable:
         def __iter__(self) -> object: ...
 
     assert_type(assert_that(object()), _ObjectAssertion[object])
 
-    # a dynamic assertion and an `add_extension` name both resolve through the same `__getattr__`, and
-    # no one signature is true of both, so the hook deliberately answers Any. pinned here because both
-    # narrower forms were tried and each one rejected code that runs: see DynamicMixin.__getattr__
-    #
-    # The subject is a value with a capability, and that is the whole rule now: the hook lives on the
-    # builder, and only a value the umbrella catches still reaches it.  A plain object gets the object
-    # view, which has no `__getattr__`, so `has_anything` on one is a type error and a documented one
+    # a dynamic assertion and an `add_extension` name resolve through the same hook, and no one signature is true of
+    # both.  A plain object gets the object view, which has no `__getattr__`, so `has_anything` on one is a type
+    # error
     assert_type(assert_that(_Countable()).has_anything("value"), Any)
 
-    # not_ hands back the assertion it was reached from, so inverting a step does not end the
-    # narrowing: the value type survives it and a wrong-domain assertion is still rejected after it.
     assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])
     assert_type(assert_that("text").not_.starts_with("x"), _StringAssertion)
     assert_type(assert_that([1, 2]).not_.contains(3), _IterableAssertion[int])
     assert_type(assert_that(42).not_.is_equal_to(43).value, int)
 
-    # check() ends the chain with the verdict, from every protocol and through the negation proxy.
     assert_type(assert_that(42).check().is_positive(), AssertionOutcome)
-    # and the proxy itself is the verdict twin of the view it was reached from, so an assertion the
-    # value cannot answer is a type error here as it is on the ordinary path
+    # the proxy is the verdict twin of the view it was reached from, so a wrong-domain assertion is a type error here
+    # too
     assert_type(assert_that(42).check(), _CheckNumericAssertion[int])
     assert_type(assert_that("text").check(), _CheckStringAssertion)
     assert_type(assert_that({"a": 1}).check(), _CheckDictAssertion[str, int])
@@ -118,7 +103,6 @@ if TYPE_CHECKING:
     assert_type(assert_that({"a": 1}).check().contains_key("a"), AssertionOutcome)
     assert_type(assert_that(42).check().not_.is_positive(), AssertionOutcome)
 
-    # The iterable-cluster methods stay on their protocol (return Self), so chaining keeps the type.
     assert_type(assert_that([1, 2]).satisfies_exactly(lambda x: x > 0, lambda x: x > 1), _IterableAssertion[int])
     assert_type(assert_that([1, 2]).zip_satisfies([2, 3], lambda left, right: left < right), _IterableAssertion[int])
     assert_type(assert_that([1, 2]).contains_only_once(1), _IterableAssertion[int])
@@ -128,20 +112,17 @@ if TYPE_CHECKING:
     assert_type(assert_that({"k": 1}).has_same_size_as({"j": 2}), _DictAssertion[str, int])
     assert_type(assert_that(b"ab").has_same_size_as(b"cd"), _BytesAssertion[bytes])
 
-    # The recursive leaf assertions live on the core protocol, so they keep each value's own type.
     assert_type(assert_that({"k": 1}).all_fields_satisfy(lambda x: x > 0), _DictAssertion[str, int])
     assert_type(assert_that(42).has_no_none_fields(), _NumericAssertion[int])
 
-    # is_equal_to keeps its protocol with the recursive-comparison kwargs.
     assert_type(assert_that({"k": 1.0}).is_equal_to({"k": 1.0}, tolerance=0.001), _DictAssertion[str, float])
     assert_type(
         assert_that({"k": 1}).is_equal_to({"k": 1}, comparators={int: lambda a, e: a == e}), _DictAssertion[str, int]
     )
     assert_type(assert_that({"k": 1}).is_equal_to({"k": None}, ignore_null=True), _DictAssertion[str, int])
 
-    # Ordering is declared wherever the runtime supports it (assertpy#128): lexicographic on str and
-    # bytes/bytearray, chronological on dates (including is_between; is_close_to stays datetime-only
-    # at runtime, so the shared date protocol does not advertise it).
+    # declared wherever the runtime supports it: `is_close_to` stays datetime-only, so the shared date protocol does
+    # not advertise it
     assert_type(assert_that("banana").is_greater_than("apple"), _StringAssertion)
     assert_type(assert_that("apple").is_less_than("banana"), _StringAssertion)
     assert_type(assert_that("b").is_greater_than_or_equal_to("a"), _StringAssertion)
@@ -165,7 +146,6 @@ if TYPE_CHECKING:
         _DateAssertion,
     )
 
-    # The any-order, relational-size, string-sugar, and type methods keep their protocols (return Self).
     assert_type(assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3), _IterableAssertion[int])
     assert_type(assert_that("cba").contains_exactly_in_any_order("a", "b", "c"), _StringAssertion)
     assert_type(
@@ -183,40 +163,31 @@ if TYPE_CHECKING:
     assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
 
-    # eventually() and eventually_sync() switch the chain to the polling builders.
     assert_type(assert_that(len).eventually(trace=False), AsyncAssertionBuilder)
     assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), SyncAssertionBuilder)
-    # and the assertion written on that builder has to stay callable. Only the builder type was pinned
-    # here, so an inferred union out of its `__getattr__` made every polling chain uncallable to a
-    # checker while these lines stayed green: caught against the built wheel, not by this suite
+    # only the builder type was pinned here, so an inferred union out of its `__getattr__` made every polling chain
+    # uncallable while these lines stayed green
     assert_that(len).eventually_sync(timeout=2, trace=False).is_equal_to(1)
     assert_that(len).eventually_sync(timeout=2, trace=False).not_.is_equal_to(2)
 
-    # exception cluster: when_called_with() gives the invoked (string message + chain) protocol;
-    # caused_by()/has_root_cause()/contains_error() keep it; raised() pivots to the exception object.
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().contains_error(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().raised(), _CoreAssertion)
-    # the group pivots leave the exception cluster: the leaves are a list, one leaf's message is text
     invoked = assert_that(len).raises(ValueError).when_called_with()
     assert_type(invoked.does_not_contain_error(KeyError), _InvokedAssertion)
     assert_type(invoked.errors(), _ListAssertion[BaseException])
     assert_type(invoked.errors().value, list[BaseException])
-    # the leaf pivot keeps the invoked view: its value is the message, and `raised()` still reaches the
-    # object, which is the pair `caused_by` already promises
     assert_type(invoked.error_of(KeyError), _InvokedAssertion)
     assert_type(invoked.error_of(KeyError).value, str)
     assert_type(invoked.error_of(KeyError).raised(), _CoreAssertion)
 
-    # Typed extract-and-continue: the generic fallback tracks the input type, `.value` hands it back,
-    # and the narrowing terminals refine it (is_not_none strips None, is_instance_of narrows to the class).
     maybe_name = cast("str | None", "fred")
     anything = cast("object", "fred")
     assert_type(assert_that(maybe_name), _ObjectAssertion[str | None])
-    # the refinement answers with the view the factory would have given for `str`, not with a
-    # narrowed object view: a refinement that ended the narrowing would be a dead end
+    # the refinement answers with the view the factory would have given, since a refinement that ended the narrowing
+    # would be a dead end
     assert_type(assert_that(maybe_name).is_not_none(), _StringAssertion)
     assert_type(assert_that(maybe_name).is_not_none().value, str)
     assert_type(assert_that(anything).is_instance_of(bool), _BoolAssertion)
@@ -224,10 +195,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)
     assert_type(assert_that(anything).is_not_none(), _ObjectAssertion[object])
 
-    # a refinement answers with the view the factory would have given, for every type the factory
-    # names.  A value whose only claim is a *shape* is where it stops, and that boundary is measured
-    # rather than chosen: see `_ObjectAssertion` for the two spellings tried and which checker each
-    # one puts in the wrong.  A `TypeIs` predicate is the way back, since it names its target
+    # a value whose only claim is a shape is where the refinement stops, and a `TypeIs` predicate is the way back
     def _is_countable(value: object) -> TypeIs[_Countable]:
         return isinstance(value, _Countable)
 
@@ -236,8 +204,6 @@ if TYPE_CHECKING:
     assert_type(assert_that(anything).is_instance_of(_Countable), _ObjectAssertion[_Countable])
     assert_type(assert_that(anything).satisfies(_is_countable), AssertionBuilder[_Countable])
 
-    # User-extensible refinement narrowing: a TypeIs predicate narrows satisfies() to the guarded type,
-    # so a domain predicate (richer than isinstance) narrows the chain and `.value` hands it back typed.
     class _Order: ...
 
     class _PaidOrder(_Order): ...
@@ -249,7 +215,6 @@ if TYPE_CHECKING:
     assert_type(assert_that(some_order).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(some_order).satisfies(_is_paid).value, _PaidOrder)
     assert_type(assert_that(anything).is_not_none().satisfies(_is_paid).value, _PaidOrder)
-    # a plain (non-TypeIs) predicate does not narrow: the chain keeps its type
     assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), _ObjectAssertion[_Order])
 
     # ... and refinement is not confined to the generic fallback. A concretely typed value reaches the
@@ -259,7 +224,6 @@ if TYPE_CHECKING:
     assert_type(assert_that(payload).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(payload).satisfies(_is_paid).value, _PaidOrder)
     assert_type(assert_that("x").satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
-    # the non-narrowing overload still applies where the argument carries no refinement
     assert_type(assert_that(payload).satisfies(lambda item: bool(item)), _DictAssertion[str, Any])
 
     # assert_conforms() narrows to the validated model for ANY input - the narrowing capstone. Because the
@@ -271,11 +235,9 @@ if TYPE_CHECKING:
     assert_type(assert_conforms(anything, _Order).value, _Order)
     assert_type(assert_conforms(json_payload, _PaidOrder).value, _PaidOrder)
     assert_type(assert_conforms(dict_payload, _PaidOrder).value, _PaidOrder)
-    # a list endpoint (each=True) narrows to list[model]
     assert_type(assert_conforms(anything, _Order, each=True), AssertionBuilder[list[_Order]])
     assert_type(assert_conforms(anything, _Order, each=True).value, list[_Order])
 
-    # collection element-access pivots narrow to the element type (universal narrowing across pivots)
     assert_type(assert_that([1, 2, 3]).first().value, int)
     assert_type(assert_that(["a", "b"]).last().value, str)
     assert_type(assert_that((1.0, 2.0)).element(0).value, float)
@@ -304,26 +266,21 @@ if TYPE_CHECKING:
     assert_type(assert_that(b"a").single(), _NumericAssertion[int])
     assert_type(assert_that(b"abc").filtered_on(lambda byte: True), _ListAssertion[int])
     assert_type(assert_that(b"abc").mapped(lambda byte: byte * 2), _ListAssertion[int])
-    # a dict is walked over its keys, and a key of an arbitrary type has no protocol to narrow to
     assert_type(assert_that({"a": 1}).first(), AssertionBuilder[str])
     assert_type(assert_that({"a": 1}).filtered_on(lambda key: True), _ListAssertion[str])
     assert_type(assert_that({"a": 1}).mapped(str.upper), _ListAssertion[str])
 
-    # The iterable pair is a question any value may ask, so it sits on the core protocol and keeps the
-    # asking type rather than being reachable only from the collection view.
     assert_type(assert_that(42).is_not_iterable(), _NumericAssertion[int])
     assert_type(assert_that(datetime.date(2026, 1, 1)).is_not_iterable(), _DateAssertion)
     assert_type(assert_that(pathlib.Path("/tmp")).is_iterable(), _PathAssertion)
     assert_type(assert_that("abc").is_iterable(), _StringAssertion)
     assert_type(assert_that({"a": 1}).is_iterable(), _DictAssertion[str, int])
-    # sorting is offered wherever the runtime walks a value, with the key typed to what it is handed
     assert_type(assert_that("aBc").is_sorted(key=str.lower), _StringAssertion)
     assert_type(assert_that(b"abc").is_sorted(key=lambda byte: -byte), _BytesAssertion[bytes])
     assert_type(assert_that({"a": 1}).is_sorted(key=str.upper), _DictAssertion[str, int])
     assert_type(assert_that([3, 1]).is_sorted(key=abs), _IterableAssertion[int])
     assert_type(assert_that(b"ab").is_subset_of(b"abc"), _BytesAssertion[bytes])
 
-    # `.value` on the typed protocols returns each protocol's value-family type.
     assert_type(assert_that("text").value, str)
     assert_type(assert_that(42).value, int)
     assert_type(assert_that({"key": 1}).value, dict[str, int])
@@ -341,54 +298,40 @@ if TYPE_CHECKING:
     assert_type(assert_that(rows).first(), AssertionBuilder[Sequence[int]])
     assert_type(assert_that(rows).first().first(), AssertionBuilder[int])
     assert_type(assert_that(rows).last().element(0), AssertionBuilder[int])
-    # a mapping pivots to its keys, which is what iterating one gives
     assert_type(assert_that(keys).first(), AssertionBuilder[str])
     assert_type(assert_that(rows).first().single(), AssertionBuilder[int])
-    # and `mapped()` hands back the list it builds, not the container it was given.  A *named* function
-    # binds the result type under all three; a lambda comes back `Any` under mypy, which is why the
-    # pin uses one and the boundary is written where the overload is
     assert_type(assert_that(rows).first().mapped(str), AssertionBuilder[list[str]])
 
-    # the frame and array views are keyed on shape rather than on a named type, so no optional
-    # dependency appears in a signature and these stand-ins are enough to pin the resolution.  The real
-    # libraries are pinned separately, where they are installed
-    class _FakeFrame:  # what pandas and polars frames have and neither a series nor an Index does
+    class _FakeFrame:
         def pivot(self, *args: object, **kwargs: object) -> object: ...
 
         @property
         def shape(self) -> object: ...
 
-    class _FakeArray:  # `strides` rather than `dtype`: a series carries `dtype` and is not an array
+    class _FakeArray:
         def __array__(self) -> object: ...
 
         @property
         def strides(self) -> object: ...
 
-    # cast from `object()` rather than `None`: the value is never read, and basedpyright rightly
-    # calls a `None` -> _FakeFrame cast a likely mistake since neither type overlaps the other
     assert_type(assert_that(cast("_FrameShape", object())), _FrameAssertion[_FrameShape])
     assert_type(assert_that(cast("_ArrayShape", object())), _ArrayAssertion[_ArrayShape])
     frame = cast("_FakeFrame", object())
     array = cast("_FakeArray", object())
     assert_type(assert_that(frame), _FrameAssertion[_FakeFrame])
     assert_type(assert_that(array), _ArrayAssertion[_FakeArray])
-    # the subject survives the narrowing, which is what the generic parameter is for
     assert_type(assert_that(frame).value, _FakeFrame)
     assert_type(assert_that(array).value, _FakeArray)
     assert_type(assert_that(frame).is_frame_equal(frame), _FrameAssertion[_FakeFrame])
     assert_type(assert_that(array).is_array_equal(array), _ArrayAssertion[_FakeArray])
     assert_type(assert_that(array).is_array_close_to(array, rtol=0.1), _ArrayAssertion[_FakeArray])
 
-    # `match.is_instance_of` forwards to `isinstance` and takes a union; the builder assertion stays
-    # narrow, since its overloads refine the value and a union has no single class to refine to
     assert_type(match.is_instance_of(int), IsInstanceOfMatcher)
     assert_type(match.is_instance_of(int | str), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int, str)), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int | str, float)), IsInstanceOfMatcher)
     assert_type(match.is_type_of(int), IsTypeOfMatcher)
 
-    # the HTTP pivot: the builder it hands back holds the parsed document, so it must not go on
-    # claiming the response, the way `at_json_path` stopped claiming the shape of its own subject
     class _FakeResponse:
         status_code: int
         headers: dict[str, str]

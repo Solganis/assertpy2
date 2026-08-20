@@ -37,8 +37,7 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True
 
-# the builder factories, and only those: everything else in the package's public surface either
-# asserts by itself or is not an entry point at all
+# the builder factories and only those: everything else either asserts by itself or is not an entry point
 _ENTRY: Final = frozenset({"assert_that", "assert_warn"})
 _PACKAGE: Final = "assertpy2"
 
@@ -106,9 +105,8 @@ def _rebound(tree: ast.Module) -> frozenset[str]:
             names.add(node.id)
         elif isinstance(node, ast.arg):
             names.add(node.arg)
-        # kept apart from the branch below, whose body is identical: merging them into one `or` is what
-        # ruff asks for and what a type checker then rejects, since `ExceptHandler.name` is `str | None`
-        # and only the separate branch narrows it
+        # merging the identical branches is what ruff asks for and a type checker then rejects, since only the
+        # separate branch narrows `ExceptHandler.name`
         elif isinstance(node, ast.ExceptHandler) and node.name:  # noqa: SIM114
             names.add(node.name)
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):

@@ -165,7 +165,7 @@ class TestSnapshotCreatedWarning:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(1).snapshot(path=str(tmp_path))
         with pytest.warns(SnapshotCreatedWarning):
-            assert_that(2).snapshot(path=str(tmp_path))  # same file, new line -> a fresh sub-snap capture
+            assert_that(2).snapshot(path=str(tmp_path))
 
     def test_same_line_second_iteration_compares(self, tmp_path):
         with pytest.warns(SnapshotCreatedWarning):
@@ -190,7 +190,6 @@ class TestSharedKeyHint:
             check({"user": "alice"})
         with pytest.raises(AssertionError) as failure:
             check({"user": "bob"})
-        # without this the reader sees two unrelated values compared for no stated reason
         assert_that(str(failure.value)).contains("reached").contains("more than once")
         assert_that(str(failure.value)).contains("earlier call in the same test").contains("snapshot(id=...)")
 
@@ -202,7 +201,6 @@ class TestSharedKeyHint:
         assert_that(str(failure.value)).matches(r"reached <.*snap-test_snapshots\.json::\d+> more than once")
 
     def test_a_first_and_only_call_says_nothing(self, tmp_path):
-        # the ordinary failure: the value was stored by an earlier run, not by an earlier call here
         _save(str(tmp_path / "snap-once.json"), {"a": 1})
         with pytest.raises(AssertionError) as failure:
             assert_that({"a": 2}).snapshot(id="once", path=str(tmp_path))
@@ -239,7 +237,6 @@ class TestSnapshotDatetimeMicroseconds:
             assert_that(timestamp.replace(microsecond=999999)).snapshot(id="micro", path=str(tmp_path))
 
     def test_zero_microseconds_keep_the_historical_format(self, tmp_path):
-        # snapshots without sub-second precision must stay readable by older library versions
         timestamp = datetime.datetime(2000, 11, 22, 3, 44, 55)
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(timestamp).snapshot(id="legacy", path=str(tmp_path))
@@ -264,7 +261,6 @@ class TestSnapshotTypedCodec:
         assert_that(raw).is_equal_to({"__type__": "date", "__data__": "2026-07-04"})
 
     def test_non_string_key_dict_roundtrip(self, tmp_path):
-        # json coerces non-string keys to strings; the codec must round-trip int/None/tuple keys intact
         value = {1: "a", 2: "b", None: "c", (3, 4): "d"}
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(value).snapshot(id="codec-intkeys", path=str(tmp_path))
@@ -273,23 +269,18 @@ class TestSnapshotTypedCodec:
             assert_that({1: "a", 2: "CHANGED"}).snapshot(id="codec-intkeys", path=str(tmp_path))
 
     def test_marker_key_dict_is_not_mistaken_for_an_envelope(self, tmp_path):
-        # a user dict that happens to carry the codec's marker keys must round-trip as a plain dict
         value = {"__type__": "date", "__data__": "not-a-date"}
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(value).snapshot(id="codec-collide", path=str(tmp_path))
         assert_that(value).snapshot(id="codec-collide", path=str(tmp_path))
 
     def test_normal_string_dict_stored_without_envelope(self, tmp_path):
-        # a plain string-keyed dict must stay an ordinary JSON object (no envelope), so existing
-        # snapshots remain byte-identical
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({"a": 1, "b": 2}).snapshot(id="codec-plain", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-codec-plain.json").read_text())
         assert_that(raw).is_equal_to({"a": 1, "b": 2})
 
     def test_unknown_type_marker_decodes_as_is(self, tmp_path):
-        # a snapshot written by a future version with an unknown type marker must decode to the raw
-        # dict (forward-compatible), not error
         snap = tmp_path / "snap-future.json"
         snap.write_text(json.dumps({"__type__": "future_type", "__data__": [1, 2]}))
         assert_that(_load(str(snap))).is_equal_to({"__type__": "future_type", "__data__": [1, 2]})
@@ -343,7 +334,6 @@ class TestSnapshotTypedCodec:
         assert_that(b"ab").snapshot(id="codec-bytearray", path=str(tmp_path))
 
     def test_aware_datetime_roundtrip(self, tmp_path):
-        # tz-aware datetimes previously lost their offset on save and never compared equal again
         zone = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
         value = datetime.datetime(2026, 7, 4, 10, 0, 0, tzinfo=zone)
         with pytest.warns(SnapshotCreatedWarning):
@@ -366,7 +356,6 @@ class TestSnapshotTypedCodec:
         assert_that(value).snapshot(id="codec-aware-neg", path=str(tmp_path))
 
     def test_subminute_offset_datetime_roundtrip(self, tmp_path):
-        # legal since 3.7; strftime renders "+000530" and strptime %z parses it back
         zone = datetime.timezone(datetime.timedelta(minutes=5, seconds=30))
         value = datetime.datetime(2026, 7, 4, 10, 0, 0, tzinfo=zone)
         with pytest.warns(SnapshotCreatedWarning):
@@ -398,7 +387,6 @@ class TestSnapshotCompareOptions:
             assert_that({"name": "Alice", "ts": 1}).snapshot(id="opt-full", path=str(tmp_path), ignore="ts")
         assert_that({"name": "Alice", "ts": 42}).snapshot(id="opt-full", path=str(tmp_path), ignore="ts")
         with pytest.raises(AssertionError):
-            # without ignore the stored ts must be compared, proving the capture kept the full value
             assert_that({"name": "Alice", "ts": 42}).snapshot(id="opt-full", path=str(tmp_path))
 
     def test_include_only_selected_keys(self, tmp_path):
@@ -451,7 +439,6 @@ class TestSnapshotUpdateMode:
         target = tmp_path / "snap-upd-same.json"
         stamp = os.stat(target).st_mtime_ns
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
-        # the suite runs warnings-as-errors, so a silent pass here also proves no update warning
         assert_that({"a": 1}).snapshot(id="upd-same", path=str(tmp_path))
         assert_that(os.stat(target).st_mtime_ns).is_equal_to(stamp)
 
@@ -496,11 +483,9 @@ class TestSnapshotUpdateMode:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({"name": "Alice", "ts": 1}).snapshot(id="upd-ign", path=str(tmp_path))
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
-        # drift only in the ignored field counts as matching, so nothing is rewritten
         assert_that({"name": "Alice", "ts": 999}).snapshot(id="upd-ign", path=str(tmp_path), ignore="ts")
         monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE")
         with pytest.raises(AssertionError):
-            # the stored ts must still be the original 1
             assert_that({"name": "Alice", "ts": 999}).snapshot(id="upd-ign", path=str(tmp_path))
 
     def test_disabled_env_value_keeps_normal_failure(self, tmp_path, monkeypatch):
@@ -588,7 +573,7 @@ class TestSnapshotSerializerRegistry:
     def test_isinstance_matches_subclasses(self, tmp_path):
         register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
         with pytest.warns(SnapshotCreatedWarning):
-            assert_that(_Cents(3)).snapshot(id="ser-sub", path=str(tmp_path))  # subclass matches by isinstance
+            assert_that(_Cents(3)).snapshot(id="ser-sub", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-sub.json").read_text())
         assert_that(raw).is_equal_to({"__type__": "custom", "__tag__": "money", "__data__": 3})
 
@@ -608,7 +593,6 @@ class TestSnapshotSerializerRegistry:
 
     def test_encode_skips_non_matching_serializer(self, tmp_path):
         register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
-        # a set is not a _Money: the registry is checked, skipped, then the built-in set codec handles it
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({1, 2, 3}).snapshot(id="ser-skip", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-skip.json").read_text())
@@ -619,7 +603,7 @@ class TestSnapshotSerializerRegistry:
         payload = {"__type__": "custom", "__tag__": "other-tag", "__data__": 5}
         snap_file = tmp_path / "snap-tagskip.json"
         snap_file.write_text(json.dumps(payload))
-        assert_that(_load(str(snap_file))).is_equal_to(payload)  # tag mismatch -> loop skips -> marker returned
+        assert_that(_load(str(snap_file))).is_equal_to(payload)
 
     def test_register_rejects_non_type(self):
         with pytest.raises(TypeError, match="cls must be a type"):
@@ -658,7 +642,7 @@ class TestSnapshotOrphanDetection:
 
     def test_sub_key_orphan_in_touched_file(self, tmp_path):
         snapname = self._write(tmp_path, "mod", {"10": 1, "20": 2, "30": 3})
-        sub, whole = _snapshot._find_orphans({(snapname, "10"), (snapname, "20")})  # 30 not exercised
+        sub, whole = _snapshot._find_orphans({(snapname, "10"), (snapname, "20")})
         assert_that(sub).is_equal_to([(snapname, "30")])
         assert_that(whole).is_empty()
 
@@ -671,7 +655,7 @@ class TestSnapshotOrphanDetection:
 
     def test_custom_id_touched_not_orphan(self, tmp_path):
         snapname = self._write(tmp_path, "custom", {"any": "value"})
-        sub, whole = _snapshot._find_orphans({(snapname, "")})  # touched as a whole-file custom id
+        sub, whole = _snapshot._find_orphans({(snapname, "")})
         assert_that(sub).is_empty()
         assert_that(whole).is_empty()
 
@@ -819,13 +803,11 @@ class TestSnapshotCiMode:
         assert_that(_ci_mode_enabled()).is_true()
         monkeypatch.setattr(_snapshot, "_CI_MODE", False)
         assert_that(_ci_mode_enabled()).is_false()
-        # flag unset -> explicit env wins, off/on both honored
         monkeypatch.setattr(_snapshot, "_CI_MODE", None)
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_CI", "off")
         assert_that(_ci_mode_enabled()).is_false()
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_CI", "yes")
         assert_that(_ci_mode_enabled()).is_true()
-        # no explicit env -> autodetect the CI marker
         monkeypatch.delenv("ASSERTPY2_SNAPSHOT_CI")
         monkeypatch.setenv("CI", "1")
         assert_that(_ci_mode_enabled()).is_true()
@@ -863,8 +845,8 @@ class TestSnapshotCiMode:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({"a": 1}).snapshot(id="ci-exist", path=str(tmp_path))
         monkeypatch.setattr(_snapshot, "_CI_MODE", True)
-        assert_that({"a": 1}).snapshot(id="ci-exist", path=str(tmp_path))  # match -> passes, no create
-        with pytest.raises(AssertionError):  # mismatch -> normal compare failure, not the CI one
+        assert_that({"a": 1}).snapshot(id="ci-exist", path=str(tmp_path))
+        with pytest.raises(AssertionError):
             assert_that({"a": 2}).snapshot(id="ci-exist", path=str(tmp_path))
 
     def test_ci_fails_on_missing_lineno_subsnap(self, tmp_path, monkeypatch):
@@ -872,9 +854,8 @@ class TestSnapshotCiMode:
             return assert_that(value).snapshot(path=str(tmp_path))
 
         with pytest.warns(SnapshotCreatedWarning):
-            snap(1)  # creates the file, keyed by snap()'s line number
+            snap(1)
         monkeypatch.setattr(_snapshot, "_CI_MODE", True)
-        # a different call site -> different line number -> absent in the existing file -> CI forbids
         with pytest.raises(AssertionError, match="CI mode forbids"):
             assert_that(2).snapshot(path=str(tmp_path))
 
@@ -986,7 +967,7 @@ def test_file_lock_serializes_concurrent_writes(tmp_path):
             with open(target) as fp:
                 data = json.load(fp)
             data[str(index)] = index
-            time.sleep(0.005)  # widen the read-modify-write window to force contention
+            time.sleep(0.005)
             with open(target, "w") as fp:
                 json.dump(data, fp)
 
@@ -998,7 +979,7 @@ def test_file_lock_serializes_concurrent_writes(tmp_path):
 
     with open(target) as fp:
         final = json.load(fp)
-    assert_that(final).is_length(15)  # every writer's entry survived - no lost updates
+    assert_that(final).is_length(15)
 
 
 _CONTRACT_SAMPLE = {"id": 1, "total": 5, "created": None, "customer": {"name": "A"}, "items": [{"sku": "X", "qty": 1}]}
@@ -1013,7 +994,7 @@ class TestContractSnapshot:
     def test_value_tolerant_same_structure_passes(self, tmp_path):
         assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-tol", path=str(tmp_path))
         changed = {"id": 999, "total": 8.75, "created": "2026-07-06", "customer": {"name": "Z"}, "items": []}
-        assert_that(changed).matches_contract_snapshot(id="c-tol", path=str(tmp_path))  # values differ, shape same
+        assert_that(changed).matches_contract_snapshot(id="c-tol", path=str(tmp_path))
 
     @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
     def test_added_field_drift_fails_with_report(self, tmp_path):
@@ -1042,7 +1023,7 @@ class TestContractSnapshot:
             assert_that(drifted).matches_contract_snapshot(id="c-list", path=str(tmp_path))
 
     def test_lineno_based_create_then_compare(self, tmp_path):
-        payloads = iter([{"a": 1}, {"a": 2}])  # same line, second run compares (same shape -> passes)
+        payloads = iter([{"a": 1}, {"a": 2}])
         with pytest.warns(SnapshotCreatedWarning):
             for _ in range(2):
                 assert_that(next(payloads)).matches_contract_snapshot(path=str(tmp_path))
@@ -1051,7 +1032,7 @@ class TestContractSnapshot:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({"a": 1}).matches_contract_snapshot(path=str(tmp_path))
         with pytest.warns(SnapshotCreatedWarning):
-            assert_that({"b": 2}).matches_contract_snapshot(path=str(tmp_path))  # same file, new sub-snap
+            assert_that({"b": 2}).matches_contract_snapshot(path=str(tmp_path))
 
     @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
     def test_update_mode_rewrites_drifted_id(self, tmp_path, monkeypatch):
@@ -1061,11 +1042,11 @@ class TestContractSnapshot:
         with pytest.warns(SnapshotUpdatedWarning, match="overwrote the stored shape"):
             assert_that(grew).matches_contract_snapshot(id="c-up", path=str(tmp_path))
         monkeypatch.delenv("ASSERTPY2_SNAPSHOT_UPDATE")
-        assert_that(grew).matches_contract_snapshot(id="c-up", path=str(tmp_path))  # rewritten shape now matches
+        assert_that(grew).matches_contract_snapshot(id="c-up", path=str(tmp_path))
 
     def test_update_mode_rewrites_drifted_lineno(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
-        values = iter([{"a": 1}, {"a": 1, "b": 2}])  # both calls below share one source line
+        values = iter([{"a": 1}, {"a": 1, "b": 2}])
         for expected in (SnapshotCreatedWarning, SnapshotUpdatedWarning):
             with pytest.warns(expected):
                 assert_that(next(values)).matches_contract_snapshot(path=str(tmp_path))
@@ -1076,9 +1057,7 @@ class TestContractSnapshot:
         target = os.path.join(str(tmp_path), "snap-c-keep.json")
         before = os.path.getmtime(target)
         monkeypatch.setenv("ASSERTPY2_SNAPSHOT_UPDATE", "1")
-        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(
-            id="c-keep", path=str(tmp_path)
-        )  # same shape, no rewrite
+        assert_that(_CONTRACT_SAMPLE).matches_contract_snapshot(id="c-keep", path=str(tmp_path))
         assert_that(os.path.getmtime(target)).is_equal_to(before)
 
     def test_ci_mode_forbids_missing(self, tmp_path, monkeypatch):
@@ -1100,8 +1079,6 @@ class TestMismatchNamesItsSnapshot:
         assert_that(message).contains("--assertpy2-snapshot-update")
 
     def test_line_keyed_snapshots_are_told_apart(self, tmp_path):
-        # without an id the file holds one entry per line of the calling code, so each call site needs
-        # to run twice: once to record, once to compare
         def first(value):
             assert_that(value).snapshot(path=str(tmp_path))
 
@@ -1145,7 +1122,6 @@ class TestContractSnapshotNamesItself:
         message = str(exc_info.value)
         assert_that(message).contains("ct-named")
         assert_that(message).contains("--assertpy2-snapshot-update")
-        # the purpose-built drift notation stays: the generic diff renderer reads worse here
         assert_that(message).contains("+ extra")
         assert_that(message).contains("~ id number -> str")
 
@@ -1227,8 +1203,6 @@ class TestAccessRecord:
         )
 
     def test_a_repeat_inside_one_test_survives_to_the_next_call(self, monkeypatch):
-        # the suite runs with `-p no:assertpy2`, so `_CURRENT_NODE` is None and the scope marker and it
-        # coincide; naming the node is what separates them
         monkeypatch.setattr(_snapshot, "_CURRENT_NODE", "test_mod.py::one")
         _snapshot._record_access("snap-mod.json", "17", "test_mod.py:17")
         _snapshot._record_access("snap-mod.json", "17", "test_mod.py:17")
@@ -1504,8 +1478,6 @@ class TestSnapshotMessages:
         )
 
     def test_a_mismatch_ends_by_naming_the_snapshot_and_the_way_to_accept_it(self, tmp_path):
-        # seeded rather than captured here: a second call in one test adds the shared-key hint, and the
-        # hint names the snapshot too, so the assertion would pass with the name gone from its own clause
         snapname = os.path.join(str(tmp_path), "snap-msg-diff.json")
         _save(snapname, {"a": 1})
         with pytest.raises(AssertionError) as failure:
@@ -1554,5 +1526,4 @@ class TestSnapshotMessages:
         with pytest.raises(AssertionFailure) as failure:
             assert_that(drifted).matches_contract_snapshot(id="ct-actual", path=str(tmp_path))
         assert_that(failure.value.actual).is_equal_to(drifted)
-        # named rather than filled in, which is what puts it in the plugin's own report section
         assert_that(failure.value._outcome.actual_provided).is_true()

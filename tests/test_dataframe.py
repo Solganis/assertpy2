@@ -115,7 +115,6 @@ class TestIsFrameEqualDuckTyped:
             assert_that(dataframe()).is_frame_equal(dataframe(), check_dtype=False)
 
     def test_root_extracted_from_dotted_module(self):
-        # Real frames live in dotted modules ("pandas.core.frame"); the root must be the first segment.
         with _fake_frame_lib("pandas", fail=False):
             frame = type("DataFrame", (), {"__module__": "pandas.core.frame"})()
             assert_that(frame).is_frame_equal(frame)
@@ -207,7 +206,6 @@ class TestRealLibraries:
 
     def test_pandas_index_is_rejected(self):
         pandas = pytest.importorskip("pandas")
-        # an Index is a real pandas object but neither a DataFrame nor a Series
         frame = pandas.DataFrame({"a": [1, 2]})
         with pytest.raises(TypeError, match="pandas or polars"):
             assert_that(frame.index).is_frame_equal(frame.index)
@@ -263,5 +261,4 @@ class TestRealLibraries:
         expected = numpy.array([1, 2], dtype="int64")
         assert_that(actual).is_array_equal(expected)
         with pytest.raises(AssertionError):
-            # strict=True adds numpy's dtype check, so the forwarded option must flip the verdict
             assert_that(actual).is_array_equal(expected, strict=True)

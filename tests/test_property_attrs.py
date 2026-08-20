@@ -47,7 +47,7 @@ def test_attrs_is_equal_to_consistent_with_eq(left, right):
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that(left).is_equal_to(right)
         diff = exc_info.value.diff
-        if diff is not None:  # the attrs diff branch must render without crashing
+        if diff is not None:
             assert isinstance(_format_diff(diff, color=True), str)
 
 

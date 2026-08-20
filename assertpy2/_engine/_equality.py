@@ -84,17 +84,15 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
     config there is nothing to honour, so the plain check is kept exactly as it was.
     """
     if value is other and not at_root:
-        # identity first, the way Python's own container comparison short-circuits. Not at the root:
-        # there is no container to inherit it from, and applied there it made `strict_types` weaker than
-        # plain equality, since `nan` is the one value that is not equal to itself
+        # identity first, the way Python's own container comparison short-circuits.  Not at the root, where `nan`
+        # made `strict_types` weaker than plain equality
         return False
     if config is None:
         return _guarded_not_equal(value, other)
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
-        # a leaf the walker does not decompose. `tolerance` and `comparators` are written for exactly
-        # this shape, so they get asked; `strict_types` is not, and asking it here called two equal sets
-        # unequal, because a set is a leaf to the walker and its members carry no path to compare by
+        # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal, since their
+        # members carry no path to compare by
         if config.tolerance is not None or config.comparators:
             return _node_decision(value, other, config) != "equal"
         return _guarded_not_equal(value, other)
@@ -136,8 +134,7 @@ def mapping_differs(
     difference is easy to get wrong: at one level an `include` of `("user", "session")` selects `user`,
     while the recursion into `user` needs the whole path to strip its first segment from.
     """
-    # both sides are dict-like by the caller's check, which no annotation on `object` can express: one
-    # cast at the top beats a suppression on each of the six lookups below
+    # one cast at the top beats a suppression on each of the six lookups below
     left = cast("MappingLike", actual)
     right = cast("MappingLike", expected)
     seen = frozenset() if seen is None else seen
@@ -175,9 +172,8 @@ def mapping_differs(
     if keys_in_actual != keys_in_expected:
         return True
     if config is not None and config.strict_types and _keyed_types_differ(actual, expected):
-        # two mappings can hold the same keys and disagree on their types: `{True: "a"}` and `{1: "a"}`
-        # are equal to Python, and under strict types they are not the same mapping. Checked here rather
-        # than in the walk below, which only ever sees the values
+        # `{True: "a"}` and `{1: "a"}` are equal to Python and not the same mapping under strict types; the walk
+        # below only ever sees the values
         return True
     for key in keys_in_actual:
         nested_left, nested_right = left[key], right[key]
@@ -188,8 +184,7 @@ def mapping_differs(
             if decision == "leaf":
                 return True
         nested_ignore = [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignore else None
-        # the nested half of an include keeps whole paths, so it is normalized the ignore way: the
-        # level above already consumed the first segment
+        # the nested half of an include keeps whole paths, and the level above already consumed the first segment
         nested_include = (
             [entry[1:] for entry in ignore_specs(include) if type(entry) is tuple and entry[0] == key]
             if include

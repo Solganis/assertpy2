@@ -112,27 +112,27 @@ class TestNotSoftAssertions:
 
     def test_soft_passing_negation_returns_value(self):
         with soft_assertions():
-            builder = assert_that(5).not_.is_equal_to(6)  # negation passes
-            value = builder.value  # must not raise on a passing negation
+            builder = assert_that(5).not_.is_equal_to(6)
+            value = builder.value
         assert_that(value).is_equal_to(5)
 
     def test_soft_failing_negation_taints_value(self):
         with pytest.raises(AssertionError), soft_assertions():
-            builder = assert_that(5).not_.is_equal_to(5)  # negation fails, error collected
+            builder = assert_that(5).not_.is_equal_to(5)
             with pytest.raises(TypeError):
                 _ = builder.value
 
     def test_soft_prior_failure_taint_survives_passing_negation(self):
         with pytest.raises(AssertionError), soft_assertions():
-            builder = assert_that(5).is_equal_to(6)  # prior real failure taints .value
-            passed = builder.not_.is_equal_to(7)  # a later passing negation keeps the taint
+            builder = assert_that(5).is_equal_to(6)
+            passed = builder.not_.is_equal_to(7)
             with pytest.raises(TypeError):
                 _ = passed.value
 
     def test_soft_prior_failure_then_failing_negation_keeps_first_taint(self):
         with pytest.raises(AssertionError), soft_assertions():
-            builder = assert_that(5).is_equal_to(6)  # prior failure already taints .value
-            failed = builder.not_.is_equal_to(5)  # failing negation: taint already set, guard skips
+            builder = assert_that(5).is_equal_to(6)
+            failed = builder.not_.is_equal_to(5)
             with pytest.raises(TypeError):
                 _ = failed.value
 
@@ -155,13 +155,13 @@ class TestNotWarnMode:
         assert_that(assert_warn(5).not_.is_equal_to(6).value).is_equal_to(5)
 
     def test_warn_failing_negation_taints_value(self):
-        builder = assert_warn(5).not_.is_equal_to(5)  # negation fails, warning logged
+        builder = assert_warn(5).not_.is_equal_to(5)
         with pytest.raises(TypeError):
             _ = builder.value
 
     def test_warn_prior_failure_then_failing_negation_keeps_first_taint(self):
-        builder = assert_warn(5).is_equal_to(6)  # prior warn failure already taints .value
-        failed = builder.not_.is_equal_to(5)  # failing negation: taint already set, guard skips
+        builder = assert_warn(5).is_equal_to(6)
+        failed = builder.not_.is_equal_to(5)
         with pytest.raises(TypeError):
             _ = failed.value
 
@@ -229,7 +229,6 @@ class TestNotDoesNotInvertAnErrorFromTheValue:
     @staticmethod
     def _foreign(caught):
         """The error travelled out as it was raised, rather than being read as a verdict."""
-        # spelled without `not_`, which is the thing under test here
         assert_that(isinstance(caught.value, AssertionFailure)).is_false()
         return assert_that(str(caught.value))
 
@@ -314,7 +313,6 @@ class TestNotDoesNotInvertAnErrorFromTheValue:
         assert_that(collected[0]).is_equal_to("Expected <1> to be equal to <2>, but was not.")
 
     def test_the_library_own_failure_still_inverts(self):
-        # the other half of the same rule: a real verdict is what negation is for
         assert_that(5).not_.is_equal_to(6)
         assert_warn(5).not_.is_equal_to(6)
 
@@ -410,7 +408,6 @@ def test_extracting_before_not_keeps_working():
     "step", ["filtered_on", "mapped", "flat_mapped", "first", "last", "element", "single", "decoded_as", "at_json_path"]
 )
 def test_not_rejects_pipeline_transformers_with_clear_error(step):
-    # transformers never raise AssertionError, so negating them could only produce a bogus failure
     with pytest.raises(TypeError, match=f"negate the assertion after {step}"):
         getattr(assert_that([1]).not_, step)
 

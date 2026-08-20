@@ -22,7 +22,6 @@ class TestValue:
         assert_that(assert_that(b"hi").decoded_as().value).is_equal_to("hi")
 
     def test_satisfies_with_typeis_predicate_runs_as_a_normal_predicate(self):
-        # the TypeIs narrowing is purely static; at runtime satisfies() just runs the bool predicate
         class Order: ...
 
         class PaidOrder(Order): ...
@@ -49,8 +48,6 @@ class TestValue:
         assert_that(message).contains("cannot extract .value").contains("Expected not <None>, but was.")
 
     def test_taint_reason_is_the_root_failure_not_the_consequent(self):
-        # is_not_none fails first (root: value is None); is_instance_of on None fails as a consequence.
-        # first-wins means the surfaced message is the root, not the downstream instance-of failure.
         with pytest.raises(TypeError) as exc, soft_assertions():
             _ = assert_that(None).is_not_none().is_instance_of(str).value
         message = str(exc.value)
@@ -83,7 +80,6 @@ class TestValue:
             _ = assert_that(None).is_not_none().extracting("total").value
 
     def test_strict_value_is_never_tainted(self):
-        # under strict a failed assertion raises before .value is reached, so the flag never trips
         assert_that(assert_that(5).is_greater_than(0).value).is_equal_to(5)
 
 

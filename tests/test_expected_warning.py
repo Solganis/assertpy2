@@ -10,7 +10,6 @@ from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_asse
 _calls = []
 
 
-# helpers
 def warn_deprecation(*args, **kwargs):
     warnings.warn("deprecated since 2.6", DeprecationWarning, stacklevel=2)
 
@@ -33,7 +32,6 @@ def warn_with_args(arg1, arg2, *, keyword):
     warnings.warn("args ok", UserWarning, stacklevel=2)
 
 
-# warns - success
 def test_warns_success():
     assert_that(warn_deprecation).warns(DeprecationWarning).when_called_with()
 
@@ -57,7 +55,6 @@ def test_warns_passes_args_and_kwargs():
     assert_that(_calls).is_equal_to([("a", "b", "c")])
 
 
-# warns - failure
 def test_warns_failure_no_warning():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(no_warn).warns(DeprecationWarning).when_called_with()
@@ -72,7 +69,6 @@ def test_warns_failure_wrong_category():
     )
 
 
-# warns - bad input
 def test_warns_val_not_callable():
     with pytest.raises(TypeError) as exc_info:
         assert_that(123).warns(UserWarning)
@@ -85,7 +81,6 @@ def test_warns_arg_not_a_warning():
     assert_that(str(exc_info.value)).contains("given warning arg must be a warning type")
 
 
-# does_not_warn
 def test_does_not_warn_success():
     assert_that(no_warn).does_not_warn(DeprecationWarning).when_called_with()
 
@@ -102,7 +97,6 @@ def test_does_not_warn_failure():
     )
 
 
-# semantics: registry dedup, filterwarnings=error, exception propagation
 def test_warns_bypasses_show_once_dedup():
     # without simplefilter("always") the second identical warning would be swallowed by __warningregistry__
     assert_that(warn_user).warns(UserWarning).when_called_with()
@@ -111,8 +105,8 @@ def test_warns_bypasses_show_once_dedup():
 
 def test_warns_captures_under_filterwarnings_error():
     with warnings.catch_warnings():
-        warnings.simplefilter("error")  # turn warnings into errors globally
-        assert_that(warn_user).warns(UserWarning).when_called_with()  # still captured, not raised
+        warnings.simplefilter("error")
+        assert_that(warn_user).warns(UserWarning).when_called_with()
 
 
 def test_warns_propagates_exception_from_callable():
@@ -121,7 +115,6 @@ def test_warns_propagates_exception_from_callable():
     assert_that(str(exc_info.value)).is_equal_to("boom")
 
 
-# integration with soft and warn modes
 def test_warns_in_soft_assertions_collects():
     with pytest.raises(AssertionError) as exc_info:  # noqa: SIM117  # nested with is clearer than a combined one here
         with soft_assertions():
@@ -176,9 +169,6 @@ def test_does_not_warn_failure_in_warn_mode_logs():
     assert_that(out).contains(
         "Expected <warn_user> to not warn <UserWarning> when called with (), but did warn <UserWarning>."
     )
-
-
-# returned() pivot to the callable's return value
 
 
 def warn_and_return_list(*args, **kwargs):

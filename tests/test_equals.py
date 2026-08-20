@@ -38,7 +38,6 @@ def test_is_equal_list_failure():
 
 
 def test_is_equal_long_list_failure_elides_the_matching_elements():
-    # the whole point: a one-element change must not dump forty elements into the message twice
     actual, expected = list(range(40)), list(range(40))
     expected[27] = 999
     with pytest.raises(AssertionError) as exc_info:
@@ -47,7 +46,6 @@ def test_is_equal_long_list_failure_elides_the_matching_elements():
 
 
 def test_is_equal_few_but_long_elements_still_elides():
-    # the budget is the rendered length, not the element count: three long strings flood a message too
     with pytest.raises(AssertionError) as exc_info:
         assert_that(["x" * 30, "y" * 30]).is_equal_to(["x" * 30, "z" * 30])
     assert_that(str(exc_info.value)).starts_with("Expected <[.., 'yyy")
@@ -62,7 +60,6 @@ def test_is_equal_long_tuple_failure_keeps_tuple_brackets():
 
 
 def test_is_equal_multiline_failure_elides_the_matching_lines():
-    # a value spanning many lines costs a terminal row per line, and the message prints it twice
     actual = "\n".join(f"line {index}" for index in range(8))
     expected = actual.replace("line 5", "line five")
     with pytest.raises(AssertionError) as exc_info:
@@ -87,7 +84,6 @@ def test_is_equal_short_multiline_failure_is_printed_whole():
 
 
 def test_is_equal_multiline_failure_with_a_shorter_counterpart():
-    # every line of the shorter side matched, so it has nothing of its own left to print
     actual = "\n".join(f"line {index}" for index in range(8))
     expected = "\n".join(f"line {index}" for index in range(5))
     with pytest.raises(AssertionError) as exc_info:
@@ -96,7 +92,6 @@ def test_is_equal_multiline_failure_with_a_shorter_counterpart():
 
 
 def test_is_equal_long_list_without_any_match_shows_everything():
-    # nothing equal to collapse and few enough to stay under the cap, so nothing is hidden
     actual = [f"itemAAAAAAAAAA{i}" for i in range(4)]
     expected = [f"otherBBBBBBBBB{i}" for i in range(4)]
     with pytest.raises(AssertionError) as exc_info:
@@ -105,7 +100,6 @@ def test_is_equal_long_list_without_any_match_shows_everything():
 
 
 def test_is_equal_caps_how_many_differing_parts_are_named():
-    # collapsing only removes what matched, so an all-different value needs a cap of its own
     actual = {f"k{index}": index for index in range(60)}
     expected = {f"k{index}": -index for index in range(60)}
     with pytest.raises(AssertionError) as exc_info:
@@ -162,7 +156,7 @@ class _FakeArray:
         return None
 
     def __eq__(self, other):
-        return self  # an element-wise result stand-in, not a bool
+        return self
 
     def __bool__(self):
         raise ValueError("the truth value of a _FakeArray is ambiguous")
@@ -228,7 +222,6 @@ class TestArrayLikeEqualityGuard:
         assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
 
     def test_scalar_array_like_is_not_rejected(self):
-        # has __array__ but a truth-testable ==, so it must compare normally (no regression)
         assert_that(_FakeScalarArray()).is_equal_to(_FakeScalarArray())
         with pytest.raises(AssertionError):
             assert_that(_FakeScalarArray()).is_not_equal_to(_FakeScalarArray())
@@ -333,7 +326,6 @@ class TestNestedArrayLikeEqualityGuard:
         assert_that(str(exc_info.value)).contains("_FakeArray")
 
     def test_array_like_reached_only_in_diff_phase(self):
-        # differing key counts make the boolean check pass cleanly; the diff walk hits the array
         with pytest.raises(TypeError) as exc_info:
             assert_that({"a": _FakeArray(), "b": 1}).is_equal_to({"a": _FakeArray()})
         assert_that(str(exc_info.value)).contains("_FakeArray")

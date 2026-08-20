@@ -90,8 +90,6 @@ def test_a_checker_reading_the_installed_wheel_sees_the_typed_surface(consumer) 
         cwd=source.parent,
         python=str(python),
     )
-    # `is_positive` on a plain class is the narrowing itself, and it has to be reported from the wheel
-    # for the same reason it is reported from the checkout
     assert_that(output).described_as("the narrowing is not visible to a consumer").contains(
         '"_ObjectAssertion[Plain]" has no attribute "is_positive"'
     )

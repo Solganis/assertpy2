@@ -57,7 +57,6 @@ class TestStartsWithBytes:
             assert_that(b"hello").starts_with_bytes(b"")
 
     def test_the_failure_now_names_the_value_under_test(self):
-        # its own implementation said only "Expected to start with <...>", omitting the subject
         with pytest.raises(AssertionFailure) as failure:
             assert_that(b"hello").starts_with_bytes(b"world")
         assert_that(str(failure.value)).is_equal_to("Expected <b'hello'> to start with <b'world'>, but did not.")
@@ -169,11 +168,11 @@ class TestBytesBoundaryCases:
 
     def test_has_byte_at_index_equal_to_length_raises_range_error(self):
         with pytest.raises(IndexError, match="to be in range"):
-            assert_that(b"abc").has_byte_at(3, 0)  # index equal to length
+            assert_that(b"abc").has_byte_at(3, 0)
 
     def test_has_byte_at_index_beyond_length_raises_range_error(self):
         with pytest.raises(IndexError, match="to be in range"):
-            assert_that(b"abc").has_byte_at(5, 0)  # index past the end
+            assert_that(b"abc").has_byte_at(5, 0)
 
     def test_has_byte_at_actual_greater_than_expected_fails(self):
         with pytest.raises(AssertionError):
@@ -202,7 +201,6 @@ def test_bytearray_equality_failure_uses_the_same_path():
 
 
 def test_bytes_against_str_is_not_treated_as_text():
-    # different types, so the text path must not claim them
     with pytest.raises(AssertionError) as exc_info:
         assert_that(b"abc").is_equal_to("abc")
     assert_that(exc_info.value.diff.kind).is_equal_to("scalar")

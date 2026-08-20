@@ -28,7 +28,7 @@ def test_contents_of_path_ascii(tmpfile):
 def test_contents_of_path_respects_encoding(tmp_path):
     # the encoding arg must apply when reading a path, not only when decoding a bytes result
     path = tmp_path / "data.txt"
-    path.write_bytes(b"caf\xe9")  # 0xE9 is 'é' in latin-1, invalid as utf-8
+    path.write_bytes(b"caf\xe9")
     assert_that(contents_of(path, encoding="latin-1")).is_equal_to("café")
 
 

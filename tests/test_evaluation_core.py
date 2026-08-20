@@ -84,10 +84,10 @@ _MIXED_ELEMENTS = st.one_of(
     st.text(max_size=2),
     st.none(),
     st.booleans(),
-    st.builds(bytearray, st.binary(max_size=2)),  # unhashable, and easy to mistake for a built-in
-    st.builds(_ByField, st.integers(-2, 2)),  # hashable, but not by the equality it answers with
+    st.builds(bytearray, st.binary(max_size=2)),
+    st.builds(_ByField, st.integers(-2, 2)),
     st.builds(_NoHash),
-    st.lists(st.integers(-2, 2), max_size=2),  # plain unhashable container
+    st.lists(st.integers(-2, 2), max_size=2),
 )
 
 
@@ -186,8 +186,6 @@ class TestBothSpellingsOfEqualityAnswerAlike:
             match.equal_to({"n": 2}, comparators={int: broken}).matches({"n": 1})
 
     def test_both_spellings_carry_the_same_structured_result(self):
-        # the matcher answers a verdict rather than raising, so what it must not do is reach a different
-        # verdict than the failure the assertion would have carried
         options = {"tolerance": 0.1}
         with pytest.raises(AssertionFailure) as failure:
             assert_that({"v": 25.0}).is_equal_to({"v": 20.0}, **options)
@@ -195,8 +193,6 @@ class TestBothSpellingsOfEqualityAnswerAlike:
         assert_that(match.equal_to({"v": 20.0}, **options).matches({"v": 25.0})).is_false()
 
     def test_an_include_naming_an_absent_key_is_a_non_match_rather_than_an_error(self):
-        # the builder reports it as a failure in its own wording; a matcher has no wording, and raising
-        # from `matches()` would break `==` and the combinators
         assert_that(match.equal_to({"a": 1}, include="missing").matches({"a": 1})).is_false()
 
 
@@ -336,8 +332,6 @@ class TestMembershipIsOneDecisionToo:
         assert_that([1, 200]).contains(duck)
 
     def test_a_value_that_cannot_be_searched_is_a_non_match_rather_than_an_error(self):
-        # the builder refuses it by type, because a wrong subject there is a mistake in the test; a
-        # matcher feeds `==` and the combinators, where raising would be wrong
         assert_that(match.contains("x").matches(42)).is_false()
         with pytest.raises(TypeError, match=r"^val must be a container or iterable"):
             assert_that(42).contains("x")
@@ -351,7 +345,6 @@ class TestMembershipIsOneDecisionToo:
         assert_that(match.contains("beta").describe_mismatch(42)).contains("cannot be searched")
 
     def test_it_refuses_to_be_built_with_nothing_to_look_for(self):
-        # `contains()` with no arguments is a vacuous assertion, and the builder already refuses it
         with pytest.raises(ValueError, match="one or more items"):
             match.contains()
 
@@ -379,7 +372,7 @@ class TestOrderingIsOneDecisionAsWell:
     def test_the_relation_answers_what_python_answers(self, label, actual, expected, relation):
         operator = {"lt": "<", "le": "<=", "gt": ">", "ge": ">="}[relation]
         assert_that(holds(actual, expected, relation)).described_as(label).is_equal_to(
-            eval(f"actual {operator} expected")  # the point is to hold the core to Python itself
+            eval(f"actual {operator} expected")
         )
 
     @pytest.mark.parametrize(
@@ -613,7 +606,6 @@ class TestStrictNeverTurnsUnequalIntoEqual:
         assert_that(self._passes(quiet, quiet, strict_types=True)).is_false()
 
     def test_a_shared_nan_inside_containers_stays_equal(self):
-        # Python's own container comparison says these are equal, and the flag must not change that
         nan = float("nan")
         assert_that([nan] == [nan]).described_as("python itself").is_true()
         assert_that(self._passes([nan], [nan])).described_as("plain").is_true()
@@ -650,8 +642,6 @@ class TestTheCoresUnderTheAwkwardCases:
     """The cases a chosen-example test does not think of, listed by review and measured here."""
 
     def test_a_key_is_computed_once_per_element(self):
-        # a key can be expensive or have a side effect; recomputing the left-hand side of every pair
-        # doubled the calls
         calls = []
 
         def counting(item: int) -> int:
@@ -673,12 +663,9 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(calls).is_length(1)
 
     def test_membership_drains_a_one_shot_iterator_before_searching_it(self):
-        # searched once per wanted item, so a generator would be empty by the second question
         assert_that(missing_items(searchable(iter([1, 2, 3])), [1, 3], _is_matcher)).is_empty()
 
     def test_membership_works_on_unhashable_elements(self):
-        # `in` on a list is a linear scan, so unhashable elements are fine; a set-based shortcut here
-        # would have raised instead
         assert_that(missing_items([[1], [2]], [[2]], _is_matcher)).is_empty()
         assert_that([{"a": 1}]).contains({"a": 1})
 
@@ -694,7 +681,6 @@ class TestTheCoresUnderTheAwkwardCases:
         """
 
         wanted, held = _ByField(1), _ByField(1)
-        # the premise, spelled with two elements so it is a real set lookup rather than one comparison
         assert_that(held in {wanted, _ByField(2)}).described_as("premise: a set cannot find it").is_false()
         assert_that(missing_items([held], [wanted], _is_matcher)).described_as("membership finds it").is_empty()
         assert_that(only_faults([held], (wanted,))).is_equal_to(([], []))
@@ -777,8 +763,6 @@ class TestTheCoresUnderTheAwkwardCases:
             return len(hashes)
 
         small, large = hash_calls_for(30), hash_calls_for(60)
-        # the shape is the claim: doubling the input doubles the hashing.  A walk would have quadrupled
-        # the comparisons instead, which is exactly the cost this path exists to avoid
         assert_that(large / small).described_as("hash calls when the input doubles").is_close_to(2.0, 0.1)
         assert_that(small / 30).described_as("hash calls per element").is_close_to(4.0, 0.1)
 
@@ -793,7 +777,7 @@ class TestTheCoresUnderTheAwkwardCases:
                 comparisons.append((self.value, getattr(other, "value", -1)))
                 return isinstance(other, ByValue) and other.value == self.value
 
-            __hash__ = None  # unhashable, so there is no shortcut to take
+            __hash__ = None
 
         values = [ByValue(index) for index in range(6)]
         only_faults(values, tuple(values))
@@ -847,12 +831,8 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(values).is_subset_of(values)
 
     def test_naming_repeats_of_an_unhashable_value_answers_like_the_shipped_release(self):
-        # both duplicate paths fall back to comparing, and comparing signalling NaNs is what raises -
-        # the same thing the released version does, so nothing here changed for such a value
         same_object = [decimal.Decimal("snan")] * 30
-        # `in` short-circuits on identity, so the same object repeated is found without comparing at all
         assert_that(has_duplicates(same_object)).described_as("one object, thirty times").is_true()
-        # naming them compares explicitly, and comparing a signalling NaN is what raises
         with pytest.raises(decimal.InvalidOperation):
             repeated_items(same_object)
 
@@ -872,7 +852,6 @@ class TestTheCoresUnderTheAwkwardCases:
         values = [Odd() for _ in range(30)]
         others = tuple(Odd() for _ in range(30))
         assert_that(_hash_safe(values)).described_as("cannot be classified, so not safe").is_false()
-        # distinct objects compare unequal, so every one of them is reported: an answer, not a crash
         assert_that(only_faults(values, others)[0]).is_length(len(values))
         with pytest.raises(AssertionFailure):
             assert_that(values).contains_only(*others)
@@ -901,8 +880,6 @@ class TestTheCoresUnderTheAwkwardCases:
         """
         plain = [decimal.Decimal(index) for index in range(30)]
         signalling = [decimal.Decimal("snan")] * 30
-        # what must not happen is a hashing `TypeError`.  Comparing a signalling NaN raises on its own,
-        # by the decimal standard, and that is what the released version does too
         for call in (
             lambda: only_faults(plain, tuple(signalling)),
             lambda: not_contained_in(signalling, plain),
@@ -912,8 +889,6 @@ class TestTheCoresUnderTheAwkwardCases:
                 call()
 
     def test_a_raw_one_shot_value_is_materialised_before_it_is_classified(self):
-        # classification walks the value too, so a caller reaching the core directly used to hand it a
-        # drained iterator and get every wanted item reported missing
         assert_that(only_faults(iter([1, 2, 3]), (1, 2, 3))).is_equal_to(([], []))
         assert_that(not_contained_in(iter([1, 2]), [1, 2, 3])).is_empty()
         assert_that(missing_items(iter([1, 2, 3]), (1, 3), _is_matcher)).is_empty()
@@ -991,7 +966,6 @@ class TestTheCoresUnderTheAwkwardCases:
     def test_duplicates_are_named_once_in_order_of_first_appearance(self):
         assert_that(repeated_items([3, 1, 3, 2, 1, 3])).is_equal_to([3, 1])
         assert_that(repeated_items([1, 2, 3])).is_empty()
-        # `1` and `1.0` are the same key to a counter and equal to a walk, so they name one duplicate
         assert_that(repeated_items([1, 1.0, 2])).is_equal_to([1])
         assert_that(repeated_items([[1], [1], [2]])).described_as("unhashable keeps the walk").is_equal_to([[1]])
 
@@ -1077,8 +1051,6 @@ class TestAMatcherIsASpecificationAndAnswersTheSameWayTwice:
         assert_that(set(verdicts)).described_as(label).is_length(1)
 
     def test_a_generator_as_the_expected_operand_is_drained_once(self):
-        # the case that failed: the first call consumed the superset and the second said "no" about a
-        # value it had just accepted
         constraint = match.is_subset_of(iter([1, 2, 3]))
         assert_that(constraint.matches([1])).described_as("first").is_true()
         assert_that(constraint.matches([1])).described_as("second").is_true()
@@ -1170,8 +1142,6 @@ class TestAMatcherLooksAtItsValueOnce:
         assert_that(result.mismatch).described_as(label).contains(expected)
 
     def test_a_key_runs_once_per_element_through_the_public_surface(self):
-        # measured through `satisfies`, not through the core: the core was already right, and the two
-        # extra walks lived above it
         calls: list[int] = []
 
         def key(value: int) -> int:
@@ -1199,12 +1169,10 @@ class TestAMatcherLooksAtItsValueOnce:
         assert_that(str(failure.value)).contains("out of order at index 0")
 
     def test_a_single_walk_matcher_that_passes_inside_a_structure(self):
-        # the other half of the branch: a leaf whose matcher answers in one look and answers "yes"
         assert_that({"rows": [1, 2, 3]}).matches_structure({"rows": match.is_sorted()})
         assert_that({"tags": ["a", "b"]}).matches_structure({"tags": match.contains("a")})
 
     def test_the_matcher_still_answers_the_same_way_twice(self):
-        # single-walk must not turn into caching: a matcher is used against many values
         matcher = match.is_sorted()
         assert_that(matcher.matches([1, 2])).is_true()
         assert_that(matcher.matches([2, 1])).is_false()

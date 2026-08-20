@@ -51,7 +51,7 @@ from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
 from tests.group_compat import BaseExceptionGroup, ExceptionGroup, needs_groups
 
-try:  # the OpenAPI properties need the [json] extra; the rest of the file does not
+try:
     import jsonschema  # noqa: F401  # presence gate only
 
     _HAS_JSONSCHEMA = True
@@ -66,9 +66,6 @@ _values = st.recursive(
     max_leaves=20,
 )
 _keys = st.text(min_size=1, max_size=5)
-
-
-# --- is_equal_to / is_not_equal_to mirror Python equality ---
 
 
 @settings(deadline=None)
@@ -106,14 +103,9 @@ def test_is_equal_to_consistent_with_eq_for_sets(left, right):
             assert_that(left).is_equal_to(right)
 
 
-# --- ignore / include selective comparison ---
-
-
 @settings(deadline=None)
 @given(base=st.dictionaries(_keys, _atoms, max_size=6), perturbations=st.dictionaries(_keys, _atoms, max_size=4))
 def test_ignore_removes_differences(base, perturbations):
-    # left keeps base values; right overlays perturbations. Ignoring exactly the perturbed keys
-    # leaves both dicts identical on the remaining (base) keys, so they compare equal.
     left = dict(base)
     right = {**base, **perturbations}
     assert_that(left).is_equal_to(right, ignore=list(perturbations))
@@ -126,14 +118,10 @@ def test_ignore_removes_differences(base, perturbations):
     right_extra=st.dictionaries(_keys, _atoms, max_size=3),
 )
 def test_include_compares_only_listed_keys(common, left_extra, right_extra):
-    # both dicts agree on every common key; extras (outside the common set) differ but are excluded.
     included = list(common)
     left = {**{k: v for k, v in left_extra.items() if k not in common}, **common}
     right = {**{k: v for k, v in right_extra.items() if k not in common}, **common}
     assert_that(left).is_equal_to(right, include=included)
-
-
-# --- matcher predicates mirror their Python semantics ---
 
 
 @given(value=st.integers(), low=st.integers(), high=st.integers())
@@ -155,9 +143,6 @@ def test_satisfies_between_consistent_with_semantics(value, low, high):
             assert_that(value).satisfies(match.between(low, high))
 
 
-# --- matcher boolean algebra (& | ~) ---
-
-
 @given(value=st.integers(), boundary_low=st.integers(), boundary_high=st.integers())
 def test_matcher_combinators_follow_boolean_logic(value, boundary_low, boundary_high):
     matcher_a = match.greater_than(boundary_low)
@@ -168,11 +153,7 @@ def test_matcher_combinators_follow_boolean_logic(value, boundary_low, boundary_
     assert (matcher_a & matcher_b).matches(value) == (result_a and result_b)
     assert (matcher_a | matcher_b).matches(value) == (result_a or result_b)
     assert (~matcher_a).matches(value) == (not result_a)
-    # de Morgan: ~(a & b) == (~a | ~b)
     assert (~(matcher_a & matcher_b)).matches(value) == ((~matcher_a) | (~matcher_b)).matches(value)
-
-
-# --- collection roundtrips ---
 
 
 @given(items=st.lists(st.integers()))
@@ -192,10 +173,6 @@ def test_contains_present_iff_member(items, candidate):
     else:
         with pytest.raises(AssertionError):
             assert_that(items).contains(candidate)
-
-
-# === Point 1: recursive comparison over dataclasses / namedtuples ===
-# Exercises the riskiest code: _build_equality_diff / _sub_diff_entries (nesting, models, lists).
 
 
 @dataclass
@@ -255,11 +232,6 @@ def test_namedtuple_is_equal_to_reflexive(value):
     assert_that(value).is_equal_to(copy.deepcopy(value))
 
 
-# === Diff well-formedness: any unequal pair yields a renderable, well-formed DiffResult ===
-# Fuzzes the whole failure path - _build_equality_diff, the disambiguating message, and the plugin's
-# colored renderer - so no generated structure can make the diff crash or emit a non-string path.
-
-
 @settings(deadline=None)
 @given(left=_values, right=_values)
 def test_diff_is_well_formed_for_unequal_values(left, right):
@@ -268,12 +240,12 @@ def test_diff_is_well_formed_for_unequal_values(left, right):
     with pytest.raises(AssertionFailure) as exc_info:
         assert_that(left).is_equal_to(right)
     failure = exc_info.value
-    assert isinstance(str(failure), str)  # message (incl. _disambiguated) renders without raising
+    assert isinstance(str(failure), str)
     diff = failure.diff
     if diff is not None:
         assert isinstance(diff.kind, str)
         assert all(isinstance(entry.path, str) for entry in diff.entries)
-        assert isinstance(_format_diff(diff, color=True), str)  # plugin renderer survives any diff
+        assert isinstance(_format_diff(diff, color=True), str)
 
 
 @settings(deadline=None)
@@ -289,16 +261,9 @@ def test_diff_is_well_formed_for_unequal_dataclasses(left, right):
         assert isinstance(_format_diff(diff, color=True), str)
 
 
-# === Diff completeness: a failing sequence accounts for every one of its positions ===
-# Well-formedness above says the diff renders.  This says it is complete, which is a claim about the
-# layer underneath: pairing decides which element is compared with which, and the walk only ever sees
-# the pairs handed to it.  A pair the pairing calls equal is never examined, so a wrong match takes a
-# real difference out of the diff and out of the message's elision at once, and the failure names a
-# smaller difference than the one that caused it.  Two defects of exactly that shape shipped, both
-# because difflib's notion of a match is not this library's: keyed on reprs it matches values that
-# print alike, keyed on the values it matches on ``==``, and every verdict here is reached with ``!=``.
-#
-# The atoms below are chosen for that: a homogeneous generator only exercises the half everyone sees.
+# completeness is a claim about the layer underneath: a pair the pairing calls equal is never examined, so a wrong
+# match takes a real difference out of the diff.  Two defects of that shape shipped, both because difflib matches on
+# reprs where every verdict here is reached with `!=`
 
 
 class _Twin:
@@ -416,7 +381,7 @@ def test_a_sequence_diff_pairs_off_every_position_it_leaves_unnamed(pair):
     dropped, added, named = _edits(diff.entries)
     kept_actual = [index for index in range(len(actual)) if index not in dropped]
     kept_expected = [index for index in range(len(expected)) if index not in added]
-    assert len(kept_actual) == len(kept_expected)  # what is left over on each side has to pair up
+    assert len(kept_actual) == len(kept_expected)
     unaccounted = [
         (left, right)
         for left, right in zip(kept_actual, kept_expected, strict=True)
@@ -444,11 +409,7 @@ def test_a_one_sided_sequence_entry_carries_the_element_it_names(pair):
             assert entry.actual is None
 
 
-# === Point 2: multiset / ordering semantics of collection assertions ===
-
-
 def _is_subsequence(sub, seq):
-    # shared iterator advances across the any() calls - the classic subsequence check
     iterator = iter(seq)
     return all(any(candidate == element for candidate in iterator) for element in sub)
 
@@ -527,9 +488,6 @@ def test_is_subset_of_matches_set_subset(items, superset):
             assert_that(items).is_subset_of(superset)
 
 
-# === Multiset semantics of contains_exactly_in_any_order ===
-
-
 @given(val=st.lists(st.integers(), max_size=6), expected=st.lists(st.integers(), min_size=1, max_size=6))
 def test_contains_exactly_in_any_order_matches_multiset_equality(val, expected):
     if Counter(val) == Counter(expected):
@@ -552,9 +510,8 @@ def test_contains_exactly_in_any_order_unhashable_permutation_invariant(items, d
     assert_that(items).contains_exactly_in_any_order(*shuffled)
 
 
-# === Bipartite pairing of satisfies_exactly_in_any_order ===
-# With pure equality matchers a perfect pairing exists iff the two multisets are equal,
-# so Python's Counter is an independent oracle for the Kuhn matching implementation.
+# with pure equality matchers a perfect pairing exists iff the multisets are equal, so Counter is an independent
+# oracle
 
 
 @given(val=st.lists(st.integers(0, 5), max_size=5), expected=st.lists(st.integers(0, 5), min_size=1, max_size=5))
@@ -572,8 +529,6 @@ def test_satisfies_exactly_in_any_order_is_permutation_invariant(items, data):
     shuffled = data.draw(st.permutations(items))
     assert_that(items).satisfies_exactly_in_any_order(*[match.equal_to(item) for item in shuffled])
 
-
-# === Relational size family mirrors len() comparisons ===
 
 _bounds = st.tuples(st.integers(0, 10), st.integers(0, 10)).map(sorted)
 
@@ -616,8 +571,6 @@ def test_is_length_between_matches_len_semantics(items, bounds):
             assert_that(items).is_length_between(low, high)
 
 
-# === String normalization sugar ===
-
 _ascii_text = st.text(alphabet=st.characters(min_codepoint=33, max_codepoint=126))
 
 
@@ -638,8 +591,7 @@ def test_is_equal_to_ignoring_whitespace_matches_normalization(left, right):
             assert_that(left).is_equal_to_ignoring_whitespace(right)
 
 
-# ascii-only: for unicode, lower(swapcase(s)) may differ from lower(s) (e.g. 'ß'.swapcase() == 'SS'),
-# which is a property of Python casing rules rather than of the assertion under test
+# ascii-only: for unicode `lower(swapcase(s))` may differ from `lower(s)`, which is a property of Python casing
 @given(text=_ascii_text.filter(lambda s: len(s) >= 1), data=st.data())
 def test_starts_with_ignoring_case_accepts_case_mangled_prefix(text, data):
     prefix_length = data.draw(st.integers(1, len(text)))
@@ -652,16 +604,13 @@ def test_ends_with_ignoring_case_accepts_case_mangled_suffix(text, data):
     assert_that(text).ends_with_ignoring_case(text[-suffix_length:].swapcase())
 
 
-# === Snapshot typed-codec round-trip ===
-# The codec is exercised directly (no files): encode -> decode must reproduce an equal value.
-
 _snapshot_zones = st.sampled_from(
     [
         None,
         datetime.timezone.utc,
         datetime.timezone(datetime.timedelta(hours=5, minutes=30)),
         datetime.timezone(datetime.timedelta(hours=-8)),
-        datetime.timezone(datetime.timedelta(minutes=5, seconds=30)),  # sub-minute offsets are legal since 3.7
+        datetime.timezone(datetime.timedelta(minutes=5, seconds=30)),
     ]
 )
 _snapshot_codec_values = (
@@ -685,8 +634,6 @@ def test_snapshot_codec_roundtrip(value):
     assert_that(decoded["v"]).is_equal_to(value)
 
 
-# === Point 3: nested ignore via tuple key-paths (recursion in _dict_not_equal) ===
-
 _two_level = st.dictionaries(
     st.text(min_size=1, max_size=3),
     st.dictionaries(st.text(min_size=1, max_size=3), st.integers(), max_size=3),
@@ -701,8 +648,7 @@ def test_nested_ignore_removes_leaf_differences(base, data):
     perturbed = data.draw(st.lists(st.sampled_from(paths), unique=True)) if paths else []
     right = {outer: dict(inner) for outer, inner in base.items()}
     for outer, leaf in perturbed:
-        right[outer][leaf] += 1000  # ints, so always a real difference
-    # ignoring exactly the perturbed leaf-paths leaves both dicts identical elsewhere
+        right[outer][leaf] += 1000
     assert_that(base).is_equal_to(right, ignore=list(perturbed))
 
 
@@ -711,20 +657,16 @@ def test_nested_ignore_removes_leaf_differences(base, data):
 def test_nested_include_compares_only_listed_leaves(base, data):
     paths = [(outer, leaf) for outer, inner in base.items() for leaf in inner]
     if not paths:
-        return  # include needs at least one referenced path; nothing to compare on an empty dict
+        return
     included = data.draw(st.lists(st.sampled_from(paths), unique=True, min_size=1))
     included_set = set(included)
     right = {outer: dict(inner) for outer, inner in base.items()}
     for outer, leaf in paths:
         if (outer, leaf) not in included_set:
-            right[outer][leaf] += 1000  # perturb only NON-included leaves (keys untouched)
-    # comparing only the included leaf-paths -> equal, since those leaves are left intact
+            right[outer][leaf] += 1000
     assert_that(base).is_equal_to(right, include=list(included))
 
 
-# --- contract shape / drift (assert_conforms exact + matches_contract_snapshot) ---
-
-# JSON-like values including NaN/inf floats: contract shape must survive them (they are just "number").
 _json_atoms = st.none() | st.booleans() | st.integers() | st.floats() | st.text()
 _json = st.recursive(_json_atoms, lambda children: st.lists(children) | st.dictionaries(_keys, children), max_leaves=20)
 
@@ -741,20 +683,18 @@ def _canon(value):
         return {key: _canon(item) for key, item in value.items()}
     if isinstance(value, list):
         return [_canon(item) for item in value]
-    return value  # None
+    return value
 
 
 @settings(deadline=None)
 @given(value=_json)
 def test_shape_never_drifts_from_itself(value):
-    # P1: a value's shape is identical to itself - the snapshot never fails on unchanged structure
     assert_that(shape_diff(shape(value), shape(value))).is_empty()
 
 
 @settings(deadline=None)
 @given(value=_json)
 def test_shape_ignores_leaf_values(value):
-    # P2 (value-tolerance): rewriting every leaf with a same-category value leaves the shape unchanged
     assert_that(shape(value)).is_equal_to(shape(_canon(value)))
     assert_that(shape_diff(shape(value), shape(_canon(value)))).is_empty()
 
@@ -762,28 +702,24 @@ def test_shape_ignores_leaf_values(value):
 @settings(deadline=None)
 @given(left=_json, right=_json)
 def test_shape_diff_is_total(left, right):
-    # P3 (totality): shape and shape_diff never raise on any pair of JSON-like values
     shape_diff(shape(left), shape(right))
 
 
 @settings(deadline=None)
 @given(number=st.integers() | st.floats())
 def test_numbers_share_one_category(number):
-    # P4: int and float (incl NaN/inf) collapse to one category, so 5 vs 5.0 is never drift
     assert_that(shape(number)).is_equal_to("number")
 
 
 @settings(deadline=None)
 @given(value=_json)
 def test_duplicate_elements_merge_to_one(value):
-    # P5: two identical elements merge to a single element shape (merge is reflexive)
     assert_that(shape([value, value])).is_equal_to(shape([value]))
 
 
 @settings(deadline=None)
 @given(ident=st.integers(), name=st.text(), tags=st.lists(st.text()))
 def test_conforming_dump_has_no_drift(ident, name, tags):
-    # P7: a model's own dumped instance never drifts from the model
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from pydantic import BaseModel
 
@@ -798,7 +734,6 @@ def test_conforming_dump_has_no_drift(ident, name, tags):
 @settings(deadline=None)
 @given(payload=st.dictionaries(_keys, _json_atoms), extra_key=st.text(min_size=1))
 def test_undeclared_key_is_always_detected(payload, extra_key):
-    # P8: any key the model does not declare surfaces as drift
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from pydantic import BaseModel
 
@@ -812,7 +747,6 @@ def test_undeclared_key_is_always_detected(payload, extra_key):
 @settings(deadline=None)
 @given(payload=st.dictionaries(_keys, _json))
 def test_contract_drift_is_total(payload):
-    # P9: contract_drift never raises on an arbitrary dict payload, even through sub-model recursion
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from pydantic import BaseModel
 
@@ -827,15 +761,12 @@ def test_contract_drift_is_total(payload):
     contract_drift(payload, Item)
 
 
-# --- Invariants for the failure-diagnostics, soft-report, and list-conformance work ---
-
 _collidable = st.sampled_from([0, 1, 2, "0", "1", "2", 1.0, 2.0, "1.0", "2.0", True, False, None, "None", "True"])
 
 
 @settings(deadline=None)
 @given(left=_collidable, right=_collidable)
 def test_disambiguated_distinguishes_colliding_reprs(left, right):
-    # two unequal values that render to the same repr stay distinguishable once tagged by type
     shown_left, shown_right = _disambiguated(left, right)
     if str(left) == str(right) and type(left) is not type(right):
         assert_that(shown_left).is_not_equal_to(shown_right)
@@ -848,8 +779,6 @@ _soft_specs = st.lists(st.tuples(_soft_groups, st.booleans(), st.booleans()), mi
 @settings(deadline=None)
 @given(specs=_soft_specs)
 def test_soft_report_numbers_every_failure_sequentially(specs):
-    # the aggregated report carries every message once, numbered 1..N across any grouping, and the
-    # numbering must survive the diff lines that a structured failure adds under its entry
     entries = [
         AssertionOutcome(
             group=group,
@@ -893,7 +822,6 @@ _field = st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6)
 @settings(deadline=None)
 @given(ids=st.lists(st.integers(), max_size=6), suffix=st.text(max_size=4))
 def test_assert_conforms_each_preserves_length_and_order(ids, suffix):
-    # each=True validates every item, preserving count and order (coercion applied per element)
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from pydantic import BaseModel
 
@@ -910,7 +838,6 @@ def test_assert_conforms_each_preserves_length_and_order(ids, suffix):
 @settings(deadline=None)
 @given(ids=st.lists(st.integers(), min_size=1, max_size=5), position=st.integers(), extra=_field)
 def test_assert_conforms_each_exact_reports_indexed_drift(ids, position, extra):
-    # an undeclared field on element i surfaces as drift path [i].field, tying each=exact to P8
     pytest.importorskip("pydantic", reason="pydantic not installed")
     from pydantic import BaseModel
 
@@ -932,7 +859,6 @@ _chain_types = st.sampled_from([ValueError, KeyError, TypeError, RuntimeError, I
 @settings(deadline=None)
 @given(chain=st.lists(_chain_types, min_size=1, max_size=6))
 def test_has_root_cause_walks_to_the_deepest_link(chain):
-    # a __cause__ chain of arbitrary depth: has_root_cause finds its last link, whatever the depth
     errors = [exc_type(f"e{index}") for index, exc_type in enumerate(chain)]
     for outer, inner in pairwise(errors):
         outer.__cause__ = inner
@@ -949,13 +875,10 @@ def test_has_root_cause_walks_to_the_deepest_link(chain):
     nulls=st.dictionaries(_keys, st.integers(), max_size=3),
 )
 def test_ignore_null_skips_every_expected_none_key(common, nulls):
-    # any key the expected leaves None accepts any actual value; the rest must still match
     expected = {**common, **dict.fromkeys(nulls, None)}
     actual = {**common, **nulls}
     assert_that(actual).is_equal_to(expected, ignore_null=True)
 
-
-# --- OpenAPI response contracts: conformance is total and independent of the spec version ---
 
 _OPENAPI_TYPES = {"string": st.text(max_size=5), "integer": st.integers(), "boolean": st.booleans()}
 
@@ -1019,15 +942,12 @@ def test_dropping_a_required_key_is_always_detected(operation):
 @settings(deadline=None)
 @given(operation=_openapi_operation())
 def test_swagger_2_and_openapi_3_agree_on_every_verdict(operation):
-    # the two spec versions reach the schema by different routes, so their verdicts must not diverge
     schema, body, dropped = operation
     assert_that(_conforms(_spec_20(schema), body)).is_equal_to(_conforms(_spec_30(schema), body))
     if dropped is not None:
         broken = {name: value for name, value in body.items() if name != dropped}
         assert_that(_conforms(_spec_20(schema), broken)).is_equal_to(_conforms(_spec_30(schema), broken))
 
-
-# --- inline snapshots: a recorded literal round-trips through the source it is written into ---
 
 _literal_atoms = (
     st.none() | st.booleans() | st.integers() | st.text(max_size=5) | st.floats(allow_nan=False, allow_infinity=False)
@@ -1047,14 +967,10 @@ _literals = st.recursive(
 @settings(deadline=None)
 @given(value=_literals, column=st.integers(min_value=0, max_value=40))
 def test_a_recorded_inline_literal_round_trips(value, column):
-    # matches_inline writes this text into the test source, so Python's own evaluation is the oracle.
-    # eval is safe here: the input is the literal this very call just rendered, never outside data.
+    # the input to `eval` is the literal this very call just rendered, never outside data
     assume(is_literalable(value))
     restored = eval(_format_literal(value, column))
     assert_that(restored).is_equal_to(value)
-
-
-# --- string diffs: every caret row explains the content row above it ---
 
 
 @st.composite
@@ -1078,18 +994,13 @@ def _line_and_edit(draw):
 def test_string_diff_shows_both_sides_with_anchored_carets(pair):
     left, right = pair
     rendered = _format_diff(DiffResult(kind="string", entries=[DiffEntry(path="line 1", actual=left, expected=right)]))
-    rows = rendered.splitlines()[2:]  # past the "diff (string):" header and the path row
-    # both sides must be spelled out: a renderer that drops one leaves the reader guessing
+    rows = rendered.splitlines()[2:]
     assert_that([row[6:] for row in rows if row.startswith("    - ")]).is_equal_to([left])
     assert_that([row[6:] for row in rows if row.startswith("    + ")]).is_equal_to([right])
-    # a caret row only ever annotates the content row directly above it
     assert_that(rows[0].startswith("    ?")).is_false()
     for previous, row in pairwise(rows):
         if row.startswith("    ?"):
             assert_that(previous.startswith(("    - ", "    + "))).is_true()
-
-
-# --- collection pipeline: each transform mirrors its Python counterpart ---
 
 
 @settings(deadline=None)
@@ -1127,9 +1038,6 @@ def test_element_first_and_last_agree_with_indexing(items, offset):
     assert_that(assert_that(items).last().val).is_equal_to(items[-1])
 
 
-# --- temporal assertions: the relational pairs are exact complements ---
-
-
 def _holds(check):
     try:
         check()
@@ -1154,10 +1062,7 @@ def test_is_after_is_the_exact_complement_of_is_before_or_equal_to(left, right):
     assert_that(after).is_not_equal_to(before_or_equal)
 
 
-# --- the parts of a failure message this library composes itself ---
-#
-# Not "no message shows an address": a value's own repr is inherited behaviour.  This covers the text
-# written around it, which is where a leak is ours to prevent.
+# not "no message shows an address": a value's own repr is inherited, and this covers the text written around it
 
 _ADDRESS = re.compile(r"0x[0-9a-fA-F]{6,}")
 
@@ -1168,7 +1073,7 @@ class _Opaque:
 
 class _SelfIdentifying:
     def __repr__(self):
-        return f"<Session {id(self):#x}>"  # a hand-written repr can leak an address just as well
+        return f"<Session {id(self):#x}>"
 
 
 @dataclass
@@ -1251,9 +1156,6 @@ def test_a_suggestion_is_a_real_attribute_and_never_the_one_that_was_asked_for(
         assert_that(attributes).contains(suggested.group(1))
 
 
-# --- strict_types: the two spellings of one relation must not drift ---
-
-
 class _Money:
     """A value object the walker does not take apart: deliberately **not** a dataclass.
 
@@ -1276,8 +1178,7 @@ class _Money:
         return f"_Money({self.amount})"
 
 
-# Every type the walker dispatches on, for properties comparing a value against a copy of itself only:
-# two different generated values would trip over the documented hash-matching gap, a copy cannot.
+# a value against a copy of itself: two different generated values would trip over the documented hash-matching gap
 _wide_atoms = (
     _atoms
     | st.binary()
@@ -1353,8 +1254,7 @@ def _passes(callable_):
 @settings(deadline=None)
 @given(left=_values, right=_values)
 def test_the_flag_and_the_matcher_agree(left, right):
-    # a scalar-only check cannot see this: on a composite expected value the matcher used to stop at
-    # the top-level type and hand the rest to `==`, which is permissive inside
+    # on a composite expected value the matcher used to stop at the top-level type and hand the rest to `==`
     by_flag = _passes(lambda: assert_that(left).is_equal_to(right, strict_types=True))
     by_matcher = match.equal_to(right, strict_types=True).matches(left)
     assert_that(by_matcher).is_equal_to(by_flag)
@@ -1363,28 +1263,20 @@ def test_the_flag_and_the_matcher_agree(left, right):
 @settings(deadline=None)
 @given(left=_values, right=_values)
 def test_strictness_only_ever_refines_equality(left, right):
-    # strictness may reject what `==` accepts, never the reverse
     if _passes(lambda: assert_that(left).is_equal_to(right, strict_types=True)):
         assert_that(left).is_equal_to(right)
 
 
 @settings(deadline=None)
-@given(value=_wide_values)  # must stay the same symbol the two reach guards above assert on
+@given(value=_wide_values)
 def test_a_value_is_strictly_equal_to_itself(value):
-    # the first line pins the identity shortcut, the second that strictness does not depend on it.
-    # The wide strategy is free here, and it covers shapes nobody wrote down, a set inside a list first
+    # the first line pins the identity shortcut, the second that strictness does not depend on it
     assert_that(value).is_equal_to(value, strict_types=True)
     assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
 
 
-# --- rendering invariants: the one place a property test has paid for itself here ---
-#
-# A wide oracle over comparison semantics measured net-negative, 12800 pairs finding nothing.  For
-# rendering there is no natural example of "a caret row with nothing above it", so it must be invented.
-
-# ESC is excluded from every generated string on purpose, paths included: a `kind="string"` diff
-# prints its values raw and a path is echoed verbatim, so data carrying an escape puts one in the
-# output legitimately. The colour invariants below are about what the renderer *adds*.
+# a wide oracle over comparison semantics measured net-negative at 12800 pairs.  ESC is excluded from every generated
+# string, paths included, since a string diff prints its values raw
 _NO_ESC = st.text(alphabet=st.characters(exclude_characters="\x1b"), max_size=200)
 _TEXT_LEAVES = _NO_ESC | st.binary(max_size=200)
 _ANY_LEAF = _TEXT_LEAVES | st.integers() | st.floats(allow_nan=True) | st.none() | st.booleans()
@@ -1412,17 +1304,14 @@ def _diffs(draw):
 @settings(deadline=None)
 @given(diff=_diffs(), color=st.booleans())
 def test_rendering_a_diff_never_raises(diff, color):
-    # the renderer runs while a failure is being reported, so an exception here replaces the failure
-    # the reader was chasing with one of ours
     assert_that(_format_diff(diff, color=color)).is_instance_of(str)
 
 
 @settings(deadline=None)
 @given(diff=_diffs())
 def test_a_caret_row_always_annotates_the_row_above_it(diff):
-    # the guide points at a span of the line before it; alone it points at nothing.
-    # Matched on the unindented prefix, not on a stripped one: a generated *path* of "?" renders as
-    # `  ?: - ''` and would otherwise be mistaken for a guide row.
+    # matched on the unindented prefix: a generated path of "?" renders as `  ?: - ''` and would be mistaken for a
+    # guide row
     rows = _format_diff(diff).splitlines()
     for previous, row in pairwise(rows):
         if row.startswith("    ?"):
@@ -1434,9 +1323,6 @@ def test_a_caret_row_always_annotates_the_row_above_it(diff):
 @settings(deadline=None)
 @given(count=st.integers(min_value=1, max_value=200), kind=_DIFF_KINDS, one_sided=st.booleans())
 def test_the_block_never_outgrows_its_budget(count, kind, one_sided):
-    # the filler is fixed rather than generated: hypothesis rightly objects to drawing forty
-    # three-thousand-character strings per example, and its content is irrelevant - only the size is.
-    # Sized so the budget is the binding constraint, otherwise the invariant holds for the wrong reason.
     filler = "x" * 3_000
     entries = [DiffEntry(path="k", actual=filler, expected=None if one_sided else filler[:-1]) for _ in range(count)]
     rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0)
@@ -1446,11 +1332,10 @@ def test_the_block_never_outgrows_its_budget(count, kind, one_sided):
 @settings(deadline=None)
 @given(count=st.integers(min_value=30, max_value=200), kind=st.sampled_from(["set", "contains"]))
 def test_a_clipped_block_still_shows_something(count, kind):
-    # `set` and `contains` join every item into a single row, so dropping the row that crosses the
-    # limit erased the whole diff: the reader got a header and a count and not one item
+    # `set` and `contains` join every item into one row, so dropping the row that crosses the limit erased the whole
+    # diff
     filler = "x" * 3_000
-    # `absent` is what puts an item in the extra group, and every producer of a set or containment
-    # entry sets it: without it the entry claims its expected value really is None
+    # `absent` is what puts an item in the extra group; without it the entry claims its expected value is None
     entries = [DiffEntry(path="extra", actual=filler, expected=None, absent="expected") for _ in range(count)]
     rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0)
     assert_that(len(rendered)).is_greater_than(1_000)
@@ -1460,7 +1345,6 @@ def test_a_clipped_block_still_shows_something(count, kind):
 @settings(deadline=None)
 @given(diff=_diffs())
 def test_an_uncoloured_render_adds_no_escape_sequences(diff):
-    # the same renderer feeds the plain-text message, where an escape would be printed literally
     assert_that(_format_diff(diff, color=False)).does_not_contain("\033")
 
 
@@ -1478,8 +1362,7 @@ def test_every_colour_opened_is_closed(diff):
 @settings(deadline=None)
 @given(count=st.integers(min_value=1, max_value=200), kind=_DIFF_KINDS)
 def test_colour_stays_balanced_when_the_block_is_clipped(count, kind):
-    # the generated diffs above never reach the budget, so they never exercised the clip: a row cut
-    # blind loses the reset that closed its colour and stains every line the terminal prints after it
+    # a row cut blind loses the reset that closed its colour and stains every line after it
     filler = "x" * 3_000
     entries = [DiffEntry(path="k", actual=filler, expected=None) for _ in range(count)]
     rendered = _format_diff(DiffResult(kind=kind, entries=entries), max_entries=0, color=True)
@@ -1497,9 +1380,7 @@ def test_colour_stays_balanced_when_the_block_is_clipped(count, kind):
 )
 def test_the_entry_cap_is_honoured_and_the_remainder_counted(entries, limit):
     rendered = _format_diff(DiffResult(kind="dict", entries=entries), max_entries=limit)
-    # counting the rendered value rows, not the summary line: the summary is emitted from the entry
-    # count alone, so it still appears when nothing was actually dropped. Rows are counted by their
-    # `- ` marker, which no generated path can forge.
+    # counting the rendered value rows: the summary is emitted from the entry count alone
     shown = sum(1 for row in rendered.splitlines() if row.startswith("    - "))
     assert_that(shown).is_equal_to(min(len(entries), limit))
     if len(entries) > limit:
@@ -1508,16 +1389,11 @@ def test_the_entry_cap_is_honoured_and_the_remainder_counted(entries, limit):
         assert_that(rendered).does_not_contain("more entries")
 
 
-# --- report ordering and windowing ------------------------------------------------------------
-
-
 @given(
     actual=st.dictionaries(st.text(min_size=1, max_size=4), st.integers(), max_size=8),
     expected=st.dictionaries(st.text(min_size=1, max_size=4), st.integers(), max_size=8),
 )
 def test_the_key_walk_covers_both_sides_once_and_keeps_the_written_order(actual, expected):
-    # what the union of two sets used to give at the price of an imposed sort: every key, no repeats,
-    # and a deterministic order. this adds the part the sort destroyed, which is the order itself
     walked = _ordered_keys(actual, expected)
     assert_that(walked).is_length(len(set(actual) | set(expected)))
     assert_that(set(walked)).is_equal_to(set(actual) | set(expected))
@@ -1665,7 +1541,6 @@ class TestEveryRefusalIsReadableWhateverArrived:
     def test_a_long_value_never_floods_the_line(self, value):
         with pytest.raises(TypeError) as failure:
             refuse(value, "a number")
-        # the cap is on the rendered value; the sentence around it is short and fixed
         assert_that(len(str(failure.value))).is_less_than(140)
 
 
@@ -1744,7 +1619,6 @@ _PIPELINE_VIEWS = {
     "dict": "_DictAssertion",
 }
 
-# every subject `assert_that` narrows to a view carrying the pipeline steps, built from one list of ints
 _PIPELINE_SUBJECTS = {
     "list": list,
     "tuple": tuple,
@@ -1891,8 +1765,6 @@ def _dispatch_relation() -> dict[str, str]:
             # so it has no row in the relation, and the order guard is what holds its placement
             umbrellas.append(subjects)
             continue
-        # a return this walk cannot decode is refused for the same reason an unreadable subject is: a
-        # quoted or qualified annotation would drop its subject out of the relation without a word
         if not view.endswith("Assertion"):
             written = ast.unparse(returns) if returns else "nothing"
             raise AssertionError(f"an assert_that overload returns {written}, which this walk cannot read")
@@ -1962,7 +1834,6 @@ def _form_names(test_name: str) -> list[str]:
                 if isinstance(statement, ast.Assign)
                 and any(isinstance(target, ast.Name) and target.id == "forms" for target in statement.targets)
             ]
-            # taking the first would compare one dictionary while another held the cases that ran
             if len(assigned) != 1:
                 raise AssertionError(f"{test_name} has {len(assigned)} `forms` dictionaries, expected one")
             for statement in assigned:
@@ -2272,8 +2143,6 @@ class TestEveryLeafOfAGroupIsReachable:
                 f"does_not_contain_error({wanted.__name__}) against contains_error"
             ).is_equal_to(not present)
 
-
-# --- the summary layers added last: a value walk, a grouping, and a static scan ------------------
 
 _LEAVES = st.one_of(
     st.integers(), st.floats(allow_nan=False), st.text(max_size=8), st.booleans(), st.none(), st.binary(max_size=8)

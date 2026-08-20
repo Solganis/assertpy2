@@ -34,7 +34,6 @@ NOT_ABOUT_A_TYPE = (
     "got an unexpected keyword argument",
     "missing 3 required positional arguments",
     "assertpy has no assertion",
-    # numpy and pandas refuse their own operands, in their own words, on a path the user opted into
     "could not be promoted",
     "unsupported operand type",
 )
@@ -104,12 +103,12 @@ def _refusals() -> list[tuple[str, str, int]]:
                     if not _bindable(method, args):
                         continue
                     with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")  # snapshot assertions write and warn about it
+                        warnings.simplefilter("ignore")
                         try:
                             getattr(assert_that(value), name)(*args)
                         except TypeError as exc:
                             found.append((name, str(exc), role))
-                        except Exception:  # every other outcome, a failing assertion included, is not the subject
+                        except Exception:
                             pass
     return found
 
@@ -198,7 +197,7 @@ class TestTheHelpersBehindTheShape:
 
         class AllControl:
             def __repr__(self) -> str:
-                return chr(0x1B) * 200  # the escape itself, not the text that spells it
+                return chr(0x1B) * 200
 
         with pytest.raises(TypeError) as failure:
             refuse(AllControl(), "a number")
@@ -297,7 +296,6 @@ class TestADiagnosticNeverReplacesSomebodyElsesError:
             call(self.BrokenOrder())
 
     def test_the_operand_that_simply_cannot_is_still_refused(self):
-        # the other half of the line: pass-through must not become "re-raise everything"
         with pytest.raises(TypeError, match=r"^val must be a sized object"):
             assert_that(42).is_length(3)
         with pytest.raises(TypeError, match=r"^given other arg must be comparable"):

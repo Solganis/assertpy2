@@ -97,8 +97,7 @@ def apply_inline_records() -> list[str]:
             source_newline = handle.newlines  # the file's own line ending, detected while reading
         for start, end, text in sorted(edits, reverse=True):
             content = content[:start] + text + content[end:]
-        # content is universal-newline-normalized (LF); re-expand to the file's original ending so an
-        # untouched CRLF file is not silently rewritten to LF (and an LF file stays LF)
+        # re-expanded to the file own ending so an untouched CRLF file is not silently rewritten to LF
         write_newline = source_newline if isinstance(source_newline, str) else "\n"
         with open(filename, "w", encoding="utf-8", newline=write_newline) as handle:
             handle.write(content)

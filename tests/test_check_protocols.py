@@ -190,8 +190,6 @@ def test_anything_landing_on_the_builder_reaches_its_own_check_rather_than_a_twi
     the same width rather than a new hole.
     """
     written = pathlib.Path(_typing.__file__).read_text(encoding="utf-8")
-    # both ways in, not only the pivot.  The comment named the pivot alone at first, and the umbrella
-    # path is the one a reader meets sooner: it is every dataclass and every non-`dict` mapping
     assert_that(written).described_as("the boundary has to be written where the declaration is").contains(
         "hands back `AssertionBuilder[_E]`", "capability umbrella claims"
     )

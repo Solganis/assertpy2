@@ -58,8 +58,6 @@ class _MixinBase:
             origin: str | None = ...,
         ) -> Self: ...
 
-        # WarningMixin (terminals dispatched from ExceptionMixin.when_called_with)
-
         def _when_called_with_warning(
             self, expected: type[Warning], *some_args: object, **some_kwargs: object
         ) -> Self: ...
@@ -67,8 +65,6 @@ class _MixinBase:
         def _when_called_with_not_warning(
             self, expected: type[Warning], *some_args: object, **some_kwargs: object
         ) -> Self: ...
-
-        # HelpersMixin
 
         def _fmt_items(self, items: object) -> str: ...
 
@@ -118,19 +114,15 @@ class _MixinBase:
         @staticmethod
         def _to_comparable_dict(obj: object) -> dict[str, object] | None: ...
 
-        # NumericMixin class attrs used by HelpersMixin._validate_between_args
         _NUMERIC_COMPAREABLE: frozenset[type]
         _NUMERIC_NON_COMPAREABLE: frozenset[type]
-
-        # Cross-mixin methods
 
         def contains(self, *items: object) -> Self: ...
 
         def does_not_contain(self, *items: object) -> Self: ...
 
-        # `Any`, not `object`: the real one is annotated per value type on the mixin that owns it
-        # (`str` there, `bytes` on the bytes protocol), and a wider declaration here would be an
-        # incompatible override of the narrower implementation
+        # `Any`, not `object`: the real one is annotated per value type, and a wider declaration here would be an
+        # incompatible override
         def starts_with(self, prefix: Any) -> Self: ...
 
         def is_equal_to(self, other: object, **kwargs: object) -> Self: ...

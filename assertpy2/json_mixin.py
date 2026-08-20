@@ -27,8 +27,7 @@ def _parsed_json_path(path: str):
     Bounded rather than unbounded: a path built from test data (``$.users[7].name``) is a fresh string
     each time, and an unbounded cache would grow with the suite.
     """
-    # the parser indexes the expression it is handed, so a non-string reaches it and comes back as
-    # "'int' object is not subscriptable": about jsonpath's own lexer, not about the call that was made
+    # the parser indexes what it is handed, so a non-string comes back as jsonpath's own lexer error
     require_type(path, str, "a string", subject=argument("path"))
     return _ensure_jsonpath_ng().parse(path)
 
@@ -66,7 +65,6 @@ def _openapi_nullable_to_null(node: Any, keyword: str = "nullable") -> Any:
         rewritten = {key: _openapi_nullable_to_null(value, keyword) for key, value in node.items()}
         nullable = rewritten.get(keyword)
         if not isinstance(nullable, bool):
-            # a non-boolean value is a property literally named that, not the OpenAPI nullable keyword
             return rewritten
         del rewritten[keyword]
         if not nullable:  # nullable: false - drop the keyword, add no null
@@ -134,14 +132,12 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
     response = responses[status_key]
     response_segments = ["paths", path, method_key, "responses", status_key]
     if isinstance(response, dict) and "$ref" in response:
-        # a Response Object may be a local $ref into components; resolve it and point at the target
         response, response_segments = _resolve_local_ref(spec, response["$ref"])
         if response is None:
             raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> has an unresolvable $ref.")
     if str(spec.get("swagger", "")).startswith("2"):
-        # Swagger 2.0 puts the response-body schema directly under the response, with no content-type
-        # layer, and lists the media types in `produces` instead. Check that list so a content_type the
-        # operation does not produce is rejected here, exactly as the 3.x content lookup rejects it.
+        # Swagger 2.0 lists the media types in `produces` instead, so that list is checked the way the 3.x content
+        # lookup does
         produces = operation.get("produces") or spec.get("produces")
         if produces and content_type not in produces:
             raise ValueError(
@@ -206,8 +202,7 @@ class JsonMixin(_MixinBase):
             ValueError: if no match is found at the given path
         """
         expr = _parsed_json_path(path)
-        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
-        # subscriptable", which is about its own indexing rather than about the value under assertion
+        # handed a scalar, jsonpath answers about its own indexing rather than about the value under assertion
         require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if not matches:
@@ -235,8 +230,7 @@ class JsonMixin(_MixinBase):
             AssertionError: if the path does not exist
         """
         expr = _parsed_json_path(path)
-        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
-        # subscriptable", which is about its own indexing rather than about the value under assertion
+        # handed a scalar, jsonpath answers about its own indexing rather than about the value under assertion
         require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if not matches:
@@ -262,8 +256,7 @@ class JsonMixin(_MixinBase):
             AssertionError: if the path exists
         """
         expr = _parsed_json_path(path)
-        # a JSON path walks a decoded document. Handed a scalar, jsonpath answers "'int' object is not
-        # subscriptable", which is about its own indexing rather than about the value under assertion
+        # handed a scalar, jsonpath answers about its own indexing rather than about the value under assertion
         require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if matches:
@@ -298,9 +291,7 @@ class JsonMixin(_MixinBase):
             )
             jsonschema_mod.validate(self.val, schema)
         except jsonschema_mod.ValidationError as exc:
-            # carry the path ourselves: it is the only part of jsonschema's own text the message does
-            # not already have, and without it the caught error has to stay in the traceback to say
-            # which field failed
+            # the path is the only part of jsonschema's text the message does not already have
             return self.error(
                 f"Expected val to match JSON schema, but validation failed at {exc.json_path}: {exc.message}",
                 suppress_context=True,

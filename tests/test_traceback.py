@@ -15,11 +15,9 @@ def test_traceback():
         assert_that(ex).is_instance_of(AssertionError)
         assert_that(ex).is_instance_of(AssertionFailure)
 
-        # extract all stack frames from the traceback
         _, _, tb = sys.exc_info()
         assert_that(tb).is_not_none()
 
-        # walk_tb added in 3.5
         if sys.version_info[0] == 3 and sys.version_info[1] >= 5:
             frames = [
                 (frame.f_code.co_filename, frame.f_code.co_name, lineno) for frame, lineno in traceback.walk_tb(tb)
@@ -29,7 +27,7 @@ def test_traceback():
 
             assert_that(frames[0][0]).ends_with("test_traceback.py")
             assert_that(frames[0][1]).is_equal_to("test_traceback")
-            assert_that(frames[0][2]).is_equal_to(11)  # the assert_that line above, pinned by number
+            assert_that(frames[0][2]).is_equal_to(11)
 
             assert_that(frames[1][0]).ends_with("base.py")
             assert_that(frames[1][1]).is_equal_to("is_equal_to")

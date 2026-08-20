@@ -12,7 +12,6 @@ from __future__ import annotations
 from collections.abc import Sized
 from typing import cast
 
-# the built-in containers, which carry a length without any protocol lookup
 _SIZED = frozenset({list, tuple, dict, str, bytes, set, frozenset, bytearray})
 
 
@@ -25,8 +24,8 @@ def length_of(value: object) -> int | None:
     Python frame being pushed, which a `__len__` implemented in C does not do.
     """
     if type(value) in _SIZED:
-        # fast path for the builtins: `isinstance` against an ABC is the whole cost of this function,
-        # and it was paid per element on the extraction path. The cast says what the frozenset checked
+        # `isinstance` against an ABC is the whole cost of this function, and it was paid per element on the
+        # extraction path
         return len(cast("Sized", value))
     if not isinstance(value, Sized):
         return None

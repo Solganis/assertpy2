@@ -116,7 +116,6 @@ def test_expected_exception_arg_passing():
     )
 
 
-# helpers
 def func_noop(*args, **kwargs):
     pass
 
@@ -272,7 +271,7 @@ def _raise_suppressed():
     try:
         raise ZeroDivisionError
     except ZeroDivisionError:
-        raise ValueError("clean") from None  # suppresses the chained context
+        raise ValueError("clean") from None
 
 
 def _raise_deep_chain():
@@ -339,7 +338,6 @@ class TestCausedBy:
         assert_that(str(exc_info.value)).contains("to be caused by <TypeError>")
 
     def test_pivot_carries_the_cause_object(self):
-        # after caused_by, raised() hands back the cause object itself, so the chain can walk deeper
         chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(KeyError)
         chain.raised().is_instance_of(KeyError)
 
@@ -374,7 +372,7 @@ class TestHasRootCause:
         first = ValueError("a")
         second = KeyError("b")
         first.__cause__ = second
-        second.__cause__ = first  # a cycle the walk must not loop on
+        second.__cause__ = first
 
         def raise_cyclic():
             raise first
@@ -387,7 +385,7 @@ class TestHasRootCause:
         tail = TypeError("tail")
         head.__cause__ = mid
         mid.__cause__ = tail
-        tail.__cause__ = mid  # a mid<->tail cycle that never returns to the head
+        tail.__cause__ = mid
 
         def raise_head():
             raise head
@@ -435,7 +433,6 @@ class TestGroupPivots:
 
     def test_errors_flattens_nesting(self):
         caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
-        # the inner group is walked through rather than handed over, so what comes back is two leaves
         assert_that([type(leaf) for leaf in caught.errors().value]).is_equal_to([ValueError, TypeError])
         caught.errors().extracting("args").is_equal_to([("v",), ("deep",)])
 
@@ -513,8 +510,6 @@ class TestGroupPivots:
             caught.does_not_contain_error()
 
     def test_a_deeply_nested_group_is_still_answered(self):
-        # `subgroup()` is written in C and walks a group thousands deep; the walk that replaced it has to
-        # hold the same ground, and a recursive one gave up around five hundred
         group = _ExceptionGroup("leaf", [ValueError("v")])
         for _ in range(3000):
             group = _ExceptionGroup("outer", [group])
@@ -528,8 +523,6 @@ class TestGroupPivots:
         caught.errors().is_length(1)
 
     def test_a_group_that_lies_about_its_own_members_is_answered_the_same_way(self):
-        # `subgroup()` is a method a subclass can override, and two of the three used to trust it while
-        # `error_of` walked the tree. One shared walk is what keeps the verdicts from splitting.
         class _LyingGroup(_ExceptionGroup):
             def subgroup(self, condition):
                 return None
@@ -545,19 +538,15 @@ class TestGroupPivots:
 
     @pytest.mark.parametrize("wrong", [str, 42, ValueError("instance"), (TypeError, KeyError)])
     def test_anything_but_an_exception_type_is_refused(self, wrong):
-        # `isinstance(node, str)` answers False rather than complaining, so without this the mistake
-        # would read as a verdict about the group. A tuple is refused too: the declared type is one class
         caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
         for call in (caught.contains_error, caught.does_not_contain_error, caught.error_of):
             with pytest.raises(TypeError, match="must be an exception type"):
                 call(wrong)
 
     def test_a_group_type_reaches_the_group_itself_from_every_form(self):
-        # `subgroup()` matches group nodes as well as leaves, so `error_of` walks the same nodes: the
-        # three used to disagree here, with `contains_error` passing and `error_of` reporting a miss
         caught = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
         caught.contains_error(_ExceptionGroup)
-        caught.error_of(_ExceptionGroup).contains("boom")  # str() of a group adds its sub-exception count
+        caught.error_of(_ExceptionGroup).contains("boom")
         with pytest.raises(AssertionError):
             caught.does_not_contain_error(_ExceptionGroup)
 
@@ -568,12 +557,9 @@ class TestGroupPivots:
             raise _ExceptionGroup("boom", [_ExceptionGroup("inner", [first]), second])
 
         caught = assert_that(raise_two).raises(_ExceptionGroup).when_called_with()
-        # depth-first, so the nested one comes before the sibling that follows its group
         assert caught.error_of(ValueError).raised().value is first
 
     def test_a_bare_base_exception_is_a_leaf_like_any_other(self):
-        # `errors()` is typed `list[BaseException]` rather than `list[Exception]`, which is what a
-        # cancelled task group hands over: KeyboardInterrupt and SystemExit are not Exceptions
         def raise_base():
             raise _BaseExceptionGroup("cancelled", [KeyboardInterrupt(), ValueError("v")])
 
@@ -583,8 +569,6 @@ class TestGroupPivots:
         caught.error_of(KeyboardInterrupt).raised().is_instance_of(KeyboardInterrupt)
 
     def test_soft_keeps_chaining_after_a_pivot_on_a_plain_exception(self):
-        # under soft assertions `error()` collects instead of raising, so each pivot has to hand back
-        # something chainable: the inert builder, which records the first failure and swallows the rest
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(_raise_config).raises(_ConfigError).when_called_with().error_of(ValueError).contains("nope")
             assert_that(_raise_config).raises(_ConfigError).when_called_with().does_not_contain_error(ValueError)
@@ -592,7 +576,6 @@ class TestGroupPivots:
 
 
 def test_raises_partial_without_name_fails_cleanly():
-    # a callable lacking __name__ (functools.partial) must fail cleanly, not raise AttributeError
     def boom(x):
         if x > 5:
             raise ValueError("big")

@@ -50,17 +50,13 @@ def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
     inner = _seen | {id(value)}
     if isinstance(value, dict):
         pairs = (_framed(_canonical(k, inner)) + _framed(_canonical(v, inner)) for k, v in value.items())
-        # sorted for every mapping but `OrderedDict`, the one whose own `==` reads order, where sorting
-        # turned a real transition into "value unchanged".  `isinstance`, since a subclass inherits it
+        # sorted for every mapping but `OrderedDict`, the one whose own `==` reads order
         return "o" + "".join(pairs) if isinstance(value, OrderedDict) else "d" + "".join(sorted(pairs))
     if isinstance(value, (set, frozenset)):
         return "s" + "".join(sorted(_framed(_canonical(member, inner)) for member in value))
     if isinstance(value, tuple):
         return "t" + "".join(_framed(_canonical(member, inner)) for member in value)
     if isinstance(value, list):
-        # the tag is redundant for a list once every part carries its length, and it stays for the shape:
-        # each branch reads the same way, and a rendering nobody can parse is easier to trust when it is
-        # written the same everywhere
         return "l" + "".join(_framed(_canonical(member, inner)) for member in value)
     return "v" + _framed(repr(value))
 
@@ -91,8 +87,7 @@ def _change_key(value: object) -> str | None:
     return hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=16).hexdigest()
 
 
-# one call recorded on a polling chain, as (name, args, kwargs); `None` args mark a step that was
-# read rather than called, which is `not_`
+# `None` args mark a step that was read rather than called, which is `not_`
 _Step = tuple[str, "tuple | None", "dict | None"]
 
 
@@ -120,20 +115,16 @@ class _PollRecorder:
         self._head: list[PollSample] = []
         self._head_limit = head
         self._tail: deque[PollSample] = deque(maxlen=tail)
-        # the change key of each retained sample, pushed and dropped in lockstep with it. The samples
-        # themselves hold the cut snapshot, and reading recurrence off that called five distinct
-        # hundred-item lists a cycle between two states, which tells a reader to stop waiting
+        # reading recurrence off the cut snapshots instead called five distinct hundred-item lists a cycle
         self._head_keys: list[str | None] = []
         self._tail_keys: deque[str | None] = deque(maxlen=tail)
         self.dropped = 0
         self.total_polls = 0
-        # counted as it happens, since the window keeps 25 samples: a new value on each of 1337 polls
-        # was summarised as "value changed 24 times".  What the summary reads off the samples is shape
+        # counted as it happens: the window keeps 25 samples, so a value new on each of 1337 polls read as 24
         self.fail_polls = 0
         self.error_polls = 0
         self.value_changes = 0
-        # the same count since the last raising poll, because "value *then* changed" is a claim about
-        # what happened after the probe recovered, and a run-wide total answers a different question
+        # since the last raising poll, because "value then changed" is a claim about what followed the recovery
         self.changes_after_last_error = 0
         self.uncomparable = False
         self.last_change_elapsed: float | None = None
@@ -148,9 +139,7 @@ class _PollRecorder:
         key = None
         if outcome == "fail":
             self.fail_polls += 1
-            # against the last value a poll *returned*, not against the previous poll: a probe that
-            # raises in between still moved from A to B, and comparing neighbours called that unchanged.
-            # Keyed off the raw value where the caller has one, since the sample it keeps is cut
+            # against the last value a poll returned: a probe that raises in between still moved from A to B
             key = _change_key(value if raw is _PROBE_UNSET else raw)
             if key is None:
                 self.uncomparable = True
@@ -163,8 +152,7 @@ class _PollRecorder:
         else:  # the only other outcome is "error"
             self.error_polls += 1
             self.changes_after_last_error = 0
-            # two fields rather than a set, which would be the one thing here that grows with the run.
-            # The class itself, by identity: two classes can share a `__name__`
+            # the class itself, by identity: two classes can share a `__name__`
             if error_type is not None:
                 if self.error_type is None:
                     self.error_type = error_type
@@ -172,8 +160,7 @@ class _PollRecorder:
                     self.mixed_error_types = True
         last = self._tail[-1] if self._tail else (self._head[-1] if self._head else None)
         last_key = self._tail_keys[-1] if self._tail_keys else (self._head_keys[-1] if self._head_keys else None)
-        # "identical consecutive polls" is decided by the key where there is one, not by the snapshot:
-        # two polls whose values differ past the cut are two polls, and collapsing them lost that
+        # decided by the key: two polls whose values differ past the cut are two polls
         same_value = (
             key == last_key and key is not None if outcome == "fail" else last is not None and last.value == value
         )
@@ -223,23 +210,19 @@ def _summarize(samples, recorder, elapsed) -> str:
     if recorder.error_polls:
         poll_word = "poll" if recorder.error_polls == 1 else "polls"
         since = recorder.changes_after_last_error
-        # "then" is a claim about what followed the last raising poll, and the run-wide total counts
-        # movement that happened before it as well
+        # the run-wide total counts movement from before the last raising poll as well
         if recorder.uncomparable:
             trend = "value could not be compared"
         elif since:
             trend = f"value then changed {since} {'time' if since == 1 else 'times'}"
         else:
             trend = "value then never changed"
-        # "recovered" is a claim about order, and the count is a total: a probe that raised, returned a
-        # value and raised again ended raising, whatever the totals say
+        # "recovered" is a claim about order, and a probe that raised, returned and raised again ended raising
         if recorder.last_outcome == "fail":
             return f"probe recovered after {recorder.error_polls} raising {poll_word}; {trend}"
         return f"probe raised on {recorder.error_polls} of {total_polls} polls; {trend}"
     if recorder.uncomparable:
-        # a probe whose values cannot be rendered at all: any count of movement would be one this
-        # recorder never took.  Reached only where every poll returned, since a run with raising polls is
-        # answered above, and the clause there carries the same admission
+        # no count of movement would be one this recorder took.  Reached only where every poll returned
         return f"value could not be compared across {total_polls} polls"
     if not recorder.value_changes:
         return f"value unchanged across {total_polls} polls"
@@ -248,15 +231,14 @@ def _summarize(samples, recorder, elapsed) -> str:
     keys = [key for _, key in kept]
     kept_changes = [right for left, right in pairwise(keys) if left != right]
     distinct = {key for key in keys if key is not None}
-    # a simple path through k values takes k-1 changes, so a surplus means the probe returned to a
-    # value it already reported.  Read off the retained samples, so the sentence says which polls
+    # a simple path through k values takes k-1 changes, so a surplus means the probe returned to a value it already
+    # reported
     if len(kept_changes) >= len(distinct):
         kept_polls = sum(sample.repeats for sample in fails)
         over = f"in the {kept_polls} polls kept" if recorder.dropped else f"across {total_polls} polls"
         return f"value cycles between {len(distinct)} states {over}"
-    # recorded when it happened rather than read back off the retained samples.  Those two agree today,
-    # because a collapsed run keeps the elapsed of its first poll and the newest change is always in the
-    # tail, but the agreement rests on both of those and neither is what this sentence is about
+    # recorded when it happened rather than read back off the retained samples, which agree today for two reasons
+    # neither of which this sentence is about
     last_change = elapsed - (recorder.last_change_elapsed or 0.0)
     return f"value changed {recorder.value_changes} {change_word}; last change {last_change:.1f}s before the deadline"
 
@@ -272,8 +254,7 @@ def _last_failure_text(exc: BaseException) -> str:
     if isinstance(exc, AssertionFailure):
         # our own class, and the only undecorated form of its message
         return exc._message
-    # total on both paths: an ignored exception is one the caller asked to retry past, and reading its
-    # `__repr__` is running their code. One that raised escaped the poll instead of being retried
+    # reading an ignored exception's `__repr__` is running the caller's code, and one that raised escaped the poll
     return _safe_str(exc) if isinstance(exc, AssertionError) else _safe_repr(exc)
 
 
@@ -488,13 +469,11 @@ class AsyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: `not_` hands back a builder and every other name a
-        # callable, and a checker reading that union refused `eventually().is_equal_to(1)` outright
+        # `Any` rather than the inferred union: a checker reading it refused `eventually().is_equal_to(1)` outright
         if name.startswith("_"):
             raise AttributeError(name)
-        # forwarded whole rather than answered name by name: `inspect.getcoroutinestate` reads
-        # `cr_suspended` on 3.11 and `cr_state` on 3.14, and a chain answering only the names known
-        # here reports a state it is not in.  `gi_` refuses: a coroutine has no generator attributes
+        # forwarded whole: `inspect.getcoroutinestate` reads `cr_suspended` on 3.11 and `cr_state` on 3.14, and `gi_`
+        # is refused because a coroutine has no generator attributes
         if name.startswith("gi_"):
             raise AttributeError(name)
         if name.startswith("cr_"):
@@ -538,9 +517,7 @@ class AsyncAssertionBuilder:
         return self._started().__await__()
 
     # these three with `__await__` are what `collections.abc.Coroutine` checks for structurally, so
-    # `asyncio.iscoroutine` says yes and `asyncio.run(chain)` works below 3.15, where it takes nothing
-    # else.  A base class of that name would add nothing: the hook is what answers, and the call site
-    # reads `Any` either way
+    # `asyncio.run(chain)` works below 3.15
     def send(self, value: Any) -> Any:
         return self._started().send(value)
 
@@ -555,8 +532,7 @@ class AsyncAssertionBuilder:
     def __del__(self) -> None:
         """Warn about a chain built and never awaited: only its end is awaited, so only its end warns."""
         coro = getattr(self, "_coro", None)  # a construction that raised leaves none of these fields
-        # asked of the coroutine rather than tracked by a flag: `__await__()` can be called and its
-        # iterator dropped, which took responsibility for a poll that then never ran
+        # asked of the coroutine rather than tracked by a flag: `__await__()` can be called and its iterator dropped
         unstarted = False
         if coro is not None and inspect.getcoroutinestate(coro) == inspect.CORO_CREATED:
             coro.close()  # or Python warns about it too, naming this module rather than the chain
@@ -574,9 +550,9 @@ class AsyncAssertionBuilder:
         )
 
     async def _poll(self) -> Any:
-        # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms import,
-        # dragging in socket/ssl/select, and only the async polling path needs it. Anyone reaching this
-        # line is already inside a running loop, so it is a dict lookup.
+        # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms import and drags in
+        # socket/ssl/select, and only the async polling path needs it.  Anyone reaching this line is inside a running
+        # loop, so it is a dict lookup
         import asyncio
 
         loop = asyncio.get_running_loop()
@@ -593,8 +569,7 @@ class AsyncAssertionBuilder:
                 probed = val
                 builder = _replay(self._builder_func, val, self._description, self._steps)
                 if _COLLECT_RETRIES and recorder is not None and recorder.total_polls:
-                    # it passed, but not on the first look: a probe that only converges after retrying
-                    # is the one that goes flaky in CI
+                    # a probe that only converges after retrying is the one that goes flaky in CI
                     _RETRIES.append((recorder.total_polls + 1, loop.time() - start, self._timeout))
                 return builder
             except (
@@ -710,16 +685,15 @@ class SyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: `not_` hands back a builder and every other name a
-        # callable, and a checker reading that union refused `eventually_sync().is_equal_to(1)` outright
+        # `Any` rather than the inferred union: a checker reading it refused `eventually_sync().is_equal_to(1)`
+        # outright
         if name.startswith("_"):
             raise AttributeError(name)
         if name == "val":  # reached only when the property above found no poll to read it from
             raise AttributeError("val is available once an assertion on this chain has passed")
         if name == "not_":
-            # a property on the builder rather than a call, so there is nothing to poll for yet: it
-            # joins the chain and is re-taken on every poll.  Read straight through, it used to hand
-            # back this method's inner function, and `.not_.is_equal_to(1)` died on an AttributeError
+            # a property rather than a call, so it joins the chain and is re-taken on every poll: read straight
+            # through, `.not_.is_equal_to(1)` died on an AttributeError
             return self._chained((*self._steps, (name, None, None)))
 
         def _run(*args, **kwargs):

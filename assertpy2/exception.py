@@ -48,7 +48,6 @@ def _require_exception_type(ex: object) -> type[BaseException]:
     """
     if not (isinstance(ex, type) and issubclass(ex, BaseException)):
         refuse(ex, "an exception type", subject=argument("exception"))
-    # handed back so the caller keeps the narrowing, the way `_engine._require.require_type` does
     return ex
 
 

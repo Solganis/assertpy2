@@ -168,7 +168,6 @@ class TestStructuredPayloadOfTheSatisfiesFamily:
         assert_that(entries).is_equal_to([("[1]", -2, "a positive value")])
 
     def test_any_satisfy_lists_every_item_that_missed(self):
-        # nothing matched, so each item is a candidate and each gets an entry
         actual, expected, _kind, entries = self._payload(
             lambda: assert_that([1, 2, 3]).any_satisfy(match.greater_than(10))
         )
@@ -282,7 +281,6 @@ class TestFailureMessagesDescribeTheRightThing:
     def test_each_with_a_callable_names_the_index_and_the_item(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, -2]).each(lambda item: item > 0)
-        # the predicate too: without it the reader is told an item failed and not what it failed
         assert_that(str(exc_info.value)).contains("index 1", "<-2>", "a lambda predicate")
 
     def test_none_satisfy_with_a_callable_names_the_predicate(self):

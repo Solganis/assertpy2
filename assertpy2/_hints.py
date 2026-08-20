@@ -98,9 +98,8 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
     return "unparsed JSON text"
 
 
-# Ordered: the first sufficient explanation is the one named, so the narrower claim goes first.  Two
-# rules for anything added here: a step explains a pair only if the pair differed *before* it ran
-# (`_explains`), and a step here outranks `_typed`, which is why that ladder runs after this one.
+# ordered, so the narrower claim goes first.  A step explains a pair only if the pair differed before it ran, and a
+# step here outranks `_typed`
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),
@@ -185,32 +184,25 @@ def diagnose(
     """
     if diff is None or diff.kind not in _VALUE_KINDS:
         return None
-    # before anything about the values, and for the same reason as the NaN fact below: when a type
-    # leaves equality to identity, nothing the other side held could have made the comparison pass, so
-    # a line about how the two differ would send the reader to fix something that will not help.
-    #
-    # Asked of the two values the assertion compared, never of a pair inside the diff. What decided a
-    # nested pair is the enclosing type's own `__eq__`, which may be anything at all, so a difference
-    # found under one says nothing about why the comparison above it failed
+    # before anything about the values: when a type leaves equality to identity, no value the other side held could
+    # have made it pass.  Asked of the two values compared, never of a pair inside the diff
     if identity:
         return _IDENTITY_FACT
     if not diff.entries:
         return None
     entries = diff.entries
 
-    # one flat pass rather than four comprehensions: this is the only part of the layer whose cost
-    # grows with the entry count, and `value != value` keeps two calls per entry out of the loop
+    # one flat pass: this is the only part whose cost grows with the entry count
     pairs: list[tuple[object, object]] = []
     absent_seen = False
     absent_expected_only = True
     positional = True
     for entry in entries:
         left, right = entry.actual, entry.expected
-        # isinstance first on purpose: `value != value` on a user object calls its ``__ne__``, and one
-        # that raises would take the whole failure down with it
+        # isinstance first: `value != value` on a user object calls its `__ne__`, and one that raises would take the
+        # failure down
         if (isinstance(left, float) and left != left) or (isinstance(right, float) and right != right):
-            # regardless of what else differs: with a NaN in the comparison there is no value the
-            # other side could hold that would make it pass, so it is what to fix before anything else
+            # with a NaN in the comparison no other value would make it pass, so it comes before anything else
             return _NAN_FACT
         absent = entry.absent
         if absent is None:
@@ -220,21 +212,18 @@ def diagnose(
             absent_seen = True
             if absent != "expected":
                 absent_expected_only = False
-        # a step, not the rendered text: a mapping key that happens to end in a bracket used to read
-        # as an index here, and the whole hint turns on whether every difference is positional
+        # a step and not the rendered text: a mapping key ending in a bracket used to read as an index
         if positional and not (entry.steps and entry.steps[-1].kind == "index"):
             positional = False
 
     if diff.kind == "string":
-        # the whole strings, not the entries: `splitlines()` folds "\r\n" into "\n", so a text that
-        # differs in both its endings and one line yields an entry for the line alone
+        # the whole strings: `splitlines()` folds "  " into " ", so a text differing in both yields an entry for the
+        # line alone
         if not isinstance(actual, (str, bytes)) or not isinstance(expected, (str, bytes)):
             return None
         return _named([(actual, expected)])
 
-    # keys on the left that the right does not have at all, and nothing else. restricted to plain
-    # mappings because that is where "key" is the right word: a sequence reports its extras the same
-    # way, and telling someone their list carries extra keys helps nobody
+    # restricted to plain mappings, since telling someone their list carries extra keys helps nobody
     if diff.kind == "dict" and absent_seen and absent_expected_only:
         return "every shared key matches, and actual carries keys the expected side does not"
 
@@ -242,8 +231,7 @@ def diagnose(
     if absent_seen:
         return None
 
-    # a DTO against the payload it was built from: the fields all agree and only the wrapper differs.
-    # said before the leaf steps because it explains the shape, which is the narrower claim
+    # a DTO against the payload it was built from, said before the leaf steps because the shape is the narrower claim
     if all(type(left) is not type(right) and _fields_match(left, right) for left, right in pairs):
         return "the contents match field for field, and only the type of the two sides differs"
 
@@ -251,15 +239,12 @@ def diagnose(
     if named is not None:
         return named
 
-    # after the ladder, not before it: a step that resolves the pairs has named the *encoding* they
-    # differ in, which is the narrower claim.  `[1, 2]` against `"[1, 2]"` is JSON text and reads
-    # better as that than as a bare difference of types
+    # after the ladder: a step that resolves the pairs has named the encoding they differ in, which is narrower
     typed = _typed(pairs, diff.kind)
     if typed is not None:
         return typed
 
-    # last, because it is the broadest thing that can be said and the easiest to reach by accident.
-    # one differing value can never be a rearrangement, which also keeps the sort off the common case
+    # last, as the broadest thing that can be said; one differing value can never be a rearrangement
     if len(pairs) >= 2 and positional and _same_values(pairs):
         return "both sides hold the same elements, in a different order"
     return None
@@ -319,15 +304,13 @@ def identity_candidate(left: object, right: object) -> bool:
         # one object against itself is equal under identity too, so a failure can never be about that
         if left is right or klass is not type(right):
             return False
-        # a cheap look first, so the ordinary case - a type that does define equality - pays only for
-        # this and stops here
+        # a cheap look first, so a type that does define equality pays only for this
         if type.__getattribute__(klass, "__eq__") is not object.__eq__:
             return False
         return _defined_as(klass, "__eq__") and _defined_as(klass, "__ne__")
     except Exception:  # pragma: no cover - no input is known to reach it, see below
-        # every lookup above walks the class tree itself and runs none of the type's own code, so
-        # nothing here is known to raise. The guard stays because this runs on the way to a failure, and
-        # the cost of being wrong about that is the reader losing the failure itself
+        # every lookup above walks the class tree and runs none of the type's own code, and the guard stays because
+        # this runs on the way to a failure
         return False
 
 
@@ -370,7 +353,7 @@ def _named(pairs: Sequence[tuple[object, object]]) -> str | None:
     for step, label in _STEPS:
         if _explains(pairs, (step,)):
             return f"every difference here is one of {_worded(label, pairs)}"
-    # only now pairs of steps: `"a\r\n "` against `"a\n"` needs both, and neither alone equalises it
+    # only now pairs of steps: `"a   "` against `"a "` needs both, and neither alone equalises it
     for index, (first_step, first_label) in enumerate(_STEPS):
         for second_step, second_label in _STEPS[index + 1 :]:
             if _explains(pairs, (first_step, second_step)):

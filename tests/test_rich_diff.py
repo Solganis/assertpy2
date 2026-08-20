@@ -95,7 +95,6 @@ class TestBuildEqualityDiffSequence:
 
 class TestBuildEqualityDiffSet:
     def test_a_set_against_a_non_set_is_a_scalar_difference(self):
-        # the membership diff needs two sets: reaching it with one turns the failure into a TypeError
         with pytest.raises(AssertionError):
             assert_that({1, 2}).is_equal_to([1, 2])
         assert_that(_build_equality_diff({1, 2}, [1, 2]).kind).is_equal_to("scalar")
@@ -171,8 +170,8 @@ class TestBuildEqualityDiffString:
         assert_that(result.entries[0].expected).is_equal_to("b")
 
     def test_str_subclass_against_plain_str(self):
-        # StrEnum members are str subclasses and get compared to plain strings constantly, so the text
-        # path must not turn on an exact type match
+        # StrEnum members are str subclasses compared to plain strings constantly, so the text path must not turn on
+        # an exact type match
         class _Tag(str):
             pass
 
@@ -387,7 +386,6 @@ class TestContainsDiff:
         assert_that([entry.expected for entry in exc.diff.entries if entry.path == "missing"]).is_equal_to(["c"])
 
     def test_contains_only_keeps_the_single_fault_wording(self):
-        # the compat guard: only the both-at-once case may change how the message reads
         with pytest.raises(AssertionError) as extra_info:
             assert_that(["a", "b", "x"]).contains_only("a", "b")
         assert_that(str(extra_info.value)).ends_with("to contain only <'a', 'b'>, but did contain <x>.")
@@ -407,13 +405,11 @@ class TestContainsDiff:
         assert_that(exc.diff.entries[0].expected).is_equal_to(3)
 
     def test_contains_exactly_order_only_skips_the_matching_prefix(self):
-        # the first index is the one worth naming, not index 0 by default
         with pytest.raises(AssertionError) as exc_info:
             assert_that(["GET", "POST", "PUT"]).contains_exactly("GET", "PUT", "POST")
         assert_that(str(exc_info.value)).contains("the order differs at index 1.")
 
     def test_contains_exactly_wrong_items_still_reports_extra_and_missing(self):
-        # the guard: only an equal multiset may take the ordering path
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_exactly(1, 2, 4)
         exc = exc_info.value
@@ -500,26 +496,24 @@ class TestListMessageCollapse:
 
     def test_self_referential_list_is_guarded(self):
         circular = [1]
-        circular.append(circular)  # a list containing itself
+        circular.append(circular)
         with pytest.raises(AssertionError) as exc:
             assert_that({"x": circular}).is_equal_to({"x": [1, [99]]})
         assert_that(str(exc.value)).contains("<circular ref>")
 
     def test_list_versus_dict_at_same_key_renders_without_crash(self):
-        # a list on one side and a mapping on the other at the same key must not be routed through the
-        # list collapser (which would index the mapping by position and raise); it renders as a plain leaf
+        # a list on one side and a mapping on the other must not be routed through the list collapser, which would
+        # index the mapping by position
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1, 2]}).is_equal_to({"a": {"x": 1}})
         assert_that(str(exc.value)).contains("'a': [1, 2]")
 
     def test_fully_differing_list_has_no_ellipsis(self):
-        # nothing collapses (every element differs) -> no ".." prefix should be added
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1, 2]}).is_equal_to({"a": [9, 8]})
         assert_that(str(exc.value)).contains("'a': [1, 2]").does_not_contain("..")
 
     def test_multiple_extra_elements_are_all_shown(self):
-        # more than one trailing element beyond the counterpart's length -> all of them shown, not just the first
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1, 2, 3, 4]}).is_equal_to({"a": [1, 2]})
         assert_that(str(exc.value)).contains("[.., 3, 4]")
@@ -557,7 +551,7 @@ class TestStringDiffCarets:
         output = _format_diff(diff)
         assert_that(output).contains("- the quick fox")
         assert_that(output).contains("+ the quick cat")
-        assert_that(output).contains("^")  # the ndiff caret guide row
+        assert_that(output).contains("^")
 
     def test_long_lines_are_windowed(self):
         diff = DiffResult(
@@ -569,8 +563,7 @@ class TestStringDiffCarets:
         assert_that(max(len(line) for line in output.splitlines())).is_less_than(200)
 
     def test_the_window_marks_a_cut_head_with_an_ellipsis(self):
-        # contains("...") alone is satisfied by the tail marker, so the head was free to render as
-        # anything at all, including the literal "None"
+        # `contains("...")` alone is satisfied by the tail marker, so the head was free to render as anything
         diff = DiffResult(
             kind="string",
             entries=[DiffEntry(path="line 1", actual="x" * 300 + "a", expected="x" * 300 + "b")],
@@ -582,8 +575,8 @@ class TestStringDiffCarets:
                 assert_that(line.strip()[2:]).starts_with("...")
 
     def test_a_line_that_is_a_prefix_of_the_other(self):
-        # no index of the shared prefix differs, so the search for the first change finds nothing; the
-        # sentinel it falls back to has to be a position, since the window arithmetic subtracts from it
+        # no index of the shared prefix differs, so the sentinel has to be a position: the window arithmetic
+        # subtracts from it
         diff = DiffResult(
             kind="string",
             entries=[DiffEntry(path="line 1", actual="x" * 300, expected="x" * 100)],
@@ -592,8 +585,7 @@ class TestStringDiffCarets:
         assert_that(output).contains("- ").contains("+ ")
 
     def test_a_change_deep_inside_a_long_line_keeps_its_carets(self):
-        # a plain prefix cut would show 300 identical characters and hide the only difference; the
-        # window centres on it, and bounding ndiff's input is what lets the carets survive the length
+        # a plain prefix cut would show 300 identical characters and hide the difference
         diff = DiffResult(
             kind="string",
             entries=[
@@ -615,9 +607,8 @@ class TestStringDiffCarets:
         assert_that(len(_format_diff(diff))).is_less_than(25_000)
 
     def test_many_long_entries_hit_the_block_budget(self):
-        # Sixty rows, and the entry cap lifted so the byte budget is what has to stop it.  A text leaf
-        # is now windowed around its difference rather than cut at 400 characters from the start, so
-        # rows are shorter than they were and it takes more of them to reach the same ceiling.
+        # the entry cap is lifted so the byte budget is what stops it, and a windowed text leaf makes rows shorter
+        # than they were
         diff = DiffResult(
             kind="sequence",
             entries=[DiffEntry(path=f"[{i}]", actual="a" * 5_000, expected="b" * 5_000) for i in range(60)],
@@ -627,8 +618,7 @@ class TestStringDiffCarets:
         assert_that(output).contains("more diff lines")
 
     def test_the_block_budget_counts_one_separator_per_line(self):
-        # the existing case is far past the limit, so charging each row an extra character changed
-        # nothing there; sized to sit just under it, the miscount is what decides elision
+        # sized to sit just under the limit, where the miscount is what decides elision
         entries = [DiffEntry(path=f"[{index}]", actual="a" * 90, expected="b" * 90) for index in range(97)]
         output = _format_diff(DiffResult(kind="sequence", entries=entries), max_entries=0)
         assert_that(output).does_not_contain("more diff lines")
@@ -1137,7 +1127,6 @@ class TestModelDumpDiff:
 
 class TestSubDiffNamedtupleCoverage:
     def test_a_namedtuple_against_a_plain_tuple_is_diffed_as_a_sequence(self):
-        # only two namedtuples read as fields; against a plain tuple the pair stays positional
         Point = namedtuple("Point", "x y")
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"p": Point(1, 2)}).is_equal_to({"p": (1, 9)})
@@ -1195,15 +1184,14 @@ class TestBuildEqualityDiffCircularRef:
         assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
 
     def test_a_circular_entry_keeps_both_sides(self):
-        # only .actual was ever asserted, so dropping the expected side rendered the row as a pure
-        # deletion and shipped "expected": null into the Allure attachment
+        # dropping the expected side rendered the row as a pure deletion and shipped "expected": null into the Allure
+        # attachment
         mapping = {"x": 1}
         entry = _build_equality_diff(mapping, mapping, _seen={id(mapping)}).entries[0]
         assert_that(entry.actual).is_equal_to("<circular ref>")
         assert_that(entry.expected).is_equal_to("<circular ref>")
 
     def test_a_nested_circular_entry_keeps_both_sides(self):
-        # the nested walk has its own cycle guard, and it was pinned by nothing at all
         circular = [1]
         circular.append(circular)
         entries = _sub_diff_entries(circular, circular, _Path("x"), _seen={id(circular)})
@@ -1217,7 +1205,6 @@ class TestBuildEqualityDiffCircularRef:
         assert_that(result.entries).is_length(1)
 
     def test_one_side_already_seen_is_enough(self):
-        # the pair is checked side by side: the counterpart of a repeat is a value nothing has seen
         actual, expected = {"x": 1}, {"x": 2}
         for seen in ({id(actual)}, {id(expected)}):
             entries = _build_equality_diff(actual, expected, _seen=seen).entries
@@ -1278,9 +1265,7 @@ class TestCircularRefProtection:
         assert_that(has_circular).is_true()
 
     def test_asymmetric_circular_ref_in_sub_diff(self):
-        # Only the actual side loops; the expected side is a fresh, non-circular dict at the same key.
-        # At that recursion only actual's id is in `seen`, so the cycle guard must fire on EITHER side
-        # being seen (its `or`), not both - otherwise it recurses past the cycle and decomposes it.
+        # only actual's id is in `seen` at that recursion, so the guard must fire on either side rather than both
         actual = {"name": "x"}
         actual["ref"] = actual
         expected = {"name": "y", "ref": {"name": "z"}}
@@ -1477,14 +1462,12 @@ class TestDiffEngineHarmonization:
         assert_that(entry.expected).is_equal_to("z")
 
     def test_keys_keep_the_order_they_were_written_in(self):
-        # sorted by repr this read 1, 10, 2, which looks like no order at all. insertion order is just
-        # as deterministic and is the one the reader chose
+        # sorted by repr this read 1, 10, 2; insertion order is as deterministic and is the one the reader chose
         paths = self._paths({1: "a", 2: "b", 10: "c"}, {1: "z", 2: "y", 10: "x"})
         assert_that(paths).is_equal_to(["1", "2", "10"])
 
     def test_keys_of_mixed_types_do_not_need_an_ordering(self):
-        # the reason the old code sorted by repr rather than by value: `sorted` on {1, "a"} raises.
-        # walking the two sides in order never compares keys at all
+        # `sorted` on {1, "a"} raises, and walking the two sides in order never compares keys at all
         paths = self._paths({1: "a", "b": "c"}, {1: "z", "b": "y"})
         assert_that(paths).is_equal_to(["1", "b"])
 
@@ -1493,9 +1476,8 @@ class TestDiffEngineHarmonization:
         assert_that(paths).is_equal_to(["b", "a"])
 
     def test_the_headline_and_the_diff_read_the_keys_in_the_same_order(self):
-        # the two halves of one message used to be built by different code with different opinions:
-        # the headline sorted by repr while the diff below it walked the mapping, so a reader matching
-        # a key from one to the other found it in a different place
+        # the headline sorted by repr while the diff below walked the mapping, so a key read from one was in a
+        # different place in the other
         written = {"zebra": 1, "apple": 2, "mango": 3}
         with pytest.raises(AssertionError) as failure:
             assert_that(written).is_equal_to({"zebra": 9, "apple": 9, "mango": 9})
@@ -1743,7 +1725,6 @@ class TestMixedKindPairsStayAssertions:
         assert_that(_build_equality_diff({"a": 1}, Model(1)).kind).is_equal_to("scalar")
 
     def test_a_model_dump_object_against_a_dict_under_a_key(self):
-        # the nested walker has its own copy of each guard, and only the root's were pinned
         with pytest.raises(AssertionError):
             assert_that({"k": _FakeModel(a=1)}).is_equal_to({"k": {"a": 1}})
         with pytest.raises(AssertionError):
@@ -1766,52 +1747,44 @@ class TestSequenceAlignment:
     """A shifted sequence is paired by alignment, so one insertion reads as one entry."""
 
     def test_an_aligned_equal_block_the_config_accepts_adds_no_row(self):
-        # the config is asked about the matched block, and an answer of "equal" has to stay silent
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1.0, 2.0, 3.0]).is_equal_to([0.0, 1.0, 2.0, 3.0], tolerance=0.5)
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).is_equal_to([("expected[0]", None, 0.0)])
 
     def test_an_aligned_equal_block_adds_no_rows(self):
-        # the config was asked about the matched block and agreed, so the insertion is the only row
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1.0, 2.0, 3.0, 4.0]).is_equal_to([0.0, 1.0, 2.0, 3.0, 4.0], tolerance=0.5)
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).is_equal_to([("expected[0]", None, 0.0)])
 
     def test_a_truncated_tail_keeps_the_index_reading(self):
-        # a dropped tail reads as the same count either way, and a tie keeps the index reading: the
-        # entries stay [3]/[4] instead of naming a side that has not shifted
+        # a tie keeps the index reading, so the entries stay [3]/[4] rather than naming a side that has not shifted
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3, 4, 5]).is_equal_to([1, 2, 3])
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[3]", "[4]"])
         assert_that([entry.steps[-1].side for entry in exc_info.value.diff.entries]).is_equal_to([None, None])
 
     def test_an_unequal_length_tie_keeps_the_index_reading(self):
-        # the alignment reports the same two positions the index pairing does, and a tie keeps the
-        # index reading, so neither path names a side
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3, 4, 5]).is_equal_to([1, 2, 3])
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["[3]", "[4]"])
 
     def test_an_aligned_pair_is_still_decomposed_to_the_field_that_differs(self):
-        # the shift is reported once and the pair the alignment matched is walked into, not dumped
-        # whole as one row
         with pytest.raises(AssertionError) as exc_info:
             assert_that([{"a": 1}, {"a": 2}]).is_equal_to([{"a": 0}, {"a": 1}, {"a": 9}])
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).contains(("[1].a", 2, 9))
 
     def test_a_sequence_at_exactly_the_cap_is_still_aligned(self):
-        # the cap is the last length that still aligns, and the test above it pins only the first that does not
         size = _diff_module._ALIGN_MAX_ELEMENTS
         result = _build_equality_diff(list(range(1, size)), list(range(size)))
         assert_that(result.entries).is_length(1)
         assert_that(result.entries[0].path).is_equal_to("expected[0]")
 
     def test_a_repeated_element_is_never_treated_as_junk(self):
-        # difflib's autojunk calls any value filling over 1% of a 200+ element sequence junk, which is
-        # exactly the repeated value an alignment has to match on
+        # difflib's autojunk calls any value filling over 1% of a 200+ element sequence junk, which is the repeated
+        # value an alignment matches on
         expected = ["a"] * 250
         result = _build_equality_diff(["x", *expected], expected)
         assert_that([entry.path for entry in result.entries]).is_equal_to(["actual[0]"])
@@ -1822,7 +1795,6 @@ class TestSequenceAlignment:
         assert_that([entry.path for entry in result.entries]).is_equal_to(["actual[0]"])
 
     def test_two_differing_positions_still_buy_an_alignment(self):
-        # one differing position cannot be beaten and never asks; two can, and has to
         result = _build_equality_diff([1, 2, 3], [1, 2, 9, 3])
         assert_that([(entry.path, entry.expected) for entry in result.entries]).is_equal_to([("expected[2]", 9)])
 
@@ -1841,16 +1813,15 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].expected).is_equal_to(3)
 
     def test_a_one_sided_entry_names_the_sequence_it_indexes(self):
-        # after a shift the two index spaces disagree, and numbering both as [i] put two unrelated
-        # entries on one path
+        # after a shift the two index spaces disagree, and numbering both as [i] put two unrelated entries on one
+        # path
         entries = _build_equality_diff([9, 1, 2, 3, 9], [1, 2, 3]).entries
         paths = [entry.path for entry in entries]
-        assert_that(paths).is_equal_to(sorted(set(paths), key=paths.index))  # no path repeats
+        assert_that(paths).is_equal_to(sorted(set(paths), key=paths.index))
         assert_that(paths).contains("actual[0]", "actual[4]")
 
     def test_unhashable_elements_are_aligned_on_their_reprs(self):
-        # difflib cannot index dicts, which is the shape of most API payloads, so the alignment keys
-        # on reprs instead of falling back to position
+        # difflib cannot index dicts, the shape of most API payloads, so the alignment keys on reprs
         actual = [{"id": index} for index in range(20)]
         result = _build_equality_diff(actual, actual[1:])
         assert_that(result.entries).is_length(1)
@@ -1882,15 +1853,12 @@ class TestSequenceAlignment:
         )
 
     def test_a_tuple_pair_reads_as_a_record(self):
-        # a coordinate pair is never shorter aligned, so the tie keeps the positional reading without
-        # a special case for the type
         result = _build_equality_diff((1, 2), (2, 3))
         assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
             [("[0]", 1, 2), ("[1]", 2, 3)]
         )
 
     def test_a_single_difference_never_asks_for_an_alignment(self):
-        # one differing position cannot be beaten, and asking would render every element's repr first
         actual = [{"id": index} for index in range(200)]
         expected = [dict(item) for item in actual]
         expected[199]["id"] = -1
@@ -1899,7 +1867,6 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].path).is_equal_to("[199].id")
 
     def test_a_sequence_past_the_cap_stays_positional(self):
-        # lengths must differ, or the cheaper gate answers first and this branch is never reached
         size = _diff_module._ALIGN_MAX_ELEMENTS + 1
         result = _build_equality_diff(list(range(size)), list(range(1, size)))
         assert_that(result.entries).is_length(size)
@@ -1912,15 +1879,11 @@ class TestSequenceAlignment:
         assert_that([entry.path for entry in result.entries]).is_equal_to(["[0]", "[1]", "[2]", "[3]"])
 
     def test_an_aligned_block_still_pairs_its_elements(self):
-        # a shift at one end and a substitution at the other: the aligned walk has to report the pair
-        # as a leaf, not as one deletion and one insertion
         result = _build_equality_diff([0, 1, 2, 3, 9], [1, 2, 3, 8])
         rows = [(entry.path, entry.actual, entry.expected) for entry in result.entries]
         assert_that(rows).contains(("actual[0]", 0, None), ("[4]", 9, 8))
 
     def test_an_aligned_pair_beyond_tolerance_is_one_leaf(self):
-        # without a config a differing pair is walked; a tolerance decides it outright, and the aligned
-        # walk has to report that verdict as a single row
         with pytest.raises(AssertionError):
             assert_that([0.0, 1.0, 2.0, 9.0]).is_equal_to([1.0, 2.0, 8.0], tolerance=0.5)
         result = _build_equality_diff(
@@ -1942,11 +1905,9 @@ class TestSequenceAlignment:
 
         with pytest.raises(AssertionError):
             assert_that([0, 1.0, 2.0]).is_equal_to([1.0, 2.0], comparators={float: picky})
-        # 1.0 and 2.0 are the aligned equal block; the comparator saw them
         assert_that(called).contains((1.0, 1.0), (2.0, 2.0))
 
     def test_the_verdict_still_belongs_to_the_config(self):
-        # alignment picks the pairing, never whether a pair is equal
         assert_that([1.0, 2.0, 3.0]).is_equal_to([1.001, 2.0, 3.0], tolerance=0.01)
         with pytest.raises(AssertionError):
             assert_that([1.0, 2.0, 3.0]).is_equal_to([1.5, 2.0, 3.0], tolerance=0.01)
@@ -1957,7 +1918,7 @@ class TestSequenceAlignment:
         rendered = []
 
         class Counted:
-            __hash__ = None  # unhashable, so an alignment here has to key on reprs
+            __hash__ = None
 
             def __init__(self, value):
                 self.value = value
@@ -2082,7 +2043,6 @@ class TestCaretsReachNestedTextLeaves:
         assert_that(self._caret_rows(output)).is_not_empty()
 
     def test_a_number_pair_gets_no_caret(self):
-        # a caret points at a character that moved, which says nothing about two numbers
         output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="n", actual=1, expected=2)]))
         assert_that(self._caret_rows(output)).is_empty()
 
@@ -2092,7 +2052,6 @@ class TestCaretsReachNestedTextLeaves:
         assert_that(output).contains("'1'").contains("+ 1")
 
     def test_a_one_sided_entry_is_unchanged(self):
-        # nothing to compare against, so the row stays the single-sided form it always was
         output = _format_diff(
             DiffResult(kind="dict", entries=[DiffEntry(path="gone", actual="x", expected=None, absent="expected")])
         )
@@ -2236,7 +2195,6 @@ class TestConfigLeafRowsHoldBothSides:
         assert_that(rows).is_equal_to([(".value", 1.0, 2.0)])
 
     def test_a_strict_type_difference_in_a_model_field_stays_one_row(self):
-        # a list against a tuple is the difference itself; walking into them finds two equal elements
         with pytest.raises(AssertionError) as exc_info:
             assert_that(_FakeModel(a=[1, 2])).is_equal_to(_FakeModel(a=(1, 2)), strict_types=True)
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
@@ -2276,7 +2234,6 @@ class TestCycleGuardOnEveryDescent:
         assert_that(rows).is_equal_to([("[1]", 2), ("[2]", "<circular ref>")])
 
     def test_a_self_referential_list_survives_an_aligned_pairing(self):
-        # the aligned walk is a second descent, with its own copy of the guard
         actual = [1, 2, 3]
         actual.append(actual)
         expected = [0, 1, 2, 3]
@@ -2300,7 +2257,6 @@ class TestCycleGuardOnEveryDescent:
         assert_that(rows).is_equal_to([(".tag", "a"), (".child", "<circular ref>")])
 
     def test_a_self_referential_dataclass_nested_in_a_dict_reports_the_cycle(self):
-        # under a key the nested walker owns the guard, and it keeps its own copy of it
         @dataclass
         class Node:
             tag: str
@@ -2346,7 +2302,6 @@ class TestCycleGuardOnEveryDescent:
         assert_that(entry.expected).is_equal_to("<circular ref>")
 
     def test_a_cycle_on_only_one_side_of_a_nested_namedtuple_is_reported(self):
-        # the guard fires on either side, and a namedtuple under a key is guarded by the nested walker
         Box = namedtuple("Box", "tag holder")
         holder = []
         looping = Box("a", holder)
@@ -2480,7 +2435,6 @@ class TestOneSidedEntriesNameTheAbsentSide:
         )
 
     def test_a_nested_namedtuple_field_only_one_side_declares(self):
-        # the nested walker has its own copy of the one-sided branch, reached only under a key
         Point = namedtuple("Point", "x y")
         Wide = namedtuple("Wide", "x y z")
         with pytest.raises(AssertionError) as exc_info:
@@ -2493,14 +2447,12 @@ class TestOneSidedEntriesNameTheAbsentSide:
         assert_that(missing).is_equal_to([("p.z", 3, "actual")])
 
     def test_a_set_member_only_one_side_has(self):
-        # the set renderer groups on `absent`, not on the label the path carries
         result = _build_equality_diff({1}, {1, 2})
         rows = [(entry.path, entry.expected, entry.absent) for entry in result.entries]
         assert_that(rows).is_equal_to([("missing", 2, "actual")])
         assert_that(str(result)).contains("missing: {2}")
 
     def test_a_nested_model_field_only_one_side_declares(self):
-        # the nested walker has its own copy of the one-sided branch, reached only under a key
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"m": _FakeModel(a=1, b=2)}).is_equal_to({"m": _FakeModel(a=1)})
         extra = [(entry.path, entry.actual, entry.absent) for entry in exc_info.value.diff.entries]
@@ -2561,7 +2513,6 @@ class TestFieldNamedConfigReachesRecordFields:
         assert_that(rows).is_equal_to([(".name", "a", "b")])
 
     def test_a_config_reaches_a_value_inside_a_nested_namedtuple_field(self):
-        # the nested walker hands the config on itself, and only the root walker was pinned
         Bag = namedtuple("Bag", "name items")
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"b": Bag("a", [1.0, 5.0])}).is_equal_to({"b": Bag("c", [1.0, 5.0001])}, tolerance=0.001)

@@ -252,7 +252,6 @@ class TestWhatTheProxiesRefuse:
         assert_that(-1).not_.is_positive()
         assert_that(assert_that(1).check().is_positive().passed).is_true()
         assert_that(assert_that(1).check().not_.is_positive().passed).is_false()
-        # the pivot itself keeps working, and so does asking the assertion after it for a verdict
         assert_that(assert_that([1, 2]).first().check().is_positive().passed).is_true()
         # the configurer keeps working through the ordinary path, which is the whole point of
         # refusing it through the proxies rather than removing it
@@ -320,14 +319,12 @@ class TestTheRefusalHoldsInEveryMode:
         add_extension(first, override=True)
         add_extension(replaced_mapped, override=True)
         try:
-            # the override fails on an empty value, so negating it there is what holds
             assert_that([]).not_.first()
             assert_that(assert_that([1]).check().first().passed).is_true()
             assert_that([1]).not_.mapped()
         finally:
             remove_extension(first)
             remove_extension(replaced_mapped)
-        # and the refusal comes back once the override is gone, so this is not a one-way door
         with pytest.raises(TypeError, match="hands back a different value"):
             assert_that([1]).not_.first()
 
@@ -359,7 +356,6 @@ class TestTheRefusalHoldsInEveryMode:
             made_during.not_.mapped()
         finally:
             remove_extension(override)
-        # the grafted method is still on that instance, so it stays negatable after the removal
         made_during.not_.mapped()
 
     def test_an_override_of_a_proxy_entry_follows_the_same_rule(self):

@@ -342,7 +342,6 @@ def test_does_not_contain_duplicates_bad_val_failure():
 
 
 def test_contains_duplicates_unhashable_items():
-    # a list of dicts (unhashable) must use an == based fallback, not raise "val must be iterable"
     assert_that([{"a": 1}, {"b": 2}, {"a": 1}]).contains_duplicates()
     with pytest.raises(AssertionError):
         assert_that([{"a": 1}, {"b": 2}]).contains_duplicates()
@@ -513,7 +512,6 @@ class TestContainsClosestElement:
         assert_that(str(exc.value)).does_not_contain("Closest element")
 
     def test_closest_is_the_most_similar_of_several(self):
-        # element 0 differs only in y; element 1 differs in x and y -> element 0 is closest
         with pytest.raises(AssertionError) as exc:
             assert_that([{"id": 2, "x": 1, "y": 2}, {"id": 2, "x": 9, "y": 9}]).contains({"id": 2, "x": 1, "y": 1})
         assert_that(str(exc.value)).contains("{'id': 2, 'x': 1, 'y': 2}").contains("y (2 != 1)")
@@ -734,7 +732,7 @@ class TestContainsOnAOneShotIterator:
     )
     def test_the_order_of_the_arguments_does_not_decide_the_verdict(self, items):
         assert_that(x for x in [1, 2, 3]).contains(*items)
-        assert_that([1, 2, 3]).contains(*items)  # the control: a list has always passed
+        assert_that([1, 2, 3]).contains(*items)
 
     def test_a_genuinely_missing_item_still_fails(self):
         with pytest.raises(AssertionError, match="to contain item <9>"):
@@ -747,13 +745,11 @@ class TestContainsOnAOneShotIterator:
         assert_that(str(exc_info.value)).contains("[1, 2, 3]").does_not_contain("generator object")
 
     def test_the_closest_element_hint_survives(self):
-        # it walks the value a second time, which used to find an exhausted iterator and say nothing
         with pytest.raises(AssertionError) as exc_info:
             assert_that(x for x in [{"id": 1, "name": "a"}]).contains({"id": 1, "name": "b"})
         assert_that(str(exc_info.value)).contains("Closest element")
 
     def test_a_re_iterable_value_is_handed_back_untouched(self):
-        # nothing is copied on the ordinary path: the list under test is the list that gets searched
         values = [1, 2, 3]
         assert_that(values).contains(1)
         assert_that(values).is_equal_to([1, 2, 3])
@@ -777,7 +773,6 @@ class TestOtherAssertionsOnAOneShotIterator:
         assert_that([1, 2, 3]).contains_only_once(1, 2, 3)
 
     def test_any_satisfy_counts_what_it_actually_examined(self):
-        # the count comes from a second walk, so it used to read "none of the 0 did" on a generator
         messages = []
         for value in ((x for x in [1, 2, 3]), [1, 2, 3]):
             with pytest.raises(AssertionError) as exc_info:
@@ -786,7 +781,6 @@ class TestOtherAssertionsOnAOneShotIterator:
         assert_that(messages[0]).contains("none of the 3 did").is_equal_to(messages[1])
 
     def test_contains_sequence_walks_by_index_and_needs_a_real_sequence(self):
-        # a generator does not support indexing, so the guard used to fire and call it "not iterable"
         assert_that(x for x in [1, 2, 3]).contains_sequence(1, 2)
         assert_that([1, 2, 3]).contains_sequence(1, 2)
 
@@ -796,8 +790,6 @@ class TestOtherAssertionsOnAOneShotIterator:
         assert_that(str(exc_info.value)).contains("[1, 2, 3]").does_not_contain("not iterable")
 
     def test_a_set_is_refused_by_name_rather_than_called_not_iterable(self):
-        # a set is iterable and simply has no order to hold a sequence in. the old guard reported it
-        # as "not iterable", which is the one thing it is not
         with pytest.raises(TypeError, match="must be a sequence"):
             assert_that({1, 2, 3}).contains_sequence(1, 2)
 

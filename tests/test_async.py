@@ -80,7 +80,6 @@ class TestEventuallyWithAsyncCallable:
         async def compute():
             return 42
 
-        # a sync callable that returns a coroutine must still be awaited before asserting
         asyncio.run(assert_that(lambda: compute()).eventually(timeout=1, interval=0.05).is_equal_to(42))
 
 
@@ -324,7 +323,7 @@ class TestSummaryUnderWindowOverflow:
         for index, value in enumerate(values):
             recorder.record(elapsed=index * 0.1, outcome="fail", value=value, detail=f"got {value}")
         trace = recorder.build(elapsed=len(values) * 0.1)
-        assert_that(trace.dropped).is_greater_than(0)  # the guard: without a drop this proves nothing
+        assert_that(trace.dropped).is_greater_than(0)
         return trace.summary
 
     def test_a_long_monotonic_walk_is_not_mistaken_for_a_cycle(self):
@@ -369,7 +368,6 @@ class TestSummaryUnderWindowOverflow:
         assert_that(failure.value.trace.summary).contains("value changed")
 
     def test_a_value_that_returns_to_itself_is_not_called_unchanged(self):
-        # the same count decides the "unchanged" sentence, which a dropped middle could make false
         recorder = _PollRecorder()
         for index in range(60):
             recorder.record(elapsed=index * 0.1, outcome="fail", value=index % 2, detail=f"got {index % 2}")
@@ -585,7 +583,6 @@ class TestTraceSummary:
         assert_that(summary).contains("value could not be compared")
 
     def test_a_value_that_moved_across_a_raising_poll_is_not_called_unchanged(self):
-        # the change is between the two polls that returned, not between neighbours
         events = [self._fail("A"), self._error(), self._fail("B")]
         assert_that(self._summary(events)).contains("value then changed 1 time")
 
@@ -718,20 +715,17 @@ class TestACollectedTimeoutKeepsItsStructuredData:
             pytest.param({*[0, 8]}, {*[8, 0]}, True, id="a-set-whose-members-collide"),
             pytest.param(_LooksLikeAList(), [1, 2], False, id="a-leaf-that-prints-like-a-list"),
             pytest.param(["a,b"], ["a", "b"], False, id="a-string-holding-the-separator"),
-            # two leaves whose renderings would run together into the one below without their lengths
             pytest.param([_Prints("a"), _Prints("bc")], [_Prints("avbc")], False, id="parts-that-would-run-together"),
             # the one mapping whose own `==` reads order, so sorting it hid a real transition
             pytest.param(
                 OrderedDict([("a", 1), ("b", 2)]), OrderedDict([("b", 2), ("a", 1)]), False, id="an-ordered-dict"
             ),
-            # a subclass inherits that comparison along with the class
             pytest.param(
                 _OrderedChild([("a", 1), ("b", 2)]),
                 _OrderedChild([("b", 2), ("a", 1)]),
                 False,
                 id="a-subclass-of-an-ordered-dict",
             ),
-            # and the ones that compare like a dict, which must keep the sort
             pytest.param(
                 defaultdict(int, {"a": 1, "b": 2}), defaultdict(int, {"b": 2, "a": 1}), True, id="a-defaultdict"
             ),
@@ -791,7 +785,6 @@ class TestACollectedTimeoutKeepsItsStructuredData:
         assert_that(_change_key(cyclic)).is_not_none()
 
     def test_two_values_that_differ_only_in_key_order_did_not_change(self):
-        # a dict is not ordered, so two of them that compare equal did not move, whatever their reprs do
         recorder = _PollRecorder()
         for value in ({"a": 1, "b": 2}, {"b": 2, "a": 1}, {"a": 1, "b": 2}):
             recorder.record(elapsed=0.1, outcome="fail", value=value, detail="got it", raw=value)
@@ -839,7 +832,6 @@ class TestACollectedTimeoutKeepsItsStructuredData:
         assert_that(failure.value.trace.summary).contains("probe raised AssertionError on all")
 
     def test_an_ignored_exception_that_cannot_be_reprd_is_still_retried(self):
-        # `ignoring=` promises to poll past it, and rendering it for the trace runs the caller's code
         class HostileError(RuntimeError):
             def __repr__(self):
                 raise ValueError("repr is not available")
@@ -876,7 +868,6 @@ class TestTheTimeoutMessageQuotesOnlyTheHeadline:
 
     @staticmethod
     def _timed_out(monkeypatch):
-        # the suite pins the flag off, the way the plugin does; this is about the surface where it is on
         monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
         counter = itertools.count()
         with pytest.raises(AssertionFailure) as failure:
@@ -1099,11 +1090,9 @@ class TestRetryCollection:
         assert_that(_RETRIES).is_empty()
 
     def test_an_untraced_async_poll_still_passes(self):
-        # with trace off there is no recorder at all, and the gate has to stop before it reads one
         asyncio.run(assert_that(lambda: 7).eventually(timeout=1, interval=0.02, trace=False).is_equal_to(7))
 
     def test_a_timeout_records_nothing(self):
-        # it never converged, so it is a failure with a trace, not a poll that nearly made it
         with pytest.raises(AssertionError):
             assert_that(lambda: "PENDING").eventually_sync(timeout=0.1, interval=0.02).is_equal_to("READY")
         assert_that(_RETRIES).is_empty()
@@ -1137,7 +1126,6 @@ class TestATaskThatOutlivesItsSoftBlock:
             asyncio.run(scenario())
 
     def test_a_task_awaited_inside_the_block_is_still_collected(self):
-        # the other half: inheritance is the feature, and closing the block must not cost it
         async def scenario():
             async def child():
                 assert_that(1).is_equal_to(2)
@@ -1252,7 +1240,7 @@ class TestAChainIsACoroutine:
             task = asyncio.ensure_future(chain)
             await asyncio.sleep(0.05)
             seen = {
-                "running": chain.cr_running,  # False while suspended at its own sleep, as for a coroutine
+                "running": chain.cr_running,
                 "code": chain.cr_code is not None,
                 "frame": chain.cr_frame is not None,
                 "await": chain.cr_await is not None,
@@ -1352,7 +1340,7 @@ class TestAForgottenAwaitStaysLoud:
 
     @staticmethod
     def _dropped(build):
-        gc.collect()  # a chain that materialised its coroutine sits in a cycle, so clear those first
+        gc.collect()
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             build()

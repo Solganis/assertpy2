@@ -58,13 +58,13 @@ def _shared_extensions():
     order dependency for another. A snapshot is taken instead, and `finally` puts it back whether the
     test removed things, added things, or raised half-way through.
     """
-    before = dict(assertpy2.assertpy._extensions)  # the registry is module state by design
+    before = dict(assertpy2.assertpy._extensions)
     try:
         for extension in _SHARED:
             add_extension(extension, override=True)
         yield
     finally:
-        assertpy2.assertpy._extensions.clear()  # same reason: restoring what was there
+        assertpy2.assertpy._extensions.clear()
         assertpy2.assertpy._extensions.update(before)
 
 
@@ -177,8 +177,6 @@ def is_foo(self):
 
 
 def dupe1():
-    # replacing an extension is the point of this pair, so it says so rather than relying on the
-    # registry letting it through quietly
     add_extension(is_foo, override=True)
     assert_that("foo").is_foo()
     with pytest.raises(AssertionError) as exc_info:
@@ -327,7 +325,7 @@ class TestExtensionBindingMechanics:
         def is_true(self):
             return self.error("shadowed is_true")
 
-        add_extension(is_true, override=True)  # deliberate: the point of this test is the restore
+        add_extension(is_true, override=True)
         try:
             with pytest.raises(AssertionError, match="shadowed is_true"):
                 assert_that(True).is_true()

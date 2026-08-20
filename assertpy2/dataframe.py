@@ -73,8 +73,7 @@ class DataFrameMixin(_MixinBase):
             ImportError: if the owning library is not installed
         """
         actual = self.val
-        # walk the MRO so a user subclass (whose own __module__ is its app, not pandas/polars) still
-        # resolves to the owning library through its DataFrame/Series base
+        # walk the MRO so a user subclass resolves to the owning library through its base
         root = next(
             (
                 base.__module__.split(".", 1)[0]
@@ -87,8 +86,7 @@ class DataFrameMixin(_MixinBase):
             refuse(actual, "a pandas or polars DataFrame/Series")
         library, testing = _load(root)
         class_name = type(actual).__name__
-        # isinstance handles real subclasses; the class-name check handles duck-typed frames (a test may
-        # inject a fake library, so the value is not an instance of that fake DataFrame/Series class)
+        # isinstance handles real subclasses, the name check handles duck-typed frames a test may inject
         if isinstance(actual, library.Series) or class_name == "Series":
             assert_equal, label = testing.assert_series_equal, "Series"
         elif isinstance(actual, library.DataFrame) or class_name == "DataFrame":

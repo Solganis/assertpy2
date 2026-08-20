@@ -26,8 +26,7 @@ class _Serializer(NamedTuple):
 # user-registered serializers, checked before the built-in codec (last registered wins)
 _SERIALIZERS: list[_Serializer] = []
 
-# keys that mark a codec envelope; a user dict carrying any of them is escaped so it is not mistaken
-# for one on load
+# a user dict carrying any of them is escaped so it is not mistaken for an envelope on load
 _RESERVED_MARKERS = frozenset({"__type__", "__data__", "__tag__", "__class__", "__module__"})
 
 
@@ -39,8 +38,7 @@ def _prepare(value, _seen: frozenset[int] = frozenset()):
     existing snapshots stay byte-identical."""
     if isinstance(value, (dict, list, tuple)):
         if id(value) in _seen:
-            # json cannot represent a cycle at all, so the only question is how this fails: naming the
-            # cycle beats a thousand frames of RecursionError from an unguarded walk
+            # json cannot represent a cycle, so naming it beats a thousand frames of RecursionError
             raise ValueError("cannot snapshot a value that contains a circular reference")
         nested = _seen | {id(value)}
         if isinstance(value, dict):

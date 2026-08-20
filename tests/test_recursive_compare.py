@@ -7,8 +7,6 @@ import pytest
 from assertpy2 import assert_that
 from assertpy2.helpers import HelpersMixin
 
-# --- fixtures ---
-
 
 @dataclasses.dataclass
 class User:
@@ -38,9 +36,6 @@ class PlainUser:
         self.id = id
         self.name = name
         self.role = role
-
-
-# --- dataclass: ignore ---
 
 
 class TestDataclassIgnore:
@@ -116,9 +111,6 @@ class TestDataclassIgnore:
         assert_that(actual).is_equal_to(expected, ignore="id")
 
 
-# --- dataclass: include ---
-
-
 class TestDataclassInclude:
     def test_include_single_field(self):
         actual = User(id=1, name="Alice", email="a@x.com")
@@ -129,9 +121,6 @@ class TestDataclassInclude:
         actual = User(id=1, name="Alice", email="a@x.com")
         expected = User(id=99, name="Alice", email="a@x.com")
         assert_that(actual).is_equal_to(expected, include=["name", "email"])
-
-
-# --- namedtuple ---
 
 
 class TestNamedtuple:
@@ -146,9 +135,6 @@ class TestNamedtuple:
         assert_that(actual).is_equal_to(expected, include="x")
 
 
-# --- plain objects ---
-
-
 class TestPlainObject:
     def test_ignore_field(self):
         actual = PlainUser(id=1, name="Alice", role="admin")
@@ -159,9 +145,6 @@ class TestPlainObject:
         actual = PlainUser(id=1, name="Alice", role="admin")
         expected = PlainUser(id=99, name="Alice", role="viewer")
         assert_that(actual).is_equal_to(expected, include="name")
-
-
-# --- list of objects ---
 
 
 class TestListOfObjects:
@@ -191,9 +174,6 @@ class TestListOfObjects:
         assert_that(actual).is_equal_to(expected, ignore="id")
 
 
-# --- error handling ---
-
-
 class TestErrors:
     def test_unconvertible_int_raises_type_error(self):
         with pytest.raises(TypeError, match="introspectable fields"):
@@ -212,9 +192,6 @@ class TestErrors:
         expected = User(id=1, name="Bob", email="a@x.com")
         with pytest.raises(AssertionError, match=r"Alice.*Bob|Bob.*Alice"):
             assert_that(actual).is_equal_to(expected, ignore="id")
-
-
-# --- _to_comparable_dict ---
 
 
 class TestToComparableDict:
@@ -257,9 +234,6 @@ class TestToComparableDict:
 
         result = HelpersMixin._to_comparable_dict(FakeModel())
         assert_that(result).is_equal_to({"x": 1, "y": 2})
-
-
-# --- list with unconvertible elements ---
 
 
 class TestListUnconvertibleElements:

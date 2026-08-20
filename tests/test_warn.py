@@ -20,7 +20,6 @@ def test_success():
 
 
 def test_failures():
-    # capture log
     capture = StringIO()
     logger = logging.getLogger("capture")
     handler = logging.StreamHandler(capture)
@@ -38,24 +37,22 @@ def test_failures():
     assert_warn("foo", logger=adapted).is_not_equal_to("foo")
     assert_warn("foo", logger=adapted).is_equal_to_ignoring_case("BAR")
 
-    # dump log to string
     out = capture.getvalue()
     capture.close()
 
-    assert_that(out).contains("[test_warn.py:30]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:31]: Expected <foo> to be empty string, but was not.")
-    assert_that(out).contains("[test_warn.py:32]: Expected <foo> to be <False>, but was not.")
-    assert_that(out).contains("[test_warn.py:33]: Expected <foo> to contain only digits, but did not.")
-    assert_that(out).contains("[test_warn.py:34]: Expected <123> to contain only alphabetic chars, but did not.")
-    assert_that(out).contains("[test_warn.py:35]: Expected <foo> to contain only uppercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:36]: Expected <FOO> to contain only lowercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:37]: Expected <foo> to be equal to <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:38]: Expected <foo> to be not equal to <foo>, but was.")
-    assert_that(out).contains("[test_warn.py:39]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+    assert_that(out).contains("[test_warn.py:29]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:30]: Expected <foo> to be empty string, but was not.")
+    assert_that(out).contains("[test_warn.py:31]: Expected <foo> to be <False>, but was not.")
+    assert_that(out).contains("[test_warn.py:32]: Expected <foo> to contain only digits, but did not.")
+    assert_that(out).contains("[test_warn.py:33]: Expected <123> to contain only alphabetic chars, but did not.")
+    assert_that(out).contains("[test_warn.py:34]: Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:35]: Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:36]: Expected <foo> to be equal to <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:37]: Expected <foo> to be not equal to <foo>, but was.")
+    assert_that(out).contains("[test_warn.py:38]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_chained_failure():
-    # capture log
     capture2 = StringIO()
     logger = logging.getLogger("capture2")
     handler = logging.StreamHandler(capture2)
@@ -64,19 +61,17 @@ def test_chained_failure():
 
     assert_warn("foo", logger=adapted).is_length(4).is_in("bar").does_not_contain_duplicates()
 
-    # dump log to string
     out = capture2.getvalue()
     capture2.close()
 
-    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to be in <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:65]: Expected <foo> to not contain duplicates, but <o> was repeated.")
+    assert_that(out).contains("[test_warn.py:62]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:62]: Expected <foo> to be in <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:62]: Expected <foo> to not contain duplicates, but <o> was repeated.")
 
 
 def test_failures_with_renamed_import():
-    from assertpy2 import assert_warn as warn  # inline: tests renamed import behavior
+    from assertpy2 import assert_warn as warn
 
-    # capture log
     capture3 = StringIO()
     logger = logging.getLogger("capture3")
     handler = logging.StreamHandler(capture3)
@@ -94,25 +89,23 @@ def test_failures_with_renamed_import():
     warn("foo", logger=adapted).is_not_equal_to("foo")
     warn("foo", logger=adapted).is_equal_to_ignoring_case("BAR")
 
-    # dump log to string
     out = capture3.getvalue()
     capture3.close()
 
-    assert_that(out).contains("[test_warn.py:86]: Expected <foo> to be of length <4>, but was <3>.")
-    assert_that(out).contains("[test_warn.py:87]: Expected <foo> to be empty string, but was not.")
-    assert_that(out).contains("[test_warn.py:88]: Expected <foo> to be <False>, but was not.")
-    assert_that(out).contains("[test_warn.py:89]: Expected <foo> to contain only digits, but did not.")
-    assert_that(out).contains("[test_warn.py:90]: Expected <123> to contain only alphabetic chars, but did not.")
-    assert_that(out).contains("[test_warn.py:91]: Expected <foo> to contain only uppercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:92]: Expected <FOO> to contain only lowercase chars, but did not.")
-    assert_that(out).contains("[test_warn.py:93]: Expected <foo> to be equal to <bar>, but was not.")
-    assert_that(out).contains("[test_warn.py:94]: Expected <foo> to be not equal to <foo>, but was.")
-    assert_that(out).contains("[test_warn.py:95]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
+    assert_that(out).contains("[test_warn.py:81]: Expected <foo> to be of length <4>, but was <3>.")
+    assert_that(out).contains("[test_warn.py:82]: Expected <foo> to be empty string, but was not.")
+    assert_that(out).contains("[test_warn.py:83]: Expected <foo> to be <False>, but was not.")
+    assert_that(out).contains("[test_warn.py:84]: Expected <foo> to contain only digits, but did not.")
+    assert_that(out).contains("[test_warn.py:85]: Expected <123> to contain only alphabetic chars, but did not.")
+    assert_that(out).contains("[test_warn.py:86]: Expected <foo> to contain only uppercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:87]: Expected <FOO> to contain only lowercase chars, but did not.")
+    assert_that(out).contains("[test_warn.py:88]: Expected <foo> to be equal to <bar>, but was not.")
+    assert_that(out).contains("[test_warn.py:89]: Expected <foo> to be not equal to <foo>, but was.")
+    assert_that(out).contains("[test_warn.py:90]: Expected <foo> to be case-insensitive equal to <BAR>, but was not.")
 
 
 def test_failure_without_locatable_caller_frame():
     # a user file living under a directory named "assertpy2" can shadow every stack frame; the
-    # warning must be logged without the location prefix instead of crashing on unpacking None
     capture = StringIO()
     logger = logging.getLogger("capture-unwind")
     logger.addHandler(logging.StreamHandler(capture))
@@ -141,12 +134,10 @@ def _captured_warn(subject, expected):
 
 def test_warn_carries_the_diff_paths():
     # warn never fails the test, so this line is the only thing the reader ever sees: dropping the
-    # paths here costs more than it does in a failing mode
     out = _captured_warn({"a": {"b": 1}}, {"a": {"b": 2}})
     assert_that(out).contains("a.b: 1 != 2")
 
 
 def test_warn_on_a_scalar_stays_a_single_line():
-    # the header already carries both values, so a path of "." would only repeat them
     out = _captured_warn(1, 2)
     assert_that(out.strip().splitlines()).is_length(1)

@@ -49,7 +49,6 @@ def _names_protocol(base: ast.expr) -> bool:
     return isinstance(base, ast.Name) and base.id == "Protocol"
 
 
-# the stability page spells small counts as words, the way prose does
 _WORDS = {
     9: "nine",
     10: "ten",
@@ -138,7 +137,7 @@ def _fields(record: type) -> list[str]:
     """Field names in declaration order, for a dataclass or a NamedTuple alike."""
     if dataclasses.is_dataclass(record):
         return [field.name for field in dataclasses.fields(record)]
-    return list(record._fields)  # NamedTuple's own documented accessor
+    return list(record._fields)
 
 
 class TestExports:
@@ -217,7 +216,6 @@ class TestTheCountsTheDocsQuote:
         quoted = {
             "exported names": (re.search(r"The (\d+) names", page), len(assertpy2.__all__)),
             "assert_type checks": (re.search(r"(\d+) `assert_type` checks", page), typing_suite.count("assert_type(")),
-            # spelled as a word on the page, so the guard reads the word rather than a digit
             "protocols": (re.search(r"walks all ([\w-]+) protocols", page), _protocol_count(protocols)),
         }
         wrong = {}
@@ -275,7 +273,6 @@ class TestNoOptionalDependencyIsImportedEagerly:
         assert_that(eager).described_as("optional dependencies imported by `import assertpy2`").is_empty()
 
     def test_the_guard_can_see_an_eager_import(self):
-        # without this the test above would pass just as well against a broken probe
         program = (
             "import sys, json; import attrs; import assertpy2; "
             f"print(json.dumps([name for name in {self.OPTIONAL!r} if name in sys.modules]))"
@@ -295,7 +292,6 @@ class TestWhatAFailureLetsYouRead:
     READABLE = ("actual", "expected", "diff", "trace", "failures")
 
     def test_it_stays_an_assertion_error(self):
-        # what lets an existing `except AssertionError` keep working, and what pytest itself keys on
         assert_that(issubclass(assertpy2.AssertionFailure, AssertionError)).is_true()
 
     def test_a_plain_failure_carries_the_readable_surface(self):
