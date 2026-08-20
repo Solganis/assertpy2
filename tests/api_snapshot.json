@@ -203,7 +203,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": "bytes",
+     "annotation": "bytes | bytearray",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "sub",
@@ -582,7 +582,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": "str",
+     "annotation": "object",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "suffix",
@@ -2004,7 +2004,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": "str",
+     "annotation": "object",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",
@@ -2017,7 +2017,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": "bytes",
+     "annotation": "bytes | bytearray",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "prefix",

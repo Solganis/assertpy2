@@ -225,8 +225,10 @@ def _view_shapes() -> dict[str, str]:
     intersection saw nothing.  This file already carries that pattern: `check` and `value` are
     redeclared in every leaf to narrow their type.
 
-    Kinds only, not annotations: a name or an alias moving is not a promise this package made, and the
-    annotations are compared against the runtime by `tests/test_typing_conformance.py`.
+    Kinds only, not annotations: a name or an alias moving is not a promise this package made.  Nothing
+    compares the annotations themselves against the runtime, and the sentence that used to stand here
+    said `tests/test_typing_conformance.py` did.  It compares parameter kinds and defaults, which is a
+    different question, so the gap is named rather than delegated to a file that does not close it.
     """
     source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
     declared: dict[str, tuple[dict[str, str], list[str]]] = {}

@@ -53,7 +53,7 @@ class BytesMixin(_MixinBase):
             return self.error(f"Expected valid {encoding} encoding, but decoding failed.")
         return self
 
-    def starts_with_bytes(self, prefix: bytes) -> Self:
+    def starts_with_bytes(self, prefix: bytes | bytearray) -> Self:
         """Assert that val starts with the given byte prefix.
 
         The bytes-only spelling of [`starts_with()`][assertpy2.string.StringMixin.starts_with], which it
@@ -76,7 +76,7 @@ class BytesMixin(_MixinBase):
         self._check_bytes()
         return self.starts_with(prefix)
 
-    def contains_bytes(self, sub: bytes) -> Self:
+    def contains_bytes(self, sub: bytes | bytearray) -> Self:
         """Assert that val contains the given byte subsequence.
 
         The bytes-only spelling of [`contains()`][assertpy2.contains.ContainsMixin.contains], which it
