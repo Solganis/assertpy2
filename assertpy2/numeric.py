@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import math
 import numbers
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, SupportsFloat
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare
@@ -36,6 +36,17 @@ def _is_inf(value) -> bool:
         return math.isinf(value)
     except OverflowError:
         return False
+
+
+def _tolerance_window(other: Any, tolerance: Any) -> tuple[Any, Any]:
+    """The closed interval ``other`` plus and minus ``tolerance``.
+
+    Typed as `Any` because the pairing is a run-time fact: `_validate_close_to_args` has already refused
+    every combination but two, a number against a number and a datetime against a timedelta.  Neither
+    operand type supports the arithmetic on its own, so a checker reading the public signature alone is
+    right to refuse it.
+    """
+    return other - tolerance, other + tolerance
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
@@ -72,8 +83,8 @@ class NumericMixin(_MixinBase):
                     else f"a {kind_bound.__name__}, to match val"
                 )
                 refuse(other, wanted, subject=argument("other"))
-            # the pair is what cannot be ordered, not the value: two strings compare fine, and saying
-            # "ordering is not defined for type <str>" about `"10" > 5` was simply untrue
+            # the pair is what cannot be ordered, not the value: two strings compare fine, so that wording was untrue
+            # of `"10" > 5`
             refuse(other, f"comparable with val {_shown(self.val)}", subject=argument("other"))
 
     def _validate_number(self):
@@ -543,7 +554,9 @@ class NumericMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to be divisible by <{divisor}>, but was not.")
         return self
 
-    def is_close_to(self, other, tolerance) -> Self:
+    def is_close_to(
+        self, other: SupportsFloat | datetime.datetime, tolerance: SupportsFloat | datetime.timedelta
+    ) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 
         Args:
@@ -577,8 +590,9 @@ class NumericMixin(_MixinBase):
             return self.error(
                 f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
             )
-        if self.val < (other - tolerance) or self.val > (other + tolerance):
-            if isinstance(self.val, datetime.datetime):
+        low, high = _tolerance_window(other, tolerance)
+        if self.val < low or self.val > high:
+            if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
                     f" <{_fmt_operand(other)}> within tolerance"
@@ -590,7 +604,9 @@ class NumericMixin(_MixinBase):
                 )
         return self
 
-    def is_not_close_to(self, other, tolerance) -> Self:
+    def is_not_close_to(
+        self, other: SupportsFloat | datetime.datetime, tolerance: SupportsFloat | datetime.timedelta
+    ) -> Self:
         """Asserts that val is numeric and is *not* close to other within tolerance.
 
         Args:
@@ -611,8 +627,9 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if (other - tolerance) <= self.val <= (other + tolerance):
-            if isinstance(self.val, datetime.datetime):
+        low, high = _tolerance_window(other, tolerance)
+        if low <= self.val <= high:
+            if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"
                     f" <{_fmt_operand(other)}> within tolerance"

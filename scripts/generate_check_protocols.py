@@ -47,7 +47,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import datetime
-    from collections.abc import Callable, Hashable, Iterable, Mapping
+{abc}
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, TypeVar, overload
 
@@ -98,7 +98,14 @@ def _returns_a_verdict(node: ast.FunctionDef) -> ast.FunctionDef:
 def generate() -> str:
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
     protocols = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name.endswith("Assertion")]
-    lines = [_HEADER]
+    # the abc import is copied from the module being mirrored rather than repeated here: a name added
+    # there and not here read as undefined in the generated file, which only pyright's baseline caught
+    abc = next(
+        line
+        for line in pathlib.Path(SOURCE).read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("from collections.abc import")
+    )
+    lines = [_HEADER.format(abc=abc)]
     for node in protocols:
         bases = []
         for base in node.bases:

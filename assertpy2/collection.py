@@ -12,7 +12,7 @@ from ._satisfies import _warn_if_vacuous
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Sized
 
     from ._engine._compat import Self
     from .matchers import Matcher
@@ -127,9 +127,8 @@ class CollectionMixin(_MixinBase):
                     collected.extend(superset)
                 except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
                     collected.append(superset)
-            # the same core the matcher spelling uses, so both answer by `==` on a value whose hash
-            # disagrees with it.  A bare `set()` here reported such a value as missing while
-            # `match.is_subset_of` found it
+            # the same core the matcher spelling uses: a bare `set()` reported a value whose hash disagrees with its
+            # `==` as missing
             missing.extend(not_contained_in(self.val, collected))
             try:
                 # for the message only, and deliberately not tied to the lookup above: the failure has
@@ -146,7 +145,13 @@ class CollectionMixin(_MixinBase):
 
         return self
 
-    def is_sorted(self, key=lambda item: item, reverse=False, *, allow_empty: bool = False) -> Self:
+    def is_sorted(
+        self,
+        key: Callable[[Any], Any] = lambda item: item,
+        reverse: bool = False,
+        *,
+        allow_empty: bool = False,
+    ) -> Self:
         """Asserts that val is iterable and is sorted.
 
         Args:
@@ -201,7 +206,7 @@ class CollectionMixin(_MixinBase):
 
         return self
 
-    def has_same_size_as(self, other) -> Self:
+    def has_same_size_as(self, other: Sized) -> Self:
         """Asserts that val has the same length as other.
 
         Args:

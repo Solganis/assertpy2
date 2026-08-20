@@ -194,7 +194,7 @@ class BaseMixin(SatisfiesMixin):
         """
         if not kwargs:
             if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
-                # atomic scalars: no array/dict-likeness, == yields a real bool - skip config/guards entirely
+                # atomic scalars: no array or dict likeness, and `==` yields a real bool
                 if self.val != other:
                     if isinstance(self.val, str) and isinstance(other, str):
                         actual_repr = _truncated(_elided_text_repr(self.val, other))
@@ -224,8 +224,7 @@ class BaseMixin(SatisfiesMixin):
         if operand is not None:
             raise _array_equality_error("is_equal_to", operand)
 
-        # the flag `_compare_to` may set is cleared however this leaves, since a soft block goes on
-        # using the builder after a failure it collected
+        # cleared however this leaves, since a soft block goes on using the builder after a failure it collected
         try:
             return self._compare_to(other, ignore=ignore, include=include, config=config)
         finally:
@@ -234,8 +233,8 @@ class BaseMixin(SatisfiesMixin):
     def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
         """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
         if config is not None and config.strict_types and _types_differ(self.val, other):
-            # the dispatch below routes two dict-likes straight into the key walk, which never sees the
-            # pair itself, so an OrderedDict against a dict would otherwise pass a strict comparison
+            # the dispatch routes two dict-likes into the key walk, which never sees the pair, so an OrderedDict
+            # against a dict would pass a strict comparison
             actual_repr, expected_repr = _disambiguated(self.val, other)
             return self.error(
                 f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.{_config_note(config)}",
@@ -270,10 +269,8 @@ class BaseMixin(SatisfiesMixin):
                     diff=diff,
                 )
         else:
-            # the one branch that decides with `==`, which is what makes identity worth reporting: every
-            # path above walks keys or fields instead, and under a walk two separate instances of a type
-            # that defines no `__eq__` do compare equal. Asked before the comparison, since a type is
-            # free to rewrite its own `__eq__` while answering one
+            # the one branch that decides with `==`: under a walk two instances of a type defining no `__eq__`
+            # compare equal.  Asked first, since a type may rewrite its own `__eq__` while answering
             self._equality_comparison = identity_candidate(self.val, other)
             if _guarded_not_equal(self.val, other):
                 if _both_list_like(self.val, other):
@@ -312,8 +309,7 @@ class BaseMixin(SatisfiesMixin):
             )
 
         def as_comparable(item):
-            # a plain dict is already a comparable dict; _to_comparable_dict returns None for it, which
-            # would skip the ignore/include filter and fall through to a wholesale compare
+            # `_to_comparable_dict` answers `None` for a plain dict, which would skip the ignore filter
             return item if isinstance(item, dict) else self._to_comparable_dict(item)
 
         for index, (actual_item, expected_item) in enumerate(zip(actual, expected, strict=True)):
@@ -325,8 +321,8 @@ class BaseMixin(SatisfiesMixin):
             else:
                 decision = _node_decision(actual_item, expected_item, config)
                 if decision == "strict":
-                    # equal so far, but strict types has to look inside the item; a value the walker
-                    # does not take apart has nothing left to check and is equal
+                    # equal so far, but strict types has to look inside; a value the walker does not take apart is
+                    # equal
                     decision = (
                         "leaf"
                         if _child_entries(actual_item, expected_item, _ROOT, descended_for="strict", config=config)
@@ -546,7 +542,7 @@ class BaseMixin(SatisfiesMixin):
             return val.__name__
         return val.__class__.__name__
 
-    def is_type_of(self, some_type) -> Self:
+    def is_type_of(self, some_type: type) -> Self:
         """Asserts that val is of the given type.
 
         Args:
@@ -690,7 +686,7 @@ class BaseMixin(SatisfiesMixin):
             refuse(some_class, "a class", subject=argument("class"))
         return self
 
-    def is_length(self, length) -> Self:
+    def is_length(self, length: int) -> Self:
         """Asserts that val is the given length.
 
         Checks val is the given length using the ``len()`` built-in.

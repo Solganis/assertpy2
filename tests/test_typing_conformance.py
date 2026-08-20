@@ -25,10 +25,12 @@ from __future__ import annotations
 import ast
 import collections
 import inspect
+import pathlib
 
 import pytest
 
 from assertpy2 import assert_that
+from assertpy2._engine import _typing
 from assertpy2.assertpy import AssertionBuilder
 from tests.test_protocol_parity import _PROTOCOLS, _VALUE_VIEWS, _declarations_of, _members_of
 
@@ -72,7 +74,7 @@ def _concrete_signature(name: str) -> inspect.Signature | None:
         return None
     try:
         return inspect.signature(concrete)
-    except (TypeError, ValueError):  # a C-implemented or otherwise unreadable callable
+    except (TypeError, ValueError):
         return None
 
 
@@ -178,6 +180,25 @@ def test_the_two_agree_about_whether_a_parameter_is_required(pairs) -> None:
     assert_that(sorted(set(differing))).described_as("required in one half and optional in the other").is_empty()
 
 
+def _aliases() -> dict[str, str]:
+    """``{alias: what it names}`` for the plain `X = Y` aliases the typed surface declares.
+
+    Without this the comparison reports `_Number` against `SupportsFloat`, which is one type written
+    two ways: the views spell the numeric bound through the alias and the runtime cannot, since the
+    alias lives inside the `TYPE_CHECKING` block.
+    """
+    found = {}
+    for node in ast.walk(ast.parse(pathlib.Path(_typing.__file__).read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                found[target.id] = node.value.id
+    return found
+
+
+_ALIASES = _aliases()
+
+
 def _shapes(annotation: ast.expr) -> set[str]:
     """The names a top-level union offers, one per member, with any subscript dropped.
 
@@ -191,7 +212,8 @@ def _shapes(annotation: ast.expr) -> set[str]:
     something the views offer and the runtime does not, and four of the first four findings this check
     ever produced were that and nothing else.
     """
-    return {member.split("[", 1)[0] for member in _members_of(annotation)}
+    heads = (member.split("[", 1)[0] for member in _members_of(annotation))
+    return {_ALIASES.get(head, head) for head in heads}
 
 
 def _covered() -> tuple[list[tuple[str, str, set[str], set[str]]], collections.Counter[str]]:
@@ -240,7 +262,7 @@ def _runtime_shapes(annotation: object) -> set[str] | None:
     """The runtime's side of the comparison, or ``None`` when it cannot be read as a spelling."""
     try:
         return _shapes(ast.parse(str(annotation), mode="eval").body)
-    except SyntaxError:  # every module here defers its annotations, so this is an object and not text
+    except SyntaxError:
         return None
 
 

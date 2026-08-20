@@ -134,7 +134,6 @@ class StringMixin(_MixinBase):
         elif isinstance(self.val, collections.abc.Iterable):
             lowered_values = []
             for value in list(self.val):  # materialize once so a one-shot iterable is not exhausted
-                # validate every element up front so the error does not depend on match/scan order
                 require_type(value, str, "a string", subject="every item of val")
                 lowered_values.append(value.lower())
             missing = []
@@ -151,10 +150,7 @@ class StringMixin(_MixinBase):
             refuse(self.val, "a string or an iterable")
         return self
 
-    # `object` and not `str`: the body takes a `str` for text, bytes for a byte string and any
-    # element for anything else iterable, which its own examples show (`starts_with(1)`,
-    # `starts_with((1, 2))`).  The three typed views each narrow it to what their value admits,
-    # and the narrow annotation here contradicted all three at once
+    # `object` and not `str`: the body takes text, bytes or any element, and the three typed views each narrow it
     def starts_with(self, prefix: object) -> Self:
         """Asserts that val is string or iterable and starts with prefix.
 
@@ -184,9 +180,8 @@ class StringMixin(_MixinBase):
             if not self.val.startswith(text_prefix):
                 return self.error(f"Expected <{self.val}> to start with <{text_prefix}>, but did not.")
         elif isinstance(self.val, (bytes, bytearray)):
-            # bytes are iterable, so without this branch they fall through to the one below and get
-            # compared element-wise: `b"foo"` yields the int 102 first, and `102 != b"f"` fails an
-            # assertion that should pass. A prefix of a byte string is a byte string, same as for text
+            # bytes are iterable, so without this branch `b"foo"` yields the int 102 and `102 != b"f"` fails an
+            # assertion that should pass
             raw_prefix = require_type(prefix, (bytes, bytearray), "bytes", subject=argument("prefix"))
             if len(raw_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
@@ -204,10 +199,7 @@ class StringMixin(_MixinBase):
             refuse(self.val, "a string or an iterable")
         return self
 
-    # `object` and not `str`: the body takes a `str` for text, bytes for a byte string and any
-    # element for anything else iterable, which its own examples show (`starts_with(1)`,
-    # `starts_with((1, 2))`).  The three typed views each narrow it to what their value admits,
-    # and the narrow annotation here contradicted all three at once
+    # `object` and not `str`, for the same reason as `starts_with`
     def ends_with(self, suffix: object) -> Self:
         """Asserts that val is string or iterable and ends with suffix.
 
@@ -237,8 +229,7 @@ class StringMixin(_MixinBase):
             if not self.val.endswith(text_suffix):
                 return self.error(f"Expected <{self.val}> to end with <{text_suffix}>, but did not.")
         elif isinstance(self.val, (bytes, bytearray)):
-            # the mirror of the branch in starts_with, and broken the same way without it: the last
-            # element of `b"foo"` is the int 111, never equal to `b"o"`
+            # the mirror of the branch in `starts_with`: the last element of `b"foo"` is the int 111
             raw_suffix = require_type(suffix, (bytes, bytearray), "bytes", subject=argument("suffix"))
             if len(raw_suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
@@ -316,7 +307,7 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to case-insensitive end with <{suffix}>, but did not.")
         return self
 
-    def matches(self, pattern) -> Self:
+    def matches(self, pattern: str) -> Self:
         """Asserts that val is string and matches the given regex pattern.
 
         Args:
@@ -374,7 +365,7 @@ class StringMixin(_MixinBase):
             return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
         return self
 
-    def does_not_match(self, pattern) -> Self:
+    def does_not_match(self, pattern: str) -> Self:
         """Asserts that val is string and does not match the given regex pattern.
 
         Args:
