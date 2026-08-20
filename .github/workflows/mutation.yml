@@ -50,7 +50,7 @@ jobs:
         # Every optional integration, matching the full-deps cell of ci.yml. A skipped test cannot
         # kill a mutant, so mutating dataframe.py or json_mixin.py without pandas/polars/jsonschema
         # installed reports its whole surface as untested.
-        run: uv sync --extra json --extra data --extra inline --group integrations --group mutation
+        run: uv sync --locked --extra json --extra data --extra inline --group integrations --group mutation
 
       - name: Run the mutants
         # Exits non-zero when it cannot collect stats, which is what a baseline failure looks like.
