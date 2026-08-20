@@ -13,8 +13,6 @@ Line numbers are not part of the key: they move on every unrelated edit above th
 from __future__ import annotations
 
 BASELINE: dict[tuple[str, str], int] = {
-    # --- values typed `object`, asked things only their runtime type can answer -------------------
-    # ty accepts these after the narrowing predicate, pyright judges them against the declared `object`
     ("assertpy2/_engine/_diff.py", "reportAttributeAccessIssue"): 14,
     ("assertpy2/_satisfies.py", "reportArgumentType"): 1,
     ("assertpy2/base.py", "reportArgumentType"): 2,
@@ -27,30 +25,15 @@ BASELINE: dict[tuple[str, str], int] = {
     # three of these are values walked as `object`; the fourth is the failure-cluster share, parsed
     # the same guarded way the poll-report fraction is
     ("assertpy2/pytest_plugin.py", "reportArgumentType"): 4,
-    # --- `numbers.Number` declares no arithmetic --------------------------------------------------
-    # The ABC names the tower without promising operators, so comparing one or passing it to
-    # `math.isnan` is flagged even though every concrete member supports both.
     ("assertpy2/_engine/_compare.py", "reportArgumentType"): 2,
     ("assertpy2/_engine/_compare.py", "reportOperatorIssue"): 1,
     ("assertpy2/helpers.py", "reportOperatorIssue"): 2,
-    # --- optional dependencies, imported under try/except ------------------------------------------
-    # Every use sits behind the flag the guarded import sets, which pyright does not correlate with
-    # the binding, so it reports the import and each use.
     ("assertpy2/behave_matchers.py", "reportAttributeAccessIssue"): 1,
     ("assertpy2/behave_matchers.py", "reportMissingModuleSource"): 1,
     ("assertpy2/pytest_plugin.py", "reportMissingImports"): 1,
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
-    # --- the overload sets, all deliberate ---------------------------------------------------------
-    # per-type overloads overlap the generic fallback by construction, and the `satisfies` narrowing
-    # pair takes the same trade in three protocols so a matcher built for another type is caught.
-    #
-    # The count rose with the refinement ladders on the object view and the capability umbrella, and
-    # every one of the additions is the same sentence: an earlier entry is more specific than a later
-    # one and returns something else.  That is what an overload ladder is.  `str | None` overlaps
-    # `_U | None`, a `str` subject overlaps both the umbrella and the fallback, and in each case the
-    # earlier entry is the answer
     ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 28,
     # the verdict twins mirror the protocols, and they mirror their reports with them: the same
     # overload ladder, the same two variance suggestions plus the one `_DictAssertion` carries, and
@@ -63,14 +46,8 @@ BASELINE: dict[tuple[str, str], int] = {
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
-    # --- mixin composition -------------------------------------------------------------------------
-    # The mixins each declare the shared helpers over their own value type, and `AssertionBuilder` is
-    # where all of them meet.
     ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
     ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
-    # --- dynamic attribute resolution ---------------------------------------------------------------
-    # `__getattr__` builds the check and negation proxies, so what it returns matches no declared
-    # return type.  Each site carries its own ty suppression
     ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
     ("assertpy2/assertpy.py", "reportReturnType"): 4,
     # the failure record is `| None` in general and never None at this call, as the comment there says

@@ -72,7 +72,7 @@ HOSTILE = [None, "abc", "", 5, -5, 0, 2.5, True, False, [1, 2, 3], [], {}, {"a":
 def _matcher_verdict(matcher, value):
     try:
         return "held" if matcher.matches(value) else "failed"
-    except (TypeError, ValueError) as exc:  # a matcher is meant to be total, so this is itself a finding
+    except (TypeError, ValueError) as exc:
         return f"refused:{type(exc).__name__}"
 
 
@@ -93,7 +93,7 @@ class TestARelationAnswersTheSameWhicheverWayItIsCalled:
             matcher_verdict = _matcher_verdict(build_matcher(), value)
             fluent_verdict = _fluent_verdict(call_fluent, value)
             if "refused" in fluent_verdict and matcher_verdict == "failed":
-                continue  # the assertion rejected the value; the matcher only declined to match it
+                continue
             assert_that(matcher_verdict).described_as(f"{name} on {value!r}").is_equal_to(fluent_verdict)
 
     def test_the_corpus_makes_this_relation_both_hold_and_fail(self, name, build_matcher, call_fluent, corpus):

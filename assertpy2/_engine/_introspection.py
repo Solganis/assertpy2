@@ -16,9 +16,8 @@ if TYPE_CHECKING:
 
 _T = TypeVar("_T")
 
-# Exact builtin types whose instances cannot carry protocol members (no instance ``__dict__``), so the
-# expensive ``runtime_checkable`` isinstance (getattr_static per member) is skipped for them.  Exact
-# types only: subclasses always take the full structural check.
+# exact builtin types whose instances carry no `__dict__`, so the `runtime_checkable` isinstance is skipped;
+# subclasses take the full structural check
 _ATOMIC_TYPES: Final = frozenset(
     {type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, set, frozenset}
 )

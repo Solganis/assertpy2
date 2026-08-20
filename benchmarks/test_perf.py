@@ -42,13 +42,11 @@ _SPEC = {"id": match.is_instance_of(int), "name": match.is_non_empty_string(), "
 
 
 def test_is_equal_to_nested_pass(benchmark):
-    # the common success path: structural equality delegates to == and builds no diff
     left, right = _records(200), _records(200)
     benchmark(lambda: assert_that(left).is_equal_to(right))
 
 
 def test_is_equal_to_nested_diff(benchmark):
-    # the failure path: _build_equality_diff walks the whole graph to produce a structured diff
     left, right = _records(200), _records(200)
     right[199]["profile"]["city"] = "changed"
 
@@ -60,7 +58,6 @@ def test_is_equal_to_nested_diff(benchmark):
 
 
 def test_matches_structure_with_matchers(benchmark):
-    # matcher dispatch (_is_matcher), StructureMatcher._walk and _as_mapping over many records
     records = _records(200)
 
     def run():
@@ -71,7 +68,6 @@ def test_matches_structure_with_matchers(benchmark):
 
 
 def test_dataclass_diff(benchmark):
-    # recursive structured diff over dataclasses (the _sub_diff_entries path)
     left = [_Row(i, f"n{i}", ["a", "b"]) for i in range(200)]
     right = [_Row(i, f"n{i}", ["a", "b"]) for i in range(200)]
     right[199].tags = ["a", "c"]
@@ -84,7 +80,6 @@ def test_dataclass_diff(benchmark):
 
 
 def test_contains_exactly_large(benchmark):
-    # the contains engine: exact membership over a sizeable list
     items = list(range(300))
     benchmark(lambda: assert_that(items).contains_exactly(*items))
 
@@ -106,8 +101,6 @@ def test_string_diff_with_carets(benchmark):
 
 
 def test_wide_dict_diff(benchmark):
-    # _dict_repr over a wide mapping where nearly every key differs, so there is little to collapse and
-    # every entry is rendered. (The cap on how many are named is free at runtime, so nothing guards it.)
     left = {f"k{i}": i for i in range(200)}
     right = {f"k{i}": -i for i in range(200)}
 
@@ -119,13 +112,11 @@ def test_wide_dict_diff(benchmark):
 
 
 def test_extracting_large(benchmark):
-    # the success path of the collection pipeline, the common shape of an API assertion
     records = _records(300)
     benchmark(lambda: assert_that(records).extracting("id", "name").is_not_empty())
 
 
 def test_contains_only_large(benchmark):
-    # membership both ways over a sizeable list, the multiset engine rather than the ordered one
     items = list(range(300))
     benchmark(lambda: assert_that(items).contains_only(*items))
 
@@ -204,18 +195,14 @@ _ASSERTIONS = 1000
 
 
 def test_builder_construction(benchmark):
-    # `assert_that(...)` with nothing asserted: the ContextVar lookup that decides soft mode, and the
-    # builder dispatch on the value's type. this is the floor every other assertion is charged
     def run():
         for index in range(_ASSERTIONS):
-            assert_that(index)  # assertpy2: allow-dangling
+            assert_that(index)
 
     benchmark(run)
 
 
 def test_scalar_equality_pass(benchmark):
-    # the same construction plus the cheapest terminal assertion there is. read against the floor
-    # above, the difference is what a passing `is_equal_to` costs with no structure to walk
     def run():
         for index in range(_ASSERTIONS):
             assert_that(index).is_equal_to(index)
@@ -224,8 +211,6 @@ def test_scalar_equality_pass(benchmark):
 
 
 def test_short_chain_pass(benchmark):
-    # what assertions look like in a suite that is not testing assertpy2: several links on one small
-    # value, where the cost is per-link overhead rather than data
     def run():
         for _ in range(_ASSERTIONS):
             assert_that("user-42").is_not_none().is_instance_of(str).starts_with("user").is_length(7)
@@ -310,7 +295,6 @@ def _polled(failing, settling, *, trace=True, steps=1):
 
 @pytest.mark.parametrize("trace", [True, False], ids=["recorder-on", "recorder-off"])
 def test_polling_a_scalar(benchmark, trace):
-    # the floor: what the poll loop costs when the value has no structure to walk
     run = _polled(41, 42, trace=trace)
     assert run() == (_POLLS + 1, _replays(1))
     benchmark(run)
@@ -328,7 +312,6 @@ def test_polling_a_wide_value(benchmark, trace):
 
 @pytest.mark.parametrize("steps", [1, 5], ids=["one-step", "five-steps"])
 def test_polling_replays_the_whole_chain(benchmark, steps):
-    # a chain is replayed against a fresh probe on every poll, so five links do five assertions a poll
     run = _polled(41, 42, steps=steps)
     assert run() == (_POLLS + 1, _replays(steps))
     benchmark(run)
@@ -344,14 +327,12 @@ def _wide_failure(differing: int):
 
 
 def test_clustering_a_failure(benchmark):
-    # runs once per failing test over every entry of its diff, so a wide failure pays per difference
     diff = _wide_failure(50)
     assert len(diff.entries) == 50
     benchmark(lambda: observations_of(diff))
 
 
 def test_clustering_a_whole_run(benchmark):
-    # what the terminal summary costs once, over forty failing tests that share one cause
     recorded = [(f"test_{index}", observations_of(_wide_failure(1))) for index in range(40)]
     assert len(clusters(recorded, 40)) == 1
     benchmark(lambda: render(clusters(recorded, 40), 40))

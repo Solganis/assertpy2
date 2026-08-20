@@ -75,7 +75,6 @@ def test_nan_fails_relational_assertions():
 
 
 def test_nan_passes_is_not_between():
-    # NaN is not within any range, so is_not_between holds
     assert_that(float("nan")).is_not_between(0, 100)
 
 

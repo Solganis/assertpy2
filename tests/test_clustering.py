@@ -164,7 +164,6 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(observations(lambda: assert_that({1, 2}).is_equal_to({1, 3}))).is_empty()
 
     def test_a_diagnostic_still_lets_them_cluster(self):
-        # the fields are unusable, the diagnostic is not: it describes the difference, not a side
         hint = "every difference here is one of surrounding whitespace"
         found = keys(lambda: assert_that({"a ", "b "}).is_equal_to({"a", "b"}), hint)
         assert_that(found).is_not_empty()
@@ -182,7 +181,6 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(first).is_not_equal_to(second)
 
     def test_the_same_value_still_clusters_however_long_it_is(self):
-        # the other half of the same rule: past the cut, equal values still have to key alike
         first = keys(lambda: assert_that(_Payload("same")).is_equal_to(_Payload("expected")))
         second = keys(lambda: assert_that(_Payload("same")).is_equal_to(_Payload("expected")))
         assert_that(first).is_equal_to(second)
@@ -267,7 +265,6 @@ class TestNothingHereMayRaise:
         assert_that(stable_repr([shared, shared])).is_equal_to("[{'x': 1}, {'x': 1}]")
 
     def test_a_container_that_raises_when_iterated(self):
-        # a detached ORM collection, a lazy wrapper over a closed connection
         class Detached(list):
             def __iter__(self):
                 raise RuntimeError("not bound to a Session")
@@ -350,8 +347,6 @@ class TestWhichClustersAreWorthPrinting:
         assert_that(clusters(recorded(5, located("user.role")), 40)).is_length(1)
 
     def test_two_of_three_clears_any_ratio_and_is_still_refused(self):
-        # the floor is what keeps the summary quiet on a small run, where reading the two failures is
-        # faster than reading a summary of them
         assert_that(clusters(recorded(2, located("user.role")), 3)).is_empty()
         assert_that(MINIMUM_SIZE).is_equal_to(3)
 
@@ -441,8 +436,6 @@ class TestTheSummaryText:
         assert_that(render([], 40)).is_empty()
 
     def test_two_clusters_that_would_print_alike_are_spelled_out(self):
-        # `{3: ...}` and `{"3": ...}` are two clusters and one readable path, so printing both plainly
-        # hands the reader identical blocks and looks like a rendering bug
         numeric = observations(lambda: assert_that({3: "a"}).is_equal_to({3: "b"}))
         textual = observations(lambda: assert_that({"3": "a"}).is_equal_to({"3": "b"}))
         rows = [(f"n{index}", numeric) for index in range(4)] + [(f"t{index}", textual) for index in range(4)]
@@ -485,7 +478,6 @@ class TestTheSummaryText:
         assert_that(_made_unique(["only"])).described_as("one of a kind keeps its name").is_equal_to(["only"])
 
     def test_an_ordinary_summary_still_reads_as_a_path(self):
-        # the precise spelling is for collisions only: it must not leak into the common case
         found = observations(lambda: assert_that({"user": {"role": "s"}}).is_equal_to({"user": {"role": "a"}}))
         lines = render(clusters([(f"p{index}", found) for index in range(5)], 5), 5)
         assert_that(lines[0]).contains("differ at user.role").does_not_contain("key=")
@@ -528,7 +520,6 @@ class TestThePluginWiring:
         assert_that(config._assertpy2_failures).is_empty()
 
     def test_the_failures_own_diagnostic_reaches_the_key(self):
-        # taken from the outcome the failure already built for its message, not recomputed
         config = self._config()
         for index in range(3):
             with pytest.raises(AssertionFailure) as failure:
@@ -546,7 +537,6 @@ class TestThePluginWiring:
         assert_that(str(caught[0].message)).contains("a count of 2 or more")
 
     def test_a_count_below_two_falls_back_too(self):
-        # one failure is not a cluster, and zero would print a heading per distinct difference
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             assert_that(_cluster_minimum("1")).is_equal_to(MINIMUM_SIZE)
@@ -589,11 +579,9 @@ class TestThePluginWiring:
         original = observations(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))[0]
         restored = _observation_from_wire(_observation_to_wire(original))
         assert_that(restored).is_equal_to(original)
-        # the signature is the cluster key, so it has to survive as something hashable
         assert_that({restored.signature: 1}).contains_key(original.signature)
 
     def test_a_location_free_observation_survives_it_too(self):
-        # the other family travels through different fields of the wire form, label against values
         hint = "every difference here is one of surrounding whitespace"
         original = observations(lambda: assert_that(b"a\n").is_equal_to(b"a"), hint)[0]
         assert_that(_observation_from_wire(_observation_to_wire(original))).is_equal_to(original)
@@ -757,7 +745,6 @@ class TestThePluginWiring:
         assert_that(pytest_plugin._controller_failures).is_empty()
         assert_that(pytest_plugin._controller_failure_count[0]).is_zero()
 
-        # end to end: what the reader is actually told about a run the summary only partly saw
         config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
         for index in range(4):
             with pytest.raises(AssertionFailure) as failure:
@@ -772,7 +759,6 @@ class TestThePluginWiring:
         pytest_plugin._controller_unreadable_workers[0] = 0
 
     def test_a_worker_that_died_is_not_also_called_unreadable(self):
-        # one thing is wrong with it, not two, and the summary should say which
         from assertpy2 import pytest_plugin
 
         pytest_plugin._controller_unreadable_workers[0] = 0
@@ -781,7 +767,6 @@ class TestThePluginWiring:
         assert_that(pytest_plugin._controller_unreadable_workers[0]).is_zero()
 
     def test_a_worker_that_shipped_nothing_about_clusters_is_never_called_dead(self):
-        # it did finish, so the line about it has to be the one about unreadable data rather than a crash
         from assertpy2 import pytest_plugin
 
         pytest_plugin._controller_lost_workers[0] = 0
@@ -1013,8 +998,6 @@ class TestTheDenominatorCountsEveryRedResult:
         pytest_plugin._session_config[0] = None
 
     def test_a_run_with_the_summary_off_does_not_count_collections_either(self):
-        # nothing reads the number when the summary is off, and a run that did not ask for it pays
-        # nothing for it
         from assertpy2 import pytest_plugin
 
         config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=None)
@@ -1039,14 +1022,12 @@ class TestTheDenominatorCountsEveryRedResult:
         pytest_plugin._session_config[0] = None
 
     def test_a_collection_failure_outside_a_session_is_ignored(self):
-        # the reference is cleared on unconfigure, and a report arriving after that has nowhere to go
         from assertpy2 import pytest_plugin
 
         pytest_plugin._session_config[0] = None
         pytest_plugin.pytest_collectreport(SimpleNamespace(failed=True, nodeid="broken.py"))
 
     def test_a_setup_error_is_counted_but_never_clustered(self):
-        # it has no diff, so it can only ever be part of the whole the summary reports against
         config = self._run("setup", RuntimeError("service did not come up"))
         assert_that(config._assertpy2_failures).is_empty()
 
@@ -1083,8 +1064,6 @@ class TestAWorkerThatDiedIsNotSilentlyIgnored:
         )
 
     def test_an_unreadable_worker_is_not_reported_as_a_crash(self):
-        # the two are different claims about the run, and reporting a crash that did not happen is the
-        # kind of false statement this summary exists to avoid
         lines = render(self._cluster(), 6, lost_workers=0, unreadable_workers=1)
         assert_that(lines[0]).is_equal_to(
             "the failures of 1 worker could not be read, so these counts cover only the rest"
@@ -1291,7 +1270,6 @@ class TestNoRenderingRaisesOnASurrogate:
         assert_that(spelled).ends_with("]")
 
     def test_a_value_key_is_sixteen_bytes(self):
-        # the wire carries one per failure, so its width is a promise rather than an implementation note
         assert_that(_identity("anything")).is_length(32).matches(r"^[0-9a-f]{32}$")
 
 
@@ -1343,7 +1321,6 @@ class TestTheShapeOfAValueKeyedSignature:
 
     def test_it_is_not_located_and_names_its_kind(self):
         key = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 2))
-        # exactly False, not merely falsy: the flag crosses the xdist wire as itself
         assert_that(key.located).is_equal_to(False)
         assert_that(key.where).is_equal_to("scalar")
         assert_that(key.values).is_length(2)
@@ -1417,7 +1394,6 @@ class TestWhatTheDenominatorAllows:
         assert_that(clusters(self._recorded(3), -1, minimum=1)).is_empty()
 
     def test_one_failure_can_still_be_a_cluster(self):
-        # only under a floor of one, which the ini option allows: the denominator does not decide it
         assert_that(clusters(self._recorded(1), 1, minimum=1)).is_length(1)
 
 
@@ -1473,7 +1449,6 @@ class TestTheSummaryOnAControllerThatRanNothingItself:
         pytest_plugin._controller_failure_count[0] = count
 
     def test_the_whole_run_is_what_the_workers_reported_and_nothing_more(self):
-        # a controller counted as failing on its own turns "3 of 3" into "3 of 4 failing tests"
         self._shipped(3)
         printed: list[str] = []
         pytest_plugin._write_cluster_summary(
@@ -1565,7 +1540,6 @@ class TestTheControllerSideBookkeeping:
         assert_that(pytest_plugin._controller_collect_errors[0]).is_zero()
 
     def test_a_failure_with_a_diff_but_no_record_behind_it_is_still_grouped(self):
-        # `eventually()` and a snapshot re-wrap raise a failure carrying a diff and no `_outcome`
         config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0, _assertpy2_cluster_minimum=3)
         failure = AssertionError("re-wrapped")
         failure.diff = diff_of(lambda: assert_that({"u": {"role": "s"}}).is_equal_to({"u": {"role": "a"}}))

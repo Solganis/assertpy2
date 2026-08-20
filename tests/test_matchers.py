@@ -47,7 +47,6 @@ class TestTemporalMatchers:
         assert_that(match.is_after(datetime(2020, 1, 1)).matches(datetime(2000, 1, 1))).is_false()
 
     def test_is_before_after_reject_non_comparable(self):
-        # naive value vs aware reference is not comparable -> no match, no raise
         assert_that(match.is_before(datetime.now(timezone.utc)).matches(datetime(2000, 1, 1))).is_false()
         assert_that(match.is_after(datetime.now(timezone.utc)).matches(datetime(2000, 1, 1))).is_false()
         assert_that(match.is_before(datetime(2020, 1, 1)).matches("not a date")).is_false()
@@ -60,13 +59,11 @@ class TestTemporalMatchers:
 
 class TestNumericMatchersRejectNonComparable:
     def test_is_positive_negative_no_raise_on_non_comparable(self):
-        # a non-comparable operand must yield a non-match, never a raw TypeError
         assert_that(match.is_positive().matches("hello")).is_false()
         assert_that(match.is_negative().matches("hello")).is_false()
         assert_that(match.is_positive().matches(None)).is_false()
 
     def test_is_positive_no_typeerror_leak_via_combinator_and_pipeline(self):
-        # a non-comparable element must not leak TypeError out of satisfies/any_satisfy/each
         assert_that("hello").satisfies(match.is_positive() | match.equal_to("hello"))
         assert_that(["two", 1]).any_satisfy(match.is_positive())
         with pytest.raises(AssertionError):
@@ -81,7 +78,6 @@ class TestNumericMatchersRejectNonComparable:
 
 class TestMatchesRegex:
     def test_invalid_pattern_raises_at_construction(self):
-        # an invalid pattern must fail fast at the call site, not later inside matches()/==/a combinator
         with pytest.raises(re.error):
             match.matches_regex("(")
 
@@ -1168,7 +1164,6 @@ class TestEqualToStrictTypes:
         assert_that(match.equal_to({"a": 1}, strict_types=True).matches({"a": 1})).is_true()
 
     def test_agrees_with_the_is_equal_to_flag(self):
-        # the two spellings of one relation must not drift
         for value, expected in ((True, 1), (1, 1.0), (1, 1)):
             spec_ok = match.equal_to(expected, strict_types=True).matches(value)
             try:
@@ -1185,7 +1180,6 @@ class TestMatcherDescriptionsNameTheRightValue:
     wrong thing and stay green."""
 
     def test_all_of_lists_only_the_matchers_that_failed(self):
-        # the filter is negated: listing the ones that passed reads as a plausible sentence too
         composed = match.is_positive() & match.is_even()
         assert_that(composed.describe_mismatch(3)).is_equal_to("<3> did not satisfy: an even integer")
 
@@ -1242,7 +1236,6 @@ class TestMatcherComposition:
         assert_that(composed.matches(3)).is_true()
 
     def test_equal_to_is_not_strict_about_types_by_default(self):
-        # the flag defaults to off, so a bool still matches the int it equals
         assert_that(match.equal_to(1).matches(True)).is_true()
         assert_that(match.equal_to(1, strict_types=True).matches(True)).is_false()
 
@@ -1278,7 +1271,6 @@ class TestTypeMatchersRefuseBadInputAtConstruction:
         assert_that(matcher.describe()).starts_with("an instance of")
 
     def test_the_error_matches_the_builder_assertion_word_for_word(self):
-        # one vocabulary for the same mistake, whichever surface the caller reached it through
         with pytest.raises(TypeError) as from_matcher:
             match.is_instance_of(None)
         with pytest.raises(TypeError) as from_builder:

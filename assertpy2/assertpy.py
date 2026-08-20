@@ -104,9 +104,7 @@ if TYPE_CHECKING:
 
 __tracebackhide__ = True  # clean tracebacks via py.test integration
 
-# our own source files, for stripping internal frames when locating the caller.  Absolute paths in a
-# set rather than suffixes in a list: one hash lookup a frame instead of thirty string comparisons,
-# and a user file of the same name cannot shadow ours
+# absolute paths in a set: one hash lookup a frame, and a user file of the same name cannot shadow ours
 ASSERTPY_FILES: Final = frozenset(
     os.path.join(os.path.dirname(__file__), name)
     for name in os.listdir(os.path.dirname(__file__))
@@ -166,10 +164,8 @@ def _collecting() -> _SoftBlock | None:
     return block if block is not None and block.active else None
 
 
-# soft assertions (contextvars for thread/async safety)
 _soft_ctx: contextvars.ContextVar[int] = contextvars.ContextVar("assertpy2_soft_ctx", default=0)
-# the composed record of each collected failure, group and caller location included: nothing about a
-# soft failure is flattened until the aggregate message is rendered, and the aggregate keeps them too
+# nothing about a soft failure is flattened until the aggregate message is rendered
 _soft_err: contextvars.ContextVar[_SoftBlock | None] = contextvars.ContextVar("assertpy2_soft_err", default=None)
 _soft_group: contextvars.ContextVar[str | None] = contextvars.ContextVar("assertpy2_soft_group", default=None)
 
@@ -222,27 +218,21 @@ def _located(location: tuple[str, int] | None, msg: str) -> str:
     return f"{msg}  [{os.path.basename(location[0])}:{location[1]}]"
 
 
-# how much text a reader can still compare side by side on one line before a difference stops being
-# visible.  Half the block form's window, because the compact form puts both sides on the same line
+# half the block form's window, because the compact form puts both sides on one line
 _SCANNABLE_WIDTH = 60
 
 
 def _indented_diff(diff: object, indent: str) -> list[str]:
     """Render a collected failure's diff under its entry, or nothing when it carries none."""
-    # one line per differing path: the full block form repeats its header on every collected failure,
-    # and a soft run exists precisely to show many of them at once
+    # one line per differing path: a soft run exists to show many of them at once
     lines = []
     entries = getattr(diff, "entries", None) or []
-    # the one entry that repeats its own header: the whole value, or the whole of a one-line string.
-    # "no steps and a root path" is what tells that from a mapping whose only differing key is
-    # spelled "." - that key is a step, and it used to be dropped from the report as a scalar
+    # a mapping whose only differing key is spelled "." has a step, and used to be dropped here
     only = entries[0] if len(entries) == 1 else None
     if only is not None and not only.steps and only.path == ".":
-        # a scalar: the header already carries both values, so a path of "." would only repeat them
         return lines
     if only is not None and only.steps == (Step("line", 1),):
-        # the header already carries a short line in full.  Past that width the change cannot be found
-        # by eye, and a window around it is this form of the caret the block rendering draws
+        # past this width the change cannot be found by eye, so a window around it is drawn instead
         actual_text, expected_text = _safe_str(only.actual), _safe_str(only.expected)
         if len(actual_text) <= _SCANNABLE_WIDTH and len(expected_text) <= _SCANNABLE_WIDTH:
             return lines
@@ -272,7 +262,6 @@ def _format_soft_errors(errs: list[AssertionOutcome]) -> str:
             if group is not None:
                 lines.append(f"  [{group}]")
         indent = ("    " if group is not None else "  ") if has_groups else ""
-        # a message can run to several lines, so the number goes on the first and the rest is indented:
         # written flat, the location landed on the last line and the next entry read as a new section
         headline, *continuation = outcome.message.splitlines() or [""]
         lines.append(f"{indent}{counter}. {_located(outcome.location, headline)}")
@@ -326,8 +315,7 @@ class _SoftAssertions:
     def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None, *_rest: object) -> None:
         _soft_ctx.set(_soft_ctx.get() - 1)
         if exc_type is not None:
-            # the escaping error still wins, or `except ValueError` around the block would break.  The
-            # failures collected before it travel as a note rather than being dropped with it
+            # the escaping error still wins, and what was collected before it travels as a note
             if exc is not None and (block := _soft_err.get(None)) is not None and _soft_ctx.get() == 0:
                 block.active = False
                 errs, block.failures = block.failures, []
@@ -337,14 +325,12 @@ class _SoftAssertions:
         block = _soft_err.get(None)
         errs = block.failures if block is not None else []
         if _soft_ctx.get() == 0 and block is not None:
-            # closed before the failures are raised, so a task still running with this block in its
-            # own context copy stops collecting into a list nobody will read
+            # a task still running with this block in its own context copy stops collecting
             block.active = False
             block.failures = []
         if errs and _soft_ctx.get() == 0:
             out = _format_soft_errors(errs)
-            # the same class as a single failure, so one `except AssertionFailure` covers a soft block
-            # too, and it hands back what it aggregated rather than only the text it rendered
+            # the same class as a single failure, so one `except AssertionFailure` covers both
             raise AssertionFailure(out, failures=tuple(errs))
 
 
@@ -421,9 +407,6 @@ def assert_all(*callables: Callable[[], object]) -> None:
             fn()
 
 
-# factory methods
-
-
 @overload
 def assert_that(val: str, description: str = "") -> _StringAssertion: ...
 
@@ -474,13 +457,8 @@ def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytear
 def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
-# --- capability overloads, and their order is load-bearing -----------------------------------------
-#
-# A `pandas.DataFrame` satisfies *every* structural protocol, because pandas models column access with
-# a catch-all attribute, so it is assignable to anything a checker is asked about.  The frame overload
-# is therefore first, and everything below it only sees values a frame did not already claim.
-#
-# `tests/test_overload_order.py` holds that order, since nothing announces it when an edit breaks it.
+# a `pandas.DataFrame` is assignable to every structural protocol, since pandas models column access with a catch-all
+# attribute, so the frame overload goes first.  `tests/test_overload_order.py` holds that order
 @overload
 def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_FrameT_co]: ...
 
@@ -489,10 +467,8 @@ def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_Fram
 def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_ArrayT_co]: ...
 
 
-# The capability umbrella, below the frame and array pair so it cannot take a value they claim, and
-# above the fallback so a value with any recognised capability keeps the whole surface.  What reaches
-# the fallback is a value that answers to nothing the library knows how to use, and that is the one
-# case where offering 152 assertion names was never anything but a lie.
+# the capability umbrella: below the frame pair so it cannot claim their values, above the fallback so anything with
+# a recognised capability keeps the whole surface
 @overload
 def assert_that(val: _CapableT, description: str = "") -> AssertionBuilder[_CapableT]: ...
 
@@ -640,7 +616,6 @@ def assert_conforms(
                 )
         return builder.builder(validated_items, description, kind)
     try:
-        # duck-typed pydantic call, guarded by the hasattr check above
         validated = model.model_validate(val)  # ty: ignore[call-non-callable]  # model_validate is dynamic
     except catchable as exc:
         return builder.error(
@@ -732,8 +707,7 @@ def fail(msg=""):
                 except TypeError as e:
                     assert_that(str(e)).contains('unsupported operand')
     """
-    # no value under test and nothing compared, so the payload is empty. the class still matches every
-    # other failure, so a handler written against the library does not have to name two of them
+    # the same class as every other failure, so a handler does not have to name two of them
     raise AssertionFailure(f"Fail: {msg}!" if msg else "Fail!")
 
 
@@ -777,14 +751,11 @@ def soft_fail(msg=""):
     fail(msg)
 
 
-# assertion extensions
 _extensions = {}
-# guards the check-then-set below: two threads adding the same name would both pass an
-# unlocked collision check
+# guards the check-then-set below against two threads adding the same name
 _extensions_lock = threading.Lock()
 
 
-# names a polling chain resolves itself, where an extension of that name never reaches the assertion.
 # `not_` is answered inside `__getattr__` rather than declared, so it is named here
 _POLLING_NAMES: Final = frozenset(
     name
@@ -837,8 +808,8 @@ def add_extension(func, *, override: bool = False):
     name = getattr(func, "__name__", None)
     if not isinstance(name, str) or not name.isidentifier():
         raise ValueError(f"the assertion's __name__ must be a valid Python identifier, got {name!r}")
-    # outside the override branch: there is nothing to override here, the name is simply out of reach
-    # after `eventually()`, and `override=True` only bought a chain that asserts nothing in silence
+    # nothing to override: after `eventually()` the name is out of reach, and `override=True` bought a chain that
+    # asserts nothing in silence
     if name in _POLLING_NAMES or name.startswith(("_", "cr_", "gi_")):
         raise ValueError(
             f"{name!r} is how a polling chain spells one of its own, so an extension of that name "
@@ -850,9 +821,7 @@ def add_extension(func, *, override: bool = False):
             _extensions.get(name), func
         )
         if not override and not same:
-            # both of these used to go through in silence, and the second is the worse of the two:
-            # an extension called `is_equal_to` replaced the core assertion, and every later call to
-            # it failed with the extension's message instead
+            # an extension called `is_equal_to` used to replace the core assertion in silence
             if name in vars(_ExtendedBuilder) or name in _extensions:
                 raise ValueError(
                     f"an assertion named {name!r} has already been added; pass override=True to "
@@ -864,8 +833,7 @@ def add_extension(func, *, override: bool = False):
                     f"replace it deliberately, or give the extension another name"
                 )
         if isinstance(func, types.FunctionType):
-            # plain functions bind once here via the descriptor protocol, keeping assert_that() free of
-            # per-call grafting; the dedicated subclass keeps AssertionBuilder itself pristine on removal
+            # the descriptor protocol binds once here, and the subclass keeps `AssertionBuilder` pristine on removal
             setattr(_ExtendedBuilder, name, func)
         else:
             _extensions[name] = func
@@ -905,7 +873,6 @@ def _builder(val, description="", kind=None, expected=None, logger=None):
     return ab
 
 
-# warnings
 class WarningLoggingAdapter(logging.LoggerAdapter):
     """Logging adapter to unwind the stack to get the correct callee filename and line number."""
 
@@ -926,16 +893,9 @@ _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
 
 
-# Chain steps that transform the value instead of asserting (their failures are never AssertionError,
-# so negating them can only produce a misleading "Expected ... to NOT satisfy" message).  Hybrids that
-# both assert and pivot (extracting_group, matches_with_groups, when_called_with) stay negatable.
-
-# Chain steps that configure or transform instead of asserting: "inverting" them is meaningless and
-# would otherwise fail later with a misleading "Expected ... to NOT satisfy" message.
-# What to do instead, per category.  The register in `_engine/_operations.py` says what an operation
-# does; these two say what that means for the proxy the caller reached it through.
-# `{name}` is filled in, because a remedy that says "the assertion after it" makes the reader work out
-# what "it" was; naming the call lets them find it in their own line
+# what to do instead, per category: the register in `_engine/_operations.py` says what an operation does, and these
+# say what that means for the proxy it was reached through.  `{name}` is filled in so the reader can find the call in
+# their own line
 _INSTEAD_OF_NEGATING: Final = {
     CONFIGURES: "negate the assertion that tests the expectation {name}() set instead",
     TRANSFORMS: "negate the assertion after {name}() instead",
@@ -950,8 +910,7 @@ _INSTEAD_OF_CHECKING: Final = {
 }
 
 
-# the proxies themselves, which are reached the same way and are not operations at all.  Two `not_`
-# used to behave as one, which is neither the identity a reader would expect nor an error
+# the proxies themselves, reached the same way and not operations at all
 _PROXY_ENTRIES: Final = {
     "check": "check() cannot be negated; call check().not_ before the assertion instead",
     "not_": "two negations cancel; drop both instead of writing not_.not_",
@@ -979,10 +938,7 @@ def _refuse_without_a_verdict(target: object, name: str, proxy: str, remedies: d
     `check()` answered `passed=True` for a pivot, which reads as an assertion that ran and held.
     """
     category = WITHOUT_A_VERDICT.get(name)
-    # an extension registered over the name replaces the operation, and with it the reason to refuse:
-    # the register describes what *this library's* operations do, and an override is somebody else's
-    # method under a name we happen to have used.  `add_extension(..., override=True)` is documented
-    # and asserting, so `not_.first()` on one has to keep working
+    # an extension over the name is somebody else's method, so the register's reason to refuse no longer applies
     if category is None or not _is_still_ours(target, name):
         return
     remedy = remedies[category].format(name=name)
@@ -998,9 +954,8 @@ class NegatedBuilder(Generic[_S]):
     """
 
     if TYPE_CHECKING:
-        # the builder's data attributes are handed back unchanged by the fallback below; declaring
-        # them here (checkers prefer a declared attribute over __getattr__) keeps `not_.val` typed as
-        # the value it is, instead of as the negated *method* the fallback describes
+        # declared because a checker prefers a declared attribute over `__getattr__`, which would type this as the
+        # negated method
         val: Any
         description: str
         kind: str | None
@@ -1012,8 +967,7 @@ class NegatedBuilder(Generic[_S]):
 
     def __getattr__(self, name: str) -> Callable[..., _S]:
         _refuse_without_a_verdict(self._builder, name, "negated with not_", _INSTEAD_OF_NEGATING)
-        # the same ownership rule the register follows: an extension over `check` or `not_` is a
-        # strange thing to write and still somebody else's method, so it is not ours to refuse
+        # an extension over `check` or `not_` is somebody else's method, so it is not ours to refuse
         if name in _PROXY_ENTRIES and _is_still_ours(self._builder, name):
             raise TypeError(_PROXY_ENTRIES[name])
         attr = getattr(self._builder, name)
@@ -1029,9 +983,8 @@ class NegatedBuilder(Generic[_S]):
                 return self._negated_check(name, attr, *args, **kwargs)
             return self._negated_strict(name, attr, *args, **kwargs)
 
-        # every branch of _negated hands back the very builder this proxy wraps, which is `_S` by
-        # construction of `not_`.  That cannot be stated without declaring `_builder: _S`, and an
-        # unbound TypeVar has no attributes, so the code above could not read `kind` off it.
+        # every branch hands back the builder this proxy wraps, which cannot be said without `_builder: _S`, and an
+        # unbound TypeVar has no attributes
         return _negated  # ty: ignore[invalid-return-type]  # see above
 
     def _make_msg(self, name: str, *args: object, **kwargs: object) -> str:
@@ -1078,8 +1031,7 @@ class NegatedBuilder(Generic[_S]):
     ) -> AssertionBuilder:
         if self._verdict(attr, *args, **kwargs) is not None:
             return self._builder
-        # the message is composed here rather than by `error()`, which would prefix the description a
-        # second time, but the exception is the builder's own: a negated failure is a failure
+        # composed here rather than by `error()`, which would prefix the description twice
         raise AssertionBuilder._failure(
             AssertionOutcome(message=self._make_msg(name, *args, **kwargs), actual=self._builder.val)
         )
@@ -1088,10 +1040,9 @@ class NegatedBuilder(Generic[_S]):
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
         if self._verdict(attr, *args, **kwargs) is not None:
-            return self._builder  # the assertion failed, so the negation held
+            return self._builder
         block = _collecting()
         err_list = block.failures if block is not None else []
-        # underlying assertion passed, so the negation failed: collect it and taint .value
         msg = self._make_msg(name, *args, **kwargs)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
@@ -1109,7 +1060,7 @@ class NegatedBuilder(Generic[_S]):
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
         if self._verdict(attr, *args, **kwargs) is not None:
-            self._builder._check_sink = None  # it failed, so the negation held
+            self._builder._check_sink = None
             return self._builder
         self._builder._check_sink = AssertionOutcome(
             message=self._make_msg(name, *args, **kwargs), actual=self._builder.val
@@ -1120,8 +1071,7 @@ class NegatedBuilder(Generic[_S]):
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
         if self._verdict(attr, *args, **kwargs) is not None:
-            return self._builder  # the assertion failed, so the negation held
-        # underlying assertion passed, so the negation failed: taint .value like error() does
+            return self._builder
         msg = self._make_msg(name, *args, **kwargs)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
@@ -1141,8 +1091,7 @@ class CheckBuilder:
     """
 
     if TYPE_CHECKING:
-        # handed back unchanged by the fallback below; declared here because checkers prefer a declared
-        # attribute over __getattr__, which would otherwise type these as the callable it describes
+        # declared because a checker prefers a declared attribute over `__getattr__`
         val: Any
         description: str
 
@@ -1150,8 +1099,7 @@ class CheckBuilder:
         def not_(self) -> CheckBuilder: ...
 
     def __init__(self, target: object, builder: AssertionBuilder) -> None:
-        # two references, because `not_` moves the target to the negation proxy while the mode and the
-        # sink stay on the builder underneath it
+        # two references: `not_` moves the target to the negation proxy while the mode stays underneath
         self._target = target
         self._builder = builder
 
@@ -1230,12 +1178,10 @@ class AssertionBuilder(
         self._expected_warning = None
         self._return_value = _UNSET
         self._raised_exception = _UNSET
-        # the first collected failure, so `.value` refuses an unverified value and names the root
-        # cause rather than breaking its narrowed type in silence
+        # `.value` refuses an unverified value and names the root cause rather than breaking its type in silence
         self._value_taint_reason: str | None = None
         self._value_origin: str | None = None
-        # where a failure lands while `check()` has this builder in verdict mode, instead of being
-        # raised, collected or logged
+        # where a failure lands while `check()` has this builder in verdict mode
         self._check_sink: AssertionOutcome | None = None
 
     @property
@@ -1317,45 +1263,32 @@ class AssertionBuilder(
         return self.val
 
     if TYPE_CHECKING:
-        # Narrowing declarations, shadowing the runtime mixin methods for type checkers only:
-        # is_not_none() removes None from the tracked value type, is_instance_of() narrows it to the
-        # checked class. Runtime behavior lives in BaseMixin and is unchanged.
+        # narrowing declarations for checkers only; the runtime behaviour lives in `BaseMixin`
 
         @overload
         def is_not_none(self: AssertionBuilder[_U | None]) -> AssertionBuilder[_U]: ...
         @overload
         def is_not_none(self) -> Self: ...
-        def is_not_none(self) -> Any:  # overload impl stub required outside stub files, never executed
-            ...
+        def is_not_none(self) -> Any: ...
 
-        # the Self overload is never picked by calls (a class arg always binds type[_U] first); it keeps
-        # AssertionBuilder structurally conformant with the protocols' `(type) -> Self` contract. pyright
-        # flags it reportOverlappingOverload - intentional, same category as the assert_that fallback overlap
+        # never picked by a call, and it keeps the class conformant with the protocols' `(type) -> Self`; pyright
+        # reports the overlap and that is intended
         @overload
         def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
         @overload
         def is_instance_of(self, some_class: type) -> Self: ...
-        def is_instance_of(self, some_class: type) -> Any:  # overload impl stub, never executed
-            ...
+        def is_instance_of(self, some_class: type) -> Any: ...
 
-        # The element pivots, declared here for the same reason the refinements above are: the runtime
-        # method returns `self.builder(<an element>)` while `CollectionMixin` declares it `-> Self`,
-        # which is true of no chain at all.  A caller who reached this class rather than a curated view
-        # was told the container came back, so `assert_that(rows).first().value.count(1)` type-checked
-        # under all three checkers and raised `AttributeError`.  Depth is the half a narrowing at
-        # `assert_that()` cannot reach: the second pivot lands back here whatever the first returned.
-        #
-        # The self type is structural rather than `AssertionBuilder[Collection[_E]]`, because `_T` is
-        # invariant: a builder over a `Sequence[int]` is not a builder over a `Collection[int]`, and
-        # the nominal spelling bound for a mapping and silently missed every other container.
+        # the element pivots: the runtime returns `self.builder(<an element>)` while `CollectionMixin` declares `->
+        # Self`, so `assert_that(rows).first().value.count(1)` type-checked and raised.  The self type is structural
+        # because `_T` is invariant, and the nominal spelling bound for a mapping and missed every other container
         @overload
         def first(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
         @overload
         def first(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
         @overload
         def first(self) -> Self: ...
-        def first(self) -> Any:  # overload impl stub required outside stub files, never executed
-            ...
+        def first(self) -> Any: ...
 
         @overload
         def last(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
@@ -1363,8 +1296,7 @@ class AssertionBuilder(
         def last(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
         @overload
         def last(self) -> Self: ...
-        def last(self) -> Any:  # overload impl stub, never executed
-            ...
+        def last(self) -> Any: ...
 
         @overload
         def element(self: AssertionBuilder[Mapping[_K, _V]], index: int) -> AssertionBuilder[_K]: ...
@@ -1372,8 +1304,7 @@ class AssertionBuilder(
         def element(self: _ElementSource[_E], index: int) -> AssertionBuilder[_E]: ...
         @overload
         def element(self, index: int) -> Self: ...
-        def element(self, index: int) -> Any:  # overload impl stub, never executed
-            ...
+        def element(self, index: int) -> Any: ...
 
         # `mapped()` for the same reason and with one more of its own: it builds a `list` whatever it
         # was given, so `-> Self` is wrong about the container as well as about the element.  It also

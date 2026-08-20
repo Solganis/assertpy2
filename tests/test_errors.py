@@ -59,7 +59,6 @@ class TestDiffEntry:
         assert_that(entry.expected).is_none()
 
     def test_str_survives_raising_str(self):
-        # a contained value whose __str__ raises must not crash the diff rendering (uses _safe_str)
         class Bad:
             def __str__(self):
                 raise ValueError("boom")
@@ -272,8 +271,6 @@ class TestMessageTruncation:
 
 
 def test_is_equal_to_error_survives_raising_str_operand():
-    # the failure message renders operands via _safe_str, so an operand whose __str__ raises yields a
-    # clean AssertionError instead of that operand's exception
     class Bad:
         def __str__(self):
             raise ValueError("boom")
@@ -314,7 +311,6 @@ class TestEveryFailureCarriesTheValueUnderTest:
         assert_that(failure.value.expected).is_none()
 
     def test_a_failure_built_outside_an_assertion_has_no_record(self):
-        # eventually() and the snapshot re-wraps construct the exception directly
         assert_that(AssertionFailure("plain")._outcome).is_none()
 
     def test_the_sentinel_reprs_as_itself(self):

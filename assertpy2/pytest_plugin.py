@@ -195,9 +195,8 @@ def pytest_configure(config):
         config._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
         config._assertpy2_diff_max = 50
-    # under pytest the plugin renders the diff as its own colored report section, so keep it out of the
-    # message to avoid showing it twice; off pytest the message stays the only carrier. save/restore the
-    # prior value (rather than forcing True back) so tests that drive these hooks directly stay balanced
+    # under pytest the plugin renders the diff as its own report section, so it stays out of the message; the prior
+    # value is restored rather than forced back, so tests driving these hooks stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
     config._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
@@ -207,8 +206,7 @@ def pytest_configure(config):
     config._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
     # nothing reads the samples once the report is off, so stop paying for them at the poll site
     async_assertions._COLLECT_RETRIES = config._assertpy2_poll_threshold is not None
-    # save/restore rather than force False back: the environment variable may have turned the guard on
-    # before import, and unconfigure must not silently undo that
+    # save and restore rather than force back: the environment variable may have turned the guard on before import
     config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
     if config.getoption("assertpy2_vacuous"):
         _satisfies._VACUOUS_GUARD = True
@@ -224,9 +222,8 @@ def pytest_unconfigure(config):
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
-    # module-level, so a second session in the same process would otherwise open with the first one's
-    # failures already counted. the other controller accumulators are cleared where they are consumed;
-    # these are consumed by a hook that may not run at all, so they are released here instead
+    # module-level, so a second session in the same process would open with the first one's failures counted; these
+    # are consumed by a hook that may not run
     _controller_failures.clear()
     _controller_failure_count[0] = 0
     _controller_lost_workers[0] = 0
@@ -243,15 +240,13 @@ def pytest_unconfigure(config):
 # snapshots touched by xdist workers, collected on the controller as each worker finishes
 _controller_touched: set = set()
 
-# inline-snapshot source edits recorded by xdist workers, applied on the controller (workers must not
-# rewrite shared source files in parallel)
+# workers must not rewrite shared source files in parallel
 _controller_inline: list = []
 
 # node ids that reached each snapshot key, shipped by xdist workers and unioned on the controller
 _controller_accesses: dict = {}
 
-# failures shipped by xdist workers: the summary is written on the controller, and a worker's own
-# config is not the controller's, so without this the run that most needs a summary gets none
+# the summary is written on the controller, and a worker's own config is not the controller's
 _controller_failures: list = []
 _controller_failure_count: list = [0]
 _controller_lost_workers: list = [0]
@@ -314,15 +309,13 @@ def _report_dangling(item):
     if not found:
         return
     here = _item_scope(item)
-    # a finding outside any def (module scope) has no test to attach to, so the first item takes it,
-    # and one inside a nested `def` belongs to the test whose scope its own starts with
+    # a finding outside any def has no test to attach to, so the first item takes it
     mine = [one for one in found if not one.scope or (here and one.scope[: len(here)] == here)]
     if not mine:
         return
     recorded[item.path] = [one for one in recorded[item.path] if one not in mine]
-    # one warning for the whole test, however many statements it holds: under `-W error` the first
-    # warning leaves this function as an exception, so a second one would never be reported at all and
-    # the reader would fix one line, rerun, and meet the next
+    # one warning for the whole test: under `-W error` the first leaves this function as an exception, so a second
+    # would never be reported
     first, rest = mine[0], mine[1:]
     message = first.message
     if rest:
@@ -352,9 +345,8 @@ def pytest_collectreport(report):
     """
     config = _session_config[0]
     if config is None or not report.failed or hasattr(config, "workeroutput"):
-        # not on a worker: under xdist every worker collects the whole suite, so counting there turned
-        # one broken module into one red result per worker. The controller collects too, and it is the
-        # one writing the summary
+        # not on a worker: every worker collects the whole suite, so counting there turned one broken module into one
+        # red result per worker
         return
     if getattr(config, "_assertpy2_cluster_minimum", None) is not None:
         _controller_collect_errors[0] += 1
@@ -382,8 +374,8 @@ def pytest_testnodedown(node, error):
         _controller_inline.extend(tuple(record) for record in inline)
     accesses = getattr(node, "workeroutput", {}).get("assertpy2_accesses")
     if accesses:
-        # unioned here rather than judged in the worker: two parametrised cases on two workers are one
-        # node id each locally, so no worker sees a second and only the union does
+        # unioned here rather than judged in the worker: two parametrised cases on two workers are one node id each
+        # locally
         for snapname, key, nodes, site in accesses:
             _controller_accesses.setdefault((snapname, key), set()).update(nodes)
             _snapshot._ACCESS_SITES.setdefault((snapname, key), site)
@@ -475,8 +467,8 @@ def _fail_on_reused_key(session, message: str) -> None:
     of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
     message the reader needs under a stack that points at the wrong place.  Print it and go red.
     """
-    # only a run that otherwise succeeded: this hook is reached from a `finally`, so Ctrl-C and an
-    # internal error land here too, each with an exit code that says more than "tests failed"
+    # only a run that otherwise succeeded: this hook is reached from a `finally`, so Ctrl-C and an internal error
+    # land here too
     if session.exitstatus == pytest.ExitCode.OK:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -511,8 +503,8 @@ def pytest_sessionfinish(session, exitstatus):
     touched = set(_snapshot._TOUCHED) | _controller_touched
     _controller_touched.clear()
     if not touched or not _is_full_run(config):
-        # on a subset run the touched set is incomplete, so orphan detection is unreliable: skip both
-        # pruning (which would delete a live but un-run sibling) and reporting (a false positive)
+        # on a subset run the touched set is incomplete, so pruning would delete a live sibling and reporting would
+        # be a false positive
         return
     sub_orphans, whole_orphans = _snapshot._find_orphans(touched)
     if not sub_orphans and not whole_orphans:
@@ -565,9 +557,8 @@ def _collect_worker_failures(node, died: bool = False) -> None:
             if isinstance(nodeid, str) or _refuse(nodeid)
         ]
         counted = output["assertpy2_failure_count"]
-        # both halves or neither: rows without a count add cluster members to a denominator they never
-        # raised, and the summary then reports six of three. The count is checked rather than coerced,
-        # since `int()` would turn `True` and `3.9` into a denominator nobody sent
+        # both halves or neither: rows without a count add members to a denominator they never raised.  Checked
+        # rather than coerced, since `int()` would take `True` and `3.9`
         if isinstance(counted, bool) or not isinstance(counted, int):
             raise TypeError(counted)
         if counted < len({nodeid for nodeid, _ in received}):

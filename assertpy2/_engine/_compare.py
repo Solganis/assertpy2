@@ -136,8 +136,8 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
 
 def _array_equality_error(method: str, operand: object) -> TypeError:
     """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
-    # point at the assertion that delegates to the library's own comparison: it reports the differing
-    # column or index, where wrapping `.equals()` in is_true() would report a bare False
+    # the dedicated assertion reports the differing column or index, where wrapping `.equals()` would report a bare
+    # False
     dedicated = "is_frame_equal(expected)" if hasattr(operand, "equals") else "is_array_equal(expected)"
     return TypeError(
         f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
@@ -284,8 +284,8 @@ def _keyed_types_differ(actual, expected) -> bool:
     different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
     Values are left alone here: they do become pairs, and the walk judges them.
     """
-    # structural, like everything else in this engine: the concrete-type check let a `UserDict` pass
-    # here while the matcher walking the same values refused it
+    # structural, like everything else here: the concrete-type check let a `UserDict` pass where the matcher refused
+    # it
     if is_mapping_like(actual) and is_mapping_like(expected):
         return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
@@ -314,21 +314,19 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             return "equal" if comparator(actual, expected) else "leaf"
         if config.strict_types:
             if actual is expected and not at_root:
-                # identity, which a container gets free from `PyObject_RichCompareBool` and the walk
-                # below would take away.  Not at the root, where it made `strict_types` the weaker rule
+                # identity, which a container gets free from `PyObject_RichCompareBool`.  Not at the root, where it
+                # made `strict_types` the weaker rule
                 return "equal"
             if _types_differ(actual, expected):
-                # ahead of tolerance on purpose: a tolerance says how far apart two numbers may be, it
-                # does not say they may be different types, and a strict run that quietly accepted int
-                # vs float inside its own tolerance would be the surprise, not the rule
+                # ahead of tolerance: a tolerance says how far apart two numbers may be, not that they may be
+                # different types
                 return "leaf"
             if _keyed_types_differ(actual, expected):
-                # before the walk, because the walk cannot reach a key: it descends *through* keys into
-                # values, and two mappings keyed `True` and `1` present it with the same set of values
+                # before the walk, which descends through keys into values, so two mappings keyed `True` and `1`
+                # present the same values
                 return "leaf"
             if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
-                # `[True] == [1]`: a container says nothing about the types inside it, so the walk that
-                # normally stops here keeps going.  A value it cannot decompose is already equal
+                # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
         if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
             return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"

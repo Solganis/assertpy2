@@ -34,8 +34,6 @@ _PROJECTS = _CORPUS / "projects"
 # one directory per run: two at once were deleting each other's environments, and a pid alone is not
 # enough, since the OS reuses them
 _RUN = f"{os.getpid()}-{secrets.token_hex(4)}"
-# the Python the consumer environments are built on, which is not the one running this script: `tomllib`
-# needs 3.11, while a consumer may well be on 3.10
 _CONSUMER_PYTHON: str | None = None
 _ENVIRONMENTS = _CORPUS / ".envs" / _RUN
 _BUILDS = _CORPUS / ".builds" / _RUN
@@ -62,9 +60,6 @@ _TOOLS_BY_NAME = {
 _TOOLS = ("pytest>=9.1,<10", "packaging>=24,<26")
 # the one tool the inventory itself needs, kept separate because the baseline install gets only this
 _INSTRUMENT = "packaging>=24,<26"
-# always recorded alongside the package itself, which is added by the name it calls itself rather than
-# by a literal.  The checkers join them only when they ran, which is what makes the artefact readable
-# rather than aspirational
 _RECORDED = frozenset({"pytest", "packaging"})
 
 
@@ -184,7 +179,6 @@ _EXTRA_DISTRIBUTIONS: dict[str, tuple[str, ...]] = {
     "allure": ("allure-pytest",),
     "behave": ("behave",),
 }
-# an extra that is only a shorthand for others, and so brings nothing of its own
 _BUNDLES = {"data": ("numpy", "pandas", "polars")}
 
 
@@ -301,7 +295,6 @@ _PROMISED_DEPENDENCIES = frozenset({"typing-extensions"})
 def _declared_dependencies() -> set[str]:
     """What a plain install is entitled to hold beyond the package itself."""
     written = {_named(requirement) for requirement in _project().get("dependencies", [])}
-    # both, so the check fires on a dependency added to either without the other
     return written | _PROMISED_DEPENDENCIES
 
 
@@ -452,7 +445,6 @@ def versions(environment: pathlib.Path, ran: tuple[str, ...]) -> dict[str, str]:
         return {}
     found = dict(sorted(json.loads(answer).items()))
     if package_name() not in {_canonical(name) for name in found}:
-        # the version of the thing being judged is the one line an artefact cannot do without
         return {}
     wanted = _RECORDED | set(ran) | {package_name()}
     return {name: version for name, version in found.items() if _canonical(name) in wanted}
@@ -470,8 +462,6 @@ def check(project: Project, environment: pathlib.Path, wanted: tuple[str, ...]) 
         if name not in wanted:
             continue
         module, *arguments = (_STRICT if project.mypy_strict else _CHECKERS).get(name, _CHECKERS[name])
-        # each checker is handed the interpreter explicitly: run from the project directory they look
-        # for a `.venv` beside the code, find none, and report the package as missing
         spelled = [argument.format(python=interpreter, cache=cache) for argument in arguments]
         results.append(Result(project.name, name, *_run((str(interpreter), "-m", module, *spelled), cwd=project.path)))
     return results
@@ -492,8 +482,6 @@ def _discard(*directories: pathlib.Path) -> None:
     """Remove this run's directories, and their shared parent once the last run has left it empty."""
     for directory in directories:
         shutil.rmtree(directory, ignore_errors=True)
-        # the shared parent goes only once the last run has left it empty, and losing that race is
-        # not a failure: another run either still holds it or removed it first
         with contextlib.suppress(OSError):
             directory.parent.rmdir()
 
@@ -508,7 +496,7 @@ def main() -> int:
     parser.add_argument("--json", type=pathlib.Path, default=None, help="also write the results as JSON")
     arguments = parser.parse_args()
 
-    global _CONSUMER_PYTHON  # one setting, read by every environment this run builds
+    global _CONSUMER_PYTHON
     _CONSUMER_PYTHON = arguments.python
 
     projects = [Project.read(path) for path in sorted(_PROJECTS.iterdir()) if (path / "corpus.toml").exists()]
@@ -544,14 +532,12 @@ def main() -> int:
                 if not arguments.keep:
                     shutil.rmtree(environment, ignore_errors=True)
     finally:
-        # whatever happened, including a build that never produced anything, this run leaves nothing
         if not arguments.keep:
             _discard(_BUILDS, _ENVIRONMENTS)
     if arguments.json:
         arguments.json.parent.mkdir(parents=True, exist_ok=True)
         report_data = {
             "installed_from": arguments.kind,
-            # what the checks ran against, because "green" without a version is "green today"
             "versions": resolved,
             "results": [dataclasses.asdict(result) for result in results],
         }

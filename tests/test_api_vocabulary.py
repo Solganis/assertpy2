@@ -51,14 +51,12 @@ _BARE_NAMES = frozenset(
         "last",
         "at_json_path",
         "conforms_to_openapi",
-        # pivots: they hand back a different value to keep asserting on, they do not assert
         "mapped",
         "flat_mapped",
         "single",
         "returned",
         "errors",
         "error_of",
-        # entry points and terminals, not assertions
         "builder",
         "check",
         "error",
@@ -122,7 +120,6 @@ class TestEveryNegationMatchesItsPositive:
                     positive
                 )
                 return
-        # a verbal negation: `does_not_match` negates `matches`, `does_not_raise` negates `raises`
         stem = name.removeprefix("does_not_")
         assert_that(any(candidate.startswith(stem[:5]) for candidate in names - {name})).described_as(
             f"{name!r} negates nothing that exists"

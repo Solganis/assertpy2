@@ -23,7 +23,7 @@ class TestSequenceElisionBoundaries:
     """
 
     def test_twenty_elements_rendering_to_sixty_characters_is_printed_whole(self):
-        seq = [1] * 20  # exactly 60 characters, exactly 20 elements: both caps at their limit
+        seq = [1] * 20
         assert_that(repr(seq)).is_length(60)
         assert_that(_elided_seq_repr(seq, [9] * 20)).is_equal_to(repr(seq))
 
@@ -34,7 +34,7 @@ class TestSequenceElisionBoundaries:
         assert_that(_elided_seq_repr([*[1] * 20, 2], [1] * 21)).is_equal_to("[.., 2]")
 
     def test_sixty_one_characters_are_collapsed(self):
-        seq = [1] * 19 + [10]  # 20 elements, 61 characters: under the element cap, over the character one
+        seq = [1] * 19 + [10]
         assert_that(repr(seq)).is_length(61)
         assert_that(_elided_seq_repr(seq, [*[1] * 19, 99])).is_equal_to("[.., 10]")
 

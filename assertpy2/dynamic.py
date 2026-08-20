@@ -69,9 +69,8 @@ class DynamicMixin(_MixinBase):
         is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
 
         if is_dict and not val_is_namedtuple:
-            # dict-like values are read by key subscription below, so presence is a key check, not
-            # hasattr - otherwise a name that is a real method (items/get/...) but absent as a key
-            # skips this gate and then raises KeyError on the subscript
+            # dict-like values are read by key below, so a name that is a real method but absent as a key would skip
+            # this gate and raise KeyError
             if attr_name not in self.val:
                 err_msg = f"Expected key <{attr_name}>, but val has no key <{attr_name}>."
         elif not hasattr(self.val, attr_name):

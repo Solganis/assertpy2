@@ -218,12 +218,10 @@ class TestSoftFailuresCarryTheirDiff:
         # asserted on the indented diff lines, not on a substring: the headline carries a cap of its
         # own whose wording is identical, so a plain contains() would pass without this code running
         diff_lines = [line for line in str(exc_info.value).splitlines() if line.startswith("   ")]
-        # k0 matches (0 == -0), so eight paths differ: five are named and three stay counted
         assert_that(diff_lines).is_length(6)
         assert_that(diff_lines[-1].strip()).is_equal_to("... and 3 more")
 
     def test_a_scalar_failure_adds_no_line(self):
-        # the header already carries both values, so a path of "." would only repeat them
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(1).is_equal_to(2)
         assert_that(str(exc_info.value).splitlines()).is_length(2)
@@ -390,7 +388,7 @@ class TestAnErrorOutOfTheBlockKeepsWhatWasCollected:
         """
 
         class WithoutAddNoteError(ValueError):
-            add_note = None  # what 3.10 looks like to `getattr`
+            add_note = None
 
         with pytest.raises(WithoutAddNoteError) as failure, soft_assertions():
             assert_that(1).is_equal_to(2)
@@ -483,7 +481,6 @@ class TestTheNoteNeverReplacesTheException:
         assert_that(notes[0]).contains("<1> to be equal to <2>")
 
     def test_an_exception_that_refuses_the_attribute_is_not_fatal(self):
-        # the last resort: nothing can be attached, and the exception still has to travel untouched
         class SealedError(ValueError):
             __slots__ = ()
 
@@ -533,7 +530,7 @@ class TestTheInvariantBehindAllOfThem:
             except AttributeError:
                 pytest.skip("this shape refuses attributes, which the None case already covers")
 
-        with pytest.raises(BaseException) as failure, soft_assertions():  # the type is the assertion
+        with pytest.raises(BaseException) as failure, soft_assertions():
             assert_that(1).is_equal_to(2)
             raise raised
 

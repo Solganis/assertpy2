@@ -25,7 +25,6 @@ def test_ignore_set_of_keys():
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1}, ignore={"b", "c"})
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({}, ignore=frozenset({"a", "b", "c"}))
     assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 2, "c": 3}, ignore=set())
-    # a set may carry nested-path tuples, same as a list
     assert_that({"a": 1, "b": {"x": 2, "y": 3}}).is_equal_to({"a": 1, "b": {"x": 2}}, ignore={("b", "y")})
 
 
@@ -208,7 +207,6 @@ def test_failure_single_item_tuple_keys_ignore():
     # due to unpacking-fu, single item tuple keys must be tupled in ignore statement, so this works:
     assert_that({(1,): "a", (2,): "b"}).is_equal_to({(1,): "a", (2,): "c"}, ignore=((2,),))
 
-    # but this fails:
     with pytest.raises(AssertionError) as exc_info:
         assert_that({(1,): "a", (2,): "b"}).is_equal_to({(1,): "a"}, ignore=(2,))
     assert_that(str(exc_info.value)).is_equal_to(
@@ -431,7 +429,6 @@ class TestDictErrorSurvivesBrokenRepr:
 
 
 def test_ignore_include_applies_to_dict_elements_in_a_list():
-    # ignore/include must reach plain dict elements of a list, not just top-level dicts
     assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 1, "b": 999}], ignore="b")
     assert_that([{"a": 1, "b": 2}]).is_equal_to([{"a": 1, "b": 999}], include="a")
     with pytest.raises(AssertionError):

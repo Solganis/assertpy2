@@ -17,8 +17,7 @@ def _submodel(annotation: object) -> type | None:
     """The nested model class for an annotation, peeling ``Optional`` / ``list`` / ``tuple``; else ``None``."""
     origin = typing.get_origin(annotation)
     args = typing.get_args(annotation)
-    # both names are needed below 3.14, where `Optional[X]` and `X | None` had distinct origins; from
-    # 3.14 they are the same object and the second test is redundant on the interpreters we gate on
+    # both names are needed below 3.14, where `Optional[X]` and `X | None` had distinct origins
     if origin is typing.Union or origin is types.UnionType:
         non_none = [arg for arg in args if arg is not type(None)]
         return _submodel(non_none[0]) if len(non_none) == 1 else None
@@ -105,8 +104,7 @@ def shape(value: object, _seen: frozenset[int] = frozenset()) -> object:
         return "str"
     if isinstance(value, (dict, list, tuple)):
         if id(value) in _seen:
-            # a self-referential graph (an ORM backref, a tree with parent pointers) would otherwise
-            # recurse until the interpreter gives up; every sibling walker marks the cycle instead
+            # a self-referential graph would otherwise recurse until the interpreter gives up
             return "<circular ref>"
         nested = _seen | {id(value)}
         if isinstance(value, dict):

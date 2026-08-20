@@ -260,7 +260,6 @@ class TestThePublicSurfaceHasNotMoved:
             f"{section}.{name}"
             for section in ("exported", "builder", "matchers")
             for name in stored[section]
-            # one leading underscore is private; `__version__` and its kind are part of the surface
             if name.startswith("_") and not name.startswith("__")
         ]
         assert_that(leaked).described_as("private names in the compatibility snapshot").is_empty()

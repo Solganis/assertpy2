@@ -31,19 +31,15 @@ from ._size import length_of
 
 _T = TypeVar("_T")
 
-# a refusal is read on one terminal line next to the traceback, so the value is capped well below the
-# limit a diff row uses: what matters here is which value arrived, not all of it
+# a refusal is read on one terminal line, so the cap is well below the one a diff row uses
 _SHOWN = 60
 
 
-# a type name is written by whoever defined the type and can be as long as they liked; the refusal is
-# still one line
+# a type name can be as long as its author liked, and the refusal is still one line
 _NAMED = 40
-# `repr` output is arbitrary text: it can carry escape sequences that repaint the terminal, and newlines
-# that turn one refusal into what looks like several
+# `repr` output is arbitrary text: escape sequences repaint the terminal, and newlines turn one refusal into several
 _CONTROL = {code: "\\x{:02x}".format(code) for code in [*range(0x20), 0x7F, 0x85]} | {  # noqa: UP032  # an f-string cannot hold this escape
-    # line and paragraph separators, plus the bidi overrides: those reorder the printed line without
-    # changing the string, so a value can be made to read as something it is not
+    # the bidi overrides reorder the printed line without changing the string
     code: "\\u{:04x}".format(code)  # noqa: UP032  # same
     for code in [0x2028, 0x2029, *range(0x202A, 0x2030), *range(0x2066, 0x206A)]
 }
@@ -62,8 +58,7 @@ def _shown(value: object) -> str:
     sequences or newlines from `__repr__`, and a diagnostic that repaints the terminal or spreads over
     four lines is worse than the mistake it reports.
     """
-    # escaped before it is capped, not after: an escape is four characters where the original was one,
-    # so capping first let a value of sixty control characters render as two hundred and forty
+    # escaped before it is capped: capping first let sixty control characters render as two hundred and forty
     shown = _truncated(_one_line(_safe_repr(value)), _SHOWN)
     return f"<{shown}> ({_truncated(type(value).__name__, _NAMED)})"
 
@@ -113,8 +108,7 @@ def sized_len(value: object, *, subject: str = "val") -> int:
     length = length_of(value)
     if length is None:
         refuse(value, "a sized object", subject=subject)
-    # past the protocol check there is nothing left to diagnose: a `__len__` that exists and still
-    # raises is a bug in the value, and it travels out as its author wrote it
+    # a `__len__` that exists and still raises is a bug in the value, and it travels out as its author wrote it
     return length
 
 
@@ -134,8 +128,7 @@ def reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
         return
     named = []
     for name in unknown:
-        # one suggestion, not a list: the same reasoning as the extraction hint, where measured typos
-        # score ~0.9 and wrong neighbours ~0.65, so extra candidates only cost the hint its credibility
+        # one suggestion, like the extraction hint: measured typos score ~0.9 and wrong neighbours ~0.65
         close = difflib.get_close_matches(str(name), sorted(known), n=1)
         named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
     plural = "" if len(named) == 1 else "s"

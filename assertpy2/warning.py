@@ -85,8 +85,7 @@ class WarningMixin(_MixinBase):
         if not callable(self.val):
             refuse(self.val, "callable")
         if not (isinstance(warning, type) and issubclass(warning, Warning)):
-            # `issubclass` on a non-class raises before the check can answer, and its own message
-            # ("issubclass() arg 1 must be a class") is about the builtin rather than the assertion
+            # `issubclass` on a non-class raises with a message about the builtin rather than the assertion
             refuse(warning, "a warning type", subject=argument("warning"))
         new_builder = self.builder(self.val, self.description, self.kind, logger=self.logger)
         new_builder._expected_warning = warning

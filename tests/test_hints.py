@@ -56,20 +56,16 @@ class TestTheHintNamesTheWholeDifference:
         assert_that(_message("one\r\ntwo", "one\ntwo")).contains("every difference here is one of line endings")
 
     def test_line_endings_win_over_whitespace_when_both_would_serve(self):
-        # stripping also hides a trailing "\r\n", so without an order the broader claim would be made
         message = _message("a\r\n", "a\n")
         assert_that(message).contains("one of line endings")
         assert_that(message).does_not_contain("surrounding whitespace")
 
     def test_two_explanations_when_neither_alone_accounts_for_it(self):
-        # the line ending is in the middle, so stripping cannot reach it, and the trailing space is
-        # outside it, so normalising newlines cannot either. it takes both
+        # the line ending is in the middle and the trailing space outside it, so it takes both normalisations
         message = _message("a\r\nb ", "a\nb")
         assert_that(message).contains("one of line endings and surrounding whitespace")
 
     def test_every_entry_has_to_be_covered_not_merely_some(self):
-        # one field is whitespace, the other is a different word. explaining half of a failure sends
-        # the reader to fix the half that was never the problem
         message = _message({"a": "x ", "b": "one"}, {"a": "x", "b": "two"})
         assert_that(message).does_not_contain("every difference here")
 
@@ -87,7 +83,6 @@ class TestKeysTheExpectedSideDoesNotHave:
 class TestTheShapeRatherThanTheValues:
     def test_a_dto_against_the_payload_it_was_built_from(self):
         # the reviewer's standing case: a model compared with raw JSON. before this there was no
-        # signal at all that the contents were identical
         message = _message({"name": "a", "city": "b"}, _User("a", "b"))
         assert_that(message).contains("the contents match field for field")
 
@@ -126,8 +121,7 @@ class TestNormalisationsAddedInTheSecondSlice:
         assert_that(_message(actual, expected)).does_not_contain("every difference here")
 
     def test_two_json_documents_are_not_called_unparsed(self):
-        # both sides are text here, so neither is the one that was left unparsed. one normalisation,
-        # two causes, and only the wording can tell them apart
+        # both sides are text, so neither is the one left unparsed: one normalisation, two causes
         message = _message('{"a": 1}', '{"a":1}')
         assert_that(message).contains("the same JSON written differently")
         assert_that(message).does_not_contain("unparsed")
@@ -143,9 +137,7 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
         assert_that(_message(actual, expected)).contains("the same elements, in a different order")
 
     def test_two_fields_holding_each_other_s_value_is_not_a_rearrangement(self):
-        # the check that keeps this from being noise. with two boolean fields, any failure where both
-        # flip holds "the same values elsewhere", which was one generated failure in five: every one
-        # of those statements true, not one of them useful
+        # with two boolean fields, one generated failure in five holds "the same values elsewhere": true and useless
         assert_that(_message({"read": True, "write": False}, {"read": False, "write": True})).does_not_contain(
             "different order"
         )
@@ -154,9 +146,7 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
         assert_that(_message([1, 2], [1, 3])).does_not_contain("different order")
 
     def test_elements_that_cannot_be_hashed_take_the_slower_route(self):
-        # counting is the fast path and needs hashable values. driven through built entries because
-        # the diff decomposes a reordered list of dicts into per-key entries, so the pairs that do
-        # reach here holding an unhashable value come from a leaf the walk stopped at
+        # the pairs that reach here holding an unhashable value come from a leaf the walk stopped at
         entries = [
             _ROOT.index(0).entry(actual={"a": 1}, expected={"b": 2}),
             _ROOT.index(1).entry(actual={"b": 2}, expected={"a": 1}),
@@ -164,8 +154,7 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).contains("in a different order")
 
     def test_a_hash_that_raises_something_other_than_type_error_is_left_alone(self):
-        # an unhashable value raises TypeError and has a slower route waiting for it. anything else
-        # coming out of a user __hash__ is not a shape this understands, so it says nothing
+        # anything other than TypeError out of a user `__hash__` is not a shape this understands
         class Hostile:
             def __hash__(self):
                 raise ValueError("boom")
@@ -192,12 +181,10 @@ class TestRearrangementIsOnlySaidWhereOrderExists:
 
 class TestNaNIsSaidBeforeAnythingElse:
     def test_a_comparison_that_can_never_pass(self):
-        # `Expected <nan:float> to be equal to <nan:float>` reads as a bug in the library until the
-        # line below explains that this is what NaN does
+        # `Expected <nan:float> to be equal to <nan:float>` reads as a bug in the library until the line explains it
         assert_that(_message(float("nan"), float("nan"))).contains("a NaN is equal to nothing, not even itself")
 
     def test_nan_nested_among_other_differences(self):
-        # it comes first because no change to the other fields could make this pass
         message = _message({"score": float("nan"), "name": "a"}, {"score": 1.0, "name": "b"})
         assert_that(message).contains("a NaN takes part in this comparison")
 
@@ -218,8 +205,8 @@ class TestSilenceOnEverythingElse:
         assert_that(_message(actual, expected)).does_not_contain("every difference here")
 
     def test_a_value_that_really_is_none_is_not_read_as_an_absent_key(self):
-        # the whole reason `absent` exists. both leave the field at None, and before the marker this
-        # was reported as a key the expected side does not have, which was simply untrue
+        # both leave the field at None, and before the marker this was reported as a key the expected side does not
+        # have
         message = _message({"a": 1}, {"a": None})
         assert_that(message).does_not_contain("carries keys the expected side does not")
 
@@ -232,14 +219,12 @@ class TestSilenceOnEverythingElse:
 
     @pytest.mark.parametrize("kind", ["match", "openapi", "contains"])
     def test_a_predicate_description_is_never_treated_as_a_value(self, kind):
-        # a `match` entry holds the actual value against a description of a predicate, not against a
-        # value. without the kind gate this pair equalises under stripping and the reader is told,
-        # with some authority, that a predicate differs from a value by whitespace
+        # a `match` entry holds a value against a description of a predicate, and without the kind gate the pair
+        # equalises under stripping
         entries = [DiffEntry(path="role", actual="guest ", expected="guest")]
         assert_that(diagnose(DiffResult(kind=kind, entries=entries))).is_none()
 
     def test_a_sequence_is_not_told_it_has_extra_keys(self):
-        # a set or a list reports its extras the same way, and "keys" is the wrong word for both
         entries = [DiffEntry(path="extra", actual=5, expected=None, absent="expected")]
         assert_that(diagnose(DiffResult(kind="set", entries=entries))).is_none()
 
@@ -275,8 +260,7 @@ class TestSilenceOnEverythingElse:
             assert_that(_message({"name": "a"}, built)).contains("the contents match field for field")
 
     def test_a_field_read_that_raises_cannot_break_the_failure(self):
-        # a model whose dump explodes is the caller's business, and their assertion error has to
-        # survive this line trying to describe it
+        # a model whose dump explodes is the caller's business, and their assertion error has to survive this line
         class BrokenModel:
             def model_dump(self):
                 raise ValueError("boom")
@@ -296,9 +280,7 @@ class TestSilenceOnEverythingElse:
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 
     def test_a_value_whose_comparison_raises_cannot_break_the_failure(self):
-        # numpy arrays and anything else with an opinionated __eq__ raise from `!=`. this runs while
-        # an assertion error is already on its way out, and swallowing the real failure to report a
-        # crash from the helpful line would be the worst outcome available
+        # an opinionated `__eq__` raises from `!=`, and this runs while an assertion error is already on its way out
         class Ambiguous:
             def __ne__(self, other):
                 raise ValueError("ambiguous")
@@ -312,8 +294,7 @@ class TestSilenceOnEverythingElse:
 
 class TestTheMessageStaysUsableAsAPrefix:
     def test_the_original_sentence_is_untouched(self):
-        # the line goes below, so `pytest.raises(match=...)` and `startswith` written against the
-        # original message keep working
+        # the line goes below, so `pytest.raises(match=...)` written against the original message keeps working
         message = _message("bob ", "bob")
         assert_that(message).starts_with("Expected <bob > to be equal to <bob>, but was not.")
 
@@ -343,17 +324,14 @@ class TestOnlyTheTypesDiffer:
         assert_that(_message(actual, expected)).contains("the same text against a value of another type")
 
     def test_a_scalar_says_nothing_because_the_headline_already_did(self):
-        # `<7:int>` / `<7:str>` names both types outright, which is more than the line could say
         message = _message(7, "7")
         assert_that(message).contains("<7:int>").contains("<7:str>")
         assert_that(message).does_not_contain("another type")
 
     def test_a_mixture_of_type_and_value_differences_says_nothing(self):
-        # one pair differs in type and the other in value, so no single statement covers the failure
         assert_that(_message({"a": 7, "b": 1}, {"a": "7", "b": 2})).does_not_contain("another type")
 
     def test_a_scalar_whose_two_sides_read_differently_still_gets_the_line(self):
-        # the headline names both types only where the two render alike, and `1` against `1.0` does not
         assert_that(_hint(1, 1.0, strict_types=True)).is_equal_to(
             "the values on both sides are equal, and only their types differ"
         )
@@ -390,7 +368,6 @@ class TestTheNarrowerExplanationStillWins:
     """
 
     def test_text_that_parses_as_json_is_still_called_json(self):
-        # both sides read alike under `str()`, which is exactly what the type line looks for
         message = _message({"a": [1, 2]}, {"a": "[1, 2]"})
         assert_that(message).contains("unparsed JSON text")
         assert_that(message).does_not_contain("another type")
@@ -404,7 +381,6 @@ class TestTheNarrowerExplanationStillWins:
         ids=["bytes", "enum"],
     )
     def test_a_type_difference_the_ladder_already_explains(self, actual, expected, expected_line):
-        # both of these differ in type too, and both have a better answer than saying so
         assert_that(_message(actual, expected)).contains(expected_line)
 
 
@@ -512,15 +488,12 @@ class TestEqualityDecidedByIdentity:
         assert_that(_message(_NoEq("ada", "london"), _NoEq("ada", "london"))).contains("compare with object's __eq__")
 
     def test_it_is_said_where_the_values_differ_too(self):
-        # the reader would otherwise fix the field and fail again on the same line
         assert_that(_hint(_NoEq("ada", "london"), _NoEq("ada", "paris"))).contains("equality is identity")
 
     def test_a_dataclass_that_opted_out_of_equality(self):
-        # the diff has no entries at all here: every field agrees and the walk has nothing to report
         assert_that(_message(_OptedOut("ada"), _OptedOut("ada"))).contains("equality is identity")
 
     def test_a_dataclass_that_opted_out_and_whose_fields_differ(self):
-        # the diff does show the field, and fixing it would still not make the comparison pass
         assert_that(_message(_OptedOut("ada"), _OptedOut("grace"))).contains("equality is identity")
 
     def test_two_exceptions_of_one_class(self):
@@ -537,7 +510,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(_AlwaysUnequal(1), _AlwaysUnequal(1))).is_none()
 
     def test_a_type_deciding_its_own_inequality_is_not_blamed_either(self):
-        # the comparison a failing assertion runs is `actual != expected`, which this type answers
         class Contrary:
             def __init__(self, value):
                 self.value = value
@@ -562,13 +534,10 @@ class TestEqualityDecidedByIdentity:
         ids=["comparators", "tolerance", "strict types", "ignore null", "ignore", "include"],
     )
     def test_a_walked_comparison_is_not_blamed_on_identity(self, options):
-        # every option replaces `==` with a walk over keys or fields, under which two separate instances
-        # of this type do compare equal, so nothing here is decided by identity
         message = _message(_NoEq("ada", "london"), _NoEq("ada", "paris"), **options)
         assert_that(message).does_not_contain("identity")
 
     def test_a_mapping_of_its_own_is_walked_and_so_is_not_blamed_either(self):
-        # a duck-typed mapping goes down the key walk rather than to `==`
         class Headers:
             def __init__(self, data):
                 self._data = data
@@ -591,8 +560,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_message(Headers({"a": 1}), Headers({"a": 2}))).does_not_contain("identity")
 
     def test_a_containment_failure_over_the_same_values_is_not_it(self):
-        # the items are the same objects and only their order differs, which the message already says,
-        # and identity had nothing to do with it
         left, right = _NoEq("ada", "london"), _NoEq("grace", "london")
         with pytest.raises(AssertionFailure) as failure:
             assert_that([left, right]).contains_exactly(right, left)
@@ -607,13 +574,10 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(_NoEq("ada", "london"), _AlwaysUnequal(1))).is_none()
 
     def test_the_same_object_on_both_sides_is_not_it(self):
-        # it compares equal under identity, so a failure can never be about that
         value = _NoEq("ada", "london")
         assert_that(identity_candidate(value, value)).is_false()
 
     def test_a_type_that_rewrites_its_own_equality_mid_comparison_is_not_it(self):
-        # the question is asked before the comparison runs, so the type that decided the failure is the
-        # one answering it, not the one it left behind
         class Sneaky:
             def __init__(self, value):
                 self.value = value
@@ -627,8 +591,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_message(Sneaky(1), Sneaky(1))).does_not_contain("identity")
 
     def test_a_descriptor_answering_for_the_class_is_not_believed(self):
-        # what an operator runs is the definition the class tree carries, and a descriptor can answer
-        # one way for the class and another for an instance
         class Deceptive:
             class Equality:
                 def __get__(self, instance, owner=None):
@@ -643,7 +605,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(Deceptive(1), Deceptive(1))).is_none()
 
     def test_a_type_inheriting_its_equality_is_still_read(self):
-        # the walk stops at the first class that defines the name, which may be a base
         class Base:
             def __eq__(self, other):
                 return False
@@ -657,8 +618,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(Child(1), Child(1))).is_none()
 
     def test_the_operator_is_asked_about_rather_than_the_class_attribute(self):
-        # a metaclass can answer for `__eq__` with something other than what the operator runs, so the
-        # lookup is static: this type compares by value and must not be called identity-based
         class Sneaky(type):
             def __getattribute__(cls, name):
                 if name in ("__eq__", "__ne__"):
@@ -677,7 +636,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(ByValue(1), ByValue(2))).is_none()
 
     def test_a_type_that_cannot_be_asked_about_its_equality_is_survived(self):
-        # the failure is already on its way out, and a diagnostic that raises would replace it
         class Hostile(type):
             def __getattribute__(cls, name):
                 if name == "__eq__":
@@ -691,8 +649,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(_message(Guarded(1), Guarded(1))).contains("to be equal to")
 
     def test_a_class_tree_that_names_no_equality_at_all_is_not_read_as_identity(self):
-        # the walk answers "not object's" when it finds no definition anywhere, which is the safe
-        # direction: a line claiming identity is worse than no line
         class Meta(type):
             @property
             def __mro__(cls):
@@ -705,8 +661,6 @@ class TestEqualityDecidedByIdentity:
         assert_that(identity_candidate(Blank(1), Blank(1))).is_false()
 
     def test_a_metaclass_descriptor_raising_on_the_equality_lookup_is_survived(self):
-        # a data descriptor on the metaclass is read before the class tree is, so the cheap look does
-        # run code of the caller's and can raise, and the failure has to survive that
         class Raising:
             def __get__(self, instance, owner=None):
                 raise RuntimeError("no lookups here")
@@ -756,12 +710,9 @@ class TestATypeDifferenceIsClaimedOnlyWhereTheTypesDiffer:
     """Both lines about types read the two sides of one comparison, and one side is not enough."""
 
     def test_two_sides_of_one_type_that_read_alike_are_left_alone(self):
-        # the pair the text branch looks at: same rendering, never equal, and one type between them
         assert_that(_hint({"a": _SameText()}, {"a": _SameText()})).is_none()
 
     def test_field_for_field_is_not_said_when_both_sides_are_the_same_type(self):
-        # built rather than compared: the walk descends into two mappings, so a pair of them reaches
-        # the leaf check only when it is handed one
         entry = DiffEntry(path="row", actual=_MappingRow("a"), expected=_MappingRow("a"))
         assert_that(diagnose(DiffResult(kind="dict", entries=[entry]))).is_none()
 

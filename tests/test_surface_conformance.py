@@ -32,9 +32,7 @@ if TYPE_CHECKING:
 # `[file.py:12]`, which the compact surfaces append to a collected entry and the block form has no use
 # for. Stripped before comparing headlines, since a location is about where, not about what
 _LOCATION = re.compile(r"\s+\[[^\[\]]+:\d+\]$")
-# the prefix a polling failure puts in front of the assertion's own message
 _POLL_PREFIX = re.compile(r"^Expected condition not met after .*?\. Last failure: ")
-# a path row of the compact rendering: three spaces, then `path: ...`
 _COMPACT_ROW = re.compile(r"^   (?P<path>.+?): ")
 
 _HINTS = (
@@ -58,7 +56,7 @@ class Case:
 
     name: str
     subject: object
-    check: object  # Callable[[Any], object]; the builder type differs per surface by design
+    check: object
 
 
 def _hint_of(lines: list[str]) -> str | None:
@@ -94,7 +92,6 @@ def _soft(case: Case) -> Delivered:
     with pytest.raises(AssertionFailure) as failure, soft_assertions():
         case.check(assert_that(case.subject))
     _header, *entry = str(failure.value).splitlines()
-    # the entry number is the aggregate's own decoration, not part of what the assertion said
     entry[0] = entry[0].removeprefix("1. ")
     return _split_compact("\n".join(entry))
 
@@ -257,8 +254,6 @@ def test_a_long_line_keeps_its_position_of_change_everywhere():
         assert_that(SURFACES[surface](case).paths).described_as(surface).is_equal_to(("line 1",))
 
 
-# --- the other axis: a matcher and the method of the same name ------------------------------------
-
 # every name that exists on both surfaces, as (method, matcher factory). `is_falsy`, `is_truthy` and
 # `is_uuid` are matcher-only and `filtered_on`/`extracting` are method-only, so neither has a twin here
 TWINS = [
@@ -303,7 +298,7 @@ def _method_verdict(method: str, value: object, args: tuple) -> str:
         getattr(assert_that(value), method)(*args)
     except AssertionFailure:
         return "fail"
-    except Exception:  # any refusal at all: the point is that it was not an answer
+    except Exception:
         return "error"
     return "pass"
 
@@ -322,11 +317,11 @@ def test_a_matcher_answers_what_its_method_answers(method: str, factory, args: t
     for value in VALUES:
         verdict = _method_verdict(method, value, args)
         if verdict == "error":
-            continue  # the method declined to answer, so there is nothing to agree with
+            continue
         try:
             matcher = factory(*args)
         except TypeError:
-            continue  # the matcher validates its own operand at build time instead
+            continue
         assert_that(matcher.matches(value)).described_as(f"{method} on {value!r}").is_equal_to(verdict == "pass")
 
 

@@ -31,7 +31,7 @@ def _vararg_assertions() -> list[str]:
             continue
         try:
             parameters = list(inspect.signature(method).parameters.values())
-        except (TypeError, ValueError):  # C-level callables carry no introspectable signature
+        except (TypeError, ValueError):
             continue
         if not any(param.kind is param.VAR_POSITIONAL for param in parameters):
             continue
@@ -93,7 +93,6 @@ def test_universal_quantifiers_hold_vacuously_on_an_empty_subject(call, subject)
 
 @pytest.mark.parametrize("subject", _EMPTY_SUBJECTS, ids=repr)
 def test_an_existential_quantifier_fails_on_an_empty_subject(subject):
-    # the counterpart that proves the rows above are a contract and not an "always passes" defect
     with pytest.raises(AssertionError):
         assert_that(subject).any_satisfy(_never)
 
@@ -175,6 +174,5 @@ class TestVacuousGuard:
         assert_that(BrokenLen()).each(lambda item: item > 0)
 
     def test_the_guard_is_off_by_default(self):
-        # a suite running filterwarnings = ["error"] must not break on upgrade
         warnings.simplefilter("error", VacuousAssertionWarning)
         assert_that([]).all_satisfy(lambda item: item > 0)

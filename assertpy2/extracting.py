@@ -194,8 +194,7 @@ class ExtractingMixin(_MixinBase):
             try:
                 return _attr_value(item, name)
             except AttributeError as exc:
-                # hasattr() reports a raising accessor as a missing one, so telling the two apart is the
-                # difference between "you typed the wrong name" and "your property is broken"
+                # hasattr() reports a raising accessor as a missing one, and the two want different messages
                 if hasattr(type(item), name):
                     raise _extraction_error(
                         f"item has property or zero-arg method <{name}>, but reading it raised AttributeError: {exc}"
@@ -204,8 +203,7 @@ class ExtractingMixin(_MixinBase):
                     available = sorted(attr for attr in dir(item) if not attr.startswith("_"))
                 except Exception:  # a broken __dir__ must not replace the real diagnostic with its own
                     available = []
-                # one suggestion, not a list: measured typos score ~0.9 while wrong neighbours sit at
-                # ~0.65, so extra candidates are noise that costs the hint its credibility
+                # one suggestion: measured typos score ~0.9 while wrong neighbours sit at ~0.65
                 close = difflib.get_close_matches(str(name), available, n=1)
                 hint = f"; did you mean {close[0]!r}?" if close else ""
                 raise _extraction_error(f"item does not have property or zero-arg method <{name}>{hint}") from None
@@ -227,8 +225,7 @@ class ExtractingMixin(_MixinBase):
             return True
 
         def _sort(item):
-            # only called when "sort" is in kwargs (the caller guards); an explicit sort=None means
-            # "no ordering", and 0 is a stable no-op for it
+            # an explicit `sort=None` means no ordering, and 0 is a stable no-op for it
             sort = kwargs["sort"]
             if isinstance(sort, str):
                 return _extract(item, sort)
@@ -238,16 +235,14 @@ class ExtractingMixin(_MixinBase):
                 return sort(item)
             if sort is None:
                 return 0
-            # anything else is a mistake: silently returning unsorted items would be answered by a
-            # confusing order mismatch further down the chain, the way `filter` used to behave
+            # silently returning unsorted items would surface as a confusing order mismatch further down the chain
             refuse(sort, "a str, an iterable, or a callable", subject=argument("sort"))
 
-        # only pay the sort when a sort key was actually requested; otherwise iteration order is unchanged
-        # and the source is walked as it comes, which keeps the extractor seeing it at the same point
+        # only pay the sort when one was requested, so the extractor sees the source at the same point
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
         extracted = []
-        # counted here rather than from the source afterwards: the walk spends a generator, and asking a
-        # spent one for its length answered zero, so the note said an emptied source had been empty
+        # counted here: the walk spends a generator, and asking a spent one for its length said an emptied source had
+        # been empty
         seen = 0
         for index, item in enumerate(source):
             seen += 1
@@ -261,7 +256,6 @@ class ExtractingMixin(_MixinBase):
                     raise _extraction_error(localized) from exc.__cause__
                 extracted.append(tuple(extracted_values) if len(extracted_values) > 1 else extracted_values[0])
 
-        # chain on with _extracted_ list (don't chain to self!)
         return self.builder(
             extracted,
             self.description,

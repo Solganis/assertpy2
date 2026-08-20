@@ -54,7 +54,7 @@ def _value(value: Any, depth: int = 0) -> str:
     if isinstance(value, (list, tuple, set, frozenset)) and depth < 3:
         items = [_value(item, depth + 1) for item in value]
         if isinstance(value, (set, frozenset)):
-            items = sorted(items)  # a set has no order of its own, and its iteration order is not news
+            items = sorted(items)
         return f"{type(value).__name__}[{', '.join(items)}]"
     if isinstance(value, dict) and depth < 3:
         pairs = ", ".join(f"{_value(key, depth + 1)}: {_value(item, depth + 1)}" for key, item in value.items())
@@ -73,7 +73,7 @@ def _parameters(target: Any) -> list[dict[str, Any]]:
     """Each parameter as the things a caller can break on, in the order they are declared."""
     try:
         signature = inspect.signature(target)
-    except (TypeError, ValueError):  # a builtin or a C function with no introspectable signature
+    except (TypeError, ValueError):
         return []
     return [
         {
@@ -100,7 +100,7 @@ def _text(annotation: Any, empty: Any) -> str | None:
 
 def _callable_entry(target: Any) -> dict[str, Any]:
     signature_return = inspect.Signature.empty
-    with contextlib.suppress(TypeError, ValueError):  # a builtin with no introspectable signature
+    with contextlib.suppress(TypeError, ValueError):
         signature_return = inspect.signature(target).return_annotation
     return {
         "kind": "callable",

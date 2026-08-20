@@ -67,12 +67,9 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     }
 )
 
-# The protocols that are a narrowed view of one kind of value, as `assert_that` returns them.  Kept
-# beside the capability register below so the two together account for every protocol in the file.
 _VALUE_VIEWS: frozenset[str] = frozenset(
     {
         "_CoreAssertion",
-        # what a value no overload recognises gets, which is a view like any other
         "_ObjectAssertion",
         "_StringAssertion",
         "_NumericAssertion",
@@ -227,7 +224,7 @@ def _base_name(base: ast.expr) -> str | None:
     every check in this file stayed green: the whole point here is that a lost edge is loud.
     """
     if isinstance(base, ast.Subscript):
-        base = base.value  # `Protocol[_E]` and `_RepeatableAssertion[str]` both arrive this way
+        base = base.value
     if isinstance(base, ast.Name):
         if base.id in _NOT_A_PROTOCOL_BASE:
             return None
@@ -365,7 +362,7 @@ def _required_arguments(method_def):
     """Return ``(positional_count, keyword_only_names)`` for the arguments a caller must supply."""
     arguments = method_def.args
     positional = arguments.posonlyargs + arguments.args
-    required_positional = len(positional) - len(arguments.defaults) - 1  # minus self
+    required_positional = len(positional) - len(arguments.defaults) - 1
     required_keyword = [
         arg.arg for arg, default in zip(arguments.kwonlyargs, arguments.kw_defaults, strict=True) if default is None
     ]
@@ -398,7 +395,7 @@ class TestProtocolParity:
         concrete = inspect.getattr_static(AssertionBuilder, method_def.name)
         signature = inspect.signature(concrete)
         positional_count, keyword_names = _required_arguments(method_def)
-        positional = [_SENTINEL] * (positional_count + 1)  # plus self
+        positional = [_SENTINEL] * (positional_count + 1)
         keyword = dict.fromkeys(keyword_names, _SENTINEL)
         try:
             signature.bind(*positional, **keyword)

@@ -53,9 +53,6 @@ RED_SUITE = textwrap.dedent(
     """
 )
 
-# a run that means to capture a snapshot has to say so: the library refuses to create one when it sees
-# a CI environment, and this corpus runs in one. Without it these suites are red on the runner and green
-# on a laptop, which is the worst of both
 CAPTURING = ("--assertpy2-snapshot-no-ci",)
 
 REPORTS = (
@@ -77,8 +74,6 @@ def run_suite(tmp_path, source, *extra, filename="test_child.py", outcome=pytest
     expects and how the tally should read, because "it printed the heading" is not the same claim.
     """
     (tmp_path / filename).write_text(source, encoding="utf-8")
-    # this interpreter, not `uv run` or a bare `pytest`: the wheel under test is installed in this
-    # environment and nowhere else, and a child that resolves its own would measure something else
     command = [sys.executable, "-m", "pytest", filename, "-q", "-p", "no:cacheprovider", *extra]
     finished = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=300, check=False)
     finished.said = finished.stdout + finished.stderr
@@ -146,8 +141,6 @@ def test_the_summary_survives_the_trip_from_the_workers(tmp_path):
     output = red_run(tmp_path, "-n", "2")
     assert_that(output).contains("assertpy2 failure clusters:")
     assert_that(output).contains("4 of 4 failing tests differ at role")
-    # the second thing that crosses the same wire, and it is recorded on the worker too: a poll that
-    # only converged after retrying is drained per test and shipped for the controller to report
     assert_that(output).contains("assertpy2 polls that nearly timed out:")
     assert_that(output).contains("converged on attempt 3")
 
@@ -198,8 +191,6 @@ def test_a_key_two_workers_reached_is_counted_once_for_the_run(tmp_path):
     the only place its transport runs.
     """
     finished = run_suite(tmp_path, SHARED_KEY_SUITE, "-n", "2", "-W", "always", *CAPTURING)
-    # the in-assertion warning cannot say this and does not fire here: it speaks when a second test
-    # reaches the key, which no single worker ever sees
     assert_that(finished.said).contains("is shared by 2 tests")
 
 

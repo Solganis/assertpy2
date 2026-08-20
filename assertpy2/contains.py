@@ -120,8 +120,7 @@ class ContainsMixin(_MixinBase):
         # membership is tested once per argument, so a one-shot iterator has to be drained first
         values = searchable(self.val)
         if not is_searchable(values):
-            # left to `in`, Python answers "argument of type 'int' is not a container or iterable":
-            # true, and about the operator rather than about the value the assertion was handed
+            # left to `in`, Python answers about the operator rather than about the value the assertion was handed
             refuse(self.val, "a container or iterable")
         if len(items) == 1:
             item = items[0]
@@ -222,8 +221,7 @@ class ContainsMixin(_MixinBase):
             return item.describe() if _is_matcher(item) else item
 
         def present(item: object) -> bool:
-            # `contains` has accepted a matcher since it was written and this, its own negation, did
-            # not: a matcher handed here was compared with `in`, which asks the wrong question
+            # a matcher handed here was compared with `in`, which asks the wrong question
             if _is_matcher(item):
                 return any(item.matches(value) for value in values)
             return item in values
@@ -270,13 +268,11 @@ class ContainsMixin(_MixinBase):
         # walked twice below and rendered a third time, so a one-shot iterator has to be drained
         values = searchable(self.val)
         if not is_walkable(values):
-            # "only these" has to see every element, so answering `in` is not enough here: left to the
-            # comprehension, a value like that came back as Python's "object is not iterable"
+            # "only these" has to see every element, and the comprehension answered "object is not iterable"
             refuse(self.val, "iterable")
         extra, missing = only_faults(values, items)
         if extra or missing:
-            # both halves at once: reporting only the extras sends the reader to fix one problem and
-            # rerun into the other, and the message wording of each half alone is unchanged
+            # both halves at once: reporting only the extras sends the reader to rerun into the other
             faults = []
             entries = []
             if extra:
@@ -334,9 +330,8 @@ class ContainsMixin(_MixinBase):
         # this walk is by index, which a one-shot iterator does not support at all
         values = materialized(self.val)
         if not isinstance(values, Sequence):
-            # two different wrong inputs, and the old guard reported both as "not iterable": true for
-            # an int, plainly false for a set, which is iterable and simply has no order to hold a
-            # sequence in
+            # the old guard reported both as "not iterable": true for an int, false for a set, which has no order to
+            # hold a sequence in
             require_type(values, Iterable, "iterable")
             refuse(self.val, "a sequence, to contain a sequence")
         for i in range(len(values) - len(items) + 1):
@@ -350,8 +345,7 @@ class ContainsMixin(_MixinBase):
         detail = (
             f" The longest run that matched was {self._fmt_items(items[:best_prefix])}."
             if best_prefix
-            # not "no element equals X": X may well be present, just never at a position where the
-            # whole sequence still fits
+            # X may well be present, just never at a position where the whole sequence still fits
             else f" No run started with <{items[0]}>."
         )
         return self.error(f"Expected <{values}> to contain sequence {self._fmt_items(items)}, but did not.{detail}")
@@ -402,8 +396,7 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "iterable")
         if not has_duplicates(values):
             return self
-        # name them: "but did" leaves the reader to scan the value for the repeat, and the sibling
-        # contains_only_once already reports exactly this shape
+        # "but did" leaves the reader to scan the value for the repeat
         repeated = repeated_items(values)
         return self.error(
             f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(repeated)}"
@@ -501,8 +494,7 @@ class ContainsMixin(_MixinBase):
             if entries:
                 diff = DiffResult(kind="contains", entries=entries)
             else:
-                # equal multisets, so only the order differs: name the first position that disagrees,
-                # which is the one the reader has to look at anyway
+                # equal multisets, so only the order differs: name the first position that disagrees
                 pairs = enumerate(zip(val_list, expected_list, strict=True))  # equal multisets, equal lengths
                 index = next(i for i, (found, wanted) in pairs if found != wanted)
                 message += f" Same items, but the order differs at index {index}."

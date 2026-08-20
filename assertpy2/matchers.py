@@ -70,14 +70,10 @@ from ._matcher_impls import (
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    # the element of the collection a membership matcher judges, so `match.contains("x")` is a matcher
-    # for collections *of strings* rather than for anything at all
+    # the element a membership matcher judges, so `match.contains("x")` is a matcher for collections of strings
     _Item = TypeVar("_Item")
 
     from ._matcher_impls import ClassInfo
-
-
-# --- Matcher application helpers ---
 
 
 def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object) -> bool:
@@ -133,8 +129,6 @@ def _describe_matcher(matcher: Matcher[Any] | Callable[..., object]) -> str:
         return matcher.describe()
     return _describe_callable(cast("Callable[..., object]", matcher))
 
-
-# --- Custom matcher registry ---
 
 _custom_matchers: dict[str, Callable[..., BaseMatcher]] = {}
 _custom_matchers_lock = threading.Lock()
@@ -196,8 +190,7 @@ def register_matcher(
         if not callable(func):
             refuse(func, "callable", subject=argument("func"))
         with _custom_matchers_lock:
-            # registering the same factory again is a no-op: a module imported twice, or a conftest
-            # fixture that runs per module, is not two libraries fighting over one name
+            # a module imported twice, or a per-module fixture, is not two libraries fighting over one name
             clash = name in _custom_matchers and not is_same_implementation(_custom_matchers[name], func)
             if clash and not override:
                 raise ValueError(
@@ -229,9 +222,6 @@ def clear_custom_matchers() -> None:
     """Remove all registered custom matchers."""
     with _custom_matchers_lock:
         _custom_matchers.clear()
-
-
-# --- Namespace ---
 
 
 class _MatchNamespace:

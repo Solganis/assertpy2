@@ -114,8 +114,8 @@ def _alignment_opcodes(actual, expected):
         keyed_expected = [_safe_repr(item) for item in expected]
         opcodes = difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
     # pragma: no cover - not reachable through a broken __repr__: `_safe_repr` swallows everything and
-    # returns a str, and strs are always hashable. What is left is a value whose iteration fails after
-    # `len()` on it succeeded, so the guard keeps that degrading to a positional diff instead of raising.
+    # what is left is a value whose iteration fails after `len()` succeeded, so the guard degrades to a positional
+    # diff
     except (TypeError, ValueError):  # pragma: no cover
         return None
     return _rechecked_equal_runs(opcodes, actual, expected)
@@ -223,8 +223,8 @@ def _alignment_opcodes_if_useful(actual, expected):
     this count picks the same winner as the exact one every time.
     """
     if len(actual) == len(expected):
-        # equal lengths can still hide a rotation, but over 13 640 random pairs that is 8% of the wins
-        # against a doubled comparison on every equal-length diff
+        # equal lengths can still hide a rotation, worth 8% of the wins over 13 640 random pairs against a doubled
+        # comparison every time
         return None
     if max(len(actual), len(expected)) > _ALIGN_MAX_ELEMENTS:
         return None  # over the cap nothing here can be used anyway
@@ -259,8 +259,8 @@ def _sequence_diff_entries(actual, expected, prefix: _Path, seen, config=None) -
         elif i >= len(expected):
             entries.append(prefix.index(i).entry(actual=actual[i], expected=None, absent="expected"))
         else:
-            # inlined, and the path built after the decision: an empty list per equal element cost 15%
-            # of the walk in allocations alone
+            # the path is built after the decision: an empty list per equal element cost 15% of the walk in
+            # allocations
             decision = _node_decision(actual[i], expected[i], config)
             if decision == "leaf":
                 entries.append(prefix.index(i).entry(actual=actual[i], expected=expected[i]))
@@ -376,13 +376,12 @@ def _build_equality_diff(
 
     strict_descent = False
     if config is not None:
-        # the root of a comparison, where identity does not stand in for equality: see `_node_decision`
+        # the root, where identity does not stand in for equality
         decision = _node_decision(actual, expected, config, at_root=_prefix is _ROOT)
         if decision == "equal":
             return DiffResult(kind="scalar", entries=[])
         if decision == "leaf":
             return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
-        # descended only to check the types inside; the ladder below decides whether there is an inside
         strict_descent = decision == "strict"
 
     def _field_entries(
@@ -396,8 +395,8 @@ def _build_equality_diff(
         entries: list[DiffEntry] = []
         for field in actual._fields:
             actual_value = getattr(actual, field)
-            # use _fields membership, not getattr/hasattr: a field name colliding with an inherited
-            # tuple method (count/index) would otherwise resolve to that bound method, not be "absent"
+            # a field name colliding with an inherited tuple method would resolve to that bound method rather than
+            # being absent
             if field not in expected._fields:
                 entries.append(_prefix.attr(field).entry(actual=actual_value, expected=None, absent="expected"))
             else:
@@ -462,8 +461,8 @@ def _build_equality_diff(
         for item in sorted(expected - actual, key=_safe_repr):
             entries.append(_prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
-    # bytes render as their b'...' literal, which difflib can point into exactly like text, and both
-    # kinds expose splitlines(), so one branch serves them
+    # bytes render as their `b'...'` literal, which difflib points into like text, and both kinds expose
+    # `splitlines()`
     both_text = isinstance(actual, str) and isinstance(expected, str)
     both_bytes = isinstance(actual, (bytes, bytearray)) and isinstance(expected, (bytes, bytearray))
     if both_text or both_bytes:
@@ -481,8 +480,7 @@ def _build_equality_diff(
         if not entries:
             entries.append(DiffEntry(path=".", actual=actual, expected=expected))
         return DiffResult(kind="string", entries=entries)
-    # the ladder ran out: this value has no inside. Reached under a strict descent that means the two
-    # sides were already equal and there was nothing further to check, not that they differ
+    # under a strict descent this means the two sides were already equal, not that they differ
     if strict_descent:
         return DiffResult(kind="scalar", entries=[])
     return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
@@ -513,8 +511,7 @@ def _sub_diff_entries(
         actual_keys = set(actual)
         expected_keys = set(expected)
         if config is not None and config.strict_types:
-            # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs.
-            # A dict keyed by the expected side answers with the key it actually stores
+            # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
             stored = {key: key for key in expected}
             for key in actual:
                 counterpart = stored.get(key, key)

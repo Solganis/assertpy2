@@ -6,7 +6,6 @@ pytest.importorskip("jsonschema", reason="jsonschema not installed")
 
 from assertpy2 import assert_that
 
-# --- OpenAPI 3.0 operation exercising $ref, oneOf, enum, format, nullable, and a plain constraint ---
 SPEC_30 = {
     "openapi": "3.0.3",
     "info": {"title": "Orders", "version": "1.0"},
@@ -68,7 +67,6 @@ SPEC_30 = {
     },
 }
 
-# 3.1 variant: nullable expressed the standard way, so no preprocessing is needed
 SPEC_31 = {
     "openapi": "3.1.0",
     "info": {"title": "Orders", "version": "1.0"},
@@ -134,7 +132,6 @@ class TestConformant:
             assert_that({"nullable": 123, "name": 456}).conforms_to_openapi(spec, "/c", "get")
 
     def test_nullable_false_does_not_allow_null(self):
-        # nullable: false must drop the keyword without permitting null
         schema = {"type": "object", "properties": {"name": {"type": "string", "nullable": False}}, "required": ["name"]}
         spec = {
             "openapi": "3.0.3",
@@ -291,7 +288,6 @@ class TestStructuralErrors:
         assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/vnd.api+json")
 
 
-# --- Swagger 2.0: schema declared directly on the response, $ref -> #/definitions, x-nullable extension ---
 SPEC_20 = {
     "swagger": "2.0",
     "info": {"title": "Orders", "version": "1.0"},
@@ -372,7 +368,6 @@ class TestSwagger20:
             assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/xml")
 
     def test_absent_produces_skips_the_content_type_check(self):
-        # nothing declared to check against, so any content_type still validates the single schema
         spec = {"swagger": "2.0", "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "object"}}}}}}}
         assert_that({}).conforms_to_openapi(spec, "/x", "get", content_type="application/xml")
 

@@ -24,14 +24,12 @@ from ._require import raised_inside
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-# types whose own `<` is defined but wrong to use across kinds: a `datetime` is only ordered against a
-# `datetime`, and comparing one with a number is a mistake rather than a verdict
+# types whose own `<` is defined but wrong across kinds: a `datetime` is only ordered against a `datetime`
 _KIND_BOUND = frozenset({datetime, timedelta, date, time})
 # ordering exists for real numbers and not for complex ones, whatever `numbers.Number` says
 _UNORDERED = frozenset({complex})
 # types whose ordering needs no rule at all: identical on both sides, total, and not kind-bound
 _PLAIN = frozenset({int, float, str, bytes})
-# the operators behind the four relation names, for the path that needs no rule
 _DIRECT = {"lt": operator.lt, "le": operator.le, "gt": operator.gt, "ge": operator.ge}
 
 
@@ -55,9 +53,8 @@ def compare(actual: Any, expected: Any) -> int:
     value, not an unorderable pair, and answering it either way would send the reader to the wrong file.
     """
     actual_type = type(actual)
-    # the ordinary case first: two values of the same simple type are ordered by the operator, and no
-    # rule below can change that. Reached from every matcher in a loop, so the checks that follow --
-    # a frozenset lookup and two `isinstance` against the numeric tower -- were paid per element
+    # the ordinary case first: reached from every matcher in a loop, so the frozenset lookup and two `isinstance`
+    # below were paid per element
     if actual_type is type(expected) and actual_type in _PLAIN:
         return (actual > expected) - (actual < expected)
     if actual_type in _UNORDERED:
@@ -70,8 +67,8 @@ def compare(actual: Any, expected: Any) -> int:
         and (not isinstance(expected, numbers.Number) or type(expected) in _UNORDERED)
     ):
         raise UnorderableError("kind", wanted=numbers.Number)
-    # the operands are deliberately dynamic here: which pairs may be ordered is decided above, by the
-    # rules this module exists to hold, and a checker reading the narrowed union sees no `<` at all
+    # deliberately dynamic: which pairs may be ordered is decided above, and a checker reading the narrowed union
+    # sees no `<` at all
     left: Any = actual
     right: Any = expected
     try:

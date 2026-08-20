@@ -92,8 +92,8 @@ def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
     try:
         empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the except below
     except Exception:  # a diagnostic must never crash the assertion it is watching
-        # no usable len(): an unsized value (a one-shot iterable) or a broken __len__.  Either way,
-        # stay out of the way rather than draining the value or surfacing its error as our own.
+        # an unsized value or a broken `__len__`: stay out of the way rather than draining it or surfacing its error
+        # as ours
         return
     if empty:
         warnings.warn(
@@ -202,13 +202,10 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** satisfy the matcher
         """
         if _is_matcher(matcher):
-            # the matcher is asked twice about the same value, and a matcher over an iterable walks it
-            # in both: on a one-shot iterator the second call saw what the first had left, so `each_item`
-            # named the wrong item at the wrong index rather than merely losing detail
+            # asked twice about the same value: on a one-shot iterator the second call saw what the first had left,
+            # so `each_item` named the wrong item
             value = materialized(self.val)
-            # a matcher that walks its value is asked once, so a `key` or comparator inside it runs
-            # once; one that answers from a type check keeps the cheap path, where the result nobody
-            # reads is never built
+            # a matcher that walks its value is asked once, so a `key` inside it runs once
             if _has_own_evaluate(matcher) or not matcher.matches(value):
                 result = _evaluate_matcher(matcher, value)
             else:
@@ -260,8 +257,7 @@ class SatisfiesMixin(_MixinBase):
         if _is_matcher(matcher):
             description = matcher.describe()
             for i, item in enumerate(self.val):
-                # asked once per item: the verdict and the reason come from the same look, so a matcher
-                # over a one-shot item is right about both and a user's `key` runs once
+                # the verdict and the reason come from the same look, so a user's `key` runs once
                 if not (_has_own_evaluate(matcher) or not matcher.matches(item)):
                     continue
                 outcome = _evaluate_matcher(matcher, item)
@@ -402,11 +398,9 @@ class SatisfiesMixin(_MixinBase):
             refuse(self.val, "iterable")
         description = _describe_matcher(matcher)
         if _is_matcher(matcher) or callable(matcher):
-            # counted again below to name how many were examined, so drain a one-shot iterator
             values = materialized(self.val)
             if not any(_apply_matcher(matcher, item) for item in values):
-                # "none did" alone leaves the reader to fetch the items themselves; the universal
-                # sibling already lists every one that failed
+                # "none did" alone leaves the reader to fetch the items themselves
                 items = list(values)
                 return self.error(
                     f"Expected any item to satisfy {description}, but none of the {len(items)} did.",

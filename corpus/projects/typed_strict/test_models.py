@@ -73,7 +73,6 @@ def test_structural_comparison_reads_a_model() -> None:
 
 def test_attrs_values_compare_field_by_field() -> None:
     shipment = Shipment(identifier=1, carrier="dhl", delivered=False)
-    # the documented migration for `has_<attribute>()`, which a strict consumer takes rather than ignores
     assert_that(shipment.carrier).is_equal_to("dhl")
     assert_that(shipment.delivered).is_false()
 
@@ -104,18 +103,12 @@ def test_the_value_of_an_extraction_is_a_list() -> None:
 def test_subset_leaves_the_chain_on_the_same_view() -> None:
     """The argument is untyped by measurement, but what comes back still knows its element."""
     names: list[str] = [order.customer for order in orders()]
-    # the chain continues on the sequence view, so the next call is still checked against `str`
     assert_that(names).is_subset_of(["alice", "bob", "carol"]).contains("alice")
-    # `.value` on a view `assert_that` handed back is the union of the containers it may hold; only a
-    # pipeline step narrows it to a list, which is what the next line uses
     kept: list[str] = assert_that(names).is_subset_of(["alice", "bob", "carol"]).filtered_on(lambda name: True).value
     assert_that(kept).is_equal_to(names)
     assert_that(orders()[0].items).is_subset_of({"book", "pen"}).is_length(2)
 
 
-# Exception groups are 3.11+, and the corpus runs the 3.10 floor too. A module-level version guard is
-# what a consumer would write: mypy and pyright both read it, so the block is checked where it applies
-# and invisible where the builtin does not exist.
 if sys.version_info >= (3, 11):
 
     def failing_tasks() -> None:
@@ -128,7 +121,6 @@ if sys.version_info >= (3, 11):
         caught.contains_error(ValueError, KeyError).does_not_contain_error(TimeoutError)
         leaves: list[BaseException] = caught.errors().value
         assert_that(leaves).is_length(2)
-        # the pivot hands back the leaf's message, and the exception itself stays one call away
         message: str = caught.error_of(ValueError).value
         assert_that(message).contains("bad id")
         caught.error_of(ValueError).raised().is_instance_of(ValueError)

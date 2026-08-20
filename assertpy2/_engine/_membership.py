@@ -61,8 +61,8 @@ def is_walkable(value: object) -> bool:
     return isinstance(value, Iterable)
 
 
-# types whose `__hash__` and `__eq__` agree, so asking a set is the same question as walking a list.
-# `bytearray` looks like it belongs and is not hashable, which turned a `contains_only` into TypeError
+# types whose `__hash__` and `__eq__` agree; `bytearray` looks like it belongs and is not hashable, which turned a
+# `contains_only` into TypeError
 _HASH_SAFE = frozenset(
     {
         int,
@@ -73,7 +73,6 @@ _HASH_SAFE = frozenset(
         bytes,
         frozenset,
         type(None),
-        # the numeric tower and the calendar types, where equal values are guaranteed to hash equally.
         # `Fraction` qualifies and is left out: `fractions` drags in thirteen modules at import
         decimal.Decimal,
         datetime.date,
@@ -84,8 +83,7 @@ _HASH_SAFE = frozenset(
 )
 
 
-# below this many comparisons the walk beats preparing a set: measured 2x slower at ten elements,
-# several times faster at a hundred
+# measured 2x slower at ten elements and several times faster at a hundred
 _WALK_UNDER = 400
 
 # the one safe-list type that refuses to hash for a single value: `Decimal("snan")` raises
@@ -173,11 +171,10 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     Both halves at once, because reporting only the extras sends the reader to fix one problem and rerun
     into the other.  A matcher looks at whether either list is non-empty; the assertion words them.
     """
-    # walked three times below, so a one-shot value has to be a sequence first.  Idempotent and free
-    # for the callers that already did it: a list is handed back as it is
+    # walked three times below, and idempotent for the callers that already did it
     walked, wanted_items = materialized(value), materialized(items)
-    # this one genuinely needs both indexes, since each side is searched for the other.  Building them
-    # together is also what keeps the pair honest: if either refuses, both fall back to the walk
+    # each side is searched for the other, and building both together is what makes either refusal fall back to the
+    # walk
     both = _index_both(wanted_items, walked)
     if both is None:
         return (
@@ -194,14 +191,11 @@ def has_duplicates(values: Sequence[Any]) -> bool:
     """Whether any element appears twice, by the same equality the rest of membership uses."""
     if _classified_alone(values):
         try:
-            # no size threshold here, unlike the cross-collection question: what a set replaces is a
-            # growing list of seen elements, quadratic from the first few, so it pays off immediately
+            # what a set replaces is a growing list of seen elements, quadratic from the first few
             return len(set(values)) != len(values)
         except Exception:  # a value refused to hash after all; only hashing is inside this `try`
             pass
-    # `in` rather than a generator of `==`: it is the same question asked by the interpreter instead of
-    # by a Python loop, and it short-circuits on identity, which is how the rest of membership answers
-    # for a value that is not equal to itself
+    # `in` rather than a generator of `==`: the interpreter asks it, and it short-circuits on identity
     seen: list[Any] = []
     for value in values:
         if value in seen:
@@ -277,8 +271,7 @@ def _index(container: Any, probes: Any) -> set[Any] | None:
     try:
         indexed = set(container)
         if probe_kinds is not None and probe_kinds & _HASH_MAY_REFUSE:
-            # only the types that are classified and may still refuse are looked at, and the types were
-            # collected once above rather than walked again here
+            # only the classified types that may still refuse, collected once above
             for probe in probes:
                 hash(probe)
     except Exception:  # any Exception raised while hashing means the walk answers instead

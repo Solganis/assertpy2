@@ -426,9 +426,6 @@ def test_extracting_iterable_failure_index_is_not_int():
     assert_that(str(exc_info.value)).contains("list indices must be integers")
 
 
-# --- extraction shape: namedtuple fields, single vs multiple names ---
-
-
 def test_extracting_namedtuple_by_field_name():
     point = namedtuple("Point", ["x", "y"])
     assert_that([point(1, 2), point(3, 4)]).extracting("x").is_equal_to([1, 3])
@@ -466,7 +463,7 @@ def test_extracting_zero_arg_method_body_typeerror_not_masked():
         prices = None
 
         def total(self):
-            return sum(self.prices)  # raises a genuine TypeError inside the body
+            return sum(self.prices)
 
     with pytest.raises(TypeError, match="not iterable"):
         assert_that([Obj()]).extracting("total").is_equal_to([0])

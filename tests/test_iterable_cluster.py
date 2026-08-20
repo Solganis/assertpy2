@@ -83,7 +83,6 @@ class TestSatisfiesExactlyInAnyOrder:
         assert_that([2, 6]).satisfies_exactly_in_any_order(match.is_even(), lambda x: x == 2)
 
     def test_owned_matcher_dead_end_falls_through_to_next(self):
-        # is_odd is taken and its owner cannot move, so the second item pairs with the next matcher
         assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), lambda x: x == 3)
 
     def test_duplicate_matchers_consumed_once_pass(self):
@@ -96,7 +95,6 @@ class TestSatisfiesExactlyInAnyOrder:
         )
 
     def test_unpaired_matcher_with_raising_probe_is_annotated(self):
-        # a predicate that raises TypeError on every item must not be mistaken for a plain mismatch
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that([1]).satisfies_exactly_in_any_order(lambda x: len(x) > 0)
         assert_that(exc_info.value.diff.entries[1].expected).contains("(probe raised TypeError on 1 item)")

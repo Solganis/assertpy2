@@ -11,8 +11,6 @@ import pytest
 from assertpy2 import assert_that, match
 from assertpy2._engine._compare import _CompareConfig
 
-# --- matchers ---
-
 
 def test_is_zero_matcher_rejects_negative():
     assert_that(match.is_zero().matches(-5)).is_false()
@@ -28,16 +26,13 @@ def test_is_divisible_by_matcher_allows_negative_divisor():
 
 
 def test_close_to_matcher_boundary_and_operator():
-    assert_that(match.close_to(10, 2).matches(12)).is_true()  # exactly at the edge
+    assert_that(match.close_to(10, 2).matches(12)).is_true()
     assert_that(match.close_to(10, 2).matches(20)).is_false()
 
 
 def test_matches_structure_value_less_than_expected():
     with pytest.raises(AssertionError):
         assert_that({"n": 3}).matches_structure({"n": 5})
-
-
-# --- numeric / range boundaries ---
 
 
 def test_is_between_allows_equal_low_and_high():
@@ -48,9 +43,6 @@ def test_is_close_to_allows_zero_tolerance():
     assert_that(5).is_close_to(5, 0)
 
 
-# --- dict ---
-
-
 def test_contains_entry_rejects_empty_entry():
     with pytest.raises(ValueError):
         assert_that({"a": 1}).contains_entry({})
@@ -59,9 +51,6 @@ def test_contains_entry_rejects_empty_entry():
 def test_contains_entry_value_greater_than_expected():
     with pytest.raises(AssertionError):
         assert_that({"a": 5}).contains_entry({"a": 3})
-
-
-# --- bytes ---
 
 
 def test_has_byte_at_out_of_range_uses_explicit_message():
@@ -79,9 +68,6 @@ def test_is_hex_equal_to_value_greater_than_expected():
         assert_that(b"\xff").is_hex_equal_to("00")
 
 
-# --- collection ---
-
-
 def test_element_out_of_range_uses_explicit_message():
     with pytest.raises(IndexError, match="to be in range"):
         assert_that([1, 2, 3]).element(5)
@@ -92,15 +78,9 @@ def test_single_rejects_two_elements():
         assert_that([1, 2]).single()
 
 
-# --- string ---
-
-
 def test_is_equal_to_ignoring_case_lexicographically_less():
     with pytest.raises(AssertionError):
         assert_that("ABC").is_equal_to_ignoring_case("xyz")
-
-
-# --- base ---
 
 
 def test_is_length_actual_longer_than_expected():
@@ -108,15 +88,12 @@ def test_is_length_actual_longer_than_expected():
         assert_that([1, 2, 3]).is_length(2)
 
 
-# --- recursive comparison config (_compare.py) ---
-
-
 def test_zero_tolerance_is_valid_for_exact_equality():
     assert_that(1.5).is_equal_to(1.5, tolerance=0)
 
 
 def test_tolerance_at_exact_boundary_passes():
-    assert_that(100).is_equal_to(102, tolerance=2)  # abs diff exactly equals tolerance
+    assert_that(100).is_equal_to(102, tolerance=2)
 
 
 def test_tolerance_just_beyond_boundary_fails():

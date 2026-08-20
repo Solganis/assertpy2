@@ -46,9 +46,8 @@ def _require_caller(frame: types.FrameType | None) -> types.FrameType:
 
 def register_snapshot_serializer(
     cls: type,
-    # `Any`, not `object`: a codec is only ever handed an instance of `cls`, and its decode only the
-    # payload its own encode produced. Demanding a parameter typed `object` rejects correct codecs,
-    # `pathlib.PurePath` as a decode among them, which is the pair recommended below
+    # `Any`, not `object`: a codec only ever sees an instance of `cls`, and demanding `object` rejected correct
+    # codecs, `pathlib.PurePath` among them
     encode: Callable[[Any], object],
     decode: Callable[[Any], object],
     *,
@@ -133,9 +132,7 @@ _UPDATE_ALL: bool = False
 # tri-state CI mode set by the pytest plugin flags (None = not set by a flag)
 _CI_MODE: bool | None = None
 
-# (snapname, key) pairs touched this session; key is the lineno for a default-id sub-snap, or "" for a
-# whole-file custom-id snapshot. The pytest plugin reads this at session finish to report obsolete
-# snapshots (xdist workers ship their sets to the controller).
+# key is the lineno for a default-id sub-snap, or "" for a whole-file custom-id snapshot
 _TOUCHED: set[tuple[str, str]] = set()
 
 _ACCESS_NODES: dict[tuple[str, str], set[str]] = {}
@@ -257,8 +254,8 @@ def _record_access(snapname: str, key: str, site: str) -> None:
         return
     nodes = _ACCESS_NODES.setdefault((snapname, key), set())
     nodes.add(_CURRENT_NODE)
-    # `>= 2` with `_WARNED` doing the once-only work: `== 2` warns once too, but only because the set
-    # grows one node at a time, and it would drop warnings the day anything repopulated the registry
+    # `>= 2` with `_WARNED` doing the once-only work: `== 2` would drop warnings the day anything repopulated the
+    # registry
     if len(nodes) >= 2 and (snapname, key) not in _WARNED:
         _WARNED.add((snapname, key))
         warnings.warn(
@@ -609,16 +606,13 @@ class SnapshotMixin(_MixinBase):
             for matcher in placeholders.values():
                 if not _is_matcher(matcher) and not callable(matcher):
                     raise TypeError("placeholder values must be Matcher instances or callables")
-        # the stored snapshot documents placeholders as tokens; the comparison ignores those keys and
-        # asserts their matcher separately, so a volatile field never breaks the snapshot
+        # the stored snapshot documents placeholders as tokens, so a volatile field never breaks it
         stored_val = self._with_placeholder_tokens(placeholders) if placeholders else self.val
         effective_ignore = _combine_ignore(ignore, placeholders)
         lineno = ""
         if id:
-            # custom id
             snapname = _name(path, id)
         else:
-            # make id from filename and line number
             caller = _require_caller(inspect.currentframe())
             file_path = os.path.basename(caller.f_code.co_filename)
             file_name = os.path.splitext(file_path)[0]
@@ -628,22 +622,18 @@ class SnapshotMixin(_MixinBase):
         _record_access(snapname, "" if id else lineno, f"id={id!r}" if id else f"{file_path}:{lineno}")
         os.makedirs(path, exist_ok=True)
 
-        # Serialize read-modify-write so parallel workers (pytest-xdist) sharing a snap file don't lose
-        # each other's entries.  The normal comparison runs after the lock is released; the update-mode
-        # rewrite decision must stay inside it.
+        # serialised so parallel workers sharing a snap file do not lose each other's entries; the update-mode
+        # rewrite decision stays inside the lock
         snapshot_value = _UNSET
         updated = False
         with _file_lock(snapname):
             if os.path.isfile(snapname):
                 snap = _load(snapname)
                 if id:
-                    # custom id, so test against the whole file
                     snapshot_value = snap
                 elif lineno in snap:
-                    # found sub-snap, so test
                     snapshot_value = snap[lineno]
                 else:
-                    # lineno not in snap, so create sub-snap and pass
                     _forbid_creation_in_ci(snapname)
                     snap[lineno] = stored_val
                     _save(snapname, snap)
@@ -666,7 +656,6 @@ class SnapshotMixin(_MixinBase):
                         _save(snapname, snap)
                     updated = True
             else:
-                # no snap, so create and pass
                 _forbid_creation_in_ci(snapname)
                 _save(snapname, stored_val if id else {lineno: stored_val})
 
@@ -690,8 +679,7 @@ class SnapshotMixin(_MixinBase):
                     comparators=comparators,
                 )
             except AssertionFailure as mismatch:
-                # name the snapshot, or the failure reads as a plain is_equal_to with no file to open.
-                # The line number goes with it, since without a custom id the file holds one per line
+                # name the snapshot, or the failure reads as a plain `is_equal_to` with no file to open
                 located = snapname if id else f"{snapname}::{lineno}"
                 raise _rewrapped(
                     mismatch,
@@ -794,8 +782,7 @@ class SnapshotMixin(_MixinBase):
                 expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
             )
         except AssertionFailure as mismatch:
-            # the stored snapshot lives in this very call, and updating rewrites it in place: saying so
-            # is what the file-backed branch already does for its own kind
+            # the stored snapshot lives in this very call, and updating rewrites it in place
             raise _rewrapped(
                 mismatch, f"{mismatch._message} {_update_hint('Inline snapshot', 'rewrite the literal here')}"
             ) from None

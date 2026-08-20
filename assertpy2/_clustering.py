@@ -59,9 +59,7 @@ __tracebackhide__ = True
 # steps that name a *place* in a value, as opposed to `item`, which names a member of a set
 _COORDINATE: Final = frozenset({"key", "index", "attr", "line"})
 
-# a position collapses to one placeholder: `users[0].role` and `users[7].role` are the same difference
-# reported against two rows, and a reader chasing a common cause wants them in one line. a line number
-# is incidental in the same way
+# a position collapses to one placeholder: `users[0].role` and `users[7].role` are one difference on two rows
 _POSITIONAL: Final = frozenset({"index", "line"})
 _ANY_POSITION: Final = "[*]"
 
@@ -190,8 +188,8 @@ def stable_repr(value: object, _seen: frozenset[int] = frozenset()) -> str:
     try:
         if isinstance(value, (set, frozenset)):
             members = sorted(stable_repr(member, inner) for member in value)
-            # an empty one falls back to `repr`, since `{}` is a dict; the price is that `set()`
-            # and the `frozenset()` it equals read apart, where two non-empty equal ones read alike
+            # an empty one falls back to `repr`, since `{}` is a dict, so `set()` and the `frozenset()` it equals
+            # read apart
             return "{" + ", ".join(members) + "}" if value else _safe_repr(value)
         if isinstance(value, dict):
             pairs = (f"{stable_repr(key, inner)}: {stable_repr(item, inner)}" for key, item in value.items())
@@ -289,9 +287,8 @@ def is_well_formed(key: Signature) -> bool:
         )
     if key.steps:
         return False
-    # exactly one of the two, which is what `signature()` sets: the diagnostic replaces the values,
-    # never joins them.  A pair of values only for the kinds whose fields hold the compared values, or
-    # a `contains` payload would print the `None` that stands for a missing item as somebody's value
+    # exactly one of the two: a pair of values only for the kinds whose fields hold them, or a `contains` payload
+    # would print the `None` standing for a missing item
     if key.label:
         return not key.values
     return len(key.values) == 2 and key.where in _VALUES_ARE_VALUES
@@ -330,17 +327,15 @@ def clusters(
     """
     if total_failures <= 0:
         return []
-    # keyed on the node id, not appended: one test can be reported failing more than once, which is
-    # what `pytest-rerunfailures` does on every retry, and counting its attempts as separate failures
-    # printed a cluster of six over two tests
+    # keyed on the node id: `pytest-rerunfailures` reports one test failing per retry, and counting attempts printed
+    # a cluster of six over two tests
     grouped: dict[Signature, dict[str, None]] = {}
     actuals: dict[Signature, dict[str, None]] = {}
     expecteds: dict[Signature, dict[str, None]] = {}
     for nodeid, found in recorded:
         for one in found:
             grouped.setdefault(one.signature, {})[nodeid] = None
-            # one past the limit, so a full side is distinguishable from a capped one by its length
-            # alone. The smallest value is always kept, whichever order the failures came in
+            # one past the limit, so a full side is distinguishable from a capped one by its length alone
             for store, value in ((actuals, one.actual), (expecteds, one.expected)):
                 seen = store.setdefault(one.signature, {})
                 if len(seen) <= _EXAMPLE_LIMIT:
@@ -353,8 +348,7 @@ def clusters(
         for key, nodeids in grouped.items()
         if len(nodeids) >= minimum
     ]
-    # size first, then the signature itself: two clusters of equal size must not swap places between
-    # runs, and the signature is the only thing about them that cannot vary
+    # size first, then the signature: two clusters of equal size must not swap places between runs
     large.sort(key=lambda cluster: (-cluster.size, cluster.signature))
     return large
 

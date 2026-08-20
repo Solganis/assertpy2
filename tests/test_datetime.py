@@ -512,10 +512,10 @@ def test_is_before_after_reject_equal():
 def test_is_equal_to_ignoring_milliseconds_each_component_mismatch():
     base = datetime.datetime(2020, 1, 2, 3, 4, 5, 123)
     for other in (
-        datetime.datetime(2020, 1, 3, 3, 4, 5),  # date differs
-        datetime.datetime(2020, 1, 2, 9, 4, 5),  # hour differs
-        datetime.datetime(2020, 1, 2, 3, 9, 5),  # minute differs
-        datetime.datetime(2020, 1, 2, 3, 4, 9),  # second differs
+        datetime.datetime(2020, 1, 3, 3, 4, 5),
+        datetime.datetime(2020, 1, 2, 9, 4, 5),
+        datetime.datetime(2020, 1, 2, 3, 9, 5),
+        datetime.datetime(2020, 1, 2, 3, 4, 9),
     ):
         with pytest.raises(AssertionError):
             assert_that(base).is_equal_to_ignoring_milliseconds(other)
@@ -524,9 +524,9 @@ def test_is_equal_to_ignoring_milliseconds_each_component_mismatch():
 def test_is_equal_to_ignoring_seconds_each_component_mismatch():
     base = datetime.datetime(2020, 1, 2, 3, 4, 5)
     for other in (
-        datetime.datetime(2020, 1, 3, 3, 4, 5),  # date differs
-        datetime.datetime(2020, 1, 2, 9, 4, 5),  # hour differs
-        datetime.datetime(2020, 1, 2, 3, 9, 5),  # minute differs
+        datetime.datetime(2020, 1, 3, 3, 4, 5),
+        datetime.datetime(2020, 1, 2, 9, 4, 5),
+        datetime.datetime(2020, 1, 2, 3, 9, 5),
     ):
         with pytest.raises(AssertionError):
             assert_that(base).is_equal_to_ignoring_seconds(other)

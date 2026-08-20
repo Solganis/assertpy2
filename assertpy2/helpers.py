@@ -62,12 +62,10 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
     Mirrors `_elided_seq_repr` for multi-line values: a one-line change in a long block should not put
     the whole block into the message twice.
     """
-    # the cost of a multi-line value is vertical: every line takes a terminal row, and the message
-    # prints the value twice. Character budgets miss that, so this one counts rows.
+    # the cost of a multi-line value is vertical, and the message prints it twice, so this counts rows
     if len(text.splitlines()) <= 3:
-        # a long *single* line has no rows to collapse, and capping it from the start printed four
-        # thousand characters of prefix per side: on a five-kilobyte string that was 96% of the
-        # message, none of it near the change. The diff rows are already windowed; so is this now.
+        # a long single line has no rows to collapse, and capping from the start printed 96% of a five-kilobyte
+        # string with none of it near the change
         return _windowed(text, counterpart, width=320)[0] if len(text) > 320 else text
     other_lines = counterpart.splitlines()
     parts = []
@@ -91,20 +89,18 @@ def _elided_seq_repr(seq, counterpart) -> str:
     the same way it collapses in the diff.  Position is the fallback, for the pairs no alignment
     improves on.
     """
-    # past 20 elements the rendering is over budget by construction (one char each plus separators), so
-    # the value is never rendered just to be measured: on the failure path that render is the whole value
+    # past 20 elements the rendering is over budget by construction, so the value is never rendered just to be
+    # measured
     if len(seq) <= 20:
         rendered = _safe_repr(seq)
         if len(rendered) <= 60:
-            # short enough to read whole: collapsing it would hide context to save a few characters, and
-            # on a two-element list the ".." form is actually the longer of the two
+            # on a two-element list the ".." form is the longer of the two
             return rendered
     aligned = _aligned_match_indices(seq, counterpart)
     parts = []
     elided = False
     for index, value in enumerate(seq):
-        # two loops rather than a per-element branch: this runs once per element of every rendered
-        # sequence, and the test is the same for all of them
+        # two loops rather than a per-element branch: this runs once per element of every rendered sequence
         if aligned is not None:
             matched = index in aligned
         else:
@@ -238,8 +234,8 @@ class HelpersMixin(_MixinBase):
             )
         except IncludeKeysMissingError as found:
             absent = found
-        # reported outside the except block on purpose: a failure raised inside one carries the signal
-        # along as its `__context__`, and an internal marker has no business in a user-facing traceback
+        # reported outside the except block: a failure raised inside one carries the signal along as its
+        # `__context__`
         keys_suffix = "" if len(absent.includes) == 1 else "s"
         missing_suffix = "" if len(absent.missing) == 1 else "s"
         includes_fmt = self._fmt_items(
@@ -318,9 +314,8 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(mapping)}
             parts = []
             ellip = False
-            # build items by iterating keys + [] (the dict-likeness gate guarantees those, not items()).
-            # left in the order the mapping holds them, which is what the diff under this line prints:
-            # sorting only here made the two halves of one message disagree about where a key sits
+            # left in the order the mapping holds them, which is what the diff prints: sorting only here made the two
+            # halves disagree about where a key sits
             for key, value in ((key, mapping[key]) for key in mapping):
                 if key not in counterpart:
                     parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
@@ -410,9 +405,8 @@ class HelpersMixin(_MixinBase):
         Returns None if the object cannot be converted.
         """
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            # like dataclasses.asdict but keeps leaf values by reference; asdict deep-copies every leaf,
-            # which crashes on un-copyable fields (locks, sockets) and breaks identity equality even for
-            # fields the caller ignores
+            # like `dataclasses.asdict` but keeps leaf values by reference, since asdict deep-copies and crashes on
+            # un-copyable fields
             def as_shallow(node):
                 if dataclasses.is_dataclass(node) and not isinstance(node, type):
                     return {field.name: as_shallow(getattr(node, field.name)) for field in dataclasses.fields(node)}
@@ -430,11 +424,10 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import, on every run
-            # where attrs is installed.  The guard above already proved it is present
+            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import on every run where attrs is
+            # installed
             import attrs
 
-            # asdict recurses like dataclasses.asdict, flattening nested attrs for ignore/include
             return attrs.asdict(obj)
         if hasattr(obj, "__dict__") and not isinstance(obj, type):
             return dict(vars(obj))
