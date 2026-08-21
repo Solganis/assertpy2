@@ -65,6 +65,8 @@ if TYPE_CHECKING:
         _CapableT,
         _FrameT_co,
         _ObjectAssertion,
+        _Other,
+        _P_co,
         _T_co,
         _U,
     )

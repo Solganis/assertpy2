@@ -9,7 +9,7 @@ import sys
 import threading
 import types
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Final, Generic, Literal, Protocol, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Final, Generic, Literal, Protocol, TypeVar, cast, overload
 
 if TYPE_CHECKING:
     import datetime
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
+    from ._engine._builder_check_typing import _CheckAnyValue
     from ._engine._compat import Self
     from ._engine._typing import (
         _ArrayAssertion,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:
         _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
+        _DateTimeAssertion,
         _DictAssertion,
         _FrameAssertion,
         _FrameT_co,
@@ -89,6 +91,7 @@ if TYPE_CHECKING:
     _R = TypeVar("_R")  # result element type after a mapping pivot
     _K = TypeVar("_K")  # dict key type, so .value keeps dict[K, V]
     _V = TypeVar("_V")  # dict value type
+    _P = TypeVar("_P")  # what a probe hands back, so a polling chain asserts on that and not on `object`
 
     class _ElementSource(Protocol[_E_co]):
         """Anything whose value is a collection of `_E_co`, however it was annotated.
@@ -438,6 +441,12 @@ def assert_that(val: set[_E] | frozenset[_E], description: str = "") -> _Iterabl
 
 
 @overload
+# a `datetime` is a `date`, so it has to be claimed first: the chronological assertions refuse a plain
+# date at run time, and one view for both types offered them to one that can never answer
+def assert_that(val: datetime.datetime, description: str = "") -> _DateTimeAssertion: ...
+
+
+@overload
 def assert_that(val: datetime.date, description: str = "") -> _DateAssertion: ...
 
 
@@ -451,10 +460,6 @@ def assert_that(val: bytes, description: str = "") -> _BytesAssertion[bytes]: ..
 
 @overload
 def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytearray]: ...
-
-
-@overload
-def assert_that(val: Callable[..., object], description: str = "") -> _CallableAssertion: ...
 
 
 # a `pandas.DataFrame` is assignable to every structural protocol, since pandas models column access with a catch-all
@@ -471,6 +476,12 @@ def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_Arra
 # a recognised capability keeps the whole surface
 @overload
 def assert_that(val: _CapableT, description: str = "") -> AssertionBuilder[_CapableT]: ...
+
+
+# below the umbrella: an ASGI or WSGI response is a callable, and this overload claimed one before the
+# capability that describes it could
+@overload
+def assert_that(val: Callable[..., _P], description: str = "") -> _CallableAssertion[_P]: ...
 
 
 # the fallback, at the price of an overload overlap mypy and pyright report and ty does not
@@ -1189,7 +1200,7 @@ class AssertionBuilder(
         """Invert the next assertion in the chain."""
         return NegatedBuilder(self)
 
-    def check(self) -> CheckBuilder:
+    def check(self) -> _CheckAnyValue[_T]:
         """Run the next assertion for its verdict instead of for its failure.
 
         The assertion does not raise, collect or log.  It returns an
@@ -1213,7 +1224,9 @@ class AssertionBuilder(
                 assert_that(5).check().is_positive().passed        # True
                 assert_that(5).check().not_.is_positive().passed   # False
         """
-        return CheckBuilder(self, self)
+        # the proxy resolves every name through `__getattr__`, which is what the declared twin
+        # describes: the twin is the shape, `CheckBuilder` is the thing
+        return cast("_CheckAnyValue[_T]", CheckBuilder(self, self))
 
     @property
     def value(self) -> _T:
