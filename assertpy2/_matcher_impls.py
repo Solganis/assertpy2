@@ -70,6 +70,16 @@ _NON_MATCHER_TYPES: Final = frozenset(
 )
 
 
+def _refused(matcher: Matcher[Any], value: object) -> MatchResult:
+    """The result for a value a matcher has already turned down, without asking it again.
+
+    The verdict and the reason used to come from two calls, and a matcher that carries state, or reads a
+    one-shot source, answers the second one differently: one returning False and then True turned a
+    refused value into a passing assertion.
+    """
+    return MatchResult(matched=False, description=matcher.describe(), mismatch=matcher.describe_mismatch(value))
+
+
 def _has_own_evaluate(matcher: object) -> bool:
     """Whether *matcher* declares `evaluate()` itself instead of inheriting the composed default.
 
@@ -177,12 +187,9 @@ class BaseMatcher:
         """
         if type(self).matches is BaseMatcher.matches:
             raise NotImplementedError("a matcher must implement matches() or evaluate()")
-        matched = self.matches(value)
-        return MatchResult(
-            matched=matched,
-            description=self.describe(),
-            mismatch="" if matched else self.describe_mismatch(value),
-        )
+        if self.matches(value):
+            return MatchResult(matched=True, description=self.describe())
+        return _refused(self, value)
 
     def describe(self) -> str:
         raise NotImplementedError

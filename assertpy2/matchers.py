@@ -50,6 +50,7 @@ from ._matcher_impls import (
     StartsWithMatcher,
     StructureMatcher,
     _is_matcher,
+    _refused,
 )
 from ._matcher_impls import (
     BaseMatcher as BaseMatcher,
@@ -101,12 +102,9 @@ def _evaluate_matcher(matcher: Matcher[Any], value: object) -> MatchResult:
     evaluate = getattr(matcher, "evaluate", None)
     if evaluate is not None:
         return evaluate(value)
-    matched = matcher.matches(value)
-    return MatchResult(
-        matched=matched,
-        description=matcher.describe(),
-        mismatch="" if matched else matcher.describe_mismatch(value),
-    )
+    if matcher.matches(value):
+        return MatchResult(matched=True, description=matcher.describe())
+    return _refused(matcher, value)
 
 
 def _describe_callable(predicate: Callable[..., object]) -> str:
