@@ -234,7 +234,21 @@ class TestContainsOnlyOnce:
         assert_that(diff.entries).is_length(1)
         assert_that(diff.entries[0].path).is_equal_to("duplicated")
         assert_that(diff.entries[0].actual).is_equal_to(2)
-        assert_that(diff.entries[0].expected).is_equal_to(2)
+        assert_that(diff.entries[0].expected).is_none()
+        assert_that(diff.entries[0].absent).is_equal_to("expected")
+
+    def test_one_entry_per_copy_too_many(self):
+        # value and count were the two sides once, and only an unequal pair tells them apart
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([9, 9, 9]).contains_only_once(9)
+        entries = exc_info.value.diff.entries
+        assert_that(entries).is_length(2)
+        assert_that([entry.actual for entry in entries]).is_equal_to([9, 9])
+
+    def test_the_duplicate_diff_renders(self):
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([1, 1, 2]).does_not_contain_duplicates()
+        assert_that(str(exc_info.value.diff)).contains("extra:", "{1}")
 
     def test_missing_and_duplicated_fails(self):
         with pytest.raises(AssertionFailure) as exc_info:

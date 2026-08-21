@@ -14,7 +14,7 @@ from ._engine._membership import (
     is_walkable,
     missing_items,
     only_faults,
-    repeated_items,
+    repeated_counts,
     searchable,
 )
 from ._engine._mixin_base import _MixinBase
@@ -27,6 +27,21 @@ if TYPE_CHECKING:
     from ._engine._compat import Self
 
 __tracebackhide__ = True
+
+
+def _surplus(counted: Sequence[tuple[object, int]]) -> list[DiffEntry]:
+    """One `DiffEntry` per copy too many, in the shape every other containment failure uses.
+
+    A count paired against a value was the first shape, and the renderer showed nothing for it: only an
+    entry saying which side is missing something reaches the extra/missing groups.  A repeat is a copy
+    the expectation has no room for, so it is spelled the same way an unwanted element is, and the
+    number of entries is how many copies over.
+    """
+    return [
+        DiffEntry(path="duplicated", actual=item, expected=None, absent="expected")
+        for item, total in counted
+        for _ in range(total - 1)
+    ]
 
 
 def _multiset_diff_entries(val_items, given_items):
@@ -133,6 +148,7 @@ class ContainsMixin(_MixinBase):
                     return self.error(
                         f"Expected <{values}> to contain item matching {item.describe()}, but did not.",
                         diff=diff,
+                        expected=items,
                     )
             elif item not in values:
                 if mapping_shaped(values):
@@ -140,7 +156,9 @@ class ContainsMixin(_MixinBase):
                         kind="contains",
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)],
                     )
-                    return self.error(f"Expected <{values}> to contain key <{item}>, but did not.", diff=diff)
+                    return self.error(
+                        f"Expected <{values}> to contain key <{item}>, but did not.", diff=diff, expected=items
+                    )
                 closest = self._closest_element(item, values)
                 if closest is not None:
                     element, entries = closest
@@ -148,11 +166,14 @@ class ContainsMixin(_MixinBase):
                         f"Expected <{values}> to contain item <{item}>, but did not."
                         f" Closest element <{element}> differs at {self._fmt_closest(entries)}.",
                         diff=DiffResult(kind="contains", entries=entries),
+                        expected=items,
                     )
                 diff = DiffResult(
                     kind="contains", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)]
                 )
-                return self.error(f"Expected <{values}> to contain item <{item}>, but did not.", diff=diff)
+                return self.error(
+                    f"Expected <{values}> to contain item <{item}>, but did not.", diff=diff, expected=items
+                )
         else:
             missing = missing_items(values, items, _is_matcher)
             if missing:
@@ -171,12 +192,14 @@ class ContainsMixin(_MixinBase):
                         f"Expected <{values}> to contain keys {self._fmt_items(items)}, but did not contain"
                         f" key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}.",
                         diff=diff,
+                        expected=items,
                     )
                 else:
                     return self.error(
                         f"Expected <{values}> to contain items {self._fmt_items(items)},"
                         f" but did not contain {self._fmt_items(missing_desc)}.",
                         diff=diff,
+                        expected=items,
                     )
         return self
 
@@ -284,6 +307,7 @@ class ContainsMixin(_MixinBase):
             return self.error(
                 f"Expected <{values}> to contain only {self._fmt_items(items)}, but {' and '.join(faults)}.",
                 diff=DiffResult(kind="contains", entries=entries),
+                expected=items,
             )
         return self
 
@@ -322,7 +346,8 @@ class ContainsMixin(_MixinBase):
                     trail = f" after {self._fmt_items(matched)}" if matched else ""
                     return self.error(
                         f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but <{item}>"
-                        f" was not found{trail}."
+                        f" was not found{trail}.",
+                        expected=items,
                     )
                 search_start = found_index + len(text)
             return self
@@ -348,7 +373,9 @@ class ContainsMixin(_MixinBase):
             # X may well be present, just never at a position where the whole sequence still fits
             else f" No run started with <{items[0]}>."
         )
-        return self.error(f"Expected <{values}> to contain sequence {self._fmt_items(items)}, but did not.{detail}")
+        return self.error(
+            f"Expected <{values}> to contain sequence {self._fmt_items(items)}, but did not.{detail}", expected=items
+        )
 
     def contains_duplicates(self) -> Self:
         """Asserts that val is iterable and *does* contain duplicates.
@@ -397,16 +424,12 @@ class ContainsMixin(_MixinBase):
         if not has_duplicates(values):
             return self
         # "but did" leaves the reader to scan the value for the repeat
-        repeated = repeated_items(values)
+        repeated = repeated_counts(values)
+        named = [value for value, _total in repeated]
         return self.error(
-            f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(repeated)}"
-            f" {'was' if len(repeated) == 1 else 'were'} repeated.",
-            diff=DiffResult(
-                kind="contains",
-                entries=[
-                    DiffEntry(path="duplicated", actual=values.count(value), expected=value) for value in repeated
-                ],
-            ),
+            f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(named)}"
+            f" {'was' if len(named) == 1 else 'were'} repeated.",
+            diff=DiffResult(kind="contains", entries=_surplus(repeated)),
         )
 
     def is_empty(self) -> Self:
@@ -502,7 +525,7 @@ class ContainsMixin(_MixinBase):
                     kind="sequence",
                     entries=[_ROOT.index(index).entry(actual=val_list[index], expected=expected_list[index])],
                 )
-            return self.error(message, diff=diff)
+            return self.error(message, diff=diff, expected=items)
         return self
 
     def contains_exactly_in_any_order(self, *items: object) -> Self:
@@ -545,6 +568,7 @@ class ContainsMixin(_MixinBase):
             return self.error(
                 f"Expected <{self.val}> to contain exactly {self._fmt_items(items)} in any order, but did not.",
                 diff=DiffResult(kind="contains", entries=entries),
+                expected=items,
             )
         return self
 
@@ -586,7 +610,8 @@ class ContainsMixin(_MixinBase):
             trail = f" after {self._fmt_items(matched)}" if matched else ""
             return self.error(
                 f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but <{items[item_index]}>"
-                f" did not follow{trail}."
+                f" did not follow{trail}.",
+                expected=items,
             )
         return self
 
@@ -627,9 +652,7 @@ class ContainsMixin(_MixinBase):
         duplicated = [item for item in items if val_list.count(item) > 1]
         if missing or duplicated:
             entries = [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
-            entries.extend(
-                DiffEntry(path="duplicated", actual=val_list.count(item), expected=item) for item in duplicated
-            )
+            entries.extend(_surplus([(item, val_list.count(item)) for item in duplicated]))
             problems = []
             if missing:
                 problems.append(f"did not contain {self._fmt_items(missing)}")
@@ -638,6 +661,7 @@ class ContainsMixin(_MixinBase):
             return self.error(
                 f"Expected <{val_list}> to contain {self._fmt_items(items)} only once, but {' and '.join(problems)}.",
                 diff=DiffResult(kind="contains", entries=entries),
+                expected=items,
             )
         return self
 
@@ -665,7 +689,7 @@ class ContainsMixin(_MixinBase):
             for item in items:
                 if self.val == item:
                     return self
-        return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.")
+        return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.", expected=items)
 
     def is_not_in(self, *items: object) -> Self:
         """Asserts that val is not equal to one of the given items.
