@@ -96,27 +96,25 @@ def _pairs() -> list[tuple[str, str, dict[str, tuple[str, bool]], dict[str, tupl
     An overload set is read as the union of what its rungs accept, since that is what it promises a
     caller.
 
-    A runtime method taking `*args` or `**kwargs` is skipped whole, and that costs more than it sounds:
-    176 of 1030 pairs, of which 31 are distinct names.  Twenty-six of those are purely variadic
-    (`contains(*items)`, `is_in(*items)`), where there is genuinely nothing to compare.  Five are not,
-    and their named parameters go unchecked along with the tail: `is_equal_to(other, **kwargs)`,
-    `is_array_equal(expected, **options)`, `is_frame_equal(expected, **options)`,
-    `is_array_close_to(expected, *, rtol, atol, equal_nan, **options)` and
-    `is_subset_of(*supersets, allow_empty=False)`.  `is_equal_to` is the most used method here, and its
-    `other` is compared on none of the four axes.
+    A runtime method taking `*args` or `**kwargs` is compared by its head rather than skipped whole.
+    Skipping it cost 176 of the 996 pairs, and among the 31 names in them five carry named parameters
+    that went unchecked along with the tail: `is_equal_to(other, **kwargs)`, `is_array_equal(expected,
+    **options)`, `is_frame_equal(expected, **options)`, `is_array_close_to(expected, *, rtol, atol,
+    equal_nan, **options)` and `is_subset_of(*supersets, allow_empty=False)`.  `is_equal_to` is the most
+    used method in the library, and its `other` was compared on none of the four axes.
 
-    Skipping per parameter instead would be worse, and that is measured rather than assumed: the six
-    keywords `is_equal_to` declares (`ignore`, `include`, `tolerance`, `comparators`, `ignore_null`,
-    `strict_types`) do not exist in its runtime signature at all, since they arrive through `**kwargs`.
-    A finer skip would report all six as invented parameters, which the runtime accepts perfectly well.
-    So this is the lesser of two wrong answers, and closing it properly means comparing the non-variadic
-    head of a signature rather than skipping the method.
+    What the tail buys is one exemption, and only one: a name a view declares and the runtime has not
+    got is excused where a tail could really be where it went, which `_absorbed` decides from the
+    runtime's own guard rather than from the presence of a tail.  The six keywords `is_equal_to` declares
+    (`ignore`, `include`, `tolerance`, `comparators`, `ignore_null`, `strict_types`) exist in no runtime
+    signature, since they arrive through `**kwargs`, and reporting them as invented is what a finer skip
+    would have done.  Everything else about the head is compared as it is for any other method.
     """
     found = []
     for protocol in sorted(_PROTOCOLS):
         for name, methods in _declarations_of(protocol).items():
             concrete = _runtime(name)
-            if concrete is None or any(kind.startswith("*") for kind, _ in concrete.values()):
+            if concrete is None:
                 continue
             promised: dict[str, tuple[str, bool]] = {}
             for method in methods:
@@ -124,6 +122,61 @@ def _pairs() -> list[tuple[str, str, dict[str, tuple[str, bool]], dict[str, tupl
                     promised.setdefault(parameter, value)
             found.append((protocol, name, promised, concrete))
     return found
+
+
+def _accepted_keywords() -> dict[str, frozenset[str]]:
+    """``{method: the keywords its `**kwargs` really takes}``, read from the runtime's own guard.
+
+    A `**kwargs` is not a promise to accept anything.  Three methods hand theirs to
+    `reject_unknown_kwargs(kwargs, <a frozenset>, "<the method>")`, and that call names both halves, so
+    the register is read out of the runtime rather than repeated here.
+    """
+    found: dict[str, frozenset[str]] = {}
+    for path in sorted(pathlib.Path(_typing.__file__).parent.parent.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        sets = {
+            target.id: frozenset(
+                element.value for element in node.value.args[0].elts if isinstance(element, ast.Constant)
+            )
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+            and isinstance(node.value, ast.Call)
+            and getattr(node.value.func, "id", None) == "frozenset"
+            and node.value.args
+            and isinstance(node.value.args[0], ast.Set)
+        }
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "reject_unknown_kwargs":
+                allowed, method = node.args[1], node.args[2]
+                if isinstance(allowed, ast.Name) and isinstance(method, ast.Constant):
+                    found[method.value] = sets.get(allowed.id, frozenset())
+    return found
+
+
+_ACCEPTED = _accepted_keywords()
+
+
+def _absorbed(name: str, parameter: str, kind: str, concrete: dict[str, tuple[str, bool]]) -> bool:
+    """Whether a tail could really be where a declared parameter went.
+
+    Two ways, and each was measured rather than assumed.  A `*args` takes a positional one, which is how
+    `extracting("user")` reaches `extracting(*names)`; it takes nothing by keyword, and excusing every
+    tail let a `strict: bool = ...` invented on `is_subset_of` pass while the call raised.  A `**kwargs`
+    takes a keyword one, but only where the runtime does not screen it: `extracting(name="user")`
+    type-checked in all three checkers and raised `unexpected keyword argument 'name'`, because the
+    guard behind that tail accepts `filter` and `sort` and nothing else.
+    """
+    kinds = {kind for kind, _default in concrete.values()}
+    if "*args" in kinds and kind == "positional-only":
+        return True
+    return "**kwargs" in kinds and parameter in _ACCEPTED.get(name, frozenset())
+
+
+def _has_a_tail(concrete: dict[str, tuple[str, bool]]) -> bool:
+    """Whether the runtime is variadic at all, which is what used to have it skipped."""
+    return any(kind.startswith("*") for kind, _default in concrete.values())
 
 
 @pytest.fixture(scope="module")
@@ -136,13 +189,27 @@ def test_the_comparison_itself_has_something_to_compare(pairs) -> None:
     assert_that(pairs).described_as("declarations with a runtime method to compare").is_length_between(600, 1200)
 
 
+def test_the_methods_behind_a_variadic_tail_are_compared_by_their_head(pairs) -> None:
+    """The five that carry a named parameter alongside the tail, `is_equal_to` first among them.
+
+    Named rather than counted: a walk that stopped including them again would leave every assertion
+    below it passing over a smaller surface, and the count alone would not say which names were lost.
+    """
+    compared = {name for _protocol, name, _promised, concrete in pairs if _has_a_tail(concrete)}
+    assert_that(compared).described_as("methods with a tail, compared rather than skipped").contains(
+        "is_equal_to", "is_array_equal", "is_frame_equal", "is_array_close_to", "is_subset_of"
+    )
+
+
 def test_no_parameter_is_accepted_at_runtime_without_being_declared(pairs) -> None:
     """One a caller cannot pass without a cast, though the runtime would take it."""
     undeclared = [
         f"{protocol}.{name}({parameter})"
         for protocol, name, promised, concrete in pairs
-        for parameter in concrete
-        if parameter not in promised
+        for parameter, (kind, _default) in concrete.items()
+        # the tail itself is not a parameter a caller passes: a view spelling out the keywords it
+        # accepts instead of repeating `**kwargs` is the design, not an omission
+        if parameter not in promised and not kind.startswith("*")
     ]
     assert_that(sorted(set(undeclared))).described_as("accepted at runtime, absent from the typed surface").is_empty()
 
@@ -153,7 +220,7 @@ def test_no_parameter_is_declared_without_existing_at_runtime(pairs) -> None:
         f"{protocol}.{name}({parameter})"
         for protocol, name, promised, concrete in pairs
         for parameter, (kind, _default) in promised.items()
-        if parameter not in concrete and not kind.startswith("*")
+        if parameter not in concrete and not kind.startswith("*") and not _absorbed(name, parameter, kind, concrete)
     ]
     assert_that(sorted(set(invented))).described_as("declared, and the runtime has no such parameter").is_empty()
 
@@ -269,6 +336,59 @@ def _runtime_shapes(annotation: object) -> set[str] | None:
 @pytest.fixture(scope="module")
 def covered():
     return _covered()
+
+
+class TestWhatTheSpellingComparisonDistinguishes:
+    """The depth of `_shapes`, shown rather than described.
+
+    About `_shapes` and not about the gate as a whole, which is a narrower claim and the true one: the
+    gate drops a pair before comparing it when the runtime side is exactly `object`, so two of the pairs
+    below (`str` and `Sized` against `object`) never reach the comparison in a real run.  They are here
+    because what they pin is the reading of a spelling, and a rung that stopped reading `object` as
+    different from `str` would take the skip with it and pass unnoticed.
+
+    `_shapes` keeps the head of each union member and drops what is under it, so `bytes` against
+    `bytearray` reads as different and `list[str]` against `list[int]` does not.  That is written in the
+    docstring there, and a sentence is not a demonstration: these say which spelling change is legible to
+    it and which is not, so the boundary moves only when somebody moves it here.
+
+    Going deeper was measured and refused.  Comparing the full spelling reports 17 of the 101 comparable
+    parameters, and every one of the 17 is deliberate: the views bind the element the runtime leaves
+    open (`Callable[[_E], object]` against `Callable[..., bool]`), the refinement ladders of
+    `is_instance_of` and `satisfies`, and `dict` against `dict[Any, Any]`.  Telling those from a real
+    narrowing needs subtype reasoning, which is what the three checkers already do on real calls.
+    """
+
+    @staticmethod
+    def _seen(declared: str, runtime: str) -> bool:
+        """Whether `_shapes` reads the two spellings as different."""
+        shapes = (_shapes(ast.parse(declared, mode="eval").body), _shapes(ast.parse(runtime, mode="eval").body))
+        return shapes[0] != shapes[1]
+
+    @pytest.mark.parametrize(
+        ("declared", "runtime"),
+        [
+            ("bytes", "bytes | bytearray"),
+            ("datetime.date", "datetime.datetime"),
+            ("str", "object"),
+            ("Sized", "object"),
+            ("int", "SupportsFloat"),
+        ],
+    )
+    def test_a_different_type_is_seen(self, declared: str, runtime: str) -> None:
+        assert_that(self._seen(declared, runtime)).described_as(f"{declared} against {runtime}").is_true()
+
+    @pytest.mark.parametrize(
+        ("declared", "runtime"),
+        [
+            ("list[str]", "list[int]"),
+            ("Callable[[str], object]", "Callable[[int], object]"),
+            ("Mapping[str, int]", "Mapping[int, str]"),
+            ("type[set[_E] | frozenset[_E]]", "type[set[_E]]"),
+        ],
+    )
+    def test_a_different_parameter_of_the_same_type_is_not(self, declared: str, runtime: str) -> None:
+        assert_that(self._seen(declared, runtime)).described_as(f"{declared} against {runtime}").is_false()
 
 
 class TestTheTypedSurfaceAndTheRuntimeAcceptTheSameThings:

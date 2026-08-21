@@ -24,7 +24,13 @@ pytest.importorskip("mypy")
 
 from assertpy2 import assert_that
 from tests import typing_harness
-from tests.typing_negative_baseline import CAUGHT, VALID
+from tests.typing_negative_baseline import (
+    _NOT_THE_VALUES_VIEW,
+    _PREDICATE_OVER_THE_SUBJECT,
+    CAUGHT,
+    SPLIT,
+    VALID,
+)
 
 _CASES = typing_harness.ROOT / "tests" / "typing_cases.py"
 
@@ -70,27 +76,42 @@ class TestTheMeasurementItselfRan:
         assert_that(stray).described_as("diagnostics away from a tagged case: the file is broken").is_empty()
 
 
+_NOT_THIS_CHAIN = {
+    "ty": {"no-matching-overload"},
+    "mypy": {"misc"},
+    "pyright": {"reportAttributeAccessIssue"},
+}
+
+
+def _matches(recorded: dict[str, frozenset[str]], family: dict[str, set[str]]) -> bool:
+    return all(set(recorded.get(checker, ())) <= codes for checker, codes in family.items())
+
+
 class TestWhatTheCheckersRefuse:
     def test_each_case_is_refused_with_exactly_the_recorded_codes(self, by_case):
         differing = {}
         for name, expected in CAUGHT.items():
             observed = {checker: sorted(codes) for checker, codes in by_case[name].items() if codes}
-            recorded = {checker: sorted(codes) for checker, codes in expected.items()}
+            # a checker recorded with no codes was measured saying nothing, and saying nothing is what
+            # it does not report, so it is not in `observed` either
+            recorded = {checker: sorted(codes) for checker, codes in expected.items() if codes}
             if observed != recorded:
                 differing[name] = {"recorded": recorded, "observed": observed}
         assert_that(differing).described_as(
             "a rejection changed. Tightened on purpose? Update typing_negative_baseline.py"
         ).is_empty()
 
-    def test_a_refused_case_is_refused_by_all_three(self, by_case):
-        # they have disagreed before, and a relation only one checker catches is a fact worth stating
-        # rather than a comfort: a suite gated on one checker would let it through
-        split = {
-            name: sorted(checker for checker, codes in by_case[name].items() if codes)
-            for name, expected in CAUGHT.items()
-            if expected and len(expected) != 3
-        }
-        assert_that(split).described_as("checkers disagree; record the split in the baseline").is_empty()
+    def test_the_cases_the_checkers_disagree_on_are_the_recorded_ones(self, by_case):
+        """A relation only some checkers catch is a fact to state, not a comfort to leave implicit.
+
+        Read from the codes rather than from the checkers listed.  Every row names all three, so asking
+        how many are listed answered three every time and this gate could not fail.  What separates a
+        split from an agreement is which of them reports anything.
+        """
+        split = sorted(name for name, expected in CAUGHT.items() if expected and not all(expected.values()))
+        assert_that(split).described_as("checkers disagree here; record the split in the baseline").is_equal_to(
+            sorted(SPLIT)
+        )
 
     def test_the_codes_say_the_same_thing_in_three_dialects(self, by_case):
         """A relation refused for one reason by one checker and another by the next is not one relation.
@@ -114,6 +135,17 @@ class TestWhatTheCheckersRefuse:
                 "mypy": {"attr-defined"},
                 "pyright": {"reportAttributeAccessIssue"},
             },
+            # an assertion declared for another chain, refused through the `self` annotation of a
+            # polling rung.  Each checker words the same refusal differently: no rung matched, the
+            # `self` argument is invalid, the attribute is not there
+            _NOT_THIS_CHAIN,
+            # a predicate over the subject, refused through the parameter the view bound it to.  mypy
+            # words it as the callable not fitting, pyright as the name the value has not got, and ty
+            # resolves the lambda through the overload set less precisely and says nothing
+            {checker: set(codes) for checker, codes in _PREDICATE_OVER_THE_SUBJECT.items()},
+            # a verdict asked of a value the builder holds, refused through the `self` annotation of a
+            # rung on its twin.  ty resolves the self-restricted rung less precisely and says nothing
+            {checker: set(codes) for checker, codes in _NOT_THE_VALUES_VIEW.items()},
             # a keyword the signature does not have, where the call does not even bind
             {
                 "ty": {"unknown-argument"},
@@ -130,16 +162,17 @@ class TestWhatTheCheckersRefuse:
         ]
         mixed = {}
         for name, expected in CAUGHT.items():
-            # every checker has to speak, with codes of its own: `set()` is a subset of any family, so a
-            # row missing one would otherwise read as three dialects agreeing
-            speaks_for_all = set(expected) == {"ty", "mypy", "pyright"} and all(expected.values())
+            # every checker has to be named, and at least one has to speak: `set()` is a subset of any
+            # family, so a row missing a checker would otherwise read as three dialects agreeing.  A
+            # checker named with no codes is recorded silence, which is a measurement rather than a gap
+            speaks_for_all = set(expected) == {"ty", "mypy", "pyright"} and any(expected.values())
             fits_one = any(
                 all(set(expected.get(checker, ())) <= codes for checker, codes in family.items()) for family in families
             )
             # `misc` is mypy's second word for an argument that does not fit, never a reason on its own:
             # alone it would let an unrelated error read as one of these families
             spoken = set(expected.get("mypy", ()))
-            rides_along = "misc" not in spoken or "arg-type" in spoken
+            rides_along = "misc" not in spoken or "arg-type" in spoken or _matches(expected, _NOT_THIS_CHAIN)
             if expected and not (speaks_for_all and fits_one and rides_along):
                 mixed[name] = {checker: sorted(codes) for checker, codes in expected.items()}
         assert_that(mixed).described_as("one relation, refused for unrelated reasons").is_empty()

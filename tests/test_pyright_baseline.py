@@ -41,6 +41,9 @@ _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_check_typing.py", "_CheckRepeatableAssertion", "_E", "contravariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckNumericAssertion", "_N", "covariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckDictAssertion", "_V", "contravariant"),
+    # awaiting a chain hands back the ordinary builder, which is invariant in its value, so pyright
+    # asks the chain to be invariant too.  Refused: the chain only ever hands the polled value out
+    ("assertpy2/_engine/_poll_typing.py", "_AsyncPoll", "_P_co", "invariant"),
 )
 
 

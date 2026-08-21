@@ -43,6 +43,18 @@ _MISSING: dict[str, frozenset[str]] = {
     "pyright": frozenset({"reportAttributeAccessIssue"}),
 }
 
+_NOT_THE_VALUES_VIEW: dict[str, frozenset[str]] = {
+    "ty": frozenset(),
+    "mypy": frozenset({"misc"}),
+    "pyright": frozenset({"reportAttributeAccessIssue"}),
+}
+
+_PREDICATE_OVER_THE_SUBJECT: dict[str, frozenset[str]] = {
+    "ty": frozenset(),
+    "mypy": frozenset({"arg-type"}),
+    "pyright": frozenset({"reportAttributeAccessIssue"}),
+}
+
 CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "contains-item-of-another-type": _ARGUMENT,
     "numeric-compared-to-text": _ARGUMENT,
@@ -52,9 +64,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "exact-items-of-another-type": _ARGUMENT,
     # each view says what a superset is for it: characters, a mapping, byte values
     "mapping-subset-of-a-sequence": _ARGUMENT,
-    "date-compared-to-number": _ARGUMENT,
-    "date-ordered-as-a-datetime": _ARGUMENT,
-    "date-taken-from-a-datetime": _ARGUMENT,
+    # the chronological nine live on the datetime view now, so a plain date does not offer them at all:
+    # what used to be a bad operand is a method the value has not got
+    "zip-reads-the-wrong-side": _MISSING,
+    "date-compared-to-number": _MISSING,
+    "date-ordered-as-a-datetime": _MISSING,
+    "date-taken-from-a-datetime": _MISSING,
     "ordered-but-not-convertible": _ARGUMENT,
     "length-given-text": _ARGUMENT,
     "bytes-prefixed-with-text": _ARGUMENT,
@@ -146,15 +161,69 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # class.  Deliberate, and the docs guard has carried a marker for exactly this since before it:
     # a dynamic assertion is outside the typed surface by policy
     "dynamic-attribute-on-an-object": _MISSING,
+    # a polling chain: the declaration wins over `__getattr__` when the chain is not the one it was
+    # written for, which is what makes a typed chain worth having at all
+    "text-assertion-on-a-polled-number": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"misc"}),
+        "pyright": frozenset({"reportAttributeAccessIssue"}),
+    },
+    # a predicate over the subject: the view binds it to its own value, so a lambda reading a name the
+    # value has not got is refused.  ty resolves the lambda's parameter through an overload set less
+    # precisely and says nothing, which is measured here rather than left blank
+    "predicate-reading-a-missing-string-method": _PREDICATE_OVER_THE_SUBJECT,
+    "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
+    "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
+    "text-assertion-after-a-dynamic-one": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"misc"}),
+        "pyright": frozenset({"reportAttributeAccessIssue"}),
+    },
+    "bad-operand-on-a-polled-number": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset({"reportArgumentType"}),
+    },
     "negation-allows-a-non-negatable-name": {},
+    # the hook has to stay: a dynamic assertion is resolved from the polled value's attributes, so
+    # `has_status("PAID")` can be declared nowhere.  With it there, an unknown name is the runtime's to
+    # name, and a `str` reaches the umbrella rung of an assertion the string view does not carry
+    "a-name-that-exists-nowhere-on-a-chain": {},
+    "numeric-assertion-on-polled-text": {},
     "ordering-matcher-takes-any-boundary": {},
     "ordering-matcher-judges-any-subject": {},
     "convertible-but-not-a-number": {},
     "array-as-a-scalar-operand": {},
 }
 
+SPLIT: frozenset[str] = frozenset(
+    {
+        "predicate-reading-a-missing-string-method",
+        "predicate-reading-a-missing-numeric-method",
+        "text-verdict-on-a-pivoted-number",
+    }
+)
+"""The cases where the three do not agree, named so a new one has to be decided about.
+
+Two relations, and ty is the silent one in both.  The first two are a lambda over the subject reading a
+name the value has not got, where ty resolves the parameter through the overload set less precisely.
+The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
+rung on its twin, which ty does not read either.
+
+Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
+missing checker would read as three dialects agreeing.
+"""
+
 VALID: frozenset[str] = frozenset(
     {
+        "valid-verdict-after-a-pivot",
+        "valid-text-verdict-after-a-pivot",
+        "valid-verdict-after-a-loose-pivot",
+        "valid-predicate-over-the-subject",
+        "valid-numeric-predicate-over-the-subject",
+        "valid-polled-refinement",
+        "valid-polled-pivot",
+        "valid-polled-dynamic-then-typed",
         "valid-contains-an-item",
         "valid-contains-a-matcher",
         "valid-int-compared-to-float",

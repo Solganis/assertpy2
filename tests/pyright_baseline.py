@@ -14,7 +14,6 @@ from __future__ import annotations
 
 BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_diff.py", "reportAttributeAccessIssue"): 14,
-    ("assertpy2/_satisfies.py", "reportArgumentType"): 1,
     ("assertpy2/base.py", "reportArgumentType"): 2,
     ("assertpy2/extracting.py", "reportArgumentType"): 1,
     ("assertpy2/extracting.py", "reportCallIssue"): 1,
@@ -34,15 +33,25 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
-    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 28,
+    # two more with the datetime rungs: a `datetime` is a `date`, so every refinement ladder offers it
+    # first, and pyright reads the pair as overlapping the way it reads `bool` before `int`
+    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 30,
     # the verdict twins mirror the protocols, and they mirror their reports with them: the same
     # overload ladder, the same two variance suggestions plus the one `_DictAssertion` carries, and
     # one override report for the same reason the original has it
     ("assertpy2/_engine/_check_typing.py", "reportOverlappingOverload"): 1,
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
+    # the polling twins restrict `self` per assertion, and a value the umbrella claims matches both a
+    # named rung and the trailing umbrella one, which pyright reads as the later rung being redundant.
+    # Most of the rest is the `is_not_none` ladder, which the views it mirrors are reported for too:
+    # a chain over `None` matches every rung of it
+    ("assertpy2/_engine/_poll_typing.py", "reportOverlappingOverload"): 48,
+    ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
+    # the verdict twin of a value the builder holds, the same shape and so the same report
+    ("assertpy2/_engine/_builder_check_typing.py", "reportOverlappingOverload"): 11,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
-    ("assertpy2/assertpy.py", "reportOverlappingOverload"): 5,
+    ("assertpy2/assertpy.py", "reportOverlappingOverload"): 6,
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
