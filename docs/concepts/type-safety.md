@@ -130,8 +130,8 @@ What is left is the value annotated `object` and the class that answers to nothi
 shorter surface is the true one.
 
 That second group is a compatibility trade rather than a clean line, and it is worth knowing which way
-it errs. A class that happens to define `__iter__` for a reason of its own keeps all 152 assertion
-names, numeric ones included, exactly as before. The rule is deliberately generous: a value the library
+it errs. A class that happens to define `__iter__` for a reason of its own keeps every assertion name
+there is, numeric ones included, exactly as before. The rule is deliberately generous: a value the library
 might be able to use keeps everything, and only a value it certainly cannot use is narrowed. Erring the
 other way would reject calls that work, which is the worse failure of the two.
 
