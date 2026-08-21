@@ -56,6 +56,16 @@ def pytest_addoption(parser):
         help="Disable CI mode / its autodetection, allowing missing snapshots to be created",
     )
     parser.addini(
+        "assertpy2_profile",
+        help="Which guards a suite gets without naming them one by one: compatible (default), safe",
+        default="compatible",
+    )
+    parser.addini(
+        "assertpy2_vacuous",
+        help="Warn when a universal assertion passes over an empty value: off (default), on",
+        default="",
+    )
+    parser.addini(
         "assertpy2_allure",
         help="Allure attachment mode: off, diff (default), full",
         default="diff",
@@ -63,7 +73,7 @@ def pytest_addoption(parser):
     parser.addini(
         "assertpy2_dangling",
         help="Warn about assert_that() statements that assert nothing: off (default), on",
-        default="off",
+        default="",
     )
     parser.addini(
         "assertpy2_dangling_entries",
@@ -84,13 +94,86 @@ def pytest_addoption(parser):
     parser.addini(
         "assertpy2_failure_clusters",
         help="Group failures sharing one difference: off (default), or the failing tests a cluster must hold",
-        default="off",
+        default="",
     )
     parser.addini(
         "assertpy2_poll_report",
         help="Name polls that converged this close to their deadline: off, or a fraction (default 0.7)",
         default="0.7",
     )
+
+
+# What a profile answers for a setting the suite did not name.  Three guards are off under
+# `compatible` because they change what a green run reports, and a suite that inherited this library
+# did not ask for that; `safe` is the one line a new suite writes to get all three.
+_PROFILES: Final = {
+    "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off", "assertpy2_failure_clusters": "off"},
+    "safe": {
+        "assertpy2_dangling": "on",
+        "assertpy2_vacuous": "on",
+        "assertpy2_failure_clusters": str(_clustering.MINIMUM_SIZE),
+    },
+}
+
+
+def _profile(config) -> str:
+    """Which profile answers, resolved once: an empty setting is the default rather than a mistake.
+
+    Once, because the three settings ask for it independently and a name nobody declared would
+    otherwise warn once per question, which reads as three separate mistakes in one config.
+    """
+    cached = getattr(config, "_assertpy2_profile", None)
+    if cached is not None:
+        return cached
+    name = str(config.getini("assertpy2_profile")).strip().lower()
+    if name and name not in _PROFILES:
+        warnings.warn(
+            f"assertpy2_profile={name!r} is not one of ({', '.join(sorted(_PROFILES))}), falling back to 'compatible'",
+            stacklevel=1,
+        )
+        name = ""
+    config._assertpy2_profile = name or "compatible"
+    return config._assertpy2_profile
+
+
+def _written(config, name: str) -> str:
+    """What the suite wrote for a setting, empty where it wrote nothing.
+
+    The three settings a profile answers for are registered with no default of their own, so this tells
+    "the suite wrote off" from "the suite said nothing about it", which is the whole of the resolution.
+    """
+    return str(config.getini(name)).strip()
+
+
+def _setting(config, name: str) -> str:
+    """What a setting resolves to: what the suite wrote, or what its profile answers for it.
+
+    Named settings win over the profile, so `safe` plus `assertpy2_dangling = off` is a suite that
+    wants the other two and has said why in its own config rather than in a comment somewhere.
+    """
+    return _written(config, name) or _PROFILES[_profile(config)][name]
+
+
+def _vacuous_guard(config) -> bool:
+    """Whether the vacuous-quantifier guard runs, with the three ways of asking it ranked.
+
+    The flag is the loudest and wins.  A written setting comes next, and it has to be able to say `off`:
+    the environment variable is how the guard is turned on away from pytest, and a suite that inherited
+    one from its CI image could not turn it off in its own config, which is where a reader looks.  Where
+    the suite said nothing, `safe` turns it on and `compatible` leaves the variable as it found it.
+    """
+    if config.getoption("assertpy2_vacuous"):
+        return True
+    written = _written(config, "assertpy2_vacuous").lower()
+    if written in ("on", "off"):
+        return written == "on"
+    if written:
+        # a typo must not read as `off`: this is a guard, and the quiet answer is the dangerous one
+        warnings.warn(
+            f"assertpy2_vacuous={written!r} is not 'on' or 'off', falling back to the profile",
+            stacklevel=1,
+        )
+    return _PROFILES[_profile(config)]["assertpy2_vacuous"] == "on" or _satisfies._VACUOUS_GUARD
 
 
 def _poll_threshold(raw: object) -> float | None:
@@ -148,7 +231,7 @@ def _dangling_enabled(config) -> bool:
     """
     if config.getoption("assertpy2_dangling"):
         return True
-    setting = str(config.getini("assertpy2_dangling")).strip().lower()
+    setting = _setting(config, "assertpy2_dangling").lower()
     if setting not in {"on", "off"}:
         warnings.warn(
             f"assertpy2_dangling={setting!r} is not 'on' or 'off', falling back to 'off'",
@@ -199,7 +282,7 @@ def pytest_configure(config):
     # value is restored rather than forced back, so tests driving these hooks stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
-    config._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
+    config._assertpy2_cluster_minimum = _cluster_minimum(_setting(config, "assertpy2_failure_clusters"))
     _session_config[0] = config
     config._assertpy2_failures = []
     config._assertpy2_failure_count = 0
@@ -208,8 +291,7 @@ def pytest_configure(config):
     async_assertions._COLLECT_RETRIES = config._assertpy2_poll_threshold is not None
     # save and restore rather than force back: the environment variable may have turned the guard on before import
     config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
-    if config.getoption("assertpy2_vacuous"):
-        _satisfies._VACUOUS_GUARD = True
+    _satisfies._VACUOUS_GUARD = _vacuous_guard(config)
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = True
     if config.getoption("assertpy2_snapshot_ci"):
@@ -748,11 +830,19 @@ def _attach_report_sections(item, report, exc) -> None:
     else:
         named_actual, named_expected = outcome.actual_provided, outcome.has_expected
 
-    # the cheap exit for a failure with nothing to add to its own message, which is most of them
+    # `expected` reached every failure when each assertion started naming what it measured against, and
+    # the message names it too, so on its own it no longer says anything the reader has not read: what
+    # decides is `actual` being named explicitly, which means a value other than the subject.  A failure
+    # with no record is the older path, where the values are all there is to go on
+    named_values = named_actual if outcome is not None else (named_actual or named_expected)
+
+    # the cheap exit for a failure with nothing to add to its own message, which is most of them.
+    # Asked of the record's own flags rather than of `named_values`: the terminal keeps quiet about a
+    # value the message already prints, and Allure below still has that value to attach
     if not (named_actual or named_expected) and diff is None and trace is None:
         return
 
-    if named_actual or named_expected:
+    if named_values:
         # capped like the diff rows: this section is read on a terminal, and the untouched values stay
         # on the exception for anything that wants them
         lines = []
@@ -787,6 +877,9 @@ def _attach_report_sections(item, report, exc) -> None:
                 trace=trace,
                 mode=mode,
                 max_entries=allure_max_entries,
+                # the record's own flags, not the terminal section's reading of them: `full` mode is
+                # asked for by a suite that wants the values as data, and a value already in the
+                # message is still the value a dashboard reads
                 named_actual=named_actual,
                 named_expected=named_expected,
             )
@@ -899,9 +992,10 @@ def _diff_to_json(diff, max_entries=50):
 
 
 def _attach_allure(actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50):
-    # the two flags carry the terminal section's decision, so an Allure run and a pytest report agree
-    # on which values the assertion named. Required rather than defaulted: a caller that reads them
-    # off the values instead is the reading this phase removed
+    # the two flags carry what the record says the assertion named, which is not what the terminal
+    # section shows: a value already in the message is left out there and attached here, where the
+    # message is prose and the field is the data.  Required rather than defaulted: a caller that reads
+    # them off the values instead is the reading this phase removed
     if mode == "off":
         return
     if mode == "full" and (named_actual or named_expected):

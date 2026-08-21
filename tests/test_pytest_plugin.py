@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from _pytest.config.argparsing import Parser
 
+from assertpy2 import _clustering, assert_that, async_assertions, match
 from assertpy2 import _satisfies as _satisfies_module
-from assertpy2 import assert_that, async_assertions, match
 from assertpy2 import errors as errors_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
@@ -21,7 +21,9 @@ from assertpy2.pytest_plugin import (
     _format_trace,
     _is_full_run,
     _json_safe,
+    _setting,
     _trace_to_json,
+    _vacuous_guard,
     pytest_addoption,
     pytest_configure,
     pytest_runtest_makereport,
@@ -85,7 +87,7 @@ class TestPluginLoaded:
     def test_addoption_registers_ini(self):
         parser = MagicMock()
         pytest_addoption(parser)
-        assert_that(parser.addini.call_count).is_equal_to(7)
+        assert_that(parser.addini.call_count).is_equal_to(9)
         names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
@@ -93,6 +95,132 @@ class TestPluginLoaded:
         assert_that(names).contains("assertpy2_failure_clusters")
         assert_that(names).contains("assertpy2_dangling")
         assert_that(names).contains("assertpy2_dangling_entries")
+        assert_that(names).contains("assertpy2_profile")
+        assert_that(names).contains("assertpy2_vacuous")
+        # the three a profile answers for are registered with no default of their own, so `_setting`
+        # can tell "the suite wrote off" from "the suite wrote nothing"
+        defaults = {call[0][0]: call[1].get("default") for call in parser.addini.call_args_list}
+        assert_that([defaults[name] for name in ("assertpy2_dangling", "assertpy2_vacuous")]).is_equal_to(["", ""])
+        assert_that(defaults["assertpy2_failure_clusters"]).is_equal_to("")
+        assert_that(defaults["assertpy2_profile"]).is_equal_to("compatible")
+
+
+class TestTheProfileAnswersForWhatTheSuiteDidNotName:
+    """One line of config instead of three, and the three keep working on their own.
+
+    The guards a new suite wants are the ones an inherited suite must not get without asking: each
+    changes what a green run reports.  So `compatible` is the default and `safe` is the line that turns
+    them on, rather than the defaults moving under everybody.
+    """
+
+    @staticmethod
+    def _config(**written):
+        return SimpleNamespace(getini=lambda name: written.get(name, ""), getoption=lambda name: False)
+
+    def test_an_unnamed_setting_takes_its_profile_answer(self):
+        compatible, safe = self._config(), self._config(assertpy2_profile="safe")
+        assert_that(_setting(compatible, "assertpy2_dangling")).is_equal_to("off")
+        assert_that(_setting(safe, "assertpy2_dangling")).is_equal_to("on")
+        assert_that(_setting(safe, "assertpy2_vacuous")).is_equal_to("on")
+        assert_that(_setting(safe, "assertpy2_failure_clusters")).is_equal_to(str(_clustering.MINIMUM_SIZE))
+
+    def test_a_named_setting_wins_over_the_profile(self):
+        config = self._config(assertpy2_profile="safe", assertpy2_dangling="off")
+        assert_that(_setting(config, "assertpy2_dangling")).described_as(
+            "a suite that named a setting has said what it wants, whatever profile it picked"
+        ).is_equal_to("off")
+        assert_that(_setting(config, "assertpy2_vacuous")).is_equal_to("on")
+
+    def test_a_profile_nobody_declared_is_refused_and_named(self):
+        config = self._config(assertpy2_profile="strict")
+        with pytest.warns(UserWarning, match="assertpy2_profile='strict' is not one of"):
+            assert_that(_setting(config, "assertpy2_dangling")).is_equal_to("off")
+
+    def test_a_mistyped_guard_setting_falls_back_to_the_profile_rather_than_to_off(self):
+        """`off` is the answer that hides a mistake, so a value nobody declared must not read as one."""
+        config = self._config(assertpy2_profile="safe", assertpy2_vacuous="onn")
+        with pytest.warns(UserWarning, match="assertpy2_vacuous='onn' is not 'on' or 'off'"):
+            assert_that(_vacuous_guard(config)).is_true()
+
+    def test_a_profile_nobody_declared_is_named_once_rather_than_per_question(self):
+        """Three settings ask, and one mistake is one mistake however many of them looked."""
+        config = self._config(assertpy2_profile="strict")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for name in ("assertpy2_dangling", "assertpy2_vacuous", "assertpy2_failure_clusters"):
+                _setting(config, name)
+        assert_that([str(one.message) for one in caught]).is_length(1)
+
+
+class TestTheProfileFromAConfigFile:
+    """The profile as a suite meets it: a config file, a run, and what it says.
+
+    The three tests above hold `_setting()`, which is the resolution and not the wiring.  A refactor
+    that stopped `pytest_configure` calling it would leave every one of them green while the profile
+    did nothing at all, so this one writes the config and reads the warnings out of a real run.
+    """
+
+    _SUITE = (
+        "from assertpy2 import assert_that\n\n\n"
+        "def test_dangling_statement():\n    assert_that(1)\n\n\n"
+        "def test_vacuous_quantifier():\n    assert_that([]).all_satisfy(lambda item: False)\n"
+    )
+
+    def _run(self, tmp_path, *settings, **environment):
+        (tmp_path / "test_guards.py").write_text(self._SUITE, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("\n".join(["[pytest]", *settings, ""]), encoding="utf-8")
+        return subprocess.run(
+            ["uv", "run", "--no-sync", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            # the variable is one of the three ways to ask for the vacuous guard, so a machine that
+            # carries it would answer for the suite under test rather than the config file does
+            env={**{key: value for key, value in os.environ.items() if key != "ASSERTPY2_VACUOUS"}, **environment},
+        )
+
+    @staticmethod
+    def _reported(result):
+        """The child's stdout, once the child is known to have run at all.
+
+        Every case here reads stdout, and two of them read it for an absence: a child that died on
+        startup prints no warning either, and would pass them both.
+        """
+        assert_that(result.returncode).described_as(f"the child run failed: {result.stderr}").is_equal_to(0)
+        return assert_that(result.stdout).described_as(
+            f"exit {result.returncode}, child stderr: {result.stderr.strip() or 'empty'}"
+        )
+
+    def test_the_default_leaves_a_run_as_it_found_it(self, tmp_path):
+        result = self._run(tmp_path)
+        self._reported(result).does_not_contain("DanglingAssertionWarning", "VacuousAssertionWarning")
+
+    def test_the_safe_profile_turns_both_warnings_on(self, tmp_path):
+        result = self._run(tmp_path, "assertpy2_profile = safe")
+        self._reported(result).contains("DanglingAssertionWarning", "VacuousAssertionWarning")
+
+    def test_a_named_setting_wins_over_the_profile_in_a_real_run(self, tmp_path):
+        result = self._run(tmp_path, "assertpy2_profile = safe", "assertpy2_dangling = off")
+        self._reported(result).does_not_contain("DanglingAssertionWarning")
+        self._reported(result).contains("VacuousAssertionWarning")
+
+    def test_a_value_the_setting_does_not_know_is_refused_rather_than_read_as_off(self, tmp_path):
+        """A guard whose setting was mistyped must not go quiet: the quiet answer is the dangerous one.
+
+        The refusal is written at configure time, which is before pytest owns the streams, so it lands
+        on stderr while the guard's own warning reaches the report.
+        """
+        result = self._run(tmp_path, "assertpy2_profile = safe", "assertpy2_vacuous = onn")
+        self._reported(result).contains("VacuousAssertionWarning")
+        assert_that(result.stderr).described_as("the mistyped setting, refused by name").contains(
+            "assertpy2_vacuous='onn' is not 'on' or 'off'"
+        )
+
+    def test_the_environment_cannot_outrank_a_suite_that_said_off(self, tmp_path):
+        """The variable asks for the guard away from pytest, and a config file is the louder voice."""
+        result = self._run(tmp_path, "assertpy2_vacuous = off", ASSERTPY2_VACUOUS="1")
+        self._reported(result).does_not_contain("VacuousAssertionWarning")
 
 
 class TestHookSkipsIrrelevantReports:
@@ -686,14 +814,37 @@ class TestAllureFullMode:
         assert_that(names).contains("AssertionFailure")
         assert_that(names).contains("Structured Diff")
 
-    def test_a_failure_that_never_named_actual_attaches_no_values(self):
+    def test_a_failure_with_no_diff_at_all_still_attaches_its_expected(self):
+        """The case the sibling below does not reach: `contains_key` carries a diff, and a diff is its
+        own reason to go on.  `is_true()` has neither a diff nor an actual of its own, so it is the one
+        that says whether the early exit reads the record's flags or the terminal section's rule.
+        """
+        mock = _mock_allure()
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(0).is_true()
+        report = _make_report()
+        _run_hook_with_allure(report, _make_call(exc=failure.value), mock, allure_mode="full")
+        attached = {call.kwargs["name"]: call.kwargs["body"] for call in mock.attach.call_args_list}
+        assert_that(json.loads(attached["AssertionFailure"])).is_equal_to({"format": 2, "expected": True})
+        assert_that([title for title, _ in report.sections]).described_as(
+            "the terminal stays quiet: the message already says what was expected"
+        ).does_not_contain("AssertionFailure")
+
+    def test_a_failure_that_named_only_an_expected_still_attaches_it(self):
+        """Full mode is data, so the rule that keeps the terminal from repeating itself does not apply.
+
+        The terminal section shows values the message did not, and every assertion names an expected
+        now, so `expected` alone stopped meaning "the reader has not seen this".  A dashboard reading
+        the attachment is in the other position: the message is prose to it, and the field is the value.
+        """
         mock = _mock_allure()
         with pytest.raises(AssertionFailure) as failure:
             assert_that({"a": 1}).contains_key("x")
         _run_hook_with_allure(_make_report(), _make_call(exc=failure.value), mock, allure_mode="full")
-        names = [call.kwargs["name"] for call in mock.attach.call_args_list]
-        assert_that(names).does_not_contain("AssertionFailure")
-        assert_that(names).contains("Structured Diff")
+        attached = {call.kwargs["name"]: call.kwargs["body"] for call in mock.attach.call_args_list}
+        assert_that(attached).contains_key("AssertionFailure", "Structured Diff")
+        body = json.loads(attached["AssertionFailure"])
+        assert_that(body).is_equal_to({"format": 2, "expected": ["x"]})
 
     def test_an_expected_of_none_is_attached_rather_than_read_as_unset(self):
         mock = _mock_allure()
@@ -727,17 +878,43 @@ class TestAllureOffMode:
         mock.attach.assert_not_called()
 
 
-def _make_config(*, ini="diff", snapshot_update=False, poll_report="0.7", clusters="3", dangling="off", entries=()):
+def _make_config(
+    *,
+    ini="diff",
+    snapshot_update=False,
+    poll_report="0.7",
+    clusters="3",
+    dangling="off",
+    entries=(),
+    profile="compatible",
+    vacuous="off",
+):
     config = MagicMock()
-    # dispatch per key: a single return value would feed the allure mode to every other ini reader
+    # every key answered by name, and a key nobody listed refuses instead of taking somebody else's
+    # value.  A catch-all fed the allure mode to every other reader, which is how a guard came to be
+    # handed `diff` for its own setting and refused it as a value it does not know
     per_key = {
+        "assertpy2_allure": ini,
+        "assertpy2_diff": "on",
+        "assertpy2_diff_max_entries": "50",
         "assertpy2_poll_report": poll_report,
         "assertpy2_failure_clusters": clusters,
         "assertpy2_dangling": dangling,
         "assertpy2_dangling_entries": entries,
+        "assertpy2_profile": profile,
+        "assertpy2_vacuous": vacuous,
     }
-    config.getini.side_effect = lambda name: per_key.get(name, ini)
+
+    def answer(name):
+        if name not in per_key:
+            raise KeyError(f"{name} is read by the plugin and not answered by this fake config")
+        return per_key[name]
+
+    config.getini.side_effect = answer
     config.getoption.return_value = snapshot_update
+    # the profile is resolved once and cached here, and a mock answers an attribute that was never set
+    # with another mock, which reads as a profile nobody declared
+    config._assertpy2_profile = None
     return config
 
 
