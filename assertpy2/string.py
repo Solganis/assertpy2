@@ -28,7 +28,9 @@ class StringMixin(_MixinBase):
         if sized_len(self.val) == 0:
             raise ValueError("val is empty")
         if not is_valid(self.val):
-            return self.error(f"Expected <{self.val}> to contain only {description}, but did not.")
+            return self.error(
+                f"Expected <{self.val}> to contain only {description}, but did not.", expected=description
+            )
         return self
 
     def is_equal_to_ignoring_case(self, other: str) -> Self:
@@ -55,7 +57,9 @@ class StringMixin(_MixinBase):
         require_type(self.val, str, "a string")
         require_type(other, str, "a string", subject=argument("other"))
         if self.val.lower() != other.lower():
-            return self.error(f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.")
+            return self.error(
+                f"Expected <{self.val}> to be case-insensitive equal to <{other}>, but was not.", expected=other
+            )
         return self
 
     def is_equal_to_ignoring_whitespace(self, other: str) -> Self:
@@ -85,7 +89,9 @@ class StringMixin(_MixinBase):
         require_type(self.val, str, "a string")
         require_type(other, str, "a string", subject=argument("other"))
         if "".join(self.val.split()) != "".join(other.split()):
-            return self.error(f"Expected <{self.val}> to be equal to <{other}> ignoring whitespace, but was not.")
+            return self.error(
+                f"Expected <{self.val}> to be equal to <{other}> ignoring whitespace, but was not.", expected=other
+            )
         return self
 
     def contains_ignoring_case(self, *items: str) -> Self:
@@ -117,7 +123,8 @@ class StringMixin(_MixinBase):
                 require_type(items[0], str, "a string", subject=argument("item"))
                 if items[0].lower() not in self.val.lower():
                     return self.error(
-                        f"Expected <{self.val}> to case-insensitive contain item <{items[0]}>, but did not."
+                        f"Expected <{self.val}> to case-insensitive contain item <{items[0]}>, but did not.",
+                        expected=items[0],
                     )
             else:
                 val_lower = self.val.lower()
@@ -129,7 +136,8 @@ class StringMixin(_MixinBase):
                 if missing:
                     return self.error(
                         f"Expected <{self.val}> to case-insensitive contain items"
-                        f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
+                        f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}.",
+                        expected=items,
                     )
         elif isinstance(self.val, collections.abc.Iterable):
             lowered_values = []
@@ -144,7 +152,8 @@ class StringMixin(_MixinBase):
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to case-insensitive contain items"
-                    f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}."
+                    f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}.",
+                    expected=items,
                 )
         else:
             refuse(self.val, "a string or an iterable")
@@ -178,7 +187,7 @@ class StringMixin(_MixinBase):
             if len(text_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(text_prefix):
-                return self.error(f"Expected <{self.val}> to start with <{text_prefix}>, but did not.")
+                return self.error(f"Expected <{self.val}> to start with <{text_prefix}>, but did not.", expected=prefix)
         elif isinstance(self.val, (bytes, bytearray)):
             # bytes are iterable, so without this branch `b"foo"` yields the int 102 and `102 != b"f"` fails an
             # assertion that should pass
@@ -186,7 +195,9 @@ class StringMixin(_MixinBase):
             if len(raw_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(raw_prefix):
-                return self.error(f"Expected <{self.val!r}> to start with <{raw_prefix!r}>, but did not.")
+                return self.error(
+                    f"Expected <{self.val!r}> to start with <{raw_prefix!r}>, but did not.", expected=prefix
+                )
         elif isinstance(self.val, collections.abc.Iterable):
             iterator = iter(self.val)
             try:
@@ -194,7 +205,7 @@ class StringMixin(_MixinBase):
             except StopIteration:
                 raise ValueError("val must not be empty") from None
             if first != prefix:
-                return self.error(f"Expected {self.val} to start with <{prefix}>, but did not.")
+                return self.error(f"Expected {self.val} to start with <{prefix}>, but did not.", expected=prefix)
         else:
             refuse(self.val, "a string or an iterable")
         return self
@@ -227,20 +238,22 @@ class StringMixin(_MixinBase):
             if len(text_suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(text_suffix):
-                return self.error(f"Expected <{self.val}> to end with <{text_suffix}>, but did not.")
+                return self.error(f"Expected <{self.val}> to end with <{text_suffix}>, but did not.", expected=suffix)
         elif isinstance(self.val, (bytes, bytearray)):
             # the mirror of the branch in `starts_with`: the last element of `b"foo"` is the int 111
             raw_suffix = require_type(suffix, (bytes, bytearray), "bytes", subject=argument("suffix"))
             if len(raw_suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(raw_suffix):
-                return self.error(f"Expected <{self.val!r}> to end with <{raw_suffix!r}>, but did not.")
+                return self.error(
+                    f"Expected <{self.val!r}> to end with <{raw_suffix!r}>, but did not.", expected=suffix
+                )
         elif isinstance(self.val, collections.abc.Iterable):
             items = list(self.val)
             if not items:
                 raise ValueError("val must not be empty")
             if items[-1] != suffix:
-                return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.")
+                return self.error(f"Expected {self.val} to end with <{suffix}>, but did not.", expected=suffix)
         else:
             refuse(self.val, "a string or an iterable")
         return self
@@ -273,7 +286,9 @@ class StringMixin(_MixinBase):
         if len(prefix) == 0:
             raise ValueError("given prefix arg must not be empty")
         if not self.val.lower().startswith(prefix.lower()):
-            return self.error(f"Expected <{self.val}> to case-insensitive start with <{prefix}>, but did not.")
+            return self.error(
+                f"Expected <{self.val}> to case-insensitive start with <{prefix}>, but did not.", expected=prefix
+            )
         return self
 
     def ends_with_ignoring_case(self, suffix: str) -> Self:
@@ -304,7 +319,9 @@ class StringMixin(_MixinBase):
         if len(suffix) == 0:
             raise ValueError("given suffix arg must not be empty")
         if not self.val.lower().endswith(suffix.lower()):
-            return self.error(f"Expected <{self.val}> to case-insensitive end with <{suffix}>, but did not.")
+            return self.error(
+                f"Expected <{self.val}> to case-insensitive end with <{suffix}>, but did not.", expected=suffix
+            )
         return self
 
     def matches(self, pattern: str) -> Self:
@@ -362,7 +379,7 @@ class StringMixin(_MixinBase):
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is None:
-            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.", expected=pattern)
         return self
 
     def does_not_match(self, pattern: str) -> Self:
@@ -515,7 +532,9 @@ class StringMixin(_MixinBase):
         for item in items:
             require_type(item, str, "a string", subject=argument("item"))
         if not any(item in self.val for item in items):
-            return self.error(f"Expected <{self.val}> to contain any of {self._fmt_items(items)}, but did not.")
+            return self.error(
+                f"Expected <{self.val}> to contain any of {self._fmt_items(items)}, but did not.", expected=items
+            )
         return self
 
     def contains_none_of(self, *items: str) -> Self:
@@ -602,16 +621,19 @@ class StringMixin(_MixinBase):
             raise ValueError("given pattern arg must not be empty")
         match_obj = re.search(pattern, self.val)
         if match_obj is None:
-            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.", expected=pattern)
         try:
             extracted = match_obj.group(group)
         except IndexError:
             return self.error(
-                f"Expected pattern <{pattern}> to have group <{group}>, but it does not.", suppress_context=True
+                f"Expected pattern <{pattern}> to have group <{group}>, but it does not.",
+                suppress_context=True,
+                expected=pattern,
             )
         if extracted is None:
             return self.error(
-                f"Expected group <{group}> of pattern <{pattern}> to be matched in <{self.val}>, but it was not."
+                f"Expected group <{group}> of pattern <{pattern}> to be matched in <{self.val}>, but it was not.",
+                expected=pattern,
             )
         return self.builder(extracted, self.description, self.kind)
 
@@ -652,7 +674,7 @@ class StringMixin(_MixinBase):
             raise ValueError("given pattern arg must not be empty")
         match_obj = re.search(pattern, self.val)
         if match_obj is None:
-            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.")
+            return self.error(f"Expected <{self.val}> to match pattern <{pattern}>, but did not.", expected=pattern)
         groupdict = match_obj.groupdict()
         result = groupdict or match_obj.groups()
         return self.builder(result, self.description, self.kind)

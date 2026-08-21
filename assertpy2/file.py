@@ -155,7 +155,10 @@ class FileMixin(_MixinBase):
         val_filename = os.path.basename(os.path.abspath(self.val))
         expected_filename = os.fspath(filename)  # normalize an os.PathLike arg to its string form
         if val_filename != expected_filename:
-            return self.error(f"Expected filename <{val_filename}> to be equal to <{expected_filename}>, but was not.")
+            return self.error(
+                f"Expected filename <{val_filename}> to be equal to <{expected_filename}>, but was not.",
+                expected=filename,
+            )
         return self
 
     def is_child_of(self, parent: object) -> Self:
@@ -186,7 +189,9 @@ class FileMixin(_MixinBase):
         except ValueError:  # pragma: no cover - Windows-only: paths on different drives share no common path
             is_child = False
         if not is_child:
-            return self.error(f"Expected file <{val_abspath}> to be a child of <{parent_abspath}>, but was not.")
+            return self.error(
+                f"Expected file <{val_abspath}> to be a child of <{parent_abspath}>, but was not.", expected=parent
+            )
         return self
 
     def is_readable(self) -> Self:

@@ -251,7 +251,8 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not self.val > other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not."
+                f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -288,7 +289,8 @@ class NumericMixin(_MixinBase):
         if not self.val >= other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be greater than or equal to"
-                f" <{_fmt_operand(other)}>, but was not."
+                f" <{_fmt_operand(other)}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -326,7 +328,8 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not self.val < other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not."
+                f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -363,7 +366,9 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not self.val <= other:  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be less than or equal to <{_fmt_operand(other)}>, but was not."
+                f"Expected <{_fmt_operand(self.val)}> to be less than or equal to"
+                f" <{_fmt_operand(other)}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -448,7 +453,8 @@ class NumericMixin(_MixinBase):
         if not low <= self.val <= high:  # positive form so NaN (unordered) fails instead of passing
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be between"
-                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not."
+                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not.",
+                expected=(low, high),
             )
         return self
 
@@ -551,7 +557,7 @@ class NumericMixin(_MixinBase):
         if divisor == 0:
             raise ValueError("given divisor arg must not be zero")
         if self.val % divisor != 0:
-            return self.error(f"Expected <{self.val}> to be divisible by <{divisor}>, but was not.")
+            return self.error(f"Expected <{self.val}> to be divisible by <{divisor}>, but was not.", expected=divisor)
         return self
 
     def is_close_to(
@@ -588,7 +594,8 @@ class NumericMixin(_MixinBase):
 
         if not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other)):
             return self.error(
-                f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
+                f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not.",
+                expected=(other, tolerance),
             )
         low, high = _tolerance_window(other, tolerance)
         if self.val < low or self.val > high:
@@ -596,11 +603,13 @@ class NumericMixin(_MixinBase):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
                     f" <{_fmt_operand(other)}> within tolerance"
-                    f" <{_fmt_tolerance(tolerance)}>, but was not."
+                    f" <{_fmt_tolerance(tolerance)}>, but was not.",
+                    expected=(other, tolerance),
                 )
             else:
                 return self.error(
-                    f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not."
+                    f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not.",
+                    expected=(other, tolerance),
                 )
         return self
 
@@ -633,10 +642,10 @@ class NumericMixin(_MixinBase):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"
                     f" <{_fmt_operand(other)}> within tolerance"
-                    f" <{_fmt_tolerance(tolerance)}>, but was."
+                    f" <{_fmt_tolerance(tolerance)}>, but was.",
                 )
             else:
                 return self.error(
-                    f"Expected <{self.val}> to not be close to <{other}> within tolerance <{tolerance}>, but was."
+                    f"Expected <{self.val}> to not be close to <{other}> within tolerance <{tolerance}>, but was.",
                 )
         return self

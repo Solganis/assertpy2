@@ -413,7 +413,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if actual is **not** identical to expected
         """
         if self.val is not other:
-            return self.error(f"Expected <{self.val}> to be identical to <{other}>, but was not.")
+            return self.error(f"Expected <{self.val}> to be identical to <{other}>, but was not.", expected=other)
         return self
 
     def is_not_same_as(self, other: object) -> Self:
@@ -469,7 +469,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val **is** false
         """
         if not self.val:
-            return self.error(f"Expected <{self.val}> to be <True>, but was not.")
+            return self.error(f"Expected <{self.val}> to be <True>, but was not.", expected=True)
         return self
 
     def is_false(self) -> Self:
@@ -494,7 +494,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val **is** true
         """
         if self.val:
-            return self.error(f"Expected <{self.val}> to be <False>, but was not.")
+            return self.error(f"Expected <{self.val}> to be <False>, but was not.", expected=False)
         return self
 
     def is_none(self) -> Self:
@@ -513,7 +513,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** none
         """
         if self.val is not None:
-            return self.error(f"Expected <{self.val}> to be <None>, but was not.")
+            return self.error(f"Expected <{self.val}> to be <None>, but was not.", expected=None)
         return self
 
     def is_not_none(self) -> Self:
@@ -570,7 +570,10 @@ class BaseMixin(SatisfiesMixin):
             refuse(some_type, "a type", subject=argument("type"))
         if type(self.val) is not some_type:
             type_name = self._type(self.val)
-            return self.error(f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.")
+            return self.error(
+                f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.",
+                expected=some_type,
+            )
         return self
 
     def is_instance_of(self, some_class: type) -> Self:
@@ -608,7 +611,8 @@ class BaseMixin(SatisfiesMixin):
             if not isinstance(self.val, some_class):
                 type_name = self._type(self.val)
                 return self.error(
-                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class.__name__}>, but was not."
+                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class.__name__}>, but was not.",
+                    expected=some_class,
                 )
         except TypeError:
             refuse(some_class, "a class", subject=argument("class"))
@@ -642,7 +646,8 @@ class BaseMixin(SatisfiesMixin):
                 type_name = self._type(self.val)
                 class_names = ", ".join(some_class.__name__ for some_class in some_classes)
                 return self.error(
-                    f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not."
+                    f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not.",
+                    expected=some_classes,
                 )
         except TypeError:
             refuse(some_classes, "classes", subject=argument("class"))
@@ -680,7 +685,8 @@ class BaseMixin(SatisfiesMixin):
         try:
             if not issubclass(self.val, some_class):
                 return self.error(
-                    f"Expected <{self.val.__name__}> to be subclass of <{some_class.__name__}>, but was not."
+                    f"Expected <{self.val.__name__}> to be subclass of <{some_class.__name__}>, but was not.",
+                    expected=some_class,
                 )
         except TypeError:
             refuse(some_class, "a class", subject=argument("class"))
@@ -714,7 +720,9 @@ class BaseMixin(SatisfiesMixin):
         if length < 0:
             raise ValueError("given arg must be a positive int")
         if sized_len(self.val) != length:
-            return self.error(f"Expected <{self.val}> to be of length <{length}>, but was <{sized_len(self.val)}>.")
+            return self.error(
+                f"Expected <{self.val}> to be of length <{length}>, but was <{sized_len(self.val)}>.", expected=length
+            )
         return self
 
     def is_length_between(self, low: int, high: int) -> Self:
@@ -754,6 +762,7 @@ class BaseMixin(SatisfiesMixin):
             raise ValueError("given low arg must be less than given high arg")
         if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{sized_len(self.val)}>."
+                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{sized_len(self.val)}>.",
+                expected=(low, high),
             )
         return self

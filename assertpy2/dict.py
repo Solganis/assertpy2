@@ -91,7 +91,8 @@ class DictMixin(_MixinBase):
         if missing:
             return self.error(
                 f"Expected <{self.val}> to contain values {self._fmt_items(values)},"
-                f" but did not contain {self._fmt_items(missing)}."
+                f" but did not contain {self._fmt_items(missing)}.",
+                expected=values,
             )
         return self
 
@@ -177,7 +178,8 @@ class DictMixin(_MixinBase):
         if missing:
             return self.error(
                 f"Expected <{self.val}> to contain entries {self._fmt_items(entries)},"
-                f" but did not contain {self._fmt_items(missing)}."
+                f" but did not contain {self._fmt_items(missing)}.",
+                expected=entries,
             )
         return self
 
