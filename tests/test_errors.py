@@ -310,6 +310,45 @@ class TestEveryFailureCarriesTheValueUnderTest:
         assert_that(failure.value._outcome.has_expected).is_true()
         assert_that(failure.value.expected).is_none()
 
+    @pytest.mark.parametrize(
+        ("call", "named"),
+        [
+            (lambda: assert_that({}).is_equal_to(None), True),
+            (lambda: assert_that(-1).is_positive(), True),
+            (lambda: assert_that([]).is_not_empty(), False),
+            (lambda: assert_that(None).is_not_none(), False),
+            (lambda: assert_that([1, 1]).does_not_contain_duplicates(), False),
+        ],
+        ids=["compared against None", "boundary", "negation", "about the value alone", "no operand"],
+    )
+    def test_the_flag_a_reporter_reads_says_the_same_as_the_record(self, call, named):
+        """The reading a reporter outside this package can do, which used to need the private record."""
+        with pytest.raises(AssertionFailure) as failure:
+            call()
+        assert_that(failure.value.has_expected).is_equal_to(named)
+        assert_that(failure.value.has_expected).is_equal_to(failure.value._outcome.has_expected)
+
+    def test_a_failure_built_outside_an_assertion_falls_back_to_the_older_reading(self):
+        # it carries no record, so the flag answers from the attribute, which is all there is there
+        assert_that(AssertionFailure("plain").has_expected).is_false()
+        assert_that(AssertionFailure("plain", expected=0).has_expected).is_true()
+
+    def test_the_two_failures_this_library_builds_without_a_record_still_answer(self):
+        """`fail()` and the aggregate a soft block raises are built directly, not composed.
+
+        Both name no expectation and hold ``None``, so the fallback is right about them.  Pinned
+        because the property's own words say so, and a promise nothing tests is a promise that rots.
+        """
+        with pytest.raises(AssertionFailure) as raised:
+            fail("boom")
+        assert_that(raised.value._outcome).is_none()
+        assert_that(raised.value.has_expected).is_false()
+
+        with pytest.raises(AssertionFailure) as aggregate, soft_assertions():
+            assert_that(1).is_equal_to(2)
+        assert_that(aggregate.value._outcome).is_none()
+        assert_that(aggregate.value.has_expected).is_false()
+
     def test_a_failure_built_outside_an_assertion_has_no_record(self):
         assert_that(AssertionFailure("plain")._outcome).is_none()
 
