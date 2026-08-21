@@ -503,8 +503,9 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         """The record this failure was composed from, set by the delivery half of `error()`.
 
         Carries what the flat attributes cannot: whether ``actual`` and ``expected`` were named by the
-        assertion or filled in from the value under test.  Stays ``None`` on a failure built directly,
-        which `eventually()` and the snapshot re-wraps still do.
+        assertion or filled in from the value under test, which is what `has_expected` reads.  The
+        polling and snapshot re-wraps carry the record of the failure they re-wrap.  It stays ``None``
+        on a failure built without one, which `fail()` and the aggregate a soft block raises both are.
 
         Private, and not a constructor argument, because `AssertionOutcome` is still gaining a field
         per release.  It becomes public when a caller outside this package has a reason to read it.
@@ -518,6 +519,24 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
     canonical import is ``from assertpy2 import AssertionFailure``, so the shorter path is also the
     truer one.  The reference still documents it under `assertpy2.errors`, which reads the source.
     """
+
+    @property
+    def has_expected(self) -> bool:
+        """Whether the assertion named an expected value at all.
+
+        ``expected is None`` cannot answer it: `is_equal_to(None)` names one and `is_not_empty()` names
+        none, and both leave the attribute at ``None``.  A reporter deciding whether to show an expected
+        column needs the difference, and had to read the private record to get it.
+
+        Read from the record a failure composed through `error()` carries, which the polling and
+        snapshot re-wraps preserve.  A failure built directly has none, and `fail()` and the aggregate a
+        soft block raises are built that way: there the older reading is all there is, and an
+        expectation counts as named when it is not ``None``.  Both of those name none and hold ``None``,
+        so the fallback answers them correctly.
+        """
+        if self._outcome is not None:
+            return self._outcome.has_expected
+        return self.expected is not None
 
     def __str__(self) -> str:
         if _RENDER_DIFF_IN_MESSAGE and self.diff is not None:
