@@ -256,15 +256,23 @@ The recorder can be switched off per assertion with `trace=False`, on both `even
 
 On every poll that fails with a value it reads that value twice, once for the sample and once to tell
 whether the value moved. The second walk covers the whole value rather than the cut sample, so a change
-past the hundredth item of a container is still seen. A poll that passes, or one whose probe raised,
-walks nothing. Over a scalar a failing poll is a few microseconds. Over a payload of two hundred records
-it measured about 2 ms, and it grows with the payload, so a tight interval over a large response is
-where turning the recorder off is worth it. Ten failing polls over those two hundred records measured
-22 ms with the recorder on against 1.2 ms with it off, which is most of what the failing poll costs.
-Over the scalar the same pair is 118 µs against 85 µs. A chain that settles on its first probe walks
-nothing either way, having produced no failed poll to record.
+past the hundredth item of a container is still seen.
 
-That is for the rare case where a near-zero interval meets a heavy probed value and even point-in-time
+A poll that passes, or one whose probe raised, walks nothing, and so does a chain that settles on its
+first probe. What the recorder costs is therefore the cost of failing polls, and it grows with the
+payload: one failing poll is a few microseconds over a scalar and about 2 ms over two hundred records.
+
+Ten of them, which is what a timeout usually reaches:
+
+| Ten failing polls over | recorder on | recorder off |
+|---|---|---|
+| a scalar | 118 µs | 85 µs |
+| a payload of two hundred records | 22 ms | 1.2 ms |
+
+That second row is most of what a failing poll costs, which is why a tight interval over a large
+response is where turning the recorder off is worth it.
+
+That is the rare case: a near-zero interval meeting a heavy probed value, where even point-in-time
 snapshots cost too much. The timeout failure then reports just the last failure.
 
 Every step of a chain is replayed against a fresh probe on each poll, so steps multiply by polls. One

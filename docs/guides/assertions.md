@@ -273,18 +273,20 @@ name has to arrive through `from ... import check`, aliases included. That impor
 difference between your wrapper and any other function in the world that happens to be called `check`,
 so a helper reached as `helpers.check(...)` is out of scope.
 
-Two limits worth knowing before you rely on it. A name this module binds itself is dropped for the
-whole file, so one `assert_that = something` anywhere in it turns the check off for that name
-everywhere in that file: the trade buys no false alarms at the cost of missed ones. And several
-dangling statements in one test arrive as a single warning naming the extra lines, because under
-`filterwarnings = ["error"]` the first one ends the test and a second warning would never be seen.
+Two limits worth knowing before you rely on it:
+
+- **a name this module binds itself is dropped for the whole file.** One `assert_that = something`
+  anywhere in it turns the check off for that name everywhere in that file. The trade buys no false
+  alarms at the cost of missed ones.
+- **several dangling statements in one test arrive as a single warning** naming the extra lines. Under
+  `filterwarnings = ["error"]` the first one ends the test, so a second warning would never be seen.
 
 What it deliberately leaves alone:
 
 - a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is a question
   about the rest of the function, not about that statement
-- a chain ending on a pivot (`.described_as(...)`, `.extracting(...)`), since which names are
-  assertions is a runtime property of the builder and hard-coding the list here would rot
+- a chain ending on a bare `check()`, since reporting it would mean deciding that the name is this
+  library's, and a project can register an extension called `check` that asserts by itself
 - `assert_conforms()`, `fail()` and `soft_fail()`, which assert on their own, so a bare call is correct
 
 One limit worth knowing before you count on it: the check reads the test modules pytest collected, and

@@ -20,12 +20,13 @@ assert_that(5).is_5()
 assert_that(6).is_5()  # fails!
 ```
 
-Both lines run, but a type checker rejects the first one: `5` resolves to the numeric protocol, which
-declares no `is_5`. An extension is visible to a checker only where the value keeps the whole builder,
-and that is a narrow set: not `str`, `int`, `dict`, `list` and the rest, which reach protocols of their
-own, and not a plain class either, which now reaches the core surface. It leaves a value that has a
-capability without having an overload, such as an iterable of your own or a mapping that is not a
-`dict`, plus anything typed `Any`. The reason and the ways round it are in
+Both lines run, but a type checker rejects the first one, since `5` resolves to the numeric protocol
+and that declares no `is_5`.
+
+An extension is visible to a checker only where the value keeps the whole builder, which is a narrow
+set: a value with a capability but no overload of its own, such as an iterable you wrote or a mapping
+that is not a `dict`, plus anything typed `Any`. Everything else reaches either its own protocol or
+the core surface. The reason and the ways round it are in
 [Where the typed surface ends](../concepts/type-safety.md#where-the-typed-surface-ends).
 
 `remove_extension()` takes the same function and unregisters it, so a temporary assertion does not
