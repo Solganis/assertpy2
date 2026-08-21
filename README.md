@@ -157,7 +157,7 @@ Your IDE shows only methods relevant to the value you're testing, not all 100+:
 - `assert_that(my_dict).` &rarr; dict methods: `contains_key`, `contains_entry`, `has_json_path`, ...
 - `assert_that(b"\x89PNG").` &rarr; bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
 
-14 type-specific Protocols instead of one `Any`.<br>
+15 type-specific Protocols instead of one `Any`.<br>
 Works in PyCharm, VS Code, and any LSP-compatible editor.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>

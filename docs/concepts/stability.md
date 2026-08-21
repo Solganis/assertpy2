@@ -8,9 +8,9 @@ an intention.
 | You can depend on | Enforced by |
 |---|---|
 | The 37 names `assertpy2` exports, and the fields of every record it hands you | [`test_public_surface.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_public_surface.py) pins both against a hand-written list |
-| Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all twenty-eight protocols |
+| Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all twenty-nine protocols |
 | The signature you call: parameter names, their order, their defaults | [`test_api_compatibility.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_compatibility.py) compares a recorded snapshot of the whole surface and classifies every change as breaking, an addition, or typing-only |
-| The type your chain has after each step | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 181 `assert_type` checks under ty, mypy `--strict` and Pyright, zero suppressions |
+| The type your chain has after each step | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 190 `assert_type` checks under ty, mypy `--strict` and Pyright, zero suppressions |
 | One relation keeping one name across the API | [`test_api_vocabulary.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_vocabulary.py) |
 | The three-method `Matcher` protocol your custom matchers implement | [`test_matcher_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_matcher_parity.py) |
 | The Allure attachment schema | versioned in its own `format` field, so a consumer branches on a number rather than guessing |
@@ -68,9 +68,11 @@ Four kinds of change ship in a minor, and the release notes list each one under 
   stage running mypy, Pyright or ty can go red before them, which is the half worth planning for. The
   release notes name every narrowed chain; the ones so far are the invoked view losing the filesystem
   assertions (the text of an exception is not a filename), `at_json_path()` answering with the core
-  assertions instead of a shape it cannot know, `extracting()` requiring its first selector, the
-  predicate parameters naming the element they are handed, and a value the library cannot use losing
-  the assertions it could never answer
+  assertions instead of a shape it cannot know, `extracting()` requiring its first selector and taking
+  it positionally (`extracting(name="user")` never ran), the predicate parameters naming the element
+  they are handed, a `datetime.date` value losing the nine assertions that read a time of day (they have
+  always raised on a plain date, and a `datetime` keeps every one of them), and a value the library
+  cannot use losing the assertions it could never answer
 
 The last of those is the widest so far, so it is worth stating plainly what it does and does not touch.
 A value with a type of this library knows is unaffected, and so is a value typed `Any`, which is what an

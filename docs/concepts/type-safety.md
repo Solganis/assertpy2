@@ -38,8 +38,10 @@ the value under test, not all 100+:
 | any callable | callable assertions (`raises`, `warns`, `eventually`, ...) |
 | anything else | the universal core assertions |
 
-The precise type is preserved through the chain (every assertion returns `Self`), so the suggestions stay
-relevant from the first call to the last.
+The precise type is preserved through the chain: an assertion hands back the same view it was reached
+from, so the suggestions stay relevant from the first call to the last. The exceptions are the steps
+that deliberately move to another value, such as `first()`, `mapped()` and `decoded_as()`, which hand
+back a view of what they produced, and `check()`, which reports a verdict instead of chaining.
 
 ## Misuse caught before the test runs
 
@@ -78,7 +80,9 @@ def what_a_checker_allows(anything: object, someone: Person) -> None:
     assert_that(someone).is_between(1, 10)          # accepted: so does a class with no view
 ```
 
-Both run and both fail, with the message the value's own comparison produced. This is deliberate and
+Both type-check and both raise, and the refusal is the library's own rather than the operator's:
+`given other arg must be comparable with val <...>` for the first and `val must be a number or a date,
+which is what an ordering is` for the second. This is deliberate and
 it is the second attempt: the first spelling bound the operand to a list of types and rejected
 `numpy.int64`, which is a value this library documents support for. A capability covers what a list of
 types cannot, and the capability an ordering has is one no annotation can name, so the choice was
