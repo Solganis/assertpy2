@@ -15,28 +15,23 @@ test ever runs.
 
 ## Type-aware autocomplete
 
-Each value type gets its own typed Protocol - string, numeric, collection, dict, date, path, bytes, and
-callable - with a generic fallback for anything else. Your IDE then suggests only the methods relevant to
-the value under test, not all 100+:
+Each value type gets its own typed Protocol, with a generic fallback for anything else. Your editor
+then suggests only what fits the value under test rather than the whole surface:
 
-- `assert_that("hello").` → string methods: `starts_with`, `matches`, `is_alpha`, `is_lower`, ...
-- `assert_that(42).` → numeric methods: `is_positive`, `is_between`, `is_close_to`, ...
-- `assert_that(["a", "b"]).` → collection methods: `contains`, `contains_exactly`, `is_sorted`, `extracting`, ...
-- `assert_that({"id": 1}).` → dict methods: `contains_key`, `contains_entry`, `has_json_path`, ...
-- `assert_that(Path("/tmp")).` → path methods: `exists`, `is_file`, `is_directory`, `is_readable`, ...
-- `assert_that(b"\x89PNG").` → bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
-
-| Value type | Protocol returned |
-|---|---|
-| `str` | string assertions |
-| `int` / `float` / `complex` | numeric assertions |
-| `list` / `tuple` / `set` / `frozenset` | collection assertions |
-| `dict` | dict assertions |
-| `datetime.date` / `datetime.datetime` | date assertions |
-| `pathlib.Path` | path assertions |
-| `bytes` / `bytearray` | bytes assertions |
-| any callable | callable assertions (`raises`, `warns`, `eventually`, ...) |
-| anything else | the universal core assertions |
+| Value type | You get | Such as |
+|---|---|---|
+| `str` | string assertions | `starts_with`, `matches`, `is_alpha`, `is_lower` |
+| `int` / `float` / `complex` | numeric assertions | `is_positive`, `is_between`, `is_close_to` |
+| `list` / `tuple` / `set` / `frozenset` | collection assertions | `contains`, `contains_exactly`, `is_sorted`, `extracting` |
+| `dict` | dict assertions | `contains_key`, `contains_entry`, `has_json_path` |
+| `datetime.date` | date assertions | `is_less_than`, `is_greater_than`, `is_between` |
+| `datetime.datetime` | the same, plus the chronological ones | `is_before`, `is_after`, `is_close_to`, `is_equal_to_ignoring_time` |
+| `pathlib.Path` | path assertions | `exists`, `is_file`, `is_directory`, `is_readable` |
+| `bytes` / `bytearray` | bytes assertions | `starts_with_bytes`, `is_valid_utf8`, `decoded_as` |
+| a pandas or polars frame | frame assertions | `is_frame_equal`, `is_array_equal`, plus size, membership and iteration |
+| a numpy array | array assertions | `is_array_equal`, `is_array_close_to`, plus the same three |
+| any callable | callable assertions | `raises`, `warns`, `eventually` |
+| anything else | the universal core assertions | |
 
 The precise type is preserved through the chain: an assertion hands back the same view it was reached
 from, so the suggestions stay relevant from the first call to the last. The exceptions are the steps
@@ -80,20 +75,23 @@ def what_a_checker_allows(anything: object, someone: Person) -> None:
     assert_that(someone).is_between(1, 10)          # accepted: so does a class with no view
 ```
 
-Both type-check and both raise, and the refusal is the library's own rather than the operator's:
-`given other arg must be comparable with val <...>` for the first and `val must be a number or a date,
-which is what an ordering is` for the second. This is deliberate and
-it is the second attempt: the first spelling bound the operand to a list of types and rejected
-`numpy.int64`, which is a value this library documents support for. A capability covers what a list of
-types cannot, and the capability an ordering has is one no annotation can name, so the choice was
-between refusing correct comparisons and accepting incorrect ones. Refusing correct code is the worse
-of the two, and `tests/typing_cases.py` holds the spellings that were tried.
+Both type-check, and both raise at runtime with the library's own refusal rather than the operator's:
+
+```text
+given other arg must be comparable with val <...>
+val must be a number or a date, which is what an ordering is
+```
+
+That is deliberate, and it is the second attempt. The first spelling bound the operand to a list of
+types and rejected `numpy.int64`, a value this library documents support for. The capability an
+ordering needs is one no annotation can name, so the choice was between refusing correct comparisons
+and accepting incorrect ones. Refusing correct code is the worse of the two.
 
 Comparing an `int` against a `float`, passing a matcher where an item is expected, and every other
 ordinary combination keep working. Which relations are refused and which stay accepted is measured
-rather than asserted: the file lives in
-[`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py) and CI
-compares all three checkers against a recorded baseline in both directions.
+rather than asserted: [`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py)
+holds the spellings that were tried, and CI compares all three checkers against a recorded baseline in
+both directions.
 
 [ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy), and
 [Pyright](https://github.com/microsoft/pyright) all report these in the editor and in CI, turning a class
@@ -119,21 +117,21 @@ numeric assertion on a user class is a type error rather than a runtime one:
 assert_that(person).is_positive()   # type error: a plain class has no numeric assertions
 ```
 
-"Cannot see a use for" is meant literally, and it is narrower than it sounds. Two kinds of value are
-unaffected. One is the value with a type of its own, which reaches its own protocol as it always did.
-The other is the value with no such type that still answers to something the library uses: an iterable
-of your own, an HTTP response from any client, a pydantic-style model, a dataclass, a mapping that is
-not a `dict`. Those keep the whole surface, and so does anything typed `Any`, which is what an
-unannotated helper or a `json.loads()` result gives you.
+"Cannot see a use for" is meant literally, and it is narrower than it sounds:
 
-What is left is the value annotated `object` and the class that answers to nothing, and for those the
-shorter surface is the true one.
+| | |
+|---|---|
+| **keeps the whole surface** | a value with a type of its own, which reaches its own protocol as it always did |
+| | a value that answers to something the library uses: an iterable of your own, an HTTP response from any client, a pydantic-style model, a dataclass, a mapping that is not a `dict` |
+| | anything typed `Any`, which is what an unannotated helper or a `json.loads()` result gives you |
+| **gets the core surface** | a value annotated `object`, and a class that answers to nothing |
 
-That second group is a compatibility trade rather than a clean line, and it is worth knowing which way
-it errs. A class that happens to define `__iter__` for a reason of its own keeps every assertion name
-there is, numeric ones included, exactly as before. The rule is deliberately generous: a value the library
-might be able to use keeps everything, and only a value it certainly cannot use is narrowed. Erring the
-other way would reject calls that work, which is the worse failure of the two.
+That second row is a compatibility trade rather than a clean line, and it errs on purpose. A class
+that happens to define `__iter__` for a reason of its own keeps every assertion name there is, numeric
+ones included. A value the library might be able to use keeps everything, and only a value it
+certainly cannot use is narrowed.
+
+Erring the other way would reject calls that work, which is the worse failure of the two.
 
 [Dynamic assertions](../guides/assertions.md#dynamic-assertions-on-objects) (`has_<attribute>()`) are
 resolved at runtime from the value itself, so no overload can declare them ahead of time. They are
@@ -168,11 +166,15 @@ assert_that(5).is_5()         # type error: _NumericAssertion has no attribute i
 ```
 
 Both lines run. An extension needs `# type: ignore[attr-defined]` at each call site, and the return
-type a checker infers for it is `Any` rather than whatever the extension actually returns. A checker
-accepts the name only where the value keeps the full builder, which is narrower than either half of
-the example above: not a `list` or a `dict`, which have overloads of their own, and not a plain class,
-which has no capability. What is left is a value with a capability and no overload, such as an
-iterable of your own or a mapping that is not a `dict`, and anything typed `Any`.
+type a checker infers for it is `Any` rather than whatever the extension actually returns.
+
+A checker accepts a dynamically attached name only where the value keeps the full builder, which is
+narrower than either half of the example above:
+
+- not a `list` or a `dict`, which have overloads of their own
+- not a plain class, which has no capability
+- what is left is a value with a capability and no overload, such as an iterable of your own or a
+  mapping that is not a `dict`, and anything typed `Any`
 
 ## Typed narrowing with .value
 
@@ -228,11 +230,12 @@ beyond returning the value.
     Either way nothing unsound escapes: in soft mode you get an exception, never a wrong-typed value.
     Read `.value` in strict mode, or after the soft block has closed.
 
-    (A refinement hands back the view `assert_that()` would have given for the refined type, so
+    What a refinement hands back is the view `assert_that()` would have given for the refined type, so
     `is_not_none()` on a `str | None` continues as a string. Refining to a class the library does not
-    name continues on the core surface instead, since there is no per-type protocol to hand back. Under
-    `ty` the numeric and sequence refinements come back gradual rather than as their view, so the chain
-    accepts everything from there on instead of narrowing.)
+    name continues on the core surface instead, since there is no per-type protocol to hand back.
+
+    Under `ty` the numeric and sequence refinements come back gradual rather than as their view, so the
+    chain accepts everything from there on instead of narrowing.
 
 ### Refinement narrowing with a TypeIs predicate (advanced)
 

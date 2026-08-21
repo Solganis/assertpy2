@@ -283,10 +283,10 @@ inside a record all fail as they would in an ordered comparison.
 !!! warning "It does not count repeats"
     `contains_only` asks *which* items are there, not how many of each. `["reader"]` satisfies
     `match.contains_only("reader", "reader")`, and `[1, 1, 2]` satisfies `match.contains_only(1, 2)`.
-    Where the counts are part of what you are asserting, the value has to be the collection itself, so
-    that [`contains_exactly_in_any_order()`](assertions.md#lists) can be used instead: it is multiset
-    equality, and it refuses both of those. Reach for [`extracting()`](assertions.md#lists) or a second
-    assertion to get to the nested collection.
+    Where the counts are part of what you are asserting, use
+    [`contains_exactly_in_any_order()`](assertions.md#lists) instead. It is multiset equality and it
+    refuses both of those, but it applies to the collection itself, so reach it with
+    [`extracting()`](assertions.md#lists) or a second assertion when the collection is nested.
 
 When the whole value is the collection, the assertions say it directly and read better than a matcher:
 [`contains_exactly_in_any_order()`](assertions.md#lists) for items and their counts, and
