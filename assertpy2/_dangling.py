@@ -19,10 +19,14 @@ What it deliberately does not flag:
 
 * a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is not a
   question about this statement;
-* a chain that ends on a pivot (`.described_as(...)`, `.extracting(...)`), because the set of
-  assertions is a runtime property of the builder and hard-coding it here would rot;
 * `assert_conforms()`, `fail()`, `soft_fail()`, which assert on their own rather than returning a
   builder, so a bare call to them is correct usage.
+
+A chain ending on a pivot or a configurer is the same defect wearing a longer tail:
+``assert_that(load).raises(ValueError)`` never calls anything, and ``assert_that(rows).extracting("id")``
+throws the extracted value away.  Both were left out while the set of operations that reach no verdict
+was only a runtime property; `assertpy2/_engine/_operations.py` states it now, and a gate keeps it in
+step with the source, so reading it here cannot rot.
 """
 
 from __future__ import annotations
@@ -31,6 +35,8 @@ import ast
 import io
 import tokenize
 from typing import TYPE_CHECKING, Final, NamedTuple
+
+from ._engine._operations import ALSO_ASSERTS, CONFIGURES, DESCRIBES, POLLS, TRANSFORMS, WITHOUT_A_VERDICT
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -57,6 +63,15 @@ A project that registered its own wrapper reads `check(1)` on the offending line
 `assert_that()` there costs a moment of "that is not what my code says" on every finding.
 """
 _NOT_CALLED: Final = "assertion is looked up and never called (missing parentheses)"
+_ENDS_ON: Final = {
+    CONFIGURES: "{name}() only sets an expectation here, and nothing calls it",
+    TRANSFORMS: "{name}() hands back another value here, and nothing asserts on it",
+    DESCRIBES: "{name}() only sets the failure description here, and asserts nothing",
+    POLLS: "{name}() starts a polling chain here, and no assertion follows it",
+}
+"""What to say about a chain ending on an operation that reaches no verdict, one sentence per kind."""
+
+_NO_VERDICT: Final = {name: kind for name, kind in WITHOUT_A_VERDICT.items() if name not in ALSO_ASSERTS}
 _NOT_AWAITED: Final = "eventually() chain is never awaited, so nothing is polled (missing await)"
 
 
@@ -193,6 +208,13 @@ def _polls(node: ast.expr) -> bool:
             return False
 
 
+def _tail(node: ast.expr) -> str | None:
+    """The name a statement ends on when that name reaches no verdict, else ``None``."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr in _NO_VERDICT:
+        return node.func.attr
+    return None
+
+
 def _closed(node: ast.expr) -> bool:
     """True when the statement ends in a bare ``close()``, the discard the chain itself stays quiet about."""
     return (
@@ -287,4 +309,6 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
             found.append(Finding(path, statement.lineno, _NOT_CALLED, scope))
         elif not awaited and _polls(value) and not _closed(value) and _reaches_entry(value, bindings):
             found.append(Finding(path, statement.lineno, _NOT_AWAITED, scope))
+        elif (tail := _tail(value)) and _reaches_entry(value, bindings):
+            found.append(Finding(path, statement.lineno, _ENDS_ON[_NO_VERDICT[tail]].format(name=tail), scope))
     return sorted(found, key=lambda finding: finding.lineno)

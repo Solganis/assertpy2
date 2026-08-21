@@ -17,7 +17,8 @@ from types import SimpleNamespace
 import pytest
 
 from assertpy2 import DanglingAssertionWarning, assert_that
-from assertpy2._dangling import _NO_ASSERTION, _NOT_AWAITED, _NOT_CALLED, ALLOW_MARKER, findings
+from assertpy2._dangling import _ENDS_ON, _NO_ASSERTION, _NO_VERDICT, _NOT_AWAITED, _NOT_CALLED, ALLOW_MARKER, findings
+from assertpy2._engine._operations import WHAT_IT_DOES
 from assertpy2.pytest_plugin import (
     _dangling_enabled,
     _dangling_entries,
@@ -100,6 +101,47 @@ class TestTheShapesItReports:
                 assert_that(3)
             """)
         assert_that(found).extracting("lineno").is_equal_to(sorted(found and [f.lineno for f in found]))
+
+
+class TestAChainThatEndsBeforeAnyVerdict:
+    """The tail asserts nothing, which the bare-builder shape and this one have in common."""
+
+    @pytest.mark.parametrize(
+        ("body", "tail"),
+        [
+            ("assert_that(lambda: None).raises(ValueError)", "raises"),
+            ("assert_that(lambda: None).does_not_raise(ValueError)", "does_not_raise"),
+            ("assert_that([{'k': 1}]).extracting('k')", "extracting"),
+            ("assert_that([1]).first()", "first"),
+            ("assert_that(1).described_as('important')", "described_as"),
+            ("assert_that(lambda: 1).eventually_sync()", "eventually_sync"),
+        ],
+        ids=["raises", "does_not_raise", "extracting", "pivot", "described_as", "sync poll"],
+    )
+    def test_the_finding_names_the_tail_and_what_it_does(self, body, tail):
+        found = scan(f"def test_x():\n    {body}\n")
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_ENDS_ON[_NO_VERDICT[tail]].format(name=tail))
+
+    def test_an_awaited_poll_with_no_assertion_on_it_is_reported(self):
+        found = scan("async def test_x():\n    await assert_that(lambda: 1).eventually()\n")
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).contains("eventually()")
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "assert_that(lambda: None).raises(ValueError).when_called_with()",
+            "assert_that(err).caused_by(ValueError)",
+            "assert_that(err).has_root_cause(ValueError)",
+        ],
+        ids=["when_called_with", "caused_by", "has_root_cause"],
+    )
+    def test_a_hybrid_that_asserts_on_its_way_past_is_left_alone(self, body):
+        assert_that(scan(f"def test_x():\n    {body}\n")).is_empty()
+
+    def test_every_kind_the_register_names_has_a_sentence_here(self):
+        assert_that(set(_ENDS_ON)).is_equal_to(set(WHAT_IT_DOES))
 
 
 class TestWhatItLeavesAlone:
