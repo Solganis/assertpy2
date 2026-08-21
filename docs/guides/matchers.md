@@ -247,6 +247,57 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
     Keys present in the value but absent from the spec are ignored, so a structure spec validates a
     subset of fields rather than requiring an exact match.
 
+### When the order does not matter
+
+A payload that returns its records in whatever order the database felt like is the ordinary case, and
+there is no `ignore_order` flag to reach for. `match.contains_only()` is the one: it asks that the value
+hold only these items, in any order, and it compares by equality, so records that cannot be hashed work
+too.
+
+```python
+assert_that({"tags": ["testing", "python"]}).is_equal_to({
+    "tags": match.contains_only("python", "testing"),
+})
+```
+
+Because a matcher composes, this works at any depth and at more than one level at once. Here the
+customers arrive in any order, and so do the roles inside each of them:
+
+```python
+assert_that({
+    "customers": [
+        {"name": "Bob", "roles": ["reader"]},
+        {"name": "Alice", "roles": ["editor", "reader"]},
+    ]
+}).is_equal_to({
+    "customers": match.contains_only(
+        match.structure({"name": "Alice", "roles": match.contains_only("reader", "editor")}),
+        match.structure({"name": "Bob", "roles": ["reader"]}),
+    ),
+})
+```
+
+The order still holds everywhere it was not waived: an item missing, an extra one, or a wrong value
+inside a record all fail as they would in an ordered comparison.
+
+!!! warning "It does not count repeats"
+    `contains_only` asks *which* items are there, not how many of each. `["reader"]` satisfies
+    `match.contains_only("reader", "reader")`, and `[1, 1, 2]` satisfies `match.contains_only(1, 2)`.
+    Where the counts are part of what you are asserting, the value has to be the collection itself, so
+    that [`contains_exactly_in_any_order()`](assertions.md#lists) can be used instead: it is multiset
+    equality, and it refuses both of those. Reach for [`extracting()`](assertions.md#lists) or a second
+    assertion to get to the nested collection.
+
+When the whole value is the collection, the assertions say it directly and read better than a matcher:
+[`contains_exactly_in_any_order()`](assertions.md#lists) for items and their counts, and
+`satisfies_exactly_in_any_order()` for one predicate per item.
+
+```python
+assert_that([{"name": "Bob"}, {"name": "Alice"}]).contains_exactly_in_any_order(
+    {"name": "Alice"}, {"name": "Bob"}
+)
+```
+
 ### What you see on failure
 
 When fields do not match, the pytest plugin prints the exact path and the predicate that failed - every
