@@ -290,7 +290,7 @@ class TestWhatAFailureLetsYouRead:
     them, which is a different guarantee: they would notice a value going wrong, not a name going away.
     """
 
-    READABLE = ("actual", "expected", "diff", "trace", "failures")
+    READABLE = ("actual", "expected", "has_expected", "diff", "trace", "failures")
 
     def test_it_stays_an_assertion_error(self):
         assert_that(issubclass(assertpy2.AssertionFailure, AssertionError)).is_true()
@@ -316,12 +316,12 @@ class TestWhatAFailureLetsYouRead:
         assert_that(failure.value.trace).is_not_none()
         assert_that(failure.value.trace.total_polls).is_greater_than_or_equal_to(1)
 
-    def test_none_says_nothing_about_whether_an_operand_was_named(self):
-        """The limit of the contract, pinned so it is a decision rather than an accident.
+    def test_expected_alone_says_nothing_about_whether_an_operand_was_named(self):
+        """Why `has_expected` had to exist, pinned from the outside.
 
-        A caller cannot tell "compared against None" from "no expected value at all" through the public
-        attributes. The distinction exists inside, on the outcome the pytest plugin reads, and it is
-        deliberately not published: no consumer outside this repository has asked for it.
+        `expected` reads `None` for both "compared against None" and "named no expectation", so a
+        reporter deciding whether to show an expected column could not tell them apart.  The
+        distinction used to live only on the outcome the pytest plugin reads.
         """
         with pytest.raises(assertpy2.AssertionFailure) as compared:
             assert_that(1).is_equal_to(None)
@@ -329,3 +329,16 @@ class TestWhatAFailureLetsYouRead:
             assert_that(1).is_none()
         assert_that(compared.value.expected).is_equal_to(unset.value.expected).is_none()
         assert_that(compared.value.actual).is_equal_to(unset.value.actual).is_equal_to(1)
+        # `has_expected` does not separate these two, and is not meant to: `is_none()` compares against
+        # None, so it names an expectation exactly as `is_equal_to(None)` does
+        assert_that(compared.value.has_expected).is_equal_to(unset.value.has_expected).is_true()
+
+    def test_has_expected_separates_an_assertion_that_names_no_expectation(self):
+        """What `has_expected` is for, which is the other question `expected is None` cannot answer."""
+        with pytest.raises(assertpy2.AssertionFailure) as named:
+            assert_that(1).is_equal_to(None)
+        with pytest.raises(assertpy2.AssertionFailure) as unnamed:
+            assert_that([]).is_not_empty()
+        assert_that(named.value.expected).is_equal_to(unnamed.value.expected).is_none()
+        assert_that(named.value.has_expected).described_as("named an expectation").is_true()
+        assert_that(unnamed.value.has_expected).described_as("named none").is_false()

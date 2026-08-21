@@ -14,10 +14,10 @@ The rejections fall into families, and the split is the useful reading: the argu
 and the argument is missing.  `ty` sometimes answers `no-matching-overload` where the others name the
 argument: same family, different route through an overload set.
 
-**What stays uncaught, and why.** `assert_that(Person()).is_positive()` type-checks, because a value
-with no protocol of its own gets the generic builder, which carries every method there is.  The
-ordering matchers take and judge anything, and the entries below say why every spelling that closes
-that trades a correct call for an incorrect one.
+**What stays uncaught, and why.** A value with no protocol of its own now gets the core surface, so
+`assert_that(Person()).is_positive()` is refused by all three.  What is left is the ordering matchers,
+which take and judge anything, and the entries below say why every spelling that closes that trades a
+correct call for an incorrect one.
 
 `.not_` used to belong here for the same reason as the first: it returns a proxy resolving any name.
 It is declared as the protocol it was reached from instead, which costs nothing, and what remains is
