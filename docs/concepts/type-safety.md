@@ -33,10 +33,13 @@ then suggests only what fits the value under test rather than the whole surface:
 | any callable | callable assertions | `raises`, `warns`, `eventually` |
 | anything else | the universal core assertions | |
 
-The precise type is preserved through the chain: an assertion hands back the same view it was reached
-from, so the suggestions stay relevant from the first call to the last. The exceptions are the steps
-that deliberately move to another value, such as `first()`, `mapped()` and `decoded_as()`, which hand
-back a view of what they produced, and `check()`, which reports a verdict instead of chaining.
+An assertion hands back the same view it was reached from, so the suggestions stay relevant from the
+first call to the last.
+
+Two kinds of step break that on purpose:
+
+- a pivot such as `first()`, `mapped()` or `decoded_as()` hands back a view of what it produced
+- `check()` reports a verdict instead of chaining
 
 ## Misuse caught before the test runs
 
@@ -64,10 +67,11 @@ assert_that(date.today()).is_before(5)             # a date against a number
 assert_that(1).satisfies(match.starts_with("a"))   # a matcher built for another type
 ```
 
-Where the ordering assertions stop is worth knowing before you rely on them. The line above catches a
-number compared against text, because a numeric value reaches a numeric view whose operand is bound.
-A value that reaches no view of its own is a different case: it keeps ordering with an operand of any
-type, and nothing there is refused.
+Where the ordering assertions stop is worth knowing before you rely on them.
+
+The line above catches a number compared against text, because a numeric value reaches a numeric view
+whose operand is bound. A value that reaches no view of its own is the different case. It keeps
+ordering with an operand of any type, and nothing there is refused.
 
 ```python
 def what_a_checker_allows(anything: object, someone: Person) -> None:
@@ -270,9 +274,10 @@ paid = assert_that(order).satisfies(is_paid_order).value   # statically PaidOrde
 ```
 
 !!! warning "Checker support: not yet in PyCharm"
-    This narrowing is solved by **ty, Pyright, and mypy** today, so it works in VS Code / Pylance and in
-    CI. **PyCharm does not yet solve type variables through `TypeIs`**: there the result stays the
-    un-narrowed type, and accessing a narrowed-only member reports a false *Unresolved attribute
+    **ty, Pyright and mypy** solve this narrowing today, so it works in VS Code / Pylance and in CI.
+
+    **PyCharm does not yet solve type variables through `TypeIs`.** There the result stays the
+    un-narrowed type, and reading a narrowed-only member reports a false *Unresolved attribute
     reference*. It is tracked upstream in
     [JetBrains PY-89124](https://youtrack.jetbrains.com/issue/PY-89124). When that ships, the narrowing
     lights up in PyCharm with no change here.

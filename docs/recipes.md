@@ -29,9 +29,11 @@ from GET https://api.example.com/orders/42 -> 200
 ```
 
 That line reads no body and starts no I/O, so a streaming response that has not been read is safe to
-assert on. `decoded_as_json()` is where the body is read, since calling it is you asking for it, and a
-body that is not JSON fails with the content type and how the body starts rather than with a
-`JSONDecodeError` from your own test. A body that could not be read at all is said to be exactly that,
+assert on.
+
+`decoded_as_json()` is where the body gets read, because calling it is you asking for it. When the body
+is not JSON, the failure names the content type and how the body starts, rather than handing you a
+`JSONDecodeError` from your own test. A body that could not be read at all is reported as exactly that,
 since an unread body may well have been JSON:
 
 <!-- docs-guard: skip -->

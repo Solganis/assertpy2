@@ -149,7 +149,7 @@ There are [45 matchers](https://solganis.github.io/assertpy2/guides/matchers/), 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/">Type-aware autocomplete</a></h2>
 
 `assert_that()` uses `@overload` to return type-specific Protocols.<br>
-Your IDE shows only methods relevant to the value you're testing, not all 100+:
+Your IDE shows only methods relevant to the value you're testing, not the whole surface:
 
 - `assert_that("hello").` &rarr; string methods: `starts_with`, `matches`, `is_alpha`, ...
 - `assert_that(42).` &rarr; numeric methods: `is_positive`, `is_between`, `is_close_to`, ...
