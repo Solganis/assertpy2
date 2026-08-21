@@ -17,7 +17,16 @@ from types import SimpleNamespace
 import pytest
 
 from assertpy2 import DanglingAssertionWarning, assert_that
-from assertpy2._dangling import _ENDS_ON, _NO_ASSERTION, _NO_VERDICT, _NOT_AWAITED, _NOT_CALLED, ALLOW_MARKER, findings
+from assertpy2._dangling import (
+    _ENDS_ON,
+    _NO_ASSERTION,
+    _NO_VERDICT,
+    _NOT_AWAITED,
+    _NOT_CALLED,
+    _UNDER_ASSERT,
+    ALLOW_MARKER,
+    findings,
+)
 from assertpy2._engine._operations import WHAT_IT_DOES
 from assertpy2.pytest_plugin import (
     _dangling_enabled,
@@ -142,6 +151,120 @@ class TestAChainThatEndsBeforeAnyVerdict:
 
     def test_every_kind_the_register_names_has_a_sentence_here(self):
         assert_that(set(_ENDS_ON)).is_equal_to(set(WHAT_IT_DOES))
+
+
+class TestAChainAnAssertReads:
+    """`assert` in front of a dangling chain, which is the same defect wearing a disguise.
+
+    The wrapper is what makes it dangerous: a builder and a bound method are both truthy, so the line
+    is green whatever the value is, while reading as though it asserted.  Nothing else sees it.  Ruff's
+    useless-expression check does not apply to a value that is consumed, and coverage marks the line
+    run.
+    """
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "assert assert_that(1)",
+            "assert assert_that([1]).is_empty",
+            "assert assert_that([{'k': 1}]).extracting('k')",
+            "assert assert_that(lambda: None).raises(ValueError)",
+            "assert assert_that(1).described_as('important')",
+            "assert assert_that(lambda: 1).eventually_sync()",
+            "assert assert_that({'id': 1}).has_id",
+            "assert assert_that(1).not_",
+            "assert assert_that(1).check",
+            "assert assert_that(1).error",
+            "assert assert_that(1).logger",
+            "assert assert_that(1).description",
+            "assert assert_that([1]).check().is_empty",
+            "assert assert_that([1]).check().not_.is_none",
+        ],
+        ids=[
+            "the builder itself",
+            "an assertion left uncalled",
+            "a pivot",
+            "an expectation nothing calls",
+            "a description",
+            "a polling chain",
+            "a dynamic assertion left uncalled",
+            "the negation proxy, read and not driven",
+            "the verdict entry, read and not called",
+            "the failure entry, read and not called",
+            "an adapter truthy on every subject there is",
+            "builder state the value under test does not decide",
+            "an assertion left uncalled behind a verdict",
+            "the same through the negation proxy",
+        ],
+    )
+    def test_it_is_reported(self, body):
+        found = scan(f"def test_x():\n    {body}\n")
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_UNDER_ASSERT)
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            "assert assert_that([1]).is_empty()",
+            "assert assert_that([1]).check().is_empty()",
+            "assert assert_that([1]).check().is_empty().passed",
+            "assert assert_that([1]).check().is_empty().description",
+            "assert assert_that([1]).value",
+            "assert assert_that([1]).val",
+            "assert assert_that([1]).value == [1]",
+            "assert [1]",
+        ],
+        ids=[
+            "an assertion that ran",
+            "a verdict, which is falsy when it failed",
+            "a field of that verdict",
+            "another field of the same verdict",
+            "the value the builder holds",
+            "the same under its compatibility name",
+            "a comparison over that value",
+            "nothing of ours at all",
+        ],
+    )
+    def test_working_usage_is_left_alone(self, body):
+        assert_that(scan(f"def test_x():\n    {body}\n")).is_empty()
+
+    def test_the_shape_really_does_pass_on_a_value_that_should_fail(self):
+        """The measurement the check exists for, kept here so it cannot rot into a story."""
+        assert assert_that([1]).is_empty  # assertpy2: allow-dangling
+        assert assert_that([1])  # assertpy2: allow-dangling
+        with pytest.raises(AssertionError):
+            assert assert_that([1]).is_empty()
+
+    def test_a_verdict_is_falsy_when_it_failed_which_is_why_it_is_left_alone(self):
+        assert_that(bool(assert_that([1]).check().is_empty())).is_false()
+        assert_that(bool(assert_that([]).check().is_empty())).is_true()
+
+    @pytest.mark.parametrize("name", sorted(_NO_VERDICT))
+    def test_the_two_contexts_agree_on_every_registered_name(self, name):
+        """Derived from the register rather than listed, so a new operation cannot reach only one path."""
+        chain = f"assert_that(1).{name}()"
+        assert_that(scan(f"def test_x():\n    {chain}\n")).described_as("as a statement").is_length(1)
+        assert_that(scan(f"def test_x():\n    assert {chain}\n")).described_as("under assert").is_length(1)
+
+    def test_an_assertion_left_uncalled_behind_a_verdict_really_does_pass(self):
+        """The shape the first version of the exemption swallowed whole."""
+        assert assert_that([1]).check().is_empty  # assertpy2: allow-dangling
+
+    def test_a_bare_check_is_left_alone_because_the_name_may_not_be_ours(self):
+        """A recorded boundary, not an oversight.
+
+        `assert assert_that(x).check()` is truthy and asserts nothing, but reporting it means deciding
+        the name belongs to this library, and a project may register an extension called `check` that
+        asserts by itself.  A read attribute needs no such guess, since nothing was called at all.
+        """
+        found = scan("""
+            def test_x():
+                assert assert_that([1]).check()
+            """)
+        assert_that(found).is_empty()
+
+    def test_the_marker_silences_one(self):
+        assert_that(scan(f"def test_x():\n    assert assert_that(1)  # {ALLOW_MARKER}\n")).is_empty()
 
 
 class TestWhatItLeavesAlone:

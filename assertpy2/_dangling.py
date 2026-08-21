@@ -18,7 +18,7 @@ runtime and cannot shift a frame.
 What it deliberately does not flag:
 
 * a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is not a
-  question about this statement;
+  question about this statement, and ruff's F841 answers it when the answer is never;
 * `assert_conforms()`, `fail()`, `soft_fail()`, which assert on their own rather than returning a
   builder, so a bare call to them is correct usage.
 
@@ -27,6 +27,12 @@ A chain ending on a pivot or a configurer is the same defect wearing a longer ta
 throws the extracted value away.  Both were left out while the set of operations that reach no verdict
 was only a runtime property; `assertpy2/_engine/_operations.py` states it now, and a gate keeps it in
 step with the source, so reading it here cannot rot.
+
+An ``assert`` in front reads the chain instead of discarding it, and a builder and a bound method are
+both truthy, so ``assert assert_that(items).is_empty`` is green on every value.  Neither B018 nor
+coverage sees that one: the value is consumed rather than dropped, and the line does run.  What the
+``assert`` reads is the whole question, since ``assert assert_that(x).val`` tests that value instead,
+and the register names the members that hand it back.
 """
 
 from __future__ import annotations
@@ -36,7 +42,15 @@ import io
 import tokenize
 from typing import TYPE_CHECKING, Final, NamedTuple
 
-from ._engine._operations import ALSO_ASSERTS, CONFIGURES, DESCRIBES, POLLS, TRANSFORMS, WITHOUT_A_VERDICT
+from ._engine._operations import (
+    ALSO_ASSERTS,
+    CONFIGURES,
+    DESCRIBES,
+    HANDS_THE_SUBJECT_BACK,
+    POLLS,
+    TRANSFORMS,
+    WITHOUT_A_VERDICT,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -73,6 +87,17 @@ _ENDS_ON: Final = {
 
 _NO_VERDICT: Final = {name: kind for name, kind in WITHOUT_A_VERDICT.items() if name not in ALSO_ASSERTS}
 _NOT_AWAITED: Final = "eventually() chain is never awaited, so nothing is polled (missing await)"
+_UNDER_ASSERT: Final = "nothing here asserts: assert reads the builder, whose truth says nothing about the value"
+"""What to say about a dangling chain an `assert` reads.
+
+The wrapper turns every shape below into the same defect and a worse one: a builder, a proxy and a
+bound method are all truthy, so the line is green whatever the value is, and it reads as if it
+asserted.  Neither ruff nor coverage sees it, since the value is consumed and the line does run.
+
+The sentence stops at "says nothing" rather than promising the line passes, because a few of the
+builder's own fields are falsy by default and turn the line red instead.  Green or red, neither
+outcome was decided by the value under test.
+"""
 
 
 class Finding(NamedTuple):
@@ -194,12 +219,12 @@ def _reaches_entry(node: ast.expr, bindings: _Bindings) -> bool:
             return False
 
 
-def _polls(node: ast.expr) -> bool:
-    """True when an attribute chain calls ``eventually()``, the async one, anywhere along it."""
+def _runs(node: ast.expr, name: str) -> bool:
+    """True when an attribute chain calls *name* anywhere along it."""
     current: ast.expr = node
     while True:
         if isinstance(current, ast.Call):
-            if isinstance(current.func, ast.Attribute) and current.func.attr == "eventually":
+            if isinstance(current.func, ast.Attribute) and current.func.attr == name:
                 return True
             current = current.func
         elif isinstance(current, ast.Attribute):
@@ -215,6 +240,42 @@ def _tail(node: ast.expr) -> str | None:
     return None
 
 
+def _reads_a_verdict_field(node: ast.Attribute) -> bool:
+    """Whether the attribute reads a field off a verdict rather than leaving an assertion uncalled.
+
+    Both sit behind `check()` and only the step before them tells them apart: `check().is_empty().passed`
+    reads a field of what the assertion decided, while `check().is_empty` is that assertion with its
+    parentheses missing, which is the shape this whole check exists for.
+    """
+    if not _runs(node, "check") or not isinstance(node.value, ast.Call):
+        return False
+    called = node.value.func
+    return not (isinstance(called, ast.Attribute) and called.attr == "check")
+
+
+def _reads_a_truthy_chain(node: ast.expr, bindings: _Bindings) -> bool:
+    """Whether `assert <node>` reads a chain that decided nothing.
+
+    An attribute handing the subject back is excluded, since `assert assert_that(x).val` tests that
+    value rather than leaving an assertion uncalled, and so is a verdict's own field.  Nothing else is:
+    reading the builder's state asserts as little as reading a method does, and `logger` is truthy on
+    every subject there is.
+
+    A chain ending on a bare `check()` is left alone deliberately.  It is truthy and asserts nothing,
+    but calling it a defect means deciding the name is ours, and a project may register an extension
+    called `check` that asserts by itself.  A read attribute needs no such guess, since nothing was
+    called at all.  Measured before deciding: no bare `check()` under an `assert` in 524 files across
+    this suite, the fixture projects and a consuming framework.
+    """
+    if not _reaches_entry(node, bindings):
+        return False
+    if _entry_call(node, bindings) or _tail(node) or (_runs(node, "eventually") and not _closed(node)):
+        return True
+    if not isinstance(node, ast.Attribute):
+        return False
+    return node.attr not in HANDS_THE_SUBJECT_BACK and not _reads_a_verdict_field(node)
+
+
 def _closed(node: ast.expr) -> bool:
     """True when the statement ends in a bare ``close()``, the discard the chain itself stays quiet about."""
     return (
@@ -226,11 +287,12 @@ def _closed(node: ast.expr) -> bool:
     )
 
 
-def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr, tuple[str, ...]]]:
-    """Every expression statement with the scope it sits in, as the chain of names around it.
+def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr | ast.Assert, tuple[str, ...]]]:
+    """Every statement that consumes a builder on the spot, with the scope it sits in.
 
-    An expression statement is the only place a discarded builder can appear: anywhere else the value
-    is bound, passed or returned, and whether *that* asserts is not a question about this statement.
+    Two do.  An expression statement discards the value, and anywhere else it is bound, passed or
+    returned, where whether *that* asserts is not a question about this statement.  An `assert` reads
+    it for its truth, which a builder and a bound method answer the same way whatever the value is.
 
     The scope is a chain rather than one name because a bare name does not identify a test: two classes
     in one file may each define `test_same`, and matching on the name alone handed both findings to
@@ -244,7 +306,7 @@ def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr, tuple[str, ...]]]:
             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 stack.append((child, (*scope, child.name)))
             else:
-                if isinstance(child, ast.Expr):
+                if isinstance(child, ast.Expr | ast.Assert):
                     yield child, scope
                 stack.append((child, scope))
 
@@ -267,7 +329,7 @@ def _marked_lines(source: str) -> frozenset[int]:
         return frozenset()
 
 
-def _silenced(statement: ast.Expr, marked: frozenset[int]) -> bool:
+def _silenced(statement: ast.stmt, marked: frozenset[int]) -> bool:
     """Whether the statement carries the marker on any of its own lines.
 
     Every line the statement spans counts, so the marker can sit at the end of a call broken over
@@ -299,6 +361,10 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
     for statement, scope in _statements(tree):
         if _silenced(statement, marked):
             continue
+        if isinstance(statement, ast.Assert):
+            if _reads_a_truthy_chain(statement.test, bindings):
+                found.append(Finding(path, statement.lineno, _UNDER_ASSERT, scope))
+            continue
         value = statement.value
         awaited = isinstance(value, ast.Await)
         while isinstance(value, ast.Await):  # `await assert_that(x).eventually()...` unwraps to the chain
@@ -307,7 +373,7 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
             found.append(Finding(path, statement.lineno, _NO_ASSERTION.format(name=name), scope))
         elif isinstance(value, ast.Attribute) and _reaches_entry(value, bindings):
             found.append(Finding(path, statement.lineno, _NOT_CALLED, scope))
-        elif not awaited and _polls(value) and not _closed(value) and _reaches_entry(value, bindings):
+        elif not awaited and _runs(value, "eventually") and not _closed(value) and _reaches_entry(value, bindings):
             found.append(Finding(path, statement.lineno, _NOT_AWAITED, scope))
         elif (tail := _tail(value)) and _reaches_entry(value, bindings):
             found.append(Finding(path, statement.lineno, _ENDS_ON[_NO_VERDICT[tail]].format(name=tail), scope))
