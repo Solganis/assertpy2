@@ -132,3 +132,72 @@ class TestTheStructureMatcherWalksOnceInsteadOfTwice:
 
     def test_a_match_reports_no_reason(self):
         assert_that(match.structure({"role": match.is_in("admin")}).evaluate({"role": "admin"}).mismatch).is_empty()
+
+
+class TestTheVerdictIsTakenOnce:
+    """A matcher that answers differently the second time used to have the second answer believed."""
+
+    class _Flaky:
+        """Refuses the first value it sees and accepts every one after, counting the questions."""
+
+        def __init__(self):
+            self.asked = 0
+
+        def matches(self, value):
+            self.asked += 1
+            return self.asked > 1
+
+        def describe(self):
+            return "the flaky requirement"
+
+        def describe_mismatch(self, value):
+            return f"was <{value}>"
+
+    class _FlakyMatcher(BaseMatcher):
+        def __init__(self):
+            self.asked = 0
+
+        def matches(self, value):
+            self.asked += 1
+            return self.asked > 1
+
+        def describe(self):
+            return "the flaky requirement"
+
+    def test_satisfies_reports_the_refusal_it_was_given(self):
+        matcher = self._Flaky()
+        with pytest.raises(AssertionFailure):
+            assert_that(1).satisfies(matcher)
+        assert_that(matcher.asked).is_equal_to(1)
+
+    def test_each_reports_the_refusal_it_was_given(self):
+        matcher = self._Flaky()
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([1, 2]).each(matcher)
+        assert_that(str(failure.value)).contains("index 0")
+        assert_that(matcher.asked).is_equal_to(1)
+
+    def test_the_words_of_a_refusal_come_from_the_refusal(self):
+        """`each()` read the matcher's description off the outcome instead of asking for it again."""
+
+        class Counted(BaseMatcher):
+            def __init__(self):
+                self.described = 0
+
+            def matches(self, value):
+                return value > 0
+
+            def describe(self):
+                self.described += 1
+                return "a positive value"
+
+        matcher = Counted()
+        with pytest.raises(AssertionFailure):
+            assert_that([1, -2]).each(matcher)
+        assert_that(matcher.described).described_as("describe() calls for one refusal").is_equal_to(1)
+
+    def test_a_matcher_inheriting_the_composed_default_is_asked_once_too(self):
+        matcher = self._FlakyMatcher()
+        with pytest.raises(AssertionFailure):
+            assert_that(1).satisfies(matcher)
+        assert_that(matcher.asked).is_equal_to(1)
