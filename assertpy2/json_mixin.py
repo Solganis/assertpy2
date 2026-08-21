@@ -234,7 +234,7 @@ class JsonMixin(_MixinBase):
         require_type(self.val, (dict, list), "a decoded JSON document (a dict or a list)")
         matches = expr.find(self.val)
         if not matches:
-            return self.error(f"Expected JSON path <{path}> to exist, but it did not.")
+            return self.error(f"Expected JSON path <{path}> to exist, but it did not.", expected=path)
         return self
 
     def does_not_have_json_path(self, path: str) -> Self:
@@ -295,6 +295,7 @@ class JsonMixin(_MixinBase):
             return self.error(
                 f"Expected val to match JSON schema, but validation failed at {exc.json_path}: {exc.message}",
                 suppress_context=True,
+                expected=schema,
             )
         return self
 

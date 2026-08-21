@@ -67,7 +67,8 @@ class DateMixin(_MixinBase):
         if self.val >= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -105,7 +106,8 @@ class DateMixin(_MixinBase):
         if self.val <= other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -138,7 +140,8 @@ class DateMixin(_MixinBase):
         if self.val > other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before or equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -171,7 +174,8 @@ class DateMixin(_MixinBase):
         if self.val < other:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after or equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -208,7 +212,8 @@ class DateMixin(_MixinBase):
         ):
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -240,7 +245,8 @@ class DateMixin(_MixinBase):
         if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d %H:%M')}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -272,6 +278,7 @@ class DateMixin(_MixinBase):
         if self.val.date() != other.date():
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d')}>, but was not."
+                f" <{other.strftime('%Y-%m-%d')}>, but was not.",
+                expected=other,
             )
         return self

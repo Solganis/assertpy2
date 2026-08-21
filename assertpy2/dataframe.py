@@ -98,7 +98,9 @@ class DataFrameMixin(_MixinBase):
             assert_equal(actual, expected, **options)
         except AssertionError as exc:
             return self.error(
-                f"Expected the {label} to equal the expected one, but they differ:\n{exc}", suppress_context=True
+                f"Expected the {label} to equal the expected one, but they differ:\n{exc}",
+                suppress_context=True,
+                expected=expected,
             )
         return self
 
@@ -132,7 +134,9 @@ class DataFrameMixin(_MixinBase):
         try:
             testing.assert_array_equal(self.val, expected, **options)
         except AssertionError as exc:
-            return self.error(f"Expected the arrays to be equal, but they differ:\n{exc}", suppress_context=True)
+            return self.error(
+                f"Expected the arrays to be equal, but they differ:\n{exc}", suppress_context=True, expected=expected
+            )
         return self
 
     def is_array_close_to(
@@ -169,5 +173,7 @@ class DataFrameMixin(_MixinBase):
         try:
             testing.assert_allclose(self.val, expected, rtol=rtol, atol=atol, equal_nan=equal_nan, **options)
         except AssertionError as exc:
-            return self.error(f"Expected the arrays to be close, but they differ:\n{exc}", suppress_context=True)
+            return self.error(
+                f"Expected the arrays to be close, but they differ:\n{exc}", suppress_context=True, expected=expected
+            )
         return self

@@ -105,12 +105,14 @@ class WarningMixin(_MixinBase):
             self.error(
                 f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
-                f" but warned <{seen}>."
+                f" but warned <{seen}>.",
+                expected=expected,
             )
             return cast("Self", _InertBuilder())
         self.error(
             f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
-            f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
+            f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
+            expected=expected,
         )
         return cast("Self", _InertBuilder())
 

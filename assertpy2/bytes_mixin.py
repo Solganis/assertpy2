@@ -50,7 +50,7 @@ class BytesMixin(_MixinBase):
         try:
             self.val.decode(encoding)
         except (UnicodeDecodeError, LookupError):
-            return self.error(f"Expected valid {encoding} encoding, but decoding failed.")
+            return self.error(f"Expected valid {encoding} encoding, but decoding failed.", expected=encoding)
         return self
 
     def starts_with_bytes(self, prefix: bytes | bytearray) -> Self:
@@ -114,7 +114,9 @@ class BytesMixin(_MixinBase):
             raise IndexError(f"Expected index {index} to be in range [0, {sized_len(self.val)}), but was out of range.")
         actual = self.val[index]
         if actual != expected:
-            return self.error(f"Expected byte at index {index} to be <0x{expected:02x}>, but was <0x{actual:02x}>.")
+            return self.error(
+                f"Expected byte at index {index} to be <0x{expected:02x}>, but was <0x{actual:02x}>.", expected=expected
+            )
         return self
 
     def is_hex_equal_to(self, expected_hex: str) -> Self:
@@ -132,7 +134,7 @@ class BytesMixin(_MixinBase):
         self._check_bytes()
         expected = bytes.fromhex(expected_hex)
         if self.val != expected:
-            return self.error(f"Expected hex <{expected_hex}>, but was <{self.val.hex()}>.")
+            return self.error(f"Expected hex <{expected_hex}>, but was <{self.val.hex()}>.", expected=expected_hex)
         return self
 
     def decoded_as(self, encoding: str = "utf-8") -> Self:
