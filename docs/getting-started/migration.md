@@ -108,5 +108,5 @@ New capabilities the original never had, ready whenever you want them:
 - [Async and blocking polling](../guides/testing.md#async-assertions) for eventual consistency.
 - [JSON Path / Schema](../guides/data.md), [regex group extraction](../guides/data.md#regex-group-extraction), and [bytes assertions](../guides/assertions.md#bytes--bytearray).
 
-See the [comparison](comparison.md) for the full feature delta, and [stability](../concepts/stability.md)
+See the [comparison](comparison.md) for how the two read side by side, and [stability](../concepts/stability.md)
 for what is covered by a compatibility promise and what is not.

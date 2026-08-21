@@ -36,7 +36,6 @@ from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 UNRUN_DOCS = {
     "docs/concepts/type-safety.md": "several blocks are counter-examples that are supposed to fail",
     "docs/guides/testing.md": "the examples write snapshot files, which would be left behind in the repo",
-    "docs/getting-started/comparison.md": "the blocks are the other library's API, not ours",
     "docs/extending/custom-assertions.md": "the page registers extensions process-wide and shows a failing call",
     "docs/extending/integrations.md": "the behave blocks need a library the coverage cell must not install",
 }

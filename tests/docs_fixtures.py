@@ -218,10 +218,41 @@ expected = pd.DataFrame({"a": [1, 2]})
 computed = np.array([1.0, 2.0])
 """
 
+COMPARISON = """
+from dataclasses import dataclass, field
+
+from pydantic import BaseModel
+
+
+class _User(BaseModel):
+    name: str = "Alice"
+    role: str = "admin"
+    age: int = 30
+
+
+@dataclass
+class PaidOrder:
+    total: float = 42.0
+    items: list[str] = field(default_factory=lambda: ["widget"])
+
+
+order = PaidOrder()
+user = _User()
+value = 42
+response = {"id": 7, "name": "Alice"}
+payload = {"user": {"name": "Alice", "role": "admin", "age": 30}}
+
+
+def fetch_status() -> str:
+    return "READY"
+"""
+
+
 PAGE_FIXTURES = {
     "docs/concepts/type-safety.md": TYPE_SAFETY,
     "docs/guides/fluent.md": FLUENT,
     "docs/guides/testing.md": TESTING,
     "docs/extending/custom-assertions.md": EXTENDING,
     "docs/extending/integrations.md": INTEGRATIONS,
+    "docs/getting-started/comparison.md": COMPARISON,
 }

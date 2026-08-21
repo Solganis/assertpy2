@@ -173,7 +173,9 @@ class TestTheCountsTheDocsQuote:
     """
 
     QUOTED_MATCHER_COUNT = 45
-    PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
+    # the comparison page dropped the figure deliberately: it sold on inventory, which is the weakest
+    # pitch this library has, and the guide it belongs on still carries it
+    PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md",)
     QUOTED_PROTOCOL_COUNT = 15
 
     def test_the_matcher_count(self):
