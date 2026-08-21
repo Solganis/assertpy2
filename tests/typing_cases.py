@@ -134,6 +134,9 @@ def _incompatible_operands() -> None:
     assert_that(1).satisfies(match.contains_only("x"))  # case: only-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_subset_of(["x"]))  # case: subset-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_sorted())  # case: sorted-matcher-for-a-scalar
+    # the pairwise quantifier names both sides now, so a character operation on the other side's
+    # element is refused where `Any` used to take it
+    assert_that("ab").zip_satisfies([1], lambda _character, number: number.isalpha())  # case: zip-reads-the-wrong-side
 
 
 def _numbers_that_are_not_ordinary_numbers() -> None:
@@ -239,6 +242,42 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that([1]).check().contains_key("a")  # case: mapping-assertion-on-a-list-through-check
     assert_that(1).check().no_such_assertion()  # case: a-name-that-exists-nowhere-through-check
     assert_that({"id": 1}).has_id("no such comparison")  # case: dynamic-attribute-on-a-mapping
+
+    # a predicate is handed the subject, so a view that knows its value knows what the lambda gets
+    assert_that("text").satisfies(lambda item: item.upperr())  # case: predicate-reading-a-missing-string-method
+    assert_that(7).satisfies(lambda item: item.bit_lengthh())  # case: predicate-reading-a-missing-numeric-method
+    # a verdict asked of a value the builder holds: an element pivot used to land on the untyped proxy
+    assert_that([1, 2]).first().check().starts_with("x")  # case: text-verdict-on-a-pivoted-number
+
+    # a polling chain used to be `Any` from its first assertion, so none of these were read at all
+    assert_that(_a_number).eventually_sync().starts_with("x")  # case: text-assertion-on-a-polled-number
+    assert_that(_a_number).eventually_sync().is_close_to("x", 1)  # case: bad-operand-on-a-polled-number
+    # a name no declaration lists still comes off `__getattr__`, which is what keeps a dynamic
+    # assertion on a polled response working.  The runtime names it instead
+    assert_that(_a_number).eventually_sync().no_such_assertion()  # case: a-name-that-exists-nowhere-on-a-chain
+    # a `str` is iterable, so it reaches the umbrella rung of an assertion the string view does not
+    # carry.  The same width as `assert_that()` gives a value the umbrella claims
+    assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
+    # the hook hands back the chain over the same value, so what follows a dynamic assertion is read
+    assert_that(_a_number).eventually_sync().has_status("PAID").starts_with(  # case: text-assertion-after-a-dynamic-one
+        "x"
+    )
+
+
+def _a_number() -> int:
+    return 1
+
+
+def _some_text() -> str:
+    return "x"
+
+
+def _some_rows() -> list[str]:
+    return ["a"]
+
+
+def _loose_rows() -> list[Any]:
+    return [1]
 
 
 def _shapes_other_people_write(
@@ -353,6 +392,18 @@ def _relations_that_must_keep_working() -> None:
     assert_that(_rows).each(_truthy_int)  # case: valid-quantifier-predicate-returning-an-int
     assert_that(_rows).filtered_on(_truthy_int)  # case: valid-filter-predicate-returning-an-int
     assert_that(_rows).each(_numpy_verdict)  # case: valid-quantifier-predicate-returning-a-numpy-bool
+    # a polling chain keeps its type through a dynamic assertion and through a pivot
+    assert_that(_a_number).eventually_sync().is_instance_of(int).is_positive()  # case: valid-polled-refinement
+    assert_that(_some_rows).eventually_sync().first().starts_with("a")  # case: valid-polled-pivot
+    assert_that(_a_number).eventually_sync().has_status("PAID").is_positive()  # case: valid-polled-dynamic-then-typed
+    # the same binding must not refuse a guard the subject can be handed to
+    assert_that("text").satisfies(lambda item: item.isupper())  # case: valid-predicate-over-the-subject
+    assert_that(7).satisfies(lambda item: item.bit_length() > 0)  # case: valid-numeric-predicate-over-the-subject
+    assert_that([1, 2]).first().check().is_positive()  # case: valid-verdict-after-a-pivot
+    assert_that(["a"]).first().check().starts_with("a")  # case: valid-text-verdict-after-a-pivot
+    # a payload typed `dict[str, Any]` is where the alternative spelling put every chain on the first
+    # rung, so this one has to keep its freedom
+    assert_that(_loose_rows()).first().check().starts_with("x")  # case: valid-verdict-after-a-loose-pivot
     # even a list, on the same kind of row the runtime suite uses: a mapping whose `__getitem__` takes
     # one answers, measured, so the selector type stays `object` and the runtime is what says no when
     # the row cannot take what it was handed

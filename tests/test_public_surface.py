@@ -67,6 +67,7 @@ _WORDS = {
     26: "twenty-six",
     27: "twenty-seven",
     28: "twenty-eight",
+    29: "twenty-nine",
 }
 
 EXPECTED_EXPORTS = [
@@ -173,7 +174,7 @@ class TestTheCountsTheDocsQuote:
 
     QUOTED_MATCHER_COUNT = 45
     PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md", "docs/getting-started/comparison.md")
-    QUOTED_PROTOCOL_COUNT = 14
+    QUOTED_PROTOCOL_COUNT = 15
 
     def test_the_matcher_count(self):
         matchers = [name for name in dir(assertpy2.match) if not name.startswith("_")]

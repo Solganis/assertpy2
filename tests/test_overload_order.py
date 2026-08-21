@@ -105,7 +105,7 @@ class TestTheOverloadOrder:
     def test_the_file_declares_overloads_at_all(self):
         # a rename or a refactor that stopped this from finding anything would make every other
         # assertion here vacuous, so the count is asserted before the order is
-        assert_that(_overload_subjects()).described_as("overloads of assert_that").is_length(17)
+        assert_that(_overload_subjects()).described_as("overloads of assert_that").is_length(18)
 
     def test_exactly_one_overload_keys_on_the_frame_shape(self):
         subjects = _overload_subjects()
@@ -146,10 +146,25 @@ class TestTheOverloadOrder:
             subjects.index("_T")
         )
 
-    def test_nothing_but_a_shape_sits_between_the_first_shape_and_the_fallback(self):
+    def test_the_shape_block_runs_without_a_wedge_in_it(self):
+        """A shape reads only what the overloads above it left, so one wedged in changes every shape below.
+
+        Under the block is a different question, and one overload lives there: the callable view.  It
+        used to sit above the shapes and claimed an ASGI or WSGI response, which is a callable and is
+        also the one thing an HTTP capability describes, so `has_status_code(200)` on a Starlette or a
+        Flask response was a type error in all three checkers while the runtime answered it.
+        """
         subjects = _overload_subjects()
         shapes = _shape_positions(subjects)
-        between = subjects[min(shapes) : subjects.index("_T")]
-        assert_that([name for name in between if name not in _shape_bound_typevars()]).described_as(
+        block = subjects[min(shapes) : max(shapes) + 1]
+        assert_that([name for name in block if name not in _shape_bound_typevars()]).described_as(
             "an overload wedged into the shape block, which changes what the shapes below it see"
         ).is_empty()
+
+    def test_only_the_callable_view_and_the_fallback_follow_the_shapes(self):
+        """Named rather than counted, so a second overload appended below the block has to be decided about."""
+        subjects = _overload_subjects()
+        below = subjects[max(_shape_positions(subjects)) + 1 :]
+        assert_that(below).described_as("what a value no shape claimed reaches, in order").is_equal_to(
+            ["Callable[..., _P]", "_T"]
+        )

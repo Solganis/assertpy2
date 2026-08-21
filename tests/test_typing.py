@@ -25,6 +25,7 @@ if TYPE_CHECKING:
         _CheckNumericAssertion,
         _CheckStringAssertion,
     )
+    from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll
     from assertpy2._engine._typing import (
         _ArrayAssertion,
         _ArrayShape,
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
         _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
+        _DateTimeAssertion,
         _DictAssertion,
         _FrameAssertion,
         _FrameShape,
@@ -46,7 +48,6 @@ if TYPE_CHECKING:
         _StringAssertion,
     )
     from assertpy2.assertpy import AssertionBuilder
-    from assertpy2.async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder
     from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher
 
     assert_type(assert_that("text"), _StringAssertion)
@@ -64,22 +65,53 @@ if TYPE_CHECKING:
     assert_type(assert_that(("a", "b")), _IterableAssertion[str])
     assert_type(assert_that({"a", "b"}), _IterableAssertion[str])
     assert_type(assert_that(frozenset({"a"})), _IterableAssertion[str])
+    # a `datetime` is a `date` and then some: the chronological nine refuse a plain date at run time, on
+    # the value as well as the operand, so one view for both types offered them to one that raises
     assert_type(assert_that(datetime.date(2026, 1, 1)), _DateAssertion)
-    assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateAssertion)
+    assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateTimeAssertion)
+    assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)).value, datetime.datetime)
     assert_type(assert_that(pathlib.Path("/tmp")), _PathAssertion)
     assert_type(assert_that(b"raw"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").starts_with(b"r"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").ends_with(b"w"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").starts_with_bytes(b"r"), _BytesAssertion[bytes])
     assert_type(assert_that({"a": 1}).each(lambda key: True), _DictAssertion[str, int])
+    # a text is walked character by character, so the quantifiers answer for it and the element is a
+    # `str`: the runtime has always taken them, and no view offered one
+    assert_type(assert_that("ab").each(lambda character: character.isalpha()), _StringAssertion)
+    assert_type(assert_that("ab").any_satisfy(lambda character: character == "a"), _StringAssertion)
+    assert_type(assert_that("ab").satisfies_exactly(lambda first: first == "a"), _StringAssertion)
+    # the pairwise one names both sides: a character and an element of the sequence walked alongside it
+    assert_type(
+        assert_that("ab").zip_satisfies([1, 2], lambda character, number: character.isalpha() and number > 0),
+        _StringAssertion,
+    )
+    # and the loose spelling stays ordinary: naming the two sides is not a demand that a caller name them
+    _pairs: list[Any] = [1, 2]
+    _loose: Callable[[Any, Any], object] = lambda left, right: left == right  # noqa: E731  # the shape under test
+    assert_type(assert_that("ab").zip_satisfies(_pairs, _loose), _StringAssertion)
     assert_type(assert_that({"a": 1}).all_satisfy(lambda key: True), _DictAssertion[str, int])
     assert_type(assert_that(bytearray(b"raw")), _BytesAssertion[bytearray])
-    assert_type(assert_that(len), _CallableAssertion)
+    assert_type(assert_that(len), _CallableAssertion[int])
     # the pair gate reads literals, so this is what ties `Callable` to the view it dispatches to
-    assert_type(assert_that(lambda: None), _CallableAssertion)
+    assert_type(assert_that(lambda: None), _CallableAssertion[None])
 
     class _Countable:
         def __iter__(self) -> object: ...
+
+    class _CallableResponse:
+        """An ASGI or WSGI response: a callable, and the one thing an HTTP capability describes."""
+
+        def __call__(self, *args: object, **kwargs: object) -> object: ...
+        @property
+        def status_code(self) -> int: ...
+        @property
+        def headers(self) -> Mapping[str, str]: ...
+
+    # the callable view sits under the shapes for this: above them it claimed a Starlette or a Flask
+    # response, and `has_status_code()` on one was a type error in all three checkers while the runtime
+    # answered it.  `tests/typing_http.py` asks the same question of the real classes
+    assert_type(assert_that(_CallableResponse()), AssertionBuilder[_CallableResponse])
 
     assert_type(assert_that(object()), _ObjectAssertion[object])
 
@@ -135,11 +167,11 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.date(2026, 1, 1)).is_less_than(datetime.date(2026, 1, 2)), _DateAssertion)
     assert_type(
         assert_that(datetime.datetime(2026, 1, 2)).is_greater_than_or_equal_to(datetime.datetime(2026, 1, 1)),
-        _DateAssertion,
+        _DateTimeAssertion,
     )
     assert_type(
         assert_that(datetime.datetime(2026, 1, 1)).is_less_than_or_equal_to(datetime.datetime(2026, 1, 2)),
-        _DateAssertion,
+        _DateTimeAssertion,
     )
     assert_type(
         assert_that(datetime.date(2026, 1, 2)).is_between(datetime.date(2026, 1, 1), datetime.date(2026, 1, 3)),
@@ -163,11 +195,12 @@ if TYPE_CHECKING:
     assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
 
-    assert_type(assert_that(len).eventually(trace=False), AsyncAssertionBuilder)
-    assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), SyncAssertionBuilder)
-    # only the builder type was pinned here, so an inferred union out of its `__getattr__` made every polling chain
-    # uncallable while these lines stayed green
+    assert_type(assert_that(len).eventually(trace=False), _AsyncPoll[int])
+    assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), _SyncPoll[int])
     assert_that(len).eventually_sync(timeout=2, trace=False).is_equal_to(1)
+    assert_that(len).eventually_sync(timeout=2, trace=False).is_positive()
+    assert_type(assert_that(len).eventually_sync().is_positive().val, int)
+    assert_type(assert_that(len).eventually().is_positive(), _AsyncPoll[int])
     assert_that(len).eventually_sync(timeout=2, trace=False).not_.is_equal_to(2)
 
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
@@ -208,6 +241,8 @@ if TYPE_CHECKING:
 
     class _PaidOrder(_Order): ...
 
+    class _Shouted(str): ...
+
     def _is_paid(order: _Order) -> TypeIs[_PaidOrder]:
         return isinstance(order, _PaidOrder)
 
@@ -223,7 +258,14 @@ if TYPE_CHECKING:
     payload = cast("dict[str, Any]", {"id": 1})
     assert_type(assert_that(payload).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(payload).satisfies(_is_paid).value, _PaidOrder)
-    assert_type(assert_that("x").satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
+
+    # ... and the guard has to be one the subject can be handed to.  A concretely typed view binds the
+    # predicate to its own value, so a guard about orders is refused on a `str` rather than promising a
+    # narrowing of something that would raise on the first attribute it read
+    def _is_shouted(text: str) -> TypeIs[_Shouted]:
+        return text.isupper()
+
+    assert_type(assert_that("x").satisfies(_is_shouted), AssertionBuilder[_Shouted])
     assert_type(assert_that(payload).satisfies(lambda item: bool(item)), _DictAssertion[str, Any])
 
     # assert_conforms() narrows to the validated model for ANY input - the narrowing capstone. Because the
@@ -288,7 +330,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(b"raw").value, bytes)
     assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
-    assert_type(assert_that(len).value, Callable[..., object])
+    assert_type(assert_that(len).value, Callable[..., int])
 
     # A pivot on the builder hands back an element, and used to be declared as handing back the
     # chain.  That is the half a narrowing at `assert_that()` cannot reach: the second pivot lands on
