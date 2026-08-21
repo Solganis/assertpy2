@@ -197,8 +197,21 @@ async def test_the_user_is_active():
 
 All three are green forever. None is possible with a bare `assert`, which is the price of a fluent
 API, so the library owes you a way to find them. The second line is already reported by
-[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/). The other two are reported by
+[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/), and a builder bound to a name
+and never read is its `F841`, so this check does not repeat either. The other two are reported by
 nothing, because a call may have side effects and no linter can know these do not.
+
+Writing `assert` in front does not save you, and that shape is the worst of the family:
+
+<!-- docs-guard: skip -->
+```python
+def test_the_user_is_active():
+    assert assert_that(user.age).is_positive  # green whatever the age is
+```
+
+`assert` reads the bound method, and a bound method is truthy. The line passes on every value while
+reading as though it checked one. `B018` does not apply here, since the value is consumed rather than
+discarded, and coverage counts the line as run.
 
 ```bash
 pytest --assertpy2-dangling

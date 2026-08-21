@@ -22,6 +22,7 @@ from assertpy2._engine._operations import (
     ALSO_ASSERTS,
     CONFIGURES,
     DESCRIBES,
+    HANDS_THE_SUBJECT_BACK,
     NOT_AN_OPERATION,
     POLLS,
     TRANSFORMS,
@@ -195,6 +196,35 @@ class TestTheRegisterDescribesTheSurface:
         for category in (CONFIGURES, TRANSFORMS, DESCRIBES, POLLS):
             members = [name for name, kind in WITHOUT_A_VERDICT.items() if kind == category]
             assert_that(members).described_as(f"operations registered as {category}").is_not_empty()
+
+
+class TestWhatHandsTheSubjectBack:
+    """`HANDS_THE_SUBJECT_BACK` decides whether `assert assert_that(x).<name>` reads a value or a defect.
+
+    Equality both ways, derived rather than listed.  A member missing from it turns working code into a
+    dangling report, and anything in it the subject does not decide silences the loudest shape the
+    check has.
+    """
+
+    def test_it_is_exactly_the_members_that_hand_the_subject_back(self):
+        subject = object()
+        builder = assert_that(subject)
+        read = {
+            name
+            for name in dir(builder)
+            if not name.startswith("_") and not callable(getattr(type(builder), name, None))
+        }
+        assert_that(read).described_as("members read rather than called").is_not_empty()
+        assert_that(sorted(HANDS_THE_SUBJECT_BACK)).is_equal_to(
+            sorted(n for n in read if getattr(builder, n) is subject)
+        )
+
+    def test_the_rest_is_truthy_whatever_the_subject_is_which_is_why_it_is_reported(self):
+        # `logger` is the sharp one: an adapter every builder has, so `assert assert_that(x).logger`
+        # would be green on every value there is
+        assert_that(bool(assert_that([]).logger)).described_as("truthy on an empty subject").is_true()
+        assert_that(bool(assert_that([1]).logger)).described_as("truthy on a full one").is_true()
+        assert_that(assert_that(1).not_).described_as("reading `not_` hands back more builder").not_.is_instance_of(int)
 
 
 class TestWhatTheProxiesRefuse:
