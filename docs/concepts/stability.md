@@ -78,7 +78,7 @@ The last of those is the widest so far, so it is worth stating plainly what it d
 A value with a type of this library knows is unaffected, and so is a value typed `Any`, which is what an
 unannotated helper or a `json.loads()` result gives you. What narrows is the value annotated `object`
 and the class that answers to nothing the library can use: no length, no iteration, no mapping, not a
-model, not a response. Those now get the assertions every value can answer rather than all 152, so
+model, not a response. Those now get the assertions every value can answer rather than the whole surface, so
 `assert_that(person).is_positive()` is a type error instead of a runtime one. Dynamic `has_<attribute>()`
 narrows with it, since the hook it resolves through lives on the full builder. The runtime is unchanged
 in every case, and the migration is to assert on the attribute rather than through it:
