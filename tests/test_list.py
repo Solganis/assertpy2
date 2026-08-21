@@ -712,7 +712,7 @@ class TestOrderingFailuresNameTheBreakPoint:
             assert_that([1, 1, 2, 2, 3]).does_not_contain_duplicates()
         exc = exc_info.value
         assert_that(str(exc)).contains("<1, 2> were repeated")
-        assert_that([entry.expected for entry in exc.diff.entries]).is_equal_to([1, 2])
+        assert_that([entry.actual for entry in exc.diff.entries]).is_equal_to([1, 2])
 
     def test_duplicates_work_on_unhashable_items(self):
         with pytest.raises(AssertionError) as exc_info:

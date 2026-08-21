@@ -252,6 +252,22 @@ def test_duplicates_reported(benchmark, size):
     benchmark(run)
 
 
+@pytest.mark.parametrize("size", [100, 2000])
+def test_many_distinct_duplicates_reported(benchmark, size):
+    # one repeat above hides a per-repeat re-walk, since there is only one repeat to walk for.  Every
+    # element repeated is where counting each of them again shows as a square
+    values = [index for index in range(size) for _ in (0, 1)]
+
+    def run():
+        try:
+            assert_that(values).does_not_contain_duplicates()
+        except AssertionFailure:
+            return
+        raise RuntimeError("the duplicates were not reported, so this measures the wrong path")
+
+    benchmark(run)
+
+
 # Polling and clustering run per *poll* and per *failing test* rather than per assertion, so their cost
 # is multiplied by a loop nobody writes. The flight recorder is on by default and walks the probed value
 # twice, once to sanitise a sample and once to key it for change: a failing poll over two hundred

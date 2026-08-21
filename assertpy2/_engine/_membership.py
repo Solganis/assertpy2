@@ -204,8 +204,8 @@ def has_duplicates(values: Sequence[Any]) -> bool:
     return False
 
 
-def repeated_items(values: Sequence[Any]) -> list[Any]:
-    """Which elements appear more than once, each named once, in order of first appearance.
+def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
+    """Each element appearing more than once with how often, in order of first appearance.
 
     Counting with `list.count()` per element re-walks the whole sequence every time, so naming the
     duplicates in a collection of a few thousand costs as much as the assertion it explains.  Where the
@@ -218,18 +218,24 @@ def repeated_items(values: Sequence[Any]) -> list[Any]:
         except TypeError:  # a value that refuses to hash despite its type, such as a signalling NaN
             counts = None
     if counts is None:
-        named: list[Any] = []
+        named: list[tuple[Any, int]] = []
         for value in values:
-            if values.count(value) > 1 and not any(value == earlier for earlier in named):
-                named.append(value)
+            total = values.count(value)
+            if total > 1 and not any(value == earlier for earlier, _ in named):
+                named.append((value, total))
         return named
     seen: set[Any] = set()
     repeated = []
     for value in values:
         if counts[value] > 1 and value not in seen:
             seen.add(value)
-            repeated.append(value)
+            repeated.append((value, counts[value]))
     return repeated
+
+
+def repeated_items(values: Sequence[Any]) -> list[Any]:
+    """Which elements appear more than once, each named once, in order of first appearance."""
+    return [value for value, _count in repeated_counts(values)]
 
 
 def not_contained_in(value: Any, container: Any) -> list[Any]:
