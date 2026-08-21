@@ -8,6 +8,11 @@ A rule appearing where it was not recorded fails. So does one appearing more oft
 than recorded, which points here rather than at the code.
 
 Line numbers are not part of the key: they move on every unrelated edit above them.
+
+Two records, because they answer different questions. `BASELINE` is the exception list: each entry is
+an oddity somebody decided about once. `LADDER_OVERLAP` is a policy, and it is kept apart because a
+list of 96 entries of one rule stops reading as exceptions and starts reading as a total nobody can
+act on, which is the failure the first paragraph warns about.
 """
 
 from __future__ import annotations
@@ -33,25 +38,13 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
-    # two more with the datetime rungs: a `datetime` is a `date`, so every refinement ladder offers it
-    # first, and pyright reads the pair as overlapping the way it reads `bool` before `int`
-    ("assertpy2/_engine/_typing.py", "reportOverlappingOverload"): 30,
-    # the verdict twins mirror the protocols, and they mirror their reports with them: the same
-    # overload ladder, the same two variance suggestions plus the one `_DictAssertion` carries, and
-    # one override report for the same reason the original has it
-    ("assertpy2/_engine/_check_typing.py", "reportOverlappingOverload"): 1,
+    # the verdict twins mirror the protocols, and they mirror their reports with them: the same two
+    # variance suggestions plus the one `_DictAssertion` carries, and one override report for the same
+    # reason the original has it
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
-    # the polling twins restrict `self` per assertion, and a value the umbrella claims matches both a
-    # named rung and the trailing umbrella one, which pyright reads as the later rung being redundant.
-    # Most of the rest is the `is_not_none` ladder, which the views it mirrors are reported for too:
-    # a chain over `None` matches every rung of it
-    ("assertpy2/_engine/_poll_typing.py", "reportOverlappingOverload"): 48,
     ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
-    # the verdict twin of a value the builder holds, the same shape and so the same report
-    ("assertpy2/_engine/_builder_check_typing.py", "reportOverlappingOverload"): 11,
     ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
-    ("assertpy2/assertpy.py", "reportOverlappingOverload"): 6,
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
@@ -64,3 +57,42 @@ BASELINE: dict[tuple[str, str], int] = {
     # both branches that reach the read assign it first, through a `try` pyright does not follow
     ("assertpy2/snapshot.py", "reportPossiblyUnboundVariable"): 2,
 }
+
+LADDER_OVERLAP: dict[tuple[str, str], int] = {
+    ("assertpy2/_engine/_builder_check_typing.py", "is_between"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than_or_equal_to"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_instance_of"): 2,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_less_than"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_less_than_or_equal_to"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_not_between"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_not_none"): 2,
+    ("assertpy2/_engine/_builder_check_typing.py", "matches_structure"): 1,
+    ("assertpy2/_engine/_check_typing.py", "is_instance_of"): 1,
+    ("assertpy2/_engine/_poll_typing.py", "is_between"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_greater_than"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_greater_than_or_equal_to"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_instance_of"): 4,
+    ("assertpy2/_engine/_poll_typing.py", "is_less_than"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_less_than_or_equal_to"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_not_between"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_not_none"): 30,
+    ("assertpy2/_engine/_poll_typing.py", "matches_structure"): 2,
+    ("assertpy2/_engine/_typing.py", "is_instance_of"): 6,
+    ("assertpy2/_engine/_typing.py", "is_not_none"): 15,
+    ("assertpy2/_engine/_typing.py", "satisfies"): 9,
+    ("assertpy2/assertpy.py", "assert_that"): 5,
+    ("assertpy2/assertpy.py", "is_instance_of"): 1,
+}
+"""Where a refinement ladder makes pyright call a later rung redundant, by the method it is on.
+
+Not a debt and not a list of decisions. A ladder puts the narrower rung first so the narrower type
+wins, and pyright reads the pair as an overlap wherever the wider rung still accepts what the narrower
+one took: `bool` before `int` on the comparisons, `datetime` before `date`, a named rung before the
+trailing umbrella one on the polling twins. `is_not_none` is nearly half of it on its own, because a
+chain over `None` matches every rung there is.
+
+Keyed by method rather than counted per file, which the rule was before. A per-file count of 48 stayed
+green when one method stopped overlapping and another started, and the file it points at is generated,
+so the number said nothing a reader could act on. The method name says which ladder moved.
+"""
