@@ -476,6 +476,20 @@ failing tests.
 
 ### Configuration
 
+Three of the settings below are what a suite turns on when it wants the library to be loud. Two guard
+against a test that passes without checking anything, the dangling detector and the vacuous-quantifier
+warning; the third, failure clustering, reads a red run rather than a green one and groups failures
+that share a cause. All three are off unless you ask, because each changes what a run reports and a
+suite that inherited this library did not ask for that. A new suite can have all three in one line:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_profile = "safe"   # dangling on, vacuous on, clusters on (default "compatible": all off)
+```
+
+Naming a setting yourself wins over the profile, so `safe` plus `assertpy2_dangling = "off"` is a suite
+that wants the other two and has said so where the next reader will look.
+
 ```toml
 [tool.pytest.ini_options]
 assertpy2_diff = "off"              # disable structured diff sections entirely
@@ -484,6 +498,7 @@ assertpy2_poll_report = "off"       # silence the near-timeout poll report (defa
 assertpy2_failure_clusters = "3"    # group failures sharing one difference (default off)
 assertpy2_dangling = "on"           # warn about assert_that() statements that assert nothing
 assertpy2_dangling_entries = "check"  # your own assert_that wrappers, for the check above
+assertpy2_vacuous = "on"            # warn when a universal assertion passes over an empty value
 ```
 
 With `--color=yes`, diffs are colored: red removals, green additions, cyan headers. Entries beyond
