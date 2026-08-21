@@ -24,7 +24,7 @@ pytest.importorskip("pyright")
 from typing import Final
 
 from assertpy2 import assert_that
-from tests.pyright_baseline import BASELINE
+from tests.pyright_baseline import BASELINE, LADDER_OVERLAP
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -76,23 +76,56 @@ def _diagnostics() -> tuple[dict[str, str], ...]:
     )
 
 
+_LADDER_RULE: Final = "reportOverlappingOverload"
+
+
 def _observed() -> dict[tuple[str, str], int]:
     counts: collections.Counter[tuple[str, str]] = collections.Counter()
     for item in _diagnostics():
-        counts[(item["file"], item["rule"])] += 1
+        if item["rule"] != _LADDER_RULE:
+            counts[(item["file"], item["rule"])] += 1
     return dict(counts)
 
 
 def test_no_unrecorded_pyright_diagnostics() -> None:
     observed = _observed()
-    # the run itself has to have happened: an empty report would pass every comparison below
-    assert_that(observed).is_not_empty()
+    # not load bearing while the record is not empty: a lost run also fails the comparison below, as
+    # every entry at once. This says so in a line instead of as a list of everything that vanished
+    assert_that(observed).described_as("pyright reported nothing at all").is_not_empty()
 
     appeared = {key: count for key, count in observed.items() if count > BASELINE.get(key, 0)}
     assert_that(appeared).described_as("pyright diagnostics not recorded in pyright_baseline.py").is_empty()
 
     resolved = {key: count for key, count in BASELINE.items() if count > observed.get(key, 0)}
     assert_that(resolved).described_as("recorded in pyright_baseline.py but no longer reported").is_empty()
+
+
+def test_the_ladder_overlaps_are_the_ones_still_reported() -> None:
+    """Hold the overlap policy to the methods it claims, rather than to a count per file.
+
+    The rule is more than half of everything pyright says about this package, and three of the five
+    files carrying it are generated, so a per-file count was a number with no owner: one method could
+    stop overlapping and another start, and 48 would still be 48. The method is what a reader can act
+    on, and it is in the message already.
+    """
+    read = [
+        (item, re.search(r'Overload \d+ for "(\w+)"', item["message"]))
+        for item in _diagnostics()
+        if item["rule"] == _LADDER_RULE
+    ]
+    # a message this pattern cannot read would drop out of the comparison silently, taking a real
+    # change with it, which is how the variance gate below is kept honest too
+    unreadable = [item["message"] for item, found in read if found is None]
+    assert_that(unreadable).described_as("overlap reports this test could not read").is_empty()
+
+    observed = collections.Counter((item["file"], found.group(1)) for item, found in read if found)
+    assert_that(observed).described_as("pyright reported no overlap at all").is_not_empty()
+
+    appeared = {key: count for key, count in observed.items() if count > LADDER_OVERLAP.get(key, 0)}
+    assert_that(appeared).described_as("an overlapping overload not recorded in LADDER_OVERLAP").is_empty()
+
+    resolved = {key: count for key, count in LADDER_OVERLAP.items() if count > observed.get(key, 0)}
+    assert_that(resolved).described_as("recorded in LADDER_OVERLAP but no longer reported").is_empty()
 
 
 def test_the_recorded_variance_refusals_are_the_ones_still_reported() -> None:
