@@ -584,3 +584,44 @@ def test_raises_partial_without_name_fails_cleanly():
         assert_that(partial(boom, 3)).raises(ValueError).when_called_with()
     with pytest.raises(AssertionError):
         assert_that(partial(boom, 9)).raises(KeyError).when_called_with()
+
+
+class TestAnInterruptIsNotAMismatch:
+    """Ctrl+C and ``sys.exit()`` belong to the runner, and both capture paths used to keep them."""
+
+    @staticmethod
+    def _interrupt():
+        raise KeyboardInterrupt
+
+    @staticmethod
+    def _exit():
+        raise SystemExit(3)
+
+    def test_raises_lets_an_interrupt_through_instead_of_reporting_it(self):
+        with pytest.raises(KeyboardInterrupt):
+            assert_that(self._interrupt).raises(ValueError).when_called_with()
+
+    def test_does_not_raise_lets_an_interrupt_through_instead_of_swallowing_it(self):
+        with pytest.raises(KeyboardInterrupt):
+            assert_that(self._interrupt).does_not_raise(ValueError).when_called_with()
+
+    def test_an_exit_travels_the_same_way(self):
+        with pytest.raises(SystemExit):
+            assert_that(self._exit).does_not_raise(ValueError).when_called_with()
+
+    def test_asking_for_one_by_name_still_catches_it(self):
+        assert_that(self._interrupt).raises(KeyboardInterrupt).when_called_with()
+        assert_that(self._exit).raises(SystemExit).when_called_with()
+
+    def test_a_named_interrupt_that_does_arrive_is_still_refused_by_the_negative_form(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(self._exit).does_not_raise(SystemExit).when_called_with()
+        assert_that(str(exc_info.value)).contains("did raise <SystemExit>")
+
+    def test_an_ordinary_mismatch_is_still_reported(self):
+        def boom():
+            raise TypeError("wrong one")
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(boom).raises(ValueError).when_called_with()
+        assert_that(str(exc_info.value)).contains("but raised <TypeError>")

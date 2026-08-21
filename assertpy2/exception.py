@@ -51,6 +51,17 @@ def _require_exception_type(ex: object) -> type[BaseException]:
     return ex
 
 
+def _escaped(exc: BaseException) -> bool:
+    """Whether *exc* is the runner's to act on rather than a mismatch to report.
+
+    A probe interrupted by ``KeyboardInterrupt``, or one that called ``sys.exit()``, did not answer the
+    question the assertion asked.  Reported as a mismatch, Ctrl+C turned into a red test, and
+    ``does_not_raise()`` swallowed it whole, so neither reached the runner.  Asking for one of them by
+    name still works: the caller's own branch catches what it named before this is consulted.
+    """
+    return not isinstance(exc, Exception)
+
+
 def _first_of(exc: BaseException, ex: type) -> BaseException | None:
     """The first exception of type *ex* in the tree, or ``None``.
 
@@ -155,17 +166,21 @@ class ExceptionMixin(_MixinBase):
                 captured = self.builder(str(e), self.description, self.kind, logger=self.logger)
                 captured._raised_exception = e
                 return captured
+            elif _escaped(e):
+                raise
             else:
                 self.error(
                     f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
-                    f" but raised <{type(e).__name__}>."
+                    f" but raised <{type(e).__name__}>.",
+                    expected=self.expected,
                 )
                 return cast("Self", _InertBuilder())
 
         self.error(
             f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
-            f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)})."
+            f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
+            expected=self.expected,
         )
         return cast("Self", _InertBuilder())
 
@@ -236,7 +251,10 @@ class ExceptionMixin(_MixinBase):
         cause = _effective_cause(exc)
         if cause is None or not isinstance(cause, ex):
             found = "no cause" if cause is None else f"<{type(cause).__name__}>"
-            self.error(f"Expected <{type(exc).__name__}> to be caused by <{ex.__name__}>, but the cause was {found}.")
+            self.error(
+                f"Expected <{type(exc).__name__}> to be caused by <{ex.__name__}>, but the cause was {found}.",
+                expected=ex,
+            )
             return cast("Self", _InertBuilder())
         pivoted = self.builder(str(cause), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = cause
@@ -261,7 +279,8 @@ class ExceptionMixin(_MixinBase):
         if not isinstance(root, ex):
             self.error(
                 f"Expected <{type(exc).__name__}> to have root cause <{ex.__name__}>,"
-                f" but the root cause was <{type(root).__name__}>."
+                f" but the root cause was <{type(root).__name__}>.",
+                expected=ex,
             )
             return cast("Self", _InertBuilder())
         pivoted = self.builder(str(root), self.description, self.kind, logger=self.logger)
@@ -296,7 +315,9 @@ class ExceptionMixin(_MixinBase):
             return cast("Self", _InertBuilder())
         for ex in ex_types:
             if _first_of(exc, ex) is None:
-                self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.")
+                self.error(
+                    f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex
+                )
                 return cast("Self", _InertBuilder())
         return self
 
@@ -396,7 +417,7 @@ class ExceptionMixin(_MixinBase):
             return cast("Self", _InertBuilder())
         found = _first_of(exc, ex)
         if found is None:
-            self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.")
+            self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex)
             return cast("Self", _InertBuilder())
         pivoted = self.builder(str(found), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = found
@@ -434,6 +455,8 @@ class ExceptionMixin(_MixinBase):
                     f" but did raise <{type(e).__name__}>."
                 )
                 return cast("Self", _InertBuilder())
+            if _escaped(e):
+                raise
             return self
         self._return_value = result
         return self
