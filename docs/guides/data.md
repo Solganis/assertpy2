@@ -58,10 +58,12 @@ with soft_assertions():
     assert_that(response).at_json_path("$.data.id").satisfies(match.is_positive())
 ```
 
-A path lands on whatever the document holds there, so what comes back offers the assertions every value
-has. Reach further with a matcher, as above, or state the type you expect and continue in it. The
-predicate below is a `TypeIs`, so the type checker takes its word: `satisfies()` runs it and reads the
-verdict, it cannot confirm that the claim matches the check inside.
+A path lands on whatever the document holds there, so what comes back offers the assertions every
+value has. To reach further, either use a matcher as above, or state the type you expect and continue
+in it.
+
+The predicate below is a `TypeIs`, so the type checker takes its word. `satisfies()` runs it and reads
+the verdict. Neither can confirm that the claim matches the check inside.
 
 ```python
 from typing_extensions import TypeIs
@@ -80,10 +82,16 @@ assert_that(payload).at_json_path("$.data.id").satisfies(is_int).is_between(1, 9
 Validate a response body against an OpenAPI operation's response schema - the one contract check none of
 the other assertion libraries here offer.
 
-OpenAPI 3.0 (its `nullable` keyword), 3.1, and Swagger 2.0 (schema declared directly on the response, its
-`x-nullable` extension) are all supported, and `$ref`, `oneOf`/`allOf`/`anyOf`,
-`enum`, and `format` all validate with full JSON-Schema semantics. Pass the parsed spec (loading
-YAML/JSON is your job) plus the operation's path and method:
+Three spec dialects are read:
+
+- **OpenAPI 3.1**, as written
+- **OpenAPI 3.0**, including its `nullable` keyword
+- **Swagger 2.0**, where the schema sits directly on the response, including its `x-nullable` extension
+
+Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf`, `enum` and `format` validate with full
+JSON-Schema semantics.
+
+Pass the parsed spec plus the operation's path and method. Loading the YAML or JSON is your job:
 
 ```python
 schema = {
@@ -115,9 +123,10 @@ assert_that(body).conforms_to_openapi(spec, "/orders/{id}", "get")
 `path` is the operation's key in the spec, not the request URL. A Swagger 2.0 `basePath` (or an OpenAPI 3
 server prefix) is not part of it, so an endpoint served at `/api/v1/version` is looked up as `/version`.
 
-`status` defaults to `200`, then `201`, then `default`. Pass `status=` to pick another. When the body does
-not conform, the message names the operation and counts the failures (`found 3 violations`), then reports
-each with its JSON path and the expected constraint - all of them, not just the first:
+`status` defaults to `200`, then `201`, then `default`. Pass `status=` to pick another.
+
+When the body does not conform, the message names the operation and counts the failures. Every one is
+reported with its JSON path and the constraint it broke, not just the first:
 
 ```text
 diff (openapi):

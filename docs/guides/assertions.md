@@ -195,11 +195,16 @@ async def test_the_user_is_active():
     assert_that(probe).eventually().is_positive()  # never awaited, so it polls nothing
 ```
 
-All three are green forever. None is possible with a bare `assert`, which is the price of a fluent
-API, so the library owes you a way to find them. The second line is already reported by
-[ruff's `B018`](https://docs.astral.sh/ruff/rules/useless-expression/), and a builder bound to a name
-and never read is its `F841`, so this check does not repeat either. The other two are reported by
-nothing, because a call may have side effects and no linter can know these do not.
+All three are green forever, and none of them is possible with a bare `assert`. That is the price of a
+fluent API, so the library owes you a way to find them.
+
+Ruff already covers part of it, and this check does not repeat what it does:
+
+- the second line is ruff's [`B018`](https://docs.astral.sh/ruff/rules/useless-expression/)
+- a builder bound to a name and never read is its `F841`
+
+The other two are reported by nothing, because a call may have side effects and no linter can know
+these do not.
 
 Writing `assert` in front does not save you, and that shape is the worst of the family:
 
@@ -290,9 +295,11 @@ What it deliberately leaves alone:
 - `assert_conforms()`, `fail()` and `soft_fail()`, which assert on their own, so a bare call is correct
 
 One limit worth knowing before you count on it: the check reads the test modules pytest collected, and
-nothing else. A project that keeps its assertion layer in a package of its own, `framework/asserts/`
-rather than the test files, gets no coverage of that package from a pytest run, because pytest never
-collects it. Nothing warns you about that, since from inside a run the two cases look identical.
+nothing else.
+
+So a project that keeps its assertion layer in a package of its own, `framework/asserts/` rather than
+the test files, gets no coverage of that package from a pytest run. Nothing warns you either, because
+from inside a run a clean package and an uncollected one look identical.
 
 Another cost: the check is static, and a
 [dynamic assertion](#dynamic-assertions-on-objects) is resolved at runtime, so
@@ -501,15 +508,23 @@ both sides is matched by identity and not walked again, exactly as Python does i
 a config object placed in two expected blocks stays cheap and a container holding the same `NaN` on
 both sides keeps comparing equal.
 
-Anything matched **by hash** is covered too, which means dictionary keys and set members. `1`, `1.0`
-and `True` hash alike and compare equal, so a mapping finds the pair before anything looks at its
-type, and reaching it takes a second pass keyed on the type. `{True: "a"}` against `{1: "a"}` and
-`{1}` against `{1.0}` both fail a strict comparison.
+Anything matched **by hash** is covered too, which means dictionary keys and set members.
 
-The one limit is cost. Strictness turns off the fast path: a container's own `==` says nothing about
-the types inside it, so every comparison walks the whole structure in Python. On a list of 20 000
-dicts that is about 0.3 ms against 41 ms, which matters only if you are comparing large dumps in a
-loop.
+`1`, `1.0` and `True` hash alike and compare equal, so a mapping finds the pair before anything looks
+at its type. Reaching the type takes a second pass:
+
+<!-- docs-guard: raises -->
+```python
+assert_that({True: "a"}).is_equal_to({1: "a"}, strict_types=True)   # fails
+```
+
+Sets read the same way: `{1}` against `{1.0}` fails a strict comparison for the same reason.
+
+The one limit is cost. Strictness turns off the fast path, because a container's own `==` says nothing
+about the types inside it, so every comparison walks the whole structure in Python.
+
+On a list of 20 000 dicts that is 0.3 ms against 41 ms. It matters only if you compare large dumps in
+a loop.
 
 Inside a [structural spec](matchers.md#structural-matching) the same relation is spelled
 `match.equal_to(value, strict_types=True)`, one matcher covering value and type together:

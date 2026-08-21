@@ -146,10 +146,12 @@ collection.
 Awaiting hands back the ordinary builder over the value that settled, so anything asserted on the
 result afterwards is a plain assertion against that value rather than a new wait.
 
-By default only a failing assertion is retried, and any other exception raised by the probe itself
-propagates immediately. The one exception is an `AssertionError` raised by the probe: it arrives at
-the same place a failing assertion does and is retried the same way, which is what a probe asserting
-its own preconditions usually wants. The timeout message says so, naming the type and the count.
+By default only a failing assertion is retried. Any other exception raised by the probe propagates
+immediately.
+
+The one exception is an `AssertionError` raised by the probe itself. It arrives where a failing
+assertion arrives and is retried the same way, which is what a probe asserting its own preconditions
+usually wants. The timeout message says so, naming the type and the count.
 
 When "not ready yet" arrives as an exception, such as a refused connection while a service boots,
 list those exception types in `ignoring`:

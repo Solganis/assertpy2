@@ -250,9 +250,10 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
 ### When the order does not matter
 
 A payload that returns its records in whatever order the database felt like is the ordinary case, and
-there is no `ignore_order` flag to reach for. `match.contains_only()` is the one: it asks that the value
-hold only these items, in any order, and it compares by equality, so records that cannot be hashed work
-too.
+there is no `ignore_order` flag to reach for.
+
+`match.contains_only()` is the one. It asks that the value hold only these items, in any order, and it
+compares by equality, so records that cannot be hashed work too.
 
 ```python
 assert_that({"tags": ["testing", "python"]}).is_equal_to({

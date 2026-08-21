@@ -330,11 +330,12 @@ except AssertionError as failure:
     # these values compare with object's __eq__, so equality is identity and no two separate instances are equal
 ```
 
-It is said before anything about the values, for the reason `NaN` is: no value on the other side would
-have made the comparison pass, so a line about how the two differ would send you to fix something that
-cannot help. Exceptions are the everyday case, since they carry identity equality too. A
-`comparators=` entry of your own owning the values silences it, the verdict there being your
-predicate's rather than the type's.
+It is said before anything about the values, for the same reason `NaN` is. No value on the other side
+would have made the comparison pass, so a line about how the two differ would send you to fix something
+that cannot help.
+
+Exceptions are the everyday case, since they carry identity equality too. Your own `comparators=` entry
+over those values silences it, the verdict there being your predicate's rather than the type's.
 
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
@@ -521,9 +522,11 @@ command-line flags, each documented where it is used:
 ## What a failure exposes
 
 An assertion library's job is to put the values it compared in front of you, so a failing assertion is
-a deliberate disclosure. That output does not stay in your terminal: it reaches CI logs, report
-attachments and, for snapshots, files committed to the repository. This is what travels where, so you
-can decide what to hand the library in the first place.
+a deliberate disclosure.
+
+That output does not stay in your terminal. It reaches CI logs, report attachments and, for snapshots,
+files committed to the repository. Below is what travels where, so you can decide what to hand the
+library in the first place.
 
 **assertpy2 caps size. It never redacts.** Nothing here inspects a value to decide whether it looks
 like a credential, and nothing ever will: a masker that guesses wrong in the safe direction hides the
@@ -743,11 +746,15 @@ Each record keeps what the text had flattened: the values, the diff, the `group`
 under, and the `(file, line)` the message renders in brackets. A polling assertion that times out inside
 a soft block keeps its [`trace`](testing.md#polling-trace) there too.
 
-The rendering under each entry is one line per differing path rather than the block form a single
-failure prints, because a block that collected ten failures would otherwise repeat ten headers. A scalar
-and a short line of text add no line, since the entry above already carries both values in full. A long
-line does add one, cut to a window around the first difference: that difference is the part nobody can
-find by reading a 200-character payload twice.
+Under each entry the rendering is one line per differing path, not the block form a single failure
+prints. A block that collected ten failures would otherwise repeat ten headers.
+
+What each kind of value adds:
+
+- a scalar, or a short line of text, adds no line at all, since the entry above already carries both
+  values in full
+- a long line adds one, cut to a window around the first difference, which is the part nobody finds by
+  reading a 200-character payload twice
 
 `failures` is empty on every other failure, which is about one value rather than a collection of them.
 
