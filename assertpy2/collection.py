@@ -3,12 +3,12 @@ from __future__ import annotations
 import collections.abc
 from typing import TYPE_CHECKING, Any, cast
 
-from ._engine._introspection import is_mapping_like
+from ._engine._introspection import is_mapping_like, materialized
 from ._engine._membership import not_contained_in
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, first_out_of_order
 from ._engine._require import argument, refuse, require_type, sized_len
-from ._satisfies import _warn_if_vacuous
+from ._satisfies import _warn_vacuous
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -97,30 +97,40 @@ class CollectionMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** subset of given superset (or supersets)
         """
-        _warn_if_vacuous("is_subset_of", self.val, allow_empty)
         require_type(self.val, collections.abc.Iterable, "iterable")
         if len(supersets) == 0:
             raise ValueError("one or more superset args must be given")
 
         missing = []
         if is_mapping_like(self.val):
+            # read whole before any superset is walked: one of them sharing this subject's iterator
+            # would leave nothing here, and a subset of nothing is anything.  Pairs rather than keys,
+            # so a superset that reaches the subject at all cannot answer for it either.  The
+            # supersets are copied into a dict below, so this copy is the symmetric one
+            entries = [(key, self.val[key]) for key in self.val]
             superdict = {}
             for superset_index, superset in enumerate(supersets):
                 self._require_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
                 for key in superset:
                     superdict.update({key: superset[key]})
 
-            for key in self.val:
+            walked = 0
+            for key, value in entries:
+                walked += 1
                 if key not in superdict:
-                    missing.append({key: self.val[key]})  # bad key
-                elif self.val[key] != superdict[key]:
-                    missing.append({key: self.val[key]})  # bad val
+                    missing.append({key: value})  # bad key
+                elif value != superdict[key]:
+                    missing.append({key: value})  # bad val
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to be subset of <{superdict}>, "
-                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
+                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
+                    expected=superdict,
                 )
+            if not walked:
+                _warn_vacuous("is_subset_of", allow_empty)
         else:
+            walked = list(materialized(self.val))
             collected = []
             for superset in supersets:
                 try:
@@ -129,7 +139,7 @@ class CollectionMixin(_MixinBase):
                     collected.append(superset)
             # the same core the matcher spelling uses: a bare `set()` reported a value whose hash disagrees with its
             # `==` as missing
-            missing.extend(not_contained_in(self.val, collected))
+            missing.extend(not_contained_in(walked, collected))
             try:
                 # for the message only, and deliberately not tied to the lookup above: the failure has
                 # always shown the superset as a set where that was possible, and which shape the
@@ -140,8 +150,11 @@ class CollectionMixin(_MixinBase):
             if missing:
                 return self.error(
                     f"Expected <{self.val}> to be subset of {self._fmt_items(superset_values)}, "
-                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
+                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
+                    expected=superset_values,
                 )
+            if not walked:
+                _warn_vacuous("is_subset_of", allow_empty)
 
         return self
 
@@ -181,12 +194,21 @@ class CollectionMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** sorted
         """
-        _warn_if_vacuous("is_sorted", self.val, allow_empty)
         require_type(self.val, collections.abc.Iterable, "iterable")
+        if not callable(key):
+            refuse(key, "callable", subject=argument("key"))
+
+        walked = 0
+
+        def _counted(items):
+            nonlocal walked
+            for item in items:
+                walked += 1
+                yield item
 
         broken = None
         try:
-            broken = first_out_of_order(self.val, key=key, reverse=reverse)
+            broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
         except UnorderableError:
             # elements that cannot be ordered against each other: reported about the collection, not
             # left to Python's "'<' not supported between instances of 'str' and 'int'", which is about
@@ -203,7 +225,8 @@ class CollectionMixin(_MixinBase):
                 f"Expected <{self.val}> to be sorted{direction}, "
                 f"but subset {self._fmt_items([earlier, later])} at index {index} is not."
             )
-
+        if not walked:
+            _warn_vacuous("is_sorted", allow_empty)
         return self
 
     def has_same_size_as(self, other: Sized) -> Self:
@@ -225,14 +248,17 @@ class CollectionMixin(_MixinBase):
             AssertionError: if val and other do **not** have the same length
             TypeError: if other is not a sized object
         """
-        other_len = sized_len(other, subject=argument("other"))
-        # val used to be left to `len()` itself, which answers "object of type 'int' has no len()":
-        # about the builtin rather than the assertion, and naming neither operand
+        # the subject first: this assertion is about it, and reading the operand first let the operand's
+        # own `__len__` answer for both
         actual_len = sized_len(self.val)
+        # `other` used to be left to `len()` itself, which answers "object of type 'int' has no len()":
+        # about the builtin rather than the assertion, and naming neither operand
+        other_len = sized_len(other, subject=argument("other"))
         if actual_len != other_len:
             return self.error(
                 f"Expected <{self.val}> to have same size as <{other}> of length <{other_len}>,"
-                f" but was length <{actual_len}>."
+                f" but was length <{actual_len}>.",
+                expected=other_len,
             )
         return self
 
@@ -263,7 +289,9 @@ class CollectionMixin(_MixinBase):
             raise ValueError("given arg must be a positive int")
         actual = sized_len(self.val)
         if actual <= size:
-            return self.error(f"Expected <{self.val}> to have size greater than <{size}>, but was <{actual}>.")
+            return self.error(
+                f"Expected <{self.val}> to have size greater than <{size}>, but was <{actual}>.", expected=size
+            )
         return self
 
     def has_size_less_than(self, size: int) -> Self:
@@ -293,7 +321,9 @@ class CollectionMixin(_MixinBase):
             raise ValueError("given arg must be a positive int")
         actual = sized_len(self.val)
         if actual >= size:
-            return self.error(f"Expected <{self.val}> to have size less than <{size}>, but was <{actual}>.")
+            return self.error(
+                f"Expected <{self.val}> to have size less than <{size}>, but was <{actual}>.", expected=size
+            )
         return self
 
     def has_size_between(self, low: int, high: int) -> Self:
@@ -328,7 +358,8 @@ class CollectionMixin(_MixinBase):
             raise ValueError("given low arg must be less than given high arg")
         if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{sized_len(self.val)}>."
+                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{sized_len(self.val)}>.",
+                expected=(low, high),
             )
         return self
 
