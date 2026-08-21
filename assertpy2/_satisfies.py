@@ -20,6 +20,7 @@ from .matchers import (
     _describe_matcher,
     _evaluate_matcher,
     _is_matcher,
+    _refused,
 )
 
 if TYPE_CHECKING:
@@ -81,26 +82,25 @@ property-based test generates empty collections as a matter of course.  Turn it 
 """
 
 
-def _warn_if_vacuous(name: str, value: object, allow_empty: bool) -> None:
-    """Warn when a universal assertion is about to pass because there is nothing to quantify over.
+def _warn_vacuous(name: str, allow_empty: bool, *, depth: int = 3) -> None:
+    """Say that *name* passed over nothing, pointing at the line that called the assertion.
 
-    Called from each public entry point rather than from the shared implementation, so the name in the
-    message is the one the caller used and ``stacklevel`` lands on their line rather than ours.
+    Called by the assertion itself once its walk is over, never before it.  Asking the subject first
+    was the earlier design and it went wrong in every direction available: it spoke in front of a
+    refusal, it took an item from a value whose walks share one position, and it answered about a
+    length where the assertion was about to walk fields.  What was walked is the only thing that
+    answers "nothing was checked", and only the walk knows it.
+
+    *depth* counts the frames to the line that called the assertion: three from a method that walks in
+    its own body, four when the walk it shares with its sibling is a method of its own.
     """
     if allow_empty or not _VACUOUS_GUARD:
         return
-    try:
-        empty = len(value) == 0  # ty: ignore[invalid-argument-type]  # guarded by the except below
-    except Exception:  # a diagnostic must never crash the assertion it is watching
-        # an unsized value or a broken `__len__`: stay out of the way rather than draining it or surfacing its error
-        # as ours
-        return
-    if empty:
-        warnings.warn(
-            f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
-            VacuousAssertionWarning,
-            stacklevel=3,
-        )
+    warnings.warn(
+        f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
+        VacuousAssertionWarning,
+        stacklevel=depth,
+    )
 
 
 class SatisfiesMixin(_MixinBase):
@@ -131,15 +131,22 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if any leaf does **not** satisfy the matcher
             TypeError: if matcher is neither a Matcher nor callable
         """
-        _warn_if_vacuous("all_fields_satisfy", self.val, allow_empty)
         if not _is_matcher(matcher) and not callable(matcher):
             refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
-        description = _describe_matcher(matcher)
-        failures = [
-            path.leaf_entry(actual=leaf, expected=description)
-            for path, leaf in _walk_leaves(self.val)
-            if not _apply_matcher(matcher, leaf)
-        ]
+        return self._every_field(matcher, allow_empty, "all_fields_satisfy")
+
+    def _every_field(self, matcher, allow_empty: bool, name: str) -> Self:
+        """The walk both field quantifiers make, named by whichever of them asked for it."""
+        description = None
+        walked = 0
+        failures = []
+        for path, leaf in _walk_leaves(self.val):
+            walked += 1
+            if not _apply_matcher(matcher, leaf):
+                # asked on the first refusal rather than before the walk: it is wanted only for the
+                # message, and a matcher that reads the subject to describe itself would read it first
+                description = _describe_matcher(matcher) if description is None else description
+                failures.append(path.leaf_entry(actual=leaf, expected=description))
         if failures:
             count = len(failures)
             field_word = "field" if count == 1 else "fields"
@@ -149,6 +156,8 @@ class SatisfiesMixin(_MixinBase):
                 expected=description,
                 diff=DiffResult(kind="match", entries=failures),
             )
+        if not walked:
+            _warn_vacuous(name, allow_empty, depth=4)
         return self
 
     def has_no_none_fields(self, *, allow_empty: bool = False) -> Self:
@@ -168,8 +177,7 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any leaf **is** ``None``
         """
-        _warn_if_vacuous("has_no_none_fields", self.val, allow_empty)
-        return self.all_fields_satisfy(IsNotNoneMatcher(), allow_empty=True)
+        return self._every_field(IsNotNoneMatcher(), allow_empty, "has_no_none_fields")
 
     def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that val satisfies the given matcher.
@@ -206,11 +214,12 @@ class SatisfiesMixin(_MixinBase):
             # so `each_item` named the wrong item
             value = materialized(self.val)
             # a matcher that walks its value is asked once, so a `key` inside it runs once
-            if _has_own_evaluate(matcher) or not matcher.matches(value):
-                result = _evaluate_matcher(matcher, value)
+            if _has_own_evaluate(matcher):
+                outcome = _evaluate_matcher(matcher, value)
+                result = None if outcome.matched else outcome
             else:
-                result = None
-            if result is not None and not result.matched:
+                result = None if matcher.matches(value) else _refused(matcher, value)
+            if result is not None:
                 return self.error(
                     f"Expected {result.description}, but {result.mismatch}.",
                     actual=value,
@@ -221,7 +230,10 @@ class SatisfiesMixin(_MixinBase):
                 )
         elif callable(matcher):
             if not cast("Callable[..., object]", matcher)(self.val):
-                return self.error(f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.")
+                return self.error(
+                    f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.",
+                    expected=_describe_matcher(matcher),
+                )
         else:
             refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self
@@ -251,17 +263,29 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any item does **not** satisfy the matcher
         """
-        _warn_if_vacuous("each", self.val, allow_empty)
+        if not _is_matcher(matcher) and not callable(matcher):
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
+        return self._every_item(matcher, allow_empty, "each")
+
+    def _every_item(self, matcher, allow_empty: bool, name: str) -> Self:
+        """The walk both item quantifiers make, named by whichever of them asked for it."""
+        walked = 0
         if _is_matcher(matcher):
-            description = matcher.describe()
             for i, item in enumerate(self.val):
+                walked += 1
                 # the verdict and the reason come from the same look, so a user's `key` runs once
-                if not (_has_own_evaluate(matcher) or not matcher.matches(item)):
+                if _has_own_evaluate(matcher):
+                    outcome = _evaluate_matcher(matcher, item)
+                elif matcher.matches(item):
                     continue
-                outcome = _evaluate_matcher(matcher, item)
+                else:
+                    outcome = _refused(matcher, item)
                 if not outcome.matched:
+                    # read off the refusal rather than asked for again: the matcher already said what
+                    # it wanted when it refused, and asking twice ran a matcher's own method twice
+                    description = outcome.description
                     return self.error(
                         f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
                         f" {outcome.mismatch}.",
@@ -271,15 +295,17 @@ class SatisfiesMixin(_MixinBase):
                             kind="match", entries=[_ROOT.index(i).entry(actual=item, expected=description)]
                         ),
                     )
-        elif callable(matcher):
+        else:
             for i, item in enumerate(self.val):
+                walked += 1
                 if not cast("Callable[..., object]", matcher)(item):
                     return self.error(
                         f"Expected all items to satisfy {_describe_matcher(matcher)},"
-                        f" but item at index {i} <{item}> did not."
+                        f" but item at index {i} <{item}> did not.",
+                        expected=_describe_matcher(matcher),
                     )
-        else:
-            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
+        if not walked:
+            _warn_vacuous(name, allow_empty, depth=4)
         return self
 
     def matches_structure(self, spec: dict[Any, Any]) -> Self:
@@ -396,10 +422,11 @@ class SatisfiesMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
-        description = _describe_matcher(matcher)
         if _is_matcher(matcher) or callable(matcher):
             values = materialized(self.val)
             if not any(_apply_matcher(matcher, item) for item in values):
+                # asked once the verdict is in, since it is wanted only for the message
+                description = _describe_matcher(matcher)
                 # "none did" alone leaves the reader to fetch the items themselves
                 items = list(values)
                 return self.error(
@@ -440,8 +467,11 @@ class SatisfiesMixin(_MixinBase):
         Raises:
             AssertionError: if any item does **not** satisfy the matcher
         """
-        _warn_if_vacuous("all_satisfy", self.val, allow_empty)
-        return self.each(matcher, allow_empty=True)
+        if not _is_matcher(matcher) and not callable(matcher):
+            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
+        if not isinstance(self.val, collections.abc.Iterable):
+            refuse(self.val, "iterable")
+        return self._every_item(matcher, allow_empty, "all_satisfy")
 
     def none_satisfy(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
         """Asserts that no item in val satisfies the given matcher.
@@ -653,7 +683,6 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if the lengths differ, or any pair does **not** satisfy the predicate
             TypeError: if val or other is not iterable, or predicate is not callable
         """
-        _warn_if_vacuous("zip_satisfies", self.val, allow_empty)
         if not callable(predicate):
             refuse(predicate, "callable", subject=argument("predicate"))
         if not isinstance(self.val, collections.abc.Iterable):
@@ -668,6 +697,10 @@ class SatisfiesMixin(_MixinBase):
                 actual=self.val,
                 expected=other,
             )
+        # warned here rather than before the walk: a length mismatch is the verdict, and warning first
+        # said the call had passed over nothing when it had not passed at all
+        if not val_items:
+            _warn_vacuous("zip_satisfies", allow_empty)
         entries = [
             _ROOT.index(index).entry(actual=val_item, expected=other_item)
             for index, (val_item, other_item) in enumerate(zip(val_items, other_items, strict=True))

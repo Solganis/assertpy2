@@ -11,6 +11,7 @@ These tests hold the two spellings together, and hold the core to the behaviour 
 
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import decimal
 import fractions
@@ -31,6 +32,7 @@ from assertpy2._engine._equality import (
     mapping_shaped,
     values_differ,
 )
+from assertpy2._engine._introspection import materialized
 from assertpy2._engine._membership import (
     _classified,
     _hash_safe,
@@ -455,6 +457,17 @@ class TestTheRelationsASpecCouldNotExpress:
             return True
 
         assert_that(match.contains_only(*items).matches(value)).described_as(label).is_equal_to(by_builder())
+
+    def test_contains_only_asks_which_items_not_how_many(self):
+        """The boundary the matcher guide warns about, pinned so the warning cannot go stale.
+
+        `contains_only` asks that nothing outside the given items is there.  Multiset equality is a
+        different question, and the assertion that answers it is `contains_exactly_in_any_order`.
+        """
+        assert_that(match.contains_only("reader", "reader").matches(["reader"])).is_true()
+        assert_that(match.contains_only(1, 2).matches([1, 1, 2])).is_true()
+        with pytest.raises(AssertionFailure):
+            assert_that([1, 1, 2]).contains_exactly_in_any_order(1, 2)
 
     @pytest.mark.parametrize(
         ("label", "value", "superset"),
@@ -892,6 +905,40 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(only_faults(iter([1, 2, 3]), (1, 2, 3))).is_equal_to(([], []))
         assert_that(not_contained_in(iter([1, 2]), [1, 2, 3])).is_empty()
         assert_that(missing_items(iter([1, 2, 3]), (1, 3), _is_matcher)).is_empty()
+
+    def test_a_value_that_can_be_walked_twice_is_handed_back_untouched(self):
+        values = [1, 2, 3]
+        assert_that(materialized(values)).is_same_as(values)
+
+    @pytest.mark.parametrize("shape", ["one shared iterator", "a fresh generator over shared state"])
+    def test_a_value_sharing_one_position_is_not_copied(self, shape):
+        """The recorded boundary: being its own iterator is not the only way to have one position.
+
+        Both shapes lose what a first walk read, so a matcher asked twice reports the remainder.  What
+        is refused is copying anything that merely lacks a length, which turns a Pydantic model into a
+        list of its field pairs, and walking one to find out costs the position that is shared.
+        """
+
+        class Shared:
+            def __init__(self, items):
+                self.items = iter(items)
+
+            def __iter__(self):
+                return self.items if shape == "one shared iterator" else (item for item in self.items)
+
+        subject = Shared([1, 2, 3])
+        assert_that(materialized(subject)).is_same_as(subject)
+
+    def test_a_value_that_is_not_an_iterator_keeps_its_own_shape(self):
+        @dataclasses.dataclass
+        class FieldPairs:
+            id: int
+
+            def __iter__(self):
+                return iter(dataclasses.asdict(self).items())
+
+        model = FieldPairs(id=1)
+        assert_that(materialized(model)).is_same_as(model)
 
     def test_user_code_that_raises_during_the_search_is_not_swallowed_by_the_fallback(self):
         """The boundary of the `try`, which is the whole point of where it is drawn.

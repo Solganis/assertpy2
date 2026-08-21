@@ -121,6 +121,12 @@ def materialized(value: Iterable[_T]) -> Iterable[_T]:
     Re-iterable values are returned as they are, so nothing is copied on the ordinary path.  A value
     that cannot be iterated at all is also returned as it is, leaving the caller's own guard to produce
     the error message it wants.
+
+    Being its own iterator is not the only way to have one position: a wrapper handing out one shared
+    iterator answers no here and still loses what a first walk read, so ``satisfies()`` over one
+    reports the remainder rather than the value.  That is left uncaught on purpose.  Copying anything
+    that merely lacks a length instead turns a Pydantic model into a list of its field pairs, and
+    walking one to find out costs the position when the position is shared.
     """
     try:
         return list(value) if iter(value) is value else value
