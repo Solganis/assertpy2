@@ -1788,6 +1788,43 @@ class TestTheSettingsAProjectGets:
         finally:
             pytest_unconfigure(config)
 
+    def test_a_blank_value_for_any_setting_leaves_the_run_alone(self):
+        """An ini line written and left empty has to resolve to the default, in silence.
+
+        A warning raised while resolving settings comes out of `pytest_configure`, and under `-W error`
+        that is an INTERNALERROR rather than a message, since pytest is inside its own hook with nothing
+        to attribute the failure to.  Three settings were found doing it: the poll report and the Allure
+        mode took the run down that way, and failure clustering joined them the moment it stopped being
+        answered by a profile.
+
+        Written against every string setting rather than those three, because the one to get this wrong
+        next is the one nobody thought to check.  It compares the whole resolved state rather than the
+        silence, so a setting that stops warning and lands on the wrong value fails here too.
+        """
+        registered = _registered_parser()._inidict
+        blank = {name: "" for name, spec in registered.items() if isinstance(spec[-1], str)}
+        assert_that(blank).described_as("the settings an empty ini line can reach").is_not_empty()
+        assert_that(self._resolved(blank)).described_as(
+            "what a blank ini line resolved to, against what writing nothing resolves to"
+        ).is_equal_to(self._resolved({}))
+
+    @staticmethod
+    def _resolved(ini):
+        """Everything `pytest_configure` settled, from a config that carries these ini values.
+
+        Configured and unconfigured inside the call rather than two at a time: the hooks save and
+        restore module state, and a second config configured over the first would restore what the
+        first had already changed.
+        """
+        config = _RegisteredConfig(ini=ini)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            pytest_configure(config)
+        try:
+            return {name: value for name, value in vars(config).items() if name.startswith("_assertpy2_")}
+        finally:
+            pytest_unconfigure(config)
+
     def test_every_key_reaches_the_setting_it_names(self):
         config = _RegisteredConfig(
             ini={

@@ -194,16 +194,21 @@ def _poll_threshold(raw: object) -> float | None:
 
     A slow CI box converges late on every poll, where the default bar turns a signal into a line of
     noise per run.  ``None`` means the report is off, and collection is skipped with it.
+
+    A blank value is the default and is not warned about, for the reason `_cluster_minimum` gives.
     """
-    if str(raw).strip().lower() == "off":
+    written = str(raw).strip()
+    if written.lower() == "off":
         return None
+    if not written:
+        return 0.7
     try:
-        value = float(raw)  # ty: ignore[invalid-argument-type]  # guarded by the except below
-    except (ValueError, TypeError):
+        value = float(written)
+    except ValueError:
         value = 0.0
     if not 0.0 < value <= 1.0:
         warnings.warn(
-            f"assertpy2_poll_report={raw!r} is not 'off' or a fraction in (0, 1], falling back to 0.7",
+            f"assertpy2_poll_report={written!r} is not 'off' or a fraction in (0, 1], falling back to 0.7",
             stacklevel=1,
         )
         return 0.7
@@ -219,16 +224,23 @@ def _cluster_minimum(raw: object) -> int | None:
     A count rather than a share of the run, which was tried first and measured strictly worse: under a
     share every additional cause raises the bar for all the others, so a run splitting cleanly into
     five causes of eight printed nothing at all.
+
+    A blank value is the default and not a mistake, so it is not warned about.  It has to be: a warning
+    raised here would come out of `pytest_configure`, and under `-W error` a suite carrying an empty
+    line for this setting would fail at startup having passed the day before.
     """
-    if str(raw).strip().lower() == "off":
+    written = str(raw).strip()
+    if written.lower() == "off":
         return None
+    if not written:
+        return _clustering.MINIMUM_SIZE
     try:
-        value = int(raw)  # ty: ignore[invalid-argument-type]  # guarded by the except below
-    except (ValueError, TypeError):
+        value = int(written)
+    except ValueError:
         value = 0
     if value < 2:
         warnings.warn(
-            f"assertpy2_failure_clusters={raw!r} is not 'off' or a count of 2 or more, "
+            f"assertpy2_failure_clusters={written!r} is not 'off' or a count of 2 or more, "
             f"falling back to {_clustering.MINIMUM_SIZE}",
             stacklevel=1,
         )
@@ -291,7 +303,7 @@ def _escalate(config) -> None:
 
 
 def pytest_configure(config):
-    mode = config.getini("assertpy2_allure")
+    mode = str(config.getini("assertpy2_allure")).strip() or "diff"
     if mode not in _ALLURE_MODES:
         warnings.warn(
             f"assertpy2_allure={mode!r} is not a valid mode "
