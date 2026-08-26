@@ -16,23 +16,38 @@ import dataclasses
 import pathlib
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 from assertpy2 import assert_that
 from assertpy2._engine import _check_typing, _typing
 from assertpy2._engine._operations import NOT_AN_OPERATION, WITHOUT_A_VERDICT
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT / "scripts"))
 
-from generate_check_protocols import TARGET, generate  # noqa: E402 - needs the path above
+
+def _generator() -> ModuleType:
+    """Import the generator, which lives outside the package, only where it is needed.
+
+    Inline rather than at the top on purpose: `scripts/` is not copied into mutmut's mutants tree, and
+    a module-level import of it fails at collection, which takes the whole mutation baseline with it.
+    Reached from one test, so the run can deselect that test instead of losing the file.
+    """
+    sys.path.insert(0, str(_ROOT / "scripts"))
+    import generate_check_protocols
+
+    return generate_check_protocols
 
 
 def test_the_generated_twins_match_the_protocols_they_mirror() -> None:
-    on_disk = TARGET.read_text(encoding="utf-8")
+    generator = _generator()
+    on_disk = pathlib.Path(_check_typing.__file__).read_text(encoding="utf-8")
     # the generator formats through ruff after writing, so compare what ruff would make of both
-    produced = _formatted(generate())
+    produced = _formatted(generator.generate())
     assert_that(produced).described_as(
         "the verdict twins are out of step; run python scripts/generate_check_protocols.py"
     ).is_equal_to(_formatted(on_disk))
@@ -43,8 +58,8 @@ def _formatted(source: str) -> str:
     # in the generator's order, which is not interchangeable: formatting first collapses the blank
     # lines between stub bodies, and doing it second puts them back
     for command in (
-        ["ruff", "format", "--stdin-filename", str(TARGET), "-"],
-        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", str(TARGET), "-"],
+        ["ruff", "format", "--stdin-filename", _check_typing.__file__, "-"],
+        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", _check_typing.__file__, "-"],
     ):
         result = subprocess.run(
             [sys.executable, "-m", *command], input=source, capture_output=True, text=True, cwd=_ROOT, check=False

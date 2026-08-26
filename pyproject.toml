@@ -144,6 +144,11 @@ source_paths = ["assertpy2/"]
 # or a global extension registry. Any new test about a stack frame, a function name or a line
 # number belongs here too.
 #
+# The five named tests at the end of the `-k` expression are a fifth kind: they re-derive a claim by
+# parsing the package's own source, and mutmut copies `tests/` into the mutants tree, so what they
+# parse is the trampoline's rewrite rather than what anybody ships. Named one by one rather than by
+# file, since their neighbours in both files run fine and are worth keeping.
+#
 # Two guards are excluded for a different reason, being about source text rather than about library
 # behaviour: the doc-example guard reads `docs/*.md` at runtime, which `also_copy` would have to carry
 # into the mutants tree, and the typing-claims guard scans the package's own `.py` files - which under
@@ -189,6 +194,27 @@ pytest_add_cli_args = [
     # both enumerate the package's own public surface, which the trampoline's renamed functions join
     "--ignore=tests/test_api_compatibility.py",
     "--ignore=tests/test_api_vocabulary.py",
+    # reads the package's own source for `reject_unknown_kwargs(...)` calls and indexes their
+    # arguments, which the trampoline's rewrite does not preserve: it raises at import, before a
+    # single test runs.  Same reason as `test_typing_claims.py` below
+    "--ignore=tests/test_typing_conformance.py",
+    # Deselected one by one rather than by file, because their neighbours run fine: the two files
+    # below hold 34 tests between them and only these three read the generator, and both contract
+    # files hold tests that judge real mutants. Node ids rather than more `and not` in the `-k`
+    # above, since that matches by substring and a future test of the same name would drop out of
+    # the run without anybody noticing.
+    #
+    # The first three import their generator from `scripts/`, which is not in the mutants tree.
+    # The rest re-derive a claim by parsing the package's own source, and mutmut copies `tests/`
+    # in, so what they parse is the trampoline's rewrite rather than what anybody ships.
+    "--deselect=tests/test_check_protocols.py::test_the_generated_twins_match_the_protocols_they_mirror",
+    "--deselect=tests/test_poll_protocols.py::test_the_generated_twins_match_the_views_they_mirror",
+    "--deselect=tests/test_poll_protocols.py::test_the_generated_verdict_twin_matches_the_views_it_mirrors",
+    "--deselect=tests/test_expected_contract.py::test_the_walk_found_the_failure_sites",
+    "--deselect=tests/test_expected_contract.py::test_every_assertion_that_names_no_expected_is_written_down",
+    "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_the_derivation_itself_ran",
+    "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_every_operation_without_a_verdict_is_registered",
+    "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_every_operation_that_pivots_has_been_decided_about",
     "--ignore=tests/test_docs_examples.py",
     "--ignore=tests/test_exception_context.py",
     "--ignore=tests/test_extensions.py",

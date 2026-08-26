@@ -14,8 +14,12 @@ import dataclasses
 import pathlib
 import subprocess
 import sys
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from types import ModuleType
 
 from assertpy2 import assert_that
 from assertpy2._engine import _builder_check_typing, _poll_typing, _typing
@@ -23,20 +27,25 @@ from assertpy2._engine._operations import NOT_AN_OPERATION, POLLS, WITHOUT_A_VER
 from assertpy2.assertpy import AssertionBuilder
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_ROOT / "scripts"))
 
-from generate_poll_protocols import (  # noqa: E402 - needs the path above
-    TARGET,
-    TARGET_VERDICT,
-    generate,
-    generate_verdict,
-)
+
+def _generator() -> ModuleType:
+    """Import the generator, which lives outside the package, only where it is needed.
+
+    Inline rather than at the top on purpose: `scripts/` is not copied into mutmut's mutants tree, and
+    a module-level import of it fails at collection, which takes the whole mutation baseline with it.
+    Reached from two tests, so the run can deselect those two instead of losing the file.
+    """
+    sys.path.insert(0, str(_ROOT / "scripts"))
+    import generate_poll_protocols
+
+    return generate_poll_protocols
 
 
 def _formatted(source: str) -> str:
     for command in (
-        ["ruff", "format", "--stdin-filename", str(TARGET), "-"],
-        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", str(TARGET), "-"],
+        ["ruff", "format", "--stdin-filename", _poll_typing.__file__, "-"],
+        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", _poll_typing.__file__, "-"],
     ):
         result = subprocess.run(
             [sys.executable, "-m", *command], input=source, capture_output=True, text=True, cwd=_ROOT, check=False
@@ -46,16 +55,16 @@ def _formatted(source: str) -> str:
 
 
 def test_the_generated_twins_match_the_views_they_mirror() -> None:
-    produced = _formatted(generate())
+    produced = _formatted(_generator().generate())
     assert_that(produced).described_as(
         "the polling twins are out of step; run python scripts/generate_poll_protocols.py"
-    ).is_equal_to(_formatted(TARGET.read_text(encoding="utf-8")))
+    ).is_equal_to(_formatted(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")))
 
 
 def test_the_generated_verdict_twin_matches_the_views_it_mirrors() -> None:
-    assert_that(_formatted(generate_verdict())).described_as(
+    assert_that(_formatted(_generator().generate_verdict())).described_as(
         "the builder's verdict twin is out of step; run python scripts/generate_poll_protocols.py"
-    ).is_equal_to(_formatted(TARGET_VERDICT.read_text(encoding="utf-8")))
+    ).is_equal_to(_formatted(pathlib.Path(_builder_check_typing.__file__).read_text(encoding="utf-8")))
 
 
 class TestTheVerdictTwinOfAValueTheBuilderHolds:
@@ -165,7 +174,7 @@ class TestWhereAPivotLands:
 
     def _returns(self, name: str) -> list[str]:
         found = []
-        for node in ast.walk(ast.parse(pathlib.Path(TARGET).read_text(encoding="utf-8"))):
+        for node in ast.walk(ast.parse(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"))):
             if isinstance(node, ast.ClassDef) and node.name == "_SyncPoll":
                 found = [
                     ast.unparse(item.returns)

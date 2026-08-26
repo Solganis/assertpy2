@@ -31,8 +31,9 @@ def _excluded_tests() -> tuple[list[str], int]:
     config = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))["tool"]["mutmut"]
     args = config.get("pytest_add_cli_args", [])
     files = [arg.removeprefix("--ignore=") for arg in args if arg.startswith("--ignore=")]
-    deselected = args[args.index("-k") + 1].count(" and not ") + 1 if "-k" in args else 0
-    return files, deselected
+    by_name = args[args.index("-k") + 1].count(" and not ") + 1 if "-k" in args else 0
+    by_id = sum(1 for arg in args if arg.startswith("--deselect="))
+    return files, by_name + by_id
 
 
 class _Tally:
@@ -87,6 +88,12 @@ def main() -> int:
     tally.read(_RESULTS)
     if tally.total == 0:
         print("no mutants were generated", file=sys.stderr)
+        return 1
+
+    if tally.judged == 0:
+        # every mutant unjudged means the baseline never ran, which mutmut reports as "failed to
+        # collect stats" and which reads downstream as a clean sweep.  It went unnoticed for two weeks
+        print(f"none of the {tally.total} mutants got a verdict: the baseline did not run", file=sys.stderr)
         return 1
 
     killed, survived, unjudged = tally.by_status["killed"], tally.by_status["survived"], tally.by_status["not checked"]
