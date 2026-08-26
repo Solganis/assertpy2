@@ -267,6 +267,130 @@ class TestAChainAnAssertReads:
         assert_that(scan(f"def test_x():\n    assert assert_that(1)  # {ALLOW_MARKER}\n")).is_empty()
 
 
+class TestTheOnlyStatementOfARaisingBlock:
+    """The one place a dangling chain cannot leave a green test.
+
+    A `pytest.raises` body of exactly one statement leaves the argument nothing to hide behind: that
+    statement runs, and either it raises, which is what the test asserts, or the block turns the test
+    red by itself.
+
+    Every wider version of this exemption measured unsound, and each negative case below is a shape
+    that passed in silence under one of them.
+    """
+
+    @pytest.mark.parametrize(
+        ("preamble", "opener"),
+        [
+            ("import pytest\n", "pytest.raises(TypeError)"),
+            ("import pytest as pt\n", "pt.raises(TypeError)"),
+            ("from pytest import raises\n", "raises(TypeError)"),
+            ("import pytest\n", "pytest.raises(TypeError, match='x')"),
+            ("import pytest\n", "pytest.RaisesGroup(ValueError)"),
+        ],
+        ids=["pytest.raises", "aliased module", "imported by name", "with a match", "RaisesGroup"],
+    )
+    def test_a_chain_alone_in_one_is_left_alone(self, preamble, opener):
+        body = f"def test_x():\n    with {opener}:\n        assert_that([1]).extracting('k')\n"
+        assert_that(scan(body, PREAMBLE + preamble)).is_empty()
+
+    def test_a_second_statement_can_supply_the_exception_instead(self):
+        """Measured as a real run: the chain asserts nothing, the `raise` satisfies the block, green."""
+        found = scan(
+            "def test_x():\n    with pytest.raises(TypeError):\n        assert_that([1])\n        raise TypeError\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    def test_a_second_statement_can_leave_the_chain_unreachable(self):
+        found = scan(
+            "def test_x():\n    with pytest.raises(TypeError):\n        raise TypeError\n        assert_that([1])\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    def test_two_statements_on_one_line_are_still_two(self):
+        """Why the exemption is keyed on the statement rather than on its line."""
+        found = scan(
+            "def test_x():\n    with pytest.raises(TypeError):\n        assert_that([1]); raise TypeError\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    def test_a_sibling_manager_can_raise_from_its_own_exit(self):
+        """`with pytest.raises(TypeError), Boom():` is satisfied by `Boom`, so the body never had to."""
+        found = scan(
+            "def test_x():\n    with pytest.raises(TypeError), Boom():\n        assert_that([1])\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    @pytest.mark.parametrize(
+        "opener",
+        ["pytest.warns(UserWarning)", "pytest.deprecated_call()"],
+        ids=["warns", "deprecated_call"],
+    )
+    def test_a_block_that_expects_its_body_to_finish_is_not_one_of_these(self, opener):
+        """`warns` records what the body emits and wants it to run to the end, unlike `raises`."""
+        body = f"def test_x():\n    with {opener}:\n        assert_that([1]).extracting('k')\n"
+        assert_that(scan(body, PREAMBLE + "import pytest\n")).is_length(1)
+
+    def test_a_helper_of_the_suites_own_named_raises_is_not_pytests(self):
+        """Matched through the import rather than by name, the way the entry points are."""
+        body = "def test_x():\n    with raises():\n        assert_that([1])\n"
+        assert_that(scan(body, PREAMBLE + "from helpers import raises\n")).is_length(1)
+
+    def test_a_module_that_rebinds_pytest_is_not_importing_it(self):
+        """The same guard `_bindings` applies to this library's own names."""
+        found = scan(
+            "def test_x():\n    pytest = fake\n    with pytest.raises(TypeError):\n        assert_that([1])\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    @pytest.mark.parametrize(
+        "preamble",
+        [
+            "from contextlib import nullcontext as raises\nfrom pytest import raises\n",
+            "from pytest import raises\nfrom contextlib import nullcontext as raises\n",
+        ],
+        ids=["shadowed before", "shadowed after"],
+    )
+    def test_a_spelling_two_imports_bind_belongs_to_neither(self, preamble):
+        """Which import wins is the order they are written in, which a name cannot be read for.
+
+        At run time `raises` here is `nullcontext`, the block catches nothing, and the test passes with
+        the chain having asserted nothing.
+        """
+        body = "def test_x():\n    with raises():\n        assert_that([1])\n"
+        assert_that(scan(body, PREAMBLE + preamble)).is_length(1)
+
+    def test_a_shadowed_pytest_module_is_not_pytest(self):
+        found = scan(
+            "def test_x():\n    with pytest.raises(TypeError):\n        assert_that([1])\n",
+            PREAMBLE + "import pytest\nimport fake as pytest\n",
+        )
+        assert_that(found).is_length(1)
+
+    def test_a_statement_after_the_block_is_still_reported(self):
+        found = scan(
+            "def test_x():\n"
+            "    with pytest.raises(TypeError):\n"
+            "        assert_that(1).is_length('x')\n"
+            "    assert_that([1])\n",
+            PREAMBLE + "import pytest\n",
+        )
+        assert_that(found).is_length(1)
+        assert_that(found[0].message).is_equal_to(_NO_ASSERTION.format(name="assert_that"))
+
+    def test_an_unrelated_with_block_is_not_exempt(self):
+        assert_that(scan("def test_x():\n    with lock:\n        assert_that([1])\n")).is_length(1)
+
+    def test_a_soft_block_is_not_one_of_them(self):
+        """A soft block collects failures and reaches its end, so a dangling chain in one is silent."""
+        body = "def test_x():\n    with soft_assertions():\n        assert_that([1]).extracting('k')\n"
+        assert_that(scan(body)).is_length(1)
+
+
 class TestWhatItLeavesAlone:
     @pytest.mark.parametrize(
         "body",

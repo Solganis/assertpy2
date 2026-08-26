@@ -288,11 +288,17 @@ Two limits worth knowing before you rely on it:
 
 What it deliberately leaves alone:
 
+- anything inside `pytest.raises()`, `pytest.warns()` or `pytest.deprecated_call()`. The silent pass
+  this check exists for cannot happen there: the chain either raises, which is what the test asserts,
+  or it does not and the block turns the test red by itself
 - a builder bound to a name (`b = assert_that(x)`), because whether `b` is used later is a question
   about the rest of the function, not about that statement
 - a chain ending on a bare `check()`, since reporting it would mean deciding that the name is this
   library's, and a project can register an extension called `check` that asserts by itself
 - `assert_conforms()`, `fail()` and `soft_fail()`, which assert on their own, so a bare call is correct
+
+A `soft_assertions()` block is not one of those: it collects failures and reaches its end, so a chain
+that asserted nothing inside one leaves the test as green as it would anywhere else.
 
 One limit worth knowing before you count on it: the check reads the test modules pytest collected, and
 nothing else.
