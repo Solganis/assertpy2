@@ -21,7 +21,8 @@ then suggests only what fits the value under test rather than the whole surface:
 | Value type | You get | Such as |
 |---|---|---|
 | `str` | string assertions | `starts_with`, `matches`, `is_alpha`, `is_lower` |
-| `int` / `float` / `complex` | numeric assertions | `is_positive`, `is_between`, `is_close_to` |
+| `int` / `float` | numeric assertions | `is_positive`, `is_between`, `is_close_to` |
+| `complex` | zero and the core, and no more | `is_zero`, `is_not_zero` |
 | `list` / `tuple` / `set` / `frozenset` | collection assertions | `contains`, `contains_exactly`, `is_sorted`, `extracting` |
 | `dict` | dict assertions | `contains_key`, `contains_entry`, `has_json_path` |
 | `datetime.date` | date assertions | `is_less_than`, `is_greater_than`, `is_between` |
