@@ -168,6 +168,12 @@ jobs:
       - name: Type check (pyright, package baseline)
         run: uv run pytest tests/test_pyright_baseline.py -q
 
+      # the outside view of the same package: what a user of the installed wheel can see a type for.
+      # A package checks clean and still hands out `Unknown` on a public method, which is a different
+      # defect and needs its own gate
+      - name: Type check (pyright, completeness of the exported surface)
+        run: uv run pytest tests/test_typing_completeness.py -q
+
       # the other direction: which incompatible operands the checkers actually refuse. Recorded per
       # relation, so tightening a signature shows up here as a deliberate change rather than as a
       # number, and loosening one shows up at all
