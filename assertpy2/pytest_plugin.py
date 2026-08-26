@@ -4,7 +4,7 @@ import contextlib
 import json
 import warnings
 from itertools import pairwise
-from typing import Final
+from typing import TYPE_CHECKING, Any, Final, Protocol, cast
 
 import pytest
 
@@ -13,6 +13,52 @@ from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
 from .errors import _diff_side, _diff_sides, _json_safe, _render_diff
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+    from pathlib import Path
+
+
+class _Stashing(Protocol):
+    """The config with what this plugin keeps on it declared, for checkers only.
+
+    A hook is handed the real `Config` and hangs its own state on it, which is how pytest's own
+    plugins do it, and `Config` declares none of those names, nor can it be subclassed to add them:
+    it is final.  Annotating the parameter and stashing an attribute are therefore not both
+    spellable, and the alternative, moving all of this to `config.stash` with typed keys, reaches 101
+    sites in the suite besides the plugin's own.
+
+    A protocol rather than a wider view on purpose: what a hook reaches through it is the stash and
+    nothing else.  Declared once so the set of names is in a single place rather than spread over the
+    hooks that write them.  At run time the object is the `Config` pytest passed.
+    """
+
+    _assertpy2_profile: str
+    _assertpy2_allure_mode: str
+    _assertpy2_dangling_enabled: bool
+    _assertpy2_dangling_entries: frozenset[str]
+    _assertpy2_dangling: dict[Path, list[_dangling.Finding]]
+    _assertpy2_diff_enabled: bool
+    _assertpy2_diff_max: int
+    _assertpy2_prev_diff_in_message: bool
+    _assertpy2_prev_vacuous: bool
+    _assertpy2_cluster_minimum: int | None
+    _assertpy2_poll_threshold: float | None
+    _assertpy2_failed_ids: set[str]
+    _assertpy2_failure_count: int
+    _assertpy2_failures: list[tuple[str, list[_clustering.Observation]]]
+
+
+class _Worker(Protocol):
+    """The config as xdist extends it inside a worker process.
+
+    `workeroutput` is xdist's channel back to the controller.  Declared rather than narrowed out of
+    the `hasattr` guard that stands in front of every use: narrowing on `hasattr` needs a subclass to
+    narrow to, and `Config` is final.
+    """
+
+    workeroutput: dict[str, Any]
+
 
 try:
     import allure  # ty: ignore[unresolved-import]  # optional dependency
@@ -24,7 +70,7 @@ except ImportError:
 _ALLURE_MODES: Final = frozenset({"off", "diff", "full"})
 
 
-def pytest_addoption(parser):
+def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
         "--assertpy2-snapshot-update",
         action="store_true",
@@ -304,7 +350,8 @@ def _escalate(config) -> None:
         config.addinivalue_line("filterwarnings", f"error::{category.__module__}.{category.__qualname__}")
 
 
-def pytest_configure(config):
+def pytest_configure(config: pytest.Config) -> None:
+    stashed = cast("_Stashing", config)
     mode = str(config.getini("assertpy2_allure")).strip() or "diff"
     if mode not in _ALLURE_MODES:
         warnings.warn(
@@ -312,29 +359,29 @@ def pytest_configure(config):
             f"({', '.join(sorted(_ALLURE_MODES))}), falling back to 'diff'",
             stacklevel=1,
         )
-        config._assertpy2_allure_mode = "diff"
+        stashed._assertpy2_allure_mode = "diff"
     else:
-        config._assertpy2_allure_mode = mode
-    config._assertpy2_dangling_enabled = _dangling_enabled(config)
-    config._assertpy2_dangling_entries = _dangling_entries(config)
-    config._assertpy2_diff_enabled = config.getini("assertpy2_diff") != "off"
+        stashed._assertpy2_allure_mode = mode
+    stashed._assertpy2_dangling_enabled = _dangling_enabled(config)
+    stashed._assertpy2_dangling_entries = _dangling_entries(config)
+    stashed._assertpy2_diff_enabled = config.getini("assertpy2_diff") != "off"
     try:
-        config._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
+        stashed._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
-        config._assertpy2_diff_max = 50
+        stashed._assertpy2_diff_max = 50
     # under pytest the plugin renders the diff as its own report section, so it stays out of the message; the prior
     # value is restored rather than forced back, so tests driving these hooks stay balanced
-    config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
+    stashed._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
-    config._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
+    stashed._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
     _session_config[0] = config
-    config._assertpy2_failures = []
-    config._assertpy2_failure_count = 0
-    config._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
+    stashed._assertpy2_failures = []
+    stashed._assertpy2_failure_count = 0
+    stashed._assertpy2_poll_threshold = _poll_threshold(config.getini("assertpy2_poll_report"))
     # nothing reads the samples once the report is off, so stop paying for them at the poll site
-    async_assertions._COLLECT_RETRIES = config._assertpy2_poll_threshold is not None
+    async_assertions._COLLECT_RETRIES = stashed._assertpy2_poll_threshold is not None
     # save and restore rather than force back: the environment variable may have turned the guard on before import
-    config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
+    stashed._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
     _satisfies._VACUOUS_GUARD = _vacuous_guard(config)
     _escalate(config)
     if config.getoption("assertpy2_snapshot_update"):
@@ -345,7 +392,7 @@ def pytest_configure(config):
         _snapshot._CI_MODE = False
 
 
-def pytest_unconfigure(config):
+def pytest_unconfigure(config: pytest.Config) -> None:
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
@@ -384,7 +431,7 @@ _controller_collect_errors: list = [0]
 _session_config: list = [None]
 
 
-def pytest_collection_modifyitems(session, config, items):
+def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config, items: list[pytest.Item]) -> None:
     """Read every collected test file once and record the statements that assert nothing.
 
     Collection rather than runtime: the check is static (see `_dangling`), so a selected subset
@@ -393,19 +440,20 @@ def pytest_collection_modifyitems(session, config, items):
     because a warning raised out of a collection hook under `-W error` aborts pytest with an
     INTERNALERROR instead of failing anything a reader can act on.
     """
-    config._assertpy2_dangling = {}
+    stashed = cast("_Stashing", config)
+    stashed._assertpy2_dangling = {}
     if not getattr(config, "_assertpy2_dangling_enabled", False):
         return
     for item in items:
         path = getattr(item, "path", None)
-        if path is None or path in config._assertpy2_dangling:  # pragma: no cover - items carry a path
+        if path is None or path in stashed._assertpy2_dangling:  # pragma: no cover - items carry a path
             continue
         try:
             source = path.read_text(encoding="utf-8")
             entries = getattr(config, "_assertpy2_dangling_entries", frozenset())
-            config._assertpy2_dangling[path] = _dangling.findings(source, str(path), entries)
+            stashed._assertpy2_dangling[path] = _dangling.findings(source, str(path), entries)
         except (OSError, SyntaxError):  # pragma: no cover - pytest imported the module, so it read and parsed
-            config._assertpy2_dangling[path] = []
+            stashed._assertpy2_dangling[path] = []
 
 
 def _item_scope(item) -> tuple[str, ...]:
@@ -451,14 +499,14 @@ def _report_dangling(item):
     warnings.warn_explicit(message, errors.DanglingAssertionWarning, first.path, first.lineno)
 
 
-def pytest_runtest_setup(item):
+def pytest_runtest_setup(item: pytest.Item) -> None:
     """Name the running test, so a snapshot key reached by two of them can be told from a helper that
     snapshots twice inside one."""
     _snapshot._CURRENT_NODE = item.nodeid
     _report_dangling(item)
 
 
-def pytest_collectreport(report):
+def pytest_collectreport(report: pytest.CollectReport) -> None:
     """Note a collection that failed, which is red and never reaches a test report.
 
     `--continue-on-collection-errors` runs the rest of the suite, so pytest ends with `3 failed, 1 error`
@@ -480,7 +528,7 @@ def pytest_collectreport(report):
 
 
 @pytest.hookimpl(optionalhook=True)  # xdist-provided hook: silently ignored when xdist is not installed
-def pytest_testnodedown(node, error):
+def pytest_testnodedown(node: Any, error: object) -> None:
     """xdist controller hook: collect the touched snapshots and inline edits each worker shipped.
 
     ``error`` is set when the worker died rather than finished.  Then it never ran its `sessionfinish`,
@@ -605,18 +653,19 @@ def _fail_on_reused_key(session, message: str) -> None:
     reporter.write_line(f"ERROR: {message}", red=True)
 
 
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     config = session.config
     if hasattr(config, "workeroutput"):  # xdist worker: ship recorded work to the controller, defer the rest
-        config.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
-        config.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
-        config.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
-        config.workeroutput["assertpy2_failures"] = [
+        worker = cast("_Worker", config)
+        worker.workeroutput["assertpy2_touched"] = [list(item) for item in _snapshot._TOUCHED]
+        worker.workeroutput["assertpy2_inline"] = [list(record) for record in _inline._RECORDS]
+        worker.workeroutput["assertpy2_retried"] = [list(row) for row in _retried]
+        worker.workeroutput["assertpy2_failures"] = [
             [nodeid, [_observation_to_wire(one) for one in found]]
             for nodeid, found in getattr(config, "_assertpy2_failures", [])
         ]
-        config.workeroutput["assertpy2_failure_count"] = getattr(config, "_assertpy2_failure_count", 0)
-        config.workeroutput["assertpy2_accesses"] = [
+        worker.workeroutput["assertpy2_failure_count"] = getattr(config, "_assertpy2_failure_count", 0)
+        worker.workeroutput["assertpy2_accesses"] = [
             [snapname, key, sorted(nodes), _snapshot._ACCESS_SITES.get((snapname, key), "")]
             for (snapname, key), nodes in _snapshot._ACCESS_NODES.items()
         ]
@@ -766,7 +815,7 @@ def _record_for_clustering(config, nodeid, exc):
         config._assertpy2_failures.append((nodeid, found))
 
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
+def pytest_terminal_summary(terminalreporter: Any, exitstatus: int, config: pytest.Config) -> None:
     """Say in a line what the failures had in common, when enough of them had anything in common.
 
     This hook rather than `pytest_sessionfinish`, which runs before the tracebacks are printed and puts
@@ -832,7 +881,7 @@ def _report_snapshot_orphans(config, sub_orphans, whole_orphans, pruned):
 
 
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> Generator[None, Any, None]:
     outcome = yield
     report = outcome.get_result()
 
