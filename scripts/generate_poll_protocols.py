@@ -13,6 +13,30 @@ annotation returns `Any`, an `Any` self matches the first rung, and every checke
 string assertion on a chain that polls anything.  Per-assertion ``self`` inverts that: an `Any` chain
 matches every rung and keeps the freedom it has today, and an annotated one is held to its type.
 
+Two more shapes were measured against the same pair of questions, and both fail on the second one.  The
+questions: does a string chain refuse `is_positive()`, and does an unannotated probe keep
+`has_status("PAID")`.
+
+* **a view per value type.**  The assertion is not declared on the view at all, so `__getattr__` answers
+  it and nothing is refused.  Taking the hook off does refuse it on all three, and then mypy refuses
+  `has_status("PAID")` on an unannotated probe, which is the idiom the hook exists for.
+* **a view per value type, hook kept, with the assertions a view does not carry declared as
+  non-callable sentinels** so a declaration shadows the hook.  This one does refuse the string chain on
+  all three.  It also collapses on an unannotated probe, where the sentinel turns into a false
+  rejection: pyright refuses `has_status("PAID")`, and mypy and pyright refuse a numeric assertion that
+  is correct.
+
+So the flat protocol is the only shape measured that refuses anything at all while the hook keeps
+working, and what it cannot refuse is a value whose own view is narrower than the umbrella: overload
+resolution has no way to say "only if no earlier rung matched".  `str` binds `_CapableT` by being
+iterable, and there is no negation to exclude a type that has a view of its own.
+
+Where that leaves the residue is worth naming, because it is not here.  `assert_that()` hands a value
+the umbrella claims the whole builder, so `assert_that(mapping_shaped).is_positive()` type-checks off
+the chain too and raises when it runs.  Narrowing the chain alone would leave a polled value stricter
+than the same value off it, so the repair belongs to the umbrella.  Both are recorded as cases in
+`tests/typing_negative_baseline.py`.
+
 Rungs follow the order `assert_that()` dispatches in, since they answer the same question.
 
 Run: `python scripts/generate_poll_protocols.py`
@@ -25,12 +49,14 @@ import pathlib
 import re
 import subprocess
 import sys
+from typing import Final
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VIEWS = ROOT / "assertpy2" / "_engine" / "_typing.py"
 ENTRY = ROOT / "assertpy2" / "assertpy.py"
 TARGET = ROOT / "assertpy2" / "_engine" / "_poll_typing.py"
 TARGET_VERDICT = ROOT / "assertpy2" / "_engine" / "_builder_check_typing.py"
+TARGET_CAPABLE = ROOT / "assertpy2" / "_engine" / "_capable_typing.py"
 
 sys.path.insert(0, str(ROOT))
 from assertpy2._engine._operations import NOT_AN_OPERATION, POLLS, WITHOUT_A_VERDICT  # noqa: E402 - needs the path
@@ -114,6 +140,7 @@ _IMPORTS = """    import datetime
 
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
+    from ._capable_typing import _Orderable
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -362,7 +389,10 @@ def _rungs(known: dict[str, ast.ClassDef], flavour: str) -> dict[str, list[ast.F
     # Not written where an open rung follows, which already covers every chain
     for name, (_holders, method) in widest.items():
         if name not in open_to_any:
-            found[name].append(_rewritten(method, f"{flavour}[_CapableT]", flavour, known, umbrella=True))
+            # the ordering six ask the value for an ordering, so their umbrella rung asks for one too,
+            # the same restriction `_capable_typing` puts on the surface off the chain
+            claimed = "_Orderable" if name in _ORDERING else "_CapableT"
+            found[name].append(_rewritten(method, f"{flavour}[{claimed}]", flavour, known, umbrella=True))
     for name, rungs in open_to_any.items():
         found.setdefault(name, []).extend(rungs)
     return found
@@ -379,14 +409,30 @@ def _body(known: dict[str, ast.ClassDef], flavour: str) -> str:
     return "\n".join(lines)
 
 
-def _abc_import() -> str:
-    """The line the mirrored module imports its `collections.abc` names with, copied rather than repeated."""
+_ABC_INDENT: Final = "    "
+"""The mirrored modules declare their imports inside `if TYPE_CHECKING:`, so the line is written indented."""
+
+
+def _abc_names(source: pathlib.Path) -> set[str]:
+    """The `collections.abc` names one module imports."""
     line = next(
         one
-        for one in VIEWS.read_text(encoding="utf-8").splitlines()
+        for one in source.read_text(encoding="utf-8").splitlines()
         if one.strip().startswith("from collections.abc import")
     )
-    return line.replace("import ", "import Generator, ", 1) if "Generator" not in line else line
+    return {name.strip() for name in line.split("import ", 1)[1].split(",")}
+
+
+def _abc_import() -> str:
+    """The `collections.abc` import for a mirrored module, taken from both modules it is built from.
+
+    The views alone were not enough.  A rung's ``self`` is the annotation an `assert_that()` overload is
+    written with, and those live in the entry module, so a name reaching the body from there was emitted
+    and never imported.  `Sequence` did exactly that, and every rung carrying it read as an undefined
+    name in all 86 places at once.
+    """
+    names = sorted(_abc_names(VIEWS) | _abc_names(ENTRY) | {"Generator"})
+    return f"{_ABC_INDENT}from collections.abc import " + ", ".join(names)
 
 
 def generate() -> str:
@@ -438,10 +484,268 @@ if TYPE_CHECKING:
 '''
 
 
+_CAPABLE = "_CapableAssertion"
+
+_ORDERING: Final = frozenset(
+    {
+        "is_positive",
+        "is_negative",
+        "is_greater_than",
+        "is_greater_than_or_equal_to",
+        "is_less_than",
+        "is_less_than_or_equal_to",
+    }
+)
+"""The assertions that order the value, and the only ones this façade restricts.
+
+Every one of them reaches `_engine._ordering.compare`, which orders the pair with `<`.  Measured on a
+class carrying one operator at a time, `__lt__` was the only one any of the six ran with, so `__lt__`
+is what the rung asks for.  Keying on `__gt__`, which is what `is_positive` looks like it needs, would
+have refused a type that spells only `__lt__` and works.
+"""
+
+
+_BY_HAND: Final = frozenset(
+    {
+        "is_not_none",
+        "is_instance_of",
+        "first",
+        "last",
+        "element",
+        "mapped",
+        "single",
+        "satisfies",
+        "eventually",
+        "eventually_sync",
+        "builder",
+        "error",
+        "check",
+    }
+)
+"""Declared in the header instead, because the builder declares each of them as a ladder for checkers.
+
+Flattened to the mixin's own signature they would lose what the ladder buys: the narrowing out of
+, the narrowing to a checked class, and the key type a pivot lands on.
+"""
+
+
+def _builder_surface() -> list[ast.FunctionDef]:
+    """Every public assertion the builder carries, read from the mixins it is composed of.
+
+    Read from the runtime rather than from the views, because the façade replaces the *builder* in one
+    overload and has to offer what the builder offers.  Taking the views instead would narrow by
+    accident: a view carries what one value type answers, and the value this stands in for is the one
+    the library recognised without being able to name.
+    """
+    found: dict[str, ast.FunctionDef] = {}
+    for path in sorted((ROOT / "assertpy2").glob("*.py")):
+        module = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(module):
+            if not isinstance(node, ast.ClassDef) or not node.name.endswith("Mixin"):
+                continue
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef) and not item.name.startswith("_"):
+                    if item.name in _BY_HAND:
+                        continue
+                    found.setdefault(item.name, item)
+    return [found[name] for name in sorted(found)]
+
+
+def _capable_declaration(node: ast.FunctionDef) -> str:
+    """One method of the façade: the runtime's own signature, with the body and the docstring gone."""
+    rendered = ast.parse(ast.unparse(node)).body[0]
+    if not isinstance(rendered, ast.FunctionDef):  # pragma: no cover - every entry here is a function
+        raise TypeError(node.name)
+    rendered.decorator_list = []
+    rendered.body = [ast.Expr(value=ast.Constant(value=...))]
+    # every default becomes `...`, the way a stub spells one: copied verbatim they carry names that
+    # live in the mixin and nowhere else, and `_UNSET` arrived here as an undefined name
+    elided = [ast.Constant(value=...) for _ in rendered.args.defaults]
+    rendered.args.defaults = elided
+    rendered.args.kw_defaults = [None if one is None else ast.Constant(value=...) for one in rendered.args.kw_defaults]
+    if node.name in _ORDERING:
+        rendered.args.args[0].annotation = ast.parse(f"{_CAPABLE}[_Orderable]", mode="eval").body
+        # `Self` needs an unannotated receiver, so a restricted rung has to name what it hands back
+        rendered.returns = ast.parse(f"{_CAPABLE}[_CapableT_co]", mode="eval").body
+    return ast.unparse(rendered)
+
+
+def generate_capable() -> str:
+    body = "\n".join(
+        "\n".join(f"        {line}" for line in _capable_declaration(node).splitlines()) for node in _builder_surface()
+    )
+    return _CAPABLE_HEADER.format(body=body)
+
+
+_CAPABLE_HEADER = '''"""The surface of a value the capability umbrella claims.
+
+Generated by `scripts/generate_poll_protocols.py`.
+
+Do not edit.  `assert_that()` hands this back for a value that answers to some capability and to no
+overload by name: a model, a dataclass, an HTTP response, a container of one\'s own.  It offers what the
+builder offers, because that is what such a value used to get and none of it can be taken away without
+refusing a call that runs.
+
+What it exists to add is one restriction.  The six ordering assertions read the value with an ordering,
+so a builder over a value that has none is not one they can be asked of.  Before this,
+`assert_that(a_mapping).is_positive()` type-checked on all three checkers and raised `TypeError` when it
+ran.
+
+A protocol rather than a subclass of the builder: narrowing ``self`` in a subclass is an invalid
+override, measured on ty, and the working precedents that narrow it all end in a rung open to anything,
+which is what a refusal cannot have.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import datetime
+    import logging
+    from collections.abc import Callable, Collection, Iterable, Mapping, Sized
+    from datetime import timedelta
+    from pathlib import Path
+    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+
+    from typing_extensions import TypeIs
+
+    from ..assertpy import AssertionBuilder
+    from ..matchers import Matcher
+    from ._builder_check_typing import _CheckAnyValue
+    from ._compat import Self
+    from ._poll_typing import _AsyncPoll, _SyncPoll
+    from ._typing import _E, _K, _R, _U, _V
+
+    # covariant: the façade only ever hands the subject back, through `value`
+    _CapableT_co = TypeVar("_CapableT_co", covariant=True)
+    _E_co = TypeVar("_E_co", covariant=True)
+
+    class _Orderable(Protocol):
+        """A value with an ordering, which is all the six relational assertions ask of one."""
+
+        def __lt__(self, other: Any, /) -> Any: ...
+
+    class _ElementSource(Protocol[_E_co]):
+        """Anything whose value is a collection of `_E_co`, spelled the way the builder spells it."""
+
+        @property
+        def value(self) -> Collection[_E_co]: ...
+
+    class _CapableAssertion(Protocol[_CapableT_co]):
+        """What a value the umbrella claims can be asked."""
+
+        # the data the builder carries, spelled as `_MixinBase` spells it.  Set in `__init__` and so
+        # absent from `dir()` of the class, which is how they were missed: left to `__getattr__` they
+        # read as callables, and `assert_that(a_capable_value).description.upper()` was refused
+        val: Any
+        description: str
+        kind: str | None
+        expected: type[BaseException] | None
+        logger: logging.LoggerAdapter[Any]
+
+        @property
+        def value(self) -> _CapableT_co: ...
+        @property
+        def not_(self) -> Self: ...
+        def __getattr__(self, name: str) -> Callable[..., Self]: ...
+
+        # the ladders the builder declares for checkers, carried across rather than flattened.  This
+        # replaces the builder in one overload, so a narrowing lost here is lost for every value the
+        # umbrella claims, and `first()` on a mapping-shaped value would stop naming its key type
+        @overload
+        def is_not_none(self: _CapableAssertion[_U | None]) -> _CapableAssertion[_U]: ...
+        @overload
+        def is_not_none(self) -> Self: ...
+        @overload
+        def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
+        @overload
+        def is_instance_of(self, some_class: type) -> Self: ...
+        @overload
+        def first(self: _CapableAssertion[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def first(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def first(self) -> Self: ...
+        @overload
+        def last(self: _CapableAssertion[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def last(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def last(self) -> Self: ...
+        @overload
+        def element(self: _CapableAssertion[Mapping[_K, _V]], index: int) -> AssertionBuilder[_K]: ...
+        @overload
+        def element(self: _ElementSource[_E], index: int) -> AssertionBuilder[_E]: ...
+        @overload
+        def element(self, index: int) -> Self: ...
+        @overload
+        def mapped(self: _ElementSource[_E], func: Callable[[_E], _R]) -> AssertionBuilder[list[_R]]: ...
+        @overload
+        def mapped(self, func: Callable[..., Any]) -> Self: ...
+        @overload
+        def single(self: _CapableAssertion[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
+        @overload
+        def single(self: _ElementSource[_E]) -> AssertionBuilder[_E]: ...
+        @overload
+        def single(self) -> Self: ...
+        @overload
+        def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
+        @overload
+        def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self: ...
+        # the two polling pivots, which live on the builder rather than on a mixin and so do not arrive
+        # with the rest.  Over `Any` rather than over the subject: the value here is callable or it is
+        # not, and no capability says which, so the chain keeps every rung open the way an unannotated
+        # probe does.  Left to `__getattr__` they came back as this façade over the callable itself,
+        # which is the object that was polled and not the value polling produced
+        def eventually(
+            self,
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _AsyncPoll[Any]: ...
+        def eventually_sync(
+            self,
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _SyncPoll[Any]: ...
+        # the builder's own two helpers, which also live off the mixins.  `builder()` is a pivot: it
+        # makes a builder over the value it is handed, and left to `__getattr__` it read as this façade
+        # over the value that was already here
+        def builder(
+            self,
+            val: Any,
+            description: str = ...,
+            kind: str | None = ...,
+            expected: Any = ...,
+            logger: Any = ...,
+            origin: Any = ...,
+        ) -> AssertionBuilder[Any]: ...
+        def error(
+            self,
+            msg: str,
+            *,
+            actual: Any = ...,
+            expected: Any = ...,
+            diff: Any = ...,
+            trace: Any = ...,
+            suppress_context: bool = ...,
+        ) -> Self: ...
+        def check(self) -> _CheckAnyValue[_CapableT_co]: ...
+{body}
+'''
+
+
 if __name__ == "__main__":
     TARGET.write_text(generate(), encoding="utf-8", newline="")
     TARGET_VERDICT.write_text(generate_verdict(), encoding="utf-8", newline="")
-    for written in (TARGET, TARGET_VERDICT):
+    TARGET_CAPABLE.write_text(generate_capable(), encoding="utf-8", newline="")
+    for written in (TARGET, TARGET_VERDICT, TARGET_CAPABLE):
         subprocess.run(["uv", "run", "ruff", "format", str(written)], cwd=ROOT, check=False, capture_output=True)
         fix = ["uv", "run", "ruff", "check", "--fix", str(written)]
         subprocess.run(fix, cwd=ROOT, check=False, capture_output=True)

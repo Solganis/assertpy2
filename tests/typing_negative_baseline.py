@@ -49,6 +49,18 @@ _NOT_THE_VALUES_VIEW: dict[str, frozenset[str]] = {
     "pyright": frozenset({"reportAttributeAccessIssue"}),
 }
 
+_NOT_THE_VALUES_KIND: dict[str, frozenset[str]] = {
+    "ty": frozenset({"invalid-argument-type"}),
+    "mypy": frozenset({"misc"}),
+    "pyright": frozenset({"reportAttributeAccessIssue"}),
+}
+
+_NOT_THE_CHAINS_VALUE: dict[str, frozenset[str]] = {
+    "ty": frozenset({"no-matching-overload"}),
+    "mypy": frozenset({"misc"}),
+    "pyright": frozenset({"reportAttributeAccessIssue"}),
+}
+
 _PREDICATE_OVER_THE_SUBJECT: dict[str, frozenset[str]] = {
     "ty": frozenset(),
     "mypy": frozenset({"arg-type"}),
@@ -161,24 +173,23 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # class.  Deliberate, and the docs guard has carried a marker for exactly this since before it:
     # a dynamic assertion is outside the typed surface by policy
     "dynamic-attribute-on-an-object": _MISSING,
+    # the umbrella hands back a protocol of its own rather than the builder, and the six ordering
+    # assertions on it ask the value for an ordering.  Both used to type-check and raise `TypeError`
+    "numeric-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
+    "numeric-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # a polling chain: the declaration wins over `__getattr__` when the chain is not the one it was
     # written for, which is what makes a typed chain worth having at all
-    "text-assertion-on-a-polled-number": {
-        "ty": frozenset({"no-matching-overload"}),
-        "mypy": frozenset({"misc"}),
-        "pyright": frozenset({"reportAttributeAccessIssue"}),
-    },
+    "text-assertion-on-a-polled-number": _NOT_THE_CHAINS_VALUE,
+    # the same rung, reached from the other end: a value with no capability matches neither the typed
+    # rung nor the umbrella, so the core narrowing follows onto the chain
+    "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
     # a predicate over the subject: the view binds it to its own value, so a lambda reading a name the
     # value has not got is refused.  ty resolves the lambda's parameter through an overload set less
     # precisely and says nothing, which is measured here rather than left blank
     "predicate-reading-a-missing-string-method": _PREDICATE_OVER_THE_SUBJECT,
     "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
     "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
-    "text-assertion-after-a-dynamic-one": {
-        "ty": frozenset({"no-matching-overload"}),
-        "mypy": frozenset({"misc"}),
-        "pyright": frozenset({"reportAttributeAccessIssue"}),
-    },
+    "text-assertion-after-a-dynamic-one": _NOT_THE_CHAINS_VALUE,
     "bad-operand-on-a-polled-number": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
@@ -224,6 +235,9 @@ VALID: frozenset[str] = frozenset(
         "valid-polled-refinement",
         "valid-polled-pivot",
         "valid-polled-dynamic-then-typed",
+        "valid-polled-dynamic-on-an-object",
+        "valid-polled-capable-callable",
+        "valid-builder-pivot-off-the-umbrella",
         "valid-contains-an-item",
         "valid-contains-a-matcher",
         "valid-int-compared-to-float",

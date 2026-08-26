@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs, assert_type
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
+    from assertpy2._engine._capable_typing import _CapableAssertion
     from assertpy2._engine._check_typing import (
         _CheckDictAssertion,
         _CheckNumericAssertion,
@@ -111,14 +112,15 @@ if TYPE_CHECKING:
     # the callable view sits under the shapes for this: above them it claimed a Starlette or a Flask
     # response, and `has_status_code()` on one was a type error in all three checkers while the runtime
     # answered it.  `tests/typing_http.py` asks the same question of the real classes
-    assert_type(assert_that(_CallableResponse()), AssertionBuilder[_CallableResponse])
+    assert_type(assert_that(_CallableResponse()), _CapableAssertion[_CallableResponse])
 
     assert_type(assert_that(object()), _ObjectAssertion[object])
 
     # a dynamic assertion and an `add_extension` name resolve through the same hook, and no one signature is true of
     # both.  A plain object gets the object view, which has no `__getattr__`, so `has_anything` on one is a type
-    # error
-    assert_type(assert_that(_Countable()).has_anything("value"), Any)
+    # error.  A capable value has the hook, and the façade hands its own surface back rather than `Any`, so the
+    # assertions after a dynamic one are still read
+    assert_type(assert_that(_Countable()).has_anything("value"), _CapableAssertion[_Countable])
 
     assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])
     assert_type(assert_that("text").not_.starts_with("x"), _StringAssertion)
@@ -381,6 +383,6 @@ if TYPE_CHECKING:
         def json(self) -> Any: ...
 
     response = _FakeResponse()
-    assert_type(assert_that(response), AssertionBuilder[_FakeResponse])
+    assert_type(assert_that(response), _CapableAssertion[_FakeResponse])
     assert_type(assert_that(response).decoded_as_json(), AssertionBuilder[object])
     assert_type(assert_that(response).decoded_as_json().value, object)

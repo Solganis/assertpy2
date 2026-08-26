@@ -82,6 +82,16 @@ def _is_int(value: object) -> TypeIs[int]:
     return isinstance(value, int)
 
 
+class _Probe:
+    """Capable and callable at once, which the umbrella claims above the callable view."""
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(("a",))
+
+    def __call__(self) -> int:
+        return 1
+
+
 class _TakesAnyKey(Mapping[object, str]):
     """A row that reads a key without hashing it, mirrored in `test_property_based.py`.
 
@@ -258,6 +268,16 @@ def _methods_that_do_not_fit_the_value() -> None:
     # a `str` is iterable, so it reaches the umbrella rung of an assertion the string view does not
     # carry.  The same width as `assert_that()` gives a value the umbrella claims
     assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
+    # and the same assertion asked of the value the umbrella claims, off the chain entirely.  It is
+    # where the width above comes from, rather than anything the chain does: `assert_that()` hands a
+    # capable value the whole builder, and this call raises `TypeError` when it runs
+    assert_that(_TakesAnyKey()).is_positive()  # case: numeric-assertion-on-a-capable-value
+    # a value with no capability at all reaches neither, so the core narrowing follows onto the chain
+    assert_that(_a_person).eventually_sync().is_positive()  # case: numeric-assertion-on-a-polled-object
+    # the bridge between the two above: the same capable value polled, which is the rung `str` reaches
+    # by being iterable.  Recorded so a chain cannot be narrowed here alone, which would leave a polled
+    # value stricter than the same value off the chain
+    assert_that(_a_row).eventually_sync().is_positive()  # case: numeric-assertion-on-a-polled-capable-value
     # the hook hands back the chain over the same value, so what follows a dynamic assertion is read
     assert_that(_a_number).eventually_sync().has_status("PAID").starts_with(  # case: text-assertion-after-a-dynamic-one
         "x"
@@ -266,6 +286,14 @@ def _methods_that_do_not_fit_the_value() -> None:
 
 def _a_number() -> int:
     return 1
+
+
+def _a_person() -> _Person:
+    return _Person()
+
+
+def _a_row() -> _TakesAnyKey:
+    return _TakesAnyKey()
 
 
 def _some_text() -> str:
@@ -396,6 +424,16 @@ def _relations_that_must_keep_working() -> None:
     assert_that(_a_number).eventually_sync().is_instance_of(int).is_positive()  # case: valid-polled-refinement
     assert_that(_some_rows).eventually_sync().first().starts_with("a")  # case: valid-polled-pivot
     assert_that(_a_number).eventually_sync().has_status("PAID").is_positive()  # case: valid-polled-dynamic-then-typed
+    # the hook has to keep answering on the narrowest chain there is, which is what the case above pays for
+    assert_that(_a_person).eventually_sync().has_status("PAID")  # case: valid-polled-dynamic-on-an-object
+    # a value that is capable and callable at once is claimed by the umbrella, above the callable view,
+    # so its polling pivot is declared on the umbrella's own surface.  Over `Any`, because no capability
+    # says what the call returns, and an `Any` chain keeps every rung open
+    assert_that(_Probe()).eventually_sync().is_positive()  # case: valid-polled-capable-callable
+    # `builder()` makes a builder over the value it is handed, so what follows is about that value and
+    # not about the capable one it was reached from.  Left to the dynamic hook it read as the façade
+    # over the original, where an ordering assertion would have been refused
+    assert_that(_TakesAnyKey()).builder(1).is_positive()  # case: valid-builder-pivot-off-the-umbrella
     # the same binding must not refuse a guard the subject can be handed to
     assert_that("text").satisfies(lambda item: item.isupper())  # case: valid-predicate-over-the-subject
     assert_that(7).satisfies(lambda item: item.bit_length() > 0)  # case: valid-numeric-predicate-over-the-subject

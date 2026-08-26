@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeIs
 
     from ._engine._builder_check_typing import _CheckAnyValue
+    from ._engine._capable_typing import _CapableAssertion
     from ._engine._compat import Self
     from ._engine._typing import (
         _ArrayAssertion,
@@ -28,7 +29,6 @@ if TYPE_CHECKING:
         _CallableAssertion,
         _CapableT,
         _ComplexAssertion,
-        _CoreAssertion,
         _DateAssertion,
         _DateTimeAssertion,
         _DictAssertion,
@@ -475,7 +475,7 @@ def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_Arra
 # the capability umbrella: below the frame pair so it cannot claim their values, above the fallback so anything with
 # a recognised capability keeps the whole surface
 @overload
-def assert_that(val: _CapableT, description: str = "") -> AssertionBuilder[_CapableT]: ...
+def assert_that(val: _CapableT, description: str = "") -> _CapableAssertion[_CapableT]: ...
 
 
 # below the umbrella: an ASGI or WSGI response is a callable, and this overload claimed one before the
@@ -489,8 +489,11 @@ def assert_that(val: Callable[..., _P], description: str = "") -> _CallableAsser
 def assert_that(val: _T, description: str = "") -> _ObjectAssertion[_T]: ...
 
 
-# Return the common base protocol so each overload stays consistent with the impl (no reportInconsistentOverload).
-def assert_that(val: object, description="") -> _CoreAssertion:
+# `Any` rather than the common base protocol, which is what this returned until the umbrella started handing back a
+# protocol of its own.  Measured: checking `_CoreAssertion` against a protocol carrying the whole surface took pyright
+# past its 4 GB heap and killed it on this one file.  `Any` is compatible with every overload, so nothing is reported
+# where the base protocol was reported before, and the overloads above are what a caller ever sees.
+def assert_that(val: object, description="") -> Any:
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
     This is a factory method for the `AssertionBuilder`, and the single most important
