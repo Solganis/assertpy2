@@ -26,9 +26,8 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/helpers.py", "reportArgumentType"): 3,
     ("assertpy2/helpers.py", "reportGeneralTypeIssues"): 1,
     ("assertpy2/helpers.py", "reportIndexIssue"): 2,
-    # three of these are values walked as `object`; the fourth is the failure-cluster share, parsed
-    # the same guarded way the poll-report fraction is
-    ("assertpy2/pytest_plugin.py", "reportArgumentType"): 4,
+    # both are a `_JsonSafe` value written into a dict pyright reads as narrower than it is
+    ("assertpy2/pytest_plugin.py", "reportArgumentType"): 2,
     ("assertpy2/_engine/_compare.py", "reportArgumentType"): 2,
     ("assertpy2/_engine/_compare.py", "reportOperatorIssue"): 1,
     ("assertpy2/helpers.py", "reportOperatorIssue"): 2,
@@ -44,14 +43,16 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
-    ("assertpy2/assertpy.py", "reportInconsistentOverload"): 1,
     # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
     # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
     ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
     ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
-    ("assertpy2/assertpy.py", "reportReturnType"): 4,
+    # what a dynamic hook hands back, read against the callable its declaration promises.  Two of a
+    # former four, and one `reportInconsistentOverload` with them, went when the implementation's
+    # return annotation became `Any`: see the comment there for why it had to
+    ("assertpy2/assertpy.py", "reportReturnType"): 2,
     # the failure record is `| None` in general and never None at this call, as the comment there says
     ("assertpy2/snapshot.py", "reportArgumentType"): 1,
     # both branches that reach the read assign it first, through a `try` pyright does not follow
@@ -59,6 +60,10 @@ BASELINE: dict[tuple[str, str], int] = {
 }
 
 LADDER_OVERLAP: dict[tuple[str, str], int] = {
+    # the ladders the umbrella's façade carries over from the builder, which overlap there too
+    ("assertpy2/_engine/_capable_typing.py", "is_not_none"): 1,
+    ("assertpy2/_engine/_capable_typing.py", "is_instance_of"): 2,
+    ("assertpy2/_engine/_capable_typing.py", "satisfies"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_between"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than_or_equal_to"): 1,

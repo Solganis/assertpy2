@@ -307,6 +307,7 @@ ignore = []
 "assertpy2/_engine/_check_typing.py" = ["A002"]
 "assertpy2/_engine/_poll_typing.py" = ["A002"]
 "assertpy2/_engine/_builder_check_typing.py" = ["A002"]
+"assertpy2/_engine/_capable_typing.py" = ["A002"]
 
 # Tests trade a few style rules for directness and literal fixtures:
 "tests/*" = [

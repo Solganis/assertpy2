@@ -76,8 +76,8 @@ class TestTheMeasurementItselfRan:
         assert_that(stray).described_as("diagnostics away from a tagged case: the file is broken").is_empty()
 
 
-_NOT_THIS_CHAIN = {
-    "ty": {"no-matching-overload"},
+_REFUSED_THROUGH_SELF = {
+    "ty": {"no-matching-overload", "invalid-argument-type"},
     "mypy": {"misc"},
     "pyright": {"reportAttributeAccessIssue"},
 }
@@ -135,10 +135,10 @@ class TestWhatTheCheckersRefuse:
                 "mypy": {"attr-defined"},
                 "pyright": {"reportAttributeAccessIssue"},
             },
-            # an assertion declared for another chain, refused through the `self` annotation of a
-            # polling rung.  Each checker words the same refusal differently: no rung matched, the
-            # `self` argument is invalid, the attribute is not there
-            _NOT_THIS_CHAIN,
+            # an assertion refused through the `self` annotation of a rung, whether the rung is on a
+            # polling chain or on the umbrella's own surface.  Each checker words the same refusal
+            # differently: no rung matched, the `self` argument does not fit, the attribute is not there
+            _REFUSED_THROUGH_SELF,
             # a predicate over the subject, refused through the parameter the view bound it to.  mypy
             # words it as the callable not fitting, pyright as the name the value has not got, and ty
             # resolves the lambda through the overload set less precisely and says nothing
@@ -172,7 +172,7 @@ class TestWhatTheCheckersRefuse:
             # `misc` is mypy's second word for an argument that does not fit, never a reason on its own:
             # alone it would let an unrelated error read as one of these families
             spoken = set(expected.get("mypy", ()))
-            rides_along = "misc" not in spoken or "arg-type" in spoken or _matches(expected, _NOT_THIS_CHAIN)
+            rides_along = "misc" not in spoken or "arg-type" in spoken or _matches(expected, _REFUSED_THROUGH_SELF)
             if expected and not (speaks_for_all and fits_one and rides_along):
                 mixed[name] = {checker: sorted(codes) for checker, codes in expected.items()}
         assert_that(mixed).described_as("one relation, refused for unrelated reasons").is_empty()

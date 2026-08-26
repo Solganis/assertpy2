@@ -1640,7 +1640,7 @@ _PIPELINE_STEPS = {
 # what a value no overload recognises resolves to.  The builder is still a return type here,
 # on the capability umbrella, so naming it as the fallback would collect the wrong overload
 _FALLBACK_VIEW = "_ObjectAssertion"
-_UMBRELLA_VIEW = "AssertionBuilder"
+_UMBRELLA_VIEW = "_CapableAssertion"
 
 
 def _plain_name(annotation) -> str:
@@ -1760,7 +1760,7 @@ def _dispatch_relation() -> dict[str, str]:
             fallbacks.append(subjects)
             continue
         if view == _UMBRELLA_VIEW:
-            # the capability umbrella, which keeps the whole builder for a value the library recognises
+            # the capability umbrella, which keeps the whole surface for a value the library recognises
             # without naming its type.  It dispatches on a union of shapes rather than on one subject,
             # so it has no row in the relation, and the order guard is what holds its placement
             umbrellas.append(subjects)

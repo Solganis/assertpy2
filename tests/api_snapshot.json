@@ -2121,7 +2121,7 @@
   "(val: bytearray, description: str = '') -> _BytesAssertion[bytearray]",
   "(val: _FrameT_co, description: str = '') -> _FrameAssertion[_FrameT_co]",
   "(val: _ArrayT_co, description: str = '') -> _ArrayAssertion[_ArrayT_co]",
-  "(val: _CapableT, description: str = '') -> AssertionBuilder[_CapableT]",
+  "(val: _CapableT, description: str = '') -> _CapableAssertion[_CapableT]",
   "(val: Callable[..., _P], description: str = '') -> _CallableAssertion[_P]",
   "(val: _T, description: str = '') -> _ObjectAssertion[_T]"
  ],
@@ -2966,7 +2966,7 @@
      "required": false
     }
    ],
-   "returns": "_CoreAssertion"
+   "returns": "Any"
   },
   "assert_warn": {
    "kind": "callable",
