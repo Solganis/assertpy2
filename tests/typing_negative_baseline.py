@@ -237,6 +237,7 @@ VALID: frozenset[str] = frozenset(
         "valid-polled-dynamic-then-typed",
         "valid-polled-dynamic-on-an-object",
         "valid-polled-capable-callable",
+        "valid-call-on-a-capable-callable",
         "valid-builder-pivot-off-the-umbrella",
         "valid-contains-an-item",
         "valid-contains-a-matcher",

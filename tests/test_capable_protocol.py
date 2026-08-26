@@ -14,6 +14,8 @@ whole reason the façade exists.
 from __future__ import annotations
 
 import ast
+import collections
+import numbers
 import pathlib
 import subprocess
 import sys
@@ -25,12 +27,188 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 import assertpy2.assertpy
-from assertpy2 import assert_that
+from assertpy2 import AssertionFailure, assert_that
 from assertpy2._engine import _capable_typing
 from assertpy2.assertpy import AssertionBuilder
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _SOURCE = pathlib.Path(_capable_typing.__file__).read_text(encoding="utf-8")
+
+
+class _Capable:
+    """The narrowest value the umbrella claims: one capability and nothing else."""
+
+    def __iter__(self):
+        return iter(("a",))
+
+
+class _Maximal(_Capable):
+    """Every capability the umbrella recognises, plus every operator a restricted assertion reads.
+
+    Registered as a real number because that is what the numeric gate asks, and registration is the one
+    thing no checker can see.  That is why the numeric family is the one left open: measured, `is_zero()`
+    runs on a class registered without `__float__`, so every structural stand-in refused a working call.
+    """
+
+    def __float__(self):
+        return 0.0
+
+    def __lt__(self, other):
+        return True
+
+    def __gt__(self, other):
+        return False
+
+    def __le__(self, other):
+        return True
+
+    def __ge__(self, other):
+        return False
+
+    def __fspath__(self):
+        return "."
+
+    def __call__(self, *args, **kwargs):
+        raise ValueError("boom")
+
+    # the other four capabilities the umbrella recognises, so an assertion that reads a mapping, a model
+    # or a response is answered here rather than reading as one no capable value can reach
+    def keys(self):
+        return ("id",)
+
+    def __getitem__(self, key):
+        return 1
+
+    def __len__(self):
+        return 1
+
+    def __contains__(self, item):
+        return True
+
+    def model_dump(self, *args, **kwargs):
+        return {"id": 1}
+
+    @property
+    def status_code(self):
+        return 200
+
+    @property
+    def headers(self):
+        return {"content-type": "application/json"}
+
+    def json(self):
+        return {"id": 1}
+
+
+numbers.Real.register(_Maximal)
+
+
+class _Ordered(_Capable):
+    """Capable and orderable, which is what the relational assertions read."""
+
+    def __lt__(self, other):
+        return True
+
+    def __gt__(self, other):
+        return False
+
+    def __le__(self, other):
+        return True
+
+    def __ge__(self, other):
+        return False
+
+
+class _Numeric(_Ordered):
+    """Capable, orderable and a real number, which is what the numeric gate reads.
+
+    Ordering as well, because `is_between` and `is_close_to` order the pair after the number gate, and
+    a subject with only the registration reads as refusing them.
+    """
+
+    def __float__(self):
+        return 0.0
+
+
+numbers.Real.register(_Numeric)
+
+
+class _Pathish(_Capable):
+    """Capable and a path, which is the structural half of `isinstance(val, (str, os.PathLike))`."""
+
+    def __fspath__(self):
+        return "."
+
+
+class _Callish(_Capable):
+    """Capable and callable, which is what `callable(val)` reads.
+
+    A fixed signature rather than `*args, **kwargs`, so the rung is measured against a real callable
+    instead of one written to match its own protocol.
+    """
+
+    def __call__(self, first: int = 0) -> int:
+        raise ValueError("boom")
+
+
+_CARRIES = {
+    "_Orderable": _Ordered,
+    "_PathLike": _Pathish,
+    "_Callable": _Callish,
+}
+"""One subject per shape, carrying that shape and no other, so a wrong key cannot read as right."""
+
+_WITHOUT = {
+    "_Orderable": (_Capable, _Pathish, _Callish),
+    "_PathLike": (_Capable, _Ordered, _Callish),
+    "_Callable": (_Capable, _Ordered, _Pathish),
+}
+"""Subjects that genuinely lack each shape, listed rather than derived.
+
+`_Numeric` carries an ordering as well, because the numeric assertions order the pair after the number
+gate, so "every other subject" would have read the numeric one as answering an ordering it was never
+keyed on.
+"""
+
+
+_ASKED_OF_THE_CHAIN = frozenset({"when_called_with"})
+"""Gated on a call before it rather than on the value, so asking it alone proves nothing."""
+
+_ARGUMENTS = [
+    (),
+    ("a",),
+    ("id",),
+    (0,),
+    (1, 1),
+    (0, 9),
+    (ValueError,),
+    ("utf-8",),
+    (b"a",),
+    (0, b"a"),
+    ({"id": 1},),
+    ("$.id",),
+    (lambda item: True,),
+    (str,),
+]
+
+
+def _answers(value, name) -> bool:
+    """Whether *value* can be asked *name* at all, over every plausible argument tuple.
+
+    A verdict counts as an answer and so does a pass: what it is looking for is the refusal a gate
+    raises, which is `TypeError` or `ValueError` whatever the arguments were.
+    """
+    for args in _ARGUMENTS:
+        try:
+            getattr(assert_that(value), name)(*args)
+        # the loop is over argument tuples, not over a workload: the cost of the `try` is not the point
+        except AssertionFailure:  # noqa: PERF203
+            return True
+        except Exception:  # any refusal is one, and the next tuple may still answer
+            continue
+        else:
+            return True
+    return False
 
 
 def _generator() -> ModuleType:
@@ -176,57 +354,114 @@ class TestNothingTheBuilderOffersIsMissing:
         assert_that(missing).described_as("declared on the façade and absent from the builder").is_empty()
 
 
-class TestTheSixThatOrderTheValue:
-    """What the façade exists to add, and the boundary of it."""
+class TestWhatEachRestrictedAssertionAsksFor:
+    """The whole reason the façade exists, derived from the runtime rather than compared against a list.
 
-    def test_each_one_asks_the_value_for_an_ordering(self) -> None:
-        generator = _generator()
-        restricted = {
-            name
-            for name, nodes in _declarations().items()
-            if any(
-                node.args.args
-                and node.args.args[0].annotation is not None
-                and "_Orderable" in ast.unparse(node.args.args[0].annotation)
-                for node in nodes
-            )
-        }
-        assert_that(restricted).described_as("the assertions keyed on an ordering").is_equal_to(
-            set(generator._ORDERING)
-        )
+    Written twice as a comparison against the generator's own tables, and both times an injection went
+    through: removing a name from a table un-restricted it silently, and swapping one key for another
+    left both sides agreeing.  These ask the runtime instead, with one subject per shape.
+    """
 
-    def test_the_ordering_is_asked_for_as_less_than(self) -> None:
-        """`__lt__` and not `__gt__`, which is the runtime's own gate rather than a guess.
+    def test_each_family_holds_what_it_was_measured_to_hold(self) -> None:
+        """How many assertions each key claims, which is where a name silently leaving is caught.
 
-        Every one of the six reaches `_engine._ordering.compare`, which orders the pair with `<`.
-        Measured on a class carrying one operator at a time, `__lt__` was the only one any of them ran
-        with, so keying on `__gt__` would have refused a type that spells only `__lt__` and works.
+        The probe below cannot prove this direction: showing that nothing *outside* the tables is
+        unanswerable needs a hand-written call per assertion, and a generic argument tuple reads a
+        mapping assertion or a JSON pivot as unanswerable when it is only unsupplied.  Counts instead,
+        against the families as they were measured, so removing an entry fails here and nowhere else.
         """
-        orderable = next(
-            node
-            for node in ast.walk(ast.parse(_SOURCE))
-            if isinstance(node, ast.ClassDef) and node.name == "_Orderable"
+        generator = _generator()
+        counted = {
+            "shape": collections.Counter(generator._ASKS_A_SHAPE.values()),
+            "type": collections.Counter(generator._ASKS_A_TYPE.values()),
+        }
+        assert_that(counted).described_as("what each key claims").is_equal_to(
+            {
+                "shape": collections.Counter({"_Orderable": 6, "_PathLike": 9, "_Callable": 5}),
+                "type": collections.Counter({"int": 3, "str": 14, "datetime.datetime": 7, "bytes | bytearray": 7}),
+            }
         )
-        assert_that([item.name for item in orderable.body if isinstance(item, ast.FunctionDef)]).is_equal_to(["__lt__"])
 
-    def test_a_value_with_an_ordering_still_answers_them(self) -> None:
-        """The runtime half of the same claim: the rung must not refuse what runs."""
+    def test_every_name_in_the_tables_is_one_the_builder_has(self) -> None:
+        """A misspelling would restrict nothing and read as a restriction."""
+        generator = _generator()
+        builder = AssertionBuilder({"id": 1})
+        tabled = set(generator._ASKS_A_SHAPE) | set(generator._ASKS_A_TYPE)
+        assert_that([name for name in tabled if not hasattr(builder, name)]).described_as(
+            "restricted, and not a name the builder has"
+        ).is_empty()
 
-        class Ordered:
-            def __iter__(self):
-                return iter(("a",))
+    def test_every_restricted_assertion_is_answered_by_the_shape_it_asks_for(self) -> None:
+        """And the direction that catches one key swapped for another."""
+        generator = _generator()
+        wrong = {
+            name: asked
+            for name, asked in generator._ASKS_A_SHAPE.items()
+            if name not in _ASKED_OF_THE_CHAIN and not _answers(_CARRIES[asked](), name)
+        }
+        assert_that(wrong).described_as("keyed on a shape that does not answer it").is_empty()
 
-            def __lt__(self, other):
-                return False
+    def test_no_restricted_assertion_is_answered_without_its_shape(self) -> None:
+        generator = _generator()
+        loose = {
+            name: asked
+            for name, asked in generator._ASKS_A_SHAPE.items()
+            if any(_answers(subject(), name) for subject in _WITHOUT[asked])
+        }
+        assert_that(loose).described_as("answered by a value that does not carry what it asks for").is_empty()
 
-            def __gt__(self, other):
-                return True
+    @pytest.mark.parametrize(
+        ("shape", "members"),
+        [("_Orderable", ["__lt__"]), ("_PathLike", ["__fspath__"]), ("_Callable", ["__call__"])],
+    )
+    def test_each_shape_asks_for_what_the_runtime_reads(self, shape, members) -> None:
+        """The names are the measurement, not the family's own vocabulary.
 
-        assert_that(Ordered()).is_positive()
+        Every relational assertion reaches `_engine._ordering.compare`, which orders the pair with `<`,
+        so `_Orderable` asks for `__lt__` and not `__gt__`.  The filesystem gate is
+        `isinstance(val, (str, os.PathLike))` and a `str` never reaches here, so what is left of it is
+        `__fspath__`.  The exception and warning gate is `callable(val)`.
+        """
+        declared = next(
+            node for node in ast.walk(ast.parse(_SOURCE)) if isinstance(node, ast.ClassDef) and node.name == shape
+        )
+        assert_that([item.name for item in declared.body if isinstance(item, ast.FunctionDef)]).is_equal_to(members)
 
-    def test_a_value_without_one_is_refused_by_the_runtime_too(self) -> None:
-        with pytest.raises(TypeError):
-            assert_that({"id": 1}.keys()).is_positive()
+    def test_the_one_asked_of_the_chain_answers_after_what_it_waits_for(self) -> None:
+        """`when_called_with()` is gated on a call before it rather than on the value, measured.
+
+        On its own it refuses everything, callable or not, because it wants an expectation set first.
+        Asked after `raises()`, a callable capable value answers it, which is what puts it in the table.
+        """
+        assert_that(_Callish()).raises(ValueError).when_called_with()
+
+
+class TestWhatIsAskedOfATypeInstead:
+    """The other half of the narrowing: rungs a capable value can never satisfy, and why they exist."""
+
+    def test_no_such_assertion_answers_the_widest_capable_value(self) -> None:
+        """A subject carrying every capability the umbrella knows and every operator these reach for.
+
+        This is what makes a type-keyed rung honest rather than plausible.  Four separate readings
+        during this work were wrong because the fixture lacked the one thing the assertion asked for, so
+        the fixture here carries all of them at once: a name that runs belongs in the other table.
+        """
+        answered = [name for name in _generator()._ASKS_A_TYPE if _answers(_Maximal(), name)]
+        assert_that(answered).described_as("keyed on a type, and yet answerable by a capable value").is_empty()
+
+    def test_they_are_declared_rather_than_left_out(self) -> None:
+        """Leaving one out refuses nothing, because `__getattr__` answers a name the façade does not have.
+
+        Measured: with these dropped instead of declared, text, dates and bytes all still type-checked on
+        a capable value in all three checkers.  The rung is what refuses, not the absence.
+        """
+        missing = set(_generator()._ASKS_A_TYPE) - set(_declarations())
+        assert_that(missing).described_as("keyed on a type and not declared, so the hook answers it").is_empty()
+
+    def test_the_two_tables_do_not_overlap(self) -> None:
+        generator = _generator()
+        both = set(generator._ASKS_A_SHAPE) & set(generator._ASKS_A_TYPE)
+        assert_that(both).described_as("in both tables").is_empty()
 
 
 class TestTheLaddersTheBuilderDeclares:

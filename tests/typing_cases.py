@@ -430,6 +430,9 @@ def _relations_that_must_keep_working() -> None:
     # so its polling pivot is declared on the umbrella's own surface.  Over `Any`, because no capability
     # says what the call returns, and an `Any` chain keeps every rung open
     assert_that(_Probe()).eventually_sync().is_positive()  # case: valid-polled-capable-callable
+    # the same value asked what the exception assertions ask of it, which is the other half of what
+    #  is keyed on and the half polling does not reach
+    assert_that(_Probe()).does_not_raise(ValueError).when_called_with()  # case: valid-call-on-a-capable-callable
     # `builder()` makes a builder over the value it is handed, so what follows is about that value and
     # not about the capable one it was reached from.  Left to the dynamic hook it read as the façade
     # over the original, where an ordering assertion would have been refused
