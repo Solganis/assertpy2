@@ -494,6 +494,33 @@ assertpy2_profile = "safe"   # dangling on, vacuous on, clusters on (default "co
 Naming a setting yourself wins over the profile, so `safe` plus `assertpy2_dangling = "off"` is a suite
 that wants the other two and has said so where the next reader will look.
 
+### Seeing them, and being stopped by them
+
+`safe` warns. A run full of findings still exits zero, which is a fair first look and a poor gate.
+
+`strict` turns on the same three guards and fails the tests they find:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_profile = "strict"
+```
+
+The two read differently in the report, because they are found at different moments:
+
+```text
+ERROR test_orders.py::test_the_total    DanglingAssertionWarning
+FAILED test_orders.py::test_every_item  VacuousAssertionWarning
+```
+
+A dangling chain is found while the module is collected and reported when its test is set up, so the
+test never runs and pytest calls it an error. A vacuous pass is found while the assertion itself runs,
+so it is a failure. Both stop the run.
+
+The escalation is scoped to this library's own two warnings. A `DeprecationWarning` from somewhere
+else in your suite is left exactly as it was, which a blanket `filterwarnings = "error"` would not do.
+
+Failure clustering is not escalated and cannot be: it reads a run that already went red.
+
 ```toml
 [tool.pytest.ini_options]
 assertpy2_diff = "off"              # disable structured diff sections entirely

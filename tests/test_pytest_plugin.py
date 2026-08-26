@@ -18,6 +18,7 @@ from assertpy2._clustering import Observation, Signature
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
     _diff_to_json,
+    _escalate,
     _format_trace,
     _is_full_run,
     _json_safe,
@@ -131,9 +132,30 @@ class TestTheProfileAnswersForWhatTheSuiteDidNotName:
         ).is_equal_to("off")
         assert_that(_setting(config, "assertpy2_vacuous")).is_equal_to("on")
 
+    def test_only_strict_writes_the_two_filters(self):
+        """The wiring itself, called directly.
+
+        The profile tests below drive a real run in a child process, where nothing measures this
+        module, so the lines that add the filters would otherwise be held by nothing.
+        """
+        written = []
+        for profile in ("compatible", "safe", "strict"):
+            config = SimpleNamespace(
+                getini=lambda name, profile=profile: {"assertpy2_profile": profile}.get(name, ""),
+                getoption=lambda name: False,
+                addinivalue_line=lambda name, value: written.append((name, value)),
+            )
+            _escalate(config)
+        assert_that(written).described_as("only `strict` escalates, and only its own two").is_equal_to(
+            [
+                ("filterwarnings", "error::assertpy2.errors.DanglingAssertionWarning"),
+                ("filterwarnings", "error::assertpy2.errors.VacuousAssertionWarning"),
+            ]
+        )
+
     def test_a_profile_nobody_declared_is_refused_and_named(self):
-        config = self._config(assertpy2_profile="strict")
-        with pytest.warns(UserWarning, match="assertpy2_profile='strict' is not one of"):
+        config = self._config(assertpy2_profile="paranoid")
+        with pytest.warns(UserWarning, match="assertpy2_profile='paranoid' is not one of"):
             assert_that(_setting(config, "assertpy2_dangling")).is_equal_to("off")
 
     def test_a_mistyped_guard_setting_falls_back_to_the_profile_rather_than_to_off(self):
@@ -144,7 +166,7 @@ class TestTheProfileAnswersForWhatTheSuiteDidNotName:
 
     def test_a_profile_nobody_declared_is_named_once_rather_than_per_question(self):
         """Three settings ask, and one mistake is one mistake however many of them looked."""
-        config = self._config(assertpy2_profile="strict")
+        config = self._config(assertpy2_profile="paranoid")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             for name in ("assertpy2_dangling", "assertpy2_vacuous", "assertpy2_failure_clusters"):
@@ -204,6 +226,56 @@ class TestTheProfileFromAConfigFile:
         result = self._run(tmp_path, "assertpy2_profile = safe", "assertpy2_dangling = off")
         self._reported(result).does_not_contain("DanglingAssertionWarning")
         self._reported(result).contains("VacuousAssertionWarning")
+
+    def test_the_safe_profile_leaves_the_run_green(self, tmp_path):
+        """What separates `safe` from `strict`, and the reason both exist.
+
+        `safe` shows a suite what it has.  A run full of findings still exits zero, which is a fair
+        first look and a poor gate.
+        """
+        result = self._run(tmp_path, "assertpy2_profile = safe")
+        assert_that(result.returncode).described_as("warnings alone do not fail a run").is_equal_to(0)
+
+    def test_the_strict_profile_fails_the_run(self, tmp_path):
+        result = self._run(tmp_path, "assertpy2_profile = strict")
+        assert_that(result.returncode).described_as(f"strict left the run green: {result.stdout}").is_not_equal_to(0)
+
+    def test_strict_reports_each_finding_where_it_arrives(self, tmp_path):
+        """A dangling finding is reported at setup, a vacuous one while the assertion runs.
+
+        The chain is found while the module is collected, but the warning is raised from
+        `pytest_runtest_setup`, which is why pytest calls it a setup error rather than a failure.
+        Pinned because a reader who expects two failures and is shown one of each will think the plugin
+        broke.
+        """
+        result = self._run(tmp_path, "assertpy2_profile = strict")
+        assert_that(result.stdout).described_as("the dangling one, found at collection").contains(
+            "ERROR test_guards.py::test_dangling_statement"
+        )
+        assert_that(result.stdout).described_as("the vacuous one, found while running").contains(
+            "FAILED test_guards.py::test_vacuous_quantifier"
+        )
+
+    def test_a_named_setting_still_wins_under_strict(self, tmp_path):
+        """`strict` escalates the guards that are on, not the ones the suite turned off."""
+        result = self._run(tmp_path, "assertpy2_profile = strict", "assertpy2_dangling = off")
+        assert_that(result.stdout).does_not_contain("ERROR test_guards.py::test_dangling_statement")
+        assert_that(result.stdout).contains("FAILED test_guards.py::test_vacuous_quantifier")
+
+    def test_strict_leaves_another_library_s_warnings_alone(self, tmp_path):
+        """Why this is not `filterwarnings = error`.
+
+        A blanket escalation would fail a test for somebody else's `DeprecationWarning`, which is a
+        change to the suite this library was never asked to make.
+        """
+        (tmp_path / "test_neighbour.py").write_text(
+            "import warnings\n\n\n"
+            "def test_someone_else_warns():\n"
+            "    warnings.warn('unrelated', DeprecationWarning, stacklevel=1)\n",
+            encoding="utf-8",
+        )
+        result = self._run(tmp_path, "assertpy2_profile = strict")
+        assert_that(result.stdout).does_not_contain("FAILED test_neighbour.py")
 
     def test_a_value_the_setting_does_not_know_is_refused_rather_than_read_as_off(self, tmp_path):
         """A guard whose setting was mistyped must not go quiet: the quiet answer is the dangerous one.
