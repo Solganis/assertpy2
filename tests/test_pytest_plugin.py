@@ -17,6 +17,7 @@ from assertpy2 import snapshot as snapshot_module
 from assertpy2._clustering import Observation, Signature
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
+    _PROFILES,
     _diff_to_json,
     _escalate,
     _format_trace,
@@ -98,20 +99,25 @@ class TestPluginLoaded:
         assert_that(names).contains("assertpy2_dangling_entries")
         assert_that(names).contains("assertpy2_profile")
         assert_that(names).contains("assertpy2_vacuous")
-        # the three a profile answers for are registered with no default of their own, so `_setting`
+        # the two a profile answers for are registered with no default of their own, so `_setting`
         # can tell "the suite wrote off" from "the suite wrote nothing"
         defaults = {call[0][0]: call[1].get("default") for call in parser.addini.call_args_list}
         assert_that([defaults[name] for name in ("assertpy2_dangling", "assertpy2_vacuous")]).is_equal_to(["", ""])
-        assert_that(defaults["assertpy2_failure_clusters"]).is_equal_to("")
+        assert_that(defaults["assertpy2_failure_clusters"]).described_as(
+            "clustering answers for itself, so it carries a real default rather than a profile's"
+        ).is_equal_to(str(_clustering.MINIMUM_SIZE))
         assert_that(defaults["assertpy2_profile"]).is_equal_to("compatible")
 
 
 class TestTheProfileAnswersForWhatTheSuiteDidNotName:
     """One line of config instead of three, and the three keep working on their own.
 
-    The guards a new suite wants are the ones an inherited suite must not get without asking: each
-    changes what a green run reports.  So `compatible` is the default and `safe` is the line that turns
-    them on, rather than the defaults moving under everybody.
+    The guards a new suite wants are the ones an inherited suite must not get without asking: each can
+    turn a green run red.  So `compatible` is the default and `safe` is the line that turns them on,
+    rather than the defaults moving under everybody.
+
+    Failure clustering is deliberately not one of them.  It is asked for by name or not at all, and its
+    default is on, because it reads a run that already failed and costs a passing one nothing.
     """
 
     @staticmethod
@@ -123,7 +129,16 @@ class TestTheProfileAnswersForWhatTheSuiteDidNotName:
         assert_that(_setting(compatible, "assertpy2_dangling")).is_equal_to("off")
         assert_that(_setting(safe, "assertpy2_dangling")).is_equal_to("on")
         assert_that(_setting(safe, "assertpy2_vacuous")).is_equal_to("on")
-        assert_that(_setting(safe, "assertpy2_failure_clusters")).is_equal_to(str(_clustering.MINIMUM_SIZE))
+
+    def test_no_profile_answers_for_failure_clustering(self):
+        """The separation itself, which a table with a third key would quietly undo.
+
+        Clustering is on by default, so a profile listing it could only ever turn it off, and the one
+        that would is `compatible`.  That is the bundling this was pulled out of: `compatible` speaks
+        for what a guard costs a passing suite, and clustering costs one nothing.
+        """
+        for profile in _PROFILES.values():
+            assert_that(profile).does_not_contain_key("assertpy2_failure_clusters")
 
     def test_a_named_setting_wins_over_the_profile(self):
         config = self._config(assertpy2_profile="safe", assertpy2_dangling="off")
@@ -165,11 +180,11 @@ class TestTheProfileAnswersForWhatTheSuiteDidNotName:
             assert_that(_vacuous_guard(config)).is_true()
 
     def test_a_profile_nobody_declared_is_named_once_rather_than_per_question(self):
-        """Three settings ask, and one mistake is one mistake however many of them looked."""
+        """Both settings ask, and one mistake is one mistake however many of them looked."""
         config = self._config(assertpy2_profile="paranoid")
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            for name in ("assertpy2_dangling", "assertpy2_vacuous", "assertpy2_failure_clusters"):
+            for name in ("assertpy2_dangling", "assertpy2_vacuous"):
                 _setting(config, name)
         assert_that([str(one.message) for one in caught]).is_length(1)
 
@@ -1783,7 +1798,9 @@ class TestTheSettingsAProjectGets:
             assert_that(config._assertpy2_dangling_entries).is_equal_to(frozenset())
             assert_that(config._assertpy2_diff_enabled).is_equal_to(True)
             assert_that(config._assertpy2_diff_max).is_equal_to(50)
-            assert_that(config._assertpy2_cluster_minimum).is_none()
+            assert_that(config._assertpy2_cluster_minimum).described_as(
+                "clustering is the one report a project gets without configuring it"
+            ).is_equal_to(_clustering.MINIMUM_SIZE)
             assert_that(config._assertpy2_poll_threshold).is_equal_to(0.7)
         finally:
             pytest_unconfigure(config)

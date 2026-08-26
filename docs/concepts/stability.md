@@ -59,7 +59,7 @@ Where the promise ends, so the edges are decided rather than assumed:
 
 Semantic versioning, read strictly: a new assertion is a minor, a patch carries fixes only.
 
-Four kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
+Five kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
 
 - **an input that was silently wrong starts raising**, such as an empty prefix that no value could fail
 - **a wrong verdict is corrected**, so an assertion that passed and should not have begins to fail
@@ -67,6 +67,8 @@ Four kinds of change ship in a minor, and the release notes list each one under 
   the same reason
 - **a type stops offering what the value cannot answer**, so a call that type-checked and then raised
   becomes a type error instead
+- **a report that was opt-in becomes default**, so a run prints something it did not print before while
+  every verdict stays where it was. Its setting still turns it off
 
 Nothing else in a minor is designed to change what your suite reports, which is why that section is
 the one to read before upgrading.

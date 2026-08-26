@@ -387,13 +387,8 @@ own dict comparison without the path.
 
 ### What the failures had in common
 
-Forty failing tests are usually not forty problems. Turn this on and a red run ends with a line saying
-what the failures actually differed at:
-
-```toml
-[tool.pytest.ini_options]
-assertpy2_failure_clusters = "3"   # failing tests a cluster must hold before it is printed
-```
+Forty failing tests are usually not forty problems. Where three or more of them differ at the same
+place, the run ends with a line saying where:
 
 ```text
 assertpy2 failure clusters:
@@ -401,6 +396,13 @@ assertpy2 failure clusters:
       actual:   'superadmin'
       expected: 'admin'
   3 of 40 outside any cluster of 3
+```
+
+You get that without configuring anything. Three is the floor rather than a rule, and it moves:
+
+```toml
+[tool.pytest.ini_options]
+assertpy2_failure_clusters = "5"   # failing tests a cluster must hold before it is printed, or "off"
 ```
 
 That is a hypothesis you can act on before opening a single traceback, and it comes from the same
@@ -471,34 +473,34 @@ still two failures. The failure message and the structured diff keep their value
 Nothing here can fail a run that would otherwise have passed or reported. If the summary cannot be
 built, it says so in a warning and the run's own results are untouched.
 
-The cost is paid only when it is on. A run that leaves the summary off never reads or walks a failure
-for it, the recorder returning on the configuration alone. Turned on, every failed report carrying a
-diff is walked once, measured at 2.3 µs over one differing entry and 0.11 ms over fifty, and the summary
-itself is built once for the whole run, 15 µs over forty failing tests.
+A run that passes pays nothing for it, since there is no failure to record. A run that fails walks each
+failed report carrying a diff once, measured at 2.3 µs over one differing entry and 0.11 ms over fifty,
+and builds the summary once for the whole run, 15 µs over forty failing tests. Turned off, the recorder
+returns on the configuration alone and nothing is read at all.
 
 ### Configuration
 
-Three of the settings below are what a suite turns on when it wants the library to be loud. Two guard
-against a test that passes without checking anything, the dangling detector and the vacuous-quantifier
-warning. The third, failure clustering, reads a red run rather than a green one and groups failures
-that share a cause.
-
-All three are off unless you ask, because each changes what a run reports and a suite that inherited
-this library did not ask for that. A new suite can have all three in one line:
+Two of the settings below guard against a test that passes without checking anything: the dangling
+detector and the vacuous-quantifier warning. Both are off unless you ask, because either can turn a
+green run red, and a suite that inherited this library did not ask for that. A new suite gets both in
+one line:
 
 ```toml
 [tool.pytest.ini_options]
-assertpy2_profile = "safe"   # dangling on, vacuous on, clusters on (default "compatible": all off)
+assertpy2_profile = "safe"   # dangling on, vacuous on (default "compatible": both off)
 ```
 
 Naming a setting yourself wins over the profile, so `safe` plus `assertpy2_dangling = "off"` is a suite
-that wants the other two and has said so where the next reader will look.
+that wants the other and has said so where the next reader will look.
+
+Failure clustering is not one of them and needs no profile. It reads a run that has already gone red,
+so there is no green run for it to change. Write `assertpy2_failure_clusters = "off"` to turn it off.
 
 ### Seeing them, and being stopped by them
 
 `safe` warns. A run full of findings still exits zero, which is a fair first look and a poor gate.
 
-`strict` turns on the same three guards and fails the tests they find:
+`strict` turns on the same two guards and fails the tests they find:
 
 ```toml
 [tool.pytest.ini_options]
@@ -526,7 +528,7 @@ Failure clustering is not escalated and cannot be: it reads a run that already w
 assertpy2_diff = "off"              # disable structured diff sections entirely
 assertpy2_diff_max_entries = "100"  # max entries to show (default 50, 0 = unlimited)
 assertpy2_poll_report = "off"       # silence the near-timeout poll report (default 0.7)
-assertpy2_failure_clusters = "3"    # group failures sharing one difference (default off)
+assertpy2_failure_clusters = "off"  # stop grouping failures that share one difference (default 3)
 assertpy2_dangling = "on"           # warn about assert_that() statements that assert nothing
 assertpy2_dangling_entries = "check"  # your own assert_that wrappers, for the check above
 assertpy2_vacuous = "on"            # warn when a universal assertion passes over an empty value

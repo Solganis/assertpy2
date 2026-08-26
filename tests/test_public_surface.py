@@ -42,6 +42,21 @@ def _protocol_count(source: str) -> int:
     )
 
 
+def _kinds_listed(page: str) -> int:
+    """How many kinds of minor change the page lists under the sentence that counts them.
+
+    The sentence and the list are edited apart, so a kind added to one and not the other leaves the page
+    promising a number it does not deliver, which is the one thing this page must not do.
+    """
+    listed = page.split("kinds of change ship in a minor", 1)[-1].splitlines()[2:]
+    counted = 0
+    for line in listed:
+        if not line.strip():
+            break
+        counted += line.startswith("- **")
+    return counted
+
+
 def _names_protocol(base: ast.expr) -> bool:
     """Whether a base is ``Protocol``, written plain or parameterised."""
     if isinstance(base, ast.Subscript):
@@ -50,6 +65,7 @@ def _names_protocol(base: ast.expr) -> bool:
 
 
 _WORDS = {
+    5: "five",
     9: "nine",
     10: "ten",
     11: "eleven",
@@ -220,11 +236,12 @@ class TestTheCountsTheDocsQuote:
             "exported names": (re.search(r"The (\d+) names", page), len(assertpy2.__all__)),
             "assert_type checks": (re.search(r"(\d+) `assert_type` checks", page), typing_suite.count("assert_type(")),
             "protocols": (re.search(r"walks all ([\w-]+) protocols", page), _protocol_count(protocols)),
+            "kinds of change": (re.search(r"([\w-]+) kinds of change", page), _kinds_listed(page)),
         }
         wrong = {}
         for what, (found, real) in quoted.items():
             said = found.group(1) if found else None
-            if said is None or said not in {str(real), _WORDS.get(real)}:
+            if said is None or said.lower() not in {str(real), _WORDS.get(real)}:
                 wrong[what] = f"page says {said}, real is {real}"
         assert_that(wrong).described_as("figures on the stability page").is_empty()
 
