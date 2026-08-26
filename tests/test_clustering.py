@@ -495,6 +495,19 @@ class TestThePluginWiring:
         # and the project's other opt-in checks (vacuous, dangling) set the precedent
         assert_that(_cluster_minimum("off")).is_none()
 
+    def test_a_blank_setting_is_the_default_and_not_a_mistake(self):
+        """The one value that must not warn, because the warning would come out of `pytest_configure`.
+
+        Under `-W error` a warning raised there fails the run at startup, so an empty line in an ini
+        file would turn a suite red on upgrade.  That is the property the default rests on: clustering
+        reads a run that already went red and can never be the reason one went red.
+        """
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert_that(_cluster_minimum("")).is_equal_to(MINIMUM_SIZE)
+            assert_that(_cluster_minimum("   ")).is_equal_to(MINIMUM_SIZE)
+        assert_that(caught).described_as("a blank value said nothing wrong").is_empty()
+
     def test_off_records_nothing(self):
         config = self._config("off")
         _record_for_clustering(config, "t.py::test_x", diff_of(lambda: assert_that(1).is_equal_to(2)))
