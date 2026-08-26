@@ -87,7 +87,7 @@ _NAMED_IN_PROSE = {
     "a pandas or polars frame": "_FrameT_co",
     "a numpy array": "_ArrayT_co",
     "any callable": "Callable",
-    "anything else": "_T",
+    "a plain class": "_T",
 }
 """Rows that name their subject in words, mapped to the head of the annotation the overload uses.
 
