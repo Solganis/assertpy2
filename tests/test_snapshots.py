@@ -19,6 +19,7 @@ from assertpy2 import (
     SnapshotCreatedWarning,
     SnapshotUpdatedWarning,
     assert_that,
+    assert_warn,
     fail,
     match,
     register_snapshot_serializer,
@@ -795,6 +796,92 @@ class TestSnapshotPlaceholders:
     def test_non_matcher_value_raises(self, tmp_path):
         with pytest.raises(TypeError, match="Matcher instances or callables"):
             assert_that({"id": _UUID_A}).snapshot(id="ph12", path=str(tmp_path), placeholders={"id": "not a matcher"})
+
+
+class TestARefusalIsStillAFailureYouCanRead:
+    """The three refusals that used to raise a bare `AssertionError`.
+
+    `docs/concepts/stability.md` promises that a failure raised by this library carries `actual`,
+    `expected`, `diff`, `trace` and `failures`.  These three did not, so a consumer catching
+    `AssertionFailure` to report structured failures missed them and got an unstructured crash.
+    """
+
+    def test_an_empty_inline_snapshot(self):
+        with pytest.raises(AssertionFailure, match="inline snapshot is empty") as failure:
+            assert_that(7).matches_inline()
+        assert_that(failure.value.actual).is_equal_to(7)
+
+    def test_an_empty_inline_snapshot_in_ci(self, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionFailure, match="CI mode forbids recording it") as failure:
+            assert_that(7).matches_inline()
+        assert_that(failure.value.actual).is_equal_to(7)
+
+    def test_a_missing_file_snapshot_in_ci(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionFailure, match="CI mode forbids creating it") as failure:
+            assert_that({"a": 1}).snapshot(id="ci-structured", path=str(tmp_path))
+        assert_that(failure.value.actual).is_equal_to({"a": 1})
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda tmp: assert_that(7).matches_inline(),
+            lambda tmp: assert_that({"a": 1}).snapshot(id="ci-unnamed", path=str(tmp)),
+        ],
+        ids=["inline", "file"],
+    )
+    def test_none_of_them_names_an_expectation(self, tmp_path, monkeypatch, call):
+        """`has_expected` has to read false: nothing was compared, so claiming one would be a lie."""
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionFailure) as failure:
+            call(tmp_path)
+        assert_that(failure.value.has_expected).is_false()
+        assert_that(failure.value.expected).is_none()
+
+    def test_an_existing_except_assertion_error_still_catches(self):
+        """The compatibility half: `AssertionFailure` is an `AssertionError` and stays one."""
+        try:
+            assert_that(7).matches_inline()
+        except AssertionError as caught:
+            assert_that(caught).is_instance_of(AssertionFailure)
+        else:  # pragma: no cover - the call above raises
+            pytest.fail("the empty inline snapshot did not raise")
+
+    def test_a_soft_block_does_not_swallow_the_refusal(self, tmp_path, monkeypatch):
+        """The reason these raise instead of being collected.
+
+        Each guards a line that writes a snapshot file.  Collected, the block would carry on to that
+        line and write the file CI mode exists to prevent, which is the opposite of what it asks for.
+        """
+        monkeypatch.setattr(_snapshot, "_CI_MODE", True)
+        with pytest.raises(AssertionFailure, match="CI mode forbids creating it"), soft_assertions():
+            assert_that({"a": 1}).snapshot(id="ci-soft", path=str(tmp_path))
+        written = os.path.join(str(tmp_path), "snap-ci-soft.json")
+        assert_that(os.path.isfile(written)).described_as("the file the guard refuses to create").is_false()
+
+    @pytest.mark.parametrize(
+        "start",
+        [lambda: assert_warn(7), lambda: assert_that(7).check()],
+        ids=["warn", "check"],
+    )
+    def test_the_other_collecting_modes_do_not_swallow_it_either(self, start):
+        """`soft` is not the only mode that would have carried on to the write.
+
+        Pinned per mode rather than once, since each reaches the failure through its own branch of the
+        delivery and a later change could quieten one of them alone.
+        """
+        with pytest.raises(AssertionFailure, match="inline snapshot is empty"):
+            start().matches_inline()
+
+    def test_the_failure_description_reaches_the_message(self):
+        """A consequence of composing rather than raising, and the reason to compose.
+
+        `described_as()` is prepended by the composer, so these three refusals now read the way every
+        other failure in the library does instead of ignoring what the caller named.
+        """
+        with pytest.raises(AssertionFailure, match=r"^\[the order id\] inline snapshot is empty"):
+            assert_that(7).described_as("the order id").matches_inline()
 
 
 class TestSnapshotCiMode:

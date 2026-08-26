@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     import logging
 
-    from ..errors import DiffResult
+    from ..errors import AssertionFailure, DiffResult, PollTrace
     from ..http_mixin import _Response
+    from ..outcome import AssertionOutcome
     from ._compare import _CompareConfig
     from ._compat import Self
 
@@ -47,6 +48,19 @@ class _MixinBase:
             diff: DiffResult | None = ...,
             suppress_context: bool = ...,
         ) -> Self: ...
+
+        def _compose(
+            self,
+            msg: str,
+            *,
+            actual: object,
+            expected: object,
+            diff: DiffResult | None,
+            trace: PollTrace | None,
+        ) -> AssertionOutcome: ...
+
+        @staticmethod
+        def _failure(outcome: AssertionOutcome) -> AssertionFailure: ...
 
         def builder(
             self,
