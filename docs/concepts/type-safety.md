@@ -32,7 +32,7 @@ then suggests only what fits the value under test rather than the whole surface:
 | a pandas or polars frame | frame assertions | `is_frame_equal`, `is_array_equal`, plus size, membership and iteration |
 | a numpy array | array assertions | `is_array_equal`, `is_array_close_to`, plus the same three |
 | any callable | callable assertions | `raises`, `warns`, `eventually` |
-| anything else | the universal core assertions | |
+| a plain class | the core, plus structural matching and an ordering that refuses nothing | `is_greater_than`, `is_between`, `matches_structure` |
 
 An assertion hands back the same view it was reached from, so the suggestions stay relevant from the
 first call to the last.
