@@ -21,7 +21,7 @@ import requests
 import starlette.responses
 
 from assertpy2 import assert_that
-from assertpy2.assertpy import AssertionBuilder
+from assertpy2._engine._capable_typing import _CapableAssertion
 
 
 def responses_keep_their_own_assertions(
@@ -56,14 +56,14 @@ def each_client_keeps_its_own_type(
 
     The head of each expected type belongs to this package rather than to the client, which is what makes
     the witness a witness: `assert_type(x.value, x.Response)` degrades on both sides at once and passes,
-    since `Any` is asserted against `Any`.  Against `AssertionBuilder[...]` a degraded client reads as
+    since `Any` is asserted against `Any`.  Against `_CapableAssertion[...]` a degraded client reads as
     `Any` on one side and a real class on the other.
     """
-    assert_type(assert_that(from_requests), AssertionBuilder[requests.Response])
-    assert_type(assert_that(from_httpx), AssertionBuilder[httpx.Response])
-    assert_type(assert_that(from_starlette), AssertionBuilder[starlette.responses.Response])
-    assert_type(assert_that(from_flask), AssertionBuilder[flask.Response])
-    assert_type(assert_that(from_django), AssertionBuilder[django.http.HttpResponse])
+    assert_type(assert_that(from_requests), _CapableAssertion[requests.Response])
+    assert_type(assert_that(from_httpx), _CapableAssertion[httpx.Response])
+    assert_type(assert_that(from_starlette), _CapableAssertion[starlette.responses.Response])
+    assert_type(assert_that(from_flask), _CapableAssertion[flask.Response])
+    assert_type(assert_that(from_django), _CapableAssertion[django.http.HttpResponse])
 
 
 def a_response_assertion_is_refused_where_the_value_is_not_one(text: str) -> None:
