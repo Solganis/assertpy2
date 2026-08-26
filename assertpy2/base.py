@@ -53,7 +53,7 @@ class BaseMixin(SatisfiesMixin):
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
         """
-        self.description = str(description)
+        self.description: str = str(description)
         return self
 
     def is_equal_to(self, other: object, **kwargs: object) -> Self:

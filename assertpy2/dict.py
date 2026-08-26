@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, refuse
@@ -128,7 +128,7 @@ class DictMixin(_MixinBase):
                 )
         return self
 
-    def contains_entry(self, *args, **kwargs) -> Self:
+    def contains_entry(self, *args: object, **kwargs: object) -> Self:
         """Asserts that val is a dict and contains the given entry or entries.
 
         Checks if the dict contains the given key-value pair or pairs.
@@ -168,12 +168,15 @@ class DictMixin(_MixinBase):
         for entry in entries:
             if type(entry) is not dict:
                 refuse(entry, "a dict", subject=argument("entry"))
-            if len(entry) != 1:
+            # `object` and not `dict`, matching the declaration and the runtime both: the check above is
+            # `type(entry) is dict`, so a `dict` subclass a narrower annotation would approve is refused here
+            pair = cast("dict[Any, Any]", entry)
+            if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
-            entry_key = next(iter(entry))
+            entry_key = next(iter(pair))
             if entry_key not in self.val:
-                missing.append(entry)  # bad key
-            elif self.val[entry_key] != entry[entry_key]:
+                missing.append(pair)  # bad key
+            elif self.val[entry_key] != pair[entry_key]:
                 missing.append(entry)  # bad val
         if missing:
             return self.error(
@@ -183,7 +186,7 @@ class DictMixin(_MixinBase):
             )
         return self
 
-    def does_not_contain_entry(self, *args, **kwargs) -> Self:
+    def does_not_contain_entry(self, *args: object, **kwargs: object) -> Self:
         """Asserts that val is a dict and does not contain the given entry or entries.
 
         Checks if the dict excludes the given key-value pair or pairs.
@@ -217,11 +220,12 @@ class DictMixin(_MixinBase):
         for entry in entries:
             if type(entry) is not dict:
                 refuse(entry, "a dict", subject=argument("entry"))
-            if len(entry) != 1:
+            pair = cast("dict[Any, Any]", entry)
+            if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
-            entry_key = next(iter(entry))
-            if entry_key in self.val and entry[entry_key] == self.val[entry_key]:
-                found.append(entry)
+            entry_key = next(iter(pair))
+            if entry_key in self.val and pair[entry_key] == self.val[entry_key]:
+                found.append(pair)
         if found:
             return self.error(
                 f"Expected <{self.val}> to not contain entries {self._fmt_items(entries)},"

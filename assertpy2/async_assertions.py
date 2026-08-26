@@ -88,7 +88,7 @@ def _change_key(value: object) -> str | None:
 
 
 # `None` args mark a step that was read rather than called, which is `not_`
-_Step = tuple[str, "tuple | None", "dict | None"]
+_Step = tuple[str, "tuple[Any, ...] | None", "dict[str, Any] | None"]
 
 
 _COLLECT_RETRIES: bool = False

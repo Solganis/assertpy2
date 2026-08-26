@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Final
+from typing import TYPE_CHECKING, Any, Final, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+_ParserT = TypeVar("_ParserT", bound="Callable[[str], Any]")
 
 _BOOL_TRUE: Final = frozenset({"true", "yes", "1", "on"})
 _BOOL_FALSE: Final = frozenset({"false", "no", "0", "off"})
 
 
-def _with_pattern(pattern):
-    def decorator(func):
-        func.pattern = pattern
+def _with_pattern(pattern: str) -> Callable[[_ParserT], _ParserT]:
+    def decorator(func: _ParserT) -> _ParserT:
+        # behave reads the pattern off the function object, which is not something a callable type carries
+        cast("Any", func).pattern = pattern
         return func
 
     return decorator
 
 
 @_with_pattern(r"\d+")
-def _positive_int(text):
+def _positive_int(text: str) -> int:
     value = int(text)
     if value <= 0:
         raise ValueError(f"expected positive integer, got {value}")
@@ -24,12 +30,12 @@ def _positive_int(text):
 
 
 @_with_pattern(r"\d+")
-def _non_negative_int(text):
+def _non_negative_int(text: str) -> int:
     return int(text)
 
 
 @_with_pattern(r"\d+\.?\d*")
-def _positive_float(text):
+def _positive_float(text: str) -> float:
     value = float(text)
     if value <= 0:
         raise ValueError(f"expected positive float, got {value}")
@@ -37,7 +43,7 @@ def _positive_float(text):
 
 
 @_with_pattern(r".+?")
-def _non_empty_string(text):
+def _non_empty_string(text: str) -> str:
     stripped = text.strip()
     if not stripped:
         raise ValueError("expected non-empty string, got blank")
@@ -45,7 +51,7 @@ def _non_empty_string(text):
 
 
 @_with_pattern(r"\w+")
-def _bool_like(text):
+def _bool_like(text: str) -> bool:
     lower = text.strip().lower()
     if lower in _BOOL_TRUE:
         return True
@@ -54,7 +60,7 @@ def _bool_like(text):
     raise ValueError(f"expected boolean-like value, got {text!r}")
 
 
-ASSERTPY_TYPES: Final = MappingProxyType(
+ASSERTPY_TYPES: Final[Mapping[str, Callable[[str], Any]]] = MappingProxyType(
     {
         "PositiveInt": _positive_int,
         "NonNegativeInt": _non_negative_int,

@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
+    from ._engine._compare import _CompareConfig
     from .errors import DiffResult
 
     # what `isinstance()` accepts, spelled out rather than recursive: not every checker we gate on understands a
@@ -288,12 +289,12 @@ class EqualToMatcher(BaseMatcher):
             reject_unknown_kwargs(options, _EQUAL_TO_OPTIONS, "equal_to")
         self.expected = expected
         self.strict_types = strict_types
-        self.ignore = options.get("ignore")
-        self.include = options.get("include")
+        self.ignore: object = options.get("ignore")
+        self.include: object = options.get("include")
         # `equal_to(value)` with nothing else is what `matches_structure` and the loops use, so it is decided once
         # here
-        self.plain = not (strict_types or options)
-        self.config = (
+        self.plain: bool = not (strict_types or options)
+        self.config: _CompareConfig | None = (
             _build_compare_config(
                 options.get("tolerance"),
                 options.get("comparators"),
@@ -683,7 +684,7 @@ class IsInMatcher(BaseMatcher):
 
 
 class HasPropertyMatcher(BaseMatcher):
-    def __init__(self, name: str, matcher: Matcher | None = None):
+    def __init__(self, name: str, matcher: Matcher[Any] | None = None):
         self.name = name
         self.matcher = matcher
 
