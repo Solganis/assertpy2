@@ -57,8 +57,14 @@ def _shared_extensions():
     unconditionally would destroy an extension of the same name that existed before, which trades one
     order dependency for another. A snapshot is taken instead, and `finally` puts it back whether the
     test removed things, added things, or raised half-way through.
+
+    Both halves of the registry, and the second half is the one this was missing. `add_extension()`
+    writes a plain function onto the builder subclass rather than into `_extensions`, so restoring the
+    mapping alone left four names on the class after this file: another test reading the builder's own
+    surface then saw them as members it was missing, and passed or failed on what ran before it.
     """
     before = dict(assertpy2.assertpy._extensions)
+    on_the_builder = dict(vars(assertpy2.assertpy._ExtendedBuilder))
     try:
         for extension in _SHARED:
             add_extension(extension, override=True)
@@ -66,6 +72,11 @@ def _shared_extensions():
     finally:
         assertpy2.assertpy._extensions.clear()
         assertpy2.assertpy._extensions.update(before)
+        for name in set(vars(assertpy2.assertpy._ExtendedBuilder)) - set(on_the_builder):
+            delattr(assertpy2.assertpy._ExtendedBuilder, name)
+        for name, member in on_the_builder.items():
+            if getattr(assertpy2.assertpy._ExtendedBuilder, name, None) is not member:
+                setattr(assertpy2.assertpy._ExtendedBuilder, name, member)
 
 
 def test_is_even_extension():
