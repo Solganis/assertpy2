@@ -19,9 +19,10 @@ from .outcome import MISSING
 
 if TYPE_CHECKING:
     import types
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping
 
     from ._engine._compat import Self
+    from .matchers import Matcher
 
 __tracebackhide__ = True
 
@@ -517,8 +518,8 @@ class SnapshotMixin(_MixinBase):
         ignore: object = None,
         include: object = None,
         tolerance: float | None = None,
-        comparators: dict | None = None,
-        placeholders: dict | None = None,
+        comparators: dict[Any, Callable[[Any, Any], Any]] | None = None,
+        placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = None,
     ) -> Self:
         """Asserts that val is identical to the on-disk snapshot stored previously.
 
@@ -715,8 +716,8 @@ class SnapshotMixin(_MixinBase):
         ignore: object = None,
         include: object = None,
         tolerance: float | None = None,
-        comparators: dict[object, Callable[..., bool]] | None = None,
-        placeholders: dict[object, object] | None = None,
+        comparators: dict[Any, Callable[[Any, Any], Any]] | None = None,
+        placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = None,
     ) -> Self:
         """Asserts that val equals an inline snapshot literal written at the call site.
 

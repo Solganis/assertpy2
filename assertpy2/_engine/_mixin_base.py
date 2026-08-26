@@ -3,13 +3,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    import logging
-
     from ..errors import AssertionFailure, DiffResult, PollTrace
     from ..http_mixin import _Response
     from ..outcome import AssertionOutcome
     from ._compare import _CompareConfig
     from ._compat import Self
+    from ._introspection import WarningLogger
 
 
 class _MixinBase:
@@ -33,7 +32,7 @@ class _MixinBase:
         description: str
         kind: str | None
         expected: type[BaseException] | None
-        logger: logging.LoggerAdapter
+        logger: WarningLogger
         _not_expected: bool
         _expected_warning: type[Warning] | None
         _return_value: object
@@ -68,7 +67,7 @@ class _MixinBase:
             description: str = ...,
             kind: str | None = ...,
             expected: type[BaseException] | None = ...,
-            logger: logging.LoggerAdapter | None = ...,
+            logger: WarningLogger | None = ...,
             origin: str | None = ...,
         ) -> Self: ...
 

@@ -685,7 +685,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import datetime
     import logging
-    from collections.abc import Callable, Collection, Iterable, Mapping, Sized
+    from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
     from typing import Any, Protocol, SupportsFloat, TypeVar, overload
 

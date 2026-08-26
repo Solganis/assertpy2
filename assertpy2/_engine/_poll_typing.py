@@ -945,11 +945,11 @@ if TYPE_CHECKING:
         def does_not_contain_entry(self: _SyncPoll[_CapableT], *args: object, **kwargs: object) -> _SyncPoll[_P_co]: ...
 
         @overload
-        def matches_structure(self: _SyncPoll[dict[_K, _V]], spec: dict) -> _SyncPoll[_P_co]: ...
+        def matches_structure(self: _SyncPoll[dict[_K, _V]], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
         @overload
-        def matches_structure(self: _SyncPoll[_T], spec: dict) -> _SyncPoll[_P_co]: ...
+        def matches_structure(self: _SyncPoll[_T], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
         @overload
-        def matches_structure(self: _SyncPoll[_CapableT], spec: dict) -> _SyncPoll[_P_co]: ...
+        def matches_structure(self: _SyncPoll[_CapableT], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
 
         @overload
         def extracting(
@@ -1271,7 +1271,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
@@ -1324,8 +1324,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
         def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> _SyncPoll[_P_co]: ...
@@ -1337,8 +1337,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
     class _AsyncPoll(Protocol[_P_co]):
@@ -2246,11 +2246,11 @@ if TYPE_CHECKING:
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
-        def matches_structure(self: _AsyncPoll[dict[_K, _V]], spec: dict) -> _AsyncPoll[_P_co]: ...
+        def matches_structure(self: _AsyncPoll[dict[_K, _V]], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
         @overload
-        def matches_structure(self: _AsyncPoll[_T], spec: dict) -> _AsyncPoll[_P_co]: ...
+        def matches_structure(self: _AsyncPoll[_T], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
         @overload
-        def matches_structure(self: _AsyncPoll[_CapableT], spec: dict) -> _AsyncPoll[_P_co]: ...
+        def matches_structure(self: _AsyncPoll[_CapableT], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def extracting(
@@ -2578,7 +2578,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
         ) -> _AsyncPoll[_P_co]: ...
@@ -2631,8 +2631,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
         def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> _AsyncPoll[_P_co]: ...
@@ -2644,6 +2644,6 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...

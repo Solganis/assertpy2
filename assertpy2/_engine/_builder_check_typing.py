@@ -919,11 +919,11 @@ if TYPE_CHECKING:
         ) -> AssertionOutcome: ...
 
         @overload
-        def matches_structure(self: _CheckAnyValue[dict[_K, _V]], spec: dict) -> AssertionOutcome: ...
+        def matches_structure(self: _CheckAnyValue[dict[_K, _V]], spec: dict[Any, Any]) -> AssertionOutcome: ...
         @overload
-        def matches_structure(self: _CheckAnyValue[_T], spec: dict) -> AssertionOutcome: ...
+        def matches_structure(self: _CheckAnyValue[_T], spec: dict[Any, Any]) -> AssertionOutcome: ...
         @overload
-        def matches_structure(self: _CheckAnyValue[_CapableT], spec: dict) -> AssertionOutcome: ...
+        def matches_structure(self: _CheckAnyValue[_CapableT], spec: dict[Any, Any]) -> AssertionOutcome: ...
 
         @overload
         def has_json_path(
@@ -1183,7 +1183,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
         ) -> AssertionOutcome: ...
@@ -1236,8 +1236,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> AssertionOutcome: ...
 
         def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> AssertionOutcome: ...
@@ -1249,6 +1249,6 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> AssertionOutcome: ...

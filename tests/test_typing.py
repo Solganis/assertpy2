@@ -13,13 +13,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import datetime
+    import logging
     import pathlib
     from collections.abc import Callable, Mapping, Sequence
     from typing import Any, cast
 
     from typing_extensions import TypeIs, assert_type
 
-    from assertpy2 import AssertionOutcome, assert_conforms, assert_that, match
+    from assertpy2 import AssertionOutcome, assert_conforms, assert_that, assert_warn, match
     from assertpy2._engine._capable_typing import _CapableAssertion
     from assertpy2._engine._check_typing import (
         _CheckDictAssertion,
@@ -49,7 +50,7 @@ if TYPE_CHECKING:
         _StringAssertion,
     )
     from assertpy2.assertpy import AssertionBuilder
-    from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher
+    from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher, Matcher
 
     assert_type(assert_that("text"), _StringAssertion)
     assert_type(assert_that(42), _NumericAssertion[int])
@@ -386,3 +387,25 @@ if TYPE_CHECKING:
     assert_type(assert_that(response), _CapableAssertion[_FakeResponse])
     assert_type(assert_that(response).decoded_as_json(), AssertionBuilder[object])
     assert_type(assert_that(response).decoded_as_json().value, object)
+
+    # every shape `assert_warn` documents a logger as.  The docstring says `Logger`, the default the
+    # builder installs is a `LoggerAdapter`, and the only thing reached on either is `warning()`, so
+    # naming a concrete type here would refuse working code that the runtime accepts
+    class _OwnLogger:
+        def warning(self, msg: object) -> None: ...
+
+    assert_type(assert_warn("foo", logger=logging.getLogger("app")), Any)
+    assert_type(assert_warn("foo", logger=logging.LoggerAdapter(logging.getLogger("app"), None)), Any)
+    assert_type(assert_warn("foo", logger=_OwnLogger()), Any)
+    assert_type(assert_warn("foo"), Any)
+
+    # comparator and placeholder tables built before the call, which is how the docs show them.  A
+    # `dict` parameter refuses these outright: it is invariant in both halves, so a table declared
+    # `dict[str, ...]` is not a `dict[object, ...]`, and one returning `bool` is not one returning
+    # `object`.  `Mapping[Any, ...]` is what accepts them, and the runtime only ever reads them
+    by_type: dict[type, Callable[[float, float], bool]] = {float: lambda a, e: round(a, 2) == round(e, 2)}
+    by_field: dict[str, Callable[[Any, Any], bool]] = {"name": lambda a, e: a.lower() == e.lower()}
+    volatile: dict[str, Matcher[str]] = {"id": match.is_uuid()}
+    assert_type(assert_that({"n": 1.0}).snapshot(id="a", comparators=by_type), _DictAssertion[str, float])
+    assert_type(assert_that({"name": "A"}).snapshot(id="b", comparators=by_field), _DictAssertion[str, str])
+    assert_type(assert_that({"id": "x"}).snapshot(id="c", placeholders=volatile), _DictAssertion[str, str])

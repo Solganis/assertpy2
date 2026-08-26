@@ -9,7 +9,7 @@ import sys
 import threading
 import types
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Final, Generic, Literal, Protocol, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, Final, Generic, Literal, NoReturn, Protocol, TypeVar, cast, overload
 
 if TYPE_CHECKING:
     import datetime
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 from . import _hints
 from ._engine._contract import contract_drift
-from ._engine._introspection import is_same_implementation
+from ._engine._introspection import WarningLogger, is_same_implementation
 from ._engine._operations import (
     CONFIGURES,
     DESCRIBES,
@@ -92,6 +92,17 @@ if TYPE_CHECKING:
     _K = TypeVar("_K")  # dict key type, so .value keeps dict[K, V]
     _V = TypeVar("_V")  # dict value type
     _P = TypeVar("_P")  # what a probe hands back, so a polling chain asserts on that and not on `object`
+
+    class _Extension(Protocol):
+        """A function attached as an extension, which the registry keys on its own name.
+
+        The name is part of the contract rather than incidental: `add_extension` refuses a value whose
+        `__name__` is not an identifier, and `remove_extension` reads it to find what to take off.
+        """
+
+        __name__: str
+
+        def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
     class _ElementSource(Protocol[_E_co]):
         """Anything whose value is a collection of `_E_co`, however it was annotated.
@@ -651,7 +662,7 @@ def assert_conforms(
     return builder.builder(validated, description, kind)
 
 
-def assert_warn(val: object, description="", logger=None):
+def assert_warn(val: object, description: str = "", logger: WarningLogger | None = None) -> Any:
     """Set the value to be tested, and optional description and logger, and allow assertions to be
     called, but never fail, only log warnings.
 
@@ -696,7 +707,7 @@ def assert_warn(val: object, description="", logger=None):
     return _builder(val, description, "warn", logger=logger)
 
 
-def fail(msg=""):
+def fail(msg: str = "") -> NoReturn:
     """Force immediate test failure with the given message.
 
     Args:
@@ -725,7 +736,7 @@ def fail(msg=""):
     raise AssertionFailure(f"Fail: {msg}!" if msg else "Fail!")
 
 
-def soft_fail(msg=""):
+def soft_fail(msg: str = "") -> None:
     """Within a [`soft_assertions()`][assertpy2.assertpy.soft_assertions] context, append the failure
     message to the soft error list, but do not halt test execution.
 
@@ -779,7 +790,7 @@ _POLLING_NAMES: Final = frozenset(
 ) | {"not_"}
 
 
-def add_extension(func, *, override: bool = False):
+def add_extension(func: _Extension, *, override: bool = False) -> None:
     """Add a new user-defined custom assertion to assertpy.
 
     Once the assertion is registered with assertpy, use it like any other assertion.  Pass val to
@@ -853,7 +864,7 @@ def add_extension(func, *, override: bool = False):
             _extensions[name] = func
 
 
-def remove_extension(func):
+def remove_extension(func: _Extension) -> None:
     """Remove a user-defined custom assertion.
 
     Args:
@@ -887,10 +898,10 @@ def _builder(val, description="", kind=None, expected=None, logger=None):
     return ab
 
 
-class WarningLoggingAdapter(logging.LoggerAdapter):
+class WarningLoggingAdapter(logging.LoggerAdapter[logging.Logger]):
     """Logging adapter to unwind the stack to get the correct callee filename and line number."""
 
-    def process(self, msg, kwargs):
+    def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
         caller = _caller_location()
         if caller is None:
             return msg, kwargs
@@ -974,9 +985,9 @@ class NegatedBuilder(Generic[_S]):
         description: str
         kind: str | None
         expected: type[BaseException] | None
-        logger: logging.LoggerAdapter
+        logger: WarningLogger
 
-    def __init__(self, builder: AssertionBuilder) -> None:
+    def __init__(self, builder: AssertionBuilder[Any]) -> None:
         self._builder = builder
 
     def __getattr__(self, name: str) -> Callable[..., _S]:
@@ -1112,7 +1123,7 @@ class CheckBuilder:
         @property
         def not_(self) -> CheckBuilder: ...
 
-    def __init__(self, target: object, builder: AssertionBuilder) -> None:
+    def __init__(self, target: object, builder: AssertionBuilder[Any]) -> None:
         # two references: `not_` moves the target to the negation proxy while the mode stays underneath
         self._target = target
         self._builder = builder
@@ -1181,13 +1192,20 @@ class AssertionBuilder(
         logger (Logger, optional): the logger for warning messages.  Defaults to ``None``
     """
 
-    def __init__(self, val, description="", kind=None, expected=None, logger=None):
+    def __init__(
+        self,
+        val: Any,
+        description: str = "",
+        kind: str | None = None,
+        expected: type[BaseException] | None = None,
+        logger: WarningLogger | None = None,
+    ) -> None:
         """Never call this constructor directly."""
         self.val = val
         self.description = description
         self.kind = kind
         self.expected = expected
-        self.logger = logger or _default_logger
+        self.logger: WarningLogger = logger or _default_logger
         self._not_expected = False
         self._expected_warning = None
         self._return_value = _UNSET
@@ -1364,7 +1382,15 @@ class AssertionBuilder(
         def satisfies(self, matcher: Any) -> Any:  # overload impl stub, never executed
             ...
 
-    def builder(self, val, description="", kind=None, expected=None, logger=None, origin=None):
+    def builder(
+        self,
+        val: Any,
+        description: str = "",
+        kind: str | None = None,
+        expected: type[BaseException] | None = None,
+        logger: WarningLogger | None = None,
+        origin: str | None = None,
+    ) -> Any:
         """Helper to build a new `AssertionBuilder` instance. Use this only if not chaining to ``self``.
 
         Args:
@@ -1386,7 +1412,16 @@ class AssertionBuilder(
         pivoted._response = self._response if self._response is not None else response_of(self.val)
         return pivoted
 
-    def error(self, msg, *, actual=MISSING, expected=MISSING, diff=None, trace=None, suppress_context=False) -> Self:
+    def error(
+        self,
+        msg: str,
+        *,
+        actual: Any = MISSING,
+        expected: Any = MISSING,
+        diff: DiffResult | None = None,
+        trace: PollTrace | None = None,
+        suppress_context: bool = False,
+    ) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
 
         If an error description is set by [`described_as()`][assertpy2.base.BaseMixin.described_as], then that

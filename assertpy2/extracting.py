@@ -3,7 +3,7 @@ from __future__ import annotations
 import collections.abc
 import difflib
 import inspect
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_model_dump_object, is_namedtuple
@@ -13,7 +13,10 @@ from ._engine._require import argument, refuse, reject_unknown_kwargs, require_t
 _EXTRACTING_OPTIONS = frozenset({"filter", "sort"})
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ._engine._compat import Self
+    from ._engine._introspection import MappingLike
 
 __tracebackhide__ = True
 
@@ -115,7 +118,7 @@ class ExtractingMixin(_MixinBase):
         assert_that(users).extracting('user', sort=lambda x: -x['age']).is_equal_to(['Bob', 'Alice', 'Charlie'])
     """
 
-    def extracting(self, *names: object, **kwargs) -> Self:
+    def extracting(self, *names: object, **kwargs: object) -> Self:
         """Asserts that val is iterable, then extracts the named attributes, properties, or
         zero-arg methods into a list (or list of tuples if multiple names are given).
 
@@ -210,18 +213,17 @@ class ExtractingMixin(_MixinBase):
 
         def _filter(item):
             if "filter" in kwargs:
-                if isinstance(kwargs["filter"], str):
-                    return bool(_extract(item, kwargs["filter"]))
-                elif mapping_shaped(kwargs["filter"], check_values=False):
-                    for key in kwargs["filter"]:
-                        if isinstance(key, str) and _extract(item, key) != kwargs["filter"][key]:
-                            return False
+                chosen = kwargs["filter"]
+                if isinstance(chosen, str):
+                    return bool(_extract(item, chosen))
+                elif mapping_shaped(chosen, check_values=False):
+                    mapping = cast("MappingLike", chosen)
+                    return all(_extract(item, key) == mapping[key] for key in mapping if isinstance(key, str))
+                elif callable(chosen):
+                    return cast("Callable[[object], object]", chosen)(item)
+                elif chosen is None:
                     return True
-                elif callable(kwargs["filter"]):
-                    return kwargs["filter"](item)
-                elif kwargs["filter"] is None:
-                    return True
-                refuse(kwargs["filter"], "a str, a dict, or a callable", subject=argument("filter"))
+                refuse(chosen, "a str, a dict, or a callable", subject=argument("filter"))
             return True
 
         def _sort(item):
@@ -232,7 +234,7 @@ class ExtractingMixin(_MixinBase):
             if isinstance(sort, collections.abc.Iterable):
                 return tuple(_extract(item, key) for key in sort if isinstance(key, str))
             if callable(sort):
-                return sort(item)
+                return cast("Callable[[object], object]", sort)(item)
             if sort is None:
                 return 0
             # silently returning unsorted items would surface as a confusing order mismatch further down the chain

@@ -222,7 +222,7 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             ignore_null: bool = ...,
             strict_types: bool = ...,
         ) -> Self: ...
@@ -294,8 +294,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> Self: ...
         def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> Self: ...  # noqa: A002  # mirrors public parameter
         def matches_inline(
@@ -305,8 +305,8 @@ if TYPE_CHECKING:
             ignore: _KeySpecs | None = ...,
             include: _KeySpecs | None = ...,
             tolerance: float | None = ...,
-            comparators: dict[object, Callable[[Any, Any], object]] | None = ...,
-            placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> Self: ...
         # declared as this protocol: any other spelling let `assert_that(1).not_.starts_with('x')` pass
         @property
@@ -344,7 +344,7 @@ if TYPE_CHECKING:
         def value(self) -> _T_co: ...
 
         # attrs reaches mypy only, so the object view carries `matches_structure` rather than a shape
-        def matches_structure(self, spec: dict) -> Self: ...
+        def matches_structure(self, spec: dict[Any, Any]) -> Self: ...
 
         def is_greater_than(self, other: Any) -> Self: ...
         def is_greater_than_or_equal_to(self, other: Any) -> Self: ...
@@ -716,7 +716,7 @@ if TYPE_CHECKING:
         def last(self) -> AssertionBuilder[_K]: ...
         def element(self, index: int) -> AssertionBuilder[_K]: ...
         def single(self) -> AssertionBuilder[_K]: ...
-        def matches_structure(self, spec: dict) -> Self: ...
+        def matches_structure(self, spec: dict[Any, Any]) -> Self: ...
 
     # the shapes a checker recognises without importing the library that defines them.  Every member is
     # one `pandas-stubs` declares: `pivot` and not `__dataframe__`, which the stubs answer through their

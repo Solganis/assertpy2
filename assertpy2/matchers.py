@@ -396,7 +396,7 @@ class _MatchNamespace:
         return IsInMatcher(*values)
 
     @staticmethod
-    def has_property(name: str, matcher: Matcher | None = None) -> HasPropertyMatcher:
+    def has_property(name: str, matcher: Matcher[Any] | None = None) -> HasPropertyMatcher:
         """Matcher for an object with attribute ``name``, optionally matching ``matcher``.
 
         Args:
@@ -565,4 +565,4 @@ class _MatchNamespace:
         return factory
 
 
-match = _MatchNamespace()
+match: _MatchNamespace = _MatchNamespace()

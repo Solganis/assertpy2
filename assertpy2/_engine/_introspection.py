@@ -46,6 +46,33 @@ class AttrsInstance(Protocol):
     __attrs_attrs__: tuple[Any, ...]
 
 
+class WarningLogger(Protocol):
+    """What a warning-mode assertion asks of a logger: the one method it calls when an assertion fails.
+
+    Structural rather than either concrete type, because both are promised and both work.  The
+    docstring of `assert_warn` says `Logger`, the default the builder installs is a `LoggerAdapter`,
+    and naming one of them in the signature refuses the other for no reason the runtime shares.
+
+    Widest on both sides.  `str` because a logger declared to take only a string is a working one and
+    the message here is always a string, and `object` because a return this never reads is not a
+    reason to refuse a logger that has one.
+    """
+
+    def warning(self, msg: str) -> object: ...
+
+
+@runtime_checkable
+class Readable(Protocol):
+    """A file-like object, recognised by the one method that reads it whole.
+
+    The return is spelled out because the caller promises a `str`: a text handle answers with one and a
+    binary handle with `bytes`, which is decoded, and a reader that answers with neither would be
+    handed straight back through a signature that says `str`.
+    """
+
+    def read(self) -> str | bytes: ...
+
+
 @runtime_checkable
 class MappingLike(Protocol):
     """A dict-like object that can be iterated over and subscripted by key."""

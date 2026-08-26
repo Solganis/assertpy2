@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sized
 
     from ._engine._compat import Self
+    from ._engine._introspection import MappingLike
     from .matchers import Matcher
 
 __tracebackhide__ = True
@@ -69,7 +70,7 @@ class CollectionMixin(_MixinBase):
             return self.error("Expected not iterable, but was.")
         return self
 
-    def is_subset_of(self, *supersets, allow_empty: bool = False) -> Self:
+    def is_subset_of(self, *supersets: object, allow_empty: bool = False) -> Self:
         """Asserts that val is iterable and a subset of the given superset (or supersets).
 
         Args:
@@ -111,8 +112,9 @@ class CollectionMixin(_MixinBase):
             superdict = {}
             for superset_index, superset in enumerate(supersets):
                 self._require_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
-                for key in superset:
-                    superdict.update({key: superset[key]})
+                mapping = cast("MappingLike", superset)
+                for key in mapping:
+                    superdict.update({key: mapping[key]})
 
             walked = 0
             for key, value in entries:
@@ -134,7 +136,8 @@ class CollectionMixin(_MixinBase):
             collected = []
             for superset in supersets:
                 try:
-                    collected.extend(superset)
+                    # the `except` is what decides this, so the cast asserts nothing the code does not already handle
+                    collected.extend(cast("Iterable[object]", superset))
                 except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
                     collected.append(superset)
             # the same core the matcher spelling uses: a bare `set()` reported a value whose hash disagrees with its

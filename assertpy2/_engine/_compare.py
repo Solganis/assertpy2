@@ -22,7 +22,7 @@ import pathlib
 import re
 import uuid
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._introspection import is_mapping_like, is_model_dump_object
 
@@ -78,7 +78,9 @@ class _CompareConfig:
     """
 
     tolerance: float | None = None
-    comparators: dict[object, Callable[[object, object], bool]] | None = None
+    # `dict` and not `Mapping`, because `_build_compare_config` refuses anything else at run time, and a
+    # signature that accepted a `MappingProxyType` a checker approved of would fail on the call
+    comparators: dict[Any, Callable[[Any, Any], Any]] | None = None
     ignore_null: bool = False
     strict_types: bool = False
 

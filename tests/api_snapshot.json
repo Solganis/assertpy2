@@ -70,49 +70,49 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "Any",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "val",
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "str",
      "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "str | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "kind",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "type[BaseException] | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "expected",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "WarningLogger | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "logger",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "str | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "origin",
      "required": false
     }
    ],
-   "returns": null
+   "returns": "Any"
   },
   "caused_by": {
    "kind": "callable",
@@ -221,14 +221,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "args",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
@@ -433,14 +433,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "args",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
@@ -608,42 +608,42 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "Any",
      "default": "<assertpy2.outcome._Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "actual",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "Any",
      "default": "<assertpy2.outcome._Missing>",
      "kind": "KEYWORD_ONLY",
      "name": "expected",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "DiffResult | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "PollTrace | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "trace",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "bool",
      "default": "False",
      "kind": "KEYWORD_ONLY",
      "name": "suppress_context",
@@ -754,7 +754,7 @@
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_KEYWORD",
      "name": "kwargs",
@@ -1632,7 +1632,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "object",
      "default": null,
      "kind": "VAR_POSITIONAL",
      "name": "supersets",
@@ -1792,14 +1792,14 @@
      "required": false
     },
     {
-     "annotation": "dict[object, Callable[..., bool]] | None",
+     "annotation": "dict[Any, Callable[[Any, Any], Any]] | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "comparators",
      "required": false
     },
     {
-     "annotation": "dict[object, object] | None",
+     "annotation": "Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "placeholders",
@@ -1984,14 +1984,14 @@
      "required": false
     },
     {
-     "annotation": "dict | None",
+     "annotation": "dict[Any, Callable[[Any, Any], Any]] | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "comparators",
      "required": false
     },
     {
-     "annotation": "dict | None",
+     "annotation": "Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None",
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "placeholders",
@@ -2372,7 +2372,7 @@
      "required": true
     },
     {
-     "annotation": "AssertionBuilder",
+     "annotation": "AssertionBuilder[Any]",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "builder",
@@ -2547,7 +2547,7 @@
    "kind": "class",
    "parameters": [
     {
-     "annotation": "AssertionBuilder",
+     "annotation": "AssertionBuilder[Any]",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "builder",
@@ -2878,7 +2878,7 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "_Extension",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
@@ -2892,7 +2892,7 @@
      "required": false
     }
    ],
-   "returns": null
+   "returns": "None"
   },
   "assert_all": {
    "kind": "callable",
@@ -2979,21 +2979,21 @@
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "str",
      "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "description",
      "required": false
     },
     {
-     "annotation": null,
+     "annotation": "WarningLogger | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "logger",
      "required": false
     }
    ],
-   "returns": null
+   "returns": "Any"
   },
   "clear_custom_matchers": {
    "kind": "callable",
@@ -3004,14 +3004,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str | bytes | os.PathLike[str] | os.PathLike[bytes] | Readable",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "file",
      "required": true
     },
     {
-     "annotation": null,
+     "annotation": "str",
      "default": "'utf-8'",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "encoding",
@@ -3024,14 +3024,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str",
      "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": false
     }
    ],
-   "returns": null
+   "returns": "NoReturn"
   },
   "match": {
    "kind": "assertpy2.matchers._MatchNamespace",
@@ -3095,14 +3095,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "_Extension",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "func",
      "required": true
     }
    ],
-   "returns": null
+   "returns": "None"
   },
   "soft_assertions": {
    "kind": "callable",
@@ -3113,14 +3113,14 @@
    "kind": "callable",
    "parameters": [
     {
-     "annotation": null,
+     "annotation": "str",
      "default": "''",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "msg",
      "required": false
     }
    ],
-   "returns": null
+   "returns": "None"
   },
   "unregister_matcher": {
    "kind": "callable",
@@ -3425,7 +3425,7 @@
      "required": true
     },
     {
-     "annotation": "Matcher | None",
+     "annotation": "Matcher[Any] | None",
      "default": "None",
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "matcher",
@@ -4892,7 +4892,7 @@
   "_ArrayAssertion.is_array_equal": "(expected: object, **options: Any) -> Self",
   "_ArrayAssertion.is_callable": "() -> Self",
   "_ArrayAssertion.is_empty": "() -> Self",
-  "_ArrayAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_ArrayAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_ArrayAssertion.is_false": "() -> Self",
   "_ArrayAssertion.is_in": "(*items: object) -> Self",
   "_ArrayAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -4914,10 +4914,10 @@
   "_ArrayAssertion.is_true": "() -> Self",
   "_ArrayAssertion.is_type_of": "(some_type: type) -> Self",
   "_ArrayAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_ArrayAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ArrayAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ArrayAssertion.not_": "() -> Self",
   "_ArrayAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_ArrayAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ArrayAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ArrayAssertion.value": "() -> _ArrayT_co",
   "_ArrayLikeAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_ArrayLikeAssertion.all_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
@@ -4936,7 +4936,7 @@
   "_ArrayLikeAssertion.is_array_equal": "(expected: object, **options: Any) -> Self",
   "_ArrayLikeAssertion.is_callable": "() -> Self",
   "_ArrayLikeAssertion.is_empty": "() -> Self",
-  "_ArrayLikeAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_ArrayLikeAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_ArrayLikeAssertion.is_false": "() -> Self",
   "_ArrayLikeAssertion.is_in": "(*items: object) -> Self",
   "_ArrayLikeAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -4958,10 +4958,10 @@
   "_ArrayLikeAssertion.is_true": "() -> Self",
   "_ArrayLikeAssertion.is_type_of": "(some_type: type) -> Self",
   "_ArrayLikeAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_ArrayLikeAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ArrayLikeAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ArrayLikeAssertion.not_": "() -> Self",
   "_ArrayLikeAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_ArrayLikeAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ArrayLikeAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ArrayLikeAssertion.value": "() -> object",
   "_BoolAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_BoolAssertion.check": "() -> _CheckBoolAssertion",
@@ -4970,7 +4970,7 @@
   "_BoolAssertion.is_between": "(low: _Number, high: _Number) -> Self",
   "_BoolAssertion.is_callable": "() -> Self",
   "_BoolAssertion.is_close_to": "(other: _Number, tolerance: _Number) -> Self",
-  "_BoolAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_BoolAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_BoolAssertion.is_false": "() -> Self",
   "_BoolAssertion.is_greater_than": "(other: _Number) -> Self",
   "_BoolAssertion.is_greater_than_or_equal_to": "(other: _Number) -> Self",
@@ -5004,10 +5004,10 @@
   "_BoolAssertion.is_type_of": "(some_type: type) -> Self",
   "_BoolAssertion.is_zero": "() -> Self",
   "_BoolAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_BoolAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_BoolAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_BoolAssertion.not_": "() -> Self",
   "_BoolAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_BoolAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_BoolAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_BoolAssertion.value": "() -> bool",
   "_BytesAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_BytesAssertion.check": "() -> _CheckBytesAssertion[_B_co]",
@@ -5028,7 +5028,7 @@
   "_BytesAssertion.has_size_less_than": "(size: int) -> Self",
   "_BytesAssertion.is_callable": "() -> Self",
   "_BytesAssertion.is_empty": "() -> Self",
-  "_BytesAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_BytesAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_BytesAssertion.is_false": "() -> Self",
   "_BytesAssertion.is_greater_than": "(other: bytes | bytearray) -> Self",
   "_BytesAssertion.is_greater_than_or_equal_to": "(other: bytes | bytearray) -> Self",
@@ -5060,11 +5060,11 @@
   "_BytesAssertion.last": "() -> _NumericAssertion[int]",
   "_BytesAssertion.mapped": "(func: Callable[[int], _R]) -> _ListAssertion[_R]",
   "_BytesAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_BytesAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_BytesAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_BytesAssertion.not_": "() -> Self",
   "_BytesAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
   "_BytesAssertion.single": "() -> _NumericAssertion[int]",
-  "_BytesAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_BytesAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_BytesAssertion.starts_with": "(prefix: bytes | bytearray) -> Self",
   "_BytesAssertion.starts_with_bytes": "(prefix: bytes | bytearray) -> Self",
   "_BytesAssertion.value": "() -> _B_co",
@@ -5077,7 +5077,7 @@
   "_CallableAssertion.eventually_sync": "(*timeout: float, *interval: float, *ignoring: type[Exception] | tuple[type[Exception], ...], *trace: bool) -> _SyncPoll[_P_co]",
   "_CallableAssertion.has_no_none_fields": "(*allow_empty: bool) -> Self",
   "_CallableAssertion.is_callable": "() -> Self",
-  "_CallableAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_CallableAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_CallableAssertion.is_false": "() -> Self",
   "_CallableAssertion.is_in": "(*items: object) -> Self",
   "_CallableAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5097,11 +5097,11 @@
   "_CallableAssertion.is_true": "() -> Self",
   "_CallableAssertion.is_type_of": "(some_type: type) -> Self",
   "_CallableAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_CallableAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_CallableAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_CallableAssertion.not_": "() -> Self",
   "_CallableAssertion.raises": "(ex: type) -> Self",
   "_CallableAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_CallableAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_CallableAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_CallableAssertion.value": "() -> Callable[..., _P_co]",
   "_CallableAssertion.warns": "(warning: type[Warning]) -> Self",
   "_CallableAssertion.when_called_with": "(*some_args: object, **some_kwargs: object) -> _InvokedAssertion",
@@ -5122,7 +5122,7 @@
   "_ComplexAssertion.described_as": "(description: str) -> Self",
   "_ComplexAssertion.has_no_none_fields": "(*allow_empty: bool) -> Self",
   "_ComplexAssertion.is_callable": "() -> Self",
-  "_ComplexAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_ComplexAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_ComplexAssertion.is_false": "() -> Self",
   "_ComplexAssertion.is_in": "(*items: object) -> Self",
   "_ComplexAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5144,17 +5144,17 @@
   "_ComplexAssertion.is_type_of": "(some_type: type) -> Self",
   "_ComplexAssertion.is_zero": "() -> Self",
   "_ComplexAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_ComplexAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ComplexAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ComplexAssertion.not_": "() -> Self",
   "_ComplexAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_ComplexAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ComplexAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ComplexAssertion.value": "() -> complex",
   "_CoreAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_CoreAssertion.check": "() -> _CheckCoreAssertion",
   "_CoreAssertion.described_as": "(description: str) -> Self",
   "_CoreAssertion.has_no_none_fields": "(*allow_empty: bool) -> Self",
   "_CoreAssertion.is_callable": "() -> Self",
-  "_CoreAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_CoreAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_CoreAssertion.is_false": "() -> Self",
   "_CoreAssertion.is_in": "(*items: object) -> Self",
   "_CoreAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5174,10 +5174,10 @@
   "_CoreAssertion.is_true": "() -> Self",
   "_CoreAssertion.is_type_of": "(some_type: type) -> Self",
   "_CoreAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_CoreAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_CoreAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_CoreAssertion.not_": "() -> Self",
   "_CoreAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_CoreAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_CoreAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_CoreAssertion.value": "() -> object",
   "_DateAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_DateAssertion.check": "() -> _CheckDateAssertion",
@@ -5185,7 +5185,7 @@
   "_DateAssertion.has_no_none_fields": "(*allow_empty: bool) -> Self",
   "_DateAssertion.is_between": "(low: datetime.date, high: datetime.date) -> Self",
   "_DateAssertion.is_callable": "() -> Self",
-  "_DateAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_DateAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_DateAssertion.is_false": "() -> Self",
   "_DateAssertion.is_greater_than": "(other: datetime.date) -> Self",
   "_DateAssertion.is_greater_than_or_equal_to": "(other: datetime.date) -> Self",
@@ -5209,10 +5209,10 @@
   "_DateAssertion.is_true": "() -> Self",
   "_DateAssertion.is_type_of": "(some_type: type) -> Self",
   "_DateAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_DateAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DateAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DateAssertion.not_": "() -> Self",
   "_DateAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_DateAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DateAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DateAssertion.value": "() -> datetime.date",
   "_DateTimeAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_DateTimeAssertion.check": "() -> _CheckDateTimeAssertion",
@@ -5225,7 +5225,7 @@
   "_DateTimeAssertion.is_between": "(low: datetime.datetime, high: datetime.datetime) -> Self",
   "_DateTimeAssertion.is_callable": "() -> Self",
   "_DateTimeAssertion.is_close_to": "(other: datetime.datetime, tolerance: datetime.timedelta) -> Self",
-  "_DateTimeAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_DateTimeAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_DateTimeAssertion.is_equal_to_ignoring_milliseconds": "(other: datetime.datetime) -> Self",
   "_DateTimeAssertion.is_equal_to_ignoring_seconds": "(other: datetime.datetime) -> Self",
   "_DateTimeAssertion.is_equal_to_ignoring_time": "(other: datetime.datetime) -> Self",
@@ -5253,10 +5253,10 @@
   "_DateTimeAssertion.is_true": "() -> Self",
   "_DateTimeAssertion.is_type_of": "(some_type: type) -> Self",
   "_DateTimeAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_DateTimeAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DateTimeAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DateTimeAssertion.not_": "() -> Self",
   "_DateTimeAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_DateTimeAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DateTimeAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DateTimeAssertion.value": "() -> datetime.datetime",
   "_DictAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_DictAssertion.all_satisfy": "(matcher: Matcher[_K] | Callable[[_K], object], *allow_empty: bool) -> Self",
@@ -5288,7 +5288,7 @@
   "_DictAssertion.has_size_less_than": "(size: int) -> Self",
   "_DictAssertion.is_callable": "() -> Self",
   "_DictAssertion.is_empty": "() -> Self",
-  "_DictAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_DictAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_DictAssertion.is_false": "() -> Self",
   "_DictAssertion.is_in": "(*items: object) -> Self",
   "_DictAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5313,14 +5313,14 @@
   "_DictAssertion.last": "() -> AssertionBuilder[_K]",
   "_DictAssertion.mapped": "(func: Callable[[_K], _R]) -> _ListAssertion[_R]",
   "_DictAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_DictAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DictAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DictAssertion.matches_json_schema": "(schema: dict[str, Any]) -> Self",
   "_DictAssertion.matches_json_schema_from_file": "(path: str | Path) -> Self",
-  "_DictAssertion.matches_structure": "(spec: dict) -> Self",
+  "_DictAssertion.matches_structure": "(spec: dict[Any, Any]) -> Self",
   "_DictAssertion.not_": "() -> Self",
   "_DictAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
   "_DictAssertion.single": "() -> AssertionBuilder[_K]",
-  "_DictAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_DictAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_DictAssertion.value": "() -> dict[_K, _V]",
   "_FilesystemAssertion.does_not_exist": "() -> Self",
   "_FilesystemAssertion.exists": "() -> Self",
@@ -5348,7 +5348,7 @@
   "_FrameAssertion.is_array_equal": "(expected: object, **options: Any) -> Self",
   "_FrameAssertion.is_callable": "() -> Self",
   "_FrameAssertion.is_empty": "() -> Self",
-  "_FrameAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_FrameAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_FrameAssertion.is_false": "() -> Self",
   "_FrameAssertion.is_frame_equal": "(expected: object, **options: Any) -> Self",
   "_FrameAssertion.is_in": "(*items: object) -> Self",
@@ -5371,10 +5371,10 @@
   "_FrameAssertion.is_true": "() -> Self",
   "_FrameAssertion.is_type_of": "(some_type: type) -> Self",
   "_FrameAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_FrameAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_FrameAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_FrameAssertion.not_": "() -> Self",
   "_FrameAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_FrameAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_FrameAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_FrameAssertion.value": "() -> _FrameT_co",
   "_InvokedAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_InvokedAssertion.all_satisfy": "(matcher: Matcher[str] | Callable[[str], object], *allow_empty: bool) -> Self",
@@ -5419,7 +5419,7 @@
   "_InvokedAssertion.is_callable": "() -> Self",
   "_InvokedAssertion.is_digit": "() -> Self",
   "_InvokedAssertion.is_empty": "() -> Self",
-  "_InvokedAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_InvokedAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_InvokedAssertion.is_equal_to_ignoring_case": "(other: str) -> Self",
   "_InvokedAssertion.is_equal_to_ignoring_whitespace": "(other: str) -> Self",
   "_InvokedAssertion.is_false": "() -> Self",
@@ -5455,7 +5455,7 @@
   "_InvokedAssertion.mapped": "(func: Callable[[str], _R]) -> _ListAssertion[_R]",
   "_InvokedAssertion.matches": "(pattern: str) -> Self",
   "_InvokedAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_InvokedAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_InvokedAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_InvokedAssertion.matches_with_groups": "(pattern: str) -> AssertionBuilder[Any]",
   "_InvokedAssertion.none_satisfy": "(matcher: Matcher[str] | Callable[[str], object]) -> Self",
   "_InvokedAssertion.not_": "() -> Self",
@@ -5465,7 +5465,7 @@
   "_InvokedAssertion.satisfies_exactly": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_InvokedAssertion.satisfies_exactly_in_any_order": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_InvokedAssertion.single": "() -> _TextAssertion",
-  "_InvokedAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_InvokedAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_InvokedAssertion.starts_with": "(prefix: str) -> Self",
   "_InvokedAssertion.starts_with_ignoring_case": "(prefix: str) -> Self",
   "_InvokedAssertion.value": "() -> str",
@@ -5503,7 +5503,7 @@
   "_IterableAssertion.has_size_less_than": "(size: int) -> Self",
   "_IterableAssertion.is_callable": "() -> Self",
   "_IterableAssertion.is_empty": "() -> Self",
-  "_IterableAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_IterableAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_IterableAssertion.is_false": "() -> Self",
   "_IterableAssertion.is_in": "(*items: object) -> Self",
   "_IterableAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5528,7 +5528,7 @@
   "_IterableAssertion.last": "() -> AssertionBuilder[_E]",
   "_IterableAssertion.mapped": "(func: Callable[[_E], _R]) -> _ListAssertion[_R]",
   "_IterableAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_IterableAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_IterableAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_IterableAssertion.matches_json_schema": "(schema: dict[str, Any]) -> Self",
   "_IterableAssertion.matches_json_schema_from_file": "(path: str | Path) -> Self",
   "_IterableAssertion.none_satisfy": "(matcher: Matcher[_E] | Callable[[_E], object]) -> Self",
@@ -5537,7 +5537,7 @@
   "_IterableAssertion.satisfies_exactly": "(*matchers: Matcher[_E] | Callable[[_E], object]) -> Self",
   "_IterableAssertion.satisfies_exactly_in_any_order": "(*matchers: Matcher[_E] | Callable[[_E], object]) -> Self",
   "_IterableAssertion.single": "() -> AssertionBuilder[_E]",
-  "_IterableAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_IterableAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_IterableAssertion.starts_with": "(prefix: _E) -> Self",
   "_IterableAssertion.value": "() -> list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]",
   "_IterableAssertion.zip_satisfies": "(other: Iterable[_Other], predicate: Callable[[_E, _Other], object], *allow_empty: bool) -> Self",
@@ -5580,7 +5580,7 @@
   "_ListAssertion.has_size_less_than": "(size: int) -> Self",
   "_ListAssertion.is_callable": "() -> Self",
   "_ListAssertion.is_empty": "() -> Self",
-  "_ListAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_ListAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_ListAssertion.is_false": "() -> Self",
   "_ListAssertion.is_in": "(*items: object) -> Self",
   "_ListAssertion.is_instance_of": "(some_class: type) -> Self",
@@ -5605,7 +5605,7 @@
   "_ListAssertion.last": "() -> AssertionBuilder[_E]",
   "_ListAssertion.mapped": "(func: Callable[[_E], _R]) -> _ListAssertion[_R]",
   "_ListAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_ListAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ListAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ListAssertion.matches_json_schema": "(schema: dict[str, Any]) -> Self",
   "_ListAssertion.matches_json_schema_from_file": "(path: str | Path) -> Self",
   "_ListAssertion.none_satisfy": "(matcher: Matcher[_E] | Callable[[_E], object]) -> Self",
@@ -5614,7 +5614,7 @@
   "_ListAssertion.satisfies_exactly": "(*matchers: Matcher[_E] | Callable[[_E], object]) -> Self",
   "_ListAssertion.satisfies_exactly_in_any_order": "(*matchers: Matcher[_E] | Callable[[_E], object]) -> Self",
   "_ListAssertion.single": "() -> AssertionBuilder[_E]",
-  "_ListAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ListAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ListAssertion.starts_with": "(prefix: _E) -> Self",
   "_ListAssertion.value": "() -> list[_E]",
   "_ListAssertion.zip_satisfies": "(other: Iterable[_Other], predicate: Callable[[_E, _Other], object], *allow_empty: bool) -> Self",
@@ -5627,7 +5627,7 @@
   "_NumericAssertion.is_callable": "() -> Self",
   "_NumericAssertion.is_close_to": "(other: _Number, tolerance: _Number) -> Self",
   "_NumericAssertion.is_divisible_by": "(divisor: int) -> Self",
-  "_NumericAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_NumericAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_NumericAssertion.is_even": "() -> Self",
   "_NumericAssertion.is_false": "() -> Self",
   "_NumericAssertion.is_greater_than": "(other: _Number) -> Self",
@@ -5663,10 +5663,10 @@
   "_NumericAssertion.is_type_of": "(some_type: type) -> Self",
   "_NumericAssertion.is_zero": "() -> Self",
   "_NumericAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_NumericAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_NumericAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_NumericAssertion.not_": "() -> Self",
   "_NumericAssertion.satisfies": "(matcher: Callable[[_N], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[_N], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[_N], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[_N], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[_N], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[_N], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[_N], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[_N], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[_N], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[_N], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[_N], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[_N], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[_N], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[_N], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[_N], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[_N], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[_N] | Callable[[_N], object]) -> Self",
-  "_NumericAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_NumericAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_NumericAssertion.value": "() -> _N",
   "_ObjectAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_ObjectAssertion.check": "() -> _CheckObjectAssertion[_T_co]",
@@ -5674,7 +5674,7 @@
   "_ObjectAssertion.has_no_none_fields": "(*allow_empty: bool) -> Self",
   "_ObjectAssertion.is_between": "(low: Any, high: Any) -> Self",
   "_ObjectAssertion.is_callable": "() -> Self",
-  "_ObjectAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_ObjectAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_ObjectAssertion.is_false": "() -> Self",
   "_ObjectAssertion.is_greater_than": "(other: Any) -> Self",
   "_ObjectAssertion.is_greater_than_or_equal_to": "(other: Any) -> Self",
@@ -5699,11 +5699,11 @@
   "_ObjectAssertion.is_true": "() -> Self",
   "_ObjectAssertion.is_type_of": "(some_type: type) -> Self",
   "_ObjectAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_ObjectAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
-  "_ObjectAssertion.matches_structure": "(spec: dict) -> Self",
+  "_ObjectAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ObjectAssertion.matches_structure": "(spec: dict[Any, Any]) -> Self",
   "_ObjectAssertion.not_": "() -> Self",
   "_ObjectAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_ObjectAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_ObjectAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_ObjectAssertion.value": "() -> _T_co",
   "_PathAssertion.all_fields_satisfy": "(matcher: Matcher[Any] | Callable[[Any], object], *allow_empty: bool) -> Self",
   "_PathAssertion.check": "() -> _CheckPathAssertion",
@@ -5714,7 +5714,7 @@
   "_PathAssertion.is_callable": "() -> Self",
   "_PathAssertion.is_child_of": "(parent: object) -> Self",
   "_PathAssertion.is_directory": "() -> Self",
-  "_PathAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_PathAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_PathAssertion.is_executable": "() -> Self",
   "_PathAssertion.is_false": "() -> Self",
   "_PathAssertion.is_file": "() -> Self",
@@ -5739,10 +5739,10 @@
   "_PathAssertion.is_type_of": "(some_type: type) -> Self",
   "_PathAssertion.is_writable": "() -> Self",
   "_PathAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_PathAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_PathAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_PathAssertion.not_": "() -> Self",
   "_PathAssertion.satisfies": "(matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion | (matcher: Callable[[Any], TypeIs[bool]]) -> _BoolAssertion | (matcher: Callable[[Any], TypeIs[int]]) -> _NumericAssertion[int] | (matcher: Callable[[Any], TypeIs[float]]) -> _NumericAssertion[float] | (matcher: Callable[[Any], TypeIs[complex]]) -> _ComplexAssertion | (matcher: Callable[[Any], TypeIs[dict[_K, _V]]]) -> _DictAssertion[_K, _V] | (matcher: Callable[[Any], TypeIs[list[_E] | tuple[_E, ...]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[set[_E] | frozenset[_E]]]) -> _IterableAssertion[_E] | (matcher: Callable[[Any], TypeIs[datetime.datetime]]) -> _DateTimeAssertion | (matcher: Callable[[Any], TypeIs[datetime.date]]) -> _DateAssertion | (matcher: Callable[[Any], TypeIs[Path]]) -> _PathAssertion | (matcher: Callable[[Any], TypeIs[bytes]]) -> _BytesAssertion[bytes] | (matcher: Callable[[Any], TypeIs[bytearray]]) -> _BytesAssertion[bytearray] | (matcher: Callable[[Any], TypeIs[Callable[..., object]]]) -> _CallableAssertion[Any] | (matcher: Callable[[Any], TypeIs[_CapableT]]) -> AssertionBuilder[_CapableT] | (matcher: Callable[[Any], TypeIs[_U]]) -> _ObjectAssertion[_U] | (matcher: Matcher[Any] | Callable[[Any], object]) -> Self",
-  "_PathAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_PathAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_PathAssertion.value": "() -> Path",
   "_RealNumberAssertion.is_between": "(low: _Number, high: _Number) -> Self",
   "_RealNumberAssertion.is_close_to": "(other: _Number, tolerance: _Number) -> Self",
@@ -5809,7 +5809,7 @@
   "_StringAssertion.is_digit": "() -> Self",
   "_StringAssertion.is_directory": "() -> Self",
   "_StringAssertion.is_empty": "() -> Self",
-  "_StringAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_StringAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_StringAssertion.is_equal_to_ignoring_case": "(other: str) -> Self",
   "_StringAssertion.is_equal_to_ignoring_whitespace": "(other: str) -> Self",
   "_StringAssertion.is_executable": "() -> Self",
@@ -5850,7 +5850,7 @@
   "_StringAssertion.mapped": "(func: Callable[[str], _R]) -> _ListAssertion[_R]",
   "_StringAssertion.matches": "(pattern: str) -> Self",
   "_StringAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_StringAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_StringAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_StringAssertion.matches_with_groups": "(pattern: str) -> AssertionBuilder[Any]",
   "_StringAssertion.none_satisfy": "(matcher: Matcher[str] | Callable[[str], object]) -> Self",
   "_StringAssertion.not_": "() -> Self",
@@ -5858,7 +5858,7 @@
   "_StringAssertion.satisfies_exactly": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_StringAssertion.satisfies_exactly_in_any_order": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_StringAssertion.single": "() -> _StringAssertion",
-  "_StringAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_StringAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_StringAssertion.starts_with": "(prefix: str) -> Self",
   "_StringAssertion.starts_with_ignoring_case": "(prefix: str) -> Self",
   "_StringAssertion.value": "() -> str",
@@ -5909,7 +5909,7 @@
   "_TextAssertion.is_callable": "() -> Self",
   "_TextAssertion.is_digit": "() -> Self",
   "_TextAssertion.is_empty": "() -> Self",
-  "_TextAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
+  "_TextAssertion.is_equal_to": "(other: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *ignore_null: bool, *strict_types: bool) -> Self",
   "_TextAssertion.is_equal_to_ignoring_case": "(other: str) -> Self",
   "_TextAssertion.is_equal_to_ignoring_whitespace": "(other: str) -> Self",
   "_TextAssertion.is_false": "() -> Self",
@@ -5945,7 +5945,7 @@
   "_TextAssertion.mapped": "(func: Callable[[str], _R]) -> _ListAssertion[_R]",
   "_TextAssertion.matches": "(pattern: str) -> Self",
   "_TextAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
-  "_TextAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_TextAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_TextAssertion.matches_with_groups": "(pattern: str) -> AssertionBuilder[Any]",
   "_TextAssertion.none_satisfy": "(matcher: Matcher[str] | Callable[[str], object]) -> Self",
   "_TextAssertion.not_": "() -> Self",
@@ -5953,7 +5953,7 @@
   "_TextAssertion.satisfies_exactly": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_TextAssertion.satisfies_exactly_in_any_order": "(*matchers: Matcher[str] | Callable[[str], object]) -> Self",
   "_TextAssertion.single": "() -> _TextAssertion",
-  "_TextAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[object, Callable[[Any, Any], object]] | None, *placeholders: dict[Hashable, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
+  "_TextAssertion.snapshot": "(id: str | None, path: str, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_TextAssertion.starts_with": "(prefix: str) -> Self",
   "_TextAssertion.starts_with_ignoring_case": "(prefix: str) -> Self",
   "_TextAssertion.value": "() -> str",

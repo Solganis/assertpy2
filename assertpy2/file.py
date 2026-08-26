@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
+    from ._engine._introspection import Readable
 
 __tracebackhide__ = True
 
 
-def contents_of(file, encoding="utf-8") -> str:
+def contents_of(file: str | bytes | os.PathLike[str] | os.PathLike[bytes] | Readable, encoding: str = "utf-8") -> str:
     """Helper to read the contents of the given file or path into a string with the given encoding.
 
     Args:
@@ -35,10 +36,12 @@ def contents_of(file, encoding="utf-8") -> str:
         TypeError: if file is not a *path-like object* or a *file-like object*
     """
     try:
-        contents = file.read()
+        # the `except` is what decides this: a path has no `read`, and asking first would not tell us more
+        contents = cast("Readable", file).read()
     except AttributeError:
         try:
-            with open(file, encoding=encoding, errors="replace") as file_handle:
+            path = cast("str | bytes | os.PathLike[str] | os.PathLike[bytes]", file)
+            with open(path, encoding=encoding, errors="replace") as file_handle:
                 contents = file_handle.read()
         except TypeError:
             raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
