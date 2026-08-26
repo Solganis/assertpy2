@@ -62,13 +62,26 @@ def _formatted(source: str) -> str:
         ["ruff", "check", "--fix", "--quiet", "--stdin-filename", _check_typing.__file__, "-"],
     ):
         result = subprocess.run(
-            [sys.executable, "-m", *command], input=source, capture_output=True, text=True, cwd=_ROOT, check=False
+            [sys.executable, "-m", *command],
+            input=source,
+            capture_output=True,
+            text=True,
+            # named rather than left to the locale: `text=True` encodes stdin with whatever the platform
+            # prefers, and on a Windows runner that is not UTF-8, so ruff was handed bytes it refused to
+            # read and this comparison ran on the wrong text
+            encoding="utf-8",
+            cwd=_ROOT,
+            check=False,
         )
-        # refuse rather than fall back to the input: with ruff absent the comparison below was of
-        # unformatted text against formatted, which passed everywhere ruff was installed and failed on
-        # the one CI cell that does not install it, a whole push later
-        if result.returncode not in (0, 1) or not result.stdout:
-            raise RuntimeError(f"ruff could not be run, so this gate would compare the wrong thing: {result.stderr}")
+        # refuse rather than fall back to the input: falling back compared unformatted text against
+        # formatted, and passed everywhere the failure did not happen.  Zero and nothing else, because
+        # `ruff check --fix` exits 1 when violations remain after fixing rather than when it fixed
+        # something, so accepting 1 would let output ruff rejected through as if it were normalised
+        if result.returncode != 0 or not result.stdout:
+            raise RuntimeError(
+                f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "
+                f"thing: {result.stderr}"
+            )
         source = result.stdout
     return source
 
