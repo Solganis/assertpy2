@@ -103,17 +103,30 @@ def pytest_addoption(parser):
     )
 
 
+_ALL_ON: Final = {
+    "assertpy2_dangling": "on",
+    "assertpy2_vacuous": "on",
+    "assertpy2_failure_clusters": str(_clustering.MINIMUM_SIZE),
+}
+
 # What a profile answers for a setting the suite did not name.  Three guards are off under
 # `compatible` because they change what a green run reports, and a suite that inherited this library
-# did not ask for that; `safe` is the one line a new suite writes to get all three.
+# did not ask for that.  `safe` is the one line a new suite writes to get all three.
+#
+# `strict` turns on the same three and additionally fails the tests they find.  Separate from `safe`
+# rather than replacing it, because a warning and a failure are different asks: a suite adopting the
+# guards wants to see what it has before it decides to be stopped by it.
 _PROFILES: Final = {
     "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off", "assertpy2_failure_clusters": "off"},
-    "safe": {
-        "assertpy2_dangling": "on",
-        "assertpy2_vacuous": "on",
-        "assertpy2_failure_clusters": str(_clustering.MINIMUM_SIZE),
-    },
+    "safe": _ALL_ON,
+    "strict": _ALL_ON,
 }
+
+_ESCALATING: Final = "strict"
+"""The profile that turns the two guards' warnings into failures.
+
+Only the two.  Failure clustering reads a run that already went red and has nothing to fail.
+"""
 
 
 def _profile(config) -> str:
@@ -260,6 +273,23 @@ def _dangling_entries(config) -> frozenset[str]:
     return frozenset(usable)
 
 
+def _escalate(config) -> None:
+    """Under `strict`, make the two guards' warnings fail the test that raised one.
+
+    Scoped to this library's own two categories rather than set as a blanket `filterwarnings = error`,
+    which would change the meaning of every `DeprecationWarning` a suite's other dependencies raise.
+
+    Both filters go in whether or not their guard is on, because a guard that is off raises nothing for
+    the filter to catch.  Asking first read as a safeguard and was measured to change nothing.
+
+    Failure clustering is not here and cannot be: it reads a run that already went red.
+    """
+    if _profile(config) != _ESCALATING:
+        return
+    for category in (errors.DanglingAssertionWarning, errors.VacuousAssertionWarning):
+        config.addinivalue_line("filterwarnings", f"error::{category.__module__}.{category.__qualname__}")
+
+
 def pytest_configure(config):
     mode = config.getini("assertpy2_allure")
     if mode not in _ALLURE_MODES:
@@ -292,6 +322,7 @@ def pytest_configure(config):
     # save and restore rather than force back: the environment variable may have turned the guard on before import
     config._assertpy2_prev_vacuous = _satisfies._VACUOUS_GUARD
     _satisfies._VACUOUS_GUARD = _vacuous_guard(config)
+    _escalate(config)
     if config.getoption("assertpy2_snapshot_update"):
         _snapshot._UPDATE_ALL = True
     if config.getoption("assertpy2_snapshot_ci"):
