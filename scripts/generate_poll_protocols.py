@@ -140,7 +140,7 @@ _IMPORTS = """    import datetime
 
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Orderable
+    from ._capable_typing import _Callable, _Orderable, _PathLike
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -391,8 +391,12 @@ def _rungs(known: dict[str, ast.ClassDef], flavour: str) -> dict[str, list[ast.F
         if name not in open_to_any:
             # the ordering six ask the value for an ordering, so their umbrella rung asks for one too,
             # the same restriction `_capable_typing` puts on the surface off the chain
-            claimed = "_Orderable" if name in _ORDERING else "_CapableT"
-            found[name].append(_rewritten(method, f"{flavour}[{claimed}]", flavour, known, umbrella=True))
+            claimed = _RESTRICTED.get(name, "_CapableT")
+            rung = _rewritten(method, f"{flavour}[{claimed}]", flavour, known, umbrella=True)
+            # a restriction can name the very type a rung above already claims, and then the umbrella
+            # rung is that rung written twice: pyright reports the overlap and nothing can select it
+            if ast.unparse(rung) not in seen:
+                found[name].append(rung)
     for name, rungs in open_to_any.items():
         found.setdefault(name, []).extend(rungs)
     return found
@@ -486,22 +490,99 @@ if TYPE_CHECKING:
 
 _CAPABLE = "_CapableAssertion"
 
-_ORDERING: Final = frozenset(
-    {
-        "is_positive",
-        "is_negative",
-        "is_greater_than",
-        "is_greater_than_or_equal_to",
-        "is_less_than",
-        "is_less_than_or_equal_to",
-    }
-)
-"""The assertions that order the value, and the only ones this façade restricts.
+_ASKS_A_SHAPE: Final = {
+    # ordering: every one reaches `_engine._ordering.compare`, which orders the pair with `<`.  Measured
+    # on a class carrying one operator at a time, `__lt__` was the only one any of the six ran with, so
+    # keying on `__gt__`, which is what `is_positive` looks like it needs, would refuse a type that works
+    "is_positive": "_Orderable",
+    "is_negative": "_Orderable",
+    "is_greater_than": "_Orderable",
+    "is_greater_than_or_equal_to": "_Orderable",
+    "is_less_than": "_Orderable",
+    "is_less_than_or_equal_to": "_Orderable",
+    # the filesystem: `isinstance(val, (str, os.PathLike))`, and a `str` never reaches here because the
+    # string overload is above the umbrella.  What is left is the structural half, `__fspath__`
+    "exists": "_PathLike",
+    "does_not_exist": "_PathLike",
+    "is_file": "_PathLike",
+    "is_directory": "_PathLike",
+    "is_named": "_PathLike",
+    "is_child_of": "_PathLike",
+    "is_readable": "_PathLike",
+    "is_writable": "_PathLike",
+    "is_executable": "_PathLike",
+    # the call: `callable(val)`, which is structural.  A capable value can be callable, and the
+    # callable view sits below the umbrella, so this is the only place such a value is described
+    "raises": "_Callable",
+    "does_not_raise": "_Callable",
+    "warns": "_Callable",
+    "does_not_warn": "_Callable",
+    "when_called_with": "_Callable",
+}
+"""What each of these asks the value for: a capability it can carry, keyed on what the runtime reads.
 
-Every one of them reaches `_engine._ordering.compare`, which orders the pair with `<`.  Measured on a
-class carrying one operator at a time, `__lt__` was the only one any of the six ran with, so `__lt__`
-is what the rung asks for.  Keying on `__gt__`, which is what `is_positive` looks like it needs, would
-have refused a type that spells only `__lt__` and works.
+Measured one capability at a time, because four separate readings were wrong when the fixture was
+missing the one thing the assertion reached for: `is_positive` looks like `__gt__` and is held by
+`__lt__`, `is_between` refuses a number that cannot be ordered, and `when_called_with()` refuses
+everything until `raises()` has been called before it.
+"""
+
+_ASKS_A_TYPE: Final = {
+    # whole numbers: `isinstance(val, int)` with `bool` refused beside it, a plain check rather than
+    # the registration the rest of the numeric family uses.  The rung above claims `int | float`, so any
+    # spelling of this one sits inside it and pyright reports the overlap; it is recorded rather than
+    # traded for a wider key that would let a float through
+    "is_even": "int",
+    "is_odd": "int",
+    "is_divisible_by": "int",
+    # text: `isinstance(val, str)`
+    "matches": "str",
+    "does_not_match": "str",
+    "is_upper": "str",
+    "is_lower": "str",
+    "is_alpha": "str",
+    "is_digit": "str",
+    "is_alphanumeric": "str",
+    "is_whitespace": "str",
+    "is_equal_to_ignoring_case": "str",
+    "is_equal_to_ignoring_whitespace": "str",
+    "starts_with_ignoring_case": "str",
+    "ends_with_ignoring_case": "str",
+    "matches_with_groups": "str",
+    "extracting_group": "str",
+    # dates: `isinstance(val, datetime.datetime)`, and exactly that rather than `date`
+    "is_before": "datetime.datetime",
+    "is_after": "datetime.datetime",
+    "is_before_or_equal_to": "datetime.datetime",
+    "is_after_or_equal_to": "datetime.datetime",
+    "is_equal_to_ignoring_time": "datetime.datetime",
+    "is_equal_to_ignoring_seconds": "datetime.datetime",
+    "is_equal_to_ignoring_milliseconds": "datetime.datetime",
+    # bytes: `isinstance(val, (bytes, bytearray))`
+    "is_hex_equal_to": "bytes | bytearray",
+    "is_valid_utf8": "bytes | bytearray",
+    "is_valid_encoding": "bytes | bytearray",
+    "contains_bytes": "bytes | bytearray",
+    "starts_with_bytes": "bytes | bytearray",
+    "has_byte_at": "bytes | bytearray",
+    "decoded_as": "bytes | bytearray",
+}
+"""Asked of a type no value reaching the umbrella can be, because each of those has an overload above it.
+
+Declared rather than left out, and that distinction is the whole of it: an assertion the façade does not
+declare is answered by `__getattr__` and refuses nothing.  Measured that way first, and text, dates and
+bytes all still type-checked on a capable value until the rung was written.
+"""
+
+_RESTRICTED: Final = _ASKS_A_SHAPE | _ASKS_A_TYPE
+"""Every rung the façade narrows, and what it asks the value for.
+
+The ten numeric assertions that are not here are the one family left open, and the reason is measured.
+Their gate is `isinstance(val, numbers.Number)`, which a class earns by registration and no checker can
+read.  Every structural stand-in was wrong in one direction or the other: without registration all ten
+refuse whatever the value carries, and with it `is_zero()` runs on a class that has no `__float__` at
+all, so keying them on `SupportsFloat` refused a call that works.  A false rejection is the more
+expensive of the two here, which is what leaves them open.
 """
 
 
@@ -563,8 +644,9 @@ def _capable_declaration(node: ast.FunctionDef) -> str:
     elided = [ast.Constant(value=...) for _ in rendered.args.defaults]
     rendered.args.defaults = elided
     rendered.args.kw_defaults = [None if one is None else ast.Constant(value=...) for one in rendered.args.kw_defaults]
-    if node.name in _ORDERING:
-        rendered.args.args[0].annotation = ast.parse(f"{_CAPABLE}[_Orderable]", mode="eval").body
+    if node.name in _RESTRICTED:
+        asked = _RESTRICTED[node.name]
+        rendered.args.args[0].annotation = ast.parse(f"{_CAPABLE}[{asked}]", mode="eval").body
         # `Self` needs an unannotated receiver, so a restricted rung has to name what it hands back
         rendered.returns = ast.parse(f"{_CAPABLE}[_CapableT_co]", mode="eval").body
     return ast.unparse(rendered)
@@ -622,9 +704,19 @@ if TYPE_CHECKING:
     _E_co = TypeVar("_E_co", covariant=True)
 
     class _Orderable(Protocol):
-        """A value with an ordering, which is all the six relational assertions ask of one."""
+        """A value with an ordering, which is all the relational assertions ask of one."""
 
         def __lt__(self, other: Any, /) -> Any: ...
+
+    class _PathLike(Protocol):
+        """A value the filesystem assertions can read a path out of, spelled as `os.PathLike` spells it."""
+
+        def __fspath__(self) -> Any: ...
+
+    class _Callable(Protocol):
+        """A value the exception and warning assertions can call, which is what `callable()` asks."""
+
+        def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
     class _ElementSource(Protocol[_E_co]):
         """Anything whose value is a collection of `_E_co`, spelled the way the builder spells it."""
