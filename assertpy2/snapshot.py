@@ -6,7 +6,7 @@ import os
 import time
 import warnings
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, NoReturn
 
 from . import _inline
 from ._engine._compare import _build_compare_config
@@ -15,6 +15,7 @@ from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
 from .errors import AssertionFailure, _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
+from .outcome import MISSING
 
 if TYPE_CHECKING:
     import types
@@ -290,17 +291,6 @@ def _ci_mode_enabled() -> bool:
     return os.environ.get("CI", "").strip().lower() in _TRUTHY
 
 
-def _forbid_creation_in_ci(snapname: str) -> None:
-    """In CI mode a missing snapshot is a hard failure, not a silent create - the golden was never
-    committed, so drift detection for this test would be silently off."""
-    if _ci_mode_enabled():
-        raise AssertionError(
-            f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the snapshot"
-            " to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or unset CI /"
-            " ASSERTPY2_SNAPSHOT_CI)"
-        )
-
-
 def _inline_literal_or_raise(value: object) -> None:
     """Reject values that cannot round-trip as a source literal (an inline snapshot rewrites source)."""
     if not _inline.is_literalable(value):
@@ -465,6 +455,30 @@ class SnapshotMixin(_MixinBase):
     Disable the autodetection with ``--assertpy2-snapshot-no-ci`` or ``ASSERTPY2_SNAPSHOT_CI=0``.
     Local runs are unaffected.
     """
+
+    def _refuse(self, message: str) -> NoReturn:
+        """Raise a composed failure, without offering it to the modes that collect one.
+
+        These refusals are about the run's configuration rather than about the value, so they carry no
+        expectation and `has_expected` reads false on them.  They still go through the composer, which
+        is what puts the value under test on them and makes them readable the way every other failure
+        this library raises is.
+
+        Raising rather than collecting is the point.  Each of these guards a line that writes a
+        snapshot file, so a soft block that collected one and carried on would write the file the guard
+        exists to prevent.
+        """
+        raise self._failure(self._compose(message, actual=MISSING, expected=MISSING, diff=None, trace=None))
+
+    def _forbid_creation_in_ci(self, snapname: str) -> None:
+        """In CI mode a missing snapshot is a hard failure, not a silent create - the golden was never
+        committed, so drift detection for this test would be silently off."""
+        if _ci_mode_enabled():
+            self._refuse(
+                f"snapshot <{snapname}> does not exist and CI mode forbids creating it - commit the"
+                " snapshot to source control, or run without CI mode (--assertpy2-snapshot-no-ci, or"
+                " unset CI / ASSERTPY2_SNAPSHOT_CI)"
+            )
 
     def _with_placeholder_tokens(self, placeholders):
         """A shallow copy of the dict-like val with placeholder keys replaced by descriptive tokens, so
@@ -634,7 +648,7 @@ class SnapshotMixin(_MixinBase):
                 elif lineno in snap:
                     snapshot_value = snap[lineno]
                 else:
-                    _forbid_creation_in_ci(snapname)
+                    self._forbid_creation_in_ci(snapname)
                     snap[lineno] = stored_val
                     _save(snapname, snap)
 
@@ -656,7 +670,7 @@ class SnapshotMixin(_MixinBase):
                         _save(snapname, snap)
                     updated = True
             else:
-                _forbid_creation_in_ci(snapname)
+                self._forbid_creation_in_ci(snapname)
                 _save(snapname, stored_val if id else {lineno: stored_val})
 
         if updated:
@@ -744,7 +758,7 @@ class SnapshotMixin(_MixinBase):
                     raise TypeError("placeholder values must be Matcher instances or callables")
         if expected is _UNSET:
             if _ci_mode_enabled():
-                raise AssertionError(
+                self._refuse(
                     "inline snapshot is empty and CI mode forbids recording it - record it locally with"
                     " --assertpy2-snapshot-update and commit the source"
                 )
@@ -759,7 +773,7 @@ class SnapshotMixin(_MixinBase):
                     stacklevel=2,
                 )
                 return self
-            raise AssertionError("inline snapshot is empty; run --assertpy2-snapshot-update to record it")
+            self._refuse("inline snapshot is empty; run --assertpy2-snapshot-update to record it")
 
         effective_ignore = _combine_ignore(ignore, placeholders)
         if _update_enabled() and self._snapshot_stale(
@@ -854,7 +868,7 @@ class SnapshotMixin(_MixinBase):
                 elif lineno in snap:
                     stored = snap[lineno]
                 else:
-                    _forbid_creation_in_ci(snapname)
+                    self._forbid_creation_in_ci(snapname)
                     snap[lineno] = contract
                     _save(snapname, snap)
 
@@ -866,7 +880,7 @@ class SnapshotMixin(_MixinBase):
                         _save(snapname, snap)
                     updated = True
             else:
-                _forbid_creation_in_ci(snapname)
+                self._forbid_creation_in_ci(snapname)
                 _save(snapname, contract if id else {lineno: contract})
 
         if updated:
