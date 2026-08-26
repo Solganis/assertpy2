@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from .matchers import Matcher
 
 from . import _hints
+from ._engine._compat import _LoggerAdapter
 from ._engine._contract import contract_drift
 from ._engine._introspection import WarningLogger, is_same_implementation
 from ._engine._operations import (
@@ -898,7 +899,7 @@ def _builder(val, description="", kind=None, expected=None, logger=None):
     return ab
 
 
-class WarningLoggingAdapter(logging.LoggerAdapter[logging.Logger]):
+class WarningLoggingAdapter(_LoggerAdapter):
     """Logging adapter to unwind the stack to get the correct callee filename and line number."""
 
     def process(self, msg: Any, kwargs: Any) -> tuple[Any, Any]:
