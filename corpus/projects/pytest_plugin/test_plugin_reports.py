@@ -102,6 +102,24 @@ def red_run(tmp_path, *extra):
     return finished.said
 
 
+def test_the_failure_cluster_summary_needs_no_configuration(tmp_path):
+    """The summary out of the box, from a project that wrote no ini file at all.
+
+    Every other cluster test here passes `-o assertpy2_failure_clusters=3`, which holds the setting and
+    not the default.  A profile turning clustering off again, or the ini losing its default, would leave
+    all of them green while an installing project saw nothing.
+    """
+    finished = run_suite(
+        tmp_path,
+        RED_SUITE,
+        filename="test_red.py",
+        outcome=pytest.ExitCode.TESTS_FAILED,
+        tally="4 failed, 2 passed",
+    )
+    assert_that(finished.said).contains("assertpy2 failure clusters:")
+    assert_that(finished.said).contains("4 of 4 failing tests differ at role")
+
+
 def test_the_failure_cluster_summary_reaches_the_terminal(tmp_path):
     output = red_run(tmp_path)
     assert_that(output).contains("assertpy2 failure clusters:")

@@ -490,9 +490,7 @@ class TestThePluginWiring:
         config._assertpy2_cluster_minimum = _cluster_minimum(setting)
         return config
 
-    def test_the_summary_is_off_unless_asked_for(self):
-        # the shipped default. two ways to crash a run were found in a review of this module alone,
-        # and the project's other opt-in checks (vacuous, dangling) set the precedent
+    def test_the_summary_can_be_turned_off(self):
         assert_that(_cluster_minimum("off")).is_none()
 
     def test_a_blank_setting_is_the_default_and_not_a_mistake(self):

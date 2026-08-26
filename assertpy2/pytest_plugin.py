@@ -57,7 +57,10 @@ def pytest_addoption(parser):
     )
     parser.addini(
         "assertpy2_profile",
-        help="Which guards a suite gets without naming them one by one: compatible (default), safe",
+        help=(
+            "Which guards a suite gets without naming them one by one: compatible (default), safe,"
+            " strict (safe, and their findings fail the test rather than warn)"
+        ),
         default="compatible",
     )
     parser.addini(
@@ -93,8 +96,11 @@ def pytest_addoption(parser):
     )
     parser.addini(
         "assertpy2_failure_clusters",
-        help="Group failures sharing one difference: off (default), or the failing tests a cluster must hold",
-        default="",
+        help=(
+            "Group failures sharing one difference: off, or the failing tests a cluster must hold "
+            f"(default {_clustering.MINIMUM_SIZE})"
+        ),
+        default=str(_clustering.MINIMUM_SIZE),
     )
     parser.addini(
         "assertpy2_poll_report",
@@ -103,37 +109,33 @@ def pytest_addoption(parser):
     )
 
 
-_ALL_ON: Final = {
-    "assertpy2_dangling": "on",
-    "assertpy2_vacuous": "on",
-    "assertpy2_failure_clusters": str(_clustering.MINIMUM_SIZE),
-}
+_ALL_ON: Final = {"assertpy2_dangling": "on", "assertpy2_vacuous": "on"}
 
-# What a profile answers for a setting the suite did not name.  Three guards are off under
-# `compatible` because they change what a green run reports, and a suite that inherited this library
-# did not ask for that.  `safe` is the one line a new suite writes to get all three.
+# What a profile answers for a setting the suite did not name.  Both guards are off under `compatible`
+# because they can turn a green run red, and a suite that inherited this library did not ask for that.
+# `safe` is the one line a new suite writes to get both.
 #
-# `strict` turns on the same three and additionally fails the tests they find.  Separate from `safe`
+# `strict` turns on the same two and additionally fails the tests they find.  Separate from `safe`
 # rather than replacing it, because a warning and a failure are different asks: a suite adopting the
 # guards wants to see what it has before it decides to be stopped by it.
+#
+# Failure clustering is not among them and has its own default.  A profile answers for what a guard
+# costs a passing suite, and clustering costs one nothing: it reads a run that already went red.
 _PROFILES: Final = {
-    "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off", "assertpy2_failure_clusters": "off"},
+    "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off"},
     "safe": _ALL_ON,
     "strict": _ALL_ON,
 }
 
 _ESCALATING: Final = "strict"
-"""The profile that turns the two guards' warnings into failures.
-
-Only the two.  Failure clustering reads a run that already went red and has nothing to fail.
-"""
+"""The profile that turns the two guards' warnings into failures."""
 
 
 def _profile(config) -> str:
     """Which profile answers, resolved once: an empty setting is the default rather than a mistake.
 
-    Once, because the three settings ask for it independently and a name nobody declared would
-    otherwise warn once per question, which reads as three separate mistakes in one config.
+    Once, because both settings ask for it independently and a name nobody declared would otherwise
+    warn once per question, which reads as two separate mistakes in one config.
     """
     cached = getattr(config, "_assertpy2_profile", None)
     if cached is not None:
@@ -152,7 +154,7 @@ def _profile(config) -> str:
 def _written(config, name: str) -> str:
     """What the suite wrote for a setting, empty where it wrote nothing.
 
-    The three settings a profile answers for are registered with no default of their own, so this tells
+    The two settings a profile answers for are registered with no default of their own, so this tells
     "the suite wrote off" from "the suite said nothing about it", which is the whole of the resolution.
     """
     return str(config.getini(name)).strip()
@@ -324,7 +326,7 @@ def pytest_configure(config):
     # value is restored rather than forced back, so tests driving these hooks stay balanced
     config._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
-    config._assertpy2_cluster_minimum = _cluster_minimum(_setting(config, "assertpy2_failure_clusters"))
+    config._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
     _session_config[0] = config
     config._assertpy2_failures = []
     config._assertpy2_failure_count = 0
