@@ -40,7 +40,7 @@ from __future__ import annotations
 import ast
 import io
 import tokenize
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import Final, NamedTuple
 
 from ._engine._operations import (
     ALSO_ASSERTS,
@@ -51,9 +51,6 @@ from ._engine._operations import (
     TRANSFORMS,
     WITHOUT_A_VERDICT,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 __tracebackhide__ = True
 
@@ -128,33 +125,68 @@ class _Bindings(NamedTuple):
         return bool(self.direct or self.modules)
 
 
-def _rebound(tree: ast.Module) -> frozenset[str]:
-    """Names this module binds itself, whatever it also imported under them.
+class _Survey(NamedTuple):
+    """Everything the checks need out of the tree, gathered in one walk.
 
-    A fixture parameter named `assert_that`, a local `assert_that = lambda ...`, a module-level
-    rebinding: in each of those the call in the body is not this library's, and reporting it is a false
-    alarm on somebody else's function.
+    Six separate walks were measured before this: resolving the entry points, the names the module
+    rebinds, the same two again for `pytest`, the blocks that demand a raise, and the statements that
+    consume a builder.  Each is cheap on its own and the tree is walked whole every time, which came to
+    624 ms over this repository's own 97 test modules against 166 ms of parsing.
 
-    Deliberately module-wide rather than scope-aware.  One shadowed parameter disables the check for
-    that name across the file, which costs findings and cannot invent them, and the alternative is a
-    scope tracker inside what is meant to stay a small static pass.
+    `statements` carries the scope each one sits in, as the chain of names around it.  A chain rather
+    than one name because a bare name does not identify a test: two classes in one file may each define
+    `test_same`, and matching on the name alone handed both findings to whichever ran first.
     """
-    names: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-            names.add(node.id)
-        elif isinstance(node, ast.arg):
-            names.add(node.arg)
-        # merging the identical branches is what ruff asks for and a type checker then rejects, since only the
-        # separate branch narrows `ExceptHandler.name`
-        elif isinstance(node, ast.ExceptHandler) and node.name:  # noqa: SIM114
-            names.add(node.name)
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names.add(node.name)
-    return frozenset(names)
+
+    rebound: frozenset[str]
+    imports: tuple[ast.Import | ast.ImportFrom, ...]
+    blocks: tuple[ast.With | ast.AsyncWith, ...]
+    statements: tuple[tuple[ast.Expr | ast.Assert, tuple[str, ...]], ...]
 
 
-def _bindings(tree: ast.Module, extra: frozenset[str] = frozenset()) -> _Bindings:
+def _survey(tree: ast.Module) -> _Survey:
+    """Walk once, keeping the four things the checks ask about.
+
+    The walk is its own rather than `ast.walk` because the scope chain has to be carried down, and
+    `ast.walk` hands back a flat stream with no way to know what encloses what.
+
+    Two statements consume a builder on the spot.  An expression statement discards the value, and
+    anywhere else it is bound, passed or returned, where whether *that* asserts is not a question about
+    this statement.  An `assert` reads it for its truth, which a builder and a bound method answer the
+    same way whatever the value is.
+    """
+    rebound: set[str] = set()
+    imports: list[ast.Import | ast.ImportFrom] = []
+    blocks: list[ast.With | ast.AsyncWith] = []
+    statements: list[tuple[ast.Expr | ast.Assert, tuple[str, ...]]] = []
+    stack: list[tuple[ast.AST, tuple[str, ...]]] = [(tree, ())]
+    while stack:
+        node, scope = stack.pop()
+        for child in ast.iter_child_nodes(node):
+            inner = scope
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                rebound.add(child.name)
+                inner = (*scope, child.name)
+            elif isinstance(child, ast.Expr | ast.Assert):
+                statements.append((child, scope))
+            elif isinstance(child, ast.Name):
+                if isinstance(child.ctx, ast.Store):
+                    rebound.add(child.id)
+            elif isinstance(child, ast.arg):
+                rebound.add(child.arg)
+            # merging the identical branches is what ruff asks for and a type checker then rejects, since only
+            # the separate branch narrows `ExceptHandler.name`
+            elif isinstance(child, ast.ExceptHandler) and child.name:
+                rebound.add(child.name)
+            elif isinstance(child, (ast.Import, ast.ImportFrom)):
+                imports.append(child)
+            elif isinstance(child, (ast.With, ast.AsyncWith)):
+                blocks.append(child)
+            stack.append((child, inner))
+    return _Survey(frozenset(rebound), tuple(imports), tuple(blocks), tuple(statements))
+
+
+def _bindings(survey: _Survey, extra: frozenset[str] = frozenset()) -> _Bindings:
     """Resolve how this module spells the entry points, `as` aliases and star imports included.
 
     A module that never imports one is skipped whole: a user function of their own named
@@ -168,7 +200,7 @@ def _bindings(tree: ast.Module, extra: frozenset[str] = frozenset()) -> _Binding
     """
     direct: set[str] = set()
     modules: set[str] = set()
-    for node in ast.walk(tree):
+    for node in survey.imports:
         if isinstance(node, ast.ImportFrom):
             ours = (node.module or "").split(".")[0] == _PACKAGE
             for alias in node.names:
@@ -176,11 +208,11 @@ def _bindings(tree: ast.Module, extra: frozenset[str] = frozenset()) -> _Binding
                     direct |= _ENTRY  # the docs' own preamble; a star import binds every entry point
                 elif alias.name in extra or (ours and alias.name in _ENTRY):
                     direct.add(alias.asname or alias.name)
-        elif isinstance(node, ast.Import):
+        else:
             for alias in node.names:
                 if alias.name.split(".")[0] == _PACKAGE:
                     modules.add(alias.asname or alias.name.split(".")[0])
-    shadowed = _rebound(tree)
+    shadowed = survey.rebound
     return _Bindings(frozenset(direct) - shadowed, frozenset(modules) - shadowed)
 
 
@@ -287,28 +319,92 @@ def _closed(node: ast.expr) -> bool:
     )
 
 
-def _statements(tree: ast.Module) -> Iterator[tuple[ast.Expr | ast.Assert, tuple[str, ...]]]:
-    """Every statement that consumes a builder on the spot, with the scope it sits in.
+_DEMANDS_A_RAISE: Final = frozenset({"raises", "RaisesGroup"})
+"""The `pytest` blocks that fail when their body reaches the end without raising.
 
-    Two do.  An expression statement discards the value, and anywhere else it is bound, passed or
-    returned, where whether *that* asserts is not a question about this statement.  An `assert` reads
-    it for its truth, which a builder and a bound method answer the same way whatever the value is.
+`warns` and `deprecated_call` are deliberately not here.  They expect their body to finish normally,
+so a chain that asserts nothing inside one is as silent as it would be anywhere else.  Measured: a
+`pytest.warns` block whose body warns and then dangles passes.
+"""
 
-    The scope is a chain rather than one name because a bare name does not identify a test: two classes
-    in one file may each define `test_same`, and matching on the name alone handed both findings to
-    whichever ran first.  Classes are walked for the same reason, so the chain reads
-    ``("TestOne", "test_same")``.
+
+def _imported_as(survey: _Survey, package: str, wanted: frozenset[str]) -> tuple[frozenset[str], frozenset[str]]:
+    """How this module spells names from *package*: bare after an import, and dotted through it.
+
+    Resolved rather than matched on the bare name, for the reason `_bindings` resolves this library's
+    own: a project helper that happens to be called `raises` or `fail` is not this one, and trusting
+    the name alone would silence a real finding inside it.
+
+    Three ways a spelling stops being the package's, all of them dropped:
+
+    * the module rebinds it, which the survey's `rebound` set answers
+    * another import binds the same spelling, where which one wins is the order they are written in
+      rather than anything a name can be read for
+    * it comes from somewhere else entirely
+
+    What this cannot answer is a mutation at run time.  `pytest.raises = something_else` leaves the
+    import reading exactly as it does here, and no static pass sees past that.  The boundary is the
+    spelling, not the object it will hold.
     """
-    stack: list[tuple[ast.AST, tuple[str, ...]]] = [(tree, ())]
-    while stack:
-        node, scope = stack.pop()
-        for child in ast.iter_child_nodes(node):
-            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                stack.append((child, (*scope, child.name)))
-            else:
-                if isinstance(child, ast.Expr | ast.Assert):
-                    yield child, scope
-                stack.append((child, scope))
+    direct: set[str] = set()
+    modules: set[str] = set()
+    elsewhere: set[str] = set()
+    for node in survey.imports:
+        if isinstance(node, ast.ImportFrom):
+            ours = (node.module or "").split(".")[0] == package
+            for alias in node.names:
+                bound = alias.asname or alias.name
+                (direct if ours and alias.name in wanted else elsewhere).add(bound)
+        else:
+            for alias in node.names:
+                bound = alias.asname or alias.name.split(".")[0]
+                (modules if alias.name.split(".")[0] == package else elsewhere).add(bound)
+    taken = survey.rebound | elsewhere
+    return frozenset(direct - taken), frozenset(modules - taken)
+
+
+def _names_a_call(node: ast.expr, names: tuple[frozenset[str], frozenset[str]], wanted: frozenset[str]) -> bool:
+    """Whether this call reaches one of *wanted* through the imports *names* resolved."""
+    if not isinstance(node, ast.Call):
+        return False
+    direct, modules = names
+    func = node.func
+    if isinstance(func, ast.Attribute):
+        return func.attr in wanted and isinstance(func.value, ast.Name) and func.value.id in modules
+    return isinstance(func, ast.Name) and func.id in direct
+
+
+def _demands_a_raise(node: ast.With | ast.AsyncWith, names: tuple[frozenset[str], frozenset[str]]) -> bool:
+    """Whether this block fails when its body reaches the end quietly, and nothing else can end it.
+
+    One item only.  A sibling manager gets its `__exit__` run after the body, so
+    ``with pytest.raises(TypeError), Boom():`` is satisfied by `Boom` and the body never had to raise.
+    """
+    return len(node.items) == 1 and _names_a_call(node.items[0].context_expr, names, _DEMANDS_A_RAISE)
+
+
+def _only_statement_of_a_raising_block(survey: _Survey) -> frozenset[int]:
+    """The statements a `pytest.raises` block holds alone, by object identity.
+
+    The exemption is this narrow because every wider one measured unsound.  A body of one statement
+    leaves the argument with nothing to hide behind: that statement runs, and either it raises, which
+    is what the test asserts, or the block itself raises `DID NOT RAISE`.
+
+    What the block raises is where the promise stops.  An enclosing `try` that catches it, or a
+    `finally` that returns, leaves the test green again, and no check reading one statement can see
+    that.  The guarantee is about the immediate block, not about the test around it.
+
+    Each condition is here for a shape that passed silently without it.  A second statement can supply
+    the exception instead (`assert_that(x)` then `raise TypeError`), or make the chain unreachable
+    (`raise TypeError` then the chain).  A sibling `with` item can raise from its own `__exit__`.
+
+    Keyed on `id()` rather than on a line, because two statements share a line when they are written
+    `assert_that(x); raise TypeError`, and exempting the line would exempt the chain as well.
+    """
+    names = _imported_as(survey, "pytest", _DEMANDS_A_RAISE)
+    return frozenset(
+        id(node.body[0]) for node in survey.blocks if len(node.body) == 1 and _demands_a_raise(node, names)
+    )
 
 
 def _marked_lines(source: str) -> frozenset[int]:
@@ -321,7 +417,13 @@ def _marked_lines(source: str) -> frozenset[int]:
 
     A file that tokenises differently from how it parsed yields nothing rather than raising: the parse
     already succeeded, so the check goes on without the escape hatch instead of taking the run down.
+
+    The text search in front is only to decide whether to tokenise at all.  A file without the marker's
+    words anywhere cannot have it in a comment either, and two of this repository's 97 test modules
+    carry one, so tokenising all 97 was 278 ms spent to read two.
     """
+    if ALLOW_MARKER not in source:
+        return frozenset()
     try:
         tokens = tokenize.generate_tokens(io.StringIO(source).readline)
         return frozenset(one.start[0] for one in tokens if one.type == tokenize.COMMENT and ALLOW_MARKER in one.string)
@@ -353,13 +455,15 @@ def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()
         SyntaxError: if *source* does not parse; the caller decides whether that is its problem.
     """
     tree = ast.parse(source)
-    bindings = _bindings(tree, extra_entries)
+    survey = _survey(tree)
+    bindings = _bindings(survey, extra_entries)
     if not bindings:
         return []
     marked = _marked_lines(source)
+    alone = _only_statement_of_a_raising_block(survey)
     found: list[Finding] = []
-    for statement, scope in _statements(tree):
-        if _silenced(statement, marked):
+    for statement, scope in survey.statements:
+        if _silenced(statement, marked) or id(statement) in alone:
             continue
         if isinstance(statement, ast.Assert):
             if _reads_a_truthy_chain(statement.test, bindings):
