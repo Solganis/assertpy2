@@ -232,7 +232,12 @@ def _formatted(source: str) -> str:
         result = subprocess.run(
             [sys.executable, "-m", *command], input=source, capture_output=True, text=True, cwd=_ROOT, check=False
         )
-        source = result.stdout or source
+        # refuse rather than fall back to the input: with ruff absent the comparison below was of
+        # unformatted text against formatted, which passed everywhere ruff was installed and failed on
+        # the one CI cell that does not install it, a whole push later
+        if result.returncode not in (0, 1) or not result.stdout:
+            raise RuntimeError(f"ruff could not be run, so this gate would compare the wrong thing: {result.stderr}")
+        source = result.stdout
     return source
 
 

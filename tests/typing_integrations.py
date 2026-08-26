@@ -19,8 +19,8 @@ import pandas
 import polars
 
 from assertpy2 import assert_that
+from assertpy2._engine._capable_typing import _CapableAssertion
 from assertpy2._engine._typing import _ArrayAssertion, _FrameAssertion
-from assertpy2.assertpy import AssertionBuilder
 
 
 def resolution(
@@ -35,11 +35,12 @@ def resolution(
     assert_type(assert_that(frame), _FrameAssertion[pandas.DataFrame])  # case: pandas-frame
     assert_type(assert_that(polars_frame), _FrameAssertion[polars.DataFrame])  # case: polars-frame
     assert_type(assert_that(array), _ArrayAssertion[numpy.ndarray[Any, Any]])  # case: numpy-array
-    # a series and an index keep the builder: nothing separates a series from an index structurally,
-    # and an index is outside `is_frame_equal`, so neither buys a view
-    assert_type(assert_that(series), AssertionBuilder[pandas.Series])  # case: pandas-series
-    assert_type(assert_that(polars_series), AssertionBuilder[polars.Series])  # case: polars-series
-    assert_type(assert_that(index), AssertionBuilder[pandas.Index])  # case: pandas-index
+    # a series and an index buy no view of their own: nothing separates a series from an index
+    # structurally, and an index is outside `is_frame_equal`.  What they reach is the capability
+    # umbrella, which hands back its own surface rather than the builder
+    assert_type(assert_that(series), _CapableAssertion[pandas.Series])  # case: pandas-series
+    assert_type(assert_that(polars_series), _CapableAssertion[polars.Series])  # case: polars-series
+    assert_type(assert_that(index), _CapableAssertion[pandas.Index])  # case: pandas-index
 
 
 def calls_that_must_keep_working(frame: pandas.DataFrame, array: numpy.ndarray[Any, Any]) -> None:
