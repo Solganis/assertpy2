@@ -253,6 +253,11 @@ class TestStructuralErrors:
         with pytest.raises(ValueError, match="no operation <POST /orders/"):
             assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", "post")
 
+    def test_a_method_that_is_not_a_string_is_named_rather_than_crashing(self):
+        """It used to answer with `AttributeError: 'int' object has no attribute 'lower'`."""
+        with pytest.raises(TypeError, match="given method arg must be a string"):
+            assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/orders/{id}", 42)  # ty: ignore[invalid-argument-type]  # the shape under test
+
     def test_unknown_path(self):
         with pytest.raises(ValueError, match="no operation"):
             assert_that(CONFORMANT).conforms_to_openapi(SPEC_30, "/nope", "get")
