@@ -1,4 +1,5 @@
 import re
+import typing
 from datetime import date, datetime, timedelta, timezone
 from math import inf, nan
 
@@ -1296,6 +1297,25 @@ class TestTypeMatcherDescriptionsSurviveEveryShape:
     def test_a_tuple_containing_a_union_names_both(self):
         described = match.is_instance_of((int | str, float)).describe()
         assert_that(described).is_equal_to("an instance of <int | str, float>")
+
+    def test_a_bad_member_is_refused_even_behind_a_good_one(self):
+        """The eager check reads every member, because `isinstance` stops at the first one that matches.
+
+        Probing the whole expression once let `type(None) | list[int]` answer through `type(None)`, so
+        the matcher was built and the generic raised a bare `TypeError` out of `matches()` later, which
+        is the one place a matcher must not raise from.
+        """
+        with pytest.raises(TypeError, match="given class arg must be a class"):
+            match.is_instance_of(type(None) | list[int])  # ty: ignore[invalid-argument-type]  # the shape under test
+
+        with pytest.raises(TypeError, match="given class arg must be a class"):
+            match.is_instance_of((int, list[int]))  # ty: ignore[invalid-argument-type]  # the shape under test
+
+        # the legacy spelling is a different class below 3.14, so testing for `types.UnionType` alone let
+        # this one through on the supported floor and nowhere else
+        legacy = typing.Union[type(None), list[int]]  # noqa: UP007  # the old spelling is the subject
+        with pytest.raises(TypeError, match="given class arg must be a class"):
+            match.is_instance_of(legacy)  # ty: ignore[invalid-argument-type]  # the shape under test
 
     def test_is_type_of_names_its_class(self):
         assert_that(match.is_type_of(int).describe()).is_equal_to("exactly type <int>")
