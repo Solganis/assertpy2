@@ -24,6 +24,7 @@ pytest.importorskip("pyright")
 from typing import Final
 
 from assertpy2 import assert_that
+from tests import typing_harness
 from tests.pyright_baseline import BASELINE, LADDER_OVERLAP
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -63,6 +64,7 @@ def _diagnostics() -> tuple[dict[str, str], ...]:
         text=True,
         check=False,
         cwd=_ROOT,
+        env=typing_harness.checker_env(),
     )
     # pyright exits non-zero whenever it reports anything, so the payload is what to read, not the code
     report = json.loads(result.stdout)
