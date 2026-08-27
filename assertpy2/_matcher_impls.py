@@ -37,9 +37,9 @@ if TYPE_CHECKING:
     from ._engine._compare import _CompareConfig
     from .errors import DiffResult
 
-    # what `isinstance()` accepts, spelled out rather than recursive: not every checker we gate on understands a
-    # recursive alias
-    ClassInfo: TypeAlias = "type | UnionType | tuple[type | UnionType, ...]"
+    # recursive because `isinstance()` accepts tuples nested to any depth, and a declaration that refuses what
+    # the runtime takes is the defect this alias exists to avoid
+    ClassInfo: TypeAlias = "type | UnionType | tuple[ClassInfo, ...]"
 
 
 _M_contra = TypeVar("_M_contra", contravariant=True)

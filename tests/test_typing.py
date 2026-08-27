@@ -375,6 +375,8 @@ if TYPE_CHECKING:
     assert_type(match.is_instance_of(int | str), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int, str)), IsInstanceOfMatcher)
     assert_type(match.is_instance_of((int | str, float)), IsInstanceOfMatcher)
+    # nested to a second level, which `isinstance` accepts and the alias is recursive to match
+    assert_type(match.is_instance_of((int, (str, float))), IsInstanceOfMatcher)
     assert_type(match.is_type_of(int), IsTypeOfMatcher)
 
     class _FakeResponse:
