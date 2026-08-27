@@ -5,7 +5,20 @@ import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final, NamedTuple, Protocol, TypeVar, cast, runtime_checkable
+from types import UnionType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Final,
+    NamedTuple,
+    Protocol,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    runtime_checkable,
+)
 
 from ._engine._compare import _build_compare_config, _config_note, _guarded_not_equal, _keyed_types_differ
 from ._engine._equality import IncludeKeysMissingError, mapping_differs, mapping_shaped, values_differ
@@ -29,7 +42,6 @@ from .errors import _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from types import UnionType
     from typing import TypeAlias
 
     from typing_extensions import TypeIs
@@ -467,11 +479,34 @@ class IsNotNoneMatcher(BaseMatcher):
         return "a non-None value"
 
 
+_UNION_ORIGINS: Final = (Union, UnionType)
+"""What `get_origin` answers for a union, which is one class on 3.14+ and two below it."""
+
+
+def _class_info_members(expected: object) -> list[object]:
+    """Every leaf `isinstance` would reach, flattening unions and tuples to any depth.
+
+    Both union spellings, read through `get_origin` rather than through `isinstance`: below 3.14
+    `typing.Union[A, B]` is not a `types.UnionType`, so testing for the class alone let the legacy
+    spelling through on the supported floor and nowhere else.
+    """
+    if isinstance(expected, tuple):
+        return [leaf for member in expected for leaf in _class_info_members(member)]
+    if get_origin(expected) in _UNION_ORIGINS:
+        return [leaf for member in get_args(expected) for leaf in _class_info_members(member)]
+    return [expected]
+
+
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
-        # eagerly, like the regex matcher: `list[int]` used to blow up inside `matches()` or inside `describe()`
+        # eagerly, like the regex matcher: `list[int]` used to blow up inside `matches()` or inside
+        # `describe()`.  Member by member rather than one probe on the whole thing: `isinstance` stops at
+        # the first member that matches, so `type(None) | list[int]` answered the probe through
+        # `type(None)` and left the generic to raise from `matches()` later
         try:
-            isinstance(None, expected_type)
+            for member in _class_info_members(expected_type):
+                # cast because whether it is class info at all is the question this loop answers
+                isinstance(None, cast("ClassInfo", member))
         except TypeError as exc:
             if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
                 raise
