@@ -1,0 +1,14 @@
+# Pyrefly checks the same file the badge is about, `tests/test_typing.py`, as a fourth independent
+# overload-resolution engine beside ty, mypy and Pyright.
+#
+# `default` rather than the `basic` it falls back to without a config: `basic` turns most diagnostic
+# classes off and honours other tools' suppression comments, so a green run under it would have said
+# less than it appeared to. Measured: the file is clean under `default` too, and the only thing
+# `strict` adds is `implicit-any-lambda` on lambdas written inside the test itself.
+preset = "default"
+
+# the badge promises zero suppressions, and permissive ignores would let a `# ty: ignore` written for
+# another checker silence this one as well
+permissive-ignores = false
+
+python-version = "3.14"

@@ -1,6 +1,6 @@
 """Static typing tests for the ``assert_that`` overloads.
 
-These are verified by type checkers (ty, Pyright, Mypy), not at runtime: each ``assert_type`` pins the
+These are verified by type checkers (ty, Pyright, Mypy, Pyrefly), not at runtime: each ``assert_type`` pins the
 overload resolution to the documented type-specific Protocol, so a regression that broadens or changes a
 return type fails the type check. The body lives under ``TYPE_CHECKING`` because the Protocols in
 :mod:`assertpy2._engine._typing` exist only for static analysis and are absent at runtime; Pytest imports this

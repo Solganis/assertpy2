@@ -1902,7 +1902,7 @@ class TestEveryPipelineStepHandsBackAList:
         This gate reads annotations, so it cannot see overload resolution: a wider overload written
         above a narrower one would change which view a checker actually chooses while leaving the text
         here untouched.  What closes that gap is the other file, where the pair is pinned with
-        `assert_type` and run through ty, mypy and pyright.
+        `assert_type` and run through ty, mypy, pyright and pyrefly.
 
         Pairs, not views.  Several subjects reach the same view, so pinning the view once would let the
         resolution of every other subject in that group drift to the fallback unnoticed.

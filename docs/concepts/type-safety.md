@@ -104,8 +104,9 @@ of test bugs into errors you see while typing.
 
 Every public `assert_that` overload is pinned by an `assert_type` check in
 [`tests/test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py). CI runs
-all three checkers against that file on every push, with **zero suppressions**, so a regression that
-broadens or changes a return type fails the build. `ty` additionally type-checks the whole package.
+four independent checkers against that file on every push, with **zero suppressions**, so a regression
+that broadens or changes a return type fails the build. `ty` additionally type-checks the whole
+package.
 
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
@@ -217,7 +218,7 @@ mapped = assert_that(orders).mapped(lambda o: o.total).value
 ```
 
 Java's AssertJ approximates this with `asInstanceOf(InstanceOfAssertFactories...)` at runtime.
-Here the narrowing is purely static - checked by ty, mypy, and Pyright - with zero runtime cost
+Here the narrowing is purely static - checked by ty, mypy, Pyright and Pyrefly - with zero runtime cost
 beyond returning the value.
 
 !!! note "The narrowing is sound in every mode"

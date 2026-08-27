@@ -1,7 +1,7 @@
 """Type-check the code examples in the README and the guide docs.
 
-The badge promises three type checkers with zero suppressions, and the README's own first listing used
-to fail all three: `has_name` on a dict is resolved dynamically at runtime and no protocol declares it.
+The badge promises four type checkers with zero suppressions, and the README's own first listing used
+to fail every one of them: `has_name` on a dict is resolved dynamically at runtime and no protocol declares it.
 Executing the snippets (test_docs_examples.py) cannot catch that, because the code runs perfectly well.
 
 Three markers steer this guard, all invisible in the rendered page:
