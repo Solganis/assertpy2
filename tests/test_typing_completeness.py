@@ -100,6 +100,22 @@ def test_every_exported_symbol_has_a_type_a_checker_can_name() -> None:
     assert_that(unresolved).described_as("exported symbols whose type pyright cannot name").is_empty()
 
 
+def test_the_package_it_read_is_this_checkout() -> None:
+    """Which `assertpy2` answered, rather than whether some `assertpy2` did.
+
+    An editable install is a `.pth` carrying an import hook, and static resolution cannot follow it, so a
+    checker that does not find the package beside its working directory falls back to whatever is on the
+    machine.  Measured while writing this: run from elsewhere, pyright read a stale copy out of the
+    system's own `site-packages` and reported 71.1% for a tree that is at 100%.
+
+    It reports the directory it chose, so the gate reads it rather than trusting the run.
+    """
+    report = _report()["typeCompleteness"]
+    for field in ("packageRootDirectory", "moduleRootDirectory", "pyTypedPath"):
+        found = pathlib.Path(str(report[field])).resolve()
+        assert_that(str(found)).described_as(f"the {field} pyright read").starts_with(str(_ROOT / "assertpy2"))
+
+
 def test_the_engine_is_the_one_this_gate_was_recorded_against() -> None:
     """The wrapper falls back to whatever it has if the pin does not reach the subprocess.
 
