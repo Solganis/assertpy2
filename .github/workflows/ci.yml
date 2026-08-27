@@ -92,6 +92,44 @@ jobs:
           # guard either way, so this cannot turn a real coverage drop into a green run.
           fail_ci_if_error: true
 
+  data-floor:
+    # `pyproject.toml` promises `numpy>=1.26`, `pandas>=2.0` and `polars>=1.0`, and the lockfile only
+    # ever resolves the newest of each, so the bottom of every one of those ranges was a claim nobody
+    # checked. This job checks it, and found a real defect the day it was written: the refusal gate
+    # keyed on numpy's wording for an unusable operand, and that wording is different below numpy 2.
+    #
+    # Its own job rather than a cell in the matrix above. An `include` entry naming an `os` and a
+    # `python-version` that already exist is merged into that combination instead of adding one, so a
+    # cell written that way would have replaced the ordinary 3.10 run rather than joining it.
+    #
+    # The exact `.0` of each, not `1.26.*`: a wildcard resolves to the newest patch, and the newest
+    # patch of the oldest minor is not what the metadata promises.
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies, then step the data libraries down to the declared floor
+        run: |
+          uv sync --locked --extra json --extra inline --group integrations
+          uv pip install "numpy==1.26.0" "pandas==2.0.0" "polars==1.0.0"
+
+      - name: Suite at the floor
+        # `--no-sync` is load bearing here and nowhere else: a bare `uv run` restores the environment
+        # from the lockfile, which would put the newest numpy back and leave this job testing what the
+        # matrix above already tests
+        run: uv run --no-sync pytest -q --ignore=tests/test_docs_examples.py tests
+
   optional-integrations:
     # allure and behave get their own job because installing them is incompatible with the coverage
     # gate: with allure present the `except ImportError` fallback in pytest_plugin.py never runs, and
@@ -222,16 +260,18 @@ jobs:
 
   ci-ok:
     timeout-minutes: 5
-    needs: [test, optional-integrations, lint]
+    needs: [test, data-floor, optional-integrations, lint]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
+          FLOOR_RESULT: ${{ needs.data-floor.result }}
           INTEGRATIONS_RESULT: ${{ needs.optional-integrations.result }}
           LINT_RESULT: ${{ needs.lint.result }}
         run: |
           [ "$TEST_RESULT" = "success" ] &&
+          [ "$FLOOR_RESULT" = "success" ] &&
           [ "$INTEGRATIONS_RESULT" = "success" ] &&
           [ "$LINT_RESULT" = "success" ]
