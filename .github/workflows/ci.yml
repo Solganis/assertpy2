@@ -162,6 +162,12 @@ jobs:
       - name: Type check (pyright, public typing surface)
         run: uv run pyright --pythonversion 3.14 tests/test_typing.py
 
+      # a fourth overload-resolution engine on the same file, which is what the badge names. Its
+      # settings are in `pyrefly.toml`, and the preset there is deliberate: the fallback one answers
+      # green while looking at much less
+      - name: Type check (pyrefly, public typing surface)
+        run: uv run pyrefly check tests/test_typing.py
+
       # the package itself carries diagnostics that are not defects (values typed `object`, guarded
       # optional imports, deliberate overloads). They are recorded per rule with a reason, so a new
       # one fails here instead of hiding in a count nobody reads.

@@ -1,7 +1,7 @@
 """Guard the two claims the project makes about its own type checking.
 
-The README badge and `docs/concepts/type-safety.md` promise that ty, mypy ``--strict`` and Pyright all
-run against ``tests/test_typing.py`` **with zero suppressions**.  That is prose, and prose drifts: one
+The README badge and `docs/concepts/type-safety.md` promise that ty, mypy ``--strict``, Pyright and
+Pyrefly all run against ``tests/test_typing.py`` **with zero suppressions**.  That is prose, and prose drifts: one
 ``# type: ignore`` added to silence an inconvenient checker would leave the badge saying something
 untrue with nothing to notice.  The first test below turns the sentence into a gate.
 
@@ -22,8 +22,8 @@ from assertpy2 import assert_that
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# every form the three checkers honour, so silencing any one of them trips this
-_SUPPRESSION = re.compile(r"#\s*(type:\s*ignore|ty:\s*ignore|pyright:\s*ignore|mypy:)")
+# every form the four checkers honour, so silencing any one of them trips this
+_SUPPRESSION = re.compile(r"#\s*(type:\s*ignore|ty:\s*ignore|pyright:\s*ignore|pyrefly:\s*ignore|mypy:)")
 
 _PACKAGE_FILES = sorted((_ROOT / "assertpy2").rglob("*.py"))
 

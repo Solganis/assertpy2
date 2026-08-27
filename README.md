@@ -16,7 +16,7 @@
   <a href="https://pypi.org/project/assertpy2/"><img src="https://img.shields.io/pypi/pyversions/assertpy2" alt="Python"></a>
   <a href="https://pepy.tech/projects/assertpy2"><img src="https://static.pepy.tech/badge/assertpy2/month" alt="Downloads"></a>
   <br>
-  <a href="https://solganis.github.io/assertpy2/concepts/type-safety/"><img src="https://img.shields.io/badge/type--checked-ty%20%7C%20mypy%20%7C%20pyright-2ea043" alt="public overloads type-checked by ty, mypy --strict, and pyright with zero suppressions"></a>
+  <a href="https://solganis.github.io/assertpy2/concepts/type-safety/"><img src="https://img.shields.io/badge/overloads-ty%20%7C%20mypy%20%7C%20pyright%20%7C%20pyrefly-2ea043" alt="every public overload checked by ty, mypy --strict, pyright and pyrefly with zero suppressions"></a>
   <a href="https://solganis.github.io/assertpy2/"><img src="https://img.shields.io/badge/docs-online-black" alt="Documentation"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://img.shields.io/ossf-scorecard/github.com/Solganis/assertpy2?label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard"></a>
 </p>
@@ -169,7 +169,7 @@ An assertion hands the value back, statically narrowed.
 <!-- docs-guard: skip -->
 ```python
 order = assert_that(repo.find(42)).is_not_none().is_instance_of(PaidOrder).value
-order.refund()  # statically PaidOrder - verified by ty, mypy, and pyright
+order.refund()  # statically PaidOrder - verified by ty, mypy, pyright and pyrefly
 ```
 
 For API tests,
