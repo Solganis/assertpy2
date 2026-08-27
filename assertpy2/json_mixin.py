@@ -115,6 +115,9 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
     Returns ``(status_key, pointer)``. Raises ``ValueError`` for any structural miss (unknown path,
     method, status, or content type) - those are test-authoring mistakes, not contract violations.
     """
+    # named rather than left to `.lower()`, which answered a non-string method with an `AttributeError`
+    # from three frames down instead of saying which argument was wrong
+    require_type(method, str, "a string", subject=argument("method"))
     method_key = method.lower()
     try:
         operation = spec["paths"][path][method_key]
