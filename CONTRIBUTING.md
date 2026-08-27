@@ -43,13 +43,28 @@ uv run pytest tests/test_docs_examples.py tests/test_typing_claims.py
 uv run --group docs mkdocs build --strict
 ```
 
-The public typing surface is checked by three checkers. Run them after the block above, not before:
+Then run the suite once on Python 3.10, the supported floor. This is not optional and not covered by
+the block above: a union carries `__name__` from 3.14 onwards and not before, `logging.LoggerAdapter`
+became subscriptable in 3.11, and neither difference is visible to a type checker told to target 3.10.
+Both of those shipped as defects that every other gate passed.
+
+Use a throwaway environment. `uv run --python 3.10` inside the project rebuilds `.venv` for that
+version, and on Windows it can fail partway and leave you without pytest:
+
+```bash
+uv venv /tmp/py310 --python 3.10
+VIRTUAL_ENV=/tmp/py310 uv pip install -e ".[json,data,inline]" pytest pytest-cov hypothesis attrs pydantic requests httpx flask ruff
+/tmp/py310/bin/python -m pytest tests --ignore=tests/test_docs_examples.py -q
+```
+
+The public typing surface is checked by four checkers. Run them after the block above, not before:
 `uv run --group typecheck` adds the checkers to the same `.venv` and leaves them there, and a coverage
 run with them installed collects a different set:
 
 ```bash
 uv run --group typecheck mypy --strict --follow-imports=silent tests/test_typing.py
 uv run --group typecheck pyright --pythonversion 3.14 tests/test_typing.py
+uv run --group typecheck pyrefly check tests/test_typing.py
 uv run --group typecheck pytest tests/test_pyright_baseline.py
 ```
 
