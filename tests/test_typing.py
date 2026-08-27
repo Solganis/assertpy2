@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         _ObjectAssertion,
         _PathAssertion,
         _StringAssertion,
+        _TextAssertion,
     )
     from assertpy2.assertpy import AssertionBuilder
     from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher, Matcher
@@ -197,6 +198,9 @@ if TYPE_CHECKING:
     assert_type(assert_that("FooBar").ends_with_ignoring_case("BAR"), _StringAssertion)
     assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
+    # a caught message is text without being a `str` view, and its element pivots are the only way to
+    # reach `_TextAssertion` at all
+    assert_type(assert_that(len).raises(ValueError).when_called_with().first(), _TextAssertion)
 
     assert_type(assert_that(len).eventually(trace=False), _AsyncPoll[int])
     assert_type(assert_that(len).eventually_sync(timeout=2, trace=False), _SyncPoll[int])
