@@ -26,6 +26,7 @@ from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 if TYPE_CHECKING:
     from ._engine._compare import _CompareConfig
     from ._engine._compat import Self
+    from ._matcher_impls import ClassInfo
 
 __tracebackhide__ = True
 
@@ -576,7 +577,7 @@ class BaseMixin(SatisfiesMixin):
             )
         return self
 
-    def is_instance_of(self, some_class: type) -> Self:
+    def is_instance_of(self, some_class: ClassInfo) -> Self:
         """Asserts that val is an instance of the given class.
 
         Args:
@@ -610,15 +611,16 @@ class BaseMixin(SatisfiesMixin):
         try:
             if not isinstance(self.val, some_class):
                 type_name = self._type(self.val)
+                some_class_name = _type_expression_name(some_class)
                 return self.error(
-                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class.__name__}>, but was not.",
+                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class_name}>, but was not.",
                     expected=some_class,
                 )
         except TypeError:
             refuse(some_class, "a class", subject=argument("class"))
         return self
 
-    def is_instance_of_any(self, *some_classes: type) -> Self:
+    def is_instance_of_any(self, *some_classes: ClassInfo) -> Self:
         """Asserts that val is an instance of at least one of the given classes.
 
         Args:
@@ -644,7 +646,7 @@ class BaseMixin(SatisfiesMixin):
         try:
             if not isinstance(self.val, some_classes):
                 type_name = self._type(self.val)
-                class_names = ", ".join(some_class.__name__ for some_class in some_classes)
+                class_names = ", ".join(_type_expression_name(some_class) for some_class in some_classes)
                 return self.error(
                     f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not.",
                     expected=some_classes,
