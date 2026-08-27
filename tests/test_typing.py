@@ -196,6 +196,8 @@ if TYPE_CHECKING:
     assert_type(assert_that("FooBar").starts_with_ignoring_case("foo"), _StringAssertion)
     assert_type(assert_that("FooBar").ends_with_ignoring_case("BAR"), _StringAssertion)
     assert_type(assert_that(1).is_instance_of_any(int, float), _NumericAssertion[int])
+    assert_type(assert_that(1).is_instance_of_any(str, int | float), _NumericAssertion[int])
+    assert_type(assert_that(1).is_instance_of_any(str, (int, float)), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
     # a caught message is text without being a `str` view, and its element pivots are the only way to
     # reach `_TextAssertion` at all
@@ -231,6 +233,10 @@ if TYPE_CHECKING:
     assert_type(assert_that(maybe_name).is_not_none().value, str)
     assert_type(assert_that(anything).is_instance_of(bool), _BoolAssertion)
     assert_type(assert_that(anything).is_instance_of(bool).value, bool)
+    assert_type(assert_that(anything).is_instance_of(bool | int), _ObjectAssertion[bool | int])
+    assert_type(assert_that(anything).is_instance_of(bool | int).value, bool | int)
+    assert_type(assert_that(anything).is_instance_of((bool, int)), _ObjectAssertion[object])
+    assert_type(assert_that(anything).is_instance_of((bool, int)).value, object)
     assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)
     assert_type(assert_that(anything).is_not_none(), _ObjectAssertion[object])
 

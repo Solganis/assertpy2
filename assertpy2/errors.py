@@ -4,6 +4,7 @@ import difflib
 import math
 import re
 from dataclasses import dataclass, field
+from types import UnionType
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 
 if TYPE_CHECKING:
@@ -44,6 +45,8 @@ def _type_expression_name(expected: object) -> str:
     """
     if isinstance(expected, tuple):
         return ", ".join(_type_expression_name(member) for member in expected)
+    if isinstance(expected, UnionType):
+        return " | ".join(_type_expression_name(member) for member in expected.__args__)
     return expected.__name__ if isinstance(expected, type) else str(expected)
 
 
