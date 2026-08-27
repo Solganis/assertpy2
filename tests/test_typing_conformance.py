@@ -29,7 +29,7 @@ import pathlib
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import _matcher_impls, assert_that
 from assertpy2._engine import _typing
 from assertpy2.assertpy import AssertionBuilder
 from tests.test_protocol_parity import _PROTOCOLS, _VALUE_VIEWS, _declarations_of, _members_of
@@ -247,20 +247,55 @@ def test_the_two_agree_about_whether_a_parameter_is_required(pairs) -> None:
     assert_that(sorted(set(differing))).described_as("required in one half and optional in the other").is_empty()
 
 
-def _aliases() -> dict[str, str]:
-    """``{alias: what it names}`` for the plain `X = Y` aliases the typed surface declares.
+def _aliases() -> dict[str, set[str]]:
+    """``{alias: the heads it stands for}`` for the aliases the typed surface declares.
 
     Without this the comparison reports `_Number` against `SupportsFloat`, which is one type written
     two ways: the views spell the numeric bound through the alias and the runtime cannot, since the
     alias lives inside the `TYPE_CHECKING` block.
+
+    Two shapes, because the surface uses two.  A plain `X = Y` names one thing.  An annotated
+    `ClassInfo: TypeAlias = "type | UnionType | tuple[ClassInfo, ...]"` names several, and its value is a
+    string, so it is parsed rather than evaluated.  Reported as a name instead, it read as a runtime
+    shape of its own and the gate compared `ClassInfo` against `type` as though they were different
+    promises.
+
+    The recursion needs nothing special: only top-level members are read, so `tuple[ClassInfo, ...]`
+    yields the head `tuple` and the alias never names itself in the result.
     """
-    found = {}
-    for node in ast.walk(ast.parse(pathlib.Path(_typing.__file__).read_text(encoding="utf-8"))):
-        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name) and len(node.targets) == 1:
-            target = node.targets[0]
-            if isinstance(target, ast.Name):
-                found[target.id] = node.value.id
+    found: dict[str, set[str]] = {}
+    for source in (_typing.__file__, _matcher_impls.__file__):
+        for node in ast.walk(ast.parse(pathlib.Path(source).read_text(encoding="utf-8"))):
+            name, value = _alias_parts(node)
+            if not name:
+                continue
+            if isinstance(value, ast.Name):
+                found[name] = {value.id}
+            elif isinstance(value, ast.Constant) and isinstance(value.value, str):
+                # parsed, never evaluated: the value is source text and running it would import whatever
+                # it names
+                written = ast.parse(value.value, mode="eval").body
+                found[name] = {member.split("[", 1)[0] for member in _members_of(written)}
     return found
+
+
+def _alias_parts(node: ast.AST) -> tuple[str, ast.expr | None]:
+    """``(alias name, its value)`` for `X = Y` and for `X: TypeAlias = Y`, else an empty name.
+
+    The annotated form is read only when the annotation says `TypeAlias`: any other string-valued
+    assignment in these modules is a value rather than a type, and parsing one as an expression fails.
+    """
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        return node.targets[0].id, node.value
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        if _plain_annotation(node.annotation) == "TypeAlias":
+            return node.target.id, node.value
+    return "", None
+
+
+def _plain_annotation(node: ast.expr) -> str:
+    """The bare name an annotation carries, or an empty string for anything else."""
+    return node.id if isinstance(node, ast.Name) else ""
 
 
 _ALIASES = _aliases()
@@ -280,7 +315,7 @@ def _shapes(annotation: ast.expr) -> set[str]:
     ever produced were that and nothing else.
     """
     heads = (member.split("[", 1)[0] for member in _members_of(annotation))
-    return {_ALIASES.get(head, head) for head in heads}
+    return {resolved for head in heads for resolved in _ALIASES.get(head, {head})}
 
 
 def _covered() -> tuple[list[tuple[str, str, set[str], set[str]]], collections.Counter[str]]:
@@ -426,6 +461,19 @@ class TestTheTypedSurfaceAndTheRuntimeAcceptTheSameThings:
         assert_that(sorted(unreachable)).described_as(
             "accepted at run time and unwritable in every typed view"
         ).is_empty()
+
+    def test_the_alias_table_resolves_what_the_surface_writes(self) -> None:
+        """Pins the resolver, which nothing else here reaches yet.
+
+        `_covered()` walks the value views and the builder, and `ClassInfo` is written on the matcher
+        surface, so deleting the resolution below would leave every other test in this file green while
+        the gate quietly went back to comparing an alias name against the shapes it stands for.
+        """
+        assert_that(_ALIASES).described_as("aliases the surface declares").contains_key("ClassInfo", "_Number")
+        assert_that(_ALIASES["ClassInfo"]).described_as("what ClassInfo stands for").is_equal_to(
+            {"type", "UnionType", "tuple"}
+        )
+        assert_that(_ALIASES["_Number"]).described_as("the plain form still resolves").is_equal_to({"SupportsFloat"})
 
     def test_no_view_offers_what_the_runtime_does_not_declare(self, covered) -> None:
         """The other direction: a call every checker allows, on a signature that never promised it."""
