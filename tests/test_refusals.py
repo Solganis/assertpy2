@@ -14,19 +14,21 @@ from __future__ import annotations
 
 import datetime
 import inspect
+import pathlib
 import re
 import warnings
 
 import pytest
 
+import assertpy2
 from assertpy2 import assert_that, match
 from assertpy2._engine._require import argument, refuse, require_type, sized_len
 
 # `<subject> must be <expectation>, but was <value> (<type>)`
 SHAPE = re.compile(r"^.+ must be .+, but was <.*> \(\w+\)$", re.DOTALL)
 
-# refusals that are not about a type at all, and would be worse for being squeezed into the shape:
-# they are about the state of the chain, or come from a library the value belongs to
+# refusals that are not about a type at all, and would be worse for being squeezed into the shape: they
+# are about the state of the chain rather than about an operand
 NOT_ABOUT_A_TYPE = (
     "no exception captured",
     "no expectation set",
@@ -34,9 +36,9 @@ NOT_ABOUT_A_TYPE = (
     "got an unexpected keyword argument",
     "missing 3 required positional arguments",
     "assertpy has no assertion",
-    "could not be promoted",
-    "unsupported operand type",
 )
+
+_PACKAGE = pathlib.Path(assertpy2.__file__).parent
 
 WRONG_VALUES = [42, object(), None]
 WRONG_OPERANDS = ["wrong", 42, object()]
@@ -83,6 +85,25 @@ def _bindable(method: object, args: tuple) -> bool:
     return True
 
 
+def _ours(exc: BaseException) -> bool:
+    """Whether this package raised it, rather than a library the value belongs to.
+
+    numpy answers an unusable operand with its own `TypeError`, and letting that through is deliberate:
+    it says more about the array than a generic refusal could.  What it must not do is decide the gate
+    by its wording.  That list used to carry two numpy phrasings, and on numpy 1.26 a third one appeared
+    (`ufunc 'isfinite' not supported`), so the gate passed on one release of somebody else's library and
+    failed on another while this package had not changed at all.
+
+    The deepest frame is the one that raised, so the question is simply whose file it sits in.
+    """
+    frame = exc.__traceback__
+    while frame is not None and frame.tb_next is not None:
+        frame = frame.tb_next
+    if frame is None:
+        return True
+    return _PACKAGE in pathlib.Path(frame.tb_frame.f_code.co_filename).parents
+
+
 def _refusals() -> list[tuple[str, str, int]]:
     """Every `TypeError` the sweep provokes, as (assertion, message, which operand was spoiled).
 
@@ -107,7 +128,8 @@ def _refusals() -> list[tuple[str, str, int]]:
                         try:
                             getattr(assert_that(value), name)(*args)
                         except TypeError as exc:
-                            found.append((name, str(exc), role))
+                            if _ours(exc):
+                                found.append((name, str(exc), role))
                         except Exception:
                             pass
     return found
