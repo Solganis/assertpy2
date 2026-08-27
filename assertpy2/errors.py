@@ -31,6 +31,22 @@ def _callable_name(value: object) -> str:
     return getattr(value, "__name__", None) or _safe_repr(value)
 
 
+def _type_expression_name(expected: object) -> str:
+    """A readable name for a type expression, on every Python this package supports.
+
+    ``__name__`` is absent on a union below 3.14 and on a tuple of types on every version, so reading
+    it directly turns a failure message into an ``AttributeError`` - raised on the failure path, which
+    is the worst place for it.  ``str()`` renders a union as ``int | str`` verbatim, which also reads
+    better than the bare ``Union`` that 3.14 started reporting.
+
+    A tuple is the third thing ``isinstance`` accepts, and its ``str()`` is a wall of ``<class '...'>``;
+    naming its members is what the reader is after.
+    """
+    if isinstance(expected, tuple):
+        return ", ".join(_type_expression_name(member) for member in expected)
+    return expected.__name__ if isinstance(expected, type) else str(expected)
+
+
 def _truncated(text: str, limit: int = 4000) -> str:
     """Cap *text* for embedding into a failure message; normal-sized values stay byte-identical.
 

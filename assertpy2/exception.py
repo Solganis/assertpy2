@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Final, cast
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, refuse
-from .errors import _callable_name
+from .errors import _callable_name, _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -251,8 +251,9 @@ class ExceptionMixin(_MixinBase):
         cause = _effective_cause(exc)
         if cause is None or not isinstance(cause, ex):
             found = "no cause" if cause is None else f"<{type(cause).__name__}>"
+            expected_name = _type_expression_name(ex)
             self.error(
-                f"Expected <{type(exc).__name__}> to be caused by <{ex.__name__}>, but the cause was {found}.",
+                f"Expected <{type(exc).__name__}> to be caused by <{expected_name}>, but the cause was {found}.",
                 expected=ex,
             )
             return cast("Self", _InertBuilder())
@@ -278,7 +279,7 @@ class ExceptionMixin(_MixinBase):
             seen.add(id(root))
         if not isinstance(root, ex):
             self.error(
-                f"Expected <{type(exc).__name__}> to have root cause <{ex.__name__}>,"
+                f"Expected <{type(exc).__name__}> to have root cause <{_type_expression_name(ex)}>,"
                 f" but the root cause was <{type(root).__name__}>.",
                 expected=ex,
             )

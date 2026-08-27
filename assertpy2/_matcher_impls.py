@@ -25,6 +25,7 @@ from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
+from .errors import _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -464,22 +465,6 @@ class IsNotNoneMatcher(BaseMatcher):
 
     def describe(self) -> str:
         return "a non-None value"
-
-
-def _type_expression_name(expected: object) -> str:
-    """A readable name for a type expression, on every Python this package supports.
-
-    ``__name__`` is absent on a union below 3.14 and on a tuple of types on every version, so reading
-    it directly turns a failure message into an ``AttributeError`` - raised on the failure path, which
-    is the worst place for it.  ``str()`` renders a union as ``int | str`` verbatim, which also reads
-    better than the bare ``Union`` that 3.14 started reporting.
-
-    A tuple is the third thing ``isinstance`` accepts, and its ``str()`` is a wall of ``<class '...'>``;
-    naming its members is what the reader is after.
-    """
-    if isinstance(expected, tuple):
-        return ", ".join(_type_expression_name(member) for member in expected)
-    return expected.__name__ if isinstance(expected, type) else str(expected)
 
 
 class IsInstanceOfMatcher(BaseMatcher):

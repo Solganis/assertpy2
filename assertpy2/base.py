@@ -20,7 +20,7 @@ from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len
 from ._hints import identity_candidate
 from ._satisfies import SatisfiesMixin
-from .errors import _disambiguated, _truncated
+from .errors import _disambiguated, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
@@ -684,8 +684,9 @@ class BaseMixin(SatisfiesMixin):
         require_type(self.val, type, "a class")
         try:
             if not issubclass(self.val, some_class):
+                expected_name = _type_expression_name(some_class)
                 return self.error(
-                    f"Expected <{self.val.__name__}> to be subclass of <{some_class.__name__}>, but was not.",
+                    f"Expected <{self.val.__name__}> to be subclass of <{expected_name}>, but was not.",
                     expected=some_class,
                 )
         except TypeError:
