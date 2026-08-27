@@ -40,9 +40,10 @@ import pytest
 
 pytest.importorskip("pyright")
 
-from typing import Final
+from typing import Any, Final
 
 from assertpy2 import assert_that
+from tests import typing_harness
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -53,8 +54,8 @@ _TARGET: Final = "3.14"
 
 
 @functools.cache
-def _completeness() -> dict[str, object]:
-    """The `--verifytypes` report over the installed surface of this package, run once for the module."""
+def _report() -> dict[str, Any]:
+    """The whole `--verifytypes` payload, run once for the module."""
     result = subprocess.run(
         [
             sys.executable,
@@ -72,9 +73,14 @@ def _completeness() -> dict[str, object]:
         encoding="utf-8",
         check=False,
         cwd=_ROOT,
+        env=typing_harness.checker_env(),
     )
     # pyright exits non-zero whenever completeness is short of 100%, so the payload is what to read
-    return json.loads(result.stdout)["typeCompleteness"]
+    return json.loads(result.stdout)
+
+
+def _completeness() -> dict[str, Any]:
+    return _report()["typeCompleteness"]
 
 
 def test_every_exported_symbol_has_a_type_a_checker_can_name() -> None:
@@ -92,6 +98,18 @@ def test_every_exported_symbol_has_a_type_a_checker_can_name() -> None:
         if symbol["isExported"] and (not symbol["isTypeKnown"] or symbol["isTypeAmbiguous"])
     )
     assert_that(unresolved).described_as("exported symbols whose type pyright cannot name").is_empty()
+
+
+def test_the_engine_is_the_one_this_gate_was_recorded_against() -> None:
+    """The wrapper falls back to whatever it has if the pin does not reach the subprocess.
+
+    That fallback is silent and it is not cosmetic: 1.1.411 rejects a union passed to a `TypeForm`
+    parameter and reads its return as `Unknown`, so a run that quietly used it would answer a different
+    question from the one this file claims to ask.
+    """
+    assert_that(_report()["version"]).described_as("the pyright build that answered").is_equal_to(
+        typing_harness.PYRIGHT_ENGINE
+    )
 
 
 def test_the_score_agrees_with_the_symbols() -> None:

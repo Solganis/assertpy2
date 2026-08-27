@@ -13,10 +13,12 @@ different set of installed packages, so `environments()` records what each one a
 from __future__ import annotations
 
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
+from typing import Final
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -33,6 +35,26 @@ def tagged_lines(path: pathlib.Path) -> dict[int, str]:
     return found
 
 
+PYRIGHT_ENGINE: Final = "1.1.413"
+"""The pyright build every gate here asks for, rather than whichever one the wrapper defaults to.
+
+The `pyright` distribution on PyPI is a launcher for a node package, and the two move at different
+speeds: PyPI stopped at 1.1.411 on 25 June while npm has shipped 1.1.412 and 1.1.413 since. Pinning the
+version through the wrapper's own variable is what keeps a contributor, CI and this table looking at
+the same checker.
+
+1.1.413 rather than 1.1.411 because `TypeForm` resolves there: under 1.1.411 a call passing a union to
+a `TypeForm[_U]` parameter is rejected outright and its return reads as `Unknown`. Measured on this
+package: the recorded baseline and the exported-surface completeness are identical under both, so the
+move costs nothing and buys a construct the other three checkers already understand.
+"""
+
+
+def checker_env() -> dict[str, str]:
+    """The environment a checker subprocess needs, with the engine pinned."""
+    return {**os.environ, "PYRIGHT_PYTHON_FORCE_VERSION": PYRIGHT_ENGINE}
+
+
 def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = None) -> str:
     """Run a checker and hand back everything it said.
 
@@ -42,7 +64,12 @@ def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = Non
     interpreter it was pointed at.
     """
     result = subprocess.run(
-        [python or sys.executable, "-m", *command], capture_output=True, text=True, cwd=cwd or ROOT, check=False
+        [python or sys.executable, "-m", *command],
+        capture_output=True,
+        text=True,
+        cwd=cwd or ROOT,
+        check=False,
+        env=checker_env(),
     )
     # every one of them exits non-zero as soon as it reports anything, so the output is what to read
     return result.stdout + result.stderr

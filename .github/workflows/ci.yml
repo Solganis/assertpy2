@@ -159,7 +159,12 @@ jobs:
       - name: Type check (mypy --strict, public typing surface)
         run: uv run mypy --strict --follow-imports=silent tests/test_typing.py
 
+      # the engine, not the launcher: `pyright` on PyPI stopped at 1.1.411 while npm has shipped two
+      # releases since, and the newer one is the first to resolve `TypeForm`. The gates that call
+      # pyright from Python pin the same build themselves, in `tests/typing_harness.py`
       - name: Type check (pyright, public typing surface)
+        env:
+          PYRIGHT_PYTHON_FORCE_VERSION: "1.1.413"
         run: uv run pyright --pythonversion 3.14 tests/test_typing.py
 
       # a fourth overload-resolution engine on the same file, which is what the badge names. Its
