@@ -1732,6 +1732,98 @@ def _shape_bounds() -> dict[str, str]:
     return bounds
 
 
+def _view_classes() -> dict[str, ast.ClassDef]:
+    """Every protocol a value can be handed, by name.
+
+    Both modules, not just the views: the umbrella is declared in the generated façade, so reading only
+    `_typing.py` dropped it from the reachable set while the code still named it, and the gate stopped
+    asking anything about it at all.
+    """
+    engine = pathlib.Path(__file__).resolve().parent.parent / "assertpy2" / "_engine"
+    return {
+        node.name: node
+        for source in (engine / "_typing.py", engine / "_capable_typing.py")
+        for node in ast.walk(ast.parse(source.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ClassDef) and node.name.endswith("Assertion")
+    }
+
+
+def _named_view(node: ast.expr | None, classes: dict[str, ast.ClassDef]) -> str:
+    """The protocol an annotation or a base names, reading through a subscript."""
+    if node is None:
+        return ""
+    named = _plain_name(node.value if isinstance(node, ast.Subscript) else node)
+    return named if named in classes else ""
+
+
+def _members(name: str, classes: dict[str, ast.ClassDef], seen: set[str] | None = None) -> list[ast.FunctionDef]:
+    """A protocol's methods and the ones it inherits.
+
+    Inherited ones are not optional here: `_InvokedAssertion` reaches `_TextAssertion` only through a
+    `first()` it does not declare itself.
+    """
+    seen = set() if seen is None else seen
+    if name in seen or name not in classes:
+        return []
+    seen.add(name)
+    found = [node for node in classes[name].body if isinstance(node, ast.FunctionDef)]
+    for base in classes[name].bases:
+        found += _members(_named_view(base, classes), classes, seen)
+    return found
+
+
+def _reachable_views() -> set[str]:
+    """Every protocol a caller can end an expression on, from the entry views outwards.
+
+    Reachability rather than position in the hierarchy.  A first attempt asked which protocols nothing
+    inherits, and that answer is wrong in both directions: `_CoreAssertion` is a base and is returned by
+    `returned()`, `raised()` and `at_json_path()`, while `_TextAssertion` is a base whose own `first()`
+    hands it back, which is the only way to reach it and had no pin on it at all.
+    """
+    classes = _view_classes()
+    reachable = {name for name in set(_dispatch_relation().values()) | {_UMBRELLA_VIEW} if name in classes}
+    frontier = set(reachable)
+    while frontier:
+        found = {
+            returned
+            for name in frontier
+            for method in _members(name, classes)
+            if (returned := _named_view(method.returns, classes)) and returned not in reachable
+        }
+        reachable |= found
+        frontier = found
+    return reachable
+
+
+def _pinned_views() -> set[str]:
+    """Every protocol named as the expected type of an `assert_type` over a real chain.
+
+    The subject has to be rooted in `assert_that`, so a pin written over a `cast` satisfies neither this
+    nor a reader: it would prove the name exists rather than that anything resolves to it.
+    """
+    source = pathlib.Path(__file__).with_name("test_typing.py").read_text(encoding="utf-8")
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call) or _plain_name(node.func) != "assert_type" or len(node.args) != 2:
+            continue
+        if _rooted_in_assert_that(node.args[0]) and (named := _plain_name(node.args[1])):
+            found.add(named)
+    return found
+
+
+def _rooted_in_assert_that(node: ast.expr) -> bool:
+    """Whether an expression is a chain that starts at `assert_that(...)`."""
+    while True:
+        if isinstance(node, ast.Call):
+            if _plain_name(node.func) == "assert_that":
+                return True
+            node = node.func
+        elif isinstance(node, ast.Attribute):
+            node = node.value
+        else:
+            return False
+
+
 def _dispatch_relation() -> dict[str, str]:
     """``{subject type name: protocol}`` for every `assert_that` overload that names a concrete type.
 
@@ -1866,6 +1958,28 @@ class _TakesAnyKey(Mapping):
 
     def __len__(self):
         return 0
+
+
+class TestEveryViewAValueCanReachIsPinned:
+    """The other half of the pin gate: the views a *chain step* reaches, not the entry.
+
+    `test_every_subject_and_view_pair_is_pinned_by_an_assert_type` covers what `assert_that` resolves to.
+    Everything past that first step is this one's: a pivot, a narrowing, an element.  It found one view
+    with no pin on it at all, `_TextAssertion`, reachable only as the text of a caught message.
+    """
+
+    def test_every_reachable_view_has_an_assert_type_on_it(self):
+        reachable = _reachable_views()
+        # the views module is the subject, so a walk that found few of them read the wrong thing
+        assert_that(reachable).described_as("protocols a caller can reach").is_length_between(10, 40)
+
+        missing = sorted(reachable - _pinned_views())
+        assert_that(missing).described_as("reachable views with no assert_type over a real chain").is_empty()
+
+    def test_a_view_nothing_reaches_is_not_asked_for_a_pin(self):
+        """Guards the exclusion rather than trusting it: unreachable protocols exist and are out."""
+        unreachable = set(_view_classes()) - _reachable_views()
+        assert_that(unreachable).described_as("protocols no expression can end on").is_not_empty()
 
 
 class TestEveryPipelineStepHandsBackAList:
