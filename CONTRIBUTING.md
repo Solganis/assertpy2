@@ -23,6 +23,11 @@ Read more about how pulls work on GitHub's [About pull requests](https://help.gi
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/) as the package manager
 
+## Before you change a public signature
+
+Read [ARCHITECTURE.md](ARCHITECTURE.md). Four files under `assertpy2/_engine/` are generated, the public
+surface is pinned by a recorded snapshot, and neither is discoverable from the files themselves.
+
 ## Verification pipeline
 
 Run all checks before submitting a PR. Every step must pass.
