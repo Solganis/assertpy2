@@ -2,6 +2,7 @@ import contextlib
 import json
 import os
 import subprocess
+import sys
 import warnings
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -207,7 +208,10 @@ class TestTheProfileFromAConfigFile:
         (tmp_path / "test_guards.py").write_text(self._SUITE, encoding="utf-8")
         (tmp_path / "pytest.ini").write_text("\n".join(["[pytest]", *settings, ""]), encoding="utf-8")
         return subprocess.run(
-            ["uv", "run", "--no-sync", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
+            # this interpreter rather than `uv run`: the child is started from `tmp_path`, which is outside
+            # the project, and `uv run` there resolves whichever interpreter it finds instead of the one
+            # running the suite.  On a 3.10 check that answered from 3.14 without the plugin installed
+            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
             cwd=tmp_path,
             capture_output=True,
             text=True,
