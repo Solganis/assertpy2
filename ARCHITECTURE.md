@@ -1,0 +1,109 @@
+# The typed surface
+
+`assert_that()` hands back a different set of methods depending on what you gave it, and four checkers have to
+agree on which set. Read this before changing a public signature. None of it is discoverable from the files.
+
+## Two halves
+
+The runtime is a stack of mixins. `AssertionBuilder` inherits `StringMixin`, `NumericMixin`, `DictMixin` and a
+dozen more, so every assertion exists on every value and refuses what it cannot handle.
+
+The typed surface is Protocols in `assertpy2/_engine/_typing.py`, one per kind of value, picked by an overload
+ladder on `assert_that` in `assertpy2/assertpy.py`. A checker sees only the protocol, so
+`assert_that({}).is_positive()` is a type error and `assert_that(1).is_positive()` is not.
+
+Neither half knows about the other. Everything below keeps them from drifting apart.
+
+## What is generated
+
+| file | written by | built from |
+|---|---|---|
+| `_engine/_typing.py` | hand | the protocols themselves |
+| `assertpy.py` overload ladder | hand | which protocol each subject resolves to |
+| `_engine/_poll_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py`, `assertpy.py`, `_engine/_operations.py` |
+| `_engine/_builder_check_typing.py` | `scripts/generate_poll_protocols.py` | the same three |
+| `_engine/_capable_typing.py` | `scripts/generate_poll_protocols.py` | the **runtime mixins** under `assertpy2/*.py` |
+| `_engine/_check_typing.py` | `scripts/generate_check_protocols.py` | `_typing.py`, `_engine/_operations.py` |
+
+One script writes three of them. That is the part people miss.
+
+- **polling twins** answer `eventually()` and `eventually_sync()`, so every assertion hands back the chain.
+- **verdict twins** answer `check()`, returning an `AssertionOutcome` instead of `Self`.
+- **the capability façade** stands in for the builder itself, so it reads the mixins rather than the views:
+  reading the views would narrow it to what one value type answers. It skips its own hand-written list.
+
+`_engine/_operations.py` decides what the first two leave out: `NOT_AN_OPERATION`, `WITHOUT_A_VERDICT`.
+
+## Changing a signature
+
+```bash
+uv run python scripts/generate_poll_protocols.py
+uv run python scripts/generate_check_protocols.py
+ASSERTPY2_UPDATE_API=1 uv run pytest tests/test_api_compatibility.py
+```
+
+The last re-records `tests/api_snapshot.json`, which pins the public surface.
+
+**The generators carry hard-coded import lines.** A signature naming something the generated file did not
+already import produces a file that will not compile, and ruff reports `F821 Undefined name` against a file you
+never edited. Add the name to the import template in the generator.
+
+## Adding a type of value
+
+The runtime comes first, because the rest is generated or recorded from it.
+
+1. Write the mixin, compose it into `AssertionBuilder`'s bases.
+2. Add it to `_COVERAGE` in `tests/test_protocol_parity.py`, which has its own gate.
+3. Declare the protocol in `_engine/_typing.py`.
+4. Add the arm to the `assert_that` ladder in `assertpy.py`.
+5. Pin it with `assert_type` in `tests/test_typing.py`, the file the README badge is about.
+6. Regenerate.
+7. Re-record the snapshot, last.
+
+Regenerating before step 1 produces a stale façade. Recording the snapshot before the mixin is composed makes
+its gate red again.
+
+## The gates
+
+| gate | the question it answers |
+|---|---|
+| `test_typing.py` | does each subject resolve to the protocol it should, under all four checkers |
+| `test_protocol_parity.py` | does every declared method exist on the runtime builder |
+| `test_typing_conformance.py` | do the declaration and the runtime agree parameter by parameter |
+| `test_poll_protocols.py` | are the polling twins what the generator produces today |
+| `test_check_protocols.py` | are the verdict twins |
+| `test_capable_protocol.py` | is the façade |
+| `test_api_compatibility.py` | has the public surface moved without the snapshot being re-recorded |
+| `test_typing_completeness.py` | can a checker name a type for every exported symbol |
+| `test_pyright_baseline.py` | has a new pyright diagnostic appeared in the package |
+| `test_typing_negative.py` | do the checkers still refuse what they should |
+| `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
+| `test_typing_integrations.py`, `test_typing_http.py` | do real pandas, polars, numpy and HTTP values still resolve |
+
+The four checkers are ty, mypy `--strict`, Pyright and Pyrefly. Where they disagree it is recorded, in
+`tests/typing_negative_baseline.py` and `tests/typing_integrations_baseline.py`.
+
+Pyright's engine is pinned in `tests/typing_harness.py`. The PyPI distribution is a launcher for a node package
+and the two move at different speeds.
+
+## True, though it looks wrong
+
+- **`assert_that`'s implementation returns `Any`.** The real return made Pyright allocate four gigabytes against
+  a 150-method protocol and die. The overloads are what callers see.
+- **Some overlapping overloads are deliberate**, recorded per method in `tests/pyright_baseline.py`.
+- **Some variance suggestions are refused**, recorded there too, per TypeVar.
+- **`ty` is scoped to `assertpy2/` and `tests/test_typing.py`.** Over the whole tree it reports hundreds of
+  diagnostics from `tests/`, which is full of calls that must not type-check.
+
+## Where the two halves may differ
+
+**Which methods are offered.** At run time every assertion exists on every value; a typed view offers only the
+ones that apply. That gap is the point of the typed surface.
+
+**What an offered method accepts.** Here they must agree exactly, and both directions have shipped as defects:
+
+- the type **refuses** what the runtime accepts, so working code is rejected
+- the type **accepts** what the runtime refuses, so a checker approves a call that raises
+
+The runtime is the fact and the declaration follows it. `ClassInfo` in `_matcher_impls.py` is the worked
+example: recursive because `isinstance` accepts tuples nested to any depth.
