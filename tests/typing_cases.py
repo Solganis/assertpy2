@@ -259,6 +259,11 @@ def _methods_that_do_not_fit_the_value() -> None:
     # a verdict asked of a value the builder holds: an element pivot used to land on the untyped proxy
     assert_that([1, 2]).first().check().starts_with("x")  # case: text-verdict-on-a-pivoted-number
 
+    # a member of a class-info tuple that is not a class.  ty answers on the outermost level only, which is
+    # the price of the alias being written out rather than recursive: it ignores a fully quoted one
+    assert_that(object()).is_instance_of((int, "nope"))  # case: a-tuple-member-that-is-not-a-class
+    assert_that(object()).is_instance_of((int, (str, "nope")))  # case: a-nested-member-that-is-not-a-class
+
     # a polling chain used to be `Any` from its first assertion, so none of these were read at all
     assert_that(_a_number).eventually_sync().starts_with("x")  # case: text-assertion-on-a-polled-number
     assert_that(_a_number).eventually_sync().is_close_to("x", 1)  # case: bad-operand-on-a-polled-number

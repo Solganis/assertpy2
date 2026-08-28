@@ -49,9 +49,13 @@ if TYPE_CHECKING:
     from ._engine._compare import _CompareConfig
     from .errors import DiffResult
 
-    # recursive because `isinstance()` accepts tuples nested to any depth, and a declaration that refuses what
-    # the runtime takes is the defect this alias exists to avoid
-    ClassInfo: TypeAlias = "type | UnionType | tuple[ClassInfo, ...]"
+    # nested because `isinstance()` accepts tuples nested to any depth, and a declaration that refuses what the
+    # runtime takes is the defect this alias exists to avoid.  Only the recursive reference is quoted, and the
+    # first level is written out: ty ignores an alias whose whole right-hand side is a string, so the parameter
+    # it annotates accepted anything and `is_instance_of("int")` stopped being a type error.  This way pyright
+    # and mypy still check a member at any depth while ty checks the outermost one.  A PEP 695 `type` statement
+    # is read correctly by all of them and is a SyntaxError on 3.10, even under `TYPE_CHECKING`
+    ClassInfo: TypeAlias = type | UnionType | tuple[type | UnionType | tuple["ClassInfo", ...], ...]
 
 
 _M_contra = TypeVar("_M_contra", contravariant=True)
