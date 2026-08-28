@@ -334,10 +334,13 @@ def test_clustering_a_failure(benchmark):
     benchmark(lambda: observations_of(diff))
 
 
+# 200 rather than the 40 this started at: at 40 it was the smallest case in the file, 14.8 us against its
+# neighbour's 114, so a few instructions of drift read as a large percentage. The path is linear, 66 us at
+# 200 against 5.5 ms of setup, and 200 is the size the polling cases above already use.
 def test_clustering_a_whole_run(benchmark):
-    recorded = [(f"test_{index}", observations_of(_wide_failure(1))) for index in range(40)]
-    assert len(clusters(recorded, 40)) == 1
-    benchmark(lambda: render(clusters(recorded, 40), 40))
+    recorded = [(f"test_{index}", observations_of(_wide_failure(1))) for index in range(200)]
+    assert len(clusters(recorded, 200)) == 1
+    benchmark(lambda: render(clusters(recorded, 200), 200))
 
 
 # Everything above holds ints and strings, whose `==` and `hash()` are free, so the cost measured is the
