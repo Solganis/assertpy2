@@ -43,10 +43,10 @@ speeds: PyPI stopped at 1.1.411 on 25 June while npm has shipped 1.1.412 and 1.1
 version through the wrapper's own variable is what keeps a contributor, CI and this table looking at
 the same checker.
 
-1.1.413 rather than 1.1.411 because `TypeForm` resolves there: under 1.1.411 a call passing a union to
-a `TypeForm[_U]` parameter is rejected outright and its return reads as `Unknown`. Measured on this
-package: the recorded baseline and the exported-surface completeness are identical under both, so the
-move costs nothing and buys a construct the other three checkers already understand.
+One build rather than whichever the launcher resolves, because every recorded number here was recorded
+against one. Measured today on both: 169 diagnostics for the package under each, so the pin buys
+reproducibility rather than a behaviour difference. It was originally taken for `TypeForm`, which 1.1.411
+refuses a union against, and that construct is no longer in the package.
 """
 
 

@@ -72,7 +72,7 @@ class Matcher(Protocol[_M_contra]):
 
     Written without a PEP 696 default on purpose: that spelling needs `typing_extensions` on everything
     before 3.13, and this package declares it only for 3.10.  A bare `Matcher` in an annotation is read
-    as `Matcher[Any]` by all three checkers anyway, so existing annotations keep their meaning.
+    as `Matcher[Any]` by all four checkers anyway, so existing annotations keep their meaning.
     """
 
     def matches(self, value: _M_contra) -> bool: ...

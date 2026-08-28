@@ -744,6 +744,8 @@ fred = Person("Fred", "Smith")
 
 assert_that(fred).is_not_none().is_type_of(Person).is_instance_of(object)
 assert_that(fred).is_instance_of_any(Person, dict)
+assert_that(fred).is_instance_of(Person | dict)            # a union
+assert_that(fred).is_instance_of((Person, (dict, str)))    # a tuple, nested to any depth
 assert_that(Person).is_subclass_of(object)
 assert_that(fred).is_same_as(fred)
 assert_that(fred.say_hello).is_callable()
