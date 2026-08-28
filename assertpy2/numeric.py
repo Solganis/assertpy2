@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 import math
 import numbers
-from typing import TYPE_CHECKING, Any, SupportsFloat
+from typing import TYPE_CHECKING, Any, SupportsFloat, SupportsIndex
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare
@@ -560,7 +560,9 @@ class NumericMixin(_MixinBase):
         return self
 
     def is_close_to(
-        self, other: SupportsFloat | datetime.datetime, tolerance: SupportsFloat | datetime.timedelta
+        self,
+        other: SupportsFloat | SupportsIndex | datetime.datetime,
+        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta,
     ) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 
@@ -613,7 +615,9 @@ class NumericMixin(_MixinBase):
         return self
 
     def is_not_close_to(
-        self, other: SupportsFloat | datetime.datetime, tolerance: SupportsFloat | datetime.timedelta
+        self,
+        other: SupportsFloat | SupportsIndex | datetime.datetime,
+        tolerance: SupportsFloat | SupportsIndex | datetime.timedelta,
     ) -> Self:
         """Asserts that val is numeric and is *not* close to other within tolerance.
 

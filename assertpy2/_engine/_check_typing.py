@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Callable, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from typing_extensions import TypeIs
 
@@ -264,6 +264,18 @@ if TYPE_CHECKING:
         def is_less_than_or_equal_to(self, other: Any) -> AssertionOutcome: ...
         def is_between(self, low: Any, high: Any) -> AssertionOutcome: ...
         def is_not_between(self, low: Any, high: Any) -> AssertionOutcome: ...
+        def is_zero(self: _ObjectAssertion[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
+        def is_not_zero(self: _ObjectAssertion[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
+        def is_close_to(
+            self: _ObjectAssertion[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> AssertionOutcome: ...
+        def is_not_close_to(
+            self: _ObjectAssertion[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> AssertionOutcome: ...
         @overload
         def is_not_none(self: _ObjectAssertion[str | None]) -> AssertionOutcome: ...
         @overload

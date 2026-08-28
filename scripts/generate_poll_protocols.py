@@ -133,14 +133,14 @@ _IMPORTS = """    import datetime
     import pathlib
 {abc}
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from typing_extensions import TypeIs
 
     from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Callable, _Indexable, _Orderable, _PathLike
+    from ._capable_typing import _Callable, _Orderable, _PathLike
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -238,6 +238,10 @@ def _handed_back(node: ast.FunctionDef, known: dict[str, ast.ClassDef], flavour:
         return f"{flavour}[Any]"
     for parameter, argument in zip(_parameters(head, known), arguments, strict=False):
         value = re.sub(rf"\b{re.escape(parameter)}\b", argument, value)
+    # a rung handing back its own view over its own parameter is `Self` written the long way, which a
+    # restricted receiver cannot spell.  Copied verbatim it puts an unbound variable in the chain class
+    if value in _parameters(head, known):
+        return f"{flavour}[_P_co]"
     return f"{flavour}[{value}]"
 
 
@@ -511,11 +515,11 @@ _ASKS_A_SHAPE: Final = {
     # number that converts to neither raises here and runs the five that stay open.  `SupportsFloat` alone
     # was wrong, `math.isnan` falling back to `__index__`, and closeness reads no ordering off the subject:
     # a bound that compares back runs it with nothing but the conversion
-    "is_nan": "SupportsFloat | _Indexable",
-    "is_not_nan": "SupportsFloat | _Indexable",
-    "is_inf": "SupportsFloat | _Indexable",
-    "is_not_inf": "SupportsFloat | _Indexable",
-    "is_close_to": "SupportsFloat | _Indexable",
+    "is_nan": "SupportsFloat | SupportsIndex",
+    "is_not_nan": "SupportsFloat | SupportsIndex",
+    "is_inf": "SupportsFloat | SupportsIndex",
+    "is_not_inf": "SupportsFloat | SupportsIndex",
+    "is_close_to": "SupportsFloat | SupportsIndex",
     # the call is structural, and the callable view sits below the umbrella, so this is the only description
     "raises": "_Callable",
     "does_not_raise": "_Callable",
@@ -696,7 +700,7 @@ if TYPE_CHECKING:
     import logging
     from collections.abc import Callable, Collection, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from typing_extensions import TypeIs
 
@@ -718,11 +722,6 @@ if TYPE_CHECKING:
         """A value with an ordering, which is all the relational assertions ask of one."""
 
         def __lt__(self, other: Any, /) -> Any: ...
-
-    class _Indexable(Protocol):
-        """The other half of what `math.isnan` reads: it falls back to `__index__` with no `__float__`."""
-
-        def __index__(self) -> int: ...
 
     class _PathLike(Protocol):
         """A value the filesystem assertions can read a path out of, spelled as `os.PathLike` spells it."""

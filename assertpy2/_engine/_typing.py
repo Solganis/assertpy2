@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Callable, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
-    from typing import Any, ClassVar, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, ClassVar, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from typing_extensions import TypeIs
 
@@ -346,11 +346,37 @@ if TYPE_CHECKING:
         def is_less_than(self, other: Any) -> Self: ...
         def is_less_than_or_equal_to(self, other: Any) -> Self: ...
         def is_between(self, low: Any, high: Any) -> Self: ...
-        def is_not_between(self, low: Any, high: Any) -> Self:
-            ...
-            # sequence ones.  No rung for a shape: both spellings tried put one checker in the wrong
+        def is_not_between(self, low: Any, high: Any) -> Self: ...
 
-        # mypy and pyright resolve all twelve rungs, ty answers `Unknown` for the numeric and
+        # the four numeric assertions an unrecognised value can answer whatever it registered as, which
+        # is how `Decimal` and `Fraction` arrive here: neither is an `int` or a `float`, so no overload
+        # names them.  Keyed on the conversion `math.isnan` reads, which does not imply the registration
+        # the runtime gate reads and cannot: a value that converts and never registered type-checks here
+        # and raises, the same boundary the relational six above already stand on.
+        #
+        # The other four, `is_nan` and friends, are NOT here and the split is measured: they sit behind
+        # `numbers.Real` rather than `numbers.Number`, so `Fraction` answers them and `Decimal` raises.
+        # No structural key separates the two, so declaring them would trade a false refusal on one
+        # stdlib type for a false acceptance on the other, and the false acceptance is what the fallback
+        # exists to remove.  The operands drop the datetime half the numeric view carries: a `datetime`
+        # has an overload above this one, so a subject here is never one and the pairing cannot arise.  The
+        # operands take the same union as the receiver: an `__index__`-only registered number is a bound
+        # the runtime accepts, measured
+        def is_zero(self: _ObjectAssertion[SupportsFloat | SupportsIndex]) -> _ObjectAssertion[_T_co]: ...
+        def is_not_zero(self: _ObjectAssertion[SupportsFloat | SupportsIndex]) -> _ObjectAssertion[_T_co]: ...
+        def is_close_to(
+            self: _ObjectAssertion[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _ObjectAssertion[_T_co]: ...
+        def is_not_close_to(
+            self: _ObjectAssertion[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _ObjectAssertion[_T_co]: ...
+
+        # mypy and pyright resolve all twelve rungs, ty answers `Unknown` for the numeric and sequence
+        # ones.  No rung for a shape: both spellings tried put one checker in the wrong
         @overload
         def is_not_none(self: _ObjectAssertion[str | None]) -> _StringAssertion: ...
         @overload

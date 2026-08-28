@@ -218,7 +218,7 @@ _CARRIES = {
     "_Orderable": (_Ordered,),
     "_PathLike": (_Pathish,),
     "_Callable": (_Callish,),
-    "SupportsFloat | _Indexable": (_Convertible, _Indexed),
+    "SupportsFloat | SupportsIndex": (_Convertible, _Indexed),
 }
 """Subjects per shape, each carrying that shape and no other, so a wrong key cannot read as right.
 
@@ -230,7 +230,7 @@ _WITHOUT = {
     "_Orderable": (_Capable, _Pathish, _Callish),
     "_PathLike": (_Capable, _Ordered, _Callish),
     "_Callable": (_Capable, _Ordered, _Pathish),
-    "SupportsFloat | _Indexable": (_Capable, _Ordered, _Pathish, _Callish, _Opaque),
+    "SupportsFloat | SupportsIndex": (_Capable, _Ordered, _Pathish, _Callish, _Opaque),
 }
 """Subjects that genuinely lack each shape, listed rather than derived.
 
@@ -458,7 +458,7 @@ class TestWhatEachRestrictedAssertionAsksFor:
         assert_that(counted).described_as("what each key claims").is_equal_to(
             {
                 "shape": collections.Counter(
-                    {"_Orderable": 6, "_PathLike": 9, "_Callable": 5, "SupportsFloat | _Indexable": 5}
+                    {"_Orderable": 6, "_PathLike": 9, "_Callable": 5, "SupportsFloat | SupportsIndex": 5}
                 ),
                 "type": collections.Counter({"int": 3, "str": 14, "datetime.datetime": 7, "bytes | bytearray": 7}),
             }
@@ -498,7 +498,6 @@ class TestWhatEachRestrictedAssertionAsksFor:
             ("_Orderable", ["__lt__"]),
             ("_PathLike", ["__fspath__"]),
             ("_Callable", ["__call__"]),
-            ("_Indexable", ["__index__"]),
         ],
     )
     def test_each_shape_asks_for_what_the_runtime_reads(self, shape, members) -> None:
@@ -507,7 +506,8 @@ class TestWhatEachRestrictedAssertionAsksFor:
         Every relational assertion reaches `_engine._ordering.compare`, which orders the pair with `<`,
         so `_Orderable` asks for `__lt__` and not `__gt__`.  The filesystem gate is
         `isinstance(val, (str, os.PathLike))` and a `str` never reaches here, so what is left of it is
-        `__fspath__`.  The exception and warning gate is `callable(val)`.
+        `__fspath__`.  The exception and warning gate is `callable(val)`.  The conversion key is spelled
+        with typing's own `SupportsFloat` and `SupportsIndex`, so there is no declaration of ours to read.
         """
         declared = next(
             node for node in ast.walk(ast.parse(_SOURCE)) if isinstance(node, ast.ClassDef) and node.name == shape

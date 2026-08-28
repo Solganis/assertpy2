@@ -76,6 +76,9 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_builder_check_typing.py", "is_not_between"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_not_none"): 2,
     ("assertpy2/_engine/_builder_check_typing.py", "matches_structure"): 1,
+    # the object view's conversion rungs, which overlap the numeric ones the twins already carry
+    ("assertpy2/_engine/_builder_check_typing.py", "is_close_to"): 1,
+    ("assertpy2/_engine/_poll_typing.py", "is_close_to"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_between"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_greater_than"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_greater_than_or_equal_to"): 2,

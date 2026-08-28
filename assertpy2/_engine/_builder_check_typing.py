@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     import pathlib
     from collections.abc import Callable, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from .._matcher_impls import ClassInfo
     from ..matchers import Matcher
     from ..outcome import AssertionOutcome
-    from ._capable_typing import _Callable, _Indexable, _Orderable, _PathLike
+    from ._capable_typing import _Callable, _Orderable, _PathLike
     from ._introspection import MappingLike
     from ._typing import (
         _U,
@@ -785,26 +785,26 @@ if TYPE_CHECKING:
         @overload
         def is_nan(self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float]) -> AssertionOutcome: ...
         @overload
-        def is_nan(self: _CheckAnyValue[SupportsFloat | _Indexable]) -> AssertionOutcome: ...
+        def is_nan(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
 
         @overload
         def is_not_nan(
             self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float],
         ) -> AssertionOutcome: ...
         @overload
-        def is_not_nan(self: _CheckAnyValue[SupportsFloat | _Indexable]) -> AssertionOutcome: ...
+        def is_not_nan(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
 
         @overload
         def is_inf(self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float]) -> AssertionOutcome: ...
         @overload
-        def is_inf(self: _CheckAnyValue[SupportsFloat | _Indexable]) -> AssertionOutcome: ...
+        def is_inf(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
 
         @overload
         def is_not_inf(
             self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float],
         ) -> AssertionOutcome: ...
         @overload
-        def is_not_inf(self: _CheckAnyValue[SupportsFloat | _Indexable]) -> AssertionOutcome: ...
+        def is_not_inf(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
 
         @overload
         def is_close_to(
@@ -816,7 +816,13 @@ if TYPE_CHECKING:
         ) -> AssertionOutcome: ...
         @overload
         def is_close_to(
-            self: _CheckAnyValue[SupportsFloat | _Indexable], other: _Number, tolerance: _Number
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_close_to(
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
         ) -> AssertionOutcome: ...
 
         @overload
@@ -826,6 +832,12 @@ if TYPE_CHECKING:
         @overload
         def is_not_close_to(
             self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_not_close_to(
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
         ) -> AssertionOutcome: ...
         @overload
         def is_not_close_to(
@@ -863,12 +875,16 @@ if TYPE_CHECKING:
             self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float] | _CheckAnyValue[complex],
         ) -> AssertionOutcome: ...
         @overload
+        def is_zero(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
+        @overload
         def is_zero(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
 
         @overload
         def is_not_zero(
             self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float] | _CheckAnyValue[complex],
         ) -> AssertionOutcome: ...
+        @overload
+        def is_not_zero(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
         @overload
         def is_not_zero(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
 
