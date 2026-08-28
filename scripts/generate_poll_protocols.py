@@ -138,6 +138,7 @@ _IMPORTS = """    import datetime
 
     from typing_extensions import TypeIs
 
+    from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
     from ._capable_typing import _Callable, _Orderable, _PathLike
@@ -690,6 +691,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
+    from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
     from ._builder_check_typing import _CheckAnyValue
@@ -750,7 +752,7 @@ if TYPE_CHECKING:
         @overload
         def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
         @overload
-        def is_instance_of(self, some_class: type) -> Self: ...
+        def is_instance_of(self, some_class: ClassInfo) -> Self: ...
         @overload
         def first(self: _CapableAssertion[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
         @overload

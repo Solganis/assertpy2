@@ -581,7 +581,7 @@ class BaseMixin(SatisfiesMixin):
         """Asserts that val is an instance of the given class.
 
         Args:
-            some_class: the expected class
+            some_class: the expected class, a union of them, or a tuple nested to any depth
 
         Examples:
             Usage:
@@ -601,6 +601,12 @@ class BaseMixin(SatisfiesMixin):
                 f = Foo()
                 assert_that(f).is_instance_of(Foo)
                 assert_that(f).is_instance_of(object)
+
+            With alternatives, anything `isinstance` takes, nested to any depth:
+
+                assert_that(1).is_instance_of(int | str)
+                assert_that(1).is_instance_of((int, str))
+                assert_that(1).is_instance_of((int, (str, bytes)))
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion
@@ -624,7 +630,7 @@ class BaseMixin(SatisfiesMixin):
         """Asserts that val is an instance of at least one of the given classes.
 
         Args:
-            *some_classes: the candidate classes
+            *some_classes: the candidate classes, each a class, a union of them, or a nested tuple
 
         Examples:
             Usage:
@@ -632,6 +638,7 @@ class BaseMixin(SatisfiesMixin):
                 assert_that(1).is_instance_of_any(int, float)
                 assert_that('foo').is_instance_of_any(str, bytes)
                 assert_that(TimeoutError()).is_instance_of_any(OSError, ValueError)
+                assert_that(1).is_instance_of_any(int | str, (bytes, bytearray))
 
         Returns:
             AssertionBuilder: returns this instance to chain to the next assertion

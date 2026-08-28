@@ -6,10 +6,9 @@ if TYPE_CHECKING:
     import datetime
     from collections.abc import Callable, Hashable, Iterable, Mapping, Sized
     from pathlib import Path
-    from types import UnionType
     from typing import Any, ClassVar, Protocol, SupportsFloat, TypeVar, overload
 
-    from typing_extensions import TypeForm, TypeIs
+    from typing_extensions import TypeIs
 
     from .._engine._introspection import MappingLike
     from .._matcher_impls import ClassInfo
@@ -415,11 +414,9 @@ if TYPE_CHECKING:
         @overload
         def is_instance_of(self, some_class: type[bytearray]) -> _BytesAssertion[bytearray]: ...
         @overload
-        def is_instance_of(self, some_class: tuple[type | UnionType, ...]) -> Self: ...
+        def is_instance_of(self, some_class: type[_U]) -> _ObjectAssertion[_U]: ...
         @overload
-        def is_instance_of(self, some_class: TypeForm[_U]) -> _ObjectAssertion[_U]: ...
-        @overload
-        def is_instance_of(self, some_class: type) -> Self: ...
+        def is_instance_of(self, some_class: ClassInfo) -> Self: ...
 
     class _TextAssertion(_MembershipAssertion, _RepeatableAssertion[str], _SizedAssertion, _CoreAssertion, Protocol):
         """What a piece of text can be asked, whether a caller passed it in or the library caught it.
