@@ -62,6 +62,7 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     # the ladders the umbrella's façade carries over from the builder, which overlap there too
     ("assertpy2/_engine/_capable_typing.py", "is_not_none"): 1,
     ("assertpy2/_engine/_capable_typing.py", "is_instance_of"): 1,
+    ("assertpy2/_engine/_capable_typing.py", "is_instance_of_any"): 1,
     ("assertpy2/_engine/_capable_typing.py", "satisfies"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_even"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_odd"): 1,
@@ -73,6 +74,7 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_greater_than_or_equal_to"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_instance_of"): 1,
+    ("assertpy2/_engine/_builder_check_typing.py", "is_instance_of_any"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_less_than"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_less_than_or_equal_to"): 1,
     ("assertpy2/_engine/_builder_check_typing.py", "is_not_between"): 1,
@@ -82,6 +84,7 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_poll_typing.py", "is_greater_than"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_greater_than_or_equal_to"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_instance_of"): 2,
+    ("assertpy2/_engine/_poll_typing.py", "is_instance_of_any"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_less_than"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_less_than_or_equal_to"): 2,
     ("assertpy2/_engine/_poll_typing.py", "is_not_between"): 2,

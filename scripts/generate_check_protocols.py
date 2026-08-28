@@ -79,6 +79,8 @@ if TYPE_CHECKING:
     _K = TypeVar("_K")
     _V = TypeVar("_V")
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")
     _Number = SupportsFloat
 '''
 
