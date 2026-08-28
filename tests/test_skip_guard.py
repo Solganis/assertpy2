@@ -10,6 +10,7 @@ cases exercise is the shipped one.
 
 from __future__ import annotations
 
+import ast
 import os
 import pathlib
 import subprocess
@@ -84,3 +85,35 @@ def test_a_partial_run_is_left_alone(tmp_path):
     result = _run(tmp_path, "--no-cov")
     assert_that(result.returncode).described_as("exit code").is_equal_to(0)
     assert_that(result.stdout).described_as("the report").does_not_contain("gates skipped for a missing module")
+
+
+# the checkers.  Named rather than read off the dependency groups, which do not line up: `typecheck`
+# also holds stubs, and `ty` sits in `dev`, which `uv sync` installs anyway.  What the cell enforcing the
+# coverage floor leaves out is `typecheck`, so a gate needing one of those skips there and trips the
+# guard above unless it says why.  `ty` is listed for the day it moves
+_DELEGATED = frozenset({"pyright", "mypy", "pyrefly", "ty"})
+
+
+def test_every_checker_skip_says_why_it_is_delegated() -> None:
+    """The class, not the instance.
+
+    Four files were given the reason by hand and two were missed, because the list was typed out rather
+    than swept, and the guard went red in CI on exactly those two.  Read from the source instead, over
+    the whole tree rather than its top level, so a file added later is read too.
+
+    It recognises the one spelling this suite uses, `<anything>.importorskip("name", reason=...)`.  A
+    bare `importorskip` imported from pytest, or a module name passed as a keyword or computed, goes
+    unseen; a positional reason is seen and reported as missing.  Neither shape appears here.
+    """
+    tests = pathlib.Path(__file__).resolve().parent
+    unexplained = []
+    for path in sorted(tests.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or getattr(node.func, "attr", "") != "importorskip":
+                continue
+            first = node.args[0] if node.args else None
+            named = isinstance(first, ast.Constant) and first.value in _DELEGATED
+            if named and not any(keyword.arg == "reason" for keyword in node.keywords):
+                unexplained.append(f"{path.name}:{node.lineno} {first.value}")
+    assert_that(unexplained).described_as("checker skips with no reason written").is_empty()

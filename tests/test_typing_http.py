@@ -12,8 +12,8 @@ import sys
 
 import pytest
 
-pytest.importorskip("pyright")
-pytest.importorskip("mypy")
+pytest.importorskip("pyright", reason="the lint job installs the typecheck group and this cell does not")
+pytest.importorskip("mypy", reason="the lint job installs the typecheck group and this cell does not")
 pytest.importorskip("requests")
 pytest.importorskip("httpx")
 pytest.importorskip("starlette")
