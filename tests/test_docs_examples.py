@@ -10,6 +10,11 @@ unchecked.
 would fail the suite for doing what the page says it does. It is the mirror of test_docs_typing's
 ``untyped`` marker, and both exist rather than widening ``skip`` so that neither takes a block out of
 both guards.
+
+One test per page, blocks in document order. A guide is written as a narrative and its blocks build on
+each other through whatever the library holds process-wide: `matchers.md` registers a matcher in one
+block and removes it in another, which passed only while the suite happened to run them in that order.
+Under a shuffling runner two seeds in four went red. A failure names the block it came from.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ pytest.importorskip("pytest_examples")
 from pytest_examples import CodeExample, EvalExample, find_examples
 
 import assertpy2
+from assertpy2 import matchers
 from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
 # Pages this guard does not run, each with the reason. Everything else is run, including a page added
@@ -56,7 +62,12 @@ SKIP_MARKERS = {
     "docs-guard: raises": "demonstrates a failure, marked as raising in the docs",
     "docs-guard: type-error": "counter-example, marked as rejected by a type checker",
 }
-_EXAMPLES = [example for doc in GUARDED_DOCS for example in find_examples(doc)]
+# grouped by page and kept in document order, because a guide page is written as a narrative: a block
+# may register a matcher the block below it removes.  Running them in one test is what reads the page
+# the way a reader does, and it is also what stops the order from being decided by whatever shuffles
+# the suite.  Python state is still fresh per block, so the only thing carried is what the library
+# itself holds process-wide
+_PAGES = {doc: sorted(find_examples(doc), key=lambda example: example.start_line) for doc in GUARDED_DOCS}
 
 
 def _skip_reason(example: CodeExample) -> str | None:
@@ -76,11 +87,7 @@ def _namespace(doc: str) -> dict[str, object]:
     return namespace
 
 
-@pytest.mark.parametrize("example", _EXAMPLES, ids=str)
-def test_doc_example_runs(example: CodeExample, eval_example: EvalExample) -> None:
-    reason = _skip_reason(example)
-    if reason is not None:
-        pytest.skip(reason)
+def _run(example: CodeExample, eval_example: EvalExample) -> None:
     namespace = _namespace(pathlib.Path(example.path).as_posix())
     module = eval_example.run(example, module_globals=namespace)
     # an example written as a pytest test only binds the function, so running the module never reaches
@@ -88,3 +95,35 @@ def test_doc_example_runs(example: CodeExample, eval_example: EvalExample) -> No
     for name, value in module.items():
         if name.startswith("test_") and callable(value) and not inspect.signature(value).parameters:
             value()
+
+
+@pytest.fixture
+def _matchers_restored():
+    """The registry a page's blocks write to, emptied first and put back after.
+
+    Both halves matter: restoring keeps a page out of the rest of the suite, and emptying keeps the rest
+    of the suite out of the page, so a name a guide registers cannot clash with one left behind.
+    """
+    saved = dict(matchers._custom_matchers)
+    matchers._custom_matchers.clear()
+    try:
+        yield
+    finally:
+        matchers._custom_matchers.clear()
+        matchers._custom_matchers.update(saved)
+
+
+@pytest.mark.parametrize("doc", list(_PAGES), ids=str)
+@pytest.mark.usefixtures("_matchers_restored")
+def test_doc_examples_run(doc: str, eval_example: EvalExample) -> None:
+    ran = 0
+    for example in _PAGES[doc]:
+        if _skip_reason(example) is not None:
+            continue
+        try:
+            _run(example, eval_example)
+        except Exception as failure:
+            raise AssertionError(f"{doc}:{example.start_line}-{example.end_line}: {failure!r}") from failure
+        ran += 1
+    if ran == 0:
+        pytest.skip("every block on this page is marked non-executable")
