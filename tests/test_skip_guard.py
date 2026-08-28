@@ -1,0 +1,86 @@
+"""The guard that stops a skipped gate from reading as a passing one.
+
+A dependency that is not installed does not fail a run, it skips it, and a skipped gate leaves no mark
+in a green summary.  That cost two red CI runs in one day: `pytest-examples` lives in its own group,
+was absent locally, and the whole doc-example file was skipped while the run was reported as passing.
+
+The guard lives in `tests/conftest.py` and is loaded here as a plugin rather than copied, so what these
+cases exercise is the shipped one.
+"""
+
+from __future__ import annotations
+
+import os
+import pathlib
+import subprocess
+import sys
+
+from assertpy2 import assert_that
+
+_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+_SUITE = """
+import pytest
+
+pytest.importorskip("a_module_that_is_not_installed")
+
+
+def test_never_reached():
+    raise AssertionError
+"""
+
+
+_PASSES = """
+def test_ok():
+    assert True
+"""
+
+
+def _run(tmp_path: pathlib.Path, *extra: str, suite: str = _SUITE) -> subprocess.CompletedProcess[str]:
+    # a second file that passes, so the exit code reports the guard rather than pytest's own "nothing
+    # was collected": the skipping file leaves no test behind at all
+    (tmp_path / "test_absent.py").write_text(suite, encoding="utf-8")
+    (tmp_path / "test_present.py").write_text(_PASSES, encoding="utf-8")
+    # its own coverage database: the child runs from the repository root, and a shared one would let its
+    # execution be combined into the parent's number and pad the very gate this file is about
+    environment = {**os.environ, "COVERAGE_FILE": str(tmp_path / ".coverage")}
+    return subprocess.run(
+        [sys.executable, "-m", "pytest", str(tmp_path), "-q", "-p", "tests.conftest", "-p", "no:cacheprovider", *extra],
+        capture_output=True,
+        text=True,
+        cwd=_ROOT,
+        env=environment,
+        check=False,
+    )
+
+
+def test_a_run_claiming_completeness_fails_on_a_missing_module(tmp_path):
+    """The coverage floor is the claim: only the cell that enforces it promises every gate ran."""
+    result = _run(tmp_path, "--cov=assertpy2", "--cov-fail-under=1")
+    assert_that(result.returncode).described_as("exit code").is_equal_to(1)
+    assert_that(result.stdout).described_as("the report").contains(
+        "gates skipped for a missing module", "a_module_that_is_not_installed"
+    )
+
+
+def test_a_skip_that_says_why_is_left_alone(tmp_path):
+    """The seam between an accident and a decision: a hand-written reason replaces pytest's own wording.
+
+    A few gates are delegated on purpose, the checkers to the lint job and allure and behave to their own,
+    and those say so where they skip.  Writing the reason is what makes the difference visible in the
+    source rather than in a register somewhere else.
+    """
+    reasoned = _SUITE.replace(
+        'importorskip("a_module_that_is_not_installed")',
+        'importorskip("a_module_that_is_not_installed", reason="delegated to another job")',
+    )
+    result = _run(tmp_path, "--cov=assertpy2", "--cov-fail-under=1", suite=reasoned)
+    assert_that(result.returncode).described_as("exit code").is_equal_to(0)
+    assert_that(result.stdout).described_as("the report").does_not_contain("gates skipped for a missing module")
+
+
+def test_a_partial_run_is_left_alone(tmp_path):
+    """Without that claim the same skip is an ordinary partial run, which contributors do all day."""
+    result = _run(tmp_path, "--no-cov")
+    assert_that(result.returncode).described_as("exit code").is_equal_to(0)
+    assert_that(result.stdout).described_as("the report").does_not_contain("gates skipped for a missing module")
