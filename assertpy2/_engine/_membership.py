@@ -19,7 +19,7 @@ from collections import Counter
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
-from ._introspection import materialized
+from ._introspection import definition_of, materialized
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -121,15 +121,36 @@ def _kinds(items: Any) -> set[type] | None:
 
 
 def _safe(kinds: set[type] | None) -> bool:
-    """Whether every one of *kinds* hashes and compares by the same rule.
+    """Whether every one of *kinds* hashes and compares by the same rule."""
+    return kinds is not None and all(_agrees(kind) for kind in kinds)
+
+
+def _agrees(kind: type) -> bool:
+    """Whether this type's ``==`` and ``hash()`` answer consistently, so a set may stand in for a walk.
 
     Hashability is asked of the type, not tried on the value: an unhashable type carries
     `__hash__ = None`.  It is not implied by the rest of the rule, since a class can inherit identity
     equality and still declare itself unhashable, and without this the shortcut raised where it answered.
+
+    The third clause is what admits a subclass.  A name on the safe list is not enough on its own,
+    because that list holds exact types, and `IntEnum`, `StrEnum` and a plain `class Money(int)` all
+    took the quadratic walk although they answer exactly as their base does: four thousand of them cost
+    30 ms against 0.09 ms.  Asked of the owner of each definition rather than of the definition itself,
+    so a class that assigns `__hash__ = str.__hash__` beside an inherited `int.__eq__` is refused: its
+    owner is the class, not a safe type.  A base cannot supply the two from different safe types either,
+    since inheriting from two of them is a layout conflict the interpreter refuses.
     """
-    return kinds is not None and all(
-        kind.__hash__ is not None and (kind in _HASH_SAFE or kind.__eq__ is object.__eq__) for kind in kinds
+    return kind.__hash__ is not None and (
+        kind in _HASH_SAFE
+        or kind.__eq__ is object.__eq__
+        or (_owned_by_a_safe_type(kind, "__eq__") and _owned_by_a_safe_type(kind, "__hash__"))
     )
+
+
+def _owned_by_a_safe_type(kind: type, name: str) -> bool:
+    """Whether *kind* inherits *name* unchanged from one of the types on the safe list."""
+    found = definition_of(kind, name)
+    return found is not None and found[0] in _HASH_SAFE
 
 
 def _hash_safe(items: Any) -> bool:
