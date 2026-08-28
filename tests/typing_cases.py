@@ -268,6 +268,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     # the same assertion off the chain, which is where the width above comes from: `assert_that()` hands
     # a capable value the whole builder, and this call raises `TypeError` when it runs
     assert_that(_TakesAnyKey()).is_positive()  # case: numeric-assertion-on-a-capable-value
+    # `float()` is necessary for these and for no other numeric, so the umbrella asks the value for it
+    assert_that(_TakesAnyKey()).is_nan()  # case: nan-assertion-on-a-capable-value
+    assert_that(_TakesAnyKey()).is_close_to(1, 1)  # case: closeness-assertion-on-a-capable-value
+    assert_that(_a_row).eventually_sync().is_nan()  # case: nan-assertion-on-a-polled-capable-value
     # a value with no capability at all reaches neither, so the core narrowing follows onto the chain
     assert_that(_a_person).eventually_sync().is_positive()  # case: numeric-assertion-on-a-polled-object
     # the bridge: the same capable value polled, the rung `str` reaches by being iterable. Recorded so a
@@ -353,6 +357,9 @@ def _relations_that_must_keep_working() -> None:
     assert_that(1.0).is_greater_than(0)  # case: valid-float-against-int
     assert_that(Decimal("1.1")).is_greater_than(Decimal("1.0"))  # case: valid-decimal-order
     assert_that(Fraction(3, 2)).is_greater_than(Fraction(1, 2))  # case: valid-fraction-order
+    # the half that decides whether the float restriction can ship: a value the umbrella claims that converts
+    assert_that(numpy.float64(1.5)).is_nan()  # case: valid-numpy-nan
+    assert_that(numpy.float64(1.5)).is_close_to(1, 1)  # case: valid-numpy-closeness
     assert_that(1 + 2j).is_zero()  # case: valid-complex-zero
     assert_that(True).is_greater_than(0)  # case: valid-bool-compared
     assert_that(1).is_equal_to(True)  # case: valid-int-equals-bool

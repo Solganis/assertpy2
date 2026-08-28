@@ -121,10 +121,12 @@ class TestWhatTheCheckersRefuse:
         through that one code, and an overlap makes the check unable to tell them apart.
         """
         families = [
-            # `misc` rides along with mypy's `arg-type` on a callable argument: the same refusal twice, not two reasons
+            # `misc` rides along with mypy's `arg-type` on a callable argument: the same refusal twice, not two reasons.
+            # `call-overload` is the same relation once every rung is narrowed on `self`, and it cannot be confused
+            # with the receiver family below, whose pyright code is `reportAttributeAccessIssue`
             {
                 "ty": {"invalid-argument-type", "no-matching-overload"},
-                "mypy": {"arg-type", "misc"},
+                "mypy": {"arg-type", "misc", "call-overload"},
                 "pyright": {"reportArgumentType", "reportCallIssue"},
             },
             # a method the value's protocol does not have

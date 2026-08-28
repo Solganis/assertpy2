@@ -132,6 +132,70 @@ class _Numeric(_Ordered):
 numbers.Real.register(_Numeric)
 
 
+class _Convertible(_Capable):
+    """Capable and a real number that converts through `__float__`, carrying no ordering."""
+
+    def __float__(self):
+        return 0.0
+
+
+class _Indexed(_Capable):
+    """The other way to convert: `math.isnan` falls back to `__index__` when there is no `__float__`."""
+
+    def __index__(self):
+        return 0
+
+
+class _Opaque(_Capable):
+    """Registered as a real and converting neither way, which is what isolates the conversion.
+
+    Every other subject that lacks conversion also lacks the registration, so it refuses at the number
+    gate and proves nothing about conversion. This one gets past that gate and is refused by `math.isnan`.
+    """
+
+
+numbers.Real.register(_Convertible)
+numbers.Real.register(_Indexed)
+numbers.Real.register(_Opaque)
+
+
+class _Bound:
+    """A closeness operand that compares back, so the subject needs no ordering of its own.
+
+    Measured: with ordinary int bounds a convertible subject with no `__lt__` raises, which reads as the
+    assertion needing an ordering. It needs one on either side, and this is the side the caller supplies.
+    """
+
+    def __init__(self, held):
+        self.held = held
+
+    def __float__(self):
+        return float(self.held)
+
+    def __sub__(self, other):
+        return _Bound(self.held - float(other))
+
+    def __add__(self, other):
+        return _Bound(self.held + float(other))
+
+    # answered without converting the subject: reading `float(other)` here would hand the subject the very
+    # capability the rung is keyed on, and a subject that cannot convert would read as answering
+    def __lt__(self, other):
+        return self.held < 0
+
+    def __gt__(self, other):
+        return self.held > 0
+
+    def __eq__(self, other):
+        return False
+
+    def __hash__(self):
+        return hash(self.held)
+
+
+numbers.Real.register(_Bound)
+
+
 class _Pathish(_Capable):
     """Capable and a path, which is the structural half of `isinstance(val, (str, os.PathLike))`."""
 
@@ -151,16 +215,22 @@ class _Callish(_Capable):
 
 
 _CARRIES = {
-    "_Orderable": _Ordered,
-    "_PathLike": _Pathish,
-    "_Callable": _Callish,
+    "_Orderable": (_Ordered,),
+    "_PathLike": (_Pathish,),
+    "_Callable": (_Callish,),
+    "SupportsFloat | _Indexable": (_Convertible, _Indexed),
 }
-"""One subject per shape, carrying that shape and no other, so a wrong key cannot read as right."""
+"""Subjects per shape, each carrying that shape and no other, so a wrong key cannot read as right.
+
+The conversion key has two, one per half of the union: `math.isnan` reads `__float__` and falls back to
+`__index__`, and a carrier for only one half would leave the other unmeasured.
+"""
 
 _WITHOUT = {
     "_Orderable": (_Capable, _Pathish, _Callish),
     "_PathLike": (_Capable, _Ordered, _Callish),
     "_Callable": (_Capable, _Ordered, _Pathish),
+    "SupportsFloat | _Indexable": (_Capable, _Ordered, _Pathish, _Callish, _Opaque),
 }
 """Subjects that genuinely lack each shape, listed rather than derived.
 
@@ -180,6 +250,7 @@ _ARGUMENTS = [
     (0,),
     (1, 1),
     (0, 9),
+    (_Bound(0), _Bound(9)),
     (ValueError,),
     ("utf-8",),
     (b"a",),
@@ -386,7 +457,9 @@ class TestWhatEachRestrictedAssertionAsksFor:
         }
         assert_that(counted).described_as("what each key claims").is_equal_to(
             {
-                "shape": collections.Counter({"_Orderable": 6, "_PathLike": 9, "_Callable": 5}),
+                "shape": collections.Counter(
+                    {"_Orderable": 6, "_PathLike": 9, "_Callable": 5, "SupportsFloat | _Indexable": 5}
+                ),
                 "type": collections.Counter({"int": 3, "str": 14, "datetime.datetime": 7, "bytes | bytearray": 7}),
             }
         )
@@ -406,7 +479,7 @@ class TestWhatEachRestrictedAssertionAsksFor:
         wrong = {
             name: asked
             for name, asked in generator._ASKS_A_SHAPE.items()
-            if name not in _ASKED_OF_THE_CHAIN and not _answers(_CARRIES[asked](), name)
+            if name not in _ASKED_OF_THE_CHAIN and not all(_answers(carrier(), name) for carrier in _CARRIES[asked])
         }
         assert_that(wrong).described_as("keyed on a shape that does not answer it").is_empty()
 
@@ -421,7 +494,12 @@ class TestWhatEachRestrictedAssertionAsksFor:
 
     @pytest.mark.parametrize(
         ("shape", "members"),
-        [("_Orderable", ["__lt__"]), ("_PathLike", ["__fspath__"]), ("_Callable", ["__call__"])],
+        [
+            ("_Orderable", ["__lt__"]),
+            ("_PathLike", ["__fspath__"]),
+            ("_Callable", ["__call__"]),
+            ("_Indexable", ["__index__"]),
+        ],
     )
     def test_each_shape_asks_for_what_the_runtime_reads(self, shape, members) -> None:
         """The names are the measurement, not the family's own vocabulary.

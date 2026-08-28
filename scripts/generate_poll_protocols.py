@@ -140,7 +140,7 @@ _IMPORTS = """    import datetime
     from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Callable, _Orderable, _PathLike
+    from ._capable_typing import _Callable, _Indexable, _Orderable, _PathLike
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -507,6 +507,15 @@ _ASKS_A_SHAPE: Final = {
     "is_readable": "_PathLike",
     "is_writable": "_PathLike",
     "is_executable": "_PathLike",
+    # converting is necessary for these and for no other numeric: measured across eight shapes, a registered
+    # number that converts to neither raises here and runs the five that stay open.  `SupportsFloat` alone
+    # was wrong, `math.isnan` falling back to `__index__`, and closeness reads no ordering off the subject:
+    # a bound that compares back runs it with nothing but the conversion
+    "is_nan": "SupportsFloat | _Indexable",
+    "is_not_nan": "SupportsFloat | _Indexable",
+    "is_inf": "SupportsFloat | _Indexable",
+    "is_not_inf": "SupportsFloat | _Indexable",
+    "is_close_to": "SupportsFloat | _Indexable",
     # the call is structural, and the callable view sits below the umbrella, so this is the only description
     "raises": "_Callable",
     "does_not_raise": "_Callable",
@@ -570,12 +579,19 @@ bytes all still type-checked on a capable value until the rung was written.
 _RESTRICTED: Final = _ASKS_A_SHAPE | _ASKS_A_TYPE
 """Every rung the façade narrows, and what it asks the value for.
 
-The ten numeric assertions that are not here are the one family left open, and the reason is measured.
-Their gate is `isinstance(val, numbers.Number)`, which a class earns by registration and no checker can
-read.  Every structural stand-in was wrong in one direction or the other: without registration all ten
-refuse whatever the value carries, and with it `is_zero()` runs on a class that has no `__float__` at
-all, so keying them on `SupportsFloat` refused a call that works.  A false rejection is the more
-expensive of the two here, which is what leaves them open.
+Five of the ten numeric assertions are still open, and the split between them was measured rather than
+assumed.  All ten sit behind `isinstance(val, numbers.Number)`, a gate a class earns by registration
+that no checker can read, so the question for each is whether a capability is *necessary* on top of it.
+For `is_nan`, `is_not_nan`, `is_inf`, `is_not_inf` and `is_close_to` converting is: they reach
+`math.isnan`, which reads `__float__` and falls back to `__index__`, so both halves are in the key.
+For the other five nothing is: `is_zero` and `is_not_zero` ask only for `__eq__` with zero, and
+`is_between`, `is_not_between` and `is_not_close_to` order the pair, which needs an ordering on either
+side.  Measured on a registered subject carrying neither an ordering nor a conversion: all three run once
+the bounds compare back, so keying them on `__le__` would refuse a call that runs.
+
+Necessary, not sufficient, and the rung claims no more: a value that converts but never registered
+still type-checks here and raises, because registration is what no checker can see.  What the rung buys
+is the other direction, a value that cannot convert refused before the run.
 """
 
 
@@ -702,6 +718,11 @@ if TYPE_CHECKING:
         """A value with an ordering, which is all the relational assertions ask of one."""
 
         def __lt__(self, other: Any, /) -> Any: ...
+
+    class _Indexable(Protocol):
+        """The other half of what `math.isnan` reads: it falls back to `__index__` with no `__float__`."""
+
+        def __index__(self) -> int: ...
 
     class _PathLike(Protocol):
         """A value the filesystem assertions can read a path out of, spelled as `os.PathLike` spells it."""
