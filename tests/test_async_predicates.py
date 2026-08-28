@@ -47,11 +47,18 @@ _SITES = {
 def _duck_matcher() -> object:
     """A matcher by the protocol's own reading, with an `async def matches`.
 
-    Built from `Matcher.__protocol_attrs__` rather than from a guess: a first probe left out
-    `describe_mismatch`, so the object was not a matcher at all and the refusal it got was about that
-    instead.  Reading the protocol is what makes this the shape the library actually accepts.
+    Read off the protocol rather than guessed: a first probe left out `describe_mismatch`, so the object
+    was not a matcher at all and the refusal it got was about that instead.
+
+    Walked rather than taken from `__protocol_attrs__`, which arrived in 3.12 and this suite runs 3.10.
     """
-    members = {name: (lambda self, *args: "never") for name in Matcher.__protocol_attrs__}
+    declared = {
+        name
+        for base in Matcher.__mro__
+        for name, member in vars(base).items()
+        if not name.startswith("_") and callable(member)
+    }
+    members = {name: (lambda self, *args: "never") for name in declared}
 
     async def matches(self: object, value: object) -> bool:
         return False
