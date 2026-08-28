@@ -333,8 +333,7 @@ def _entry_overloads() -> list[str]:
     """
     tree = ast.parse(pathlib.Path(assertpy2.assertpy.__file__).read_text(encoding="utf-8"))
     names, modules = _overload_names(tree)
-    # taken from `tree.body` rather than `ast.walk`: the latter has no documented order and would also
-    # find a nested function of the same name, and order is exactly what this list is compared by
+    # from `tree.body`, not `ast.walk`: the latter has no documented order, and order is what this is compared by
     declared = [
         node
         for node in tree.body
@@ -405,8 +404,7 @@ def _matcher_protocol() -> dict[str, Any]:
             {name: _member_entry(Matcher, name) for name in vars(base) if not name.startswith("_")},
         )
         for name, annotation in getattr(base, "__annotations__", {}).items():
-            # assigned rather than set as a default: walking base to derived means the derived one has
-            # to win, and `setdefault` kept whatever the base declared
+            # assigned, not `setdefault`: walking base to derived means the derived one has to win
             if not name.startswith("_"):
                 members[name] = {"kind": "annotation", "annotation": _text(annotation, None)}
     return dict(sorted(members.items()))

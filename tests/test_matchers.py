@@ -18,8 +18,7 @@ class TestTemporalMatchers:
         assert_that(match.is_now(3).matches(datetime.now() - timedelta(seconds=30))).is_false()
 
     def test_is_now_default_window_is_two_seconds(self):
-        # every other case either passes an explicit delta or uses an unshifted now(), both of which
-        # hold under any positive default, so the default itself was pinned by nothing
+        # every other case holds under any positive default, so the default itself was pinned by nothing
         assert_that(match.is_now().matches(datetime.now() - timedelta(seconds=1.5))).is_true()
         assert_that(match.is_now().matches(datetime.now() - timedelta(seconds=2.5))).is_false()
 
@@ -71,8 +70,7 @@ class TestNumericMatchersRejectNonComparable:
             assert_that(["a", "b"]).each(match.is_negative())
 
     def test_matches_structure_with_combinator_matcher_is_clean(self):
-        # describe_mismatch re-evaluates every sub-matcher of an AllOf; a guarded sub-matcher
-        # (is_positive on a str) must not leak TypeError out of matches_structure/satisfies/each
+        # describe_mismatch re-runs every sub-matcher, and a guarded one must not leak TypeError to the caller
         with pytest.raises(AssertionError):
             assert_that({"n": "x"}).matches_structure({"n": match.is_instance_of(int) & match.is_positive()})
 
@@ -714,8 +712,7 @@ class TestTheTextMatchersAgreeWithTheirMethods:
 
     @pytest.mark.parametrize("matcher", [match.contains_string, match.starts_with, match.ends_with])
     def test_the_two_text_types_never_match_each_other(self, matcher):
-        # the method raises TypeError on this pair; a matcher answers instead of raising, and the
-        # answer is no.  Anything else would make `b"hello" == match.starts_with("he")` a silent yes
+        # a matcher answers no where the method raises, or `b"hello" == match.starts_with("he")` is a silent yes
         assert_that(matcher("he").matches(b"hello")).is_false()
         assert_that(matcher(b"he").matches("hello")).is_false()
 
@@ -1157,8 +1154,7 @@ class TestEqualToStrictTypes:
             assert_that({"active": 1}).matches_structure({"active": match.equal_to(True, strict_types=True)})
 
     def test_the_strict_walk_reaches_inside_a_composite(self):
-        # the cases above all compare scalars, which never reach the recursive walk: without it the
-        # matcher quietly falls back to plain `==` and the flag stops meaning anything for containers
+        # scalars never reach the recursive walk, where the matcher falls back to `==` and the flag means nothing
         assert_that(match.equal_to([1], strict_types=True).matches([True])).is_false()
         assert_that(match.equal_to([1], strict_types=True).matches([1])).is_true()
         assert_that(match.equal_to({"a": 1}, strict_types=True).matches({"a": True})).is_false()
@@ -1260,8 +1256,7 @@ class TestTypeMatchersRefuseBadInputAtConstruction:
 
     @pytest.mark.parametrize("bad", [list[int], None, "int", int | str, (int, str)])
     def test_is_type_of_refuses_anything_but_a_type(self, bad):
-        # `type(value) is <a union>` can never hold, so accepting one yields a matcher that silently
-        # never matches
+        # `type(value) is <a union>` can never hold, so accepting one yields a matcher that never matches
         with pytest.raises(TypeError, match="given type arg must be a type"):
             match.is_type_of(bad)
 
@@ -1287,8 +1282,7 @@ class TestTypeMatcherDescriptionsSurviveEveryShape:
         assert_that(match.is_instance_of(int).describe()).is_equal_to("an instance of <int>")
 
     def test_a_union_is_spelled_out(self):
-        # `str()` gives `int | str` on every supported version; `__name__` gives `Union` on 3.14+ and
-        # raises below it
+        # `str()` gives `int | str` everywhere; `__name__` gives `Union` on 3.14+ and raises below it
         assert_that(match.is_instance_of(int | str).describe()).is_equal_to("an instance of <int | str>")
 
     def test_a_tuple_names_its_members(self):
@@ -1311,8 +1305,7 @@ class TestTypeMatcherDescriptionsSurviveEveryShape:
         with pytest.raises(TypeError, match="given class arg must be a class"):
             match.is_instance_of((int, list[int]))  # ty: ignore[invalid-argument-type]  # the shape under test
 
-        # the legacy spelling is a different class below 3.14, so testing for `types.UnionType` alone let
-        # this one through on the supported floor and nowhere else
+        # the legacy spelling is a different class below 3.14, so a `types.UnionType` test let it through
         legacy = typing.Union[type(None), list[int]]  # noqa: UP007  # the old spelling is the subject
         with pytest.raises(TypeError, match="given class arg must be a class"):
             match.is_instance_of(legacy)  # ty: ignore[invalid-argument-type]  # the shape under test

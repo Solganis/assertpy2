@@ -47,22 +47,19 @@ from assertpy2.assertpy import AssertionBuilder
 
 _SENTINEL = object()
 
-# Pairs that say the same thing and must stay apart, with the reason: the gate below would otherwise
-# force a shared base, and one such base widened `contains` until `"abc".contains(123)` type-checked.
+# Pairs that say the same thing and must stay apart. The gate below would force a shared base,
+# and one such base widened `contains` until `"abc".contains(123)` type-checked.
 _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # a mapping searches keys, a byte string searches bytes and a frame or an array searches its
-        # elements: one spelling, three questions, and a shared base would have to be untyped to fit all
+        # one spelling, three questions: keys, bytes, elements. A shared base would have to be untyped to fit
         ("contains", "_BytesAssertion", "_DictAssertion"),
         ("contains", "_BytesAssertion", "_CollectionShapedAssertion"),
         ("contains", "_CollectionShapedAssertion", "_DictAssertion"),
-        # narrowing `satisfies` means redeclaring the whole overload pair, and the first half of that
-        # pair is the same everywhere by construction: it is the `TypeIs` form the core already has.
-        # Only the second half narrows, to `Matcher[str]` and `Matcher[_N]` respectively
+        # narrowing `satisfies` redeclares the whole pair, whose first half is the core's `TypeIs` form
+        # everywhere. Only the second half narrows, to `Matcher[str]` and `Matcher[_N]`
         ("satisfies", "_NumericAssertion", "_TextAssertion"),
-        # `matches_structure` takes a mapping, a pydantic-style model or an attrs instance.  The
-        # mapping half has a view of its own, and the other two do not: only mypy sees an attrs class,
-        # so the object view carries it rather than a shape answering three different ways
+        # `matches_structure` takes a mapping, a model or an attrs instance. Only the mapping has a view
+        # of its own, and since only mypy sees an attrs class, the object view carries the other two
         ("matches_structure", "_DictAssertion", "_ObjectAssertion"),
     }
 )
@@ -85,14 +82,13 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
         "_FrameAssertion",
         "_ArrayAssertion",
         "_InvokedAssertion",
-        # not a type `assert_that` dispatches to, but what every pipeline step hands back: a collection
-        # this library built, which is always a `list` whatever went in
+        # not a dispatch type but what every pipeline step hands back: always a `list`, whatever went in
         "_ListAssertion",
     }
 )
 
-# Which protocol carries which capability, checked for equality rather than containment: both
-# directions fail quietly, and one of them offered `exists()` on the text of an exception.
+# Which protocol carries which capability, by equality and not containment: both directions fail
+# quietly, and one of them offered `exists()` on the text of an exception.
 _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_WalkAssertion": (
         "_StructureAssertion",
@@ -152,26 +148,22 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     "_TextAssertion": ("_StringAssertion", "_InvokedAssertion"),
 }
 
-# Where a protocol deliberately redeclares what it inherits in order to narrow it.  The pair of
-# overloads has to be repeated whole, so its unchanged half looks like a copy while the other half is
-# the entire point: `Matcher[str]` and `Matcher[_N]` instead of the core's `Matcher`.
+# Where a protocol redeclares what it inherits in order to narrow it. The pair of overloads is
+# repeated whole, so its unchanged half looks like a copy while `Matcher[str]` is the entire point.
 _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
     {
         ("_NumericAssertion", "satisfies"),
         ("_TextAssertion", "satisfies"),
-        # the refinements, which answer with the view the factory would have given for the refined
-        # type.  The core declares the plain pair, and this is the same pair with the ladder in front
+        # the refinements answer with the factory's view for the refined type: the core pair with a ladder
         ("_ObjectAssertion", "is_not_none"),
         ("_ObjectAssertion", "is_instance_of"),
         ("_ObjectAssertion", "is_instance_of_any"),
-        # the string view keeps its own result type on the pivots: text for a message, `str` for a
-        # string, which is what lets one be read as a path and the other not
+        # the string view keeps its result type on the pivots, which lets one be read as a path and not the other
         ("_StringAssertion", "first"),
         ("_StringAssertion", "last"),
         ("_StringAssertion", "element"),
         ("_StringAssertion", "single"),
-        # the quantifiers, narrowed to the element each view knows: the structure capability is shared
-        # by a mapping and a sequence, so there it can only say `Any`
+        # the quantifiers narrow to each view's element; the structure capability is shared, so there it is `Any`
         ("_IterableAssertion", "each"),
         ("_IterableAssertion", "all_satisfy"),
         ("_DictAssertion", "each"),
@@ -179,24 +171,20 @@ _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
-# Which Protocols must, between them, declare every public method of each mixin.  Several mixins are
-# reachable from more than one narrowed view (a JSON path assertion applies to a dict and to a list),
-# so the requirement is coverage by the union, not membership in one.
+# Which Protocols must between them declare every public method of a mixin. Several mixins are
+# reachable from more than one view, so the requirement is coverage by the union, not membership.
 _COVERAGE: dict[type, tuple[str, ...]] = {
     base.BaseMixin: ("_CoreAssertion",),
     bytes_mixin.BytesMixin: ("_BytesAssertion",),
     collection.CollectionMixin: ("_IterableAssertion",),
     contains.ContainsMixin: ("_IterableAssertion", "_StringAssertion"),
-    # the datetime view alone, though both date views exist: all seven refuse a plain date at run time, and
-    # pooling the two would let a name dropped from one be supplied by the other.
-    #
-    # The other direction, a view carrying *part* of a mixin, is not asked for: the five ordering declarations
-    # on each date view and the two closeness ones come from `NumericMixin`, covered by `_NumericAssertion`.
-    # A register of what each value type can answer was measured and refused: 55 of the 117 view-and-mixin pairs
-    # are partial, holding 210 declarations, and "the runtime answers, the view is silent" runs 19 to 35 per
-    # view, about 450 in all.  `tests/api_snapshot.json` already fails a removal, so what stays open is an
-    # addition to a shared mixin, and deriving that needs a real argument for each of the 157 methods: with a
-    # stand-in, a refusal about the argument reads the same as a type that cannot answer
+    # the datetime view alone: all seven refuse a plain date at run time, and pooling the two would let a name
+    # dropped from one be supplied by the other.  The other direction, a view carrying *part* of a mixin, was
+    # measured and refused: 55 of the 117 pairs are partial, holding 210 declarations, and "the runtime answers,
+    # the view is silent" runs 19 to 35 per view, about 450 in all.  `tests/api_snapshot.json` already fails a
+    # removal, so what stays open is an addition to a shared mixin, and deriving that needs a real argument for
+    # each of the 157 methods: with a stand-in, a refusal about the argument reads the same as a type that
+    # cannot answer
     date.DateMixin: ("_DateTimeAssertion",),
     dict_mixin.DictMixin: ("_DictAssertion",),
     exception.ExceptionMixin: ("_InvokedAssertion", "_CallableAssertion"),
@@ -214,13 +202,12 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     http_mixin.HttpMixin: (),
 }
 
-# The two families with no narrowed view: every ``assert_that`` overload keys on a concrete type, and
-# neither a DataFrame nor an HTTP response matches any, so the call lands on the fallback, which is the
-# class carrying these methods.
+# The two families with no narrowed view: neither a DataFrame nor an HTTP response matches an
+# overload, so the call lands on the fallback, which is the class carrying these methods.
 _UNTYPED: frozenset[str] = frozenset({"decoded_as_json"})
 
-# The bases that carry no assertions and so contribute no edge to the inheritance graph.  Written out
-# because everything not on this list has to be either a protocol of this file or an error.
+# The bases that carry no assertions, written out because anything not listed has to be either a
+# protocol of this file or an error.
 _NOT_A_PROTOCOL_BASE: frozenset[str] = frozenset({"Protocol", "Generic"})
 
 
@@ -262,8 +249,8 @@ def _protocol_classes():
 _PROTOCOLS = _protocol_classes()
 
 
-# Union spellings this file refuses to read: what a name means cannot be followed from the syntax
-# alone, and the typed surface writes every union with `|`, so the cheap rule is to require it.
+# Union spellings this file refuses to read: a name cannot be followed from the syntax alone, and
+# the typed surface writes every union with `|`, so the cheap rule is to require it.
 _LEGACY_UNIONS: tuple[str, str] = ("Optional", "Union")
 
 
@@ -452,8 +439,7 @@ class TestReverseParity:
         assert_that(_UNTYPED - runtime).described_as("exempted names that no longer exist at runtime").is_empty()
 
     def test_the_fallback_really_carries_the_untyped_methods(self):
-        # the exemption's premise: no overload matches these types, so the call lands on the concrete
-        # builder rather than on a narrowed view.  tests/test_typing.py pins that at the type level
+        # the premise: no overload matches these types, and `tests/test_typing.py` pins that at the type level
         for name in _UNTYPED:
             assert_that(inspect.getattr_static(AssertionBuilder, name, _SENTINEL)).described_as(name).is_not_same_as(
                 _SENTINEL
@@ -523,8 +509,7 @@ class TestTheProtocolsStayComposed:
         ).is_empty()
 
     def test_a_child_does_not_redeclare_what_it_already_inherits(self):
-        # the other way duplication comes back: a copy in a child of what its base already says.  The
-        # test above ignores related pairs on purpose, so without this one that route is open
+        # the other way duplication returns: the test above ignores related pairs, leaving this route open
         redundant = {}
         for protocol, method_def in _CASES:
             for parent in _PROTOCOLS[protocol][1]:

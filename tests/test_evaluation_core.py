@@ -100,10 +100,8 @@ class _Status(str, enum.Enum):
     DUE = "due"
 
 
-# both halves of the membership rule in one generator: values a set may answer for, and values it may
-# not.  Mixing them is what makes the properties below test the classifier rather than the fast path.
-# The last three are the subclass half of it: two that a set may answer for although their exact types
-# are not on the safe list, and one that inherits equality and hashes by another rule entirely
+# both halves in one generator, so the properties below test the classifier and not the fast path.
+# the last three are the subclass half: two a set may answer for, one that hashes by another rule
 _MIXED_ELEMENTS = st.one_of(
     st.integers(-5, 5),
     st.text(max_size=2),
@@ -160,8 +158,7 @@ class TestBothSpellingsOfEqualityAnswerAlike:
         assert_that(match.equal_to(expected, **options).matches(actual)).described_as(label).is_equal_to(by_builder())
 
     def test_an_option_the_relation_does_not_have_is_refused_by_name(self):
-        # the builder already refuses a misspelt option; the matcher used to accept none at all, and a
-        # spec author had no way to tell "not supported" from "spelled wrong"
+        # the matcher used to accept no options at all, so "not supported" read the same as "spelled wrong"
         with pytest.raises(TypeError, match=r"equal_to.*strict_type"):
             match.equal_to(1, strict_type=True)
 
@@ -269,8 +266,7 @@ class TestTheCoreItself:
         assert_that(math.isnan(nan)).is_true()
 
     def test_the_mixin_still_answers_for_an_extension_that_calls_it(self):
-        # the methods stayed as thin wrappers on purpose: an extension written against
-        # `self._normalize_key_specs(...)` keeps working, and the decision behind it is now shared
+        # thin wrappers on purpose: an extension calling `self._normalize_key_specs(...)` keeps working
         builder = assert_that({"a": 1})
         assert_that(builder._normalize_key_specs(["a", "b"], "ignore")).is_equal_to(["a", "b"])
         assert_that(builder._dict_ignore(("a",))).is_equal_to(["a"])
@@ -278,8 +274,7 @@ class TestTheCoreItself:
         assert_that(builder._is_dict_like({"a": 1})).is_true()
 
     def test_the_two_spec_normalizers_differ_on_purpose(self):
-        # a one-element tuple is just a key for ignore; for include a path selects its first segment,
-        # and the rest is consumed one level down. Getting this backwards silently broke nested include
+        # for include a path selects its first segment, and getting this backwards broke nested include
         assert_that(ignore_specs(("a",))).is_equal_to(["a"])
         assert_that(ignore_specs(("a", "b"))).is_equal_to([("a", "b")])
         assert_that(include_specs(("a", "b"))).is_equal_to(["a"])
@@ -293,8 +288,7 @@ class TestTheCoreItself:
         loose = _CompareConfig(tolerance=0.1)
         assert_that(values_differ(1.0, 1.05, loose)).is_false()
         assert_that(values_differ(1.0, 2.0, loose)).is_true()
-        # a set is a leaf to the walker, and strict types have nothing to say about one: asking anyway
-        # called two equal sets unequal
+        # a set is a leaf, and asking strict types about one called two equal sets unequal
         assert_that(values_differ({1, 2}, {1, 2}, _CompareConfig(strict_types=True))).is_false()
 
 
@@ -330,8 +324,7 @@ class TestMembershipIsOneDecisionToo:
         assert_that(match.contains(*items).matches(value)).described_as(label).is_equal_to(by_builder())
 
     def test_a_matcher_among_the_items_is_satisfied_by_any_element(self):
-        # the part that makes membership more than `item in value`: the argument decides for itself,
-        # and it is asked of each element rather than compared to the collection
+        # what makes membership more than `item in value`: the argument is asked of each element
         assert_that(match.contains(match.greater_than(100)).matches([1, 200])).is_true()
         assert_that(match.contains(match.greater_than(100)).matches([1, 2])).is_false()
 
@@ -431,16 +424,14 @@ class TestOrderingIsOneDecisionAsWell:
         assert_that(holds(nan, nan, "lt")).is_false()
 
     def test_nan_is_neither_less_nor_greater_nor_equal(self):
-        # `compare` answers 0 because neither side is smaller, and that is the one place where "not
-        # less, not greater" must not become "equal": `le`/`ge` stay false
+        # `compare` answers 0, and this is where "not less, not greater" must not become equal: `le`/`ge` stay false
         nan = float("nan")
         assert_that(holds(nan, nan, "le")).is_false()
         assert_that(holds(nan, nan, "ge")).is_false()
         assert_that(holds(nan, 1, "lt")).is_false()
 
     def test_both_spellings_treat_an_unorderable_pair_their_own_way(self):
-        # the difference in strictness is deliberate: a wrong subject in an assertion is a mistake in
-        # the test, while a matcher feeds `==` and the combinators, where raising would be wrong
+        # deliberate: a wrong subject is a mistake in the test, while a matcher feeds `==` and the combinators
         assert_that(match.greater_than(1).matches("a")).is_false()
         with pytest.raises(TypeError, match=r"^given other arg must be a number"):
             assert_that(1).is_greater_than("a")
@@ -582,9 +573,7 @@ class TestTheRelationsASpecCouldNotExpress:
         assert_that(match.is_sorted().matches([1, "a"])).is_false()
 
     def test_the_assertion_refuses_the_same_collection_in_its_own_words(self):
-        # the two halves of the same rule again: a matcher answers, an assertion refuses. What must not
-        # happen is Python's "'<' not supported between instances of 'str' and 'int'" reaching the
-        # reader, which is about the operator and names neither the assertion nor its value
+        # a matcher answers, an assertion refuses; what must not reach the reader is `'<' not supported between`
         with pytest.raises(TypeError, match=r"^val must be a collection whose items can be ordered"):
             assert_that([1, "a"]).is_sorted()
 

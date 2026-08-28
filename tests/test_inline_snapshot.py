@@ -58,8 +58,7 @@ class TestSelective:
         assert_that(str(failure.value)).starts_with("val must be dict-like")
 
     def test_a_matcher_placeholder_is_accepted(self):
-        # the shape the docs recommend, and a Matcher is not callable, so only the guard's first half
-        # can let it through
+        # the shape the docs recommend, and a Matcher is not callable, so only the guard's first half admits it
         assert_that({"id": "550e8400-e29b-41d4-a716-446655440000", "name": "Alice"}).matches_inline(
             {"id": "", "name": "Alice"}, placeholders={"id": match.is_uuid()}
         )
@@ -125,8 +124,7 @@ class TestLiteralable:
 
 
 def test_inline_mismatch_names_its_kind_and_the_update_flag():
-    # the file-backed branch says which snapshot it measured against; the inline one must not stay
-    # silent, or the reader sees the same failure worded two different ways
+    # the file-backed branch names its snapshot; the inline one must not word the same failure differently
     with pytest.raises(AssertionError) as exc_info:
         assert_that({"id": 7, "status": "paid"}).matches_inline({"id": 7, "status": "pending"})
     message = str(exc_info.value)
@@ -214,8 +212,7 @@ class TestApplyRecordsWithSeveralEdits:
         )
 
     def test_a_non_ascii_literal_round_trips(self, tmp_path):
-        # the file is opened with an explicit encoding both ways; on a runner whose locale is not UTF-8
-        # the default would mangle this
+        # explicit encoding both ways: on a runner whose locale is not UTF-8 the default would mangle this
         source = tmp_path / "u.py"
         source.write_text("a = matches_inline()\n", encoding="utf-8", newline="")
         insert_at = source.read_text(encoding="utf-8").index("matches_inline(") + len("matches_inline(")
@@ -243,7 +240,6 @@ class TestASnapshotMismatchCarriesTheRecordTheComparisonComposed:
         monkeypatch.chdir(tmp_path)
         with pytest.raises(AssertionFailure) as failure:
             assert_that({"a": 1}).matches_inline({"a": 2})
-        # the same relationship a directly raised failure has: __str__ appends the rendered diff, the
-        # record holds the message that was composed
+        # as with a directly raised failure: `__str__` appends the diff, the record holds the composed message
         assert_that(failure.value._outcome.message).contains("Inline snapshot")
         assert_that(str(failure.value)).starts_with(failure.value._outcome.message)

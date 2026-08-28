@@ -167,8 +167,7 @@ class TestRecordedPosition:
         source = self._source_of(filename)
         column = start - (source.rfind("\n", 0, start) + 1)
         assert_that(text).contains("\n")
-        # the column is read off this file, so an off-by-one in the recorder's own arithmetic surfaces
-        # as a different rendering here; `_format_literal` itself is pinned by TestFormatLiteral
+        # the column is read off this file, so an off-by-one in the recorder surfaces as a different rendering
         assert_that(text).is_equal_to(_inline._format_literal(wide, column))
 
     def test_an_updated_multiline_literal_is_indented_to_the_literal(self, monkeypatch):

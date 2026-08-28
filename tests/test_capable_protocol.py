@@ -71,8 +71,7 @@ class _Maximal(_Capable):
     def __call__(self, *args, **kwargs):
         raise ValueError("boom")
 
-    # the other four capabilities the umbrella recognises, so an assertion that reads a mapping, a model
-    # or a response is answered here rather than reading as one no capable value can reach
+    # the other four capabilities, so an assertion reading a mapping, a model or a response is answered here
     def keys(self):
         return ("id",)
 
@@ -234,16 +233,12 @@ def _formatted(source: str) -> str:
             input=source,
             capture_output=True,
             text=True,
-            # named rather than left to the locale: `text=True` encodes stdin with whatever the platform
-            # prefers, and on a Windows runner that is not UTF-8, so ruff was handed bytes it refused to
-            # read and this comparison ran on the wrong text
+            # named rather than left to the locale: a Windows runner is not UTF-8, and ruff refused the bytes
             encoding="utf-8",
             cwd=_ROOT,
             check=False,
         )
-        # refuse rather than fall back to the input: falling back compared unformatted text against formatted
-        # and passed everywhere the failure did not happen.  Zero and nothing else, because `ruff check --fix`
-        # exits 1 when violations remain, so accepting 1 would let output ruff rejected through
+        # refuse rather than fall back: `--fix` exits 1 with violations left, so 1 would let rejected output through
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(
                 f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "
@@ -356,9 +351,7 @@ class TestNothingTheBuilderOffersIsMissing:
         members that live on the builder rather than on a mixin were absent.  Built from the class it
         could not name what `__init__` sets, and four more went the same way.
         """
-        # constructed here rather than through `assert_that()`, which hands back a subclass carrying whatever a
-        # suite registered.  Measured: running `test_extensions.py` first left four names on that subclass and this
-        # read them as members the facade had dropped
+        # built directly: `assert_that()` hands back a subclass, and a suite's four registered names read as dropped
         carried = {name for name in dir(AssertionBuilder({"id": 1})) if not name.startswith("_")}
         declared = set(_declarations()) | _attributes()
         assert_that(carried - declared).described_as("a member the umbrella used to offer").is_empty()

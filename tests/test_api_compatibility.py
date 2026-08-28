@@ -60,8 +60,7 @@ def _positional(entry: dict) -> list[str]:
     ]
 
 
-# how a parameter may change the ways it can be passed.  Widening is an addition: a caller that worked
-# still works and gains a spelling.  Narrowing takes a spelling away, so it breaks
+# widening is an addition, a caller gains a spelling; narrowing takes one away, so it breaks
 _WIDENING = {
     ("POSITIONAL_ONLY", "POSITIONAL_OR_KEYWORD"),
     ("KEYWORD_ONLY", "POSITIONAL_OR_KEYWORD"),
@@ -115,8 +114,7 @@ def _parameter_changes(path: str, name: str, before: dict, after: dict) -> list[
     if not after["required"] and before["required"]:
         changes.append(("addition", f"{path}: parameter '{name}' gained a default"))
     if after.get("default") != before.get("default") and after["required"] == before["required"]:
-        # both labels on purpose: the call still binds, and it now does something else.  Whoever reads
-        # the gate has to see that this is not a free minor
+        # both labels on purpose: the call still binds and now does something else, which is not a free minor
         moved = f"{path}: parameter '{name}' defaults to {after.get('default')}, was {before.get('default')}"
         changes.extend([("behaviour", moved), ("breaking", moved)])
     if after["annotation"] != before["annotation"]:
@@ -135,12 +133,10 @@ def _section_changes(section: str, before: dict, after: dict) -> list[tuple[str,
         elif _owned(old.get("construction")):
             changes.extend(_callable_changes(f"{section}.{name}", old, new))
         else:
-            # the signature belongs to a base outside this package: it moves when the standard library
-            # moves, which is not a promise this package made and not a change it can make
+            # the signature belongs to a base outside this package, so it moves when the standard library does
             pass
         for field in ("fields", "bases"):
-            # order matters for both: fields carry positional construction and unpacking, bases carry
-            # the method resolution order, so a reshuffle changes behaviour while keeping every name
+            # order matters: fields carry positional construction, bases the MRO, so a reshuffle changes behaviour
             gone = [item for item in old.get(field, []) if item not in new.get(field, [])]
             fresh = [item for item in new.get(field, []) if item not in old.get(field, [])]
             changes += [("breaking", f"{section}.{name}: {field[:-1]} '{item}' removed") for item in gone]
@@ -219,8 +215,7 @@ def differences(before: dict, after: dict) -> list[tuple[str, str]]:
         for name in sorted(set(old_shapes) & set(new_shapes))
         if old_shapes[name] != new_shapes[name]
     )
-    # both directions, not the intersection alone: a view that stops offering a method loses its key,
-    # and one that starts gains a key that was never there to compare against
+    # both directions: a view that stops offering a method loses its key, one that starts gains an unmatched one
     changes.extend(
         ("typing", f"{name} is gone from the typed surface") for name in sorted(set(old_shapes) - set(new_shapes))
     )
@@ -253,8 +248,7 @@ class TestThePublicSurfaceHasNotMoved:
         assert_that(other).described_as("surface changed and the snapshot was not re-recorded").is_empty()
 
     def test_the_snapshot_holds_no_private_names(self):
-        # a snapshot that captured privates would turn every internal rename into a red gate, which is
-        # the fastest way to teach everyone to re-record without reading
+        # capturing privates would make every internal rename a red gate, teaching everyone to re-record unread
         stored = _stored()
         leaked = [
             f"{section}.{name}"

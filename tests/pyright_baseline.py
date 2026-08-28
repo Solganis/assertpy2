@@ -37,20 +37,16 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
-    # the verdict twins mirror the protocols and their reports with them: the same two variance suggestions
-    # plus the one `_DictAssertion` carries, and one override report for the same reason the original has it
+    # the twins mirror the protocols and their reports: the same suggestions, and one override for the same reason
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
-    # Two variance suggestions, both refused: `_N` is read back through `value`, and `_E` sits inside
-    # a contravariant `Matcher`, where the flips cancel and a `Matcher[Dog]` would reach animals
+    # both refused: `_N` is read back through `value`, and `_E` sits in a contravariant `Matcher` where flips cancel
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
     ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
     ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
-    # what a dynamic hook hands back, read against the callable its declaration promises.  Two of a
-    # former four, and one `reportInconsistentOverload` with them, went when the implementation's
-    # return annotation became `Any`: see the comment there for why it had to
+    # what a dynamic hook hands back: two of a former four went when the implementation's return became `Any`
     ("assertpy2/assertpy.py", "reportReturnType"): 2,
     # the failure record is `| None` in general and never None at this call, as the comment there says
     ("assertpy2/snapshot.py", "reportArgumentType"): 1,

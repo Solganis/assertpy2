@@ -415,8 +415,7 @@ class TestSummaryUnderWindowOverflow:
         assert_that(summary).contains("value changed 4 times")
 
     def test_polls_that_differ_only_past_the_snapshot_are_not_one_poll(self):
-        # the timeline collapses identical consecutive polls, and identical has to mean identical: two
-        # values differing past the cut were folded into one record with a repeat count
+        # identical has to mean identical: two values differing past the cut were folded into one record
         recorder = _PollRecorder()
         for index in range(3):
             value = [*range(150), f"unique {index}"]
@@ -430,8 +429,7 @@ class TestSummaryUnderWindowOverflow:
         assert_that(recorder.build(elapsed=0.3).samples).is_length(3)
 
     def test_a_cycle_is_still_detected_after_samples_are_dropped(self):
-        # the shape is read off the window, so once anything was dropped the sentence says which polls
-        # it is about rather than pairing what it saw with a count of polls it did not
+        # read off the window: once anything was dropped the sentence must say which polls it is about
         values = ["up" if i % 2 else "down" for i in range(40)]
         assert_that(self._summary_of(values)).is_equal_to("value cycles between 2 states in the 25 polls kept")
 
@@ -521,8 +519,7 @@ class TestTraceSummary:
         assert_that(summary).is_equal_to("probe raised exceptions on all 60 polls")
 
     def test_many_distinct_messages_of_one_type_still_name_that_type(self):
-        # the sentence needs "one type" or "several", and holding a set of what it saw would grow with
-        # the run, which is the one thing the bounded sample window exists to prevent
+        # the sentence needs "one type" or "several", and a set of what it saw would grow with the run
         events = [self._error(ConnectionError(f"attempt {index}")) for index in range(200)]
         recorder = _PollRecorder()
         assert_that(self._summary(events, recorder=recorder)).is_equal_to(
@@ -543,14 +540,12 @@ class TestTraceSummary:
         )
 
     def test_a_probe_that_ended_raising_is_not_called_recovered(self):
-        # "recovered" is a claim about order, and the count of raising polls is a total: a probe that
-        # raised, returned a value and raised again ended raising, whatever the totals say
+        # "recovered" is about order, not totals: raise, return, raise again ended raising whatever the totals say
         events = [self._fail("A"), self._error(), self._fail("A"), self._error()]
         assert_that(self._summary(events)).is_equal_to("probe raised on 2 of 4 polls; value then never changed")
 
     def test_the_recovery_line_counts_only_what_followed_the_last_error(self):
-        # "value *then* changed" is a claim about what happened after the probe recovered, and the
-        # run-wide total counted movement from before the exception as well
+        # "value *then* changed" is about after the recovery, and the run-wide total counted movement before it
         events = [self._fail("A"), self._fail("B"), self._error(), self._fail("C")]
         assert_that(self._summary(events)).is_equal_to(
             "probe recovered after 1 raising poll; value then changed 1 time"
@@ -611,8 +606,7 @@ class TestTraceSummary:
         )
 
     def test_dropped_fail_samples_not_reported_as_all_raised(self):
-        # a run whose window holds only error samples still had polls that returned a value and failed,
-        # and the sentence about "all polls" is decided by the counts rather than by what was kept
+        # "all polls" is decided by the counts, not by what the window kept
         events = [self._fail(index) for index in range(4)] + [
             self._error(f"ConnectionError('e{i}')") for i in range(26)
         ]
@@ -652,8 +646,7 @@ class TestACollectedTimeoutKeepsItsStructuredData:
 
     @staticmethod
     def _collected(expected={"n": -1}, probe=None):  # noqa: B006  # read, never mutated
-        # the value is fixed and the number of polls is not: how many a real clock fits into 50ms is the
-        # machine's business, and a test that pins it fails on a loaded CI rather than on a defect
+        # the value is fixed and the poll count is not: pinning it fails on a loaded CI rather than on a defect
         with pytest.raises(AssertionFailure) as failure, soft_assertions():
             assert_that(probe or (lambda: {"n": 5})).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(expected)
         return failure.value
@@ -667,8 +660,7 @@ class TestACollectedTimeoutKeepsItsStructuredData:
         assert_that(str(self._collected())).contains("value unchanged")
 
     def test_an_assertion_that_named_nothing_adds_nothing(self):
-        # `is_not_empty()` names neither side, and a collected timeout for it must not grow a block of
-        # values nobody asked about: `error()` decides that from which arguments arrive
+        # `is_not_empty()` names neither side, and `error()` decides that from which arguments arrive
         with pytest.raises(AssertionFailure) as failure, soft_assertions():
             assert_that(list).eventually_sync(timeout=0.05, interval=0.01).is_not_empty()
         outcome = failure.value.failures[0]
@@ -676,8 +668,7 @@ class TestACollectedTimeoutKeepsItsStructuredData:
         assert_that(outcome.has_expected).is_false()
 
     def test_a_failure_built_by_hand_falls_back_to_its_values(self):
-        # `eventually()` and the snapshot re-wraps build failures directly, so there is no record of what
-        # they named: then the values themselves are all there is to go on, which is what the plugin does
+        # these build failures directly, so the values themselves are all there is to go on, as the plugin does
         built = AssertionFailure("no record here", actual={"a": 1}, expected={"a": 2})
         assert_that(aa._structured_of(built)).is_equal_to({"actual": {"a": 1}, "expected": {"a": 2}})
         assert_that(aa._structured_of(AssertionFailure("nothing named"))).is_empty()
@@ -710,8 +701,7 @@ class TestACollectedTimeoutKeepsItsStructuredData:
             pytest.param({"a": {1, 2}}, {"a": {2, 1}}, True, id="a-nested-set-in-another-order"),
             pytest.param("x", type("StrSubclass", (str,), {})("x"), True, id="a-str-subclass"),
             pytest.param(({"a": 1, "b": 2},), ({"b": 2, "a": 1},), True, id="a-dict-inside-a-tuple"),
-            # built from lists in opposite orders on purpose: 0 and 8 land in one bucket, so the two
-            # equal sets really do iterate differently and the sort is what keeps them one value
+            # opposite orders on purpose: 0 and 8 share a bucket, so the equal sets really do iterate differently
             pytest.param({*[0, 8]}, {*[8, 0]}, True, id="a-set-whose-members-collide"),
             pytest.param(_LooksLikeAList(), [1, 2], False, id="a-leaf-that-prints-like-a-list"),
             pytest.param(["a,b"], ["a", "b"], False, id="a-string-holding-the-separator"),
@@ -846,8 +836,7 @@ class TestACollectedTimeoutKeepsItsStructuredData:
         assert_that(probe).eventually_sync(timeout=0.5, interval=0.01, ignoring=HostileError).is_equal_to("ready")
 
     def test_an_expected_none_is_still_a_named_expectation(self):
-        # "was this named" cannot be read off a test against None: `is_equal_to(None)` names one, and a
-        # probe returning None provides one. Both were being dropped from the collected record
+        # "was this named" cannot be read off a test against None: both spellings were dropped from the record
         outcome = self._collected(expected=None).failures[0]
         assert_that(outcome.has_expected).is_true()
         assert_that(outcome.expected).is_none()
@@ -1052,8 +1041,7 @@ class TestRetryCollection:
         _RETRIES.clear()
 
     def test_nothing_is_collected_without_the_plugin(self, monkeypatch):
-        # the plugin is the only consumer: off pytest (unittest, a script) the list would grow for the
-        # whole life of the process with nobody to drain it
+        # the plugin is the only consumer: off pytest the list would grow for the life of the process
         monkeypatch.setattr(aa, "_COLLECT_RETRIES", False)
         states = itertools.chain(["PENDING"] * 2, itertools.repeat("READY"))
         assert_that(lambda: next(states)).eventually_sync(timeout=2, interval=0.02).is_equal_to("READY")
@@ -1078,8 +1066,7 @@ class TestRetryCollection:
         assert_that(_RETRIES).is_length(1)
 
     def test_the_async_first_attempt_pass_records_nothing(self):
-        # the sync mirror of this existed, the async one did not, so the async gate could go from a
-        # conjunction to a disjunction and report every clean poll as a retry
+        # the sync mirror existed, so the async gate could turn into a disjunction and call every clean poll a retry
         asyncio.run(assert_that(lambda: "READY").eventually(timeout=2, interval=0.02).is_equal_to("READY"))
         assert_that(_RETRIES).is_empty()
 

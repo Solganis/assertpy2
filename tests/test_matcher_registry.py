@@ -90,8 +90,7 @@ class TestRegisterMatcher:
         assert_that("foo").satisfies(combined)
 
     def test_a_name_already_taken_is_refused(self):
-        # two libraries both registering `has_status` used to end with whichever imported last, and
-        # nothing said so
+        # two libraries registering `has_status` used to end with whichever imported last, silently
         @register_matcher("custom")
         def custom_v1():
             return match.equal_to(1)
@@ -129,9 +128,7 @@ class TestRegisterMatcher:
         assert_that(2).satisfies(match.custom())
 
     def test_a_built_in_name_is_refused_outright(self):
-        # override cannot help here: `match.equal_to` is found by ordinary attribute lookup, which
-        # never consults this registry, so the registration would not lose an argument, it would
-        # simply never run
+        # `match.equal_to` is found by attribute lookup, which never consults this registry, so override never runs
         with pytest.raises(ValueError, match="built-in matcher"):
             register_matcher("equal_to")(lambda: match.equal_to(1))
         with pytest.raises(ValueError, match="built-in matcher"):

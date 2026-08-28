@@ -134,8 +134,7 @@ class _MixinBase:
 
         def does_not_contain(self, *items: object) -> Self: ...
 
-        # `Any`, not `object`: the real one is annotated per value type, and a wider declaration here would be an
-        # incompatible override
+        # `Any`, not `object`: the real one is annotated per value type, and a wider one here overrides incompatibly
         def starts_with(self, prefix: Any) -> Self: ...
 
         def is_equal_to(self, other: object, **kwargs: object) -> Self: ...

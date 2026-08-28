@@ -26,8 +26,7 @@ from tests import typing_harness
 from tests.typing_integrations_baseline import DIVERGING, REFUSED, SILENT, STUB_WITNESS
 
 _CASES = typing_harness.ROOT / "tests" / "typing_integrations.py"
-# the interpreter running this test, which is the one the skips above just proved has the libraries.
-# Naming `.venv` instead would be a second claim about where they live, and a wrong one off Windows
+# the interpreter running this test, which the skips above proved has the libraries; `.venv` is a guess
 _INTERPRETER = sys.executable
 _TARGET = "3.14"
 

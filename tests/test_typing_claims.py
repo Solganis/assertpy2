@@ -64,8 +64,7 @@ class TestEverySuppressionInThePackageSaysWhy:
             if not match:
                 continue
             trailing = line[match.end() :]
-            # the rule name in brackets is part of the suppression, the reason is whatever follows the
-            # second `#` on the line
+            # the rule name in brackets is part of the suppression, the reason is whatever follows the second `#`
             if "#" not in trailing.split("]", 1)[-1]:
                 unexplained.append(f"{path.name} line {number}: {line.strip()}")
         assert_that(unexplained).described_as("suppressions with no stated reason").is_empty()

@@ -604,8 +604,7 @@ class TestIsAfterOrEqualTo:
 
 
 def test_naive_vs_aware_comparison_raises_clear_type_error():
-    # mixing a tz-naive and a tz-aware datetime is a programming error; all four relational methods must
-    # raise a clear, actionable TypeError instead of Python's raw "can't compare offset-naive..." one
+    # mixing naive and aware must raise an actionable TypeError, not Python's raw "can't compare offset-naive"
     naive = datetime.datetime(2020, 1, 1, 12)
     aware = datetime.datetime(2020, 1, 1, 12, tzinfo=datetime.timezone.utc)
     for call in (

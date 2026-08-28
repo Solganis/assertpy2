@@ -28,9 +28,8 @@ class TestSequenceElisionBoundaries:
         assert_that(_elided_seq_repr(seq, [9] * 20)).is_equal_to(repr(seq))
 
     def test_twenty_one_elements_are_collapsed(self):
-        # elision needs something to elide, so the counterpart matches everywhere but the last slot.
-        # 21 one-character elements never fit 60 characters anyway, so raising the element cap alone
-        # cannot change this answer.
+        # the counterpart matches everywhere but the last slot; 21 one-character elements never fit 60
+        # characters anyway, so raising the element cap alone cannot change this answer
         assert_that(_elided_seq_repr([*[1] * 20, 2], [1] * 21)).is_equal_to("[.., 2]")
 
     def test_sixty_one_characters_are_collapsed(self):

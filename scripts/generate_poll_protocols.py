@@ -61,8 +61,7 @@ TARGET_CAPABLE = ROOT / "assertpy2" / "_engine" / "_capable_typing.py"
 sys.path.insert(0, str(ROOT))
 from assertpy2._engine._operations import NOT_AN_OPERATION, POLLS, WITHOUT_A_VERDICT  # noqa: E402 - needs the path
 
-# `not_` is declared by hand below: it stays a property here, and the rewrite that turns a chained
-# assertion into a chain over the same value would have made it a call
+# `not_` stays a property: the rewrite into a chain over the same value would have made it a call
 _SKIP = NOT_AN_OPERATION | {name for name, kind in WITHOUT_A_VERDICT.items() if kind == POLLS}
 
 # the verdict twin carries only what reaches a verdict, the same rule the per-view twins follow
@@ -296,9 +295,8 @@ def _rewritten(
     assert isinstance(copied, ast.FunctionDef)
     own = (copied.args.posonlyargs or copied.args.args)[0]
     if own.annotation is not None:
-        # a rung narrowing itself, `is_not_none(self: _ObjectAssertion[T | None])`: about the value
-        # kept whole rather than split per member: `_ObjectAssertion[str | None]` is one value that is
-        # either, and a chain over each separately is a different question
+        # a rung narrowing itself is about the value kept whole: `_ObjectAssertion[str | None]` is one value
+        # that is either, and a chain over each member separately is a different question
         inner = ast.unparse(own.annotation)
         own.annotation = ast.Name(id=f"{flavour}[{inner[inner.index('[') + 1 : -1] if '[' in inner else '_P_co'}]")
     elif restriction is not None:
@@ -388,16 +386,13 @@ def _rungs(known: dict[str, ast.ClassDef], flavour: str) -> dict[str, list[ast.F
             if narrowed and holders > widest.get(method.name, (0, method))[0]:
                 widest[method.name] = (holders, method)
 
-    # a value the umbrella claims keeps the whole builder, so its rung comes after the named ones.
-    # Not written where an open rung follows, which already covers every chain
+    # the umbrella rung comes after the named ones, and is skipped where an open rung already covers the chain
     for name, (_holders, method) in widest.items():
         if name not in open_to_any:
-            # the ordering six ask the value for an ordering, so their umbrella rung asks for one too,
-            # the same restriction `_capable_typing` puts on the surface off the chain
+            # the ordering six ask for an ordering, the restriction `_capable_typing` puts on the surface off the chain
             claimed = _RESTRICTED.get(name, "_CapableT")
             rung = _rewritten(method, f"{flavour}[{claimed}]", flavour, known, umbrella=True)
-            # a restriction can name the very type a rung above already claims, and then the umbrella
-            # rung is that rung written twice: pyright reports the overlap and nothing can select it
+            # a restriction naming a type a rung above claims writes that rung twice, and pyright reports the overlap
             if ast.unparse(rung) not in seen:
                 found[name].append(rung)
     for name, rungs in open_to_any.items():
@@ -494,17 +489,15 @@ if TYPE_CHECKING:
 _CAPABLE = "_CapableAssertion"
 
 _ASKS_A_SHAPE: Final = {
-    # ordering: every one reaches `_engine._ordering.compare`, which orders the pair with `<`.  Measured
-    # on a class carrying one operator at a time, `__lt__` was the only one any of the six ran with, so
-    # keying on `__gt__`, which is what `is_positive` looks like it needs, would refuse a type that works
+    # ordering reaches `_engine._ordering.compare`, which orders with `<`. Measured one operator at a time,
+    # `__lt__` was the only one any of the six ran with, so keying on `__gt__` would refuse a working type
     "is_positive": "_Orderable",
     "is_negative": "_Orderable",
     "is_greater_than": "_Orderable",
     "is_greater_than_or_equal_to": "_Orderable",
     "is_less_than": "_Orderable",
     "is_less_than_or_equal_to": "_Orderable",
-    # the filesystem: `isinstance(val, (str, os.PathLike))`, and a `str` never reaches here because the
-    # string overload is above the umbrella.  What is left is the structural half, `__fspath__`
+    # the filesystem: a `str` never reaches here, the string overload being above, so `__fspath__` is what is left
     "exists": "_PathLike",
     "does_not_exist": "_PathLike",
     "is_file": "_PathLike",
@@ -514,8 +507,7 @@ _ASKS_A_SHAPE: Final = {
     "is_readable": "_PathLike",
     "is_writable": "_PathLike",
     "is_executable": "_PathLike",
-    # the call: `callable(val)`, which is structural.  A capable value can be callable, and the
-    # callable view sits below the umbrella, so this is the only place such a value is described
+    # the call is structural, and the callable view sits below the umbrella, so this is the only description
     "raises": "_Callable",
     "does_not_raise": "_Callable",
     "warns": "_Callable",
@@ -531,9 +523,8 @@ everything until `raises()` has been called before it.
 """
 
 _ASKS_A_TYPE: Final = {
-    # whole numbers: `isinstance(val, int)` with `bool` refused beside it, a plain check rather than the
-    # registration the rest of the numeric family uses.  The rung above claims `int | float`, so pyright reports
-    # the overlap; recorded rather than traded for a wider key that would let a float through
+    # whole numbers: a plain `isinstance` rather than the numeric family's registration. The rung above
+    # claims `int | float`, so pyright reports the overlap; a wider key would let a float through
     "is_even": "int",
     "is_odd": "int",
     "is_divisible_by": "int",
@@ -642,8 +633,7 @@ def _capable_declaration(node: ast.FunctionDef) -> str:
         raise TypeError(node.name)
     rendered.decorator_list = []
     rendered.body = [ast.Expr(value=ast.Constant(value=...))]
-    # every default becomes `...`, the way a stub spells one: copied verbatim they carry names that
-    # live in the mixin and nowhere else, and `_UNSET` arrived here as an undefined name
+    # every default becomes `...`: copied verbatim they name things living only in the mixin, like `_UNSET`
     elided = [ast.Constant(value=...) for _ in rendered.args.defaults]
     rendered.args.defaults = elided
     rendered.args.kw_defaults = [None if one is None else ast.Constant(value=...) for one in rendered.args.kw_defaults]
@@ -732,9 +722,7 @@ if TYPE_CHECKING:
     class _CapableAssertion(Protocol[_CapableT_co]):
         """What a value the umbrella claims can be asked."""
 
-        # the data the builder carries, spelled as `_MixinBase` spells it.  Set in `__init__` and so absent from
-        # `dir()` of the class, which is how they were missed: left to `__getattr__` they read as callables, and
-        # `assert_that(a_capable_value).description.upper()` was refused
+        # the data the builder carries: absent from `dir()`, so `__getattr__` read `description` as a callable
         val: Any
         description: str
         kind: str | None
@@ -747,9 +735,7 @@ if TYPE_CHECKING:
         def not_(self) -> Self: ...
         def __getattr__(self, name: str) -> Callable[..., Self]: ...
 
-        # the ladders the builder declares for checkers, carried across rather than flattened.  This replaces the
-        # builder in one overload, so a narrowing lost here is lost for every value the umbrella claims, and
-        # `first()` on a mapping-shaped value would stop naming its key type
+        # the builder's ladders, carried across: a narrowing lost here is lost for every value the umbrella claims
         @overload
         def is_not_none(self: _CapableAssertion[_U | None]) -> _CapableAssertion[_U]: ...
         @overload
@@ -804,9 +790,7 @@ if TYPE_CHECKING:
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self: ...
-        # the two polling pivots, which live on the builder rather than on a mixin.  Over `Any` rather than over
-        # the subject: no capability says whether the value is callable, so the chain keeps every rung open.  Left
-        # to `__getattr__` they came back as this facade over the callable that was polled, not over its result
+        # the polling pivots, over `Any`: no capability says the value is callable, so the chain keeps every rung open
         def eventually(
             self,
             *,
@@ -823,8 +807,7 @@ if TYPE_CHECKING:
             ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
-        # the builder's own two helpers, also off the mixins.  `builder()` is a pivot: left to `__getattr__` it
-        # read as this facade over the value that was already here
+        # the builder's own helpers: left to `__getattr__`, `builder()` read as this facade over the value already here
         def builder(
             self,
             val: Any,

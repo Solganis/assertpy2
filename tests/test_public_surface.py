@@ -126,8 +126,8 @@ EXPECTED_EXPORTS = [
     "unregister_matcher",
 ]
 
-# The records a consumer reads off a failure. `__all__` covers the names a module exports and stops
-# there, so a field dropped from one of these would go out in a release unremarked.
+# The records a consumer reads off a failure. `__all__` covers exported names and stops there, so a
+# field dropped from one of these would go out in a release unremarked.
 EXPECTED_FIELDS = {
     "AssertionOutcome": [
         "passed",
@@ -162,8 +162,7 @@ class TestExports:
         assert_that(sorted(assertpy2.__all__)).is_equal_to(sorted(EXPECTED_EXPORTS))
 
     def test_every_exported_name_resolves(self):
-        # `__all__` is a list of strings, and a name left in it after its import was dropped fails
-        # only at `from assertpy2 import *`, which nothing in the suite does
+        # a name left in `__all__` after its import was dropped fails only at `import *`, which nothing does
         missing = [name for name in assertpy2.__all__ if not hasattr(assertpy2, name)]
         assert_that(missing).described_as("names in __all__ with nothing behind them").is_empty()
 
@@ -174,8 +173,7 @@ class TestRecordFields:
         assert_that(observed).is_equal_to(EXPECTED_FIELDS)
 
     def test_every_pinned_record_is_exported(self):
-        # a record pinned here but dropped from `__all__` would keep passing the check above through
-        # whatever import path this module happens to use
+        # a record dropped from `__all__` would keep passing the check above through this module's import path
         assert_that(sorted(EXPECTED_FIELDS)).is_subset_of(set(assertpy2.__all__))
 
 
@@ -189,8 +187,7 @@ class TestTheCountsTheDocsQuote:
     """
 
     QUOTED_MATCHER_COUNT = 45
-    # the comparison page dropped the figure deliberately: it sold on inventory, which is the weakest
-    # pitch this library has, and the guide it belongs on still carries it
+    # the comparison page dropped the figure deliberately: it sold on inventory, our weakest pitch
     PAGES_QUOTING_THE_MATCHER_COUNT = ("README.md",)
     QUOTED_PROTOCOL_COUNT = 15
 
@@ -198,24 +195,21 @@ class TestTheCountsTheDocsQuote:
         matchers = [name for name in dir(assertpy2.match) if not name.startswith("_")]
         assert_that(matchers).described_as("matchers, quoted in the docs").is_length(self.QUOTED_MATCHER_COUNT)
 
-    # a bare `(\d+) matchers` reads the "2" out of "assertpy2 matchers", so the digits have to start a
-    # word, and the adjective between number and noun ("41 composable matchers") has to be allowed
+    # a bare `(\d+) matchers` reads the "2" out of "assertpy2 matchers", and "41 composable matchers" must fit
     _QUOTED = re.compile(r"(?<![\w.])(\d+)\s+(?:\w+\s+)?matchers")
 
     def test_every_page_quoting_the_matcher_count_quotes_the_right_one(self):
         stale = {}
         for page in self.PAGES_QUOTING_THE_MATCHER_COUNT:
             quoted = self._QUOTED.findall(pathlib.Path(page).read_text(encoding="utf-8"))
-            # a page that stopped quoting the figure is as much a drift as one quoting it wrong: the
-            # sentence was rewritten and this guard would go on passing over a page it no longer covers
+            # a page that stopped quoting the figure drifts too: the guard would go on passing over a rewritten sentence
             if not quoted or set(quoted) != {str(self.QUOTED_MATCHER_COUNT)}:
                 stale[page] = quoted
         assert_that(stale).described_as("pages quoting a matcher count that is not the real one").is_empty()
 
     def test_the_protocol_count(self):
-        # counted from what `assert_that` dispatches to, which is the claim the pages make. One more
-        # protocol in the module, `_InvokedAssertion`, is reached through `raised()` rather than from
-        # `assert_that`, so it is not one of the ones an IDE picks between on the first call
+        # counted from what `assert_that` dispatches to, which is the claim the pages make.
+        # `_InvokedAssertion` is reached through `raised()`, so an IDE never offers it on the first call
         source = pathlib.Path("assertpy2/assertpy.py").read_text(encoding="utf-8")
         returned = set(re.findall(r"-> (_[A-Za-z]+Assertion)\b", source))
         assert_that(returned).described_as("protocols assert_that returns, quoted in the docs").is_length(
@@ -257,9 +251,8 @@ class TestTheCountsTheDocsQuote:
         assert_that(documented).described_as("attachment versions the page prints").is_equal_to(emitted)
 
     def test_the_assertion_count_clears_the_floor_the_docs_claim(self):
-        # a floor, not an exact number: `add_extension` writes onto the builder, so a suite that
-        # registers one and leaves it makes the exact count depend on test order. The page says
-        # "over 100" and that is the claim worth holding
+        # a floor: `add_extension` writes onto the builder, so a suite that registers one makes the exact
+        # count depend on test order. The page says "over 100", and that is the claim worth holding
         builder = assertpy2.assert_that(1)
         assertions = [
             name for name in dir(builder) if not name.startswith("_") and callable(getattr(builder, name, None))
@@ -348,8 +341,7 @@ class TestWhatAFailureLetsYouRead:
             assert_that(1).is_none()
         assert_that(compared.value.expected).is_equal_to(unset.value.expected).is_none()
         assert_that(compared.value.actual).is_equal_to(unset.value.actual).is_equal_to(1)
-        # `has_expected` does not separate these two, and is not meant to: `is_none()` compares against
-        # None, so it names an expectation exactly as `is_equal_to(None)` does
+        # `has_expected` does not separate these two: `is_none()` names an expectation as `is_equal_to(None)` does
         assert_that(compared.value.has_expected).is_equal_to(unset.value.has_expected).is_true()
 
     def test_has_expected_separates_an_assertion_that_names_no_expectation(self):

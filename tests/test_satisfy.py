@@ -258,8 +258,7 @@ class TestFailureMessagesDescribeTheRightThing:
         assert_that(str(exc_info.value)).contains("a value greater than <10>").contains("<5>")
 
     def test_satisfies_with_a_callable_names_the_predicate_and_the_value(self):
-        # the callable branch has its own message and its own `_describe_matcher` call, and raises a
-        # plain AssertionError: only the matcher branches carry the structured payload
+        # the callable branch raises a plain AssertionError: only the matcher branches carry the structured payload
         with pytest.raises(AssertionError) as exc_info:
             assert_that(5).satisfies(lambda value: value > 10)
         assert_that(str(exc_info.value)).contains("<5>").contains("lambda")
@@ -284,8 +283,7 @@ class TestFailureMessagesDescribeTheRightThing:
         assert_that(str(exc_info.value)).contains("index 1", "<-2>", "a lambda predicate")
 
     def test_none_satisfy_with_a_callable_names_the_predicate(self):
-        # the callable branch builds its description through the shared helper, not through the
-        # matcher protocol, and had no test of its own
+        # the callable branch describes through the shared helper, not the matcher protocol, and had no test
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 20]).none_satisfy(lambda item: item > 10)
         assert_that(str(exc_info.value)).contains("lambda").contains("index 1").contains("<20>")

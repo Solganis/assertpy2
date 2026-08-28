@@ -162,8 +162,7 @@ class TestJsonPathIsCompiledOnce:
         assert_that(spy.call_count).is_equal_to(2)
 
     def test_the_cache_is_bounded(self):
-        # a path built from test data is a fresh string every time, so an unbounded cache would grow
-        # with the suite
+        # a path built from test data is a fresh string, so an unbounded cache would grow with the suite
         assert_that(json_mixin._parsed_json_path.cache_info().maxsize).is_not_none()
 
 

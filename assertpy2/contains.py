@@ -355,8 +355,7 @@ class ContainsMixin(_MixinBase):
         # this walk is by index, which a one-shot iterator does not support at all
         values = materialized(self.val)
         if not isinstance(values, Sequence):
-            # the old guard reported both as "not iterable": true for an int, false for a set, which has no order to
-            # hold a sequence in
+            # the old guard said "not iterable" for both: true for an int, false for a set, which has no order
             require_type(values, Iterable, "iterable")
             refuse(self.val, "a sequence, to contain a sequence")
         for i in range(len(values) - len(items) + 1):

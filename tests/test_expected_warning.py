@@ -207,8 +207,7 @@ def test_warns_partial_without_name_fails_cleanly():
 
 
 def test_custom_logger_survives_collection_transform():
-    # a transform (filtered_on/mapped/first/...) must forward the caller's logger, so a warning from a
-    # failing assertion after it still reaches the custom logger, not the library default
+    # a transform must forward the caller's logger, or a later warning goes to the library default
     capture = StringIO()
     logger = logging.getLogger("test_transform_logger")
     logger.addHandler(logging.StreamHandler(capture))

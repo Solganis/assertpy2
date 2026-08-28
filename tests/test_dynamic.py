@@ -103,8 +103,7 @@ class TestDynamicDictAccess:
             assert_that({"n": 5}).has_n(3)
 
     def test_method_name_key_absent_reports_key_not_keyerror(self):
-        # "items"/"get" are dict methods (hasattr is True) but absent as keys here; the presence gate
-        # must report a clean key failure instead of raising KeyError on the subscript
+        # "items" and "get" are methods but absent as keys, so the gate must report a key failure, not KeyError
         with pytest.raises(AssertionError, match="Expected key <items>"):
             assert_that({"status": "ok"}).has_items([1, 2, 3])
         with pytest.raises(AssertionError, match="Expected key <get>"):

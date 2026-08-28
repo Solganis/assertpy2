@@ -68,8 +68,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(("a", "b")), _IterableAssertion[str])
     assert_type(assert_that({"a", "b"}), _IterableAssertion[str])
     assert_type(assert_that(frozenset({"a"})), _IterableAssertion[str])
-    # a `datetime` is a `date` and then some: the chronological nine refuse a plain date at run time, on
-    # the value as well as the operand, so one view for both types offered them to one that raises
+    # the chronological nine refuse a plain date at run time, so one view for both offered them to a raiser
     assert_type(assert_that(datetime.date(2026, 1, 1)), _DateAssertion)
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)), _DateTimeAssertion)
     assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)).value, datetime.datetime)
@@ -79,8 +78,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(b"raw").ends_with(b"w"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").starts_with_bytes(b"r"), _BytesAssertion[bytes])
     assert_type(assert_that({"a": 1}).each(lambda key: True), _DictAssertion[str, int])
-    # a text is walked character by character, so the quantifiers answer for it and the element is a
-    # `str`: the runtime has always taken them, and no view offered one
+    # a text walks character by character, so the element is a `str`: the runtime took them, no view offered one
     assert_type(assert_that("ab").each(lambda character: character.isalpha()), _StringAssertion)
     assert_type(assert_that("ab").any_satisfy(lambda character: character == "a"), _StringAssertion)
     assert_type(assert_that("ab").satisfies_exactly(lambda first: first == "a"), _StringAssertion)
@@ -111,16 +109,14 @@ if TYPE_CHECKING:
         @property
         def headers(self) -> Mapping[str, str]: ...
 
-    # the callable view sits under the shapes for this: above them it claimed a Starlette or a Flask
-    # response, and `has_status_code()` on one was a type error in all three checkers while the runtime
-    # answered it.  `tests/typing_http.py` asks the same question of the real classes
+    # the callable view sits under the shapes: above them it claimed a Starlette or Flask response, and
+    # `has_status_code()` was a type error in all three checkers while the runtime answered it
     assert_type(assert_that(_CallableResponse()), _CapableAssertion[_CallableResponse])
 
     assert_type(assert_that(object()), _ObjectAssertion[object])
 
-    # a dynamic assertion and an `add_extension` name resolve through the same hook, and no one signature is true
-    # of both.  A plain object gets the object view, which has no `__getattr__`, so `has_anything` on one is a
-    # type error.  A capable value has the hook, and the facade hands its own surface back rather than `Any`
+    # one hook, two names, no signature true of both: a plain object gets the object view and no
+    # `__getattr__`, while a capable value has the hook and gets the facade's own surface back
     assert_type(assert_that(_Countable()).has_anything("value"), _CapableAssertion[_Countable])
 
     assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])
@@ -129,8 +125,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(42).not_.is_equal_to(43).value, int)
 
     assert_type(assert_that(42).check().is_positive(), AssertionOutcome)
-    # the proxy is the verdict twin of the view it was reached from, so a wrong-domain assertion is a type error here
-    # too
+    # the proxy is the verdict twin of the view it came from, so a wrong-domain assertion is a type error here
     assert_type(assert_that(42).check(), _CheckNumericAssertion[int])
     assert_type(assert_that("text").check(), _CheckStringAssertion)
     assert_type(assert_that({"a": 1}).check(), _CheckDictAssertion[str, int])
@@ -156,8 +151,7 @@ if TYPE_CHECKING:
     )
     assert_type(assert_that({"k": 1}).is_equal_to({"k": None}, ignore_null=True), _DictAssertion[str, int])
 
-    # declared wherever the runtime supports it: `is_close_to` stays datetime-only, so the shared date protocol does
-    # not advertise it
+    # `is_close_to` stays datetime-only, so the shared date protocol does not advertise it
     assert_type(assert_that("banana").is_greater_than("apple"), _StringAssertion)
     assert_type(assert_that("apple").is_less_than("banana"), _StringAssertion)
     assert_type(assert_that("b").is_greater_than_or_equal_to("a"), _StringAssertion)
@@ -199,8 +193,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(1).is_instance_of_any(str, int | float), _NumericAssertion[int])
     assert_type(assert_that(1).is_instance_of_any(str, (int, float)), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
-    # a caught message is text without being a `str` view, and its element pivots are the only way to
-    # reach `_TextAssertion` at all
+    # a caught message is text without being a `str` view, and its pivots are the only way to `_TextAssertion`
     assert_type(assert_that(len).raises(ValueError).when_called_with().first(), _TextAssertion)
 
     assert_type(assert_that(len).eventually(trace=False), _AsyncPoll[int])
@@ -231,22 +224,17 @@ if TYPE_CHECKING:
     maybe_name = cast("str | None", "fred")
     anything = cast("object", "fred")
     assert_type(assert_that(maybe_name), _ObjectAssertion[str | None])
-    # the refinement answers with the view the factory would have given, since a refinement that ended the narrowing
-    # would be a dead end
+    # the refinement answers with the factory's view, since one that ended the narrowing would be a dead end
     assert_type(assert_that(maybe_name).is_not_none(), _StringAssertion)
     assert_type(assert_that(maybe_name).is_not_none().value, str)
     assert_type(assert_that(anything).is_instance_of(bool), _BoolAssertion)
     assert_type(assert_that(anything).is_instance_of(bool).value, bool)
-    # a tuple of alternatives lands on the widest rung, nested to any depth because that is the shape
-    # `isinstance` takes and a flat rung refuses it.
-    #
-    # A union has no line here on purpose, and the reason is not that the checkers disagree.  All four bind
-    # `_Alpha | _Beta` through `TypeForm[_U]`, measured on pyright 1.1.413 with no experimental flag.  What
-    # that costs is the domain: `TypeForm` is any type expression, so with such a rung every checker accepts
-    # `Literal[1]`, `Never`, `Annotated[int, "x"]` and `list[int]`, each of which the runtime refuses with
-    # `TypeError`.  There is no narrower spelling, since PEP 747 declined syntax for a restricted subset and
-    # Python has no intersection type.  A union therefore keeps the view the chain already had.  The runtime side is
-    # gated in `tests/test_class.py`, where all four spellings are accepted and named in the failure
+    # a tuple of alternatives lands on the widest rung, nested to any depth, as `isinstance` takes it.  A union
+    # has no line, and not because the checkers disagree: all four bind it through `TypeForm[_U]`, measured on
+    # pyright 1.1.413 with no experimental flag, which then also takes `Literal[1]`, `Never`, `Annotated[int,
+    # "x"]` and `list[int]`, each refused by the runtime.  PEP 747 declined a restricted spelling and Python has
+    # no intersection type, so a union keeps the view the chain already had.  The runtime side is gated in
+    # `tests/test_class.py`, where all four spellings are accepted and named in the failure
     assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[_Alpha | _Beta])
     assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, _Alpha | _Beta)
     assert_type(assert_that(anything).is_instance_of((int, str, bytes)), _ObjectAssertion[int | str | bytes])
@@ -281,25 +269,22 @@ if TYPE_CHECKING:
     assert_type(assert_that(anything).is_not_none().satisfies(_is_paid).value, _PaidOrder)
     assert_type(assert_that(some_order).satisfies(lambda item: bool(item)), _ObjectAssertion[_Order])
 
-    # ... and refinement is not confined to the generic fallback. A concretely typed value reaches the
-    # per-type Protocol, and it narrows from there too: a JSON payload typed `dict[str, Any]` is where a
-    # domain predicate is most often applied, and it used to be the one place refinement stopped.
+    # refinement is not confined to the generic fallback: a JSON payload typed `dict[str, Any]` reaches
+    # the per-type Protocol, is where a domain predicate is most often applied, and used to stop there
     payload = cast("dict[str, Any]", {"id": 1})
     assert_type(assert_that(payload).satisfies(_is_paid), _ObjectAssertion[_PaidOrder])
     assert_type(assert_that(payload).satisfies(_is_paid).value, _PaidOrder)
 
-    # ... and the guard has to be one the subject can be handed to.  A concretely typed view binds the
-    # predicate to its own value, so a guard about orders is refused on a `str` rather than promising a
-    # narrowing of something that would raise on the first attribute it read
+    # the guard has to be one the subject can be handed to: a concretely typed view binds the predicate to
+    # its own value, so a guard about orders is refused on a `str` rather than promising a narrowing
     def _is_shouted(text: str) -> TypeIs[_Shouted]:
         return text.isupper()
 
     assert_type(assert_that("x").satisfies(_is_shouted), AssertionBuilder[_Shouted])
     assert_type(assert_that(payload).satisfies(lambda item: bool(item)), _DictAssertion[str, Any])
 
-    # assert_conforms() narrows to the validated model for ANY input - the narrowing capstone. Because the
-    # return type is driven by the model arg (not the value), even the `Any` a decoded JSON payload
-    # carries and an explicitly dict-typed payload both narrow, where a method on the builder could not.
+    # the narrowing capstone: the return type is driven by the model argument and not the value, so the
+    # `Any` a decoded payload carries and an explicitly dict-typed one both narrow where a method could not
     json_payload = cast("Any", {"id": 1})
     dict_payload = cast("dict[str, object]", {"id": 1})
     assert_type(assert_conforms(anything, _Order), AssertionBuilder[_Order])
@@ -315,15 +300,13 @@ if TYPE_CHECKING:
     order_list = cast("list[_Order]", [])
     assert_type(assert_that(order_list).single().value, _Order)
     assert_type(assert_that(order_list).first(), AssertionBuilder[_Order])
-    # a map pivot re-types the element; a filter preserves it.  Either way the value that comes back is
-    # a list, because that is what the pipeline builds whatever it was handed
+    # a map pivot re-types the element and a filter preserves it, and either way a list comes back
     assert_type(assert_that([1, 2]).mapped(str).value, list[str])
     assert_type(assert_that(order_list).filtered_on(lambda o: True).value, list[_Order])
     assert_type(assert_that((1, 2)).filtered_on(lambda n: True).value, list[int])
     assert_type(assert_that({1, 2}).mapped(str).value, list[str])
 
-    # a character of a string is a string and a byte is an int, so both stay on their own protocol.
-    # The invoked view lands on text, which keeps a caught message from being asked to exist on disk
+    # a character is a string and a byte an int, so both stay put; the invoked view lands on text
     assert_type(assert_that("abc").first(), _StringAssertion)
     assert_type(assert_that("abc").last(), _StringAssertion)
     assert_type(assert_that("abc").element(1), _StringAssertion)
@@ -361,9 +344,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(datetime.date(2026, 1, 1)).value, datetime.date)
     assert_type(assert_that(len).value, Callable[..., int])
 
-    # A pivot on the builder hands back an element, and used to be declared as handing back the
-    # chain.  That is the half a narrowing at `assert_that()` cannot reach: the second pivot lands on
-    # the builder whatever the first returned, so depth is where it shows.
+    # A pivot on the builder hands back an element, and used to be declared as handing back the chain.
+    # A narrowing at `assert_that()` cannot reach that: the second pivot lands on the builder regardless
     rows = cast("Sequence[Sequence[int]]", [[1]])
     keys = cast("Mapping[str, int]", {"a": 1})
     assert_type(assert_that(rows).first(), AssertionBuilder[Sequence[int]])
@@ -416,9 +398,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(response).decoded_as_json(), AssertionBuilder[object])
     assert_type(assert_that(response).decoded_as_json().value, object)
 
-    # every shape `assert_warn` documents a logger as.  The docstring says `Logger`, the default the
-    # builder installs is a `LoggerAdapter`, and the only thing reached on either is `warning()`, so
-    # naming a concrete type here would refuse working code that the runtime accepts
+    # every shape `assert_warn` documents a logger as: the docstring says `Logger`, the default is a
+    # `LoggerAdapter`, and only `warning()` is ever reached, so a concrete type would refuse working code
     class _OwnLogger:
         def warning(self, msg: object) -> None: ...
 
@@ -427,10 +408,8 @@ if TYPE_CHECKING:
     assert_type(assert_warn("foo", logger=_OwnLogger()), Any)
     assert_type(assert_warn("foo"), Any)
 
-    # comparator and placeholder tables built before the call, which is how the docs show them.  A `dict`
-    # parameter refuses these outright, being invariant in both halves: a table declared `dict[str, ...]` is not
-    # a `dict[object, ...]`, and one returning `bool` is not one returning `object`.  `Mapping[Any, ...]` is what
-    # accepts them, and the runtime only ever reads them
+    # tables built before the call, as the docs show them. `dict` is invariant in both halves, so a table
+    # declared `dict[str, ...]` is not a `dict[object, ...]`; `Mapping[Any, ...]` accepts them and is only read
     by_type: dict[type, Callable[[float, float], bool]] = {float: lambda a, e: round(a, 2) == round(e, 2)}
     by_field: dict[str, Callable[[Any, Any], bool]] = {"name": lambda a, e: a.lower() == e.lower()}
     volatile: dict[str, Matcher[str]] = {"id": match.is_uuid()}

@@ -115,8 +115,7 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
     Returns ``(status_key, pointer)``. Raises ``ValueError`` for any structural miss (unknown path,
     method, status, or content type) - those are test-authoring mistakes, not contract violations.
     """
-    # named rather than left to `.lower()`, which answered a non-string method with an `AttributeError`
-    # from three frames down instead of saying which argument was wrong
+    # named rather than left to `.lower()`, which answered from three frames down without naming the argument
     require_type(method, str, "a string", subject=argument("method"))
     method_key = method.lower()
     try:
@@ -139,8 +138,7 @@ def _openapi_resolve(spec: dict[str, Any], path: str, method: str, status: str |
         if response is None:
             raise ValueError(f"Response <{status_key}> of <{method.upper()} {path}> has an unresolvable $ref.")
     if str(spec.get("swagger", "")).startswith("2"):
-        # Swagger 2.0 lists the media types in `produces` instead, so that list is checked the way the 3.x content
-        # lookup does
+        # Swagger 2.0 lists media types in `produces`, checked the way the 3.x content lookup does
         produces = operation.get("produces") or spec.get("produces")
         if produces and content_type not in produces:
             raise ValueError(

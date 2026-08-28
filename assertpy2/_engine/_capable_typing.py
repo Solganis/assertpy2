@@ -68,9 +68,7 @@ if TYPE_CHECKING:
     class _CapableAssertion(Protocol[_CapableT_co]):
         """What a value the umbrella claims can be asked."""
 
-        # the data the builder carries, spelled as `_MixinBase` spells it.  Set in `__init__` and so absent from
-        # `dir()` of the class, which is how they were missed: left to `__getattr__` they read as callables, and
-        # `assert_that(a_capable_value).description.upper()` was refused
+        # the data the builder carries: absent from `dir()`, so `__getattr__` read `description` as a callable
         val: Any
         description: str
         kind: str | None
@@ -83,9 +81,7 @@ if TYPE_CHECKING:
         def not_(self) -> Self: ...
         def __getattr__(self, name: str) -> Callable[..., Self]: ...
 
-        # the ladders the builder declares for checkers, carried across rather than flattened.  This replaces the
-        # builder in one overload, so a narrowing lost here is lost for every value the umbrella claims, and
-        # `first()` on a mapping-shaped value would stop naming its key type
+        # the builder's ladders, carried across: a narrowing lost here is lost for every value the umbrella claims
         @overload
         def is_not_none(self: _CapableAssertion[_U | None]) -> _CapableAssertion[_U]: ...
         @overload
@@ -140,9 +136,7 @@ if TYPE_CHECKING:
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self: ...
-        # the two polling pivots, which live on the builder rather than on a mixin.  Over `Any` rather than over
-        # the subject: no capability says whether the value is callable, so the chain keeps every rung open.  Left
-        # to `__getattr__` they came back as this facade over the callable that was polled, not over its result
+        # the polling pivots, over `Any`: no capability says the value is callable, so the chain keeps every rung open
         def eventually(
             self,
             *,
@@ -159,8 +153,7 @@ if TYPE_CHECKING:
             ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
-        # the builder's own two helpers, also off the mixins.  `builder()` is a pivot: left to `__getattr__` it
-        # read as this facade over the value that was already here
+        # the builder's own helpers: left to `__getattr__`, `builder()` read as this facade over the value already here
         def builder(
             self,
             val: Any,

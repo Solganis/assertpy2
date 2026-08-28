@@ -193,8 +193,7 @@ class CustomDictNoGetitem:
 
 
 def test_dict_repr_survives_mapping_without_items():
-    # the failure-message renderer must build entries from keys()+[]; a minimal mapping-like value may
-    # lack items(), and rendering the diff must not crash with AttributeError
+    # the renderer builds entries from `keys()`: a minimal mapping may lack `items()` and must not crash
     class MinimalMapping:
         def __init__(self, data):
             self._data = data
@@ -213,9 +212,7 @@ def test_dict_repr_survives_mapping_without_items():
 
 
 def test_nested_mapping_without_values_still_takes_the_dict_path():
-    # a nested value is matched with check_values=False on purpose: a mapping that lacks values() must
-    # still be compared key-by-key, so a nested ignore path reaches into it. Demanding values() here
-    # would drop it to a plain equality check and the ignore would silently stop applying.
+    # `check_values=False` on purpose: demanding `values()` would drop to plain equality and the ignore would stop
     class MinimalMapping:
         def __init__(self, data):
             self._data = data

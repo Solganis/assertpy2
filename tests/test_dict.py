@@ -407,8 +407,7 @@ def test_subset_of_refuses_a_superset_that_is_not_dict_like():
     with pytest.raises(TypeError, match="must be dict-like"):
         assert_that({"a": 1}).is_subset_of(["a"])
 
-    # and what it does take: anything carrying `keys`, iteration and subscripting, whether or not it
-    # is a `Mapping`, which is what the declared type says by naming both spellings
+    # and what it does take: anything with `keys`, iteration and subscripting, `Mapping` or not
     class Structural:
         def keys(self):
             return ["a"]

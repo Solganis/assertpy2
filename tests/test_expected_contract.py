@@ -76,8 +76,7 @@ _ASKS_ABOUT_THE_VALUE_ALONE = {
     "is_writable",
 }
 
-# Not assertions: a precondition that refuses a subject, a poll that ran out, a walk reporting a
-# difference it found rather than one it was given, and the dynamic hook, which has no operand to name
+# Not assertions: a refused subject, an exhausted poll, a walk reporting its own find, the dynamic hook
 _NOT_AN_ASSERTION = {
     "_check_placeholders",
     "_dict_not_equal",
@@ -136,8 +135,7 @@ def test_no_excused_name_stands_for_two_different_assertions() -> None:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if not (isinstance(node, ast.FunctionDef) and node.name in _EXCUSED):
                 continue
-            # only where a failure is raised: a protocol declares the same names and raises nothing,
-            # and a matcher factory of that name is a different thing again
+            # only where a failure is raised: a protocol declares the names and raises nothing
             if any(isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "error" for call in ast.walk(node)):
                 owners[node.name].add(path.name)
     shared = {name: sorted(where) for name, where in owners.items() if len(where) > 1}

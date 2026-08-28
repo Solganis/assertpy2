@@ -243,8 +243,7 @@ class ExtractingMixin(_MixinBase):
         # only pay the sort when one was requested, so the extractor sees the source at the same point
         source = sorted(self.val, key=_sort) if "sort" in kwargs else self.val
         extracted = []
-        # counted here: the walk spends a generator, and asking a spent one for its length said an emptied source had
-        # been empty
+        # counted here: the walk spends a generator, and asking a spent one said an emptied source had been empty
         seen = 0
         for index, item in enumerate(source):
             seen += 1

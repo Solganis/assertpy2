@@ -35,16 +35,14 @@ from pytest_examples import CodeExample, find_examples
 from assertpy2 import assert_that
 from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
-# Pages this guard does not read, each with the reason it does not. Everything else is read, including
-# a page added after this line was written.
+# pages this guard does not read, with reasons; everything else is read, including a page added later
 UNCHECKED_DOCS = {
     "docs/getting-started/comparison.md": "the blocks are the other library's API, not ours",
 }
 
 CHECKED_DOCS = documented_pages(UNCHECKED_DOCS)
 
-# what the pages assume a reader already has in scope by the time they reach a later block, kept the
-# same as the executing guard's namespace so a block cannot pass one and fail the other over an import
+# the same namespace as the executing guard, so a block cannot pass one and fail the other over an import
 PREAMBLE = "import datetime, json, logging, re\nfrom pathlib import Path\nfrom assertpy2 import *  # noqa: F403\n"
 
 SKIP_MARKERS = ("docs-guard: skip", "docs-guard: untyped")

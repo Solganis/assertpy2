@@ -189,8 +189,7 @@ class StringMixin(_MixinBase):
             if not self.val.startswith(text_prefix):
                 return self.error(f"Expected <{self.val}> to start with <{text_prefix}>, but did not.", expected=prefix)
         elif isinstance(self.val, (bytes, bytearray)):
-            # bytes are iterable, so without this branch `b"foo"` yields the int 102 and `102 != b"f"` fails an
-            # assertion that should pass
+            # bytes are iterable: `b"foo"` would yield 102, failing an assertion that should pass
             raw_prefix = require_type(prefix, (bytes, bytearray), "bytes", subject=argument("prefix"))
             if len(raw_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")

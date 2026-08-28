@@ -28,8 +28,7 @@ pytest.importorskip("mypy", reason="the lint job installs the typecheck group an
 from assertpy2 import assert_that
 from tests import typing_harness
 
-# a value with no capability, so the answer names the narrowed view and not the builder: a checker
-# reading nothing at all would answer `Any` here and the `assert_type` would pass on emptiness
+# no capability, so the answer names the narrowed view: a checker reading nothing would answer `Any`
 _CONSUMER = """from typing import assert_type
 
 from assertpy2 import assert_that
@@ -51,8 +50,7 @@ def resolution(plain: Plain, text: str) -> None:
 def consumer(tmp_path_factory) -> tuple[pathlib.Path, pathlib.Path]:
     """A throwaway environment with the wheel installed, plus a file that uses the typed surface."""
     root = tmp_path_factory.mktemp("wheel")
-    # the executable rather than `-m uv`: uv is the project's build tool and is not a module in the
-    # environment it manages, which is how the first version of this skipped without saying anything
+    # the executable, not `-m uv`: uv is not a module in the environment it manages, and this skipped silently
     uv = shutil.which("uv")
     if uv is None:
         pytest.skip("uv is not on PATH, so the wheel cannot be built here")
@@ -78,8 +76,7 @@ def consumer(tmp_path_factory) -> tuple[pathlib.Path, pathlib.Path]:
 
 def test_a_checker_reading_the_installed_wheel_sees_the_typed_surface(consumer) -> None:
     python, source = consumer
-    # `--follow-imports=silent`, as the other typing gates use: without it `--strict` walks into the
-    # installed package and reports its internals, which is a different question asked by another gate
+    # `--follow-imports=silent`, as the other gates use: `--strict` would report the installed internals
     output = typing_harness.run(
         "mypy",
         "--strict",
@@ -93,8 +90,7 @@ def test_a_checker_reading_the_installed_wheel_sees_the_typed_surface(consumer) 
     assert_that(output).described_as("the narrowing is not visible to a consumer").contains(
         '"_ObjectAssertion[Plain]" has no attribute "is_positive"'
     )
-    # and nothing else about the consumer file: an unresolved import or a missing `py.typed` lands
-    # there as its own diagnostic, which is exactly the packaging mistake this exists to catch
+    # an unresolved import or a missing `py.typed` lands here, which is the packaging mistake this catches
     other = [
         line for line in output.splitlines() if ": error:" in line and source.name in line and "is_positive" not in line
     ]

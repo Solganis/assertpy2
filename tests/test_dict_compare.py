@@ -436,8 +436,7 @@ def test_ignore_include_applies_to_dict_elements_in_a_list():
 
 
 def test_cyclic_dict_under_ignore_is_treated_as_equal():
-    # the selective-comparison path detects a revisited pair and treats it as equal rather than
-    # recursing; without that accumulation the walk never sees the repeat and the comparison diverges
+    # a revisited pair counts as equal rather than recursing; without it the walk never sees the repeat
     actual = {"k": 1}
     actual["self"] = actual
     expected = {"k": 2}

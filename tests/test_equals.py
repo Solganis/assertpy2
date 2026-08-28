@@ -192,8 +192,7 @@ class TestArrayLikeEqualityGuard:
         assert_that(str(exc_info.value)).contains("is_equal_to").contains("_FakeArray").contains("element-wise")
 
     def test_the_guard_points_an_array_at_is_array_equal(self):
-        # the point of the message: send the reader to the assertion that reports the differing index,
-        # not to one that wraps a bare False
+        # the point of the message: send the reader to the assertion naming the index, not one wrapping a bare False
         with pytest.raises(TypeError) as exc_info:
             assert_that(_FakeArray()).is_equal_to(_FakeArray())
         assert_that(str(exc_info.value)).contains("is_array_equal(expected)").does_not_contain("is_frame_equal")
@@ -214,9 +213,7 @@ class TestArrayLikeEqualityGuard:
         assert_that(str(exc_info.value)).contains("_FakeArray")
 
     def test_an_array_inside_two_sequences_of_different_lengths_is_still_named(self):
-        # the top-level `!=` that admitted the failure short-circuits on the first element and never
-        # reaches the array, so the diff is where it surfaces: unequal lengths send it through the
-        # alignment, which pairs by index before it can pair by anything else
+        # the top-level `!=` short-circuits before the array, so the diff surfaces it through the alignment
         with pytest.raises(TypeError) as exc_info:
             assert_that([0, 1, _FakeArray(), 3, 4]).is_equal_to([9, 0, 1, _FakeArray(), 3, 4])
         assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
@@ -371,8 +368,7 @@ class TestFindAmbiguousOperand:
         assert_that(found).is_same_as(arr)
 
     def test_an_array_only_on_the_expected_side_is_found(self):
-        # every case above puts the array on the actual side, so nothing held the search to looking at
-        # both: an array reachable only through expected fell through and its raw ValueError escaped
+        # with the array only on the expected side the search fell through and its raw ValueError escaped
         arr = _FakeArray()
         assert_that(_find_ambiguous_operand([1], [arr])).is_same_as(arr)
         assert_that(_find_ambiguous_operand(_ArrayField(1), _ArrayField(arr))).is_same_as(arr)
@@ -414,8 +410,7 @@ class TestFindAmbiguousOperand:
 
 
 def test_is_equal_shifted_list_failure_elides_the_aligned_run():
-    # the message elides on the same alignment the diff pairs on: eliding by position would shift every
-    # later element out of the elision and dump both sequences whole
+    # elides on the alignment the diff pairs on: by position, every later element shifts out and both dump whole
     with pytest.raises(AssertionError) as exc_info:
         assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
     assert_that(str(exc_info.value)).contains("Expected <[.., 0]> to be equal to <[..]>")
@@ -442,13 +437,11 @@ class TestFindAmbiguousOperandOnMismatchedShapes:
         assert_that(_find_ambiguous_operand(object(), _ArrayField(_FakeArray()))).is_none()
 
     def test_a_dataclass_type_is_not_mistaken_for_an_instance(self):
-        # `is_dataclass` answers True for the class object too, and `fields()` on it yields the
-        # declared fields with no values to read
+        # `is_dataclass` answers True for the class too, and `fields()` on it yields no values to read
         assert_that(_find_ambiguous_operand(_ArrayField, _ArrayField)).is_none()
 
     def test_a_longer_actual_stops_at_the_shorter_expected(self):
-        # the zip is deliberately non-strict: a length difference is the diff engine's business, and
-        # raising here would replace a reported difference with a crash
+        # non-strict on purpose: a length difference is the diff engine's business, and raising would hide it
         assert_that(_find_ambiguous_operand([1, _FakeArray()], [1])).is_none()
 
 
@@ -476,8 +469,7 @@ class TestFindAmbiguousOperandCycleGuard:
         assert_that(_find_ambiguous_operand(model, other)).is_none()
 
     def test_the_pair_identity_uses_both_sides(self):
-        # keyed on one side only, two different expected values behind the same actual collapse into
-        # one entry and the second is skipped, hiding the array it holds
+        # keyed on one side, two expected values collapse into one entry and the second hides the array it holds
         shared = {"v": 1}
         arr = _FakeArray()
         assert_that(_find_ambiguous_operand([shared, shared], [{"v": 1}, {"v": arr}])).is_same_as(arr)

@@ -119,8 +119,7 @@ def test_every_name_it_names_is_in_the_tree() -> None:
     names = [token.split("[")[0] for token in quoted if _is_an_identifier(token)]
     # both halves matter: the bare identifiers, and the ones only a code fragment mentions
     names += [name for token in quoted if not _is_an_identifier(token) for name in _names_in(token)]
-    # a floor rather than a count: the document is edited for brevity and the number moves, but a run that
-    # found a handful read the wrong file or stopped matching
+    # a floor, not a count: the document is edited for brevity, but a handful means the wrong file was read
     assert_that(names).described_as("identifiers quoted in the document").is_length_between(10, 200)
 
     defined = _defined_names()

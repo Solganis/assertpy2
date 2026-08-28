@@ -49,12 +49,10 @@ if TYPE_CHECKING:
     from ._engine._compare import _CompareConfig
     from .errors import DiffResult
 
-    # nested because `isinstance()` accepts tuples nested to any depth, and a declaration that refuses what the
-    # runtime takes is the defect this alias exists to avoid.  Only the recursive reference is quoted, and the
-    # first level is written out: ty ignores an alias whose whole right-hand side is a string, so the parameter
-    # it annotates accepted anything and `is_instance_of("int")` stopped being a type error.  This way pyright
-    # and mypy still check a member at any depth while ty checks the outermost one.  A PEP 695 `type` statement
-    # is read correctly by all of them and is a SyntaxError on 3.10, even under `TYPE_CHECKING`
+    # nested because `isinstance()` accepts tuples nested to any depth.  Only the recursive reference is
+    # quoted: ty ignores an alias whose whole right-hand side is a string, and `is_instance_of("int")`
+    # stopped being a type error.  This way pyright and mypy check a member at any depth and ty the outermost.
+    # A PEP 695 `type` statement is read by all of them and is a SyntaxError on 3.10
     ClassInfo: TypeAlias = type | UnionType | tuple[type | UnionType | tuple["ClassInfo", ...], ...]
 
 
@@ -175,8 +173,7 @@ class MatchResult:
         return self.matched
 
 
-# the options `is_equal_to` accepts, offered here too: with `strict_types` alone a structural spec could not say
-# "close enough"
+# the options `is_equal_to` takes: with `strict_types` alone a spec could not say "close enough"
 _EQUAL_TO_OPTIONS = frozenset({"ignore", "include", "tolerance", "comparators", "ignore_null"})
 
 
@@ -310,8 +307,7 @@ class EqualToMatcher(BaseMatcher):
         self.strict_types = strict_types
         self.ignore: object = options.get("ignore")
         self.include: object = options.get("include")
-        # `equal_to(value)` with nothing else is what `matches_structure` and the loops use, so it is decided once
-        # here
+        # `equal_to(value)` alone is what `matches_structure` and the loops use, so it is decided once here
         self.plain: bool = not (strict_types or options)
         self.config: _CompareConfig | None = (
             _build_compare_config(
@@ -337,8 +333,7 @@ class EqualToMatcher(BaseMatcher):
             except IncludeKeysMissingError:
                 return False  # an include naming an absent key: a mistake in the spec, so nothing matches
         if self.strict_types and _keyed_types_differ(value, self.expected):
-            # the flag walks to the leaves, so this has to: a composite whose own `==` is true says nothing about the
-            # types inside it
+            # the flag walks to the leaves: a composite whose `==` is true says nothing about the types inside
             return False  # a set the walker does not decompose, and a mapping key it walks straight past
         return not values_differ(value, self.expected, self.config, at_root=True)
 
@@ -505,9 +500,7 @@ def _class_info_members(expected: object) -> list[object]:
 
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
-        # eagerly, like the regex matcher: `list[int]` used to blow up inside `matches()` or `describe()`.  Member by
-        # member, since `isinstance` stops at the first match and `type(None) | list[int]` answered through
-        # `type(None)`, leaving the generic to raise later
+        # eagerly, like the regex matcher, and member by member: `isinstance` stops at the first match
         try:
             for member in _class_info_members(expected_type):
                 # cast because whether it is class info at all is the question this loop answers
@@ -537,8 +530,7 @@ class IsTypeOfMatcher(BaseMatcher):
     """
 
     def __init__(self, expected_type: type):
-        # `type(value) is <a union>` can never be true, so accepting one produces a matcher that silently never
-        # matches
+        # `type(value) is <a union>` is never true, so accepting one makes a matcher that silently never matches
         if type(expected_type) is not type and not issubclass(type(expected_type), type):
             refuse(expected_type, "a type", subject=argument("type"))
         self.expected_type = expected_type
@@ -574,8 +566,7 @@ class HasLengthMatcher(BaseMatcher):
         self.expected_length = expected_length
 
     def matches(self, value: Any) -> bool:
-        # the core answers `None` for a value with no length, and a `__len__` that raises travels out rather than
-        # being swallowed
+        # the core answers `None` for no length, and a raising `__len__` travels out rather than being swallowed
         return length_of(value) == self.expected_length
 
     def describe(self) -> str:
@@ -734,8 +725,7 @@ class HasPropertyMatcher(BaseMatcher):
         return f"was <{value!r}>"
 
 
-# `str` and `bytes` are never each other's operands, and accepting `str` alone made a matcher disagree with its own
-# method
+# `str` and `bytes` are never each other's operands, and accepting `str` alone made a matcher disagree with itself
 def _textlike_noun(operand: object) -> str:
     """What to call the operand in a description, so a bytes match does not read as a string one."""
     return "bytes" if isinstance(operand, (bytes, bytearray)) else "a string"
@@ -755,8 +745,7 @@ class ContainsStringMatcher(BaseMatcher):
 class MatchesRegexMatcher(BaseMatcher):
     def __init__(self, pattern: str):
         self.pattern = pattern
-        # compiled eagerly so an invalid pattern raises at the call site rather than inside `matches()` or a
-        # combinator
+        # compiled eagerly so an invalid pattern raises at the call site, not inside `matches()` or a combinator
         self._compiled = re.compile(pattern)
 
     def matches(self, value: Any) -> bool:
@@ -865,8 +854,7 @@ class ContainsOnlyMatcher(BaseMatcher):
         """One walk: "only these" needs everything that is there, and two walks cannot both see it."""
         searched = searchable(value)
         if not is_walkable(searched):
-            # membership is not enough: every element has to be seen, and a value that only answers `__contains__`
-            # cannot be listed
+            # membership is not enough: every element must be seen, and `__contains__` alone cannot be listed
             return MatchResult(
                 matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be listed"
             )
@@ -890,8 +878,7 @@ class IsSubsetOfMatcher(BaseMatcher):
         if not superset:
             raise ValueError("one or more items must be given")
         given = superset[0] if len(superset) == 1 and is_searchable(superset[0]) else superset
-        # drained here rather than at each call: a generator handed in as the superset was consumed by the first
-        # `matches()`
+        # drained here, not per call: a generator handed in as the superset was consumed by the first `matches()`
         self.superset = searchable(given)
 
     def matches(self, value: Any) -> bool:
@@ -999,7 +986,6 @@ class IsNowMatcher(BaseMatcher):
         if not isinstance(value, datetime):
             return False
         # `datetime.now(tzinfo)` matches the value's awareness, so the subtraction never mixes naive and aware
-        # operands
         return abs(value - datetime.now(value.tzinfo)) <= self._delta
 
     def describe(self) -> str:
@@ -1203,8 +1189,7 @@ class StructureMatcher(BaseMatcher):
         seen = seen | {pair_id}
         mismatches: list[_SpecMismatch] = []
         for key, expected in spec.items():
-            # built where it is needed: a spec that matches reads no path, and building one per key was the whole
-            # added cost
+            # built where needed: a spec that matches reads no path, and building one per key was the whole added cost
             if key not in value:
                 mismatches.append(_SpecMismatch(path.key(key), _MISSING, _describe_spec_value(expected), None))
                 continue
@@ -1212,12 +1197,10 @@ class StructureMatcher(BaseMatcher):
             if isinstance(expected, StructureMatcher) and is_mapping_like(normalized := self._as_mapping(actual)):
                 mismatches.extend(self._walk(normalized, expected._spec, path.key(key), seen))
             elif _is_matcher(expected):
-                # a predicate that cannot evaluate means "no match", asked once so a matcher over a one-shot leaf
-                # keeps its reason
+                # a predicate that cannot evaluate means "no match", asked once so a one-shot leaf keeps its reason
                 try:
                     if _has_own_evaluate(expected):
-                        # a matcher that walks its value answers once, so it is right about the reason even for a
-                        # one-shot iterator
+                        # a matcher that walks its value answers once, so its reason holds for a one-shot iterator
                         outcome = cast("BaseMatcher", expected).evaluate(actual)
                         if not outcome.matched:
                             mismatches.append(

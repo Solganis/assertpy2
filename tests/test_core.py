@@ -40,8 +40,7 @@ class TestValue:
         assert_that(got).is_equal_to("foo")
 
     def test_value_after_failed_soft_assertion_raises_carrying_root_failure(self):
-        # extract-and-continue is incoherent under collect-and-continue: refuse loudly, and surface
-        # the underlying failure so its cause is not lost when the aggregated report is superseded
+        # extract-and-continue is incoherent under collect-and-continue: refuse loudly and surface the cause
         with pytest.raises(TypeError) as exc, soft_assertions():
             _ = assert_that(None).is_not_none().value
         message = str(exc.value)
@@ -54,8 +53,7 @@ class TestValue:
         assert_that(message).contains("Expected not <None>, but was.").does_not_contain("instance of class")
 
     def test_taint_covers_any_failed_assertion_not_only_narrowing(self):
-        # intended general contract "extract only what was fully established": a failed non-narrowing
-        # assertion (is_greater_than) taints .value exactly like a failed is_not_none would
+        # extract only what was established: a failed `is_greater_than` taints `.value` as a failed `is_not_none` would
         with pytest.raises(TypeError, match=r"cannot extract .value.*to be greater than"), soft_assertions():
             _ = assert_that(3).is_greater_than(10).value
 
@@ -64,18 +62,14 @@ class TestValue:
             _ = assert_warn(None).is_not_none().value
 
     def test_taint_is_per_value_pivot_washes_orthogonal_failure(self):
-        # the taint is per-value: a pivot begins a fresh builder. after a failed but ORTHOGONAL
-        # assertion (is_length), extracting a real sub-value returns it cleanly; the block still
-        # aggregate-raises the collected is_length failure at exit
+        # the taint is per-value: after a failed orthogonal assertion a real sub-value still extracts cleanly
         captured = []
         with pytest.raises(AssertionError, match="soft assertion failures"), soft_assertions():
             captured.append(assert_that([{"a": 1}]).is_length(9).extracting("a").value)
         assert_that(captured).is_equal_to([[1]])
 
     def test_pivot_after_failed_is_not_none_raises_in_the_pivot_not_at_value(self):
-        # adversarial: a pivot can never reach .value with a value derived from an unvalidated None.
-        # extracting on the None left by a failed is_not_none raises in the pivot's own input check,
-        # before .value - so per-value taint + pivot input-validation together close the poison path
+        # a pivot cannot reach `.value` from an unvalidated None: it raises in the pivot's own input check first
         with pytest.raises(TypeError, match="val must be iterable"), soft_assertions():
             _ = assert_that(None).is_not_none().extracting("total").value
 
@@ -130,8 +124,7 @@ def test_fmt_args_kwargs_multiple_both(builder):
 
 
 def test_check_dict_like_empty_dict(builder):
-    # the old form was `assert_that(builder._require_dict_like({}))`, which asserted nothing: the method
-    # returns None and reports by raising, so the test passed whatever it did
+    # the old form asserted nothing: the method returns None and reports by raising, so it passed whatever it did
     assert_that(builder._require_dict_like).does_not_raise(TypeError).when_called_with({})
 
 

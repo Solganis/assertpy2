@@ -51,8 +51,7 @@ def test_is_subset_of():
 
 
 def test_is_subset_of_accepts_unhashable_items():
-    # the contains family handles dicts and lists via == comparison; is_subset_of used to build a set
-    # and crash with a raw TypeError on the very same input
+    # the contains family compares with ==; is_subset_of built a set and crashed with a raw TypeError
     assert_that([{"a": 1}]).is_subset_of([{"a": 1}, {"b": 2}])
     assert_that([[1]]).is_subset_of([[1], [2]])
 
@@ -193,8 +192,7 @@ def test_chaining():
 
 
 def test_filter_that_empties_the_subject_says_so():
-    # an empty derived value carries no context of its own: without the origin the failure reads the
-    # same whether the input was empty or the filter removed every element
+    # without the origin an empty derived value reads the same whether the input was empty or the filter emptied it
     with pytest.raises(AssertionError) as exc_info:
         assert_that([{"n": 1}, {"n": 2}]).filtered_on(lambda item: False).is_not_empty()
     assert_that(str(exc_info.value)).contains("filtered_on() kept 0 of 2 items")
@@ -230,8 +228,7 @@ def test_the_source_is_walked_as_it_comes():
 
 
 def test_a_broken_producer_does_not_replace_the_extraction_failure():
-    # the first item cannot be extracted from and the second kills the producer: the reader is owed the
-    # error about their data, not the one that came of reading ahead to count
+    # the reader is owed the error about their data, not the one that came of reading ahead to count
     def hostile():
         yield {"name": "first"}
         raise RuntimeError("the producer broke on the second item")
@@ -311,15 +308,13 @@ class TestSizeValidatorBoundaries:
         assert_that([1, 2, 3]).element(2).is_equal_to(3)
 
     def test_one_past_the_end_is_refused_by_our_own_message(self):
-        # a slack bound would let the list raise its own bare IndexError instead, which names neither
-        # the index nor the range the caller had to stay inside
+        # a slack bound leaves a bare IndexError, which names neither the index nor the range
         with pytest.raises(IndexError, match=r"Expected index 3 to be in range \[0, 3\)"):
             assert_that([1, 2, 3]).element(3)
 
     @pytest.mark.parametrize("name", list(_navigations()))
     def test_a_custom_logger_survives_the_hop(self, name, caplog):
-        # warn mode routes through the logger the caller handed in; losing it on any one hop sends the
-        # warning to a logger they are not watching
+        # warn mode routes through the caller's logger; losing it on any hop warns where nobody is watching
         navigate = _navigations()[name]
         custom = logging.getLogger("assertpy2.test.custom")
         navigate(assert_warn([1], logger=custom)).is_equal_to(object())

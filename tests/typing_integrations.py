@@ -35,9 +35,8 @@ def resolution(
     assert_type(assert_that(frame), _FrameAssertion[pandas.DataFrame])  # case: pandas-frame
     assert_type(assert_that(polars_frame), _FrameAssertion[polars.DataFrame])  # case: polars-frame
     assert_type(assert_that(array), _ArrayAssertion[numpy.ndarray[Any, Any]])  # case: numpy-array
-    # a series and an index buy no view of their own: nothing separates a series from an index
-    # structurally, and an index is outside `is_frame_equal`.  What they reach is the capability
-    # umbrella, which hands back its own surface rather than the builder
+    # a series and an index buy no view: nothing separates them structurally and an index is outside
+    # `is_frame_equal`. They reach the umbrella, which hands back its own surface rather than the builder
     assert_type(assert_that(series), _CapableAssertion[pandas.Series])  # case: pandas-series
     assert_type(assert_that(polars_series), _CapableAssertion[polars.Series])  # case: polars-series
     assert_type(assert_that(index), _CapableAssertion[pandas.Index])  # case: pandas-index
@@ -53,8 +52,7 @@ def calls_that_must_keep_working(frame: pandas.DataFrame, array: numpy.ndarray[A
     assert_type(assert_that(frame).value.columns, pandas.Index[str])  # case: frame-value
     assert_that(array).is_not_empty()  # case: array-sized
     assert_that(array).is_array_close_to(array)  # case: array-own
-    # `dtype` reads as `Any` here rather than as a `numpy.dtype`, which is numpy's own typing and
-    # not ours; what this case holds is that the chain reaches the array's own members at all
+    # `dtype` reads as `Any`, which is numpy's typing; this case holds that the chain reaches its members at all
     assert_type(assert_that(array).value.size, int)  # case: array-value
 
 

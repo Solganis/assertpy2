@@ -207,8 +207,7 @@ def test_no_parameter_is_accepted_at_runtime_without_being_declared(pairs) -> No
         f"{protocol}.{name}({parameter})"
         for protocol, name, promised, concrete in pairs
         for parameter, (kind, _default) in concrete.items()
-        # the tail itself is not a parameter a caller passes: a view spelling out the keywords it
-        # accepts instead of repeating `**kwargs` is the design, not an omission
+        # a view spelling out the keywords it accepts instead of repeating `**kwargs` is the design, not an omission
         if parameter not in promised and not kind.startswith("*")
     ]
     assert_that(sorted(set(undeclared))).described_as("accepted at runtime, absent from the typed surface").is_empty()
@@ -272,8 +271,7 @@ def _aliases() -> dict[str, set[str]]:
             if isinstance(value, ast.Name):
                 found[name] = {value.id}
             elif isinstance(value, ast.Constant) and isinstance(value.value, str):
-                # parsed, never evaluated: the value is source text and running it would import whatever
-                # it names
+                # parsed, never evaluated: the value is source text and running it would import whatever it names
                 written = ast.parse(value.value, mode="eval").body
                 found[name] = {member.split("[", 1)[0] for member in _members_of(written)}
             elif annotated and isinstance(value, ast.BinOp | ast.Subscript):
@@ -446,9 +444,8 @@ class TestTheTypedSurfaceAndTheRuntimeAcceptTheSameThings:
 
     def test_the_comparison_reached_most_of_what_the_views_declare(self, covered) -> None:
         pairs, skipped = covered
-        # the headline must not be wider than the check: a third of the declared parameters go
-        # uncompared, each for one of four stated reasons, and a walk that compared nothing at all
-        # would pass both directions below without a word
+        # the headline must not outrun the check: a third of the declared parameters go uncompared for one of
+        # four stated reasons, and a walk comparing nothing would pass both directions below without a word
         assert_that(pairs).described_as("parameters with a spelling on both sides").is_length_between(60, 250)
         assert_that(sum(skipped.values())).described_as("parameters skipped, each for a named reason").is_less_than(
             len(pairs)

@@ -143,8 +143,7 @@ class SatisfiesMixin(_MixinBase):
         for path, leaf in _walk_leaves(self.val):
             walked += 1
             if not _apply_matcher(matcher, leaf):
-                # asked on the first refusal rather than before the walk: it is wanted only for the
-                # message, and a matcher that reads the subject to describe itself would read it first
+                # asked on the first refusal: a self-describing matcher would otherwise read the subject first
                 description = _describe_matcher(matcher) if description is None else description
                 failures.append(path.leaf_entry(actual=leaf, expected=description))
         if failures:
@@ -210,8 +209,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val does **not** satisfy the matcher
         """
         if _is_matcher(matcher):
-            # asked twice about the same value: on a one-shot iterator the second call saw what the first had left,
-            # so `each_item` named the wrong item
+            # asked twice about one value: on a one-shot iterator the second call made `each_item` name the wrong item
             value = materialized(self.val)
             # a matcher that walks its value is asked once, so a `key` inside it runs once
             if _has_own_evaluate(matcher):
@@ -283,8 +281,7 @@ class SatisfiesMixin(_MixinBase):
                 else:
                     outcome = _refused(matcher, item)
                 if not outcome.matched:
-                    # read off the refusal rather than asked for again: the matcher already said what
-                    # it wanted when it refused, and asking twice ran a matcher's own method twice
+                    # read off the refusal: the matcher said what it wanted, and asking twice ran its own method twice
                     description = outcome.description
                     return self.error(
                         f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
@@ -699,8 +696,7 @@ class SatisfiesMixin(_MixinBase):
                 actual=self.val,
                 expected=other,
             )
-        # warned here rather than before the walk: a length mismatch is the verdict, and warning first
-        # said the call had passed over nothing when it had not passed at all
+        # warned here: a length mismatch is the verdict, and warning first said the call passed over nothing
         if not val_items:
             _warn_vacuous("zip_satisfies", allow_empty)
         entries = [

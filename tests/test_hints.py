@@ -205,8 +205,7 @@ class TestSilenceOnEverythingElse:
         assert_that(_message(actual, expected)).does_not_contain("every difference here")
 
     def test_a_value_that_really_is_none_is_not_read_as_an_absent_key(self):
-        # both leave the field at None, and before the marker this was reported as a key the expected side does not
-        # have
+        # both leave the field at None, which before the marker read as a key the expected side does not have
         message = _message({"a": 1}, {"a": None})
         assert_that(message).does_not_contain("carries keys the expected side does not")
 
@@ -219,8 +218,7 @@ class TestSilenceOnEverythingElse:
 
     @pytest.mark.parametrize("kind", ["match", "openapi", "contains"])
     def test_a_predicate_description_is_never_treated_as_a_value(self, kind):
-        # a `match` entry holds a value against a description of a predicate, and without the kind gate the pair
-        # equalises under stripping
+        # a `match` entry holds a value against a predicate's description, and without the kind gate the pair equalises
         entries = [DiffEntry(path="role", actual="guest ", expected="guest")]
         assert_that(diagnose(DiffResult(kind=kind, entries=entries))).is_none()
 
@@ -392,15 +390,12 @@ class TestTheContractOfTheExplanationLadder:
     """
 
     def test_a_normalisation_never_explains_a_pair_that_already_matches(self):
-        # the first rule, at the level it lives on rather than through the failure it produced. a pair
-        # whose sides already agree is a difference for some other reason, and a step that leaves it
-        # alone has not accounted for anything
+        # the first rule: a pair whose sides already agree differed for some other reason
         assert_that(_explains([(1, 1)], (lambda value: value,))).is_false()
         assert_that(_explains([("a ", "a")], (str.strip,))).is_true()
 
     def test_a_named_encoding_outranks_the_general_claim_that_types_differ(self):
-        # the second rule. both sides read alike under `str()`, which is what the type branch looks
-        # for, and the ladder has the better answer
+        # the second rule: both sides read alike under `str()`, and the ladder has the better answer
         message = _message({"a": [1, 2]}, {"a": "[1, 2]"})
         assert_that(message).contains("unparsed JSON text")
         assert_that(message).does_not_contain("another type")
@@ -441,16 +436,14 @@ class TestBytesReadTheSameAsText:
         assert_that(_message(b"\xd7\xd8\n", b"\xd7\xd8")).contains("surrounding whitespace")
 
     def test_two_bytes_are_not_called_a_difference_of_encoding(self):
-        # `_decoded` sits above `_stripped` in the ladder and would take the credit through a pair of
-        # steps, telling a reader about decoded text when both sides are bytes and nothing was decoded
+        # `_decoded` sits higher and would tell a reader about decoded text when both sides are bytes
         assert_that(_message(b"payload\n", b"payload")).does_not_contain("decoded text")
 
     def test_one_side_bytes_still_reads_as_encoding(self):
         assert_that(_message(b"x", "x")).contains("bytes against decoded text")
 
     def test_a_bytearray_on_the_other_side_is_not_read_as_text(self):
-        # what this branch is handed is the two values the assertion compared, and a `bytearray` is
-        # neither of the two types the steps under it know how to normalise
+        # handed the two values compared, and a `bytearray` is neither type the steps under it normalise
         assert_that(_hint(b"payload\n", bytearray(b"payload"))).is_none()
 
 
@@ -501,8 +494,7 @@ class TestEqualityDecidedByIdentity:
         assert_that(_hint(ValueError("boom"), ValueError("boom"))).contains("equality is identity")
 
     def test_an_object_nested_in_a_structure_is_left_alone(self):
-        # what decided the comparison above the pair is the enclosing type's own `__eq__`, which may be
-        # anything, so a difference found under one says nothing about why the comparison failed
+        # the enclosing type's own `__eq__` decided it, so a difference found under one explains nothing
         left, right = {"user": _NoEq("ada", "london")}, {"user": _NoEq("ada", "london")}
         assert_that(_message(left, right)).does_not_contain("identity")
 

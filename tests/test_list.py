@@ -220,8 +220,7 @@ def test_contains_sequence():
 
 
 def test_contains_sequence_string_advances_past_match():
-    # a single "X" cannot satisfy a two-"X" sequence: the search must advance past the first
-    # match, so index arithmetic that re-finds the same "X" must not produce a false pass.
+    # the search must advance past the first match, or arithmetic that re-finds the same "X" passes falsely
     with pytest.raises(AssertionError):
         assert_that("aX").contains_sequence("X", "X")
 
@@ -235,8 +234,7 @@ def test_contains_sequence_failure():
 
 
 def test_contains_sequence_tail_prefix_absent_fails_cleanly():
-    # the last element matches the sequence's first item but the full sequence runs past the end:
-    # the scan must fail cleanly (AssertionError), never walk off the end into IndexError (loop-bound guard)
+    # the full sequence runs past the end: the scan must fail cleanly, never walk off into IndexError
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(3, 9)
     assert_that(str(exc_info.value)).is_equal_to(
@@ -597,8 +595,7 @@ class TestContainsExactlyInAnyOrder:
         assert_that([[3], [1, 2]]).contains_exactly_in_any_order([1, 2], [3])
 
     def test_mixed_non_comparable_types_diff_fails_cleanly(self):
-        # a failing diff over non-comparable items (int + str) must sort stably by repr for the message,
-        # never by natural order (which raises TypeError on mixed types)
+        # non-comparable items sort by repr for the message; natural order raises TypeError on mixed types
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, "a"]).contains_exactly_in_any_order(2, "b")
         assert_that(str(exc_info.value)).is_equal_to(
@@ -689,8 +686,7 @@ class TestOrderingFailuresNameTheBreakPoint:
         assert_that(str(exc_info.value)).contains("The longest run that matched was <1, 2>")
 
     def test_sequence_with_no_matching_start_says_so_without_overclaiming(self):
-        # 3 IS in the list, just never where a two-element run still fits: the wording must not
-        # claim the element is absent
+        # 3 is in the list, just never where a two-element run fits: the wording must not call it absent
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_sequence(3, 4)
         message = str(exc_info.value)

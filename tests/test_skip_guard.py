@@ -38,12 +38,10 @@ def test_ok():
 
 
 def _run(tmp_path: pathlib.Path, *extra: str, suite: str = _SUITE) -> subprocess.CompletedProcess[str]:
-    # a second file that passes, so the exit code reports the guard rather than pytest's own "nothing
-    # was collected": the skipping file leaves no test behind at all
+    # a second passing file, so the exit code reports the guard and not pytest's "nothing was collected"
     (tmp_path / "test_absent.py").write_text(suite, encoding="utf-8")
     (tmp_path / "test_present.py").write_text(_PASSES, encoding="utf-8")
-    # its own coverage database: the child runs from the repository root, and a shared one would let its
-    # execution be combined into the parent's number and pad the very gate this file is about
+    # its own coverage database: the child runs from the root, and a shared one would pad the gate under test
     environment = {**os.environ, "COVERAGE_FILE": str(tmp_path / ".coverage")}
     return subprocess.run(
         [sys.executable, "-m", "pytest", str(tmp_path), "-q", "-p", "tests.conftest", "-p", "no:cacheprovider", *extra],
@@ -87,10 +85,8 @@ def test_a_partial_run_is_left_alone(tmp_path):
     assert_that(result.stdout).described_as("the report").does_not_contain("gates skipped for a missing module")
 
 
-# the checkers.  Named rather than read off the dependency groups, which do not line up: `typecheck`
-# also holds stubs, and `ty` sits in `dev`, which `uv sync` installs anyway.  What the cell enforcing the
-# coverage floor leaves out is `typecheck`, so a gate needing one of those skips there and trips the
-# guard above unless it says why.  `ty` is listed for the day it moves
+# the checkers, named rather than read off the dependency groups, which do not line up: `typecheck` also
+# holds stubs, `ty` sits in `dev`, and the coverage cell leaves `typecheck` out
 _DELEGATED = frozenset({"pyright", "mypy", "pyrefly", "ty"})
 
 

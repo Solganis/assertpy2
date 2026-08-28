@@ -262,8 +262,7 @@ class TestStructureMatcher:
         assert_that(matcher.matches(value)).is_true()
 
     def test_shared_subobject_across_keys_is_not_a_cycle(self):
-        # the same spec and value instances reused under sibling keys form a DAG, not a cycle;
-        # matches() must scope its visited-set per path, like collect_mismatches does
+        # reuse under sibling keys is a DAG, not a cycle: matches() must scope its visited-set per path
         frag_spec = {"n": match.is_positive()}
         spec = {"a": frag_spec, "b": frag_spec}
         frag_val = {"n": 5}
@@ -347,8 +346,7 @@ class TestMatchesStructureMethod:
             assert_that({"age": -5}).matches_structure({"age": match.is_positive()})
 
     def test_the_mismatch_names_the_offending_value(self):
-        # every assertion here matched on the path, never on the value, so the detail was free to
-        # describe None and the reader would be told which key failed but not what was in it
+        # every assertion matched on the path, so the detail was free to describe None and name only the key
         with pytest.raises(AssertionError) as failure:
             assert_that({"age": 10}).matches_structure({"age": match.greater_than(18)})
         assert_that(str(failure.value)).contains("but was <10>").does_not_contain("but was <None>")
@@ -575,8 +573,7 @@ class TestAssertConforms:
         assert_that(str(exc_info.value)).contains("conform to <Order>").contains("int_parsing")
         assert_that(exc_info.value.actual).is_equal_to({"id": "notint", "total": "x"})
         assert_that(exc_info.value.expected).is_equal_to(order_cls)
-        # pydantic's ValidationError text is already in the message above, so it must not also head
-        # the traceback (TestExceptionContext in test_traceback.py draws the line)
+        # pydantic's ValidationError text is already in the message, so it must not also head the traceback
         assert_that(exc_info.value.__suppress_context__).is_true()
 
     def test_invalid_item_fails_without_chaining_pydantic(self):
@@ -870,8 +867,7 @@ class TestShape:
         assert_that(shape([[1], ["x"]])).is_equal_to([["mixed"]])
 
     def test_nested_dict_elements_are_merged_key_by_key(self):
-        # `[[1], ["x"]]` above cannot tell a real merge from "give up and say mixed": both answers are
-        # "mixed". Dict elements can, because merging them keeps a union rather than collapsing.
+        # `[[1], ["x"]]` answers "mixed" either way; dict elements merge into a union rather than collapsing
         assert_that(shape([[{"a": 1}], [{"b": 2}]])).is_equal_to([[{"a": "number", "b": "number"}]])
 
     def test_a_self_referential_list_is_marked_not_followed(self):
@@ -881,8 +877,7 @@ class TestShape:
         assert_that(shape(cyclic)).is_equal_to(["mixed"])
 
     def test_a_self_referential_dict_keeps_the_marker(self):
-        # a list merges the marker away into "mixed", so a dict is the only place it reaches the stored
-        # shape, and its wording is the one every other walker in the package prints for a cycle
+        # a list merges the marker into "mixed", so a dict is the only place it reaches the stored shape
         cyclic = {"a": 1}
         cyclic["self"] = cyclic
         assert_that(shape(cyclic)).is_equal_to({"a": "number", "self": "<circular ref>"})
@@ -958,8 +953,7 @@ class TestAliasResolution:
     objects nothing reached before."""
 
     def test_a_serialization_only_alias_is_not_declared(self):
-        # drift is about what a payload may arrive under, and `serialization_alias` only renames a
-        # field on the way out; pydantic will not accept it as input, so neither do we
+        # `serialization_alias` renames a field on the way out, and pydantic will not accept it as input
         pytest.importorskip("pydantic", reason="pydantic not installed")
         from pydantic import BaseModel, Field
 
@@ -1110,25 +1104,22 @@ class TestStructureWalkPathsAndCycles:
         assert_that(mismatches[0][1]).is_same_as(boom)
 
     def test_a_cycle_needs_both_sides_to_repeat(self):
-        # the guard is keyed on the (value, spec) pair: keyed on one side alone, a spec that revisits a
-        # value it has already compared against a *different* sub-spec stops looking at it
+        # keyed on the pair: on one side alone, a spec revisiting a value under a different sub-spec stops looking
         inner = {"n": 1}
         value = {"a": inner, "b": inner}
         mismatches = StructureMatcher({"a": {"n": 1}, "b": {"n": 2}}).collect_mismatches(value)
         assert_that([path.text for path, _, _ in mismatches]).is_equal_to(["b.n"])
 
     def test_a_value_revisited_against_a_different_sub_spec_is_still_compared(self):
-        # the guard is keyed on the (value, spec) pair. Keyed on the value alone, a cyclic payload
-        # walked against a finite spec reports a false circular reference the second time the same
-        # sub-value comes up, and the real mismatch below it is never reached.
+        # keyed on the pair. On the value alone, a cyclic payload against a finite spec reports a false
+        # circular reference the second time a sub-value comes up, and the real mismatch is never reached.
         inner = {"n": 1}
         inner["a"] = inner
         mismatches = StructureMatcher({"a": {"a": {"n": 2}}}).collect_mismatches({"a": inner})
         assert_that(_texts(mismatches)).is_equal_to([("a.a.n", 1, "<2>")])
 
     def test_the_mismatch_detail_comes_from_the_matcher(self):
-        # a matcher whose wording differs from the generic "was <...>" fallback, or the two branches
-        # would render identically and the sentence would pass either way
+        # wording that differs from the generic "was <...>", or the two branches would render identically
         described = StructureMatcher({"a": match.is_even()}).describe_mismatch({"a": "x"})
         assert_that(described).is_equal_to(
             "at <a>: expected an even integer, but was <'x'> of type <str>, not an integer"

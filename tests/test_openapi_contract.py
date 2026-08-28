@@ -391,8 +391,7 @@ class TestStatusAutoSelection:
         return {"openapi": "3.0.3", "paths": {"/x": {"get": {"responses": responses}}}}
 
     def test_two_hundred_wins_over_two_hundred_and_one(self):
-        # the schema of whichever response is picked demands a property named after its status code,
-        # so the failure names the one that was chosen
+        # each schema demands a property named after its status code, so the failure names the one chosen
         with pytest.raises(AssertionError, match="200"):
             assert_that({}).conforms_to_openapi(self._spec("201", "200"), "/x", "get")
 

@@ -98,8 +98,7 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
     return "unparsed JSON text"
 
 
-# ordered, so the narrower claim goes first.  A step explains a pair only if the pair differed before it ran, and a
-# step here outranks `_typed`
+# ordered, narrower first: a step explains a pair only if the pair differed before it ran
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),
@@ -184,8 +183,7 @@ def diagnose(
     """
     if diff is None or diff.kind not in _VALUE_KINDS:
         return None
-    # before anything about the values: when a type leaves equality to identity, no value the other side held could
-    # have made it pass.  Asked of the two values compared, never of a pair inside the diff
+    # asked of the two values compared, never of a pair inside the diff: identity equality can never pass
     if identity:
         return _IDENTITY_FACT
     if not diff.entries:
@@ -199,8 +197,7 @@ def diagnose(
     positional = True
     for entry in entries:
         left, right = entry.actual, entry.expected
-        # isinstance first: `value != value` on a user object calls its `__ne__`, and one that raises would take the
-        # failure down
+        # isinstance first: `value != value` calls a user `__ne__`, and one that raises would take the failure down
         if (isinstance(left, float) and left != left) or (isinstance(right, float) and right != right):
             # with a NaN in the comparison no other value would make it pass, so it comes before anything else
             return _NAN_FACT
@@ -217,8 +214,7 @@ def diagnose(
             positional = False
 
     if diff.kind == "string":
-        # the whole strings: `splitlines()` folds "  " into " ", so a text differing in both yields an entry for the
-        # line alone
+        # the whole strings: `splitlines()` folds "  " into " ", so a text differing in both yields one entry
         if not isinstance(actual, (str, bytes)) or not isinstance(expected, (str, bytes)):
             return None
         return _named([(actual, expected)])
@@ -303,8 +299,7 @@ def identity_candidate(left: object, right: object) -> bool:
             return False
         return _defined_as(klass, "__eq__") and _defined_as(klass, "__ne__")
     except Exception:  # pragma: no cover - no input is known to reach it, see below
-        # every lookup above walks the class tree and runs none of the type's own code, and the guard stays
-        # because this runs on the way to a failure
+        # every lookup above runs none of the type's own code, and the guard stays because a failure is on the way
         return False
 
 

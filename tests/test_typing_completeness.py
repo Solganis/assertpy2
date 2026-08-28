@@ -47,9 +47,8 @@ from tests import typing_harness
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# pinned the way the baseline gate pins it, and for the same reason: the type-check job runs 3.14, so a
-# failure here should print the list that job would print.  The verdict itself does not depend on it,
-# 3.10 exports 406 symbols against 3.14's 412 through the version-gated overloads and both are complete
+# pinned as the baseline gate pins it: the type-check job runs 3.14, so a failure prints that job's list.
+# The verdict does not depend on it, 3.10 exports 406 symbols against 3.14's 412 and both are complete
 _TARGET: Final = "3.14"
 
 
@@ -87,8 +86,7 @@ def test_every_exported_symbol_has_a_type_a_checker_can_name() -> None:
     report = _completeness()
     symbols = report["symbols"]
 
-    # a run that resolved nothing would report nothing unknown and pass saying so.  This asks for a name
-    # only the real walk produces, rather than for a count that a broken run could also satisfy
+    # a run resolving nothing would pass saying so, hence a name only the real walk produces, not a count
     walked = {symbol["name"] for symbol in symbols}
     assert_that(walked).described_as("the verifytypes run did not reach the package").contains("assertpy2.assert_that")
 
@@ -138,8 +136,7 @@ def test_the_score_agrees_with_the_symbols() -> None:
     report = _completeness()
     assert_that(report["completenessScore"]).described_as("pyright's own score for the surface").is_equal_to(1.0)
     counts = report["exportedSymbolCounts"]
-    # the known count is deliberately not asserted: it moves with every method the package adds, and a
-    # gate that reddens on a new feature teaches contributors to re-record it without reading
+    # the count moves with every method added, and a gate reddening on a new feature teaches blind re-recording
     assert_that({key: value for key, value in counts.items() if value}).described_as(
         "the counts behind the score"
     ).contains_only("withKnownType")

@@ -35,8 +35,7 @@ _SITES = {
     "zip_satisfies": lambda predicate: assert_that([1]).zip_satisfies([1], predicate),
     "satisfies_exactly": lambda predicate: assert_that([1]).satisfies_exactly(predicate),
     "satisfies_exactly_in_any_order": lambda predicate: assert_that([1]).satisfies_exactly_in_any_order(predicate),
-    # a comparator answers the same question about a pair rather than about one value, and reaches the
-    # same mistake through `is_equal_to`, `match.equal_to` and a snapshot comparison
+    # a comparator asks about a pair, and reaches the same mistake through three different entry points
     "is_equal_to comparator": lambda predicate: assert_that(1).is_equal_to(2, comparators={int: predicate}),
     "match.equal_to comparator": lambda predicate: assert_that(1).satisfies(
         match.equal_to(2, comparators={int: predicate})
@@ -76,8 +75,7 @@ _MATCHER_SITES = {
     "satisfies_exactly_in_any_order": lambda matcher: assert_that([1]).satisfies_exactly_in_any_order(matcher),
     "contains": lambda matcher: assert_that([1]).contains(matcher),
     "matches_structure": lambda matcher: assert_that({"x": 1}).matches_structure({"x": matcher}),
-    # the combinators that wrap another matcher and read its verdict themselves, which the first sweep
-    # of the call sites missed: each of these truth-tests the inner one before the outer read happens
+    # the combinators the first sweep missed: each truth-tests the inner matcher before the outer read
     "composed with &": lambda matcher: assert_that(1).satisfies(match.is_positive() & matcher),
     "composed with |": lambda matcher: assert_that(1).satisfies(match.is_negative() | matcher),
     "each_item": lambda matcher: assert_that([1]).satisfies(match.each_item(matcher)),

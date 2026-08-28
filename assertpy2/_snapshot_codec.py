@@ -49,6 +49,7 @@ def _prepare(value, _seen: frozenset[int] = frozenset()):
                 "__type__": "dict",
                 "__data__": [[_prepare(key, nested), _prepare(item, nested)] for key, item in items],
             }
+        # a tuple comes back a list: `_rehash_key` restores one only where it was a dict key
         return [_prepare(item, nested) for item in value]
     return value
 
@@ -62,6 +63,7 @@ def _rehash_key(key):
 
 
 class _Encoder(json.JSONEncoder):
+    # `o` is what `JSONEncoder` names it, and pyright reads an override by parameter name
     def default(self, o):
         for entry in _SERIALIZERS:
             if isinstance(o, entry.cls):
@@ -71,8 +73,8 @@ class _Encoder(json.JSONEncoder):
         elif isinstance(o, complex):
             return {"__type__": "complex", "__data__": [o.real, o.imag]}
         elif isinstance(o, datetime.datetime):
-            # the sub-second and offset suffixes are used only when needed, so snapshots without
-            # microseconds/tzinfo keep the historical format and stay readable by older versions
+            # each suffix is added only when the value carries it, so a snapshot with neither microseconds nor
+            # `tzinfo` keeps the historical format and stays readable by an older version
             fmt = "%Y-%m-%d %H:%M:%S.%f" if o.microsecond else "%Y-%m-%d %H:%M:%S"
             if o.tzinfo is not None:
                 fmt += "%z"

@@ -55,8 +55,7 @@ def _bodies() -> tuple[dict[str, ast.FunctionDef], set[str]]:
     for path in sorted(_PACKAGE.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for klass in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
-            # and the builder itself, which declares a few operations of its own rather than
-            # inheriting them: the two polls live there, and a mixin-only walk called them asserting
+            # and the builder's own operations: the two polls live there, and a mixin-only walk called them asserting
             if not klass.name.endswith("Mixin") and klass.name != "AssertionBuilder":
                 continue
             for method in (item for item in klass.body if isinstance(item, ast.FunctionDef)):
@@ -137,8 +136,7 @@ class TestTheRegisterDescribesTheSurface:
         ).is_equal_to(sorted(set(WITHOUT_A_VERDICT) | NOT_AN_OPERATION))
 
     def test_no_registered_operation_actually_asserts(self, derived):
-        # a registered pivot may still reach the failure path through a precondition, so what would be
-        # wrong is a *non-pivot* in the register that asserts: that one has a verdict and is being hidden
+        # what would be wrong is a non-pivot in the register that asserts: it has a verdict and is hidden
         bodies, _public = _bodies()
         asserting = [
             name
@@ -174,8 +172,7 @@ class TestTheRegisterDescribesTheSurface:
         test takes it as a parameter, and `errors()` is the one that took none.
         """
         bodies, _public = _bodies()
-        # every way a parameter can be spelled, not the two the current six happen to use: a hybrid
-        # written `def caused_by(self, *, ex: type)` would otherwise be rejected for taking nothing
+        # every spelling, not the two in use: `def caused_by(self, *, ex: type)` would read as taking nothing
         without_an_expectation = [
             name
             for name in ALSO_ASSERTS
@@ -220,8 +217,7 @@ class TestWhatHandsTheSubjectBack:
         )
 
     def test_the_rest_is_truthy_whatever_the_subject_is_which_is_why_it_is_reported(self):
-        # `logger` is the sharp one: an adapter every builder has, so `assert assert_that(x).logger`
-        # would be green on every value there is
+        # `logger` is the sharp one: every builder has it, so `assert assert_that(x).logger` is always green
         assert_that(bool(assert_that([]).logger)).described_as("truthy on an empty subject").is_true()
         assert_that(bool(assert_that([1]).logger)).described_as("truthy on a full one").is_true()
         assert_that(assert_that(1).not_).described_as("reading `not_` hands back more builder").not_.is_instance_of(int)
@@ -258,8 +254,7 @@ class TestWhatTheProxiesRefuse:
         ids=["configures", "transforms", "describes", "polls"],
     )
     def test_asking_for_a_verdict_where_there_is_none_is_refused(self, call, expected):
-        # the worse half of the two: this used to answer `passed=True`, which reads as an assertion
-        # that ran and held rather than as one that never happened
+        # the worse half: `passed=True` reads as an assertion that ran and held, not one that never happened
         with pytest.raises(TypeError, match=expected):
             call()
 
@@ -283,8 +278,7 @@ class TestWhatTheProxiesRefuse:
         assert_that(assert_that(1).check().is_positive().passed).is_true()
         assert_that(assert_that(1).check().not_.is_positive().passed).is_false()
         assert_that(assert_that([1, 2]).first().check().is_positive().passed).is_true()
-        # the configurer keeps working through the ordinary path, which is the whole point of
-        # refusing it through the proxies rather than removing it
+        # the configurer keeps working through the ordinary path, which is why it is refused and not removed
         assert_that(lambda: None).does_not_raise(ValueError).when_called_with()
         assert_that(assert_that(lambda: None).does_not_raise(ValueError).check().when_called_with().passed).is_true()
 

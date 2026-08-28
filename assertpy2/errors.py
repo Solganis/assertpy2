@@ -281,8 +281,7 @@ def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green:
     if entry.absent == "actual":
         lines.append(f"  {green}{entry.path}: + {_diff_side(entry.expected)}{reset}")
         return
-    # ndiff costs ~175x a plain pair, so it used to be skipped past 200 characters; the window bounds its input
-    # instead
+    # ndiff costs ~175x a plain pair, so it was skipped past 200 characters; the window bounds its input instead
     actual_line, expected_line = _windowed(_safe_str(entry.actual), _safe_str(entry.expected))
     lines.append(f"  {entry.path}:")
     for guide in difflib.ndiff([actual_line], [expected_line]):

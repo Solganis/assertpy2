@@ -37,8 +37,7 @@ import assertpy2
 from assertpy2 import matchers
 from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
-# Pages this guard does not run, each with the reason. Everything else is run, including a page added
-# after this line was written: a hand-kept list of pages to check is a list that quietly stops growing.
+# pages this guard does not run, with reasons: a hand-kept list of pages to check stops growing quietly
 UNRUN_DOCS = {
     "docs/concepts/type-safety.md": "several blocks are counter-examples that are supposed to fail",
     "docs/guides/testing.md": "the examples write snapshot files, which would be left behind in the repo",
@@ -48,8 +47,7 @@ UNRUN_DOCS = {
 
 GUARDED_DOCS = documented_pages(UNRUN_DOCS)
 
-# assertpy2's public API minus its submodules (which shadow builtins like `dict`/`bytes`), plus the
-# stdlib names the guide pages assume are already imported by the time a reader reaches a later block.
+# the public API minus submodules shadowing builtins, plus the stdlib names a later block assumes
 DOC_NAMESPACE = {
     name: getattr(assertpy2, name)
     for name in dir(assertpy2)
@@ -62,11 +60,8 @@ SKIP_MARKERS = {
     "docs-guard: raises": "demonstrates a failure, marked as raising in the docs",
     "docs-guard: type-error": "counter-example, marked as rejected by a type checker",
 }
-# grouped by page and kept in document order, because a guide page is written as a narrative: a block
-# may register a matcher the block below it removes.  Running them in one test is what reads the page
-# the way a reader does, and it is also what stops the order from being decided by whatever shuffles
-# the suite.  Python state is still fresh per block, so the only thing carried is what the library
-# itself holds process-wide
+# grouped by page in document order: a block may register a matcher the block below removes.
+# Python state is fresh per block, so only what the library holds process-wide carries over
 _PAGES = {doc: sorted(find_examples(doc), key=lambda example: example.start_line) for doc in GUARDED_DOCS}
 
 
@@ -90,8 +85,7 @@ def _namespace(doc: str) -> dict[str, object]:
 def _run(example: CodeExample, eval_example: EvalExample) -> None:
     namespace = _namespace(pathlib.Path(example.path).as_posix())
     module = eval_example.run(example, module_globals=namespace)
-    # an example written as a pytest test only binds the function, so running the module never reaches
-    # the assertions in its body. Call the ones that ask for no fixtures, and the body is checked too
+    # an example written as a test only binds it, so the fixture-free ones are called and their bodies checked
     for name, value in module.items():
         if name.startswith("test_") and callable(value) and not inspect.signature(value).parameters:
             value()

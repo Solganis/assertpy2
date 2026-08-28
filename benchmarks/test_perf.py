@@ -1,11 +1,9 @@
-# CodSpeed regression gate: micro-benchmarks of assertpy2's own hot paths, measured commit-over-commit
-# under CPU simulation. Run manually with `uv run --group benchmark pytest benchmarks/ --codspeed --no-cov`;
-# the CodSpeed CI job runs the same. Not collected by the default suite (testpaths=tests), so it never gates
-# on the machine's noise - only CodSpeed's simulated instruction count does.
+# CodSpeed regression gate: micro-benchmarks of assertpy2's hot paths, measured commit-over-commit under
+# CPU simulation.  Run with `uv run --group benchmark pytest benchmarks/ --codspeed --no-cov`, which is
+# what the CI job runs.  Not collected by the default suite, so machine noise never gates.
 #
-# The local run prints a "Time (best)" column that is not a measurement: a callable taking 95 us of wall
-# clock was reported as 85 ns, and the ordering of two cases came out reversed. Read `Run time / Iters`
-# if a local number is wanted at all.
+# The local "Time (best)" column is not a measurement: 95 us of wall clock was reported as 85 ns and two
+# cases came out in the wrong order.  Read `Run time / Iters` instead.
 from __future__ import annotations
 
 import contextlib
@@ -85,8 +83,7 @@ def test_contains_exactly_large(benchmark):
 
 
 def test_string_diff_with_carets(benchmark):
-    # difflib.ndiff costs ~175x a plain pair of prints, and is guarded by a length cutoff. Rendering is
-    # lazy, so str() has to be called or the carets never run and the benchmark guards nothing.
+    # difflib.ndiff costs ~175x a plain pair of prints; str() has to be called or the carets never run
     left = "the quick brown fox jumps over the lazy dog " * 3
     right = left.replace("brown", "brawn", 1)
 
@@ -122,8 +119,7 @@ def test_contains_only_large(benchmark):
 
 
 def test_shifted_list_diff(benchmark):
-    # the alignment path: one element inserted at the head, which positional pairing would report as a
-    # difference at every later index. difflib runs on the failure path only, so this is where it costs
+    # one element inserted at the head, which positional pairing reports as a difference at every later index
     left, right = list(range(500)), list(range(1, 500))
 
     def run():
@@ -134,8 +130,7 @@ def test_shifted_list_diff(benchmark):
 
 
 def test_shifted_records_diff(benchmark):
-    # the same shift over unhashable elements, which difflib cannot index directly: the alignment falls
-    # back to keying on reprs, and rendering 500 dict reprs is the price
+    # the same shift over unhashable elements: alignment keys on reprs, and rendering 500 dict reprs is the price
     left = _records(500)
     right = _records(500)[1:]
 
@@ -147,9 +142,7 @@ def test_shifted_records_diff(benchmark):
 
 
 def test_unshifted_list_diff(benchmark):
-    # the alignment loses here and the walk stays positional, so this measures what the losing branch
-    # costs everyone whose sequence did not shift: no common run exists, and the opcodes are computed
-    # and thrown away
+    # the alignment loses: no common run exists, so the opcodes are computed and thrown away
     left = [value * 2 for value in range(500)]
     right = [value * 2 + 1 for value in range(500)]
 
@@ -161,8 +154,7 @@ def test_unshifted_list_diff(benchmark):
 
 
 def test_long_records_one_field_diff(benchmark):
-    # the common QA failure: a long list of records with one field changed. Pairing by index already
-    # yields the single entry an alignment could, so this is the case that must not pay for difflib
+    # the common QA failure: index pairing already yields the one entry, so this must not pay for difflib
     left = _records(200)
     right = _records(200)
     right[199]["profile"]["city"] = "changed"
@@ -175,8 +167,7 @@ def test_long_records_one_field_diff(benchmark):
 
 
 def test_over_cap_list_diff(benchmark):
-    # past _ALIGN_MAX_ELEMENTS the alignment is skipped entirely, which is the branch that keeps a
-    # quadratic search off a very large failure
+    # past `_ALIGN_MAX_ELEMENTS` the alignment is skipped, keeping a quadratic search off a large failure
     left, right = list(range(2000)), list(range(1, 2000))
 
     def run():
@@ -236,9 +227,8 @@ def test_matcher_is_subset_of_pass(benchmark, size):
 
 @pytest.mark.parametrize("size", [100, 2000])
 def test_duplicates_reported(benchmark, size):
-    # the failing side on purpose: naming the repeats is the part that used to count each element again.
-    # The failure is required rather than suppressed: swallowing it would leave the benchmark green and
-    # silently timing a passing assertion if the duplicate ever stopped being found
+    # the failing side on purpose: naming the repeats is what used to count each element again. Swallowing
+    # the failure would leave this green and timing a passing assertion if the duplicate stopped being found
     values = [*range(size), 0]
 
     def run():
@@ -253,8 +243,7 @@ def test_duplicates_reported(benchmark, size):
 
 @pytest.mark.parametrize("size", [100, 2000])
 def test_many_distinct_duplicates_reported(benchmark, size):
-    # one repeat above hides a per-repeat re-walk, since there is only one repeat to walk for.  Every
-    # element repeated is where counting each of them again shows as a square
+    # one repeat above hides a per-repeat re-walk; every element repeated is where it shows as a square
     values = [index for index in range(size) for _ in (0, 1)]
 
     def run():
@@ -316,9 +305,8 @@ def test_polling_a_scalar(benchmark, trace):
 
 @pytest.mark.parametrize("trace", [True, False], ids=["recorder-on", "recorder-off"])
 def test_polling_a_wide_value(benchmark, trace):
-    # the same loop over two hundred records, where the assertion walks the payload as well. The pair
-    # isolates the recorder because both sides run that same assertion: it is 95% of a failing poll
-    # here against a quarter of one over the scalar above
+    # the same loop where the assertion also walks the payload, so the pair isolates the recorder: 95% of
+    # a failing poll here against a quarter of one over the scalar above
     run = _polled(_WIDE_FAIL, _WIDE_PASS, trace=trace)
     assert run() == (_POLLS + 1, _replays(1))
     benchmark(run)
@@ -419,10 +407,9 @@ def test_expensive_equality_diff(benchmark):
     ids=["hashable", "unhashable", "mixed"],
 )
 def test_finding_duplicates_by_hashability(benchmark, shape, make):
-    # `contains_duplicates` rather than its negation on purpose: the negation goes on to name every
-    # repeat, and for the two shapes that cannot hash that reporting is quadratic too, so timing it
-    # measures the two together. 2001 elements through the check alone: 0.04 ms hashable, 10.9 ms mixed,
-    # 14.7 ms unhashable, against 0.18, 32 and 43 with the reporting attached
+    # `contains_duplicates` rather than its negation: the negation names every repeat, quadratic too for the
+    # two unhashable shapes. 2001 elements through the check alone: 0.04 ms hashable, 10.9 mixed, 14.7
+    # unhashable, against 0.18, 32 and 43 with the reporting attached
     values = make(2000)
 
     def run():
@@ -452,9 +439,8 @@ def test_a_class_with_its_own_equality_pays_the_quadratic_path(benchmark):
 
 @pytest.mark.parametrize("walkable", [False, True], ids=["list", "single-use iterator"])
 def test_a_single_use_iterable_is_read_once(benchmark, walkable):
-    # an iterator has to be read whole before anything can be asked of it twice, and `materialized()` is
-    # where that happens. Twenty thousand elements: 0.09 ms as a list against 0.42 ms as an iterator for
-    # `contains`, so the cost is the materialisation rather than the assertion
+    # an iterator is read whole in `materialized()`. Twenty thousand elements: 0.09 ms as a list against
+    # 0.42 ms as an iterator for `contains`, so the cost is the materialisation and not the assertion
     size = 20000
 
     def run():

@@ -199,15 +199,13 @@ class TestTheFailureSaysWhichResponseItCameFrom:
         assert_that(str(failure.value)).contains("-> 500")
 
     def test_the_note_never_reads_the_body(self):
-        # the safety rule of the whole feature: a streaming response has not been read, and reporting a
-        # failure is not the place to find that out
+        # the safety rule: a streaming response has not been read, and a failure is no place to find that out
         with pytest.raises(AssertionFailure) as failure:
             assert_that(Streaming()).has_status_code(200)
         assert_that(str(failure.value)).contains("from POST https://api.example.com/orders -> 500")
 
     def test_a_response_that_is_falsey_still_carries_its_note(self):
-        # `requests.Response` is falsey for every 4xx and 5xx, which is the response whose provenance a
-        # reader needs most, and a truthiness test would drop it at the second pivot
+        # `requests.Response` is falsey for every 4xx and 5xx, exactly the one whose provenance a reader needs
         class Refused(Fetched):
             def __bool__(self):
                 return False
@@ -310,8 +308,7 @@ class TestTheStepIntoTheBody:
             assert_that(response).decoded_as_json()
 
     def test_headers_that_yield_pairs_rather_than_names(self):
-        # werkzeug's Headers iterate as (name, value), and reading a pair as a name is how this once
-        # reported that no content type had been declared when one had
+        # werkzeug's Headers iterate as pairs, and reading one as a name reported no content type when one was set
         class Paired:
             def __init__(self, items):
                 self._items = items
@@ -358,8 +355,7 @@ class TestTheStepIntoTheBody:
         )
 
     def test_a_parser_that_answers_none_rather_than_raising(self):
-        # Flask's get_json() returns None for a body it will not parse, so its answer alone settles
-        # nothing and the raw body has to be asked
+        # Flask's `get_json()` returns None for a body it will not parse, so the raw body has to be asked
         class Careful(Flasked):
             def get_json(self):
                 return None
@@ -377,8 +373,7 @@ class TestTheStepIntoTheBody:
         assert_that(Careful(body=b"null")).decoded_as_json().is_none()
 
     def test_a_body_that_cannot_be_read_at_all_still_refuses_cleanly(self):
-        # every name raises on a response that was never read, and the refusal is what must come out.
-        # It does not call the body anything: an unread body may well have been JSON
+        # the refusal must come out and must not name the body: an unread one may well have been JSON
         with pytest.raises(ValueError, match="the response body could not be read") as failure:
             assert_that(Streaming()).decoded_as_json()
         assert_that(str(failure.value)).does_not_contain("is not JSON")
@@ -461,8 +456,7 @@ def _configure_django(django):
         django.setup()
         from django.urls import path
 
-        # the URLconf django resolves against: it reads `urlpatterns` off the module named above, and
-        # importing `path` before `setup()` is not allowed
+        # the URLconf django resolves against: importing `path` before `setup()` is not allowed
         globals()["urlpatterns"] = [path("orders/<int:order_id>/", order_view)]
 
 

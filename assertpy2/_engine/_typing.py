@@ -52,12 +52,10 @@ if TYPE_CHECKING:
     _T_co = TypeVar("_T_co", covariant=True)  # the subject of a value no overload recognises
     _P_co = TypeVar("_P_co", covariant=True)  # what a polled probe hands back, which is what its chain asserts on
 
-    # a capability rather than a list of types: the list said `float | Decimal | Fraction` and refused
-    # `numpy.int64`. `str`, `complex`, `date` and containers have no `__float__` and stay caught
+    # a capability, not a list: the list said `float | Decimal | Fraction` and refused `numpy.int64`
     _Number = SupportsFloat
 
-    # Predicates read `Callable[[Any], object]`, or `[Any, Any]` where the runtime hands over a pair.
-    # The verdict is `object` and not `bool`, which refused a `numpy.bool_`.
+    # a predicate's verdict is `object`, not `bool`, which refused a `numpy.bool_`
 
     class _MembershipAssertion(Protocol):
         """ "Is every one of my elements in there", asked the same way by three types.
@@ -141,16 +139,13 @@ if TYPE_CHECKING:
 
         def extracting(
             self,
-            # a selector stays `object`: whether one works depends on the row, and every narrowing tried
-            # refused working code, down to `Hashable | slice` refusing a list key
+            # a selector stays `object`: every narrowing tried refused working code, `Hashable | slice` included
             name: object,
             /,
             *names: object,
-            # named rather than `**kwargs`, so a typo like `filtr=` is caught before the run.  `Mapping`
-            # because `dict` is invariant, and `str` keys because other keys are accepted then skipped
+            # named rather than `**kwargs`, so `filtr=` is caught; `Mapping` because `dict` is invariant
             filter: str | Mapping[str, object] | Callable[[Any], object] = ...,  # noqa: A002  # public keyword
-            # `sort` is narrower by the runtime's own rule: a single index is refused, the same index
-            # inside a list is honoured
+            # `sort` is narrower by the runtime: one index is refused, the same index inside a list is honoured
             sort: str | Iterable[object] | Callable[[Any], object] = ...,
         ) -> _ListAssertion[Any]: ...
         def each(self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...) -> Self: ...
@@ -246,8 +241,7 @@ if TYPE_CHECKING:
         def is_not_callable(self) -> Self: ...
         def is_iterable(self) -> Self: ...
         def is_not_iterable(self) -> Self: ...
-        # a protocol narrowing `satisfies` restates the whole overload set, ladder included.  The predicate stays
-        # `Any` here and is bound to the value in the views that know it: this one is the widest
+        # a protocol narrowing `satisfies` restates the ladder; the predicate stays `Any` in this widest one
         @overload
         def satisfies(self, matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion: ...
         @overload
@@ -313,8 +307,8 @@ if TYPE_CHECKING:
         # declared as this protocol: any other spelling let `assert_that(1).not_.starts_with('x')` pass
         @property
         def not_(self) -> Self: ...
-        # a builder twin was tried and dropped: text and numeric ordering collide in one class.
-        # A pivot hands back `AssertionBuilder[_E]`, as does what the capability umbrella claims, so both stay untyped
+        # a builder twin was tried and dropped: text and numeric ordering collide in one class.  A pivot
+        # hands back `AssertionBuilder[_E]`, as does what the capability umbrella claims, so both stay untyped
         def check(self) -> _CheckCoreAssertion: ...
         @property
         def value(self) -> object: ...
@@ -515,16 +509,14 @@ if TYPE_CHECKING:
         def is_sorted(
             self, key: Callable[[str], object] = ..., reverse: bool = ..., *, allow_empty: bool = ...
         ) -> Self: ...
-        # the quantifiers walk a text character by character and the runtime answers every one for a `str`.  They
-        # were absent for no reason anybody wrote down, so `assert_that("ab").each(...)` was a type error that ran
+        # the runtime answers every quantifier for a `str`, so `assert_that("ab").each(...)` was a type error that ran
         def each(self, matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...) -> Self: ...
         def all_satisfy(self, matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...) -> Self: ...
         def any_satisfy(self, matcher: Matcher[str] | Callable[[str], object]) -> Self: ...
         def none_satisfy(self, matcher: Matcher[str] | Callable[[str], object]) -> Self: ...
         def satisfies_exactly(self, *matchers: Matcher[str] | Callable[[str], object]) -> Self: ...
         def satisfies_exactly_in_any_order(self, *matchers: Matcher[str] | Callable[[str], object]) -> Self: ...
-        # the predicate is handed a character and an item of the other side, so both are named: `Any`
-        # here let a caller write a character operation on whatever the other side holds
+        # both named: `Any` let a caller write a character operation on whatever the other side holds
         def zip_satisfies(
             self, other: Iterable[_Other], predicate: Callable[[str, _Other], object], *, allow_empty: bool = ...
         ) -> Self: ...
@@ -722,8 +714,7 @@ if TYPE_CHECKING:
         def is_sorted(
             self, key: Callable[[_K], object] = ..., reverse: bool = ..., *, allow_empty: bool = ...
         ) -> Self: ...
-        # an element pivot hands back the builder: turning `_K` into the view the factory would
-        # pick is dispatch this API has no way to write
+        # an element pivot hands back the builder: `_K` into the factory's view is dispatch this API cannot write
         def filtered_on(self, predicate: Matcher[_K] | Callable[[_K], object]) -> _ListAssertion[_K]: ...
         def mapped(self, func: Callable[[_K], _R]) -> _ListAssertion[_R]: ...
         def flat_mapped(self, func: Callable[[_K], Iterable[_R]]) -> _ListAssertion[_R]: ...
@@ -737,8 +728,7 @@ if TYPE_CHECKING:
     # `pandas-stubs` declares: `pivot` and not `__dataframe__`, which the stubs answer through their catch-all
     # and mypy then reads as an array.  No series shape, since nothing separates a series from a `pandas.Index`
 
-    # the capability umbrella: a value answering to some capability keeps the whole surface, only one with none
-    # is narrowed.  Keyed on what the runtime gate reads, so `__dict__` is out: it lives on `object`
+    # the umbrella: any capability keeps the whole surface.  `__dict__` is out, it lives on `object`
 
     class _CollectionShape(Protocol):
         # `__iter__` alone: a generator has no `__len__` and `contains()` works on one
@@ -881,8 +871,7 @@ if TYPE_CHECKING:
         def is_equal_to_ignoring_milliseconds(self, other: datetime.datetime) -> Self: ...
         def is_equal_to_ignoring_seconds(self, other: datetime.datetime) -> Self: ...
         def is_equal_to_ignoring_time(self, other: datetime.datetime) -> Self: ...
-        # closeness on a datetime is measured in a timedelta, the one place the numeric family takes
-        # something other than a number
+        # closeness on a datetime is a timedelta, the one place the numeric family takes something else
         def is_close_to(self, other: datetime.datetime, tolerance: datetime.timedelta) -> Self: ...
         def is_not_close_to(self, other: datetime.datetime, tolerance: datetime.timedelta) -> Self: ...
 

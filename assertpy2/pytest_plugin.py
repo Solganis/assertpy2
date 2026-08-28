@@ -158,10 +158,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 _ALL_ON: Final = {"assertpy2_dangling": "on", "assertpy2_vacuous": "on"}
 
 # What a profile answers for a setting the suite did not name.  Both guards are off under `compatible`,
-# since they can turn an inherited suite's green run red.  `strict` turns the same two on and fails what
-# they find, separate from `safe` because a warning and a failure are different asks.  Failure clustering
-# has its own default: a profile answers for what a guard costs a passing suite, and clustering costs
-# nothing, it reads a run that already went red.
+# since they can turn an inherited suite green run red; `strict` turns them on and fails what they find.
+# Failure clustering has its own default: it costs a passing suite nothing, it reads a run already red
 _PROFILES: Final = {
     "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off"},
     "safe": _ALL_ON,
@@ -364,8 +362,7 @@ def pytest_configure(config: pytest.Config) -> None:
         stashed._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
         stashed._assertpy2_diff_max = 50
-    # under pytest the plugin renders the diff as its own report section, so it stays out of the message; the prior
-    # value is restored rather than forced back, so tests driving these hooks stay balanced
+    # the plugin renders the diff as a report section; the prior value is restored, not forced, so hooks stay balanced
     stashed._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
     stashed._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
@@ -391,8 +388,7 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
-    # module-level, so a second session in the same process would open with the first one's failures counted; these
-    # are consumed by a hook that may not run
+    # module-level, so a second session would open with the first one's failures, consumed by a hook that may not run
     _controller_failures.clear()
     _controller_failure_count[0] = 0
     _controller_lost_workers[0] = 0
@@ -484,8 +480,7 @@ def _report_dangling(item):
     if not mine:
         return
     recorded[item.path] = [one for one in recorded[item.path] if one not in mine]
-    # one warning for the whole test: under `-W error` the first leaves this function as an exception, so a second
-    # would never be reported
+    # one warning per test: under `-W error` the first leaves this function, so a second is never reported
     first, rest = mine[0], mine[1:]
     message = first.message
     if rest:
@@ -515,8 +510,7 @@ def pytest_collectreport(report: pytest.CollectReport) -> None:
     """
     config = _session_config[0]
     if config is None or not report.failed or hasattr(config, "workeroutput"):
-        # not on a worker: every worker collects the whole suite, so counting there turned one broken module into one
-        # red result per worker
+        # not on a worker: each collects the whole suite, so counting there made one broken module one result per worker
         return
     if getattr(config, "_assertpy2_cluster_minimum", None) is not None:
         _controller_collect_errors[0] += 1
@@ -544,8 +538,7 @@ def pytest_testnodedown(node: Any, error: object) -> None:
         _controller_inline.extend(tuple(record) for record in inline)
     accesses = getattr(node, "workeroutput", {}).get("assertpy2_accesses")
     if accesses:
-        # unioned here rather than judged in the worker: two parametrised cases on two workers are one node id each
-        # locally
+        # unioned here: two parametrised cases on two workers are one node id each locally
         for snapname, key, nodes, site in accesses:
             _controller_accesses.setdefault((snapname, key), set()).update(nodes)
             _snapshot._ACCESS_SITES.setdefault((snapname, key), site)
@@ -637,8 +630,7 @@ def _fail_on_reused_key(session, message: str) -> None:
     of a session-finish hook is an INTERNALERROR with this module's traceback in it - which buries the
     message the reader needs under a stack that points at the wrong place.  Print it and go red.
     """
-    # only a run that otherwise succeeded: this hook is reached from a `finally`, so Ctrl-C and an internal error
-    # land here too
+    # only a run that otherwise succeeded: reached from a `finally`, so Ctrl-C and an internal error land here too
     if session.exitstatus == pytest.ExitCode.OK:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
@@ -674,8 +666,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     touched = set(_snapshot._TOUCHED) | _controller_touched
     _controller_touched.clear()
     if not touched or not _is_full_run(config):
-        # on a subset run the touched set is incomplete, so pruning would delete a live sibling and reporting would
-        # be a false positive
+        # on a subset run the touched set is incomplete, so pruning would delete a live sibling
         return
     sub_orphans, whole_orphans = _snapshot._find_orphans(touched)
     if not sub_orphans and not whole_orphans:
@@ -728,8 +719,7 @@ def _collect_worker_failures(node, died: bool = False) -> None:
             if isinstance(nodeid, str) or _refuse(nodeid)
         ]
         counted = output["assertpy2_failure_count"]
-        # both halves or neither: rows without a count add members to a denominator they never raised.  Checked
-        # rather than coerced, since `int()` would take `True` and `3.9`
+        # both halves or neither, checked rather than coerced, since `int()` would take `True` and `3.9`
         if isinstance(counted, bool) or not isinstance(counted, int):
             raise TypeError(counted)
         if counted < len({nodeid for nodeid, _ in received}):
@@ -785,25 +775,21 @@ def _record_for_clustering(config, nodeid, exc):
     """
     if getattr(config, "_assertpy2_cluster_minimum", None) is None:
         return
-    # a set of node ids rather than a counter: a retried test is reported failing once per attempt, and
-    # counting attempts made the run look larger than it was
+    # node ids, not a counter: a retried test is reported failing once per attempt
     failed = getattr(config, "_assertpy2_failed_ids", None)
     if failed is None:
         failed = config._assertpy2_failed_ids = set()
     failed.add(nodeid)
     config._assertpy2_failure_count = len(failed)
     try:
-        # inside the guard, reads included: `diff` is our own attribute name on somebody else's exception, and
-        # reading a property runs their code.  One that raised took the whole run down with INTERNALERROR
+        # inside the guard: `diff` is our name on somebody else's exception, and one that raised took the run down
         diff = getattr(exc, "diff", None)
-        # the hint the failure already computed for its own message, rather than a second run of the
-        # same analysis. `_outcome` is absent on a failure raised outside the fluent path
+        # the hint the failure already computed; `_outcome` is absent on a failure raised outside the fluent path
         outcome = getattr(exc, "_outcome", None)
         label = getattr(outcome, "hint", None)
         found = _clustering.observations_of(diff, label)
     except Exception:
-        # a summary is a convenience and a report hook is not a place to raise from: pytest answers an
-        # exception here with INTERNALERROR, which costs the reader the entire run's results
+        # a report hook is no place to raise from: pytest answers with INTERNALERROR and the run's results are lost
         return
     if found:
         config._assertpy2_failures.append((nodeid, found))
@@ -824,11 +810,9 @@ def pytest_terminal_summary(terminalreporter: Any, exitstatus: int, config: pyte
     try:
         _write_cluster_summary(terminalreporter, config)
     except Exception as exc:  # pragma: no cover - the barrier itself; its parts are tested directly
-        # a summary is a convenience, and taking a run's whole report down to print it would be the worst trade.
         # `Exception`, not `BaseException`: a Ctrl-C or a SystemExit through here still has to travel
         with contextlib.suppress(Exception):
-            # the notice is itself suppressed rather than trusted: under `-W error` a warning raises,
-            # which would put the barrier's own traceback in the report in place of the failure it caught
+            # the notice is suppressed too: under `-W error` it would replace the failure with its own traceback
             warnings.warn(f"assertpy2 could not write its failure-cluster summary: {exc!r}", stacklevel=1)
 
 
@@ -878,14 +862,12 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     outcome = yield
     report = outcome.get_result()
 
-    # every phase, not just "call": a fixture that polls in teardown runs after the call report, so
-    # draining only there would tag its retries with the next test that happens to run
+    # every phase, not just "call": a fixture polling in teardown would tag its retries with the next test
     _drain_retries(report.nodeid)
     if not report.failed:
         return
 
-    # ahead of the "call" and AssertionError gates, and without requiring an exception at all: the
-    # summary counts against every red result, including an erroring fixture and a strict xpass
+    # ahead of the gates and without needing an exception: it counts an erroring fixture and a strict xpass too
     exc = call.excinfo.value if call.excinfo is not None else None
     _record_for_clustering(item.config, report.nodeid, exc)
 
@@ -895,8 +877,7 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     try:
         _attach_report_sections(item, report, exc)
     except Exception:  # pragma: no cover - the barrier; everything under it is tested directly
-        # the sections are built from attributes of somebody else's exception, and reading one runs their code:
-        # an `AssertionError` subclass whose `diff` property raised took the whole run down with INTERNALERROR
+        # built from somebody else's exception, and a `diff` property that raised took the whole run down
         return
 
 
@@ -907,8 +888,7 @@ def _attach_report_sections(item, report, exc) -> None:
     diff = getattr(exc, "diff", None)
     trace = getattr(exc, "trace", None)
 
-    # read from the record, not from a test against `None`: `actual` is filled on every failure, and
-    # `expected` cannot tell "compared against None" from "no expected value at all"
+    # read from the record: `expected` cannot tell "compared against None" from "no expected value"
     outcome = getattr(exc, "_outcome", None)
     if outcome is None:
         # built by hand, by `eventually()` or by a snapshot re-wrap: the values are all there is to go on
@@ -916,23 +896,18 @@ def _attach_report_sections(item, report, exc) -> None:
     else:
         named_actual, named_expected = outcome.actual_provided, outcome.has_expected
 
-    # `expected` reached every failure once each assertion named what it measured against, and the message
-    # names it too, so what decides is `actual` being named: a value other than the subject.  A failure with
-    # no record is the older path, where the values are all there is to go on
+    # what decides is `actual` being named, a value other than the subject; no record is the older path
     named_values = named_actual if outcome is not None else (named_actual or named_expected)
 
-    # the cheap exit, which is most failures.  Asked of the record's own flags rather than of `named_values`:
-    # the terminal keeps quiet about a value the message already prints, and Allure below still attaches it
+    # the cheap exit: the terminal keeps quiet about a value the message prints, and Allure still attaches it
     if not (named_actual or named_expected) and diff is None and trace is None:
         return
 
     if named_values:
-        # capped like the diff rows: this section is read on a terminal, and the untouched values stay
-        # on the exception for anything that wants them
+        # capped like the diff rows; the untouched values stay on the exception for anything that wants them
         lines = []
         if named_actual and named_expected:
-            # windowed as a pair: capping each side on its own hides the difference when it sits past
-            # the cap, and prints two values that look identical under a heading saying they are not
+            # windowed as a pair: capping each side alone prints two values that look identical while saying they differ
             left, right = _diff_sides(actual, expected)
             lines.append(f"  actual:   {left}")
             lines.append(f"  expected: {right}")
@@ -961,8 +936,7 @@ def _attach_report_sections(item, report, exc) -> None:
                 trace=trace,
                 mode=mode,
                 max_entries=allure_max_entries,
-                # the record's own flags, not the terminal section's reading of them: a value already in the message is
-                # still the value a dashboard reads
+                # the record's flags, not the section's: a value already in the message is still what a dashboard reads
                 named_actual=named_actual,
                 named_expected=named_expected,
             )
@@ -1042,8 +1016,7 @@ def _entry_to_json(entry):
         item["absent"] = absent
     steps = getattr(entry, "steps", ())
     if steps:
-        # `path` is lossy, since a mapping key goes through `str()`, so a consumer that wants to walk
-        # back into the payload needs the keys themselves.  Absent at the root, which has no location
+        # `path` is lossy, a mapping key goes through `str()`; absent at the root, which has no location
         item["steps"] = [_step_to_json(step) for step in steps]
     return item
 
@@ -1075,9 +1048,7 @@ def _diff_to_json(diff, max_entries=50):
 
 
 def _attach_allure(actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50):
-    # the two flags carry what the record says the assertion named, which is not what the terminal shows: a
-    # value already in the message is left out there and attached here, where the field is the data.
-    # Required rather than defaulted, since reading them off the values is the reading this phase removed
+    # the flags say what the assertion named, not what the terminal shows, and are required rather than defaulted
     if mode == "off":
         return
     if mode == "full" and (named_actual or named_expected):

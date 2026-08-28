@@ -34,8 +34,7 @@ class Color(enum.Enum):
     GREEN = 2
 
 
-# first pass re-captures every snapshot; the capture warnings themselves are pinned in
-# TestSnapshotCreatedWarning, here they would only obscure the roundtrip
+# first pass re-captures every snapshot; the capture warnings are pinned in TestSnapshotCreatedWarning
 @pytest.mark.filterwarnings("ignore::assertpy2.snapshot.SnapshotCreatedWarning")
 @pytest.mark.parametrize("count", [1, 2])
 def test_snapshot_roundtrip_all_types(count):
@@ -85,10 +84,6 @@ def test_snapshot_roundtrip_all_types(count):
     assert_that(datetime.datetime(2000, 11, 22, 3, 44, 55)).snapshot()
 
     assert_that(1 + 2j).snapshot()
-
-    # tuples are always converted to lists...can this be fixed?
-    # assert_that((1, 2, 3)).snapshot()
-    # assert_that({'a': (1,2), 'b': (3,4), 'c': (5,6)}).snapshot()
 
     assert_that({"custom": "id"}).snapshot(id="mycustomid")
 

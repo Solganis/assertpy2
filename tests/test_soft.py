@@ -215,8 +215,7 @@ class TestSoftFailuresCarryTheirDiff:
     def test_many_differences_are_capped(self):
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that({f"k{i}": i for i in range(9)}).is_equal_to({f"k{i}": -i for i in range(9)})
-        # asserted on the indented diff lines, not on a substring: the headline carries a cap of its
-        # own whose wording is identical, so a plain contains() would pass without this code running
+        # on the indented diff lines: the headline's own cap is worded identically, so contains() would pass
         diff_lines = [line for line in str(exc_info.value).splitlines() if line.startswith("   ")]
         assert_that(diff_lines).is_length(6)
         assert_that(diff_lines[-1].strip()).is_equal_to("... and 3 more")
@@ -232,8 +231,7 @@ class TestSoftFailuresCarryTheirDiff:
         assert_that(str(exc_info.value).splitlines()).is_length(2)
 
     def test_a_long_line_of_text_is_windowed_onto_its_difference(self):
-        # the hard failure spends caret rows on this. Without the window the collected one said only
-        # that two 181-character payloads were unequal, which no reader can act on
+        # without the window the collected failure said only that two 181-character payloads were unequal
         actual, expected = "x" * 90 + "A" + "y" * 90, "x" * 90 + "B" + "y" * 90
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(actual).is_equal_to(expected)
@@ -245,14 +243,12 @@ class TestSoftFailuresCarryTheirDiff:
         actual, expected = b"a" * 80 + b"X" + b"b" * 80, b"a" * 80 + b"Y" + b"b" * 80
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that(actual).is_equal_to(expected)
-        # asserted on the detail line, not on a substring: the headline carries both values in full,
-        # so `contains("aX")` passed against the entry itself and the window was never exercised
+        # on the detail line: the headline carries both values, so `contains("aX")` passed against the entry
         detail = str(exc_info.value).splitlines()[-1]
         assert_that(detail).starts_with("   line 1: ").contains("aX").contains("aY")
 
     def test_a_message_of_several_lines_stays_one_entry(self):
-        # the one-cause hint puts a second line in the message. Rendered flat, the location landed at
-        # the end of it and the line itself started at column zero, so an entry read as two
+        # the hint adds a second line; rendered flat, the location landed at its end and the entry read as two
         with pytest.raises(AssertionError) as exc_info, soft_assertions():
             assert_that({"a": b"x", "b": b"y"}).is_equal_to({"a": "x", "b": "y"})
             assert_that(1).is_equal_to(2)
@@ -399,8 +395,7 @@ class TestAnErrorOutOfTheBlockKeepsWhatWasCollected:
         assert_that(str(failure.value)).described_as("the message is still the message").is_equal_to("boom")
 
     def test_only_the_outermost_block_annotates(self):
-        # a nested block hands its failures upward, so annotating on the way out of the inner one would
-        # report them twice and empty the outer block's own collection
+        # a nested block hands failures upward, so annotating on the inner exit reports them twice
         with pytest.raises(ValueError) as failure, soft_assertions():
             assert_that(1).is_equal_to(2)
             with soft_assertions():
@@ -411,8 +406,7 @@ class TestAnErrorOutOfTheBlockKeepsWhatWasCollected:
         assert_that(notes[0]).contains("<1> to be equal to <2>").contains("<3> to be equal to <4>")
 
     def test_an_error_thrown_inside_the_inner_block_is_annotated_once_on_the_way_out(self):
-        # the exception passes through both exits. The inner one sees a depth that is not yet zero and
-        # leaves the failures alone, so the note is written where the whole collection is: outside
+        # both exits see it; the inner one leaves the failures alone, so the note is written where they collect
         with pytest.raises(ValueError) as failure, soft_assertions():
             assert_that(1).is_equal_to(2)
             with soft_assertions():

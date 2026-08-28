@@ -231,14 +231,12 @@ def _summarize(samples, recorder, elapsed) -> str:
     keys = [key for _, key in kept]
     kept_changes = [right for left, right in pairwise(keys) if left != right]
     distinct = {key for key in keys if key is not None}
-    # a simple path through k values takes k-1 changes, so a surplus means the probe returned to a value it already
-    # reported
+    # a simple path through k values takes k-1 changes, so a surplus means the probe returned to a reported value
     if len(kept_changes) >= len(distinct):
         kept_polls = sum(sample.repeats for sample in fails)
         over = f"in the {kept_polls} polls kept" if recorder.dropped else f"across {total_polls} polls"
         return f"value cycles between {len(distinct)} states {over}"
-    # recorded when it happened rather than read back off the retained samples, which agree today for two reasons
-    # neither of which this sentence is about
+    # recorded when it happened rather than read back off the retained samples
     last_change = elapsed - (recorder.last_change_elapsed or 0.0)
     return f"value changed {recorder.value_changes} {change_word}; last change {last_change:.1f}s before the deadline"
 
@@ -469,11 +467,10 @@ class AsyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: a checker reading it refused `eventually().is_equal_to(1)` outright
+        # `Any` rather than the inferred union, which made a checker refuse `eventually().is_equal_to(1)`
         if name.startswith("_"):
             raise AttributeError(name)
-        # forwarded whole: `inspect.getcoroutinestate` reads `cr_suspended` on 3.11 and `cr_state` on 3.14, and `gi_`
-        # is refused because a coroutine has no generator attributes
+        # forwarded whole: the state attribute is `cr_suspended` on 3.11 and `cr_state` on 3.14, and `gi_` is refused
         if name.startswith("gi_"):
             raise AttributeError(name)
         if name.startswith("cr_"):
@@ -516,8 +513,7 @@ class AsyncAssertionBuilder:
         """
         return self._started().__await__()
 
-    # these three with `__await__` are what `collections.abc.Coroutine` checks for structurally, so
-    # `asyncio.run(chain)` works below 3.15
+    # these three with `__await__` are what `Coroutine` checks structurally, so `asyncio.run(chain)` works below 3.15
     def send(self, value: Any) -> Any:
         return self._started().send(value)
 
@@ -550,8 +546,7 @@ class AsyncAssertionBuilder:
         )
 
     async def _poll(self) -> Any:
-        # not imported at module level: asyncio costs 21ms of assertpy2's 59ms import and drags in socket/ssl/select,
-        # and only this path needs it.  Anyone reaching the line is inside a running loop, so it is a dict lookup
+        # not at module level: asyncio costs 21ms of a 59ms import and only this path needs it, already inside a loop
         import asyncio
 
         loop = asyncio.get_running_loop()
@@ -684,15 +679,13 @@ class SyncAssertionBuilder:
         return self
 
     def __getattr__(self, name: str) -> Any:
-        # `Any` rather than the inferred union: a checker reading it refused `eventually_sync().is_equal_to(1)`
-        # outright
+        # `Any` rather than the inferred union, which made a checker refuse `eventually_sync().is_equal_to(1)`
         if name.startswith("_"):
             raise AttributeError(name)
         if name == "val":  # reached only when the property above found no poll to read it from
             raise AttributeError("val is available once an assertion on this chain has passed")
         if name == "not_":
-            # a property rather than a call, so it joins the chain and is re-taken on every poll: read straight
-            # through, `.not_.is_equal_to(1)` died on an AttributeError
+            # a property, so it joins the chain and is re-taken per poll: read straight, `.not_.is_equal_to(1)` died
             return self._chained((*self._steps, (name, None, None)))
 
         def _run(*args, **kwargs):

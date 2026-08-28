@@ -81,8 +81,7 @@ class TestDataclassIgnore:
         assert_that(actual).is_equal_to(expected, ignore="lock")
 
     def test_shared_identity_field_not_deepcopied(self):
-        # a shared reference in a compared field must stay identity-equal (asdict deep-copied it into
-        # two distinct objects and reported a false difference)
+        # a shared reference must stay identity-equal; asdict deep-copied it and reported a false difference
         class Handle:
             def __init__(self, token):
                 self.token = token

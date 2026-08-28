@@ -53,8 +53,7 @@ def compare(actual: Any, expected: Any) -> int:
     value, not an unorderable pair, and answering it either way would send the reader to the wrong file.
     """
     actual_type = type(actual)
-    # the ordinary case first: reached from every matcher in a loop, so the frozenset lookup and two `isinstance`
-    # below were paid per element
+    # the ordinary case first: in a per-element loop, so the frozenset lookup and two `isinstance` were paid each time
     if actual_type is type(expected) and actual_type in _PLAIN:
         return (actual > expected) - (actual < expected)
     if actual_type in _UNORDERED:
@@ -67,8 +66,7 @@ def compare(actual: Any, expected: Any) -> int:
         and (not isinstance(expected, numbers.Number) or type(expected) in _UNORDERED)
     ):
         raise UnorderableError("kind", wanted=numbers.Number)
-    # deliberately dynamic: which pairs may be ordered is decided above, and a checker reading the narrowed union
-    # sees no `<` at all
+    # deliberately dynamic: what may be ordered is decided above, and a checker reading the union sees no `<`
     left: Any = actual
     right: Any = expected
     try:
@@ -92,8 +90,7 @@ def holds(actual: Any, expected: Any, relation: str) -> bool:
     """
     actual_type = type(actual)
     if actual_type is type(expected) and actual_type in _PLAIN:
-        # the same shortcut `compare` takes, taken one call earlier: this is the loop body of every
-        # ordering matcher, and building the answer through a dict of four keys was most of its cost
+        # the shortcut `compare` takes, one call earlier: building the answer through a dict of four keys cost most
         return _DIRECT[relation](actual, expected)
     order = compare(actual, expected)
     if order == 0 and relation in ("le", "ge") and not bool(actual == expected):
@@ -114,8 +111,8 @@ def first_out_of_order(
     for index, current in enumerate(items):
         current_key = key(current)
         if index > 0:
-            # through `compare`, not `<`: a broken `__lt__` raised in this frame reads to the origin check as a plain
-            # type mismatch.  The key is carried rather than recomputed, which doubled the calls
+            # through `compare`, not `<`: a raise here reads to the origin check as a plain type mismatch.
+            # The key is carried rather than recomputed, which doubled the calls to the caller's `key`
             broken = holds(current_key, previous_key, "gt" if reverse else "lt")
             if broken:
                 return index - 1, previous, current
