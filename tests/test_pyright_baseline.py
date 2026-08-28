@@ -33,23 +33,18 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 # diagnostic of the same rule, and each refusal is about its TypeVar rather than about a number.
 _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_typing.py", "_RepeatableAssertion", "_E", "contravariant"),
-    # `_NumericAssertion` is no longer among them: `check()` reads `_N` back in a return position, so pyright's
-    # covariance suggestion answers itself.  The twins inherit the refusals with the signatures, and
-    # `_CheckDictAssertion` gains one: dropping the chaining return leaves `_V` read-only there, but the value
-    # type is still read back through the assertions that take it, so the answer is the same
+    # `_NumericAssertion` is out because `check()` reads `_N` back in a return position, answering the
+    # suggestion. `_CheckDictAssertion` gains one: dropping the chaining return leaves `_V` read-only
     ("assertpy2/_engine/_check_typing.py", "_CheckRepeatableAssertion", "_E", "contravariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckNumericAssertion", "_N", "covariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckDictAssertion", "_V", "contravariant"),
-    # awaiting a chain hands back the ordinary builder, which is invariant in its value, so pyright
-    # asks the chain to be invariant too.  Refused: the chain only ever hands the polled value out
+    # awaiting a chain hands back the invariant builder, so pyright asks the same of the chain. Refused
     ("assertpy2/_engine/_poll_typing.py", "_AsyncPoll", "_P_co", "invariant"),
 )
 
 
-# The target this baseline was recorded against, passed explicitly rather than taken from whichever
-# interpreter runs.  pyright reports 108 diagnostics against 3.10 and 102 against 3.14, so a contributor on
-# the supported floor met a red gate that said nothing about their change.  3.14 is what the CI job runs,
-# and 3.15 gives the same answer
+# The target this baseline was recorded against, passed rather than read off the running interpreter:
+# pyright reports 174 diagnostics against 3.10 and 169 against 3.14. CI runs 3.14, and 3.15 agrees
 _TARGET: Final = "3.14"
 
 
@@ -89,8 +84,7 @@ def _observed() -> dict[tuple[str, str], int]:
 
 def test_no_unrecorded_pyright_diagnostics() -> None:
     observed = _observed()
-    # not load bearing while the record is not empty: a lost run also fails the comparison below, as
-    # every entry at once. This says so in a line instead of as a list of everything that vanished
+    # not load bearing while the record is not empty: a lost run fails below as every entry at once
     assert_that(observed).described_as("pyright reported nothing at all").is_not_empty()
 
     appeared = {key: count for key, count in observed.items() if count > BASELINE.get(key, 0)}
@@ -113,8 +107,7 @@ def test_the_ladder_overlaps_are_the_ones_still_reported() -> None:
         for item in _diagnostics()
         if item["rule"] == _LADDER_RULE
     ]
-    # a message this pattern cannot read would drop out of the comparison silently, taking a real
-    # change with it, which is how the variance gate below is kept honest too
+    # an unreadable message would drop out silently with a real change, which keeps the variance gate honest
     unreadable = [item["message"] for item, found in read if found is None]
     assert_that(unreadable).described_as("overlap reports this test could not read").is_empty()
 
@@ -142,13 +135,11 @@ def test_the_recorded_variance_refusals_are_the_ones_still_reported() -> None:
         for item in _diagnostics()
         if item["rule"] == "reportInvalidTypeVarUse"
     ]
-    # every one has to be classified: a message this pattern cannot read would otherwise drop out of the
-    # comparison silently, and take a real change with it
+    # every one has to be classified, or an unreadable message drops out silently with a real change
     unreadable = [item["message"] for item, found in read if found is None]
     assert_that(unreadable).described_as("variance suggestions this test could not parse").is_empty()
 
-    # the file and the suggested variance are part of the record: the same protocol and TypeVar asked to
-    # become something else is a different diagnostic, and a count would not know
+    # the file and the suggested variance are part of the record, and a count would not know they changed
     reported = [(item["file"], found.group(2), found.group(1), found.group(3)) for item, found in read if found]
     assert_that(sorted(reported)).described_as("the variance suggestions pyright still reports").is_equal_to(
         sorted(_REFUSED_VARIANCE)

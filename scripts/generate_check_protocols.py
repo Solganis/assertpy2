@@ -59,8 +59,7 @@ if TYPE_CHECKING:
     from ._compat import Self
     from ._introspection import MappingLike
 
-    # the type variables and the object view come from the module these twins mirror, so a change
-    # there cannot leave the two disagreeing about what a variable is bound to
+    # the type variables come from the module these twins mirror, so the two cannot disagree about a binding
     from ._typing import (
         _ArrayT_co,
         _CapableT,
@@ -131,8 +130,7 @@ def generate() -> str:
             lines.append("")
             continue
         for method in methods:
-            # the decorators come out of `_returns_a_verdict`, which keeps every one but `property`.
-            # Rendering them separately as well is how `@overload` was emitted twice on every rung
+            # `_returns_a_verdict` keeps every decorator but `property`; rendering them again emitted `@overload` twice
             rendered = ast.unparse(_returns_a_verdict(method))
             lines.append("\n".join(f"        {line}" for line in rendered.splitlines()))
         lines.append("        @property")

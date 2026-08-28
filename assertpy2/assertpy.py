@@ -456,8 +456,7 @@ def assert_that(val: set[_E] | frozenset[_E], description: str = "") -> _Iterabl
 
 
 @overload
-# a `datetime` is a `date`, so it has to be claimed first: the chronological assertions refuse a plain
-# date at run time, and one view for both types offered them to one that can never answer
+# a `datetime` is a `date` and is claimed first: one view for both offered chronology to a type that cannot answer
 def assert_that(val: datetime.datetime, description: str = "") -> _DateTimeAssertion: ...
 
 
@@ -477,8 +476,7 @@ def assert_that(val: bytes, description: str = "") -> _BytesAssertion[bytes]: ..
 def assert_that(val: bytearray, description: str = "") -> _BytesAssertion[bytearray]: ...
 
 
-# a `pandas.DataFrame` is assignable to every structural protocol, since pandas models column access with a catch-all
-# attribute, so the frame overload goes first.  `tests/test_overload_order.py` holds that order
+# a frame is assignable to every structural protocol, so it goes first; `tests/test_overload_order.py` holds that
 @overload
 def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_FrameT_co]: ...
 
@@ -487,14 +485,12 @@ def assert_that(val: _FrameT_co, description: str = "") -> _FrameAssertion[_Fram
 def assert_that(val: _ArrayT_co, description: str = "") -> _ArrayAssertion[_ArrayT_co]: ...
 
 
-# the capability umbrella: below the frame pair so it cannot claim their values, above the fallback so anything with
-# a recognised capability keeps the whole surface
+# the umbrella: below the frame pair so it cannot claim their values, above the fallback so a capability keeps all
 @overload
 def assert_that(val: _CapableT, description: str = "") -> _CapableAssertion[_CapableT]: ...
 
 
-# below the umbrella: an ASGI or WSGI response is a callable, and this overload claimed one before the
-# capability that describes it could
+# below the umbrella: an ASGI or WSGI response is a callable, and this claimed one before its capability could
 @overload
 def assert_that(val: Callable[..., _P], description: str = "") -> _CallableAssertion[_P]: ...
 
@@ -504,10 +500,7 @@ def assert_that(val: Callable[..., _P], description: str = "") -> _CallableAsser
 def assert_that(val: _T, description: str = "") -> _ObjectAssertion[_T]: ...
 
 
-# `Any` rather than the common base protocol: once the umbrella handed back a protocol of its own, checking
-# `_CoreAssertion` against a protocol carrying the whole surface took pyright past its 4 GB heap and killed it on
-# this file.  `Any` is compatible with every overload, so nothing is reported that the base protocol reported,
-# and the overloads above are what a caller ever sees
+# `Any` rather than the base protocol, which took pyright past its 4 GB heap; the overloads are what a caller sees
 def assert_that(val: object, description="") -> Any:
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
@@ -837,8 +830,7 @@ def add_extension(func: _Extension, *, override: bool = False) -> None:
     name = getattr(func, "__name__", None)
     if not isinstance(name, str) or not name.isidentifier():
         raise ValueError(f"the assertion's __name__ must be a valid Python identifier, got {name!r}")
-    # nothing to override: after `eventually()` the name is out of reach, and `override=True` bought a chain that
-    # asserts nothing in silence
+    # nothing to override: after `eventually()` the name is out of reach, and `override=True` bought silence
     if name in _POLLING_NAMES or name.startswith(("_", "cr_", "gi_")):
         raise ValueError(
             f"{name!r} is how a polling chain spells one of its own, so an extension of that name "
@@ -922,8 +914,7 @@ _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
 
 
-# what the register in `_engine/_operations.py` means for the proxy an operation was reached through.  `{name}` is
-# filled in so the reader finds the call in their own line
+# what the register in `_engine/_operations.py` means for the proxy; `{name}` so the reader finds their call
 _INSTEAD_OF_NEGATING: Final = {
     CONFIGURES: "negate the assertion that tests the expectation {name}() set instead",
     TRANSFORMS: "negate the assertion after {name}() instead",
@@ -982,8 +973,7 @@ class NegatedBuilder(Generic[_S]):
     """
 
     if TYPE_CHECKING:
-        # declared because a checker prefers a declared attribute over `__getattr__`, which would type this as the
-        # negated method
+        # declared because a checker prefers it over `__getattr__`, which would type this as the negated method
         val: Any
         description: str
         kind: str | None
@@ -1011,8 +1001,7 @@ class NegatedBuilder(Generic[_S]):
                 return self._negated_check(name, attr, *args, **kwargs)
             return self._negated_strict(name, attr, *args, **kwargs)
 
-        # every branch hands back the builder this proxy wraps, which cannot be said without `_builder: _S`, and an
-        # unbound TypeVar has no attributes
+        # every branch hands back the wrapped builder, unsayable without `_builder: _S`, and an unbound TypeVar has none
         return _negated  # ty: ignore[invalid-return-type]  # see above
 
     def _make_msg(self, name: str, *args: object, **kwargs: object) -> str:
@@ -1119,7 +1108,7 @@ class CheckBuilder:
     """
 
     if TYPE_CHECKING:
-        # declared because a checker prefers a declared attribute over `__getattr__`
+        # declared because a checker prefers it over `__getattr__`, which types every name as a verdict call
         val: Any
         description: str
 
@@ -1137,8 +1126,7 @@ class CheckBuilder:
             raise TypeError("check() is already the verdict proxy; one check() is enough")
         attr = getattr(self._target, name)
         if isinstance(attr, NegatedBuilder):
-            # ty: ignore[invalid-return-type]  # `not_` is declared above, where it types as a proxy;
-            # this fallback is the one runtime path the annotation cannot describe
+            # ty: ignore[invalid-return-type]  # declared above as a proxy; this is the path that cannot be described
             return CheckBuilder(attr, self._builder)
         if not callable(attr):
             return attr
@@ -1248,8 +1236,7 @@ class AssertionBuilder(
                 assert_that(5).check().is_positive().passed        # True
                 assert_that(5).check().not_.is_positive().passed   # False
         """
-        # the proxy resolves every name through `__getattr__`, which is what the declared twin
-        # describes: the twin is the shape, `CheckBuilder` is the thing
+        # the proxy resolves every name through `__getattr__`: the twin is the shape, `CheckBuilder` is the thing
         return cast("_CheckAnyValue[_T]", CheckBuilder(self, self))
 
     @property
@@ -1308,8 +1295,7 @@ class AssertionBuilder(
         def is_not_none(self) -> Self: ...
         def is_not_none(self) -> Any: ...
 
-        # the second rung is what a tuple lands on, and what a union lands on under the checkers that read it
-        # as `UnionType`.  It also keeps the class conformant with the protocols' `(ClassInfo) -> Self`
+        # the second rung takes a tuple, and a union under checkers reading it as `UnionType`; it also keeps conformance
         @overload
         def is_instance_of(self, some_class: tuple[type[_U], type[_U2]]) -> AssertionBuilder[_U | _U2]: ...
         @overload
@@ -1332,9 +1318,7 @@ class AssertionBuilder(
         def is_instance_of_any(self, *some_classes: ClassInfo) -> Self: ...
         def is_instance_of_any(self, *some_classes: Any) -> Any: ...
 
-        # the element pivots return `self.builder(<an element>)` while `CollectionMixin` declares `-> Self`, so
-        # `assert_that(rows).first().value.count(1)` type-checked and raised.  Structural because `_T` is invariant:
-        # the nominal spelling bound for a mapping and missed every other container
+        # the pivots return `self.builder(<element>)` where `CollectionMixin` says `-> Self`; `_T` is invariant
         @overload
         def first(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
         @overload
@@ -1359,12 +1343,12 @@ class AssertionBuilder(
         def element(self, index: int) -> Self: ...
         def element(self, index: int) -> Any: ...
 
-        # `mapped()` builds a `list` whatever it was given, so `-> Self` was wrong about the container as well as
-        # the element, and refused working code.  Its boundary: a named function binds `_R` under both checkers, a
-        # lambda binds it under ty and comes back `Any` under mypy, losing precision rather than rejecting.
-        # `filtered_on()` and `flat_mapped()` stay undeclared, measured: against `Matcher[_E] | Callable[[_E], object]`
-        # a lambda binds nothing, so `filtered_on()` was `Unknown` under ty and `flat_mapped()` resolved there, and
-        # both stayed `Any` under mypy.  One answer out of three checkers is the bar and neither reaches it
+        # `mapped()` builds a `list` whatever it was given, so `-> Self` was wrong about the container too and
+        # refused working code.  Its boundary: a named function binds `_R` under both checkers, a lambda binds it
+        # under ty and comes back `Any` under mypy, losing precision rather than rejecting.  `filtered_on()` and
+        # `flat_mapped()` stay undeclared, measured: against `Matcher[_E] | Callable[[_E], object]` a lambda binds
+        # nothing, so `filtered_on()` was `Unknown` under ty and `flat_mapped()` resolved there, and both stayed
+        # `Any` under mypy.  One answer out of three checkers is the bar and neither reaches it
         @overload
         def mapped(self: _ElementSource[_E], func: Callable[[_E], _R]) -> AssertionBuilder[list[_R]]: ...
         @overload
@@ -1381,8 +1365,7 @@ class AssertionBuilder(
         def single(self) -> Any:  # overload impl stub, never executed
             ...
 
-        # a `TypeIs` predicate narrows the chain to its target type.  Solved by ty, pyright and mypy;
-        # PyCharm does not solve TypeVars through `TypeIs` yet (JetBrains PY-89124)
+        # a `TypeIs` predicate narrows the chain; PyCharm does not solve TypeVars through it yet (PY-89124)
         @overload
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
@@ -1413,8 +1396,7 @@ class AssertionBuilder(
         """
         pivoted = _builder(val, description, kind, expected, logger)
         pivoted._value_origin = origin
-        # kept across the pivot: by the time an assertion on a parsed body fails, the response is out of reach.
-        # `is not None` and not `or`, since a `requests.Response` is falsey for every 4xx and 5xx
+        # kept across the pivot, and `is not None` not `or`, since a `requests.Response` is falsey for every 4xx
         pivoted._response = self._response if self._response is not None else response_of(self.val)
         return pivoted
 
@@ -1460,8 +1442,7 @@ class AssertionBuilder(
         failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace))
         if failure is None:
             return self
-        # the raise stays here rather than in _deliver: a failing assertion's traceback ends at
-        # `error`, and tests/test_traceback.py pins that it is exactly three frames deep
+        # the raise stays here: a failure's traceback ends at `error`, three frames deep, pinned in test_traceback.py
         if suppress_context:
             raise failure from None
         raise failure
@@ -1470,8 +1451,7 @@ class AssertionBuilder(
         self, msg: str, *, actual: object, expected: object, diff: DiffResult | None, trace: PollTrace | None
     ) -> AssertionOutcome:
         """Build the failure record.  Decides nothing about what happens to it."""
-        # filling the subject here rather than at each call site is what puts it on all 163 failures
-        # instead of the 34 that name it explicitly
+        # filled here rather than per call site, which is what puts it on all 163 failures instead of 34
         provided = actual is not MISSING
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self._value_origin and not len(self.val):
@@ -1479,8 +1459,7 @@ class AssertionBuilder(
             out = f"{out} The value is empty because {self._value_origin}."
         hint = _hints.diagnose(diff, actual, expected, identity=self._equality_comparison)
         if hint is not None:
-            # on its own line, like the comparison-settings echo, so the original message stays a
-            # prefix and a `match=` or `startswith` written against it keeps working
+            # on its own line, so the original message stays a prefix and a `match=` written against it keeps working
             out = f"{out}\n{hint}"
         response = self._response if self._response is not None else response_of(self.val)
         note = response_note(response) if response is not None else None
@@ -1512,16 +1491,14 @@ class AssertionBuilder(
         if self.kind == "soft":
             block = _collecting()
             if block is None:
-                # the block this builder was made under has closed, which a task outliving it does: the
-                # context copy still says "soft", and appending would put the failure in a list nobody reads
+                # the block has closed, which an outliving task does: appending puts the failure in a list nobody reads
                 return self._failure(outcome)
             if self._value_taint_reason is None:
                 self._value_taint_reason = outcome.message
             block.failures.append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
             return None
         if self.kind == "check":
-            # no taint: a verdict was asked for, not asserted.  One assignment rather than a first-wins
-            # guard, since every `self.error(...)` in the package returns at once
+            # no taint: a verdict was asked for, not asserted; every `self.error(...)` returns at once
             self._check_sink = outcome
             return None
         return self._failure(outcome)

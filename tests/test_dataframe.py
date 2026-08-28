@@ -120,8 +120,7 @@ class TestIsFrameEqualDuckTyped:
             assert_that(frame).is_frame_equal(frame)
 
     def test_non_frame_pandas_object_raises_type_error(self):
-        # a pandas object that is neither DataFrame nor Series (an Index, Categorical, ...) must be
-        # rejected, not mis-routed to assert_frame_equal
+        # a pandas object that is neither frame nor series must be rejected, not routed to `assert_frame_equal`
         with _fake_frame_lib("pandas", fail=False):
             index = type("Index", (), {"__module__": "pandas.core.indexes.base"})()
             with pytest.raises(TypeError, match="pandas or polars"):
@@ -146,8 +145,7 @@ class TestArrayAssertionsDuckTyped:
             assert_that([1.0]).is_array_close_to([2.0])
 
     def test_is_array_close_to_forwards_default_tolerances(self):
-        # The defaults must match numpy's own (rtol=1e-05, atol=1e-08, equal_nan=False) and be forwarded
-        # unchanged.
+        # the defaults must match numpy's own (rtol=1e-05, atol=1e-08, equal_nan=False) and be forwarded unchanged
         with _fake_numpy(fail=True), pytest.raises(AssertionError, match="rtol=1e-05 atol=1e-08 equal_nan=False"):
             assert_that([1.0]).is_array_close_to([2.0])
 
@@ -248,9 +246,7 @@ class TestRealLibraries:
         ):
             with pytest.raises(TypeError, match=r"unsized object|0-d array"):
                 call()
-        # the ones it is really for keep working, which is why the view is worth having on this value.
-        # `contains` is among them and `contains_only` is not, so the boundary does not fall on family
-        # lines: one asks `in`, which numpy answers, and the other iterates, which it refuses
+        # `contains` asks `in`, which numpy answers, and `contains_only` iterates, which it refuses
         assert_that(scalar).is_array_equal(numpy.array(1))
         assert_that(scalar).is_array_close_to(numpy.array(1))
         assert_that(scalar).contains(1)

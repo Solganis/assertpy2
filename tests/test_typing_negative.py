@@ -92,8 +92,7 @@ class TestWhatTheCheckersRefuse:
         differing = {}
         for name, expected in CAUGHT.items():
             observed = {checker: sorted(codes) for checker, codes in by_case[name].items() if codes}
-            # a checker recorded with no codes was measured saying nothing, and saying nothing is what
-            # it does not report, so it is not in `observed` either
+            # a checker recorded with no codes was measured saying nothing, so it is not in `observed` either
             recorded = {checker: sorted(codes) for checker, codes in expected.items() if codes}
             if observed != recorded:
                 differing[name] = {"recorded": recorded, "observed": observed}
@@ -122,8 +121,7 @@ class TestWhatTheCheckersRefuse:
         through that one code, and an overlap makes the check unable to tell them apart.
         """
         families = [
-            # an argument that does not fit.  `misc` rides along with mypy's `arg-type` when the
-            # argument is a callable: the same refusal said twice, not a second reason
+            # `misc` rides along with mypy's `arg-type` on a callable argument: the same refusal twice, not two reasons
             {
                 "ty": {"invalid-argument-type", "no-matching-overload"},
                 "mypy": {"arg-type", "misc"},
@@ -135,16 +133,13 @@ class TestWhatTheCheckersRefuse:
                 "mypy": {"attr-defined"},
                 "pyright": {"reportAttributeAccessIssue"},
             },
-            # an assertion refused through the `self` annotation of a rung, whether the rung is on a
-            # polling chain or on the umbrella's own surface.  Each checker words the same refusal
-            # differently: no rung matched, the `self` argument does not fit, the attribute is not there
+            # refused through a rung's `self`, on a polling chain or the umbrella. Each checker words it differently:
+            # no rung matched, the `self` argument does not fit, the attribute is not there
             _REFUSED_THROUGH_SELF,
-            # a predicate over the subject, refused through the parameter the view bound it to.  mypy
-            # words it as the callable not fitting, pyright as the name the value has not got, and ty
-            # resolves the lambda through the overload set less precisely and says nothing
+            # a predicate refused through the parameter the view bound it to: mypy words it as the callable not
+            # fitting, pyright as a missing name, and ty resolves the lambda less precisely and says nothing
             {checker: set(codes) for checker, codes in _PREDICATE_OVER_THE_SUBJECT.items()},
-            # a verdict asked of a value the builder holds, refused through the `self` annotation of a
-            # rung on its twin.  ty resolves the self-restricted rung less precisely and says nothing
+            # refused through a twin rung's `self`; ty resolves the self-restricted rung less precisely and says nothing
             {checker: set(codes) for checker, codes in _NOT_THE_VALUES_VIEW.items()},
             # a keyword the signature does not have, where the call does not even bind
             {
@@ -152,8 +147,7 @@ class TestWhatTheCheckersRefuse:
                 "mypy": {"call-arg"},
                 "pyright": {"reportCallIssue"},
             },
-            # a required argument that is not there.  Kept apart from the keyword family above, because
-            # `call-arg` and `reportCallIssue` cover both and only ty tells them apart by name
+            # kept apart from the keyword family: `call-arg` and `reportCallIssue` cover both, only ty tells them apart
             {
                 "ty": {"missing-argument"},
                 "mypy": {"call-arg"},
@@ -162,9 +156,8 @@ class TestWhatTheCheckersRefuse:
         ]
         mixed = {}
         for name, expected in CAUGHT.items():
-            # every checker has to be named, and at least one has to speak: `set()` is a subset of any
-            # family, so a row missing a checker would otherwise read as three dialects agreeing.  A
-            # checker named with no codes is recorded silence, which is a measurement rather than a gap
+            # `set()` is a subset of any family, so a row missing a checker would read as three dialects agreeing.
+            # A checker named with no codes is recorded silence, which is a measurement rather than a gap
             speaks_for_all = set(expected) == {"ty", "mypy", "pyright"} and any(expected.values())
             fits_one = any(
                 all(set(expected.get(checker, ())) <= codes for checker, codes in family.items()) for family in families

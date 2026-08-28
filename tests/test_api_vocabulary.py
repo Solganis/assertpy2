@@ -13,8 +13,7 @@ from assertpy2.assertpy import AssertionBuilder
 
 _PREFIXES = ("is_not_", "is_", "does_not_", "has_no_", "has_", "contains_", "all_", "any_", "none_")
 
-# Verbs and nouns that are the whole name, not a prefixed one. A verb states an action the value
-# performs or undergoes, which no `is_`/`has_` spelling improves.
+# verbs and nouns that are the whole name: an action no `is_`/`has_` spelling improves
 _BARE_NAMES = frozenset(
     {
         "contains",
@@ -69,8 +68,7 @@ _BARE_NAMES = frozenset(
 # Negation form per prefix, which is the half a reader actually has to guess.
 _NEGATION = {"is_": "is_not_", "has_": "does_not_have_", "contains_": "does_not_contain_"}
 
-# Names that break a rule on purpose. One line per name, and the line has to say why: an exception
-# without a reason is how a rule becomes a suggestion.
+# names breaking a rule on purpose, one line each saying why: an exception without a reason is a suggestion
 _DOCUMENTED_EXCEPTIONS = {
     "is_unicode": "assertpy 1.1 compatibility; every str is unicode on Python 3, so this is is_instance_of(str)",
     "has_json_path": "a JSON path addresses lists too, so contains_ would claim a narrower relation than this has",
@@ -89,16 +87,14 @@ def _public_names():
 
 class TestEveryNameFollowsThePrefixVocabulary:
     def test_the_surface_has_not_shrunk_below_what_the_rules_were_derived_from(self):
-        # the corpus this file reasons about: if it collapses, the rules below are being checked
-        # against nothing and would pass on an empty API
+        # the corpus this file reasons about: if it collapses, the rules below would pass on an empty API
         assert_that(_public_names()).is_length_between(150, 250)
 
     @pytest.mark.parametrize("name", _public_names())
     def test_a_name_is_prefixed_or_a_bare_verb(self, name):
         if name in _DOCUMENTED_EXCEPTIONS or name in _BARE_NAMES:
             return
-        # a modifier on a known verb stays in that verb's family: `starts_with_ignoring_case` is
-        # `starts_with` with the comparison relaxed, not a new relation needing its own prefix
+        # a modifier stays in the verb's family: `starts_with_ignoring_case` is `starts_with` relaxed
         if any(name.startswith(f"{verb}_") for verb in _BARE_NAMES):
             return
         assert_that(name.startswith(_PREFIXES)).described_as(
@@ -146,7 +142,6 @@ class TestOneRelationKeepsOneNameAcrossNamespaces:
         assert_that(match.is_length(3)).is_not_none()
 
     def test_the_quantifier_is_declared_wherever_the_one_it_delegates_to_is(self):
-        # `all_satisfy` delegates to `each`, so being reachable in fewer places than `each` was a
-        # difference the runtime never had
+        # `all_satisfy` delegates to `each`, so being reachable in fewer places was a difference the runtime never had
         assert_that({"ab": 1}).each(lambda key: len(key) == 2)
         assert_that({"ab": 1}).all_satisfy(lambda key: len(key) == 2)

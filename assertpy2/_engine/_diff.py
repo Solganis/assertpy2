@@ -113,8 +113,7 @@ def _alignment_opcodes(actual, expected):
         keyed_actual = [_safe_repr(item) for item in actual]
         keyed_expected = [_safe_repr(item) for item in expected]
         opcodes = difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
-    # pragma: no cover - `_safe_repr` swallows everything, so what is left is a value whose iteration fails
-    # after `len()` succeeded, and the guard degrades to a positional diff
+    # pragma: no cover - `_safe_repr` swallows everything; what is left degrades to a positional diff
     except (TypeError, ValueError):  # pragma: no cover
         return None
     return _rechecked_equal_runs(opcodes, actual, expected)
@@ -222,8 +221,7 @@ def _alignment_opcodes_if_useful(actual, expected):
     this count picks the same winner as the exact one every time.
     """
     if len(actual) == len(expected):
-        # equal lengths can still hide a rotation, worth 8% of the wins over 13 640 random pairs against a doubled
-        # comparison every time
+        # equal lengths hide a rotation, worth 8% of the wins over 13 640 pairs against a doubled comparison
         return None
     if max(len(actual), len(expected)) > _ALIGN_MAX_ELEMENTS:
         return None  # over the cap nothing here can be used anyway
@@ -258,8 +256,7 @@ def _sequence_diff_entries(actual, expected, prefix: _Path, seen, config=None) -
         elif i >= len(expected):
             entries.append(prefix.index(i).entry(actual=actual[i], expected=None, absent="expected"))
         else:
-            # the path is built after the decision: an empty list per equal element cost 15% of the walk in
-            # allocations
+            # the path is built after the decision: an empty list per equal element cost 15% of the walk
             decision = _node_decision(actual[i], expected[i], config)
             if decision == "leaf":
                 entries.append(prefix.index(i).entry(actual=actual[i], expected=expected[i]))
@@ -394,8 +391,7 @@ def _build_equality_diff(
         entries: list[DiffEntry] = []
         for field in actual._fields:
             actual_value = getattr(actual, field)
-            # a field name colliding with an inherited tuple method would resolve to that bound method rather than
-            # being absent
+            # a field name colliding with an inherited tuple method resolves to that method rather than being absent
             if field not in expected._fields:
                 entries.append(_prefix.attr(field).entry(actual=actual_value, expected=None, absent="expected"))
             else:
@@ -460,8 +456,7 @@ def _build_equality_diff(
         for item in sorted(expected - actual, key=_safe_repr):
             entries.append(_prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
-    # bytes render as their `b'...'` literal, which difflib points into like text, and both kinds expose
-    # `splitlines()`
+    # bytes render as `b'...'`, which difflib points into like text, and both expose `splitlines()`
     both_text = isinstance(actual, str) and isinstance(expected, str)
     both_bytes = isinstance(actual, (bytes, bytearray)) and isinstance(expected, (bytes, bytearray))
     if both_text or both_bytes:

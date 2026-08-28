@@ -215,8 +215,7 @@ def test_dupe_extensions():
 
 
 def test_a_second_implementation_under_one_name_is_refused():
-    # the hazard is two different functions claiming one name, which used to end with whichever was
-    # imported last and no way to tell
+    # two functions claiming one name used to end with whichever was imported last, silently
     def already_there(self):
         return self
 
@@ -235,9 +234,8 @@ def test_a_second_implementation_under_one_name_is_refused():
 
 
 def test_a_function_rebuilt_by_a_fixture_is_not_a_clash():
-    # the documented way to share extensions is a module-scoped conftest fixture, and a fixture that
-    # defines its assertion inline hands over a NEW function object every time it runs. identity
-    # would call the second module a clash; the code object is what stays the same across rebuilds
+    # a conftest fixture defining its assertion inline hands over a new function object every run,
+    # so identity would call the second module a clash; the code object stays the same across rebuilds
     def build():
         def steady(self):
             return self
@@ -254,8 +252,7 @@ def test_a_function_rebuilt_by_a_fixture_is_not_a_clash():
 
 
 def test_a_callable_object_falls_back_to_identity():
-    # an instance with __call__ has no code object to compare, so the strictest answer available is
-    # whether it is literally the same object
+    # an instance with `__call__` has no code object, so identity is the strictest answer available
     class Callable:
         __name__ = "instance_extension"
 
@@ -273,15 +270,13 @@ def test_a_callable_object_falls_back_to_identity():
 
 
 def test_a_callable_without_a_usable_name_is_refused():
-    # a callable object's __name__ is whatever it says it is, and the registry keys on it. a lambda
-    # gives "<lambda>", which is not something anyone can then call on the builder
+    # the registry keys on `__name__`, and a lambda gives "<lambda>", which nobody can call on the builder
     with pytest.raises(ValueError, match="valid Python identifier"):
         add_extension(lambda self: self)
 
 
 def test_replacing_a_built_in_assertion_has_to_be_deliberate():
-    # this used to go through in silence, and every later call to the core assertion got the
-    # extension's message instead. the project's own suite was doing it by accident
+    # this went through in silence, and every later call to the core assertion got the extension's message
     def is_type_of(self, other):
         return self.error("shadowed")
 

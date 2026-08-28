@@ -42,8 +42,7 @@ class TestTheVerdictComesBackInsteadOfBeingRaised:
         assert_that(outcome.message).starts_with("[the balance] ")
 
     def test_one_call_composes_one_failure_however_many_parts_it_names(self):
-        # the invariant the sink rests on: every `self.error(...)` in the package returns immediately,
-        # so an assertion that found several problems still reports them as one message
+        # the invariant the sink rests on: every `self.error(...)` returns at once, so several problems are one message
         outcome = assert_that([1, 2]).check().contains(9, 8)
         assert_that(outcome.passed).is_false()
         assert_that(outcome.message).contains("9")
@@ -58,8 +57,7 @@ class TestTheBuilderIsUnchangedAfterwards:
             builder.is_positive()
 
     def test_a_failed_check_does_not_taint_the_value(self):
-        # soft and warn refuse `.value` after a failure, because a collected failure means the value was
-        # never verified. a check was never an assertion about it: the caller asked a question
+        # soft and warn refuse `.value` after a failure: a check asked a question, it asserted nothing
         builder = assert_that(-5)
         builder.check().is_positive()
         assert_that(builder.value).is_equal_to(-5)
@@ -106,8 +104,7 @@ class TestNegationIsProxiedRatherThanRefused:
         assert_that(outcome.actual).is_equal_to(5)
 
     def test_a_negation_leaves_no_collected_failure_behind(self):
-        # the inner assertion lands in the sink before the negation reads it, and a negation that held
-        # has to clear it or the next check would report a failure that already answered
+        # the inner assertion lands in the sink first, and a negation that held has to clear it
         builder = assert_that(-5)
         builder.check().not_.is_positive()
         assert_that(builder.check().is_negative().passed).is_true()

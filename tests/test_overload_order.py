@@ -82,8 +82,7 @@ def _shape_bound_typevars() -> dict[str, str]:
                 for keyword in keywords:
                     if keyword.arg != "bound":
                         continue
-                    # a bound is one shape by name, or a union of them written as a string because it is too long for
-                    # one line.  Reading only the first form is how the umbrella overload was invisible to this file
+                    # a bound is one name or a union written as a string; reading only the first form hid the umbrella
                     named = _shape_names(keyword.value)
                     if named:
                         bounds[name] = " | ".join(named)
@@ -100,8 +99,7 @@ class TestTheOverloadOrder:
     """The frame overload first among the shapes, every shape before the fallback."""
 
     def test_the_file_declares_overloads_at_all(self):
-        # a rename or a refactor that stopped this from finding anything would make every other
-        # assertion here vacuous, so the count is asserted before the order is
+        # finding nothing would make every assertion here vacuous, so the count is asserted before the order
         assert_that(_overload_subjects()).described_as("overloads of assert_that").is_length(18)
 
     def test_exactly_one_overload_keys_on_the_frame_shape(self):

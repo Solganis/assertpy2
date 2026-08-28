@@ -83,8 +83,7 @@ class NumericMixin(_MixinBase):
                     else f"a {kind_bound.__name__}, to match val"
                 )
                 refuse(other, wanted, subject=argument("other"))
-            # the pair is what cannot be ordered, not the value: two strings compare fine, so that wording was untrue
-            # of `"10" > 5`
+            # the pair cannot be ordered, not the value: two strings compare fine, so that was untrue of `"10" > 5`
             refuse(other, f"comparable with val {_shown(self.val)}", subject=argument("other"))
 
     def _validate_number(self):

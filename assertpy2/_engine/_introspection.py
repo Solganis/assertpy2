@@ -16,8 +16,7 @@ if TYPE_CHECKING:
 
 _T = TypeVar("_T")
 
-# exact builtin types whose instances carry no `__dict__`, so the `runtime_checkable` isinstance is skipped;
-# subclasses take the full structural check
+# exact builtins carrying no `__dict__`, so the isinstance is skipped; a subclass takes the structural check
 _ATOMIC_TYPES: Final = frozenset(
     {type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, set, frozenset}
 )

@@ -63,8 +63,7 @@ def test_expected_exception_no_arg_wrong_exception_failure():
 
 @pytest.mark.parametrize("wrong", [42, ValueError("instance")])
 def test_expectation_that_is_not_a_class_is_refused(wrong):
-    # `issubclass()` reports its own argument position and never names the assertion, so anything that is
-    # not a class at all used to read as "issubclass() arg 1 must be a class"
+    # `issubclass()` names no assertion, so a non-class read as "issubclass() arg 1 must be a class"
     with pytest.raises(TypeError, match="must be an exception type"):
         assert_that(func_noop).raises(wrong)
     with pytest.raises(TypeError, match="must be an exception type"):
@@ -426,8 +425,7 @@ class TestContainsError:
 @needs_groups
 class TestGroupPivots:
     def test_errors_yields_the_leaves(self):
-        # the types, in order: a length alone would hold just as well if the view kept the group and
-        # dropped a leaf, which is the mistake this is here to catch
+        # the types in order: a length alone would hold if the view kept the group and dropped a leaf
         caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
         assert_that([type(leaf) for leaf in caught.errors().value]).is_equal_to([ValueError, KeyError])
 
@@ -489,8 +487,7 @@ class TestGroupPivots:
         assert_that(collected).contains("to be an exception group")
 
     def test_the_leaves_view_does_not_carry_the_exception(self):
-        # `_ListAssertion` declares no `raised()`, so the runtime must not offer one either: a path the
-        # typed surface refuses is the hole this library keeps closing, and it closes both ways
+        # `_ListAssertion` declares no `raised()`, so the runtime must not offer one: the hole closes both ways
         caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
         with pytest.raises(TypeError, match="no exception captured"):
             caught.errors().raised()
@@ -501,8 +498,7 @@ class TestGroupPivots:
         assert_that(str(exc_info.value)).contains("errors() is only valid after")
 
     def test_an_empty_call_is_refused_by_both_forms(self):
-        # the rest of the contains family refuses a call with nothing to look for, and these two used
-        # to pass on it: an assertion that asks nothing cannot fail, which is the failure mode itself
+        # these two used to pass on a call with nothing to look for, which is the failure mode itself
         caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
         with pytest.raises(ValueError, match="one or more args"):
             caught.contains_error()

@@ -41,8 +41,7 @@ class TestAllureContract:
 
     @pytest.mark.parametrize("mode", ["full", "diff", "off"])
     def test_attaching_a_real_diff_does_not_raise(self, mode):
-        # allure.attach outside a running allure listener is a no-op rather than an error, so this
-        # reaches the real function with our real keyword arguments (body/name/attachment_type).
+        # `allure.attach` outside a listener is a no-op, so this reaches the real function with real arguments
         from assertpy2.pytest_plugin import _attach_allure
 
         diff = _build_equality_diff({"name": "alice", "age": 30}, {"name": "alice", "age": 31})

@@ -23,8 +23,7 @@ TRANSFORMS: Final = "transforms"
 DESCRIBES: Final = "describes"
 POLLS: Final = "polls"
 
-# the proxies compose their own sentence around this, since the same operation is refused for one reason by `not_`
-# and another by `check()`
+# the proxies word their own sentence: `not_` and `check()` refuse the same operation for different reasons
 WHAT_IT_DOES: Final = {
     CONFIGURES: "only sets an expectation and asserts nothing on its own",
     TRANSFORMS: "hands back a different value instead of asserting",
@@ -32,16 +31,13 @@ WHAT_IT_DOES: Final = {
     POLLS: "runs a whole chain until it holds",
 }
 
-# the builder's own machinery, named rather than filtered out silently, so a new one has to be declared here before
-# the gate accepts it
+# the builder's own machinery, named rather than filtered, so a new one is declared before the gate takes it
 NOT_AN_OPERATION: Final = frozenset({"builder", "check", "error", "not_", "value"})
 
-# the members that hand the subject itself back, which the dangling check must not read as an assertion left
-# uncalled.  Nothing else qualifies: `not_` is a proxy, `logger` an adapter truthy on every subject, the rest state
+# the members handing the subject back, which the dangling check must not read as an assertion left uncalled
 HANDS_THE_SUBJECT_BACK: Final = frozenset({"val", "value"})
 
-# the hybrids, which hand back a different value and test an expectation on the way.  Named rather than derived:
-# "reaches `self.error()`" does not separate a verdict from a precondition, and `errors()` first read as asserting
+# the hybrids: named, since "reaches `self.error()`" does not separate a verdict from a precondition
 ALSO_ASSERTS: Final = frozenset(
     {
         "caused_by",

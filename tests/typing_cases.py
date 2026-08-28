@@ -136,16 +136,14 @@ def _incompatible_operands() -> None:
     assert_that(datetime.date(2026, 1, 1)).is_before(datetime.date(2026, 2, 1))  # case: date-ordered-as-a-datetime
     _day = datetime.datetime(2026, 1, 1).date()
     assert_that(_day).is_after(datetime.date(2020, 1, 1))  # case: date-taken-from-a-datetime
-    # ordered against anything, convertible to nothing: the checker and the runtime agree to refuse it,
-    # which is the half of the approximation that works
+    # ordered against anything, convertible to nothing: checker and runtime agree to refuse it
     assert_that(1).is_greater_than(_Ordered())  # case: ordered-but-not-convertible
     assert_that(1).satisfies(match.starts_with("a"))  # case: matcher-for-another-type
     assert_that(1).satisfies(match.contains("x"))  # case: membership-matcher-for-a-scalar
     assert_that(1).satisfies(match.contains_only("x"))  # case: only-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_subset_of(["x"]))  # case: subset-matcher-for-a-scalar
     assert_that(1).satisfies(match.is_sorted())  # case: sorted-matcher-for-a-scalar
-    # the pairwise quantifier names both sides now, so a character operation on the other side's
-    # element is refused where `Any` used to take it
+    # the pairwise quantifier names both sides, so a character operation on the other element is refused
     assert_that("ab").zip_satisfies([1], lambda _character, number: number.isalpha())  # case: zip-reads-the-wrong-side
 
 
@@ -170,15 +168,12 @@ def _chaining_must_not_widen_what_the_value_offers() -> None:
     """
     assert_that(1 + 2j).is_not_zero().is_positive()  # case: complex-widened-by-chaining
     assert_that(True).is_greater_than(0).is_even()  # case: bool-widened-by-chaining
-    # `.not_` used to be the exception: the proxy resolves any name through `__getattr__`, so the
-    # negated branch accepted what the protocol does not. It is declared as the protocol it was
-    # reached from instead, which costs nothing and refuses the same calls the un-negated chain does
+    # `.not_` used to accept what the protocol does not, the proxy resolving any name through `__getattr__`.
+    # It is declared as the protocol it was reached from, refusing the same calls the un-negated chain does
     assert_that(1 + 2j).not_.is_greater_than(0)  # case: negation-widens-the-protocol
-    # what that declaration does allow and the runtime refuses: the fourteen names that transform or
-    # configure rather than assert. The runtime says so by name, which is the tolerable direction
+    # what the declaration allows and the runtime refuses: the fourteen names that transform or configure
     assert_that(1).not_.described_as("x")  # case: negation-allows-a-non-negatable-name
-    # an ordering matcher takes and judges anything its `<` accepts, and neither half is typed. A
-    # boundary of the wrong type is accepted, and so is a matcher built for another subject entirely
+    # neither half of an ordering matcher is typed: a wrong-type boundary and a foreign subject both fit
     assert_that(1).satisfies(match.greater_than("x"))  # case: ordering-matcher-takes-any-boundary
     assert_that("x").satisfies(match.greater_than(0))  # case: ordering-matcher-judges-any-subject
 
@@ -259,29 +254,24 @@ def _methods_that_do_not_fit_the_value() -> None:
     # a verdict asked of a value the builder holds: an element pivot used to land on the untyped proxy
     assert_that([1, 2]).first().check().starts_with("x")  # case: text-verdict-on-a-pivoted-number
 
-    # a member of a class-info tuple that is not a class.  ty answers on the outermost level only, which is
-    # the price of the alias being written out rather than recursive: it ignores a fully quoted one
+    # ty answers on the outermost level only, the price of the alias being written out rather than recursive
     assert_that(object()).is_instance_of((int, "nope"))  # case: a-tuple-member-that-is-not-a-class
     assert_that(object()).is_instance_of((int, (str, "nope")))  # case: a-nested-member-that-is-not-a-class
 
     # a polling chain used to be `Any` from its first assertion, so none of these were read at all
     assert_that(_a_number).eventually_sync().starts_with("x")  # case: text-assertion-on-a-polled-number
     assert_that(_a_number).eventually_sync().is_close_to("x", 1)  # case: bad-operand-on-a-polled-number
-    # a name no declaration lists still comes off `__getattr__`, which is what keeps a dynamic
-    # assertion on a polled response working.  The runtime names it instead
+    # a name no declaration lists comes off `__getattr__`, which keeps a dynamic assertion working
     assert_that(_a_number).eventually_sync().no_such_assertion()  # case: a-name-that-exists-nowhere-on-a-chain
-    # a `str` is iterable, so it reaches the umbrella rung of an assertion the string view does not
-    # carry.  The same width as `assert_that()` gives a value the umbrella claims
+    # a `str` is iterable, so it reaches the umbrella rung, as wide as a value the umbrella claims
     assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
-    # and the same assertion asked of the value the umbrella claims, off the chain entirely.  It is
-    # where the width above comes from, rather than anything the chain does: `assert_that()` hands a
-    # capable value the whole builder, and this call raises `TypeError` when it runs
+    # the same assertion off the chain, which is where the width above comes from: `assert_that()` hands
+    # a capable value the whole builder, and this call raises `TypeError` when it runs
     assert_that(_TakesAnyKey()).is_positive()  # case: numeric-assertion-on-a-capable-value
     # a value with no capability at all reaches neither, so the core narrowing follows onto the chain
     assert_that(_a_person).eventually_sync().is_positive()  # case: numeric-assertion-on-a-polled-object
-    # the bridge between the two above: the same capable value polled, which is the rung `str` reaches
-    # by being iterable.  Recorded so a chain cannot be narrowed here alone, which would leave a polled
-    # value stricter than the same value off the chain
+    # the bridge: the same capable value polled, the rung `str` reaches by being iterable. Recorded so a
+    # chain cannot be narrowed alone, leaving a polled value stricter than the same value off the chain
     assert_that(_a_row).eventually_sync().is_positive()  # case: numeric-assertion-on-a-polled-capable-value
     # the hook hands back the chain over the same value, so what follows a dynamic assertion is read
     assert_that(_a_number).eventually_sync().has_status("PAID").starts_with(  # case: text-assertion-after-a-dynamic-one
@@ -380,8 +370,7 @@ def _relations_that_must_keep_working() -> None:
     assert_that("ab").is_subset_of("abc")  # case: valid-subset-of-characters
     assert_that({"a": 1}).is_subset_of({"a": 1, "b": 2})  # case: valid-subset-of-a-mapping
     assert_that(b"ab").is_subset_of([97, 98])  # case: valid-subset-of-byte-values
-    # the runtime compares by `==`, so a superset of a wider element type is ordinary: only the mapping
-    # view narrows, because only there is a shape refused by name rather than by comparison
+    # `==` makes a wider superset ordinary; only the mapping view refuses a shape by name rather than by comparison
     assert_that([1, 2]).is_subset_of("abc")  # case: valid-subset-of-text-items
     assert_that([1]).is_subset_of(1.0)  # case: valid-subset-of-a-wider-number
     assert_that("ab").is_subset_of([1, 2, "a", "b"])  # case: valid-subset-of-mixed-items
@@ -389,8 +378,7 @@ def _relations_that_must_keep_working() -> None:
     assert_that([{"n": 1}]).satisfies(match.is_sorted(key=lambda row: row["n"]))  # case: valid-sorted-by-key
     assert_that(1.05).satisfies(match.equal_to(1.0, tolerance=0.1))  # case: valid-equal-to-tolerance
     assert_that({"a": 1}).satisfies(match.equal_to({"a": 2}, ignore="a"))  # case: valid-equal-to-ignore
-    # `Iterable` is covariant and `Matcher` is contravariant, so binding the element to the collection
-    # is easy to make too strict: these three are ordinary code and must keep type-checking
+    # `Iterable` is covariant and `Matcher` contravariant, so these three ordinary calls must keep type-checking
     _mixed: list[int | str] = [1, "x"]
     assert_that(_mixed).satisfies(match.contains("x"))  # case: valid-membership-in-a-union-collection
     _wide: list[object] = [1, "x"]
@@ -411,16 +399,14 @@ def _relations_that_must_keep_working() -> None:
     assert_that(_rows).extracting("id", sort=["id", "name"])  # case: valid-extracting-sort-by-keys
     assert_that(_rows).extracting("id", sort=lambda row: row["id"])  # case: valid-extracting-sort-callable
     assert_that(_rows).extracting("id", filter="name", sort="id")  # case: valid-extracting-filter-and-sort
-    # a mapping filter, held in a variable rather than written inline: `dict` is invariant, so the
-    # parameter has to be a `Mapping` for this to type-check at all
+    # a mapping filter held in a variable: `dict` is invariant, so the parameter has to be a `Mapping`
     _criteria: dict[str, str] = {"name": "a"}
     assert_that(_rows).extracting("id", filter=_criteria)  # case: valid-extracting-filter-from-a-variable
     _proxy: Mapping[str, str] = MappingProxyType({"name": "a"})
     assert_that(_rows).extracting("id", filter=_proxy)  # case: valid-extracting-filter-from-a-mapping
     # a slice selects part of a sequence row, and it only became hashable in 3.12
     assert_that([(1, 2, 3)]).extracting(slice(0, 2))  # case: valid-extracting-a-slice
-    # the verdict is read for truth, so a predicate answering with something other than `bool` is
-    # ordinary: `numpy.bool_` is the case that decided this, since the library documents numpy support
+    # the verdict is read for truth, and `numpy.bool_` decided this, the library documenting numpy support
     assert_that(_rows).extracting("id", filter=_truthy_int)  # case: valid-filter-option-verdict-not-a-bool
     assert_that(_rows).each(_truthy_int)  # case: valid-quantifier-predicate-returning-an-int
     assert_that(_rows).filtered_on(_truthy_int)  # case: valid-filter-predicate-returning-an-int
@@ -431,34 +417,28 @@ def _relations_that_must_keep_working() -> None:
     assert_that(_a_number).eventually_sync().has_status("PAID").is_positive()  # case: valid-polled-dynamic-then-typed
     # the hook has to keep answering on the narrowest chain there is, which is what the case above pays for
     assert_that(_a_person).eventually_sync().has_status("PAID")  # case: valid-polled-dynamic-on-an-object
-    # a value that is capable and callable at once is claimed by the umbrella, above the callable view,
-    # so its polling pivot is declared on the umbrella's own surface.  Over `Any`, because no capability
-    # says what the call returns, and an `Any` chain keeps every rung open
+    # capable and callable at once is claimed by the umbrella, above the callable view, so its polling pivot
+    # is declared there. Over `Any`, because no capability says what the call returns
     assert_that(_Probe()).eventually_sync().is_positive()  # case: valid-polled-capable-callable
-    # the same value asked what the exception assertions ask of it, which is the other half of what
-    #  is keyed on and the half polling does not reach
+    # the same value asked what the exception assertions ask, the half polling does not reach
     assert_that(_Probe()).does_not_raise(ValueError).when_called_with()  # case: valid-call-on-a-capable-callable
-    # `builder()` makes a builder over the value it is handed, so what follows is about that value and
-    # not about the capable one it was reached from.  Left to the dynamic hook it read as the façade
-    # over the original, where an ordering assertion would have been refused
+    # `builder()` builds over the value it is handed, not the capable one it came from. Left to the dynamic
+    # hook it read as the facade over the original, where an ordering assertion would have been refused
     assert_that(_TakesAnyKey()).builder(1).is_positive()  # case: valid-builder-pivot-off-the-umbrella
     # the same binding must not refuse a guard the subject can be handed to
     assert_that("text").satisfies(lambda item: item.isupper())  # case: valid-predicate-over-the-subject
     assert_that(7).satisfies(lambda item: item.bit_length() > 0)  # case: valid-numeric-predicate-over-the-subject
     assert_that([1, 2]).first().check().is_positive()  # case: valid-verdict-after-a-pivot
     assert_that(["a"]).first().check().starts_with("a")  # case: valid-text-verdict-after-a-pivot
-    # a payload typed `dict[str, Any]` is where the alternative spelling put every chain on the first
-    # rung, so this one has to keep its freedom
+    # `dict[str, Any]` is where the alternative spelling put every chain on the first rung
     assert_that(_loose_rows()).first().check().starts_with("x")  # case: valid-verdict-after-a-loose-pivot
-    # even a list, on the same kind of row the runtime suite uses: a mapping whose `__getitem__` takes
-    # one answers, measured, so the selector type stays `object` and the runtime is what says no when
-    # the row cannot take what it was handed
+    # even a list: a mapping whose `__getitem__` takes one answers, measured, so the selector stays `object`
+    # and the runtime says no when the row cannot take what it was handed
     assert_that([_TakesAnyKey()]).extracting([])  # case: valid-extracting-an-unhashable-selector
     assert_that(_wide).satisfies(match.is_subset_of([1, "x", 2.0]))  # case: valid-subset-of-a-wide-collection
     assert_that(_mixed).satisfies(match.contains_only(1, "x"))  # case: valid-only-in-a-union-collection
-    # the regression this half of the file exists for: the numeric bound was first written as a list of
-    # types and rejected `numpy.int64`, which this library documents support for and which compares
-    # happily at runtime. Named as a capability now, so anything that can produce a float is accepted
+    # the regression this half exists for: the numeric bound was first a list of types and rejected
+    # `numpy.int64`, which this library supports. Named as a capability, so anything producing a float fits
     assert_that(1).is_greater_than(numpy.int64(0))  # case: valid-numpy-integer
     assert_that(1.5).is_greater_than(numpy.float64(0))  # case: valid-numpy-float
     assert_that(1).is_close_to(numpy.float64(1), numpy.float64(0.1))  # case: valid-numpy-tolerance

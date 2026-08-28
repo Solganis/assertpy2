@@ -67,8 +67,7 @@ def test_attrs_ignore_removes_top_level_field(value, new_name):
 @settings(deadline=None)
 @given(value=_attrs_outers, new_a=st.integers())
 def test_attrs_ignore_reaches_into_nested_attrs(value, new_a):
-    # a tuple is a single nested path: ignore the "a" field of the nested attrs instance, exercising
-    # the recursive attrs.asdict path that shallow filtering used to get wrong
+    # a tuple is one nested path, exercising the recursive `attrs.asdict` that shallow filtering got wrong
     other = attrs.evolve(value, inner=attrs.evolve(value.inner, a=new_a))
     assert_that(value).is_equal_to(other, ignore=("inner", "a"))
 
@@ -76,8 +75,7 @@ def test_attrs_ignore_reaches_into_nested_attrs(value, new_a):
 @settings(deadline=None)
 @given(value=_attrs_outers)
 def test_attrs_matches_structure_normalizes_instance(value):
-    # StructureMatcher._as_mapping must normalize an attrs instance to its field dict, so matcher and
-    # raw-value specs over its own fields always hold
+    # `StructureMatcher._as_mapping` normalises an attrs instance to its field dict
     assert_that(value).matches_structure(
         {"name": match.is_instance_of(str), "items": match.is_instance_of(list), "inner": match.is_not_none()}
     )

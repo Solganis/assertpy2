@@ -82,8 +82,7 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "exact-items-of-another-type": _ARGUMENT,
     # each view says what a superset is for it: characters, a mapping, byte values
     "mapping-subset-of-a-sequence": _ARGUMENT,
-    # the chronological nine live on the datetime view now, so a plain date does not offer them at all:
-    # what used to be a bad operand is a method the value has not got
+    # the chronological nine live on the datetime view, so a bad operand became a method the value has not got
     "zip-reads-the-wrong-side": _MISSING,
     "date-compared-to-number": _MISSING,
     "date-ordered-as-a-datetime": _MISSING,
@@ -97,9 +96,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
-    # the four membership and ordering matchers judge a collection, so a scalar is the wrong subject for
-    # them. Recorded separately from the text matcher above because they were added later and their
-    # binding is the new part: without it they would have resolved to `Matcher[Any]` and matched anything
+    # the four membership and ordering matchers judge a collection, so a scalar is the wrong subject. Kept
+    # apart from the text matcher because their binding is the new part: without it, `Matcher[Any]`
     "membership-matcher-for-a-scalar": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
@@ -141,15 +139,13 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"call-arg"}),
         "pyright": frozenset({"reportCallIssue"}),
     },
-    # mypy adds `misc` beside `arg-type` on a callable of the wrong arity, which is its way of saying
-    # the lambda itself does not fit rather than only its result
+    # mypy adds `misc` beside `arg-type` to say the lambda itself does not fit, not only its result
     "extracting-filter-of-wrong-arity": {
         "ty": frozenset({"invalid-argument-type"}),
         "mypy": frozenset({"arg-type", "misc"}),
         "pyright": frozenset({"reportArgumentType"}),
     },
-    # the arity, not the verdict: `sort` and `filter` are handed one item each, so a two-parameter
-    # callable is refused before the run rather than during it
+    # the arity, not the verdict: `sort` and `filter` hand over one item, so a two-parameter callable is refused
     "extracting-sort-of-wrong-arity": {
         "ty": frozenset({"invalid-argument-type"}),
         "mypy": frozenset({"arg-type", "misc"}),
@@ -161,9 +157,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "bool-parity": _MISSING,
     "bool-divisibility": _MISSING,
     "numeric-assertion-on-text": _MISSING,
-    # the same four questions asked through `check()`, which used to answer every one of them with a
-    # callable.  Its `__getattr__` typed any name as available, so a typo was invisible too, and the
-    # runtime named it only when the test ran.  Each view now hands back its own verdict twin
+    # the same four through `check()`, which answered every one with a callable: its `__getattr__` typed any
+    # name as available, so a typo was invisible. Each view now hands back its own verdict twin
     "text-assertion-on-a-number-through-check": _MISSING,
     "numeric-assertion-on-text-through-check": _MISSING,
     "mapping-assertion-on-a-list-through-check": _MISSING,
@@ -171,34 +166,27 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "dynamic-attribute-on-a-mapping": _MISSING,
     "complex-widened-by-chaining": _MISSING,
     "bool-widened-by-chaining": _MISSING,
-    # `.not_` is declared as the protocol it was reached from, so the proxy accepts what the value
-    # accepts.  What it still allows and the runtime refuses is the handful of non-negatable names
+    # `.not_` is the protocol it was reached from, so what it still allows is the non-negatable names
     "negation-widens-the-protocol": _MISSING,
     "numeric-assertion-on-an-object": _MISSING,
-    # the dynamic hook lives on the builder, so the same narrowing takes `has_<attr>` off a plain
-    # class.  Deliberate, and the docs guard has carried a marker for exactly this since before it:
-    # a dynamic assertion is outside the typed surface by policy
+    # the hook lives on the builder, so the narrowing takes `has_<attr>` off a plain class. Deliberate, and
+    # the docs guard has carried a marker for it since before: a dynamic assertion is outside the typed surface
     "dynamic-attribute-on-an-object": _MISSING,
-    # the umbrella hands back a protocol of its own rather than the builder, and the six ordering
-    # assertions on it ask the value for an ordering.  Both used to type-check and raise `TypeError`
+    # the umbrella's own protocol asks the value for an ordering; both used to type-check and raise `TypeError`
     "numeric-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
     "numeric-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
-    # a polling chain: the declaration wins over `__getattr__` when the chain is not the one it was
-    # written for, which is what makes a typed chain worth having at all
+    # a polling chain: the declaration wins over `__getattr__`, which is what makes a typed chain worth having
     "text-assertion-on-a-polled-number": _NOT_THE_CHAINS_VALUE,
-    # the same rung, reached from the other end: a value with no capability matches neither the typed
-    # rung nor the umbrella, so the core narrowing follows onto the chain
+    # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
     "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
-    # a predicate over the subject: the view binds it to its own value, so a lambda reading a name the
-    # value has not got is refused.  ty resolves the lambda's parameter through an overload set less
-    # precisely and says nothing, which is measured here rather than left blank
+    # the view binds the predicate to its own value, so a lambda reading a missing name is refused. ty
+    # resolves the parameter through an overload set less precisely and says nothing, measured here
     "predicate-reading-a-missing-string-method": _PREDICATE_OVER_THE_SUBJECT,
     "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
     "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
     "text-assertion-after-a-dynamic-one": _NOT_THE_CHAINS_VALUE,
-    # ty answers on the outermost level of a class-info tuple only.  Its alias is written out rather than
-    # recursive because a fully quoted one is ignored outright, and the two that read the recursion cover
-    # the depth it gives up
+    # ty answers on the outermost level only. The alias is written out rather than recursive because a fully
+    # quoted one is ignored outright, and the two that read the recursion cover the depth it gives up
     "a-tuple-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     "a-nested-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     "bad-operand-on-a-polled-number": {
@@ -207,9 +195,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "pyright": frozenset({"reportArgumentType"}),
     },
     "negation-allows-a-non-negatable-name": {},
-    # the hook has to stay: a dynamic assertion is resolved from the polled value's attributes, so
-    # `has_status("PAID")` can be declared nowhere.  With it there, an unknown name is the runtime's to
-    # name, and a `str` reaches the umbrella rung of an assertion the string view does not carry
+    # the hook has to stay: `has_status("PAID")` can be declared nowhere. With it there an unknown name is
+    # the runtime's to name, and a `str` reaches the umbrella rung of an assertion the string view lacks
     "a-name-that-exists-nowhere-on-a-chain": {},
     "numeric-assertion-on-polled-text": {},
     "ordering-matcher-takes-any-boundary": {},

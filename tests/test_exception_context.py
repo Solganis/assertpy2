@@ -16,8 +16,7 @@ import pathlib
 import assertpy2
 from assertpy2 import assert_that
 
-# Sites that deliberately let the caught exception through. An entry is a decision, and it carries
-# its reason; a new one that appears without a reason is the bug this module exists to catch.
+# Sites that let the caught exception through. An entry without a reason is the bug this module catches.
 KEEPS_THE_CAUGHT_EXCEPTION = {
     ("async_assertions.py", "_out_of_time"): (
         "soft/warn branch only, where error() collects or logs and never raises; the strict branch "

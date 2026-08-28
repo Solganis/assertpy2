@@ -93,8 +93,7 @@ class TestWhatCountsAsOneDifference:
         assert_that(first).is_not_equal_to(second)
 
     def test_the_row_index_is_generalised_away(self):
-        # `users[0].role` and `users[7].role` are one difference reported against two rows, and a
-        # reader chasing a common cause wants them on one line
+        # one difference reported against two rows, which a reader chasing a common cause wants on one line
         first = keys(lambda: assert_that({"users": [{"role": "super"}]}).is_equal_to({"users": [{"role": "x"}]}))
         second = keys(
             lambda: assert_that({"users": [{"role": "y"}, {"role": "super"}]}).is_equal_to(
@@ -105,8 +104,7 @@ class TestWhatCountsAsOneDifference:
         assert_that(first[0].where).is_equal_to("users[*].role")
 
     def test_a_mapping_key_is_taken_from_the_step_not_the_rendered_path(self):
-        # the rendered path puts a key through `str()`, so {3: ...} and {"3": ...} read alike. the
-        # steps hold the keys themselves, and these two must not share a cluster
+        # the rendered path puts a key through `str()`, so {3: ...} and {"3": ...} must not share a cluster
         numeric = keys(lambda: assert_that({3: "a"}).is_equal_to({3: "b"}))
         textual = keys(lambda: assert_that({"3": "a"}).is_equal_to({"3": "b"}))
         assert_that(numeric).is_not_equal_to(textual)
@@ -159,8 +157,7 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(observations(lambda: assert_that([1, 2]).contains(9))).is_empty()
 
     def test_a_set_difference_stays_out_for_the_same_reason(self):
-        # and it produced two entries per failure, so one failing test printed two blocks under one
-        # heading and the cluster sizes summed past the number of failures
+        # two entries per failure printed two blocks under one heading and summed past the number of failures
         assert_that(observations(lambda: assert_that({1, 2}).is_equal_to({1, 3}))).is_empty()
 
     def test_a_diagnostic_still_lets_them_cluster(self):
@@ -209,8 +206,7 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(first).is_not_equal_to(second)
 
     def test_a_located_failure_ignores_the_diagnostic(self):
-        # a place is the stronger signal, and letting a label split one field into two clusters would
-        # undo the whole correction
+        # a place is the stronger signal: letting a label split one field into two clusters undoes the correction
         plain = keys(lambda: assert_that({"a": "x "}).is_equal_to({"a": "x"}))
         hinted = keys(lambda: assert_that({"a": "x "}).is_equal_to({"a": "x"}), "one of surrounding whitespace")
         assert_that(plain).is_equal_to(hinted)
@@ -232,8 +228,7 @@ class TestTheKindsThatHaveNoCoordinate:
         assert_that(found[0].where).is_equal_to("role")
 
     def test_a_changed_line_is_a_location_with_its_number_generalised(self):
-        # two files differing on different lines are still "the same line changed" for triage, and the
-        # line number is as incidental to that as a row index is
+        # two files differing on different lines are still "the same line changed", the number as incidental as an index
         first = keys(lambda: assert_that("a\nb").is_equal_to("a\nc"))
         second = keys(lambda: assert_that("x\ny\nb").is_equal_to("x\ny\nc"))
         assert_that(first[0].where).is_equal_to("line [n]")
@@ -323,8 +318,7 @@ class TestASignatureReadsTheSameInAnyProcess:
         assert_that(stable_repr(frozenset({2, 1}))).is_equal_to("{1, 2}")
 
     def test_a_dict_keeps_the_order_it_was_written_in(self):
-        # deliberately not sorted: a dict's order is the reader's own, and pinning it here would put a
-        # value in the summary that the failure message never showed
+        # not sorted: a dict's order is the reader's own, and pinning it would show what the message never did
         assert_that(stable_repr({"z": 1, "a": 2})).is_equal_to("{'z': 1, 'a': 2}")
 
 
@@ -342,8 +336,7 @@ class TestWhichClustersAreWorthPrinting:
         assert_that(found[0].size).is_equal_to(37)
 
     def test_a_small_cluster_in_a_large_run_is_still_reported(self):
-        # the exact case a share got wrong: five failures sharing a cause in a run of forty are five
-        # tests to fix together, whatever the other thirty-five were doing
+        # the case a share got wrong: five failures sharing a cause are five tests to fix, whatever the rest did
         assert_that(clusters(recorded(5, located("user.role")), 40)).is_length(1)
 
     def test_two_of_three_clears_any_ratio_and_is_still_refused(self):
@@ -422,8 +415,7 @@ class TestTheSummaryText:
         assert_that(lines).described_as("the words replace the two value lines").is_length(2)
 
     def test_a_kind_without_a_place_is_marked_as_one(self):
-        # keyed on its diagnostic, the only way `contains` reaches a cluster: its two fields hold
-        # presence rather than values, so a pair of them is a signature this module never builds
+        # keyed on its diagnostic, the only way `contains` reaches a cluster: its fields hold presence, not values
         key = Signature(False, "contains", label="every difference here is one of bytes against text")
         assert_that(render(clusters(recorded(5, key), 5), 5)[0]).is_equal_to(
             "5 of 5 failing tests share one contains difference"
@@ -472,8 +464,7 @@ class TestTheSummaryText:
         assert_that(headings[0]).is_not_equal_to(headings[1])
 
     def test_whatever_still_reads_alike_is_numbered(self):
-        # the spelling identifies, and a cut spelling keeps a digest, but neither can promise two
-        # headings differ. This can, and it is the last line of that defence rather than the first
+        # neither the spelling nor its digest can promise two headings differ; this can, and it is the last line of that
         assert_that(_made_unique(["a", "a", "b"])).is_equal_to(["a #1", "a #2", "b"])
         assert_that(_made_unique(["only"])).described_as("one of a kind keeps its name").is_equal_to(["only"])
 
@@ -1019,8 +1010,7 @@ class TestTheDenominatorCountsEveryRedResult:
         pytest_plugin._session_config[0] = None
 
     def test_a_worker_does_not_count_the_collection_every_worker_repeats(self):
-        # under xdist each worker collects the whole suite, so counting there turned one broken module
-        # into one red result per worker: measured as `3 of 6` on a run pytest called `3 failed, 1 error`
+        # under xdist each worker collects the whole suite: `3 of 6` on a run pytest called `3 failed, 1 error`
         from assertpy2 import pytest_plugin
 
         worker = SimpleNamespace(
@@ -1064,8 +1054,7 @@ class TestAWorkerThatDiedIsNotSilentlyIgnored:
         assert_that(render(self._cluster(), 6, 2)[0]).contains("2 workers died")
 
     def test_a_failed_collection_is_named_apart_from_the_tests(self):
-        # it is red and it is not a test, so folding it into the denominator would name a test that
-        # never existed: measured as `3 of 4 failing tests` on a run pytest called `3 failed, 1 error`.
+        # red but not a test: measured as `3 of 4 failing tests` on a run pytest called `3 failed, 1 error`.
         # "collection error" rather than "module": a package or a plugin's collector can fail too
         lines = render(self._cluster(), 6, collect_errors=1)
         assert_that(lines[0]).is_equal_to("1 collection error, not counted below")
@@ -1151,8 +1140,7 @@ class TestTheSummaryHasBounds:
         assert_that(lines[1]).is_equal_to("    actual:   000000 and 3 other values")
 
     def test_the_printed_example_survives_the_cap(self):
-        # the cap must not reintroduce the defect the sort closed: under xdist the arrival order is
-        # whatever the workers did, and the smallest value has to win whatever order it arrived in
+        # the cap must not undo the sort: under xdist the arrival order is whatever the workers did
         rows = self._many(500)
         assert_that(render(clusters(list(reversed(rows)), 500), 500)).is_equal_to(render(clusters(rows, 500), 500))
 
@@ -1202,8 +1190,7 @@ class TestTheSummaryNeverTakesTheRunDown:
         assert_that(str(caught[0].message)).contains("terminal is gone")
 
     def test_the_notice_itself_cannot_raise_under_warnings_as_errors(self):
-        # a suite running `-W error` turns the barrier's own notice into an exception, which would put
-        # its traceback in the report in place of the failure it was catching
+        # under `-W error` the barrier's own notice becomes an exception, replacing the failure it was catching
         config = SimpleNamespace(_assertpy2_failures=[], _assertpy2_failure_count=0)
         config._assertpy2_cluster_minimum = 3
         for index in range(4):
@@ -1291,8 +1278,7 @@ class TestALocationRendersForAReader:
         assert_that(render_path((("key", "''"),))).is_equal_to("")
 
     def test_a_key_that_is_one_quote_keeps_it(self):
-        # arrives only over the wire: `repr` never produces a bare quote, and `is_well_formed` compares
-        # what it renders against the `where` the payload claims
+        # arrives only over the wire: `repr` never makes a bare quote, and `is_well_formed` compares against the `where`
         assert_that(render_path((("key", "'"),))).is_equal_to("'")
 
     def test_a_quoted_key_loses_its_quotes(self):
@@ -1314,8 +1300,7 @@ class TestALocationFreeSignatureCarriesExactlyTwoValues:
 
     @pytest.mark.parametrize("kind", ["contains", "set"])
     def test_a_kind_whose_fields_hold_presence_carries_no_values(self, kind):
-        # `signature()` refuses to pair values for these, and a payload that did would print the
-        # `None` standing for a missing item as though it were the value under test
+        # `signature()` refuses to pair values here: a payload that did would print the `None` for a missing item
         assert_that(is_well_formed(Signature(False, kind, values=("a", "b")))).is_false()
 
     @pytest.mark.parametrize("kind", ["contains", "set", "scalar", "string"])
@@ -1507,8 +1492,7 @@ class TestWhatComesOffTheWireIsCheckedFieldByField:
     """A coordinate is two names, and both halves of that have to be checked or the summary raises."""
 
     def test_a_step_whose_parts_are_not_both_names_is_refused_as_a_type_error(self):
-        # `len(step) == 2` alone lets a coordinate through whose value is not a string, and the summary
-        # then raises out of the grouping instead of reporting the worker as unreadable
+        # `len(step) == 2` alone lets a non-string coordinate through, and the summary then raises out of the grouping
         with pytest.raises(TypeError):
             _observation_from_wire([True, "role", [["key", 5]], "", [], "'a'", "'b'"])
 
@@ -1532,8 +1516,7 @@ class TestTheControllerSideBookkeeping:
         assert_that(pytest_plugin._controller_unreadable_workers[0]).is_equal_to(2)
 
     def test_a_node_with_no_name_of_its_own_prefixes_with_nothing(self):
-        # the prefix exists to tell two workers running the same test apart, and an invented one would
-        # make a node id nobody can look up
+        # the prefix tells two workers running one test apart, and an invented one makes a node id nobody can look up
         wire = [["t.py::test_x", [[True, "user.role", [["key", "'user'"], ["key", "'role'"]], "", [], "'s'", "'a'"]]]]
         node = SimpleNamespace(workeroutput={"assertpy2_failures": wire, "assertpy2_failure_count": 1})
         pytest_plugin._collect_worker_failures(node)

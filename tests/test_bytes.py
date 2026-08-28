@@ -51,8 +51,7 @@ class TestStartsWithBytes:
             assert_that(b"hello").starts_with_bytes(b"world")
 
     def test_an_empty_prefix_is_refused_the_way_the_general_spelling_refuses_it(self):
-        # it used to hold, which is an assertion no value can fail. `starts_with` rejects an empty
-        # prefix for str and for bytes alike, and this is that same relation under a bytes-only name
+        # it used to hold, which no value can fail; `starts_with` rejects an empty prefix for str and bytes alike
         with pytest.raises(ValueError, match="must not be empty"):
             assert_that(b"hello").starts_with_bytes(b"")
 
@@ -78,8 +77,7 @@ class TestContainsBytes:
         assert_that(b"\x00\x01\x02").contains_bytes(b"\x01")
 
     def test_the_failure_now_carries_a_diff(self):
-        # its own implementation built none, so a bytes containment failure reported less than the
-        # general spelling did about the very same value
+        # its own implementation built none, so a bytes containment failure said less than the general spelling
         with pytest.raises(AssertionFailure) as failure:
             assert_that(b"hello").contains_bytes(b"\x00\x01")
         assert_that(failure.value.diff).is_not_none()

@@ -66,14 +66,13 @@ SILENT = frozenset(
 # The witness that the stubs resolved: it pins `pandas.Index[str]`, which is `Any` without them.
 STUB_WITNESS = "frame-value"
 
-# Disagreements kept on purpose, with the reason in the module docstring above.  A checker missing from
-# a row accepts the pinned answer.
+# Disagreements kept on purpose, reasoned in the module docstring. A missing checker accepts the pinned answer.
 DIVERGING = {
     "pandas-series": {"ty": {"type-assertion-failure"}, "mypy": {"assert-type"}},
 }
 
-# Calls outside the value's runtime domain, which the narrowed view has to refuse.  These are what the
-# narrowing buys: on the generic builder every one of them type-checks and then raises.
+# Calls outside the value's runtime domain, which the narrowed view refuses. On the generic builder
+# every one of them type-checks and then raises.
 REFUSED = {
     "frame-not-a-document": {
         "ty": {"unresolved-attribute"},

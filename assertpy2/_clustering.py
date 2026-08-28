@@ -188,8 +188,7 @@ def stable_repr(value: object, _seen: frozenset[int] = frozenset()) -> str:
     try:
         if isinstance(value, (set, frozenset)):
             members = sorted(stable_repr(member, inner) for member in value)
-            # an empty one falls back to `repr`, since `{}` is a dict, so `set()` and the `frozenset()` it equals
-            # read apart
+            # an empty one falls back to `repr`: `{}` is a dict, so `set()` and the `frozenset()` it equals read apart
             return "{" + ", ".join(members) + "}" if value else _safe_repr(value)
         if isinstance(value, dict):
             pairs = (f"{stable_repr(key, inner)}: {stable_repr(item, inner)}" for key, item in value.items())
@@ -287,8 +286,7 @@ def is_well_formed(key: Signature) -> bool:
         )
     if key.steps:
         return False
-    # exactly one of the two: a pair of values only for the kinds whose fields hold them, or a `contains` payload
-    # would print the `None` standing for a missing item
+    # a pair of values only for the kinds whose fields hold them, or a `contains` payload prints a `None`
     if key.label:
         return not key.values
     return len(key.values) == 2 and key.where in _VALUES_ARE_VALUES
@@ -327,8 +325,7 @@ def clusters(
     """
     if total_failures <= 0:
         return []
-    # keyed on the node id: `pytest-rerunfailures` reports one test failing per retry, and counting attempts printed
-    # a cluster of six over two tests
+    # keyed on the node id: `pytest-rerunfailures` retries printed a cluster of six over two tests
     grouped: dict[Signature, dict[str, None]] = {}
     actuals: dict[Signature, dict[str, None]] = {}
     expecteds: dict[Signature, dict[str, None]] = {}
@@ -473,20 +470,18 @@ def render(
         lines.append(f"{collect_errors} collection error{'' if one else 's'}, not counted below")
     for cluster, where in zip(shown, _headings(shown), strict=True):
         lines.append(_headline(cluster, where, total_failures))
-        # a cluster keyed on its diagnostic already says the difference in words, and the values under
-        # it are the ones that vary between its failures rather than the thing they share
+        # a cluster keyed on its diagnostic says the difference in words; the values are what varies inside it
         if cluster.signature.label:
             lines.append(f"    {cluster.signature.label}")
         else:
             lines.append(f"    actual:   {_side(cluster.actuals)}")
             lines.append(f"    expected: {_side(cluster.expecteds)}")
     if omitted:
-        # said rather than dropped: five of eleven causes shown silently reads as "these are the
-        # causes".  "more" rather than "smaller", since equal-sized clusters are ordered by signature
+        # said rather than dropped: "five of eleven" silently reads as "these are the causes".  "more" rather
+        # than "smaller", since equal-sized clusters are ordered by signature
         lines.append(f"{len(omitted)} more cluster{'' if len(omitted) == 1 else 's'} not shown")
     covered = len({nodeid for cluster in found for nodeid in cluster.nodeids})
     if covered < total_failures:
-        # what the number measures, rather than "not clustered": two tests sharing a difference under a
-        # floor of three are related, and the summary only declined to print them
+        # what the number measures, not "not clustered": the summary declined to print a pair under the floor
         lines.append(f"{total_failures - covered} of {total_failures} outside any cluster of {minimum}")
     return lines

@@ -64,7 +64,7 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
     """
     # the cost of a multi-line value is vertical, and the message prints it twice, so this counts rows
     if len(text.splitlines()) <= 3:
-        # a long single line has no rows to collapse, and capping from the start printed 96% of a five-kilobyte
+        # a long line has no rows to collapse, and capping from the start printed 96% of a five-kilobyte
         # string with none of it near the change
         return _windowed(text, counterpart, width=320)[0] if len(text) > 320 else text
     other_lines = counterpart.splitlines()
@@ -89,8 +89,7 @@ def _elided_seq_repr(seq, counterpart) -> str:
     the same way it collapses in the diff.  Position is the fallback, for the pairs no alignment
     improves on.
     """
-    # past 20 elements the rendering is over budget by construction, so the value is never rendered just to be
-    # measured
+    # past 20 elements the rendering is over budget, so the value is never rendered just to be measured
     if len(seq) <= 20:
         rendered = _safe_repr(seq)
         if len(rendered) <= 60:
@@ -234,8 +233,7 @@ class HelpersMixin(_MixinBase):
             )
         except IncludeKeysMissingError as found:
             absent = found
-        # reported outside the except block: a failure raised inside one carries the signal along as its
-        # `__context__`
+        # reported outside the except block: a failure raised inside carries the signal as its `__context__`
         keys_suffix = "" if len(absent.includes) == 1 else "s"
         missing_suffix = "" if len(absent.missing) == 1 else "s"
         includes_fmt = self._fmt_items(
@@ -314,8 +312,7 @@ class HelpersMixin(_MixinBase):
             _seen = _seen | {id(mapping)}
             parts = []
             ellip = False
-            # left in the order the mapping holds them, which is what the diff prints: sorting only here made the two
-            # halves disagree about where a key sits
+            # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
             for key, value in ((key, mapping[key]) for key in mapping):
                 if key not in counterpart:
                     parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
@@ -405,8 +402,7 @@ class HelpersMixin(_MixinBase):
         Returns None if the object cannot be converted.
         """
         if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            # like `dataclasses.asdict` but keeps leaf values by reference, since asdict deep-copies and crashes on
-            # un-copyable fields
+            # like `dataclasses.asdict` but by reference: asdict deep-copies and crashes on un-copyable fields
             def as_shallow(node):
                 if dataclasses.is_dataclass(node) and not isinstance(node, type):
                     return {field.name: as_shallow(getattr(node, field.name)) for field in dataclasses.fields(node)}
@@ -424,8 +420,7 @@ class HelpersMixin(_MixinBase):
         if is_model_dump_object(obj):
             return obj.model_dump()
         if is_attrs_instance(obj):
-            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import on every run where attrs is
-            # installed
+            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import wherever attrs is installed
             import attrs
 
             return attrs.asdict(obj)

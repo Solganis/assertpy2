@@ -98,8 +98,7 @@ def test_extracting_suggests_a_close_attribute_name():
 
 
 def test_extracting_tells_a_broken_property_from_a_missing_one():
-    # hasattr() reports a raising accessor as missing, which used to produce the absurd
-    # "does not have property <total>; did you mean 'total'?"
+    # hasattr() reports a raising accessor as missing, which produced "does not have <total>; did you mean 'total'?"
     class Order:
         @property
         def total(self):
@@ -124,8 +123,7 @@ def test_extracting_reports_an_unset_slot_as_a_broken_read():
 
 
 def test_extracting_lets_a_user_value_error_through_untouched():
-    # the localization wrapper must re-raise only this module's own errors, or a failing property
-    # loses the traceback that points at the user's code
+    # the wrapper re-raises only this module's errors, or a failing property loses the traceback into user code
     class Flaky:
         @property
         def name(self):
@@ -262,8 +260,7 @@ def test_extracting_sort_none():
 
 
 def test_extracting_sort_bad_type():
-    # mirrors filter: a wrong whole arg is a mistake, not a request for no ordering. Silently returning
-    # unsorted items surfaces later as a baffling order mismatch, or passes by luck.
+    # mirrors filter: a wrong arg is a mistake, and unsorted items surface later as a baffling order mismatch
     with pytest.raises(TypeError, match="given sort arg must be a str, an iterable, or a callable"):
         assert_that(users).extracting("user", sort=123)
 

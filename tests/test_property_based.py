@@ -261,9 +261,8 @@ def test_diff_is_well_formed_for_unequal_dataclasses(left, right):
         assert isinstance(_format_diff(diff, color=True), str)
 
 
-# completeness is a claim about the layer underneath: a pair the pairing calls equal is never examined, so a wrong
-# match takes a real difference out of the diff.  Two defects of that shape shipped, both because difflib matches on
-# reprs where every verdict here is reached with `!=`
+# a pair the pairing calls equal is never examined, so a wrong match hides a real difference.
+# Two defects of that shape shipped, both because difflib matches on reprs where verdicts use `!=`
 
 
 class _Twin:
@@ -510,8 +509,7 @@ def test_contains_exactly_in_any_order_unhashable_permutation_invariant(items, d
     assert_that(items).contains_exactly_in_any_order(*shuffled)
 
 
-# with pure equality matchers a perfect pairing exists iff the multisets are equal, so Counter is an independent
-# oracle
+# with pure equality matchers a perfect pairing exists iff the multisets are equal, so Counter is an oracle
 
 
 @given(val=st.lists(st.integers(0, 5), max_size=5), expected=st.lists(st.integers(0, 5), min_size=1, max_size=5))
@@ -1275,8 +1273,8 @@ def test_a_value_is_strictly_equal_to_itself(value):
     assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
 
 
-# a wide oracle over comparison semantics measured net-negative at 12800 pairs.  ESC is excluded from every generated
-# string, paths included, since a string diff prints its values raw
+# a wide oracle over comparison semantics measured net-negative at 12800 pairs. ESC is excluded
+# from every generated string, paths included, since a string diff prints its values raw
 _NO_ESC = st.text(alphabet=st.characters(exclude_characters="\x1b"), max_size=200)
 _TEXT_LEAVES = _NO_ESC | st.binary(max_size=200)
 _ANY_LEAF = _TEXT_LEAVES | st.integers() | st.floats(allow_nan=True) | st.none() | st.booleans()
@@ -1310,8 +1308,7 @@ def test_rendering_a_diff_never_raises(diff, color):
 @settings(deadline=None)
 @given(diff=_diffs())
 def test_a_caret_row_always_annotates_the_row_above_it(diff):
-    # matched on the unindented prefix: a generated path of "?" renders as `  ?: - ''` and would be mistaken for a
-    # guide row
+    # matched unindented: a generated path of "?" renders as `  ?: - ''` and would read as a guide row
     rows = _format_diff(diff).splitlines()
     for previous, row in pairwise(rows):
         if row.startswith("    ?"):
@@ -1332,8 +1329,7 @@ def test_the_block_never_outgrows_its_budget(count, kind, one_sided):
 @settings(deadline=None)
 @given(count=st.integers(min_value=30, max_value=200), kind=st.sampled_from(["set", "contains"]))
 def test_a_clipped_block_still_shows_something(count, kind):
-    # `set` and `contains` join every item into one row, so dropping the row that crosses the limit erased the whole
-    # diff
+    # `set` and `contains` join every item into one row, so dropping the row over the limit erased the diff
     filler = "x" * 3_000
     # `absent` is what puts an item in the extra group; without it the entry claims its expected value is None
     entries = [DiffEntry(path="extra", actual=filler, expected=None, absent="expected") for _ in range(count)]
@@ -1407,9 +1403,8 @@ def test_the_key_walk_covers_both_sides_once_and_keeps_the_written_order(actual,
     marker=st.sampled_from("ABC"),
 )
 def test_a_windowed_pair_shows_where_the_two_sides_part_however_deep_it_is(lead, trail, marker):
-    # the defect this replaced: each side was cut from its start, so a difference past the cap left two
-    # identical-looking values printed under a heading saying they were not equal.  the shared run is
-    # generated up to well past the 400-character cap, which is exactly where the old form went blind
+    # the defect this replaced: each side was cut from its start, so a difference past the cap printed
+    # two identical-looking values. The shared run is generated well past the 400-character cap
     left, right = f"{'x' * lead}{marker}{'y' * trail}", f"{'x' * lead}z{'y' * trail}"
     rendered_left, rendered_right = _diff_sides(left, right)
     assert_that(rendered_left).is_not_equal_to(rendered_right)
@@ -1507,9 +1502,8 @@ class TestTheCompactRenderingKeepsThePositionOfChange:
         assert_that(detail).is_length(1)
         assert_that(detail[0]).starts_with("   line 1: ").contains("X").contains("Y")
 
-    # control characters are excluded because `\r` and friends are line breaks to `splitlines()`, which
-    # is how the message is read back here: a value carrying one is a *multi*-line failure, and those
-    # keep their per-line rows by design
+    # `\r` and friends are line breaks to `splitlines()`, which is how the message is read back:
+    # a value carrying one is a multi-line failure, and those keep their per-line rows by design
     _ONE_LINE = st.text(st.characters(exclude_categories=("Cc", "Cs", "Zl", "Zp")), max_size=60)
 
     @given(actual=_ONE_LINE, expected=_ONE_LINE)
@@ -1605,9 +1599,8 @@ class TestTheEvaluationCoresAgreeWithPython:
         assert_that(text_ends_with(raw, text)).is_false()
 
 
-# Which narrowed view each subject reaches, so the table below can be checked against the typed surface
-# rather than trusted.  A hand-written list of "types with a pipeline" is exactly the kind of thing that
-# stops matching the code the first time a view is added.
+# Which narrowed view each subject reaches, so the table below is checked against the typed
+# surface. A hand-written list of "types with a pipeline" stops matching the first time one is added.
 _PIPELINE_VIEWS = {
     "list": "_IterableAssertion",
     "tuple": "_IterableAssertion",
@@ -1636,10 +1629,9 @@ _PIPELINE_STEPS = {
 }
 
 
-# what `assert_that` answers when no concrete overload matches, and so the one overload with no subject
-# what a value no overload recognises resolves to.  The builder is still a return type here,
-# on the capability umbrella, so naming it as the fallback would collect the wrong overload
+# what a value no overload recognises resolves to
 _FALLBACK_VIEW = "_ObjectAssertion"
+# the one overload with no subject, so naming it as the fallback would collect the wrong overload
 _UMBRELLA_VIEW = "_CapableAssertion"
 
 
@@ -1671,9 +1663,8 @@ def _pinned_pairs() -> dict[str, str]:
         subject = _literal_type(checked.args[0])
         if not subject:
             continue
-        # pinned twice to different views is a contradiction and stops the run.  Pinned twice to the same
-        # view is ordinary and allowed: `test_typing.py` checks a list subject in many chains, and each
-        # of those lines is a real assertion rather than a duplicate to remove
+        # pinned twice to different views is a contradiction; twice to the same view is ordinary, since
+        # `test_typing.py` checks a list subject in many chains and each line is a real assertion
         if subject in pinned and pinned[subject] != _plain_name(view):
             raise AssertionError(f"{subject} is pinned to both {pinned[subject]} and {_plain_name(view)}")
         pinned[subject] = _plain_name(view)
@@ -1725,8 +1716,7 @@ def _shape_bounds() -> dict[str, str]:
                 value=ast.Call(func=ast.Name(id="TypeVar"), keywords=keywords),
             ):
                 for keyword in keywords:
-                    # only a bound written as one name resolves to a subject.  The umbrella's bound is
-                    # a union of shapes written as a string, and it is read where it is dispatched
+                    # only a bound written as one name resolves to a subject; the umbrella's is a union in a string
                     if keyword.arg == "bound" and isinstance(keyword.value, ast.Name):
                         bounds[name] = keyword.value.id
     return bounds
@@ -1847,27 +1837,23 @@ def _dispatch_relation() -> dict[str, str]:
         view = _plain_name(returns)
         subjects = _annotated_types(arguments[0].annotation) if arguments and arguments[0].annotation else []
         if view == _FALLBACK_VIEW:
-            # the overload answering for anything unrecognised.  Its subject is a bare TypeVar, and
-            # requiring that here is what stops a concrete overload from hiding behind the same return
+            # a bare TypeVar subject, which is what stops a concrete overload from hiding behind the same return
             fallbacks.append(subjects)
             continue
         if view == _UMBRELLA_VIEW:
-            # the capability umbrella, which keeps the whole surface for a value the library recognises
-            # without naming its type.  It dispatches on a union of shapes rather than on one subject,
-            # so it has no row in the relation, and the order guard is what holds its placement
+            # the umbrella keeps the whole surface without naming a type, dispatching on a union of shapes,
+            # so it has no row in the relation and the order guard is what holds its placement
             umbrellas.append(subjects)
             continue
         if not view.endswith("Assertion"):
             written = ast.unparse(returns) if returns else "nothing"
             raise AssertionError(f"an assert_that overload returns {written}, which this walk cannot read")
-        # an overload this walk cannot read would drop out of the relation without a word, and the
-        # relation is the whole claim: refuse instead, the same way the protocol walk refuses a base
+        # an unreadable overload would drop out of the relation silently, so refuse as the protocol walk does
         if not subjects:
             raise AssertionError(f"an assert_that overload returning {view} has a subject this walk cannot read")
         bounds = _shape_bounds()
         for subject in (bounds.get(name, name) for name in subjects):
-            # a repeat is an error even when it agrees: two overloads naming one subject is a
-            # duplicate to remove, and letting the agreeing case through would hide it
+            # a repeat is an error even when it agrees: letting the agreeing case through would hide a duplicate
             if subject in relation:
                 raise AssertionError(f"{subject} is dispatched by more than one overload")
             relation[subject] = view
@@ -1930,8 +1916,7 @@ def _form_names(test_name: str) -> list[str]:
                 raise AssertionError(f"{test_name} has {len(assigned)} `forms` dictionaries, expected one")
             for statement in assigned:
                 if True:
-                    # a computed key would otherwise be dropped here and the form would vanish from the
-                    # comparison, which is the drift this gate exists to catch
+                    # a computed key would be dropped here and the form would vanish from the comparison
                     if not isinstance(statement.value, ast.Dict):
                         raise AssertionError(f"`forms` in {test_name} is not a dictionary literal")
                     if not all(
@@ -2106,12 +2091,10 @@ class TestEveryPipelineStepHandsBackAList:
         tuples rather than scalars, which is a different code path to the same promise.
         """
         subject = [{"id": identifier, "name": name} for identifier, name in rows]
-        # held in a variable rather than written inline, which is the shape the typed suite pins: an
-        # invariant `dict[str, str]` would not fit a `dict[str, object]` parameter
+        # held in a variable, as the typed suite pins: an invariant `dict[str, str]` fits no `dict[str, object]`
         criteria: dict[str, str] = {"name": "a"}
         forms = {
-            # keyed by the name of the case recording the same form in `typing_cases.py`, so the two
-            # suites compare as sets rather than as two numbers that happen to be equal
+            # keyed by the case name in `typing_cases.py`, so the two suites compare as sets, not as two numbers
             "one-name": lambda: assert_that(subject).extracting("id"),
             "several-names": lambda: assert_that(subject).extracting("id", "name"),
             "filter-callable": lambda: assert_that(subject).extracting("id", filter=lambda row: True),
@@ -2146,8 +2129,7 @@ class TestEveryPipelineStepHandsBackAList:
         assert_that(here).described_as("call forms named twice").does_not_contain_duplicates()
 
         recorded = pathlib.Path(__file__).with_name("typing_cases.py").read_text(encoding="utf-8")
-        # the marker has to sit on a line that actually calls `extracting`: a label left behind after
-        # its call was deleted would otherwise keep the two sets equal while the form was gone
+        # a label left behind after its call was deleted would keep the two sets equal with the form gone
         marked = [
             found.group(1)
             for line in recorded.splitlines()

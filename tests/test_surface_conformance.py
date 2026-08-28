@@ -29,8 +29,7 @@ from assertpy2.async_assertions import AsyncAssertionBuilder
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# `[file.py:12]`, which the compact surfaces append to a collected entry and the block form has no use
-# for. Stripped before comparing headlines, since a location is about where, not about what
+# `[file.py:12]`, appended by the compact surfaces only, and stripped since it says where and not what
 _LOCATION = re.compile(r"\s+\[[^\[\]]+:\d+\]$")
 _POLL_PREFIX = re.compile(r"^Expected condition not met after .*?\. Last failure: ")
 _COMPACT_ROW = re.compile(r"^   (?P<path>.+?): ")
@@ -254,8 +253,7 @@ def test_a_long_line_keeps_its_position_of_change_everywhere():
         assert_that(SURFACES[surface](case).paths).described_as(surface).is_equal_to(("line 1",))
 
 
-# every name that exists on both surfaces, as (method, matcher factory). `is_falsy`, `is_truthy` and
-# `is_uuid` are matcher-only and `filtered_on`/`extracting` are method-only, so neither has a twin here
+# every name on both surfaces; `is_falsy`, `is_truthy`, `is_uuid`, `filtered_on` and `extracting` have no twin
 TWINS = [
     ("is_greater_than", match.greater_than, (0,)),
     ("is_greater_than_or_equal_to", match.greater_than_or_equal_to, (0,)),
@@ -267,8 +265,7 @@ TWINS = [
     ("contains", match.contains_string, ("ell",)),
     ("starts_with", match.starts_with, ("he",)),
     ("ends_with", match.ends_with, ("lo",)),
-    # the same three against bytes, which is where they disagreed: with a `str` operand the method
-    # refuses a bytes value outright, so those rows say nothing about whether the two agree
+    # the same three against bytes: with a `str` operand the method refuses a bytes value outright
     ("contains", match.contains_string, (b"ell",)),
     ("starts_with", match.starts_with, (b"he",)),
     ("ends_with", match.ends_with, (b"lo",)),
@@ -355,8 +352,7 @@ class TestCheckIsTheSameVerdictWithoutTheRaise:
         )
 
     def test_a_wrong_argument_type_is_still_raised(self):
-        # a usage error is not a verdict: answered with `passed=False` it would read as "the value is
-        # not of that length", and the call that was actually wrong would never be looked at
+        # a usage error is not a verdict: `passed=False` reads as "not of that length" and hides the wrong call
         with pytest.raises(TypeError, match=r"^given length arg must be an integer"):
             assert_that([1, 2]).check().is_length("2")
 
@@ -379,9 +375,8 @@ class TestCheckIsTheSameVerdictWithoutTheRaise:
         ids=["wrong argument type", "incomparable operand"],
     )
     def test_the_builder_survives_an_error_raised_inside_check(self, spoil):
-        # `check()` swaps the builder into collecting mode for the length of one call. An error on that
-        # path used to be the way to leave it swapped, and the next ordinary assertion on the same
-        # builder would then quietly collect instead of raising
+        # `check()` swaps the builder into collecting mode for one call, and an error on that path used to
+        # leave it swapped, so the next ordinary assertion collected instead of raising
         builder = assert_that([1, 2])
         with pytest.raises(TypeError):
             spoil(builder)

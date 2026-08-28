@@ -62,8 +62,7 @@ def is_walkable(value: object) -> bool:
     return isinstance(value, Iterable)
 
 
-# types whose `__hash__` and `__eq__` agree; `bytearray` looks like it belongs and is not hashable, which turned a
-# `contains_only` into TypeError
+# types whose `__hash__` and `__eq__` agree; `bytearray` looks like one and turned `contains_only` into TypeError
 _HASH_SAFE = frozenset(
     {
         int,
@@ -195,8 +194,7 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     """
     # walked three times below, and idempotent for the callers that already did it
     walked, wanted_items = materialized(value), materialized(items)
-    # each side is searched for the other, and building both together is what makes either refusal fall back to the
-    # walk
+    # each side is searched for the other, and building both together is what makes either refusal fall back
     both = _index_both(wanted_items, walked)
     if both is None:
         return (

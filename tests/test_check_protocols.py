@@ -55,8 +55,7 @@ def test_the_generated_twins_match_the_protocols_they_mirror() -> None:
 
 def _formatted(source: str) -> str:
     """Both steps the generator runs after writing, so the comparison is of the same thing twice."""
-    # in the generator's order, which is not interchangeable: formatting first collapses the blank
-    # lines between stub bodies, and doing it second puts them back
+    # in the generator's order: formatting first collapses the blank lines between stub bodies
     for command in (
         ["ruff", "format", "--stdin-filename", _check_typing.__file__, "-"],
         ["ruff", "check", "--fix", "--quiet", "--stdin-filename", _check_typing.__file__, "-"],
@@ -66,16 +65,12 @@ def _formatted(source: str) -> str:
             input=source,
             capture_output=True,
             text=True,
-            # named rather than left to the locale: `text=True` encodes stdin with whatever the platform
-            # prefers, and on a Windows runner that is not UTF-8, so ruff was handed bytes it refused to
-            # read and this comparison ran on the wrong text
+            # named rather than left to the locale: a Windows runner is not UTF-8, and ruff refused the bytes
             encoding="utf-8",
             cwd=_ROOT,
             check=False,
         )
-        # refuse rather than fall back to the input: falling back compared unformatted text against formatted
-        # and passed everywhere the failure did not happen.  Zero and nothing else, because `ruff check --fix`
-        # exits 1 when violations remain, so accepting 1 would let output ruff rejected through
+        # refuse rather than fall back: `--fix` exits 1 with violations left, so 1 would let rejected output through
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(
                 f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "
@@ -115,8 +110,7 @@ class TestWhatTheTwinsCarry:
         ids=["numeric-holds", "numeric-fails", "string-holds", "negated"],
     )
     def test_the_runtime_still_answers_through_every_twin(self, call, expected) -> None:
-        # the twins describe a runtime object that resolves names through `__getattr__`, so what they
-        # promise has to be checked against the runtime rather than assumed from the declaration
+        # the twins describe an object resolving names through `__getattr__`, so check the runtime, not the declaration
         assert_that(call().passed).is_equal_to(expected)
 
 
@@ -148,8 +142,7 @@ def test_every_twin_declaration_mirrors_the_one_it_was_generated_from() -> None:
         )
         for name, (methods, bases) in originals.items()
     }
-    # both directions over the classes too, so a twin that exists for nothing and a protocol with no
-    # twin are each a difference rather than a silent pass
+    # both directions over the classes: a twin for nothing and a protocol with no twin are each a difference
     assert_that(sorted(twins)).described_as("the set of twins").is_equal_to(sorted(expected))
 
     differing = {}
@@ -204,9 +197,7 @@ def _declared(source: str) -> dict[str, tuple[dict[str, list[ast.FunctionDef]], 
         for item in node.body:
             if isinstance(item, ast.FunctionDef):
                 methods.setdefault(item.name, []).append(item)
-        # every base, written out: `Protocol[_E]` and the generic argument of an assertion base are
-        # what carry the element type into `check()`, and a comparison of bare names would let a
-        # generator hand back `_CheckIterableAssertion[Any]` without a word
+        # every base written out: bare names would let a generator hand back `_CheckIterableAssertion[Any]` unnoticed
         found[node.name] = (methods, [ast.unparse(base) for base in node.bases])
     return found
 
@@ -226,8 +217,7 @@ def test_anything_landing_on_the_builder_reaches_its_own_check_rather_than_a_twi
         "hands back `AssertionBuilder[_E]`", "capability umbrella claims"
     )
 
-    # and the runtime still names a typo, which is what a checker would have caught here, from both
-    # ways in: after a pivot, and from the first call on a value the umbrella claims
+    # the runtime still names a typo, from both ways in: after a pivot, and on a value the umbrella claims
     @dataclasses.dataclass
     class _Point:
         x: int

@@ -210,8 +210,7 @@ class TestEventuallySyncTrace:
         assert_that(str(exc_info.value)).contains("(probe recovered after 1 raising poll;")
 
     def test_a_timeout_collected_by_a_soft_block_keeps_its_trace(self):
-        # a collected timeout used to keep the text and drop the telemetry: `error()` had nowhere to
-        # put a trace, so the only path that carried one was the raising one
+        # a collected timeout dropped the telemetry: `error()` had nowhere to put a trace, only the raising path did
         with pytest.raises(AssertionFailure) as exc_info, soft_assertions():
             assert_that(lambda: {"s": "PENDING"}).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(
                 {"s": "PAID"}

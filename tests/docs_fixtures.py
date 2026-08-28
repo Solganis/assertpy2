@@ -24,8 +24,7 @@ def documented_pages(excluded: dict[str, str]) -> list[str]:
     pages = ["README.md", *sorted(path.as_posix() for path in pathlib.Path("docs").rglob("*.md"))]
     stale = sorted(set(excluded) - set(pages))
     if stale:
-        # a renamed page would otherwise leave its exclusion behind, excusing nothing while reading as
-        # though the decision still stood, and the renamed page itself would rejoin the guard unnoticed
+        # a renamed page would leave its exclusion behind, excusing nothing, and rejoin the guard unnoticed
         raise ValueError(f"excluded pages that no longer exist: {stale}")
     return [page for page in pages if page not in excluded]
 
@@ -68,8 +67,7 @@ class _Response:
         raise NotImplementedError
 
 
-# what the page's counter-examples are written about: a class answering to nothing the library can
-# use, which is the one kind of value the narrowed fallback applies to
+# what the counter-examples are about: a class answering to nothing, the one kind the fallback applies to
 class Person:
     def __init__(self, first_name: str) -> None:
         self.first_name = first_name
@@ -81,8 +79,7 @@ order = PaidOrder()
 person = Person("Fred")
 '''
 
-# Every value here is chosen to make the page's own assertions hold: `users` has exactly the five
-# active rows the page filters down to, `orders` the one FAILED row it maps and reads the first of.
+# chosen so the page's own assertions hold: five active rows to filter to, one FAILED order to map
 FLUENT = """
 from dataclasses import dataclass, field
 
@@ -119,8 +116,7 @@ items = [1, -2, 3, -4]
 orders = [_Order(status="FAILED", total=19.99), _Order(status="PAID", total=5.0)]
 """
 
-# Static only, like TYPE_SAFETY: the page's own examples write snapshot files, and a guard that ran
-# them would leave those files behind in the repo.
+# static only: the page's examples write snapshot files, which a guard that ran them would leave behind
 TESTING = """
 from typing import Any
 
@@ -172,9 +168,7 @@ payload: dict[str, Any] = {}
 metrics: dict[str, float] = {}
 """
 
-# The page registers `is_5` in its first block and uses it in later ones, which each guard reads on its own.
-# `some_library` is stubbed to the shape the example uses rather than dropped: a block nobody checks is how
-# the `is_5` gap went unnoticed
+# `some_library` is stubbed to the shape the example uses: a block nobody checks is how the `is_5` gap hid
 EXTENDING = """
 class _ValidationError(Exception):
     pass
@@ -196,8 +190,7 @@ def is_5(self):
     return self
 """
 
-# behave is not installed in the guard's environment (it changes the failure path for the whole suite,
-# so it gets its own CI job), and the step decorators are the only thing the page borrows from it.
+# behave is not installed here (it changes the failure path, so it has its own job); only its decorators are borrowed
 INTEGRATIONS = """
 from typing import Any
 

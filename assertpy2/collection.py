@@ -104,9 +104,7 @@ class CollectionMixin(_MixinBase):
 
         missing = []
         if is_mapping_like(self.val):
-            # read whole before any superset is walked: one of them sharing this subject's iterator would leave nothing
-            # here, and a subset of nothing is anything.  Pairs rather than keys, so a superset that reaches the subject
-            # cannot answer for it either
+            # read whole first: a superset sharing this iterator leaves nothing, and a subset of nothing is anything
             entries = [(key, self.val[key]) for key in self.val]
             superdict = {}
             for superset_index, superset in enumerate(supersets):
@@ -139,12 +137,10 @@ class CollectionMixin(_MixinBase):
                     collected.extend(cast("Iterable[object]", superset))
                 except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
                     collected.append(superset)
-            # the same core the matcher spelling uses: a bare `set()` reported a value whose hash disagrees with its
-            # `==` as missing
+            # the same core the matcher uses: a bare `set()` called a value whose hash disagrees with `==` missing
             missing.extend(not_contained_in(walked, collected))
             try:
-                # for the message only, not tied to the lookup above: the failure has always shown the superset as a set
-                # where that was possible, and which shape the membership decision took is no reason to change that
+                # for the message only: the failure has always shown the superset as a set where that was possible
                 superset_values: object = set(collected)
             except TypeError:
                 superset_values = collected
@@ -211,8 +207,7 @@ class CollectionMixin(_MixinBase):
         try:
             broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
         except UnorderableError:
-            # reported about the collection, not left to Python's "'<' not supported between instances of 'str' and
-            # 'int'", which is about the operator and names neither the assertion nor the value it was given
+            # reported about the collection: Python's own message is about the operator and names neither side
             unorderable = True
         else:
             unorderable = False
@@ -248,11 +243,9 @@ class CollectionMixin(_MixinBase):
             AssertionError: if val and other do **not** have the same length
             TypeError: if other is not a sized object
         """
-        # the subject first: this assertion is about it, and reading the operand first let the operand's
-        # own `__len__` answer for both
+        # the subject first: reading the operand first let the operand's own `__len__` answer for both
         actual_len = sized_len(self.val)
-        # `other` used to be left to `len()` itself, which answers "object of type 'int' has no len()":
-        # about the builtin rather than the assertion, and naming neither operand
+        # `other` was left to `len()`, whose message is about the builtin and names neither operand
         other_len = sized_len(other, subject=argument("other"))
         if actual_len != other_len:
             return self.error(
@@ -379,11 +372,9 @@ class CollectionMixin(_MixinBase):
             AssertionBuilder: returns a new instance with the filtered list as val
         """
         require_type(self.val, collections.abc.Iterable, "iterable")
-        # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher` subclass check: a
-        # custom matcher written against the documented shape was called as a plain function here
+        # the protocol test the other matcher-taking methods use: a duck-typed matcher was called as a function
         matches = predicate.matches if _is_matcher(predicate) else cast("Callable[..., object]", predicate)
-        # counted in the filtering pass: a generator is spent by it, so asking its length afterwards
-        # made the note about a filter that emptied a non-empty source claim the source was empty
+        # counted in the pass: a generator is spent by it, and asking after made an emptied source read as empty
         seen = 0
         filtered = []
         for item in self.val:

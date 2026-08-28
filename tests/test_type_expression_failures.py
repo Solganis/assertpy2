@@ -70,9 +70,8 @@ _COVERED = {
     "is_instance_of_any": _instance_of_any,
 }
 
-# what the builtin behind each of these accepts besides a bare class.  No member matches any subject
-# above: a shape that happens to match makes the assertion pass, and a test that then expects a failure
-# reports a defect in its own fixture
+# what the builtin behind each accepts besides a bare class. No member matches any subject above: one
+# that did would pass the assertion, and a test expecting a failure would report its own fixture
 _SHAPES = {
     "a union": _Person | IndexError,
     "a tuple": (_Person, IndexError),

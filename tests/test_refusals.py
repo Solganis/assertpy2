@@ -27,8 +27,7 @@ from assertpy2._engine._require import argument, refuse, require_type, sized_len
 # `<subject> must be <expectation>, but was <value> (<type>)`
 SHAPE = re.compile(r"^.+ must be .+, but was <.*> \(\w+\)$", re.DOTALL)
 
-# refusals that are not about a type at all, and would be worse for being squeezed into the shape: they
-# are about the state of the chain rather than about an operand
+# refusals about the state of the chain rather than an operand, and worse for being squeezed into the shape
 NOT_ABOUT_A_TYPE = (
     "no exception captured",
     "no expectation set",
@@ -184,8 +183,7 @@ class TestTheHelpersBehindTheShape:
             require_type(42, str, "a string", subject=argument("prefix"))
 
     def test_a_long_value_is_cut_rather_than_dumped(self):
-        # a refusal is read on one line next to a traceback, so a 500-character payload is shown by its
-        # opening and a count of what was left out
+        # a refusal is read on one line, so a 500-character payload shows its opening and a count of the rest
         with pytest.raises(TypeError) as failure:
             refuse("x" * 500, "a number")
         message = str(failure.value)
@@ -226,8 +224,7 @@ class TestTheHelpersBehindTheShape:
         assert_that(len(str(failure.value))).is_less_than(140)
 
     def test_a_control_character_is_shown_rather_than_dropped(self):
-        # dropping them would make two different values print identically, which is worse than the
-        # noise: the whole point of showing the value is telling one from another
+        # dropping them would print two different values identically, which is the point of showing the value
         class Carriage:
             def __repr__(self) -> str:
                 return chr(0x0D) + "OVERWRITE"
@@ -324,8 +321,7 @@ class TestADiagnosticNeverReplacesSomebodyElsesError:
             assert_that("10").is_greater_than(5)
 
     def test_a_matcher_still_answers_no_for_an_operand_it_cannot_compare(self):
-        # a matcher feeds `==` and combinators, where raising would be wrong: an operand it cannot
-        # compare is a non-match, and only a raising operator of their own travels out
+        # a matcher feeds `==` and the combinators: an operand it cannot compare is a non-match, not an error
         assert_that(match.less_than(1).matches("text")).is_false()
         assert_that(match.has_length(3).matches(42)).is_false()
 
@@ -340,8 +336,7 @@ def test_the_sweep_covers_every_public_assertion(refusals):
     reached = {name for name, _, _ in refusals}
     assert_that(swept).described_as("assertions discovered").is_not_empty()
     assert_that(reached - swept).described_as("reached but not discovered").is_empty()
-    # a floor rather than a fixed number: it moves with every assertion added, and the point is that
-    # discovery keeps finding most of the surface rather than silently collapsing to a handful
+    # a floor: it moves with every assertion added, and the point is that discovery keeps finding most of them
     assert_that(len(reached)).described_as("assertions that refused something").is_greater_than(len(swept) // 3)
 
 

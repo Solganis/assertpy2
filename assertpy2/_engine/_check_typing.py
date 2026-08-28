@@ -26,8 +26,7 @@ if TYPE_CHECKING:
     from ._compat import Self
     from ._introspection import MappingLike
 
-    # the type variables and the object view come from the module these twins mirror, so a change
-    # there cannot leave the two disagreeing about what a variable is bound to
+    # the type variables come from the module these twins mirror, so the two cannot disagree about a binding
     from ._typing import (
         _U,
         _ArrayT_co,

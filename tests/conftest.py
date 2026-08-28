@@ -51,17 +51,12 @@ def builder() -> AssertionBuilder:
     return AssertionBuilder(None)
 
 
-# A gate that is not installed does not fail, it skips, and a skipped gate reads as a green one.  It
-# cost two red CI runs in one day: `pytest-examples` was absent locally, so the whole doc-example file
-# was skipped while the run was reported as passing.
-#
-# The signal that a run claims to be complete is already there and needs no flag of its own: only the
-# cell that enforces the coverage floor promises every dependency is installed.  Under that promise a
-# module missing from the environment is a defect; anywhere else it is an ordinary partial run.
-#
-# A gate delegated to another job on purpose says so in its own `importorskip` reason, which replaces
-# pytest's wording and so reads as a decision rather than an accident.  The checkers are the case: the
-# lint job installs the typecheck group and the coverage cell does not.
+# A skipped gate reads as a green one, which cost two red CI runs in one day: `pytest-examples` was absent
+# locally, so the whole doc-example file was skipped while the run was reported as passing.  Only the cell
+# enforcing the coverage floor promises every dependency is installed, so a module missing under that promise
+# is a defect and anywhere else an ordinary partial run.  A gate delegated to another job says so in its own
+# `importorskip` reason: the checkers are the case, the lint job installing the typecheck group and the
+# coverage cell not.
 _IMPORT_SKIP = ("could not import", "no module named")
 _missing_from: dict[str, str] = {}
 

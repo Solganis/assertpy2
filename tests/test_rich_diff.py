@@ -170,8 +170,7 @@ class TestBuildEqualityDiffString:
         assert_that(result.entries[0].expected).is_equal_to("b")
 
     def test_str_subclass_against_plain_str(self):
-        # StrEnum members are str subclasses compared to plain strings constantly, so the text path must not turn on
-        # an exact type match
+        # StrEnum members are str subclasses compared to plain strings, so the text path cannot need an exact type
         class _Tag(str):
             pass
 
@@ -502,8 +501,7 @@ class TestListMessageCollapse:
         assert_that(str(exc.value)).contains("<circular ref>")
 
     def test_list_versus_dict_at_same_key_renders_without_crash(self):
-        # a list on one side and a mapping on the other must not be routed through the list collapser, which would
-        # index the mapping by position
+        # a list against a mapping must not reach the list collapser, which would index the mapping by position
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1, 2]}).is_equal_to({"a": {"x": 1}})
         assert_that(str(exc.value)).contains("'a': [1, 2]")
@@ -575,8 +573,7 @@ class TestStringDiffCarets:
                 assert_that(line.strip()[2:]).starts_with("...")
 
     def test_a_line_that_is_a_prefix_of_the_other(self):
-        # no index of the shared prefix differs, so the sentinel has to be a position: the window arithmetic
-        # subtracts from it
+        # no index of the shared prefix differs, so the sentinel has to be a position the arithmetic subtracts from
         diff = DiffResult(
             kind="string",
             entries=[DiffEntry(path="line 1", actual="x" * 300, expected="x" * 100)],
@@ -607,8 +604,7 @@ class TestStringDiffCarets:
         assert_that(len(_format_diff(diff))).is_less_than(25_000)
 
     def test_many_long_entries_hit_the_block_budget(self):
-        # the entry cap is lifted so the byte budget is what stops it, and a windowed text leaf makes rows shorter
-        # than they were
+        # the entry cap is lifted so the byte budget stops it, and a windowed text leaf makes rows shorter
         diff = DiffResult(
             kind="sequence",
             entries=[DiffEntry(path=f"[{i}]", actual="a" * 5_000, expected="b" * 5_000) for i in range(60)],
@@ -1184,8 +1180,7 @@ class TestBuildEqualityDiffCircularRef:
         assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
 
     def test_a_circular_entry_keeps_both_sides(self):
-        # dropping the expected side rendered the row as a pure deletion and shipped "expected": null into the Allure
-        # attachment
+        # dropping the expected side rendered a pure deletion and shipped "expected": null into the attachment
         mapping = {"x": 1}
         entry = _build_equality_diff(mapping, mapping, _seen={id(mapping)}).entries[0]
         assert_that(entry.actual).is_equal_to("<circular ref>")
@@ -1476,8 +1471,7 @@ class TestDiffEngineHarmonization:
         assert_that(paths).is_equal_to(["b", "a"])
 
     def test_the_headline_and_the_diff_read_the_keys_in_the_same_order(self):
-        # the headline sorted by repr while the diff below walked the mapping, so a key read from one was in a
-        # different place in the other
+        # the headline sorted by repr while the diff walked the mapping, so a key sat in two different places
         written = {"zebra": 1, "apple": 2, "mango": 3}
         with pytest.raises(AssertionError) as failure:
             assert_that(written).is_equal_to({"zebra": 9, "apple": 9, "mango": 9})
@@ -1783,8 +1777,7 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].path).is_equal_to("expected[0]")
 
     def test_a_repeated_element_is_never_treated_as_junk(self):
-        # difflib's autojunk calls any value filling over 1% of a 200+ element sequence junk, which is the repeated
-        # value an alignment matches on
+        # difflib's autojunk junks any value over 1% of a 200+ element sequence, which is what alignment matches on
         expected = ["a"] * 250
         result = _build_equality_diff(["x", *expected], expected)
         assert_that([entry.path for entry in result.entries]).is_equal_to(["actual[0]"])
@@ -1813,8 +1806,7 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].expected).is_equal_to(3)
 
     def test_a_one_sided_entry_names_the_sequence_it_indexes(self):
-        # after a shift the two index spaces disagree, and numbering both as [i] put two unrelated entries on one
-        # path
+        # after a shift the index spaces disagree, and numbering both as [i] put two unrelated entries on one path
         entries = _build_equality_diff([9, 1, 2, 3, 9], [1, 2, 3]).entries
         paths = [entry.path for entry in entries]
         assert_that(paths).is_equal_to(sorted(set(paths), key=paths.index))
@@ -1845,8 +1837,7 @@ class TestSequenceAlignment:
         )
 
     def test_a_reversal_keeps_the_index_reading(self):
-        # aligned this reads as four insertions and deletions, positionally as two substitutions, and
-        # the shorter reading wins
+        # four insertions and deletions aligned, two substitutions positionally, and the shorter reading wins
         result = _build_equality_diff([1, 2, 3], [3, 2, 1])
         assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
             [("[0]", 1, 3), ("[2]", 3, 1)]
@@ -1873,8 +1864,7 @@ class TestSequenceAlignment:
         assert_that(result.entries[0].path).is_equal_to("[0]")
 
     def test_an_equal_length_pair_is_never_aligned(self):
-        # a rotation would read shorter aligned, and is given up so that the common failure - two
-        # equal-length sequences of records - pays nothing for an alignment that cannot help it
+        # a rotation reads shorter aligned, given up so two equal-length record sequences pay nothing for it
         result = _build_equality_diff([1, 2, 3, 4], [2, 3, 4, 1])
         assert_that([entry.path for entry in result.entries]).is_equal_to(["[0]", "[1]", "[2]", "[3]"])
 
@@ -1895,8 +1885,7 @@ class TestSequenceAlignment:
         assert_that(rows).contains(("[3]", 9.0, 8.0))
 
     def test_an_aligned_equal_block_is_still_offered_to_the_config(self):
-        # difflib matched the block on ==, which is the whole test only when nothing narrows it: a
-        # comparator is free to disagree and has to be asked
+        # difflib matched the block on ==, which is the whole test only until a comparator narrows it
         called = []
 
         def picky(left, right):
@@ -2066,9 +2055,8 @@ class TestCaretsReachNestedTextLeaves:
         assert_that(self._caret_rows(output)).is_not_empty()
 
     def test_a_difference_past_the_row_cap_is_still_marked(self):
-        # windowing after capping cut both sides at the same offset, leaving two identical strings:
-        # ndiff called them a match and the row rendered with no `-`/`+` at all, so a failure looked
-        # like agreement. The window is taken over the whole repr for exactly this reason.
+        # windowing after capping cut both sides at the same offset, leaving two identical strings: ndiff
+        # called them a match and the row lost its `-`/`+`. The window is taken over the whole repr for this
         left, right = "z" * 600 + "abc", "z" * 600 + "abd"
         output = _format_diff(DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=left, expected=right)]))
         marked = [line.strip() for line in output.splitlines() if line.strip().startswith(("-", "+"))]
@@ -2076,8 +2064,7 @@ class TestCaretsReachNestedTextLeaves:
         assert_that(self._caret_rows(output)).is_length(2)
 
     def test_two_non_text_values_with_the_same_repr_still_read_as_differing(self):
-        # they are not text, so they never reach the guide at all: `_both_texts` declining is what
-        # keeps a common row from claiming they match
+        # not text, so they never reach the guide: `_both_texts` declining keeps a common row from claiming a match
         class SameRepr:
             def __repr__(self):
                 return "<obj>"
@@ -2103,8 +2090,7 @@ class TestTheBlockBudgetCutsRatherThanDrops:
         assert_that(_within_budget(["a", "b"], limit=20)).is_equal_to("a\nb")
 
     def test_a_limit_reached_exactly_at_a_row_boundary_drops_the_next_row(self):
-        # no room left for even one character of the next row, so there is nothing to truncate and it
-        # is counted instead
+        # no room for one character of the next row, so there is nothing to truncate and it is counted instead
         assert_that(_within_budget(["a" * 19, "b"], limit=20)).is_equal_to("a" * 19 + "\n  ... and 1 more diff lines")
 
     def test_rows_after_the_cut_are_counted(self):
@@ -2118,8 +2104,7 @@ class TestTheBlockBudgetCutsRatherThanDrops:
         assert_that(rendered).contains("xxx")
 
     def test_a_clipped_coloured_row_keeps_its_reset(self):
-        # the reset closes the colour at the end of the row; cutting it off stains everything the
-        # terminal prints after the diff block
+        # the reset closes the colour, and cutting it off stains everything the terminal prints after the block
         entries = [DiffEntry(path="extra", actual="x" * 3_000, expected=None, absent="expected") for _ in range(60)]
         rendered = _format_diff(DiffResult(kind="set", entries=entries), max_entries=0, color=True)
         opens = sum(rendered.count(code) for code in ("\033[31m", "\033[32m", "\033[36m"))
@@ -2157,8 +2142,7 @@ class TestConfigLeafRowsHoldBothSides:
         assert_that(rows).is_equal_to([(".value", 1.0, 2.0)])
 
     def test_strict_types_refuses_a_pair_a_comparator_called_equal(self):
-        # the type check runs before the comparator is consulted, so the failure carries a scalar diff
-        # with nothing to show rather than a row claiming the two values differ
+        # the type check runs first, so the failure carries an empty scalar diff rather than a row claiming a difference
         with pytest.raises(AssertionError) as exc_info:
             assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: True})
         assert_that(exc_info.value.diff.kind).is_equal_to("scalar")

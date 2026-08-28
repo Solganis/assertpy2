@@ -174,8 +174,7 @@ def _survey(tree: ast.Module) -> _Survey:
                     rebound.add(child.id)
             elif isinstance(child, ast.arg):
                 rebound.add(child.arg)
-            # merging the identical branches is what ruff asks for and a type checker then rejects, since only
-            # the separate branch narrows `ExceptHandler.name`
+            # merging the branches is what ruff asks and a checker rejects: only the separate one narrows the name
             elif isinstance(child, ast.ExceptHandler) and child.name:
                 rebound.add(child.name)
             elif isinstance(child, (ast.Import, ast.ImportFrom)):

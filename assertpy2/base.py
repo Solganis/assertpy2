@@ -234,8 +234,7 @@ class BaseMixin(SatisfiesMixin):
     def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
         """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
         if config is not None and config.strict_types and _types_differ(self.val, other):
-            # the dispatch routes two dict-likes into the key walk, which never sees the pair, so an OrderedDict
-            # against a dict would pass a strict comparison
+            # the key walk never sees the pair, so an OrderedDict against a dict would pass a strict comparison
             actual_repr, expected_repr = _disambiguated(self.val, other)
             return self.error(
                 f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.{_config_note(config)}",
@@ -270,8 +269,7 @@ class BaseMixin(SatisfiesMixin):
                     diff=diff,
                 )
         else:
-            # the one branch that decides with `==`: under a walk two instances of a type defining no `__eq__`
-            # compare equal.  Asked first, since a type may rewrite its own `__eq__` while answering
+            # the one branch deciding with `==`, asked first since a type may rewrite its own `__eq__` while answering
             self._equality_comparison = identity_candidate(self.val, other)
             if _guarded_not_equal(self.val, other):
                 if _both_list_like(self.val, other):
@@ -322,8 +320,7 @@ class BaseMixin(SatisfiesMixin):
             else:
                 decision = _node_decision(actual_item, expected_item, config)
                 if decision == "strict":
-                    # equal so far, but strict types has to look inside; a value the walker does not take apart is
-                    # equal
+                    # equal so far, but strict types looks inside; a value the walker does not take apart is equal
                     decision = (
                         "leaf"
                         if _child_entries(actual_item, expected_item, _ROOT, descended_for="strict", config=config)

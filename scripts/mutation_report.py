@@ -13,10 +13,9 @@ import sys
 
 import tomllib
 
-# mutmut's own exit-code table, imported rather than copied: only two codes mean "killed", while 5 and 33
-# mean nothing covered the mutant and 36 and 255 mean a timeout.  Reading every non-zero code as a kill
-# inflates the score, so the mapping fails loudly if it moves.  The import loads mutmut's config, so this
-# runs from the repository root where `[tool.mutmut]` lives
+# mutmut's exit-code table, imported rather than copied: only two codes mean "killed", 5 and 33 mean
+# nothing covered the mutant and 36 and 255 a timeout, so reading every non-zero code as a kill inflates
+# the score. The import loads mutmut's config, so this runs from the root where `[tool.mutmut]` lives
 from mutmut.__main__ import status_by_exit_code
 
 _RESULTS = pathlib.Path("mutants/assertpy2")
@@ -91,8 +90,8 @@ def main() -> int:
         return 1
 
     if tally.judged == 0:
-        # every mutant unjudged means the baseline never ran, which mutmut reports as "failed to
-        # collect stats" and which reads downstream as a clean sweep.  It went unnoticed for two weeks
+        # every mutant unjudged means the baseline never ran, which mutmut reports as "failed to collect stats"
+        # and which reads downstream as a clean sweep.  It went unnoticed for two weeks
         print(f"none of the {tally.total} mutants got a verdict: the baseline did not run", file=sys.stderr)
         return 1
 

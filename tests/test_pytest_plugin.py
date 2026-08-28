@@ -100,8 +100,7 @@ class TestPluginLoaded:
         assert_that(names).contains("assertpy2_dangling_entries")
         assert_that(names).contains("assertpy2_profile")
         assert_that(names).contains("assertpy2_vacuous")
-        # the two a profile answers for are registered with no default of their own, so `_setting`
-        # can tell "the suite wrote off" from "the suite wrote nothing"
+        # the two a profile answers for carry no default, so `_setting` tells "wrote off" from "wrote nothing"
         defaults = {call[0][0]: call[1].get("default") for call in parser.addini.call_args_list}
         assert_that([defaults[name] for name in ("assertpy2_dangling", "assertpy2_vacuous")]).is_equal_to(["", ""])
         assert_that(defaults["assertpy2_failure_clusters"]).described_as(
@@ -208,16 +207,14 @@ class TestTheProfileFromAConfigFile:
         (tmp_path / "test_guards.py").write_text(self._SUITE, encoding="utf-8")
         (tmp_path / "pytest.ini").write_text("\n".join(["[pytest]", *settings, ""]), encoding="utf-8")
         return subprocess.run(
-            # this interpreter rather than `uv run`: the child is started from `tmp_path`, which is outside
-            # the project, and `uv run` there resolves whichever interpreter it finds instead of the one
-            # running the suite.  On a 3.10 check that answered from 3.14 without the plugin installed
+            # this interpreter, not `uv run`: the child starts in `tmp_path`, outside the project, where `uv run`
+            # resolves whatever it finds. A 3.10 check answered from 3.14 with no plugin installed
             [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider"],
             cwd=tmp_path,
             capture_output=True,
             text=True,
             timeout=180,
-            # the variable is one of the three ways to ask for the vacuous guard, so a machine that
-            # carries it would answer for the suite under test rather than the config file does
+            # one of the three ways to ask for the vacuous guard, so a machine carrying it would answer for the suite
             env={**{key: value for key, value in os.environ.items() if key != "ASSERTPY2_VACUOUS"}, **environment},
         )
 
@@ -546,8 +543,7 @@ class TestDiffToJson:
         assert_that(_diff_to_json(diff)).is_none()
 
     def test_payload_carries_format_version(self):
-        # consumers branch on the schema: 1 = repr strings, 2 = typed values, 3 = a named absent side, 4 = a machine-
-        # readable path
+        # consumers branch on it: 1 repr strings, 2 typed values, 3 a named absent side, 4 a machine-readable path
         diff = DiffResult(kind="dict", entries=[DiffEntry(path="a", actual=1, expected=2)])
         assert_that(json.loads(_diff_to_json(diff))["format"]).is_equal_to(4)
 
@@ -981,8 +977,7 @@ def _make_config(
     vacuous="off",
 ):
     config = MagicMock()
-    # every key answered by name, and a key nobody listed refuses instead of taking somebody else's
-    # value.  A catch-all fed the allure mode to every other reader, which is how a guard came to be
+    # every key answered by name: a catch-all fed the allure mode to every other reader, and a guard was
     # handed `diff` for its own setting and refused it as a value it does not know
     per_key = {
         "assertpy2_allure": ini,
@@ -1003,8 +998,7 @@ def _make_config(
 
     config.getini.side_effect = answer
     config.getoption.return_value = snapshot_update
-    # the profile is resolved once and cached here, and a mock answers an attribute that was never set
-    # with another mock, which reads as a profile nobody declared
+    # the profile is cached here, and a mock answers an unset attribute with a mock, reading as a profile
     config._assertpy2_profile = None
     return config
 
@@ -1480,8 +1474,7 @@ class TestSnapshotKeyReuseWarning:
         assert_that(str(caught[0].message)).contains("snapshot(id=...)")
 
     def test_the_warning_points_at_the_line_that_reused_the_key(self, monkeypatch, tmp_path):
-        # `catch_warnings` records the message and not where pytest attributes it, so the stack level was free to
-        # drift
+        # `catch_warnings` records the message, not where pytest attributes it, so the stack level could drift
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             assert_that({"u": 1}).snapshot(id="shared", path=str(tmp_path))

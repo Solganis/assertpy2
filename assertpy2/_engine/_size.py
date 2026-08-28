@@ -24,8 +24,7 @@ def length_of(value: object) -> int | None:
     Python frame being pushed, which a `__len__` implemented in C does not do.
     """
     if type(value) in _SIZED:
-        # `isinstance` against an ABC is the whole cost of this function, and it was paid per element on the
-        # extraction path
+        # `isinstance` against an ABC is the whole cost here, and it was paid per element on the extraction path
         return len(cast("Sized", value))
     if not isinstance(value, Sized):
         return None

@@ -48,8 +48,7 @@ def _require_caller(frame: types.FrameType | None) -> types.FrameType:
 
 def register_snapshot_serializer(
     cls: type,
-    # `Any`, not `object`: a codec only ever sees an instance of `cls`, and demanding `object` rejected correct
-    # codecs, `pathlib.PurePath` among them
+    # `Any`, not `object`: a codec only sees an instance of `cls`, and `object` rejected `pathlib.PurePath`
     encode: Callable[[Any], object],
     decode: Callable[[Any], object],
     *,
@@ -211,8 +210,7 @@ def _rewrapped(mismatch: AssertionFailure, message: str) -> AssertionFailure:
     failure = AssertionFailure(
         message, actual=mismatch.actual, expected=mismatch.expected, diff=mismatch.diff, trace=mismatch.trace
     )
-    # ty: ignore[invalid-argument-type]  # the record is `| None` in general and never None here: both
-    # callers catch what `is_equal_to` raised, and delivery always attaches one (see the docstring)
+    # ty: ignore[invalid-argument-type]  # never None here: both callers catch what `is_equal_to` raised
     failure._outcome = replace(mismatch._outcome, message=message)
     return failure
 
@@ -256,8 +254,7 @@ def _record_access(snapname: str, key: str, site: str) -> None:
         return
     nodes = _ACCESS_NODES.setdefault((snapname, key), set())
     nodes.add(_CURRENT_NODE)
-    # `>= 2` with `_WARNED` doing the once-only work: `== 2` would drop warnings the day anything repopulated the
-    # registry
+    # `>= 2` with `_WARNED` doing the once-only work: `== 2` would drop warnings if anything repopulated the registry
     if len(nodes) >= 2 and (snapname, key) not in _WARNED:
         _WARNED.add((snapname, key))
         warnings.warn(
@@ -637,8 +634,7 @@ class SnapshotMixin(_MixinBase):
         _record_access(snapname, "" if id else lineno, f"id={id!r}" if id else f"{file_path}:{lineno}")
         os.makedirs(path, exist_ok=True)
 
-        # serialised so parallel workers sharing a snap file do not lose each other's entries; the update-mode
-        # rewrite decision stays inside the lock
+        # serialised so parallel workers do not lose each other's entries; the rewrite decision stays inside the lock
         snapshot_value = _UNSET
         updated = False
         with _file_lock(snapname):

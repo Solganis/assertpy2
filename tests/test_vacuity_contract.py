@@ -72,8 +72,8 @@ def _never(item: object) -> bool:
 
 _EMPTY_SUBJECTS = [[], (), set(), ""]
 
-# Universal quantification over an empty set is true, the way Python's own all() and AssertJ read it.
-# Each row below passes on an empty subject even though its predicate can never hold.
+# Universal quantification over an empty set is true, as Python's `all()` and AssertJ read it. Each row
+# below passes on an empty subject even though its predicate can never hold.
 _VACUOUSLY_TRUE = {
     "all_satisfy": lambda subject: assert_that(subject).all_satisfy(_never),
     "none_satisfy": lambda subject: assert_that(subject).none_satisfy(_never),
@@ -98,14 +98,13 @@ def test_an_existential_quantifier_fails_on_an_empty_subject(subject):
         assert_that(subject).any_satisfy(_never)
 
 
-# Only the positive half of the table above: an empty subject is the expected pass for the negatives
-# ("no errors were logged" is exactly what such a test wanted), so warning there would be noise.
+# Only the positive half: an empty subject is the expected pass for the negatives ("no errors were
+# logged" is exactly what such a test wanted), so warning there would be noise.
 _POSITIVE_QUANTIFIERS = {
     name: call for name, call in _VACUOUSLY_TRUE.items() if name not in {"none_satisfy", "does_not_contain_duplicates"}
 } | {
-    # not in the table above, which runs every entry against every empty subject: `all_fields_satisfy`
-    # treats a set or a string as one leaf by design, so it is vacuous only on a container that walks
-    # to nothing. The guard still has to name it, which is what it is here for.
+    # not in the table above: `all_fields_satisfy` treats a set or a string as one leaf, so it is vacuous
+    # only on a container that walks to nothing. The guard still has to name it.
     "all_fields_satisfy": lambda subject: assert_that(subject).all_fields_satisfy(_never),
 }
 
@@ -158,9 +157,8 @@ class TestVacuousGuard:
 
     @pytest.mark.parametrize(("name", "call"), list(_POSITIVE_QUANTIFIERS.items()), ids=list(_POSITIVE_QUANTIFIERS))
     def test_the_warning_names_the_method_the_caller_used(self, guarded, name, call):
-        # the guard sits in each entry point, not in the shared one they delegate to: a message saying
-        # "each()" for an all_satisfy() call would send the reader to the wrong docs. Checking one
-        # entry point left every other one free to pass whatever name it liked.
+        # the guard sits in each entry point: a message saying "each()" for an `all_satisfy()` call sends the
+        # reader to the wrong docs, and checking one left every other free to pass whatever name it liked.
         with pytest.warns(VacuousAssertionWarning, match=rf"^{name}\(\)"):
             call([])
 
@@ -439,8 +437,7 @@ class TestVacuousGuard:
         assert_that(paths).described_as("the fields, not the walk over them").is_equal_to(["id", "name"])
 
     def test_a_broken_len_is_beside_the_point(self, guarded):
-        # the guard no longer asks for a length at all: it reads what the walk counted, so a value
-        # whose `__len__` raises is answered by walking it like any other
+        # the guard reads what the walk counted, so a value whose `__len__` raises is walked like any other
         class BrokenLen:
             def __len__(self):
                 raise ValueError("len exploded")

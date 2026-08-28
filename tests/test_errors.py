@@ -178,9 +178,7 @@ class TestStructuredErrorFromAssertions:
             assert_that(ex.expected).is_equal_to({"a": 1, "b": 99})
 
     def test_is_not_equal_to_raises_the_same_class_as_a_comparison(self):
-        # these two used to be the other half of a split: an assertion that named no expected value
-        # and built no diff raised a bare AssertionError, so what a handler could read off a failure
-        # depended on which assertion had produced it
+        # these two once raised a bare AssertionError, so a handler read a different shape per assertion
         with pytest.raises(AssertionFailure) as failure:
             assert_that(1).is_not_equal_to(1)
         assert_that(failure.value.actual).is_equal_to(1)
@@ -396,8 +394,7 @@ class TestEveryDifferenceCarriesAMachineReadablePath:
         assert_that([(step.kind, step.value) for step in entry.steps]).is_equal_to([("attr", "x")])
 
     def test_a_shifted_sequence_names_the_side_its_index_belongs_to(self):
-        # once alignment shifts the two apart their index spaces disagree, and an index without a side
-        # names two different elements
+        # once alignment shifts the two apart, an index without a side names two different elements
         with pytest.raises(AssertionFailure) as failure:
             assert_that([1, 2, 3, 4]).is_equal_to([0, 1, 2, 3, 4])
         one_sided = [entry for entry in failure.value.diff.entries if entry.absent is not None]

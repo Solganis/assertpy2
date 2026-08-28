@@ -346,14 +346,12 @@ class TestConfigWithFilter:
             assert_that([1.0]).is_equal_to([1.5], include="x", tolerance=0.001)
 
     def test_nested_dict_vs_scalar_under_config_fails_cleanly(self):
-        # one side dict-nested, the other scalar: reports a clean difference, not a TypeError from
-        # descending into the scalar.
+        # one side dict-nested, the other scalar: a clean difference, not a TypeError from descending
         with pytest.raises(AssertionFailure):
             assert_that({"a": {"x": 1.0}}).is_equal_to({"a": 5.0}, tolerance=0.001)
 
     def test_tolerated_key_does_not_short_circuit_later_keys(self):
-        # int keys hash deterministically (hash(0)=0 < hash(1)=1), so the set iterates 0 then 1: key 0 is
-        # within tolerance and key 1 differs, so both keys must be checked, not just the first.
+        # the set iterates 0 then 1, and only key 1 differs, so both keys must be checked and not just the first
         with pytest.raises(AssertionFailure):
             assert_that({0: 1.0, 1: 5.0}).is_equal_to({0: 1.0001, 1: 9.0}, tolerance=0.001)
 
@@ -634,8 +632,7 @@ class TestStrictTypes:
         ids=str,
     )
     def test_an_equal_set_is_not_read_as_a_difference(self, actual, expected):
-        # forcing the walk must only ever enter what the walker takes apart. A set is a container it
-        # does not, so entering one hands the caller a value it reads as a difference
+        # the walk may only enter what the walker takes apart; a set is not, and entering one invents a difference
         assert_that(actual).is_equal_to(expected, strict_types=True)
         assert_that(match.equal_to(expected, strict_types=True).matches(actual)).is_true()
 
@@ -663,8 +660,7 @@ class TestStrictTypes:
         ids=str,
     )
     def test_an_undecomposable_value_at_the_top_level_is_equal_to_its_copy(self, value):
-        # the top-level builder has its own ladder, wider than the nested walker's: it knows sets,
-        # strings and bytes. A forced descent has to read "the ladder ran out" as equality there too
+        # the builder's ladder knows sets, strings and bytes, so a forced descent reads "ran out" as equality too
         assert_that(value).is_equal_to(copy.deepcopy(value), strict_types=True)
 
     @pytest.mark.parametrize(
@@ -742,8 +738,7 @@ class TestStrictTypes:
         assert_that(diff.entries[0].steps[-1].kind).described_as("reported against the key").is_equal_to("key")
 
     def test_a_key_matched_by_hash_is_found_whichever_side_stores_it(self):
-        # `{True} & {1}` hands back whichever side the set implementation drew from, so an intersection
-        # loses the very type being compared. Both orders have to report
+        # `{True} & {1}` hands back whichever side the set drew from, losing the type being compared
         for actual, expected in (({True: "a"}, {1: "a"}), ({1: "a"}, {True: "a"})):
             with pytest.raises(AssertionError):
                 assert_that(actual).is_equal_to(expected, strict_types=True)
@@ -769,9 +764,8 @@ class TestStrictTypes:
         assert_that(rows).is_equal_to([("b", 2, None)])
 
     def test_a_self_referential_pair_behaves_the_same_either_way(self):
-        # forcing the walk into a container whose own `==` was true raises the question of what happens
-        # on a cycle. Nothing new: two distinct self-referential structures already exhaust the stack
-        # without the flag, and so does bare `==` (CPython's guard covers `a is b`, not this)
+        # nothing new on a cycle: two distinct self-referential structures already exhaust the stack without
+        # the flag, and so does bare `==` (CPython's guard covers `a is b`, not this)
         actual = {"x": 1}
         actual["self"] = actual
         expected = {"x": 1}
@@ -796,15 +790,13 @@ class TestStrictTypes:
             assert_that(actual).is_equal_to(expected, strict_types=True)
 
     def test_a_shared_subnode_is_not_walked_twice(self):
-        # forcing the walk gives up the identity shortcut CPython applies inside a container, and a
-        # shared subnode is where that shortcut is doing real work: here it is also cyclic
+        # forcing the walk gives up CPython's identity shortcut, and a shared subnode is where it does real work
         shared = {"k": 1}
         shared["self"] = shared
         assert_that({"cfg": shared, "n": 1}).is_equal_to({"cfg": shared, "n": 1}, strict_types=True)
 
     def test_the_same_nan_object_still_compares_equal(self):
-        # `nan != nan`, so a container holding one is equal to itself only through that same shortcut.
-        # Without it a strict run would disagree with a plain one over something unrelated to types.
+        # `nan != nan`, so without the shortcut a strict run would disagree with a plain one over nothing typed
         nan = float("nan")
         assert_that([nan]).is_equal_to([nan])
         assert_that([nan]).is_equal_to([nan], strict_types=True)
@@ -895,16 +887,14 @@ class TestConfigSurvivesTheFilteredPaths:
             assert_that([(1, 2)]).is_equal_to([(True, 2)], strict_types=True, ignore="absent")
 
     def test_an_element_pair_where_only_one_side_introspects(self):
-        # the pair guard is a conjunction: with a dataclass on one side and an int on the other, taking
-        # either side alone walks a None as if it were a mapping
+        # the pair guard is a conjunction: taking either side alone walks a None as if it were a mapping
         with pytest.raises(AssertionFailure, match="index"):
             assert_that([1]).is_equal_to([Point(1.0, 2.0)], ignore="id")
         with pytest.raises(AssertionFailure, match="index"):
             assert_that([Point(1.0, 2.0)]).is_equal_to([1], ignore="id")
 
     def test_a_length_mismatch_carries_both_sides_on_the_exception(self):
-        # the message names both sequences, so dropping the structured `actual` changed no text: only
-        # the report attachment and any programmatic consumer lost it
+        # the message names both sequences, so dropping the structured `actual` cost only the report attachment
         with pytest.raises(AssertionFailure) as failure:
             assert_that([{"a": 1}]).is_equal_to([{"a": 1}, {"b": 2}], ignore="x")
         assert_that(failure.value.actual).is_equal_to([{"a": 1}])
@@ -962,8 +952,7 @@ class TestConfigEchoedOnFailure:
         assert_that(message).contains("compared with tolerance=0.1")
 
     def test_the_original_sentence_stays_a_prefix(self):
-        # what keeps an existing `match=` or `startswith` written against the old text working: the note
-        # is appended on its own line and never rewrites the sentence
+        # the note is appended on its own line and never rewrites the sentence an existing `match=` reads
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": 1.0}).is_equal_to({"a": 9.0}, tolerance=0.1)
         first_line = str(exc_info.value).splitlines()[0]
@@ -1001,9 +990,8 @@ class TestDecisionSentinelsReachTheDiff:
             )
 
     def test_a_comparator_owning_a_container_field_stops_the_descent(self):
-        # a scalar leaf reads the same either way, because descending into it finds nothing and the
-        # caller falls back to plain inequality. A container is where "this leaf differs" and "walk
-        # inside it" part company: the path is the field, not a key underneath it.
+        # a scalar leaf reads the same either way. A container is where "this leaf differs" and "walk inside
+        # it" part company: the path is the field, not a key underneath it.
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"a": {"x": 1}}).is_equal_to({"a": {"x": 2}}, comparators={"a": lambda actual, expected: False})
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])

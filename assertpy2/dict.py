@@ -168,8 +168,7 @@ class DictMixin(_MixinBase):
         for entry in entries:
             if type(entry) is not dict:
                 refuse(entry, "a dict", subject=argument("entry"))
-            # `object` and not `dict`, matching the declaration and the runtime both: the check above is
-            # `type(entry) is dict`, so a `dict` subclass a narrower annotation would approve is refused here
+            # `object` not `dict`: the check above is `type(entry) is dict`, so a subclass is refused here
             pair = cast("dict[Any, Any]", entry)
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")

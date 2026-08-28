@@ -84,15 +84,13 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
     config there is nothing to honour, so the plain check is kept exactly as it was.
     """
     if value is other and not at_root:
-        # identity first, the way Python's own container comparison short-circuits.  Not at the root, where `nan`
-        # made `strict_types` weaker than plain equality
+        # identity first, as Python's containers do.  Not at the root, where `nan` made `strict_types` the weaker rule
         return False
     if config is None:
         return _guarded_not_equal(value, other)
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
-        # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal, since their
-        # members carry no path to compare by
+        # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal
         if config.tolerance is not None or config.comparators:
             return _node_decision(value, other, config) != "equal"
         return _guarded_not_equal(value, other)
@@ -172,8 +170,7 @@ def mapping_differs(
     if keys_in_actual != keys_in_expected:
         return True
     if config is not None and config.strict_types and _keyed_types_differ(actual, expected):
-        # `{True: "a"}` and `{1: "a"}` are equal to Python and not the same mapping under strict types; the walk
-        # below only ever sees the values
+        # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; the walk below sees only values
         return True
     for key in keys_in_actual:
         nested_left, nested_right = left[key], right[key]

@@ -79,8 +79,7 @@ class _CompareConfig:
     """
 
     tolerance: float | None = None
-    # `dict` and not `Mapping`, because `_build_compare_config` refuses anything else at run time, and a
-    # signature that accepted a `MappingProxyType` a checker approved of would fail on the call
+    # `dict` and not `Mapping`: the runtime refuses anything else, so a checker-approved `MappingProxyType` would fail
     comparators: dict[Any, Callable[[Any, Any], Any]] | None = None
     ignore_null: bool = False
     strict_types: bool = False
@@ -139,8 +138,7 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
 
 def _array_equality_error(method: str, operand: object) -> TypeError:
     """Build the actionable error raised when ``method`` is given an element-wise array/frame-like."""
-    # the dedicated assertion reports the differing column or index, where wrapping `.equals()` would report a bare
-    # False
+    # the dedicated assertion names the differing column or index, where wrapping `.equals()` reports a bare False
     dedicated = "is_frame_equal(expected)" if hasattr(operand, "equals") else "is_array_equal(expected)"
     return TypeError(
         f"{method}() cannot directly compare <{type(operand).__name__}>: its '==' is element-wise and has"
@@ -287,8 +285,7 @@ def _keyed_types_differ(actual, expected) -> bool:
     different pairs where `True` and `1` are the same key, which is exactly the distinction being made.
     Values are left alone here: they do become pairs, and the walk judges them.
     """
-    # structural, like everything else here: the concrete-type check let a `UserDict` pass where the matcher refused
-    # it
+    # structural, like everything here: the concrete-type check let a `UserDict` pass where the matcher refused it
     if is_mapping_like(actual) and is_mapping_like(expected):
         return {(type(key), key) for key in actual} != {(type(key), key) for key in expected}
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
@@ -317,16 +314,13 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             return "equal" if verdict(comparator(actual, expected), subject="the comparator") else "leaf"
         if config.strict_types:
             if actual is expected and not at_root:
-                # identity, which a container gets free from `PyObject_RichCompareBool`.  Not at the root, where it
-                # made `strict_types` the weaker rule
+                # identity, free from `PyObject_RichCompareBool`.  Not at the root, where it made `strict_types` weaker
                 return "equal"
             if _types_differ(actual, expected):
-                # ahead of tolerance: a tolerance says how far apart two numbers may be, not that they may be
-                # different types
+                # ahead of tolerance: how far apart is not the same as may differ in type
                 return "leaf"
             if _keyed_types_differ(actual, expected):
-                # before the walk, which descends through keys into values, so two mappings keyed `True` and `1`
-                # present the same values
+                # before the walk: it descends keys into values, so `True` and `1` keys present the same values
                 return "leaf"
             if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going

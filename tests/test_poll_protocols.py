@@ -52,16 +52,12 @@ def _formatted(source: str) -> str:
             input=source,
             capture_output=True,
             text=True,
-            # named rather than left to the locale: `text=True` encodes stdin with whatever the platform
-            # prefers, and on a Windows runner that is not UTF-8, so ruff was handed bytes it refused to
-            # read and this comparison ran on the wrong text
+            # named rather than left to the locale: a Windows runner is not UTF-8, and ruff refused the bytes
             encoding="utf-8",
             cwd=_ROOT,
             check=False,
         )
-        # refuse rather than fall back to the input: falling back compared unformatted text against formatted
-        # and passed everywhere the failure did not happen.  Zero and nothing else, because `ruff check --fix`
-        # exits 1 when violations remain, so accepting 1 would let output ruff rejected through
+        # refuse rather than fall back: `--fix` exits 1 with violations left, so 1 would let rejected output through
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(
                 f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "
@@ -139,9 +135,8 @@ def _names(source: str, protocol: str | None = None) -> set[str]:
     return found
 
 
-# the view reached through `when_called_with()`, never through `assert_that()`.  It adds these eight to
-# the surface its value type would have, so the chain gives up its type at that pivot and they come off
-# the hook rather than being declared for a chain over text
+# reached through `when_called_with()` only. It adds these eight to the surface its value type
+# would have, so the chain gives up its type at that pivot and they come off the hook
 _AFTER_A_CALL = frozenset(
     {
         "caused_by",
@@ -177,8 +172,7 @@ class TestWhatTheTwinsCarry:
         assert_that(twins).contains("within", "every", "ignoring", "not_", "__getattr__")
 
     def test_every_declared_name_is_one_the_replay_can_answer(self) -> None:
-        # a chain answers any name from its hook, so the parity question is about the builder the
-        # steps are replayed on, not about the chain object
+        # a chain answers any name off its hook, so parity is about the builder the steps are replayed on
         twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), "_SyncPoll")
         declared = {name for name in twins if not name.startswith("_") and name not in _THE_CHAIN_ITSELF}
         assert_that(sorted(declared - set(dir(AssertionBuilder)))).described_as(
@@ -204,8 +198,7 @@ class TestWhereAPivotLands:
         assert_that(self._returns("first")).contains("_SyncPoll[str]", "_SyncPoll[_K]")
 
     def test_the_invoked_pivot_gives_the_type_up(self) -> None:
-        # its view adds `raised()` and the seven others to what a chain over text would offer, so
-        # calling the chain one over text would answer those off the hook and claim text for them
+        # its view adds eight names, so calling the chain one over text would answer them off the hook
         assert_that(set(self._returns("when_called_with"))).is_equal_to({"_SyncPoll[Any]"})
 
 

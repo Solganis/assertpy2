@@ -252,9 +252,8 @@ class TestNotDoesNotInvertAnErrorFromTheValue:
         self._foreign(caught).is_equal_to("comparator broke")
 
     def test_a_property_that_raises(self):
-        # this one never reached the catch even before it was narrowed: a dynamic `has_*` reads the
-        # property while the proxy is resolving the attribute, which is before there is anything to
-        # invert. Pinned so a refactor that moves resolution inside the try does not lose it silently
+        # a dynamic `has_*` reads the property while the proxy resolves the attribute, before there is
+        # a verdict to invert. Pinned so moving resolution inside the try does not lose it silently
         class Record:
             @property
             def name(self):
@@ -281,8 +280,7 @@ class TestNotDoesNotInvertAnErrorFromTheValue:
         self._foreign(caught).is_equal_to("comparison implementation broke")
 
     def test_a_nested_assertion_inside_a_comparator(self):
-        # the class of the exception cannot answer this one: a comparator that asserts with this
-        # library raises this library's own failure, and it is still not the verdict being negated
+        # a comparator asserting with this library raises our own failure, which is still not the verdict
         def asserts_inside(left, right):
             assert_that(left).is_equal_to(right)
             return True
@@ -418,7 +416,6 @@ def test_pipeline_transformer_before_not_keeps_working():
 
 
 def test_hybrid_pivots_stay_negatable():
-    # extracting_group / matches_with_groups both assert (pattern must match) and pivot,
-    # so negating them is meaningful and stays allowed
+    # both assert (the pattern must match) and pivot, so negating them is meaningful and stays allowed
     assert_that("abc").not_.matches_with_groups(r"(\d+)")
     assert_that("abc").not_.extracting_group(r"(\d+)", 1)

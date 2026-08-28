@@ -488,8 +488,7 @@ class TestSilencingADeliberateOne:
         assert_that(ALLOW_MARKER).is_equal_to("assertpy2: allow-dangling")
 
     def test_a_bare_noqa_does_not_silence_it(self):
-        # ruff's own suppression comment belongs to ruff: borrowing it would silence this check
-        # by accident, and would also mean a line silenced for one tool is silenced for both
+        # ruff's suppression belongs to ruff: borrowing it would silence this check and both tools at once
         found = scan("""
             def test_x():
                 assert_that(1)  # noqa: F401
@@ -565,8 +564,7 @@ class TestAProjectsOwnWrapper:
         assert_that(findings(source, "sample.py", frozenset({"check"}))).is_empty()
 
     def test_reaching_the_wrapper_through_its_module_is_not_recognised(self):
-        # a documented limit rather than an oversight: `helpers.check` would need the config to name a
-        # module too, and every suite reached for `from ... import` instead
+        # a documented limit: `helpers.check` would need the config to name a module, and suites use `from ... import`
         source = "import project.helpers\n\ndef test_x():\n    project.helpers.check(1)\n"
         assert_that(findings(source, "sample.py", frozenset({"check"}))).is_empty()
 
@@ -593,8 +591,7 @@ class TestThePluginWiring:
 
     @staticmethod
     def _item(config, path, function_name=None, nodeid="t.py::test_x"):
-        # `__qualname__` rather than `__name__`: the plugin reads the whole chain, so a fake item has
-        # to carry one too
+        # `__qualname__`, not `__name__`: the plugin reads the whole chain, so a fake item carries one too
         function = SimpleNamespace(__name__=function_name, __qualname__=function_name) if function_name else None
         return SimpleNamespace(config=config, path=path, function=function, nodeid=nodeid)
 
@@ -670,8 +667,7 @@ class TestThePluginWiring:
         assert_that(config._assertpy2_dangling).is_empty()
 
     def test_two_findings_in_one_test_become_one_warning(self, tmp_path):
-        # under `-W error` the first warning leaves the hook as an exception, so reporting them one by
-        # one would show the reader a single line and quietly drop the rest of that test's
+        # under `-W error` the first warning leaves the hook, so reporting one by one would drop the rest
         source = tmp_path / "t.py"
         body = textwrap.dedent("""
             def test_x():
@@ -690,8 +686,7 @@ class TestThePluginWiring:
         assert_that(config._assertpy2_dangling[source]).described_as("neither is left behind").is_empty()
 
     def test_an_item_with_no_function_still_takes_a_module_scope_finding(self, tmp_path):
-        # a collector or a hook driven by hand has no function to name, and a finding that belongs to
-        # no test has to land somewhere rather than be held forever
+        # a hook driven by hand has no function to name, and a finding belonging to no test must land somewhere
         source = tmp_path / "t.py"
         source.write_text(PREAMBLE + "assert_that(1)\n", encoding="utf-8")
         config = self._config(enabled=True)
@@ -736,8 +731,7 @@ class TestTurningItOn:
         assert_that(_dangling_enabled(self._config(ini="  ON  "))).is_true()
 
     def test_an_unreadable_setting_warns_and_stays_off(self):
-        # silence would be the wrong answer: a typo that quietly disables a check is how the check
-        # stops running without anybody noticing
+        # silence would be wrong: a typo that quietly disables a check is how it stops running unnoticed
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             enabled = _dangling_enabled(self._config(ini="yes"))
@@ -814,8 +808,7 @@ class TestANameThisModuleBindsItselfIsNotOurs:
         assert_that(found).described_as("only the shadowed name is dropped").is_length(1)
 
     def test_an_exception_name_shadows_too(self):
-        # `except ... as assert_that` binds the name for the block, and its own AST node holds a plain
-        # string rather than a `Name`, so it needs its own branch
+        # `except ... as assert_that` holds a plain string rather than a `Name`, so it needs its own branch
         body = """
             def test_x():
                 try:
@@ -920,8 +913,7 @@ class TestUnderARealPytestRun:
         assert_that(result.stdout).contains("2 passed")
 
     def test_two_findings_in_one_test_arrive_together(self, tmp_path):
-        # under `-W error` the first warning leaves the reporting hook as an exception, so a second
-        # warning would never be reached: one aggregated warning is what keeps the second line visible
+        # under `-W error` a second warning is never reached: one aggregated warning keeps the second line visible
         body = "from assertpy2 import assert_that\n\n\ndef test_two():\n    assert_that(1)\n    assert_that(2)\n"
         reported = self._run(tmp_path, body)
         assert_that(reported.stdout).contains("and 1 more in this test, at line 6")
@@ -930,8 +922,7 @@ class TestUnderARealPytestRun:
         assert_that(escalated.stdout).contains("1 error")
 
     def test_a_finding_in_a_nested_class_reaches_its_own_test(self, tmp_path):
-        # `item.cls` names only the innermost class, so the chains lined up only once the plugin read
-        # the whole `__qualname__`
+        # `item.cls` names only the innermost class, so the chains lined up once the plugin read `__qualname__`
         body = (
             "from assertpy2 import assert_that\n\n\n"
             "class TestOuter:\n    class TestInner:\n        def test_nested(self):\n            assert_that(1)\n"
@@ -1025,8 +1016,7 @@ class TestEveryFindingReachesExactlyOneTest:
         )
         source = (tmp_path / "test_generated.py").read_text(encoding="utf-8")
         expected = len(findings(source, "test_generated.py"))
-        # one warning per test, and the aggregated one names the lines it stands for, so every finding
-        # is either a warning of its own or named inside one
+        # one warning per test, naming the lines it stands for, so every finding is a warning or named inside one
         reported = result.stdout.count("DanglingAssertionWarning") + result.stdout.count("more in this test")
         assert_that(reported).described_as(f"{expected} findings in the file").is_equal_to(expected)
 
