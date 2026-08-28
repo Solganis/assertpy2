@@ -240,15 +240,18 @@ if TYPE_CHECKING:
     # a tuple of alternatives lands on the widest rung, nested to any depth because that is the shape
     # `isinstance` takes and a flat rung refuses it.
     #
-    # A union has no line here on purpose.  What `_Alpha | _Beta` *is* in an argument position is where the
-    # four disagree, and no declaration reconciles them: pyrefly reads it as `type[_Alpha | _Beta]` and binds
-    # the rung above, pyright and mypy read it as `UnionType` and fall to this one, and for a union of two
-    # types the ladder does have rungs for, pyright distributes `bool | int` over `type[bool]` and
-    # `type[int]` while pyrefly collapses it to `type[int]`.  Binding the union ahead of the concrete rungs
-    # was measured too and costs `is_instance_of(int)` its `_NumericAssertion[int]`.  The runtime side is
+    # A union has no line here on purpose, and the reason is not that the checkers disagree.  All four bind
+    # `_Alpha | _Beta` through `TypeForm[_U]`, measured on pyright 1.1.413 with no experimental flag.  What
+    # that costs is the domain: `TypeForm` is any type expression, so with such a rung every checker accepts
+    # `Literal[1]`, `Never`, `Annotated[int, "x"]` and `list[int]`, each of which the runtime refuses with
+    # `TypeError`.  There is no narrower spelling, since PEP 747 declined syntax for a restricted subset and
+    # Python has no intersection type.  A union therefore keeps the view the chain already had.  The runtime side is
     # gated in `tests/test_class.py`, where all four spellings are accepted and named in the failure
-    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[object])
-    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, object)
+    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[_Alpha | _Beta])
+    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, _Alpha | _Beta)
+    assert_type(assert_that(anything).is_instance_of((int, str, bytes)), _ObjectAssertion[int | str | bytes])
+    assert_type(assert_that(anything).is_instance_of_any(_Alpha, _Beta), _ObjectAssertion[_Alpha | _Beta])
+    # past the arities that bind, and for a tuple nested to any depth, the widest rung answers
     assert_type(assert_that(anything).is_instance_of((_Alpha, (_Beta, str))), _ObjectAssertion[object])
     assert_type(assert_that(anything).is_instance_of_any((_Alpha, _Beta), (str, bytes)), _ObjectAssertion[object])
     assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)

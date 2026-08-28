@@ -89,6 +89,8 @@ _E_co = TypeVar("_E_co", covariant=True)  # the element a pivot hands back
 _S = TypeVar("_S")
 if TYPE_CHECKING:
     _U = TypeVar("_U")
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")
     _E = TypeVar("_E")  # element type of a collection, so first()/element()/... narrow to it
     _R = TypeVar("_R")  # result element type after a mapping pivot
     _K = TypeVar("_K")  # dict key type, so .value keeps dict[K, V]
@@ -1309,10 +1311,26 @@ class AssertionBuilder(
         # the second rung is what a tuple lands on, and what a union lands on under the checkers that read it
         # as `UnionType`.  It also keeps the class conformant with the protocols' `(ClassInfo) -> Self`
         @overload
+        def is_instance_of(self, some_class: tuple[type[_U], type[_U2]]) -> AssertionBuilder[_U | _U2]: ...
+        @overload
+        def is_instance_of(
+            self, some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> AssertionBuilder[_U | _U2 | _U3]: ...
+        @overload
         def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
         @overload
         def is_instance_of(self, some_class: ClassInfo) -> Self: ...
         def is_instance_of(self, some_class: Any) -> Any: ...
+
+        @overload
+        def is_instance_of_any(self, first: type[_U], second: type[_U2], /) -> AssertionBuilder[_U | _U2]: ...
+        @overload
+        def is_instance_of_any(
+            self, first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> AssertionBuilder[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> Self: ...
+        def is_instance_of_any(self, *some_classes: Any) -> Any: ...
 
         # the element pivots return `self.builder(<an element>)` while `CollectionMixin` declares `-> Self`, so
         # `assert_that(rows).first().value.count(1)` type-checked and raised.  Structural because `_T` is invariant:

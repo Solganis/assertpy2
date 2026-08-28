@@ -198,6 +198,18 @@ paid = assert_that(order).is_not_none().is_instance_of(PaidOrder).value
 paid.refund()  # statically typed as PaidOrder - no cast, no bare assert
 ```
 
+Alternatives narrow too, up to three of them, written as a tuple or as separate arguments:
+
+```python
+found = assert_that(order).is_instance_of((PaidOrder, Order)).value
+either = assert_that(order).is_instance_of_any(PaidOrder, Order).value
+```
+
+Both give `PaidOrder | Order`. The same alternatives written as a union, `PaidOrder | Order`, are
+accepted and do not narrow: the chain keeps the type it already had. The union reaches the assertion as
+one `types.UnionType` value, and the only annotation that binds its members also accepts type
+expressions `isinstance` refuses, such as `Literal[1]`.
+
 On the per-type protocols `value` returns the family type (`str` for string assertions, `dict` for
 dict assertions, ...), so extract-and-continue works after pivots too:
 

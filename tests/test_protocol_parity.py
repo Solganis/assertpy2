@@ -163,6 +163,7 @@ _NARROWED_ON_PURPOSE: frozenset[tuple[str, str]] = frozenset(
         # type.  The core declares the plain pair, and this is the same pair with the ladder in front
         ("_ObjectAssertion", "is_not_none"),
         ("_ObjectAssertion", "is_instance_of"),
+        ("_ObjectAssertion", "is_instance_of_any"),
         # the string view keeps its own result type on the pivots: text for a message, `str` for a
         # string, which is what lets one be read as a path and the other not
         ("_StringAssertion", "first"),
