@@ -73,9 +73,13 @@ def _disambiguated(actual: object, other: object) -> tuple[str, str]:
     return actual_str, other_str
 
 
-_JsonSafe: TypeAlias = "bool | int | float | str | list[_JsonSafe] | dict[str, _JsonSafe] | None"
+_JsonSafe: TypeAlias = bool | int | float | str | list["_JsonSafe"] | dict[str, "_JsonSafe"] | None
 """Declared rather than inferred: a recursive return type is resolved per call site, and moving one
-call moved two unrelated diagnostics in another module."""
+call moved two unrelated diagnostics in another module.
+
+Only the recursive reference is quoted.  Written as one string, ty ignores the alias and reads the
+return as `Divergent`, and a misuse of the result went uncaught; written this way it resolves the outer
+level and pyright and mypy keep the whole depth.  The same reading applies to `ClassInfo`."""
 
 
 def _json_safe(value, _depth=0, _seen=None) -> _JsonSafe:
