@@ -313,8 +313,8 @@ VALID: frozenset[str] = frozenset(
         "valid-numpy-float",
         "valid-numpy-tolerance",
         # a value the umbrella claims that converts, which is what the float restriction must not refuse
-        "valid-numpy-nan",
-        "valid-numpy-closeness",
+        "valid-capable-nan",
+        "valid-capable-closeness",
         "valid-numpy-int32",
         "valid-numpy-uint64",
         "valid-numpy-float32",

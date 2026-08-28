@@ -109,6 +109,17 @@ class _TakesAnyKey(Mapping[object, str]):
         return 0
 
 
+class _ConvertibleRow(_TakesAnyKey):
+    """The same row that converts, which is what a value the umbrella claims and can be asked `is_nan()`.
+
+    A numpy scalar reads as a `float` subclass and lands on the numeric view, so it measures that view
+    and not this one: the umbrella's own float restriction needs a subject that reaches the umbrella.
+    """
+
+    def __float__(self) -> float:
+        return 0.0
+
+
 class _Ordered:
     """Ordered against anything and convertible to nothing, which both sides refuse alike."""
 
@@ -358,8 +369,8 @@ def _relations_that_must_keep_working() -> None:
     assert_that(Decimal("1.1")).is_greater_than(Decimal("1.0"))  # case: valid-decimal-order
     assert_that(Fraction(3, 2)).is_greater_than(Fraction(1, 2))  # case: valid-fraction-order
     # the half that decides whether the float restriction can ship: a value the umbrella claims that converts
-    assert_that(numpy.float64(1.5)).is_nan()  # case: valid-numpy-nan
-    assert_that(numpy.float64(1.5)).is_close_to(1, 1)  # case: valid-numpy-closeness
+    assert_that(_ConvertibleRow()).is_nan()  # case: valid-capable-nan
+    assert_that(_ConvertibleRow()).is_close_to(1, 1)  # case: valid-capable-closeness
     assert_that(1 + 2j).is_zero()  # case: valid-complex-zero
     assert_that(True).is_greater_than(0)  # case: valid-bool-compared
     assert_that(1).is_equal_to(True)  # case: valid-int-equals-bool
