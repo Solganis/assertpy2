@@ -4,6 +4,8 @@ from assertpy2 import errors as _errors
 from assertpy2 import snapshot as _snapshot
 from assertpy2.assertpy import AssertionBuilder
 
+_UNINSTALLED: pytest.StashKey[str] = pytest.StashKey()
+
 
 @pytest.fixture(autouse=True)
 def _plain_messages(monkeypatch):
@@ -47,3 +49,56 @@ def builder() -> AssertionBuilder:
     the object, not an assertion.
     """
     return AssertionBuilder(None)
+
+
+# A gate that is not installed does not fail, it skips, and a skipped gate reads as a green one.  It
+# cost two red CI runs in one day: `pytest-examples` was absent locally, so the whole doc-example file
+# was skipped while the run was reported as passing.
+#
+# The signal that a run claims to be complete is already there and needs no flag of its own: only the
+# cell that enforces the coverage floor promises every dependency is installed.  Under that promise a
+# module missing from the environment is a defect; anywhere else it is an ordinary partial run.
+#
+# A gate delegated to another job on purpose says so in its own `importorskip` reason, which replaces
+# pytest's wording and so reads as a decision rather than an accident.  The checkers are the case: the
+# lint job installs the typecheck group and the coverage cell does not.
+_IMPORT_SKIP = ("could not import", "no module named")
+_missing_from: dict[str, str] = {}
+
+
+def _record(report) -> None:
+    """Both report kinds, because the two ways a module goes missing arrive as different ones.
+
+    `pytest.importorskip` at the top of a file raises while the file is being collected, so it never
+    reaches a run report at all.  That is the shape that hid a whole skipped gate, so reading only the
+    run reports would leave the guard blind to exactly what it was written for.
+    """
+    if not report.skipped or not isinstance(report.longrepr, tuple):
+        return
+    _, _, reason = report.longrepr
+    if any(marker in reason.lower() for marker in _IMPORT_SKIP):
+        _missing_from[report.nodeid] = reason
+
+
+def pytest_runtest_logreport(report) -> None:
+    _record(report)
+
+
+def pytest_collectreport(report) -> None:
+    _record(report)
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    if not _missing_from or session.config.getoption("cov_fail_under", None) is None:
+        return
+    listed = "\n".join(f"  {nodeid}: {reason}" for nodeid, reason in sorted(_missing_from.items()))
+    session.config.stash[_UNINSTALLED] = listed
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
+def pytest_terminal_summary(terminalreporter) -> None:
+    listed = terminalreporter.config.stash.get(_UNINSTALLED, None)
+    if listed is not None:
+        terminalreporter.write_sep("=", "gates skipped for a missing module", red=True)
+        terminalreporter.write_line(listed)
+        terminalreporter.write_line("this run enforces the coverage floor, so it claims every gate ran")

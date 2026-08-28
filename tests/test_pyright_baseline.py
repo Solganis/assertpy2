@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-pytest.importorskip("pyright")
+pytest.importorskip("pyright", reason="the lint job installs the typecheck group and this cell does not")
 
 from typing import Final
 

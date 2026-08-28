@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import pytest
 
-pytest.importorskip("pyright")
-pytest.importorskip("mypy")
+pytest.importorskip("pyright", reason="the lint job installs the typecheck group and this cell does not")
+pytest.importorskip("mypy", reason="the lint job installs the typecheck group and this cell does not")
 
 from assertpy2 import assert_that
 from tests import typing_harness
