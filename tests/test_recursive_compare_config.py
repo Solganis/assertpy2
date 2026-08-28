@@ -147,17 +147,19 @@ class TestToleranceNested:
 
 class TestComparators:
     def test_type_comparator_passes(self):
-        assert_that([1, 2]).is_equal_to([10, 20], comparators={int: lambda a, e: True})
+        assert_that([1, 2]).is_equal_to([10, 20], comparators={int: lambda actual, expected: True})
 
     def test_type_comparator_fails(self):
         with pytest.raises(AssertionFailure):
-            assert_that([1]).is_equal_to([2], comparators={int: lambda a, e: a == e})
+            assert_that([1]).is_equal_to([2], comparators={int: lambda actual, expected: actual == expected})
 
     def test_field_name_comparator_passes(self):
-        assert_that({"id": 1, "x": 5}).is_equal_to({"id": 999, "x": 5}, comparators={"id": lambda a, e: True})
+        assert_that({"id": 1, "x": 5}).is_equal_to(
+            {"id": 999, "x": 5}, comparators={"id": lambda actual, expected: True}
+        )
 
     def test_field_name_wins_over_type(self):
-        comparators = {"id": lambda a, e: True, int: lambda a, e: a == e}
+        comparators = {"id": lambda actual, expected: True, int: lambda actual, expected: actual == expected}
         assert_that({"id": 1, "n": 5}).is_equal_to({"id": 99, "n": 5}, comparators=comparators)
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"id": 1, "n": 5}).is_equal_to({"id": 99, "n": 6}, comparators=comparators)
@@ -169,8 +171,8 @@ class TestComparators:
 
         calls = []
         comparators = {
-            MyInt: lambda a, e: calls.append("exact") or True,
-            int: lambda a, e: calls.append("isinstance") or True,
+            MyInt: lambda actual, expected: calls.append("exact") or True,
+            int: lambda actual, expected: calls.append("isinstance") or True,
         }
         assert_that([MyInt(1)]).is_equal_to([MyInt(9)], comparators=comparators)
         assert_that(calls).is_equal_to(["exact"])
@@ -179,41 +181,47 @@ class TestComparators:
         class MyInt(int):
             pass
 
-        assert_that([MyInt(1)]).is_equal_to([MyInt(9)], comparators={int: lambda a, e: True})
+        assert_that([MyInt(1)]).is_equal_to([MyInt(9)], comparators={int: lambda actual, expected: True})
 
     def test_no_matching_comparator_falls_back_to_equality(self):
         with pytest.raises(AssertionFailure):
-            assert_that([1]).is_equal_to([2], comparators={str: lambda a, e: True})
+            assert_that([1]).is_equal_to([2], comparators={str: lambda actual, expected: True})
 
     def test_scalar_comparator_equal(self):
-        assert_that(5).is_equal_to(6, comparators={int: lambda a, e: True})
+        assert_that(5).is_equal_to(6, comparators={int: lambda actual, expected: True})
 
     def test_scalar_comparator_leaf(self):
         with pytest.raises(AssertionFailure):
-            assert_that(5).is_equal_to(6, comparators={int: lambda a, e: False})
+            assert_that(5).is_equal_to(6, comparators={int: lambda actual, expected: False})
 
     def test_container_comparator_at_top(self):
-        assert_that([1]).is_equal_to([2], comparators={list: lambda a, e: True})
+        assert_that([1]).is_equal_to([2], comparators={list: lambda actual, expected: True})
 
     def test_namedtuple_field_comparator_leaf(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that(Pair(1, 2)).is_equal_to(Pair(1, 9), comparators={int: lambda a, e: a == e})
+            assert_that(Pair(1, 2)).is_equal_to(
+                Pair(1, 9), comparators={int: lambda actual, expected: actual == expected}
+            )
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to(".b")
 
     def test_model_field_comparator_leaf(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that(FakeModel(a=1, b=2)).is_equal_to(FakeModel(a=1, b=9), comparators={int: lambda a, e: a == e})
+            assert_that(FakeModel(a=1, b=2)).is_equal_to(
+                FakeModel(a=1, b=9), comparators={int: lambda actual, expected: actual == expected}
+            )
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to(".b")
 
     def test_nested_namedtuple_field_comparator_leaf(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that({"p": Pair(1, 2)}).is_equal_to({"p": Pair(1, 9)}, comparators={int: lambda a, e: a == e})
+            assert_that({"p": Pair(1, 2)}).is_equal_to(
+                {"p": Pair(1, 9)}, comparators={int: lambda actual, expected: actual == expected}
+            )
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("p.b")
 
     def test_nested_model_field_comparator_leaf(self):
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"m": FakeModel(a=1, b=2)}).is_equal_to(
-                {"m": FakeModel(a=1, b=9)}, comparators={int: lambda a, e: a == e}
+                {"m": FakeModel(a=1, b=9)}, comparators={int: lambda actual, expected: actual == expected}
             )
         assert_that(exc_info.value.diff.entries[0].path).is_equal_to("m.b")
 
@@ -259,7 +267,7 @@ class TestConfigValidation:
 
     def test_comparators_not_dict_raises(self):
         with pytest.raises(TypeError) as exc_info:
-            assert_that(1).is_equal_to(1, comparators=[lambda a, e: True])
+            assert_that(1).is_equal_to(1, comparators=[lambda actual, expected: True])
         assert_that(str(exc_info.value)).is_equal_to("given comparators arg must be a dict")
 
     def test_comparator_not_callable_raises(self):
@@ -319,7 +327,9 @@ class TestDiffMessageConsistency:
 
     def test_comparator_equal_leaf_absent_from_diff(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that({"id": 1, "n": 5}).is_equal_to({"id": 999, "n": 9}, comparators={"id": lambda a, e: True})
+            assert_that({"id": 1, "n": 5}).is_equal_to(
+                {"id": 999, "n": 9}, comparators={"id": lambda actual, expected: True}
+            )
         paths = [entry.path for entry in exc_info.value.diff.entries]
         assert_that(paths).is_equal_to(["n"])
 
@@ -926,7 +936,11 @@ class TestConfigEchoedOnFailure:
     def test_comparators_are_named_by_key(self):
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that({"n": "A", "b": 2}).is_equal_to(
-                {"n": "bb", "b": 3}, comparators={"n": lambda a, e: a.lower() == e.lower(), float: lambda a, e: True}
+                {"n": "bb", "b": 3},
+                comparators={
+                    "n": lambda actual, expected: actual.lower() == expected.lower(),
+                    float: lambda actual, expected: True,
+                },
             )
         assert_that(str(exc_info.value)).contains("comparators for float, n")
 

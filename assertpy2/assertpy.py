@@ -421,8 +421,8 @@ def assert_all(*callables: Callable[[], object]) -> None:
         AssertionError: if any of the callables produce assertion failures
     """
     with soft_assertions():
-        for fn in callables:
-            fn()
+        for call in callables:
+            call()
 
 
 @overload
@@ -894,12 +894,12 @@ def _builder(val, description="", kind=None, expected=None, logger=None):
     Function extensions already live on `_ExtendedBuilder`; only non-function callables (which the
     descriptor protocol cannot bind) still need per-instance grafting here.
     """
-    ab = _ExtendedBuilder(val, description, kind, expected, logger)
+    builder = _ExtendedBuilder(val, description, kind, expected, logger)
     if _extensions:
         for name, func in _extensions.items():
-            meth = types.MethodType(func, ab)
-            setattr(ab, name, meth)
-    return ab
+            meth = types.MethodType(func, builder)
+            setattr(builder, name, meth)
+    return builder
 
 
 class WarningLoggingAdapter(_LoggerAdapter):

@@ -22,50 +22,69 @@ from assertpy2 import assert_that, match
 
 # (name, build the matcher, call the fluent assertion, values that make it both hold and fail)
 PAIRS = [
-    ("is_equal_to", lambda: match.equal_to(5), lambda b: b.is_equal_to(5), [5, 5.0, True, 4, "5"]),
-    ("is_greater_than", lambda: match.greater_than(3), lambda b: b.is_greater_than(3), [5, 3, 2, 3.5, True]),
+    ("is_equal_to", lambda: match.equal_to(5), lambda builder: builder.is_equal_to(5), [5, 5.0, True, 4, "5"]),
+    (
+        "is_greater_than",
+        lambda: match.greater_than(3),
+        lambda builder: builder.is_greater_than(3),
+        [5, 3, 2, 3.5, True],
+    ),
     (
         "is_greater_than_or_equal_to",
         lambda: match.greater_than_or_equal_to(3),
-        lambda b: b.is_greater_than_or_equal_to(3),
+        lambda builder: builder.is_greater_than_or_equal_to(3),
         [5, 3, 2, 2.9],
     ),
-    ("is_less_than", lambda: match.less_than(3), lambda b: b.is_less_than(3), [1, 3, 5, 2.9, False]),
+    ("is_less_than", lambda: match.less_than(3), lambda builder: builder.is_less_than(3), [1, 3, 5, 2.9, False]),
     (
         "is_less_than_or_equal_to",
         lambda: match.less_than_or_equal_to(3),
-        lambda b: b.is_less_than_or_equal_to(3),
+        lambda builder: builder.is_less_than_or_equal_to(3),
         [1, 3, 5, 3.1],
     ),
-    ("is_between", lambda: match.between(1, 9), lambda b: b.is_between(1, 9), [5, 1, 9, 0, 10, 1.5]),
-    ("is_close_to", lambda: match.close_to(5, 1), lambda b: b.is_close_to(5, 1), [5, 5.5, 6, 6.1, 4]),
-    ("is_positive", lambda: match.is_positive(), lambda b: b.is_positive(), [5, 0, -5, 0.1, True, False]),
-    ("is_negative", lambda: match.is_negative(), lambda b: b.is_negative(), [-5, 0, 5, -0.1, False]),
-    ("is_zero", lambda: match.is_zero(), lambda b: b.is_zero(), [0, 0.0, 1, -0.0, False]),
-    ("is_even", lambda: match.is_even(), lambda b: b.is_even(), [2, 3, 0, -4]),
-    ("is_odd", lambda: match.is_odd(), lambda b: b.is_odd(), [3, 2, -1, 0]),
-    ("is_length", lambda: match.has_length(3), lambda b: b.is_length(3), ["abc", "ab", [1, 2, 3], {}, (1, 2, 3)]),
-    ("is_empty", lambda: match.is_empty(), lambda b: b.is_empty(), ["", "a", [], [1], {}, set()]),
-    ("is_not_empty", lambda: match.is_not_empty(), lambda b: b.is_not_empty(), ["", "a", [], [1], {}]),
-    ("is_true", lambda: match.is_truthy(), lambda b: b.is_true(), [True, False, 1, 0, "a", ""]),
-    ("is_false", lambda: match.is_falsy(), lambda b: b.is_false(), [False, True, 0, 1, "", "a"]),
-    ("is_none", lambda: match.is_none(), lambda b: b.is_none(), [None, 0, "", False]),
-    ("is_not_none", lambda: match.is_not_none(), lambda b: b.is_not_none(), [None, 0, "", False]),
-    ("is_instance_of", lambda: match.is_instance_of(int), lambda b: b.is_instance_of(int), [5, True, 5.0, "5"]),
-    ("is_type_of", lambda: match.is_type_of(int), lambda b: b.is_type_of(int), [5, True, 5.0]),
-    ("is_callable", lambda: match.is_callable(), lambda b: b.is_callable(), [len, 5, str, "x"]),
-    ("is_in", lambda: match.is_in(1, 2, 3), lambda b: b.is_in(1, 2, 3), [1, 4, True, 1.0]),
-    ("matches", lambda: match.matches_regex("a.c"), lambda b: b.matches("a.c"), ["abc", "axc", "ab", "xxabcxx"]),
+    ("is_between", lambda: match.between(1, 9), lambda builder: builder.is_between(1, 9), [5, 1, 9, 0, 10, 1.5]),
+    ("is_close_to", lambda: match.close_to(5, 1), lambda builder: builder.is_close_to(5, 1), [5, 5.5, 6, 6.1, 4]),
+    ("is_positive", lambda: match.is_positive(), lambda builder: builder.is_positive(), [5, 0, -5, 0.1, True, False]),
+    ("is_negative", lambda: match.is_negative(), lambda builder: builder.is_negative(), [-5, 0, 5, -0.1, False]),
+    ("is_zero", lambda: match.is_zero(), lambda builder: builder.is_zero(), [0, 0.0, 1, -0.0, False]),
+    ("is_even", lambda: match.is_even(), lambda builder: builder.is_even(), [2, 3, 0, -4]),
+    ("is_odd", lambda: match.is_odd(), lambda builder: builder.is_odd(), [3, 2, -1, 0]),
+    (
+        "is_length",
+        lambda: match.has_length(3),
+        lambda builder: builder.is_length(3),
+        ["abc", "ab", [1, 2, 3], {}, (1, 2, 3)],
+    ),
+    ("is_empty", lambda: match.is_empty(), lambda builder: builder.is_empty(), ["", "a", [], [1], {}, set()]),
+    ("is_not_empty", lambda: match.is_not_empty(), lambda builder: builder.is_not_empty(), ["", "a", [], [1], {}]),
+    ("is_true", lambda: match.is_truthy(), lambda builder: builder.is_true(), [True, False, 1, 0, "a", ""]),
+    ("is_false", lambda: match.is_falsy(), lambda builder: builder.is_false(), [False, True, 0, 1, "", "a"]),
+    ("is_none", lambda: match.is_none(), lambda builder: builder.is_none(), [None, 0, "", False]),
+    ("is_not_none", lambda: match.is_not_none(), lambda builder: builder.is_not_none(), [None, 0, "", False]),
+    (
+        "is_instance_of",
+        lambda: match.is_instance_of(int),
+        lambda builder: builder.is_instance_of(int),
+        [5, True, 5.0, "5"],
+    ),
+    ("is_type_of", lambda: match.is_type_of(int), lambda builder: builder.is_type_of(int), [5, True, 5.0]),
+    ("is_callable", lambda: match.is_callable(), lambda builder: builder.is_callable(), [len, 5, str, "x"]),
+    ("is_in", lambda: match.is_in(1, 2, 3), lambda builder: builder.is_in(1, 2, 3), [1, 4, True, 1.0]),
+    (
+        "matches",
+        lambda: match.matches_regex("a.c"),
+        lambda builder: builder.matches("a.c"),
+        ["abc", "axc", "ab", "xxabcxx"],
+    ),
     (
         "is_before",
         lambda: match.is_before(datetime.datetime(2026, 6, 1)),
-        lambda b: b.is_before(datetime.datetime(2026, 6, 1)),
+        lambda builder: builder.is_before(datetime.datetime(2026, 6, 1)),
         [datetime.datetime(2026, 1, 1), datetime.datetime(2026, 12, 1)],
     ),
 ]
 
-# values thrown at every relation, whatever it is about: the point is that no relation ever *contradicts*
-# its twin, including on a value neither was written for
+# no relation ever contradicts its twin, including on a value neither was written for
 HOSTILE = [None, "abc", "", 5, -5, 0, 2.5, True, False, [1, 2, 3], [], {}, {"a": 1}, (1, 2), {1, 2}, b"abc", len]
 
 
@@ -133,9 +152,9 @@ class TestTheThreeMatchersThatAreNarrowerThanTheirNamesake:
 
     def test_on_a_string_all_three_agree(self):
         for matcher, call in (
-            (match.contains_string("ab"), lambda b: b.contains("ab")),
-            (match.starts_with("ab"), lambda b: b.starts_with("ab")),
-            (match.ends_with("ab"), lambda b: b.ends_with("ab")),
+            (match.contains_string("ab"), lambda builder: builder.contains("ab")),
+            (match.starts_with("ab"), lambda builder: builder.starts_with("ab")),
+            (match.ends_with("ab"), lambda builder: builder.ends_with("ab")),
         ):
             for value in ("ab", "xabx", "xx", ""):
                 assert_that(_matcher_verdict(matcher, value)).described_as(f"{matcher!r} on {value!r}").is_equal_to(

@@ -21,14 +21,13 @@ ITEMS = [
 
 class TestFilteredOn:
     def test_with_callable(self):
-        assert_that([1, -2, 3, -4]).filtered_on(lambda x: x > 0).is_length(2)
+        assert_that([1, -2, 3, -4]).filtered_on(lambda value: value > 0).is_length(2)
 
     def test_with_matcher(self):
         assert_that([1, -2, 3, -4]).filtered_on(match.is_positive()).is_length(2)
 
     def test_with_a_matcher_that_does_not_inherit_the_base_class(self):
-        # every other matcher-taking method resolves the documented `Matcher` protocol. this one
-        # tested for a `BaseMatcher` subclass, so a custom matcher was called as a plain function
+        # this one tested for a `BaseMatcher` subclass, so a custom matcher was called as a plain function
         class IsPositive:
             def matches(self, item):
                 return item > 0
@@ -42,10 +41,10 @@ class TestFilteredOn:
         assert_that([1, -2, 3, -4]).filtered_on(IsPositive()).is_length(2)
 
     def test_empty_result(self):
-        assert_that([1, 2, 3]).filtered_on(lambda x: x > 10).is_empty()
+        assert_that([1, 2, 3]).filtered_on(lambda value: value > 10).is_empty()
 
     def test_all_match(self):
-        assert_that([2, 4, 6]).filtered_on(lambda x: x % 2 == 0).is_length(3)
+        assert_that([2, 4, 6]).filtered_on(lambda value: value % 2 == 0).is_length(3)
 
     def test_on_objects(self):
         result = assert_that(ITEMS).filtered_on(lambda item: item.value > 0)
@@ -56,10 +55,10 @@ class TestFilteredOn:
 
     def test_non_iterable_raises(self):
         with pytest.raises(TypeError, match="val must be iterable"):
-            assert_that(42).filtered_on(lambda x: x > 0)
+            assert_that(42).filtered_on(lambda value: value > 0)
 
     def test_preserves_description(self):
-        result = assert_that([1, 2]).described_as("nums").filtered_on(lambda x: x > 0)
+        result = assert_that([1, 2]).described_as("nums").filtered_on(lambda value: value > 0)
         assert_that(result.description).is_equal_to("nums")
 
 
@@ -68,7 +67,7 @@ class TestMapped:
         assert_that(["a", "b", "c"]).mapped(str.upper).contains("A", "B")
 
     def test_with_lambda(self):
-        assert_that([1, 2, 3]).mapped(lambda x: x * 2).is_equal_to([2, 4, 6])
+        assert_that([1, 2, 3]).mapped(lambda value: value * 2).is_equal_to([2, 4, 6])
 
     def test_on_objects(self):
         assert_that(ITEMS).mapped(lambda item: item.name).contains("Alice", "Bob")
@@ -89,7 +88,7 @@ class TestFlatMapped:
         assert_that(ITEMS).flat_mapped(lambda item: item.tags).contains("admin", "user")
 
     def test_empty_inner(self):
-        assert_that([[], [], []]).flat_mapped(lambda x: x).is_empty()
+        assert_that([[], [], []]).flat_mapped(lambda value: value).is_empty()
 
     def test_non_iterable_raises(self):
         with pytest.raises(TypeError, match="val must be iterable"):

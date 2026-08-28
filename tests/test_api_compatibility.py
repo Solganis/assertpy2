@@ -335,123 +335,132 @@ class TestTheClassificationItself:
     @pytest.mark.parametrize(
         ("label", "mutate", "severity"),
         [
-            ("an export disappears", lambda s: s.update(exports=[]), "breaking"),
-            # the typing severity, which is the whole of the policy this snapshot exists to enforce:
-            # the runtime goes on answering and a type-check stage goes red, so it ships in a minor
+            ("an export disappears", lambda snapshot: snapshot.update(exports=[]), "breaking"),
+            # the typing severity: the runtime answers on and a type-check stage goes red, so it ships in a minor
             (
                 "a view stops offering an assertion",
-                lambda s: s["typed_views"].update(_StringAssertion=["starts_with"]),
+                lambda snapshot: snapshot["typed_views"].update(_StringAssertion=["starts_with"]),
                 "typing",
             ),
             (
                 "a whole view is gone",
-                lambda s: s.update(typed_views={}),
+                lambda snapshot: snapshot.update(typed_views={}),
                 "typing",
             ),
             (
                 "a parameter turns keyword-only",
-                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "(*prefix: str) -> Self"}),
+                lambda snapshot: snapshot["view_shapes"].update(
+                    {"_StringAssertion.starts_with": "(*prefix: str) -> Self"}
+                ),
                 "typing",
             ),
             (
                 "a parameter is narrowed",
-                lambda s: s["view_shapes"].update({"_StringAssertion.starts_with": "(prefix: LiteralString) -> Self"}),
+                lambda snapshot: snapshot["view_shapes"].update(
+                    {"_StringAssertion.starts_with": "(prefix: LiteralString) -> Self"}
+                ),
                 "typing",
             ),
             (
                 "a pivot hands back another view",
-                lambda s: s["view_shapes"].update({"_StringAssertion.first": "() -> _TextAssertion"}),
+                lambda snapshot: snapshot["view_shapes"].update({"_StringAssertion.first": "() -> _TextAssertion"}),
                 "typing",
             ),
             (
                 "a declaration leaves the typed surface",
-                lambda s: s["view_shapes"].pop("_StringAssertion.is_alpha"),
+                lambda snapshot: snapshot["view_shapes"].pop("_StringAssertion.is_alpha"),
                 "typing",
             ),
             (
                 "a view starts offering an assertion",
-                lambda s: s["typed_views"].update(_StringAssertion=["is_alpha", "is_digit", "starts_with"]),
+                lambda snapshot: snapshot["typed_views"].update(
+                    _StringAssertion=["is_alpha", "is_digit", "starts_with"]
+                ),
                 "addition",
             ),
-            ("py.typed disappears", lambda s: s.update(py_typed=False), "breaking"),
+            ("py.typed disappears", lambda snapshot: snapshot.update(py_typed=False), "breaking"),
             (
                 "an existing parameter loses its default",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][1].update(required=True, default=None),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][1].update(
+                    required=True, default=None
+                ),
                 "breaking",
             ),
             (
                 "a required parameter is added",
-                lambda s: s["builder"]["is_equal_to"]["parameters"].append(
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"].append(
                     {"name": "mode", "kind": "KEYWORD_ONLY", "required": True, "default": None, "annotation": None}
                 ),
                 "breaking",
             ),
             (
                 "a parameter is renamed",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][0].update(name="expected"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][0].update(name="expected"),
                 "breaking",
             ),
             (
                 "positional parameters swap places",
-                lambda s: s["builder"]["is_equal_to"]["parameters"].reverse(),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"].reverse(),
                 "breaking",
             ),
             (
                 "a keyword-only parameter becomes positional too",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][2].update(kind="POSITIONAL_OR_KEYWORD"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][2].update(
+                    kind="POSITIONAL_OR_KEYWORD"
+                ),
                 "addition",
             ),
             (
                 "a positional parameter becomes keyword-only",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][0].update(kind="KEYWORD_ONLY"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][0].update(kind="KEYWORD_ONLY"),
                 "breaking",
             ),
             (
                 "a default value changes",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][1].update(default="True"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][1].update(default="True"),
                 "behaviour",
             ),
             (
                 "record fields are reordered",
-                lambda s: s["exported"]["AssertionFailure"].update(fields=["expected", "actual"]),
+                lambda snapshot: snapshot["exported"]["AssertionFailure"].update(fields=["expected", "actual"]),
                 "breaking",
             ),
             (
                 "an assert_that overload disappears",
-                lambda s: s.update(entry_overloads=[]),
+                lambda snapshot: snapshot.update(entry_overloads=[]),
                 "breaking",
             ),
             (
                 "a matcher protocol method disappears",
-                lambda s: s["matcher_protocol"].pop("describe"),
+                lambda snapshot: snapshot["matcher_protocol"].pop("describe"),
                 "breaking",
             ),
             (
                 "a method disappears",
-                lambda s: s["builder"].clear(),
+                lambda snapshot: snapshot["builder"].clear(),
                 "breaking",
             ),
             (
                 "a readable failure attribute disappears",
-                lambda s: s.update(failure_attributes={}),
+                lambda snapshot: snapshot.update(failure_attributes={}),
                 "breaking",
             ),
             (
                 "an optional parameter appears",
-                lambda s: s["builder"]["is_equal_to"]["parameters"].append(
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"].append(
                     {"name": "ignore", "kind": "KEYWORD_ONLY", "required": False, "default": "None", "annotation": None}
                 ),
                 "addition",
             ),
-            ("an export appears", lambda s: s.update(exports=["assert_that", "assert_soon"]), "addition"),
+            ("an export appears", lambda snapshot: snapshot.update(exports=["assert_that", "assert_soon"]), "addition"),
             (
                 "an annotation appears where there was none",
-                lambda s: s["builder"]["is_equal_to"]["parameters"][0].update(annotation="object"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"]["parameters"][0].update(annotation="object"),
                 "typing",
             ),
             (
                 "a return type is narrowed",
-                lambda s: s["builder"]["is_equal_to"].update(returns="_StringAssertion"),
+                lambda snapshot: snapshot["builder"]["is_equal_to"].update(returns="_StringAssertion"),
                 "typing",
             ),
         ],

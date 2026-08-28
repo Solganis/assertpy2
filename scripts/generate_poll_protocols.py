@@ -345,7 +345,7 @@ def _protocols(known: dict[str, ast.ClassDef], flavour: str) -> list[tuple[str, 
             reach.setdefault(protocol, []).append(view)
 
     found = []
-    for protocol, holders in sorted(reach.items(), key=lambda pair: min(named.index(v) for v in pair[1])):
+    for protocol, holders in sorted(reach.items(), key=lambda pair: min(named.index(one) for one in pair[1])):
         skip = _SKIP_FOR_A_VERDICT if flavour == _VERDICT else _SKIP
         methods = [
             item

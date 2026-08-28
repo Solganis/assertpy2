@@ -2,8 +2,8 @@
 
 `assert_that()` returns this for a value that answers to some capability and to no overload by name.
 It used to return the builder itself, which meant every assertion on it, including the six that order
-the value: `assert_that(a_mapping).is_positive()` type-checked on all three checkers and raised
-`TypeError` when it ran.
+the value: `assert_that(a_mapping).is_positive()` type-checked on ty, mypy and Pyright, the three
+gated then, and raised `TypeError` when it ran.
 
 Two claims here, and they pull against each other, which is why both are written down. Nothing the
 builder offers may be missing, because the umbrella exists for values the library could not name and a
