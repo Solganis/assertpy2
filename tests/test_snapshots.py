@@ -413,7 +413,9 @@ class TestSnapshotCompareOptions:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({"name": "Alice"}).snapshot(id="opt-cmp", path=str(tmp_path))
         assert_that({"name": "ALICE"}).snapshot(
-            id="opt-cmp", path=str(tmp_path), comparators={"name": lambda a, e: a.lower() == e.lower()}
+            id="opt-cmp",
+            path=str(tmp_path),
+            comparators={"name": lambda actual, expected: actual.lower() == expected.lower()},
         )
 
     def test_bad_tolerance_fails_on_first_capture(self, tmp_path):
@@ -552,7 +554,7 @@ class TestSnapshotBuiltinCodecExtras:
 
 class TestSnapshotSerializerRegistry:
     def test_custom_type_roundtrip(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c), tag="money")
         value = {"price": _Money(500)}
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(value).snapshot(id="ser-money", path=str(tmp_path))
@@ -561,26 +563,26 @@ class TestSnapshotSerializerRegistry:
             assert_that({"price": _Money(999)}).snapshot(id="ser-money", path=str(tmp_path))
 
     def test_stored_with_custom_marker_and_tag(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c), tag="money")
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(_Money(7)).snapshot(id="ser-tag", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-tag.json").read_text())
         assert_that(raw).is_equal_to({"__type__": "custom", "__tag__": "money", "__data__": 7})
 
     def test_default_tag_is_qualified_name(self):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c))
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c))
         assert_that(_snapshot._SERIALIZERS[0].tag).ends_with("._Money")
 
     def test_isinstance_matches_subclasses(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c), tag="money")
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(_Cents(3)).snapshot(id="ser-sub", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-sub.json").read_text())
         assert_that(raw).is_equal_to({"__type__": "custom", "__tag__": "money", "__data__": 3})
 
     def test_last_registered_wins(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: "first", lambda d: _Money(0), tag="t1")
-        register_snapshot_serializer(_Money, lambda m: "second", lambda d: _Money(0), tag="t2")
+        register_snapshot_serializer(_Money, lambda model: "first", lambda d: _Money(0), tag="t1")
+        register_snapshot_serializer(_Money, lambda model: "second", lambda d: _Money(0), tag="t2")
         with pytest.warns(SnapshotCreatedWarning):
             assert_that(_Money(0)).snapshot(id="ser-last", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-last.json").read_text())
@@ -593,14 +595,14 @@ class TestSnapshotSerializerRegistry:
         assert_that(_load(str(snap_file))).is_equal_to(payload)
 
     def test_encode_skips_non_matching_serializer(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c), tag="money")
         with pytest.warns(SnapshotCreatedWarning):
             assert_that({1, 2, 3}).snapshot(id="ser-skip", path=str(tmp_path))
         raw = json.loads((tmp_path / "snap-ser-skip.json").read_text())
         assert_that(raw["__type__"]).is_equal_to("set")
 
     def test_decode_skips_non_matching_tag(self, tmp_path):
-        register_snapshot_serializer(_Money, lambda m: m.cents, lambda c: _Money(c), tag="money")
+        register_snapshot_serializer(_Money, lambda model: model.cents, lambda c: _Money(c), tag="money")
         payload = {"__type__": "custom", "__tag__": "other-tag", "__data__": 5}
         snap_file = tmp_path / "snap-tagskip.json"
         snap_file.write_text(json.dumps(payload))

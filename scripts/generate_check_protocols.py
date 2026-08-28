@@ -96,15 +96,14 @@ def _returns_a_verdict(node: ast.FunctionDef) -> ast.FunctionDef:
     copied.returns = ast.Name(id="AssertionOutcome")
     copied.body = [ast.Expr(value=ast.Constant(value=Ellipsis))]
     # `property` goes: a verdict is reported by a call, not read off an attribute
-    copied.decorator_list = [d for d in copied.decorator_list if ast.unparse(d) != "property"]
+    copied.decorator_list = [one for one in copied.decorator_list if ast.unparse(one) != "property"]
     return copied
 
 
 def generate() -> str:
     tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-    protocols = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name.endswith("Assertion")]
-    # the abc import is copied from the module being mirrored rather than repeated here: a name added
-    # there and not here read as undefined in the generated file, which only pyright's baseline caught
+    protocols = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef) and node.name.endswith("Assertion")]
+    # the abc import is copied from the mirrored module: a name added there read as undefined here
     abc = next(
         line
         for line in pathlib.Path(SOURCE).read_text(encoding="utf-8").splitlines()

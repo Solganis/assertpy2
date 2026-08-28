@@ -49,7 +49,7 @@ def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
         return "c"  # a container that reaches back to its own root, as `repr` marks with `...`
     inner = _seen | {id(value)}
     if isinstance(value, dict):
-        pairs = (_framed(_canonical(k, inner)) + _framed(_canonical(v, inner)) for k, v in value.items())
+        pairs = (_framed(_canonical(key, inner)) + _framed(_canonical(held, inner)) for key, held in value.items())
         # sorted for every mapping but `OrderedDict`, the one whose own `==` reads order
         return "o" + "".join(pairs) if isinstance(value, OrderedDict) else "d" + "".join(sorted(pairs))
     if isinstance(value, (set, frozenset)):

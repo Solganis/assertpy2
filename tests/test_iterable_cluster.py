@@ -8,7 +8,7 @@ class TestSatisfiesExactly:
         assert_that([1, "foo", 3.0]).satisfies_exactly(match.is_odd(), match.is_instance_of(str), match.is_positive())
 
     def test_callables_pass(self):
-        assert_that([2, 4]).satisfies_exactly(lambda x: x == 2, lambda x: x == 4)
+        assert_that([2, 4]).satisfies_exactly(lambda value: value == 2, lambda value: value == 4)
 
     def test_returns_self_for_chaining(self):
         assert_that([1, 2]).satisfies_exactly(match.is_odd(), match.is_even()).is_length(2)
@@ -33,7 +33,7 @@ class TestSatisfiesExactly:
 
     def test_failing_callable_describes_in_diff(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that([1, 2]).satisfies_exactly(lambda x: x == 1, lambda x: x == 99)
+            assert_that([1, 2]).satisfies_exactly(lambda value: value == 1, lambda value: value == 99)
         assert_that(exc_info.value.diff.entries[0].expected).contains("lambda")
 
     def test_length_greater_than_matchers_fails(self):
@@ -73,17 +73,17 @@ class TestSatisfiesExactlyInAnyOrder:
         )
 
     def test_callables_pass(self):
-        assert_that([2, 1]).satisfies_exactly_in_any_order(lambda x: x == 1, lambda x: x == 2)
+        assert_that([2, 1]).satisfies_exactly_in_any_order(lambda value: value == 1, lambda value: value == 2)
 
     def test_returns_self_for_chaining(self):
         assert_that([2, 1]).satisfies_exactly_in_any_order(match.is_odd(), match.is_even()).is_length(2)
 
     def test_needs_augmenting_path_to_pair(self):
         # greedy pairing grabs is_even for the 2 and dead-ends; only re-assignment covers both items
-        assert_that([2, 6]).satisfies_exactly_in_any_order(match.is_even(), lambda x: x == 2)
+        assert_that([2, 6]).satisfies_exactly_in_any_order(match.is_even(), lambda value: value == 2)
 
     def test_owned_matcher_dead_end_falls_through_to_next(self):
-        assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), lambda x: x == 3)
+        assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), lambda value: value == 3)
 
     def test_duplicate_matchers_consumed_once_pass(self):
         assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), match.is_odd())
@@ -96,12 +96,12 @@ class TestSatisfiesExactlyInAnyOrder:
 
     def test_unpaired_matcher_with_raising_probe_is_annotated(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that([1]).satisfies_exactly_in_any_order(lambda x: len(x) > 0)
+            assert_that([1]).satisfies_exactly_in_any_order(lambda value: len(value) > 0)
         assert_that(exc_info.value.diff.entries[1].expected).contains("(probe raised TypeError on 1 item)")
 
     def test_unpaired_matcher_annotation_counts_all_raising_probes(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), lambda x: len(x) > 0)
+            assert_that([1, 3]).satisfies_exactly_in_any_order(match.is_odd(), lambda value: len(value) > 0)
         annotated = [entry.expected for entry in exc_info.value.diff.entries if entry.path == "missing"]
         assert_that(annotated).is_length(1)
         assert_that(annotated[0]).contains("lambda").contains("(probe raised TypeError on 2 items)")
@@ -125,7 +125,7 @@ class TestSatisfiesExactlyInAnyOrder:
 
     def test_failing_callable_describes_in_diff(self):
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that([1, 2]).satisfies_exactly_in_any_order(lambda x: x == 99, lambda x: x == 1)
+            assert_that([1, 2]).satisfies_exactly_in_any_order(lambda value: value == 99, lambda value: value == 1)
         assert_that(exc_info.value.diff.entries[1].expected).contains("lambda")
 
     def test_length_mismatch_fails(self):

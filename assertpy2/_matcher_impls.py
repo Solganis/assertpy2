@@ -259,7 +259,7 @@ class AllOfMatcher(BaseMatcher):
         return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
 
     def describe_mismatch(self, value: Any) -> str:
-        failed = [m for m in self.matchers if not verdict(m.matches(value), subject="the matcher")]
+        failed = [one for one in self.matchers if not verdict(one.matches(value), subject="the matcher")]
         return f"<{value}> did not satisfy: {', '.join(matcher.describe() for matcher in failed)}"
 
 
