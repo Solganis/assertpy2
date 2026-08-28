@@ -37,6 +37,12 @@ _ARGUMENT: dict[str, frozenset[str]] = {
     "pyright": frozenset({"reportArgumentType"}),
 }
 
+_CLASS_INFO_MEMBER: dict[str, frozenset[str]] = {
+    "ty": frozenset(),
+    "mypy": frozenset({"arg-type"}),
+    "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+}
+
 _MISSING: dict[str, frozenset[str]] = {
     "ty": frozenset({"unresolved-attribute"}),
     "mypy": frozenset({"attr-defined"}),
@@ -190,6 +196,11 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
     "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
     "text-assertion-after-a-dynamic-one": _NOT_THE_CHAINS_VALUE,
+    # ty answers on the outermost level of a class-info tuple only.  Its alias is written out rather than
+    # recursive because a fully quoted one is ignored outright, and the two that read the recursion cover
+    # the depth it gives up
+    "a-tuple-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
+    "a-nested-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     "bad-operand-on-a-polled-number": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
@@ -212,14 +223,18 @@ SPLIT: frozenset[str] = frozenset(
         "predicate-reading-a-missing-string-method",
         "predicate-reading-a-missing-numeric-method",
         "text-verdict-on-a-pivoted-number",
+        "a-tuple-member-that-is-not-a-class",
+        "a-nested-member-that-is-not-a-class",
     }
 )
 """The cases where the three do not agree, named so a new one has to be decided about.
 
-Two relations, and ty is the silent one in both.  The first two are a lambda over the subject reading a
+Three relations, and ty is the silent one in all of them.  The first two are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
 The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
-rung on its twin, which ty does not read either.
+rung on its twin, which ty does not read either.  The last two are a member of a class-info tuple that
+is not a class: `ClassInfo` is written out one level with the recursion quoted, because ty ignores an
+alias whose whole right-hand side is a string, and it reads the outermost level only.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as three dialects agreeing.
