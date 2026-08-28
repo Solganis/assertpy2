@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import pathlib
     from collections.abc import Callable, Collection, Mapping
 
-    from typing_extensions import TypeForm, TypeIs
+    from typing_extensions import TypeIs
 
     from ._engine._builder_check_typing import _CheckAnyValue
     from ._engine._capable_typing import _CapableAssertion
@@ -1306,13 +1306,13 @@ class AssertionBuilder(
         def is_not_none(self) -> Self: ...
         def is_not_none(self) -> Any: ...
 
-        # never picked by a call, and it keeps the class conformant with the protocols' `(type) -> Self`; pyright
-        # reports the overlap and that is intended
+        # the second rung is what a tuple lands on, and what a union lands on under the checkers that read it
+        # as `UnionType`.  It also keeps the class conformant with the protocols' `(ClassInfo) -> Self`
         @overload
-        def is_instance_of(self, some_class: TypeForm[_U]) -> AssertionBuilder[_U]: ...
+        def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
         @overload
         def is_instance_of(self, some_class: ClassInfo) -> Self: ...
-        def is_instance_of(self, some_class: ClassInfo) -> Any: ...
+        def is_instance_of(self, some_class: Any) -> Any: ...
 
         # the element pivots return `self.builder(<an element>)` while `CollectionMixin` declares `-> Self`, so
         # `assert_that(rows).first().value.count(1)` type-checked and raised.  Structural because `_T` is invariant:
