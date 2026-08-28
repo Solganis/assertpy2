@@ -90,7 +90,12 @@ class _HashesLikeText(int):
     __hash__ = str.__hash__
 
 
-class _Status(enum.StrEnum):
+class _Status(str, enum.Enum):
+    """Spelled with the mixin rather than as `enum.StrEnum`, which arrived in 3.11 and this suite runs 3.10.
+
+    Identical where it matters: both take `__eq__` and `__hash__` from `str`, which is what the rule reads.
+    """
+
     PAID = "paid"
     DUE = "due"
 
@@ -854,7 +859,7 @@ class TestTheCoresUnderTheAwkwardCases:
             def __init__(self, *_: object) -> None:
                 self.currency = "USD"
 
-        class Status(enum.StrEnum):
+        class Status(str, enum.Enum):
             PAID = "paid"
             DUE = "due"
 
