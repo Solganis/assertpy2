@@ -104,10 +104,9 @@ class CollectionMixin(_MixinBase):
 
         missing = []
         if is_mapping_like(self.val):
-            # read whole before any superset is walked: one of them sharing this subject's iterator
-            # would leave nothing here, and a subset of nothing is anything.  Pairs rather than keys,
-            # so a superset that reaches the subject at all cannot answer for it either.  The
-            # supersets are copied into a dict below, so this copy is the symmetric one
+            # read whole before any superset is walked: one of them sharing this subject's iterator would leave nothing
+            # here, and a subset of nothing is anything.  Pairs rather than keys, so a superset that reaches the subject
+            # cannot answer for it either
             entries = [(key, self.val[key]) for key in self.val]
             superdict = {}
             for superset_index, superset in enumerate(supersets):
@@ -144,9 +143,8 @@ class CollectionMixin(_MixinBase):
             # `==` as missing
             missing.extend(not_contained_in(walked, collected))
             try:
-                # for the message only, and deliberately not tied to the lookup above: the failure has
-                # always shown the superset as a set where that was possible, and which shape the
-                # membership decision happened to take is not a reason to change what a reader sees
+                # for the message only, not tied to the lookup above: the failure has always shown the superset as a set
+                # where that was possible, and which shape the membership decision took is no reason to change that
                 superset_values: object = set(collected)
             except TypeError:
                 superset_values = collected
@@ -213,9 +211,8 @@ class CollectionMixin(_MixinBase):
         try:
             broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
         except UnorderableError:
-            # elements that cannot be ordered against each other: reported about the collection, not
-            # left to Python's "'<' not supported between instances of 'str' and 'int'", which is about
-            # the operator and names neither the assertion nor the value it was given
+            # reported about the collection, not left to Python's "'<' not supported between instances of 'str' and
+            # 'int'", which is about the operator and names neither the assertion nor the value it was given
             unorderable = True
         else:
             unorderable = False
@@ -382,9 +379,8 @@ class CollectionMixin(_MixinBase):
             AssertionBuilder: returns a new instance with the filtered list as val
         """
         require_type(self.val, collections.abc.Iterable, "iterable")
-        # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher`
-        # subclass check: a custom matcher written against the documented shape was called as a
-        # plain function here, and works everywhere else
+        # the protocol test every other matcher-taking method uses, rather than a `BaseMatcher` subclass check: a
+        # custom matcher written against the documented shape was called as a plain function here
         matches = predicate.matches if _is_matcher(predicate) else cast("Callable[..., object]", predicate)
         # counted in the filtering pass: a generator is spent by it, so asking its length afterwards
         # made the note about a filter that emptied a non-empty source claim the source was empty

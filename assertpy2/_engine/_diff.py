@@ -113,9 +113,8 @@ def _alignment_opcodes(actual, expected):
         keyed_actual = [_safe_repr(item) for item in actual]
         keyed_expected = [_safe_repr(item) for item in expected]
         opcodes = difflib.SequenceMatcher(None, keyed_actual, keyed_expected, autojunk=False).get_opcodes()
-    # pragma: no cover - not reachable through a broken __repr__: `_safe_repr` swallows everything and
-    # what is left is a value whose iteration fails after `len()` succeeded, so the guard degrades to a positional
-    # diff
+    # pragma: no cover - `_safe_repr` swallows everything, so what is left is a value whose iteration fails
+    # after `len()` succeeded, and the guard degrades to a positional diff
     except (TypeError, ValueError):  # pragma: no cover
         return None
     return _rechecked_equal_runs(opcodes, actual, expected)

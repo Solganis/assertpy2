@@ -157,16 +157,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 _ALL_ON: Final = {"assertpy2_dangling": "on", "assertpy2_vacuous": "on"}
 
-# What a profile answers for a setting the suite did not name.  Both guards are off under `compatible`
-# because they can turn a green run red, and a suite that inherited this library did not ask for that.
-# `safe` is the one line a new suite writes to get both.
-#
-# `strict` turns on the same two and additionally fails the tests they find.  Separate from `safe`
-# rather than replacing it, because a warning and a failure are different asks: a suite adopting the
-# guards wants to see what it has before it decides to be stopped by it.
-#
-# Failure clustering is not among them and has its own default.  A profile answers for what a guard
-# costs a passing suite, and clustering costs one nothing: it reads a run that already went red.
+# What a profile answers for a setting the suite did not name.  Both guards are off under `compatible`,
+# since they can turn an inherited suite's green run red.  `strict` turns the same two on and fails what
+# they find, separate from `safe` because a warning and a failure are different asks.  Failure clustering
+# has its own default: a profile answers for what a guard costs a passing suite, and clustering costs
+# nothing, it reads a run that already went red.
 _PROFILES: Final = {
     "compatible": {"assertpy2_dangling": "off", "assertpy2_vacuous": "off"},
     "safe": _ALL_ON,
@@ -798,9 +793,8 @@ def _record_for_clustering(config, nodeid, exc):
     failed.add(nodeid)
     config._assertpy2_failure_count = len(failed)
     try:
-        # inside the guard, reads included: `diff` is our own attribute name on somebody else's
-        # exception, and reading a property runs their code. One that raised took the whole run down
-        # with INTERNALERROR, which is the cost of every line here being outside the net rather than in
+        # inside the guard, reads included: `diff` is our own attribute name on somebody else's exception, and
+        # reading a property runs their code.  One that raised took the whole run down with INTERNALERROR
         diff = getattr(exc, "diff", None)
         # the hint the failure already computed for its own message, rather than a second run of the
         # same analysis. `_outcome` is absent on a failure raised outside the fluent path
@@ -830,8 +824,7 @@ def pytest_terminal_summary(terminalreporter: Any, exitstatus: int, config: pyte
     try:
         _write_cluster_summary(terminalreporter, config)
     except Exception as exc:  # pragma: no cover - the barrier itself; its parts are tested directly
-        # a summary is a convenience and this hook is not a place to raise from: everything below is
-        # optional, and taking a run's whole report down to print it would be the worst possible trade.
+        # a summary is a convenience, and taking a run's whole report down to print it would be the worst trade.
         # `Exception`, not `BaseException`: a Ctrl-C or a SystemExit through here still has to travel
         with contextlib.suppress(Exception):
             # the notice is itself suppressed rather than trusted: under `-W error` a warning raises,
@@ -902,9 +895,8 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     try:
         _attach_report_sections(item, report, exc)
     except Exception:  # pragma: no cover - the barrier; everything under it is tested directly
-        # the sections are built from attributes of somebody else's exception, and reading one runs
-        # their code: an `AssertionError` subclass whose `diff` property raised took the whole run down
-        # with INTERNALERROR. A failure that cannot be decorated is still a failure worth reporting
+        # the sections are built from attributes of somebody else's exception, and reading one runs their code:
+        # an `AssertionError` subclass whose `diff` property raised took the whole run down with INTERNALERROR
         return
 
 
@@ -924,15 +916,13 @@ def _attach_report_sections(item, report, exc) -> None:
     else:
         named_actual, named_expected = outcome.actual_provided, outcome.has_expected
 
-    # `expected` reached every failure when each assertion started naming what it measured against, and
-    # the message names it too, so on its own it no longer says anything the reader has not read: what
-    # decides is `actual` being named explicitly, which means a value other than the subject.  A failure
-    # with no record is the older path, where the values are all there is to go on
+    # `expected` reached every failure once each assertion named what it measured against, and the message
+    # names it too, so what decides is `actual` being named: a value other than the subject.  A failure with
+    # no record is the older path, where the values are all there is to go on
     named_values = named_actual if outcome is not None else (named_actual or named_expected)
 
-    # the cheap exit for a failure with nothing to add to its own message, which is most of them.
-    # Asked of the record's own flags rather than of `named_values`: the terminal keeps quiet about a
-    # value the message already prints, and Allure below still has that value to attach
+    # the cheap exit, which is most failures.  Asked of the record's own flags rather than of `named_values`:
+    # the terminal keeps quiet about a value the message already prints, and Allure below still attaches it
     if not (named_actual or named_expected) and diff is None and trace is None:
         return
 
@@ -971,9 +961,8 @@ def _attach_report_sections(item, report, exc) -> None:
                 trace=trace,
                 mode=mode,
                 max_entries=allure_max_entries,
-                # the record's own flags, not the terminal section's reading of them: `full` mode is
-                # asked for by a suite that wants the values as data, and a value already in the
-                # message is still the value a dashboard reads
+                # the record's own flags, not the terminal section's reading of them: a value already in the message is
+                # still the value a dashboard reads
                 named_actual=named_actual,
                 named_expected=named_expected,
             )
@@ -1086,10 +1075,9 @@ def _diff_to_json(diff, max_entries=50):
 
 
 def _attach_allure(actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50):
-    # the two flags carry what the record says the assertion named, which is not what the terminal
-    # section shows: a value already in the message is left out there and attached here, where the
-    # message is prose and the field is the data.  Required rather than defaulted: a caller that reads
-    # them off the values instead is the reading this phase removed
+    # the two flags carry what the record says the assertion named, which is not what the terminal shows: a
+    # value already in the message is left out there and attached here, where the field is the data.
+    # Required rather than defaulted, since reading them off the values is the reading this phase removed
     if mode == "off":
         return
     if mode == "full" and (named_actual or named_expected):

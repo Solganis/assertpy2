@@ -499,10 +499,9 @@ def _class_info_members(expected: object) -> list[object]:
 
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
-        # eagerly, like the regex matcher: `list[int]` used to blow up inside `matches()` or inside
-        # `describe()`.  Member by member rather than one probe on the whole thing: `isinstance` stops at
-        # the first member that matches, so `type(None) | list[int]` answered the probe through
-        # `type(None)` and left the generic to raise from `matches()` later
+        # eagerly, like the regex matcher: `list[int]` used to blow up inside `matches()` or `describe()`.  Member by
+        # member, since `isinstance` stops at the first match and `type(None) | list[int]` answered through
+        # `type(None)`, leaving the generic to raise later
         try:
             for member in _class_info_members(expected_type):
                 # cast because whether it is class info at all is the question this loop answers

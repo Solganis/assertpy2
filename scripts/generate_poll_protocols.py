@@ -528,10 +528,9 @@ everything until `raises()` has been called before it.
 """
 
 _ASKS_A_TYPE: Final = {
-    # whole numbers: `isinstance(val, int)` with `bool` refused beside it, a plain check rather than
-    # the registration the rest of the numeric family uses.  The rung above claims `int | float`, so any
-    # spelling of this one sits inside it and pyright reports the overlap; it is recorded rather than
-    # traded for a wider key that would let a float through
+    # whole numbers: `isinstance(val, int)` with `bool` refused beside it, a plain check rather than the
+    # registration the rest of the numeric family uses.  The rung above claims `int | float`, so pyright reports
+    # the overlap; recorded rather than traded for a wider key that would let a float through
     "is_even": "int",
     "is_odd": "int",
     "is_divisible_by": "int",
@@ -726,9 +725,9 @@ if TYPE_CHECKING:
     class _CapableAssertion(Protocol[_CapableT_co]):
         """What a value the umbrella claims can be asked."""
 
-        # the data the builder carries, spelled as `_MixinBase` spells it.  Set in `__init__` and so
-        # absent from `dir()` of the class, which is how they were missed: left to `__getattr__` they
-        # read as callables, and `assert_that(a_capable_value).description.upper()` was refused
+        # the data the builder carries, spelled as `_MixinBase` spells it.  Set in `__init__` and so absent from
+        # `dir()` of the class, which is how they were missed: left to `__getattr__` they read as callables, and
+        # `assert_that(a_capable_value).description.upper()` was refused
         val: Any
         description: str
         kind: str | None
@@ -741,9 +740,9 @@ if TYPE_CHECKING:
         def not_(self) -> Self: ...
         def __getattr__(self, name: str) -> Callable[..., Self]: ...
 
-        # the ladders the builder declares for checkers, carried across rather than flattened.  This
-        # replaces the builder in one overload, so a narrowing lost here is lost for every value the
-        # umbrella claims, and `first()` on a mapping-shaped value would stop naming its key type
+        # the ladders the builder declares for checkers, carried across rather than flattened.  This replaces the
+        # builder in one overload, so a narrowing lost here is lost for every value the umbrella claims, and
+        # `first()` on a mapping-shaped value would stop naming its key type
         @overload
         def is_not_none(self: _CapableAssertion[_U | None]) -> _CapableAssertion[_U]: ...
         @overload
@@ -784,11 +783,9 @@ if TYPE_CHECKING:
         def satisfies(self, matcher: Callable[[Any], TypeIs[_U]]) -> AssertionBuilder[_U]: ...
         @overload
         def satisfies(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self: ...
-        # the two polling pivots, which live on the builder rather than on a mixin and so do not arrive
-        # with the rest.  Over `Any` rather than over the subject: the value here is callable or it is
-        # not, and no capability says which, so the chain keeps every rung open the way an unannotated
-        # probe does.  Left to `__getattr__` they came back as this façade over the callable itself,
-        # which is the object that was polled and not the value polling produced
+        # the two polling pivots, which live on the builder rather than on a mixin.  Over `Any` rather than over
+        # the subject: no capability says whether the value is callable, so the chain keeps every rung open.  Left
+        # to `__getattr__` they came back as this facade over the callable that was polled, not over its result
         def eventually(
             self,
             *,
@@ -805,9 +802,8 @@ if TYPE_CHECKING:
             ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
-        # the builder's own two helpers, which also live off the mixins.  `builder()` is a pivot: it
-        # makes a builder over the value it is handed, and left to `__getattr__` it read as this façade
-        # over the value that was already here
+        # the builder's own two helpers, also off the mixins.  `builder()` is a pivot: left to `__getattr__` it
+        # read as this facade over the value that was already here
         def builder(
             self,
             val: Any,

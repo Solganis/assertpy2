@@ -82,11 +82,8 @@ def _shape_bound_typevars() -> dict[str, str]:
                 for keyword in keywords:
                     if keyword.arg != "bound":
                         continue
-                    # a bound is either one shape by name, or a union of them written as a string
-                    # because it is too long for one line.  Reading only the first form is how the
-                    # umbrella overload was invisible to this file on the day it was added
-                    # one shape by name, or a union of them.  Reading only the first form is how
-                    # the umbrella overload was invisible to this file on the day it was added
+                    # a bound is one shape by name, or a union of them written as a string because it is too long for
+                    # one line.  Reading only the first form is how the umbrella overload was invisible to this file
                     named = _shape_names(keyword.value)
                     if named:
                         bounds[name] = " | ".join(named)

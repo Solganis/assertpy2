@@ -59,10 +59,9 @@ def _formatted(source: str) -> str:
             cwd=_ROOT,
             check=False,
         )
-        # refuse rather than fall back to the input: falling back compared unformatted text against
-        # formatted, and passed everywhere the failure did not happen.  Zero and nothing else, because
-        # `ruff check --fix` exits 1 when violations remain after fixing rather than when it fixed
-        # something, so accepting 1 would let output ruff rejected through as if it were normalised
+        # refuse rather than fall back to the input: falling back compared unformatted text against formatted
+        # and passed everywhere the failure did not happen.  Zero and nothing else, because `ruff check --fix`
+        # exits 1 when violations remain, so accepting 1 would let output ruff rejected through
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(
                 f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "

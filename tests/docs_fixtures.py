@@ -172,9 +172,9 @@ payload: dict[str, Any] = {}
 metrics: dict[str, float] = {}
 """
 
-# The page registers `is_5` in its first block and keeps using it in later ones, which each guard reads
-# on its own. `some_library` stands for whatever the reader is wrapping, so it is stubbed to the shape
-# the example uses rather than dropped: a block nobody checks is how the `is_5` gap went unnoticed.
+# The page registers `is_5` in its first block and uses it in later ones, which each guard reads on its own.
+# `some_library` is stubbed to the shape the example uses rather than dropped: a block nobody checks is how
+# the `is_5` gap went unnoticed
 EXTENDING = """
 class _ValidationError(Exception):
     pass
