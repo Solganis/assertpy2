@@ -198,6 +198,24 @@ async def test_the_user_is_active():
 All three are green forever, and none of them is possible with a bare `assert`. That is the price of a
 fluent API, so the library owes you a way to find them.
 
+A fourth shape needs no check, because it is refused where it happens. An `async def` predicate hands
+back a coroutine, which is truthy and never runs, so the assertion around it would pass whatever the
+value was:
+
+<!-- docs-guard: raises -->
+```python
+async def is_positive(value: int) -> bool:
+    return value > 0
+
+assert_that(-1).satisfies(is_positive)  # TypeError: handed back a coroutine instead of an answer
+```
+
+Await the call and assert on what it returned, `assert_that(await is_positive(-1)).is_true()`. Every
+place that reads an answer as truth refuses a coroutine, whether it came from a plain callable, from a
+custom matcher's `matches()`, or from a `comparators=` entry, and whether it is reached directly or
+through a composed matcher. `eventually()` is the other half of the story and a different one: it polls
+an async probe for you, so an async callable belongs there as the thing being polled.
+
 Ruff already covers part of it, and this check does not repeat what it does:
 
 - the second line is ruff's [`B018`](https://docs.astral.sh/ruff/rules/useless-expression/)

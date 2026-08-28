@@ -19,7 +19,7 @@ from ._engine._membership import (
 )
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
-from ._engine._require import argument, refuse, require_type, sized_len
+from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from .errors import DiffEntry, DiffResult
 from .matchers import _is_matcher
 
@@ -140,7 +140,7 @@ class ContainsMixin(_MixinBase):
         if len(items) == 1:
             item = items[0]
             if _is_matcher(item):
-                if not any(item.matches(value) for value in values):
+                if not any(verdict(item.matches(value), subject="the matcher") for value in values):
                     diff = DiffResult(
                         kind="contains",
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item.describe())],
@@ -246,7 +246,7 @@ class ContainsMixin(_MixinBase):
         def present(item: object) -> bool:
             # a matcher handed here was compared with `in`, which asks the wrong question
             if _is_matcher(item):
-                return any(item.matches(value) for value in values)
+                return any(verdict(item.matches(value), subject="the matcher") for value in values)
             return item in values
 
         if len(items) == 1:

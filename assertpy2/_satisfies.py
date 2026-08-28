@@ -9,7 +9,7 @@ from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
-from ._engine._require import argument, refuse
+from ._engine._require import CoroutineVerdictError, argument, refuse, verdict
 from ._matcher_impls import _has_own_evaluate
 from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
 from .matchers import (
@@ -218,7 +218,7 @@ class SatisfiesMixin(_MixinBase):
                 outcome = _evaluate_matcher(matcher, value)
                 result = None if outcome.matched else outcome
             else:
-                result = None if matcher.matches(value) else _refused(matcher, value)
+                result = None if verdict(matcher.matches(value), subject="the matcher") else _refused(matcher, value)
             if result is not None:
                 return self.error(
                     f"Expected {result.description}, but {result.mismatch}.",
@@ -229,7 +229,7 @@ class SatisfiesMixin(_MixinBase):
                     ),
                 )
         elif callable(matcher):
-            if not cast("Callable[..., object]", matcher)(self.val):
+            if not verdict(cast("Callable[..., object]", matcher)(self.val)):
                 return self.error(
                     f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.",
                     expected=_describe_matcher(matcher),
@@ -278,7 +278,7 @@ class SatisfiesMixin(_MixinBase):
                 # the verdict and the reason come from the same look, so a user's `key` runs once
                 if _has_own_evaluate(matcher):
                     outcome = _evaluate_matcher(matcher, item)
-                elif matcher.matches(item):
+                elif verdict(matcher.matches(item), subject="the matcher"):
                     continue
                 else:
                     outcome = _refused(matcher, item)
@@ -298,7 +298,7 @@ class SatisfiesMixin(_MixinBase):
         else:
             for i, item in enumerate(self.val):
                 walked += 1
-                if not cast("Callable[..., object]", matcher)(item):
+                if not verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected all items to satisfy {_describe_matcher(matcher)},"
                         f" but item at index {i} <{item}> did not.",
@@ -501,13 +501,13 @@ class SatisfiesMixin(_MixinBase):
             refuse(self.val, "iterable")
         if _is_matcher(matcher):
             for i, item in enumerate(self.val):
-                if matcher.matches(item):
+                if verdict(matcher.matches(item), subject="the matcher"):
                     return self.error(
                         f"Expected no item to satisfy {matcher.describe()}, but item at index {i} <{item}> did."
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
-                if cast("Callable[..., object]", matcher)(item):
+                if verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected no item to satisfy {_describe_matcher(matcher)}, but item at index {i} <{item}> did."
                     )
@@ -626,7 +626,9 @@ class SatisfiesMixin(_MixinBase):
             for column, matcher in enumerate(matchers):
                 try:
                     row.append(_apply_matcher(matcher, item))
-                except TypeError:  # noqa: PERF203  # every probe may raise independently on a mixed collection
+                except CoroutineVerdictError:  # noqa: PERF203  # never a non-match, always a mistake
+                    raise
+                except TypeError:  # every probe may raise independently on a mixed collection
                     raised_counts[column] += 1
                     row.append(False)
             satisfied.append(row)
@@ -704,7 +706,7 @@ class SatisfiesMixin(_MixinBase):
         entries = [
             _ROOT.index(index).entry(actual=val_item, expected=other_item)
             for index, (val_item, other_item) in enumerate(zip(val_items, other_items, strict=True))
-            if not predicate(val_item, other_item)
+            if not verdict(predicate(val_item, other_item))
         ]
         if entries:
             failed = "pair" if len(entries) == 1 else "pairs"
