@@ -13,10 +13,10 @@ import sys
 
 import tomllib
 
-# mutmut's own exit-code table, imported rather than copied: only two codes mean "killed", while 5 and
-# 33 mean nothing covered the mutant and 36 and 255 mean a timeout.  Reading every non-zero code as a
-# kill inflates the score, so the mapping fails loudly if it moves.  The import loads mutmut's config,
-# so this runs from the repository root where `[tool.mutmut]` lives.
+# mutmut's own exit-code table, imported rather than copied: only two codes mean "killed", while 5 and 33
+# mean nothing covered the mutant and 36 and 255 mean a timeout.  Reading every non-zero code as a kill
+# inflates the score, so the mapping fails loudly if it moves.  The import loads mutmut's config, so this
+# runs from the repository root where `[tool.mutmut]` lives
 from mutmut.__main__ import status_by_exit_code
 
 _RESULTS = pathlib.Path("mutants/assertpy2")

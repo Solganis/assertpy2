@@ -501,10 +501,10 @@ def assert_that(val: Callable[..., _P], description: str = "") -> _CallableAsser
 def assert_that(val: _T, description: str = "") -> _ObjectAssertion[_T]: ...
 
 
-# `Any` rather than the common base protocol, which is what this returned until the umbrella started handing back a
-# protocol of its own.  Measured: checking `_CoreAssertion` against a protocol carrying the whole surface took pyright
-# past its 4 GB heap and killed it on this one file.  `Any` is compatible with every overload, so nothing is reported
-# where the base protocol was reported before, and the overloads above are what a caller ever sees.
+# `Any` rather than the common base protocol: once the umbrella handed back a protocol of its own, checking
+# `_CoreAssertion` against a protocol carrying the whole surface took pyright past its 4 GB heap and killed it on
+# this file.  `Any` is compatible with every overload, so nothing is reported that the base protocol reported,
+# and the overloads above are what a caller ever sees
 def assert_that(val: object, description="") -> Any:
     """Set the value to be tested, plus an optional description, and allow assertions to be called.
 
@@ -919,9 +919,8 @@ _logger.addHandler(_handler)
 _default_logger = WarningLoggingAdapter(_logger, None)
 
 
-# what to do instead, per category: the register in `_engine/_operations.py` says what an operation does, and these
-# say what that means for the proxy it was reached through.  `{name}` is filled in so the reader can find the call in
-# their own line
+# what the register in `_engine/_operations.py` means for the proxy an operation was reached through.  `{name}` is
+# filled in so the reader finds the call in their own line
 _INSTEAD_OF_NEGATING: Final = {
     CONFIGURES: "negate the assertion that tests the expectation {name}() set instead",
     TRANSFORMS: "negate the assertion after {name}() instead",
@@ -1314,9 +1313,9 @@ class AssertionBuilder(
         def is_instance_of(self, some_class: type) -> Self: ...
         def is_instance_of(self, some_class: type) -> Any: ...
 
-        # the element pivots: the runtime returns `self.builder(<an element>)` while `CollectionMixin` declares `->
-        # Self`, so `assert_that(rows).first().value.count(1)` type-checked and raised.  The self type is structural
-        # because `_T` is invariant, and the nominal spelling bound for a mapping and missed every other container
+        # the element pivots return `self.builder(<an element>)` while `CollectionMixin` declares `-> Self`, so
+        # `assert_that(rows).first().value.count(1)` type-checked and raised.  Structural because `_T` is invariant:
+        # the nominal spelling bound for a mapping and missed every other container
         @overload
         def first(self: AssertionBuilder[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
         @overload
@@ -1341,23 +1340,12 @@ class AssertionBuilder(
         def element(self, index: int) -> Self: ...
         def element(self, index: int) -> Any: ...
 
-        # `mapped()` for the same reason and with one more of its own: it builds a `list` whatever it
-        # was given, so `-> Self` is wrong about the container as well as about the element.  It also
-        # rejects working code rather than only accepting broken code:
-        # `assert_that(rows).mapped(str).value[0].upper()` runs and was refused, because `.value` was
-        # declared as the input rather than as the list that comes back.
-        #
-        # `mapped()` carries a smaller version of the same limit, worth knowing before relying on it:
-        # a named function binds `_R` under both checkers, a lambda binds it under ty and comes back
-        # `AssertionBuilder[Any]` under mypy.  That loses precision rather than rejecting anything, so
-        # it is a boundary rather than the reason the two below are absent.
-        #
-        # `filtered_on()` and `flat_mapped()` are deliberately not declared here, and the reason is
-        # measured.  A predicate parameter spelled `Matcher[_E] | Callable[[_E], object]` gives a
-        # lambda nothing to bind against, so `filtered_on(lambda item: True)` came back `Unknown` under
-        # ty and `Any` under mypy; `flat_mapped()` resolved under ty and stayed `Any` under mypy.  One
-        # answer from three checkers is the bar, and neither reaches it.  A caller who wants them typed
-        # reaches them through a curated view, where the element is already bound.
+        # `mapped()` builds a `list` whatever it was given, so `-> Self` was wrong about the container as well as
+        # the element, and refused working code.  Its boundary: a named function binds `_R` under both checkers, a
+        # lambda binds it under ty and comes back `Any` under mypy, losing precision rather than rejecting.
+        # `filtered_on()` and `flat_mapped()` stay undeclared, measured: against `Matcher[_E] | Callable[[_E], object]`
+        # a lambda binds nothing, so `filtered_on()` was `Unknown` under ty and `flat_mapped()` resolved there, and
+        # both stayed `Any` under mypy.  One answer out of three checkers is the bar and neither reaches it
         @overload
         def mapped(self: _ElementSource[_E], func: Callable[[_E], _R]) -> AssertionBuilder[list[_R]]: ...
         @overload
@@ -1406,10 +1394,8 @@ class AssertionBuilder(
         """
         pivoted = _builder(val, description, kind, expected, logger)
         pivoted._value_origin = origin
-        # the response this value came from, kept across the pivot: by the time an assertion on a parsed
-        # body fails, the response itself is out of reach of everything downstream
-        # `is not None` and not `or`: a `requests.Response` is falsey for every 4xx and 5xx, which is
-        # exactly the response whose provenance a reader needs
+        # kept across the pivot: by the time an assertion on a parsed body fails, the response is out of reach.
+        # `is not None` and not `or`, since a `requests.Response` is falsey for every 4xx and 5xx
         pivoted._response = self._response if self._response is not None else response_of(self.val)
         return pivoted
 
@@ -1465,9 +1451,8 @@ class AssertionBuilder(
         self, msg: str, *, actual: object, expected: object, diff: DiffResult | None, trace: PollTrace | None
     ) -> AssertionOutcome:
         """Build the failure record.  Decides nothing about what happens to it."""
-        # every message in the library reads "Expected <val> to ...", so the subject of a failure is
-        # the value under test whether or not the assertion bothered to name it. filling it here is
-        # what puts it on all 163 failures instead of the 34 that pass it explicitly
+        # filling the subject here rather than at each call site is what puts it on all 163 failures
+        # instead of the 34 that name it explicitly
         provided = actual is not MISSING
         out = f"{f'[{self.description}] ' if len(self.description) > 0 else ''}{msg}"
         if self._value_origin and not len(self.val):
@@ -1508,9 +1493,8 @@ class AssertionBuilder(
         if self.kind == "soft":
             block = _collecting()
             if block is None:
-                # the block this builder was made under has since closed, which happens when a task
-                # created inside it outlives it: the context copy still says "soft", and appending here
-                # would put the failure in a list nobody reads. Failing is the honest answer
+                # the block this builder was made under has closed, which a task outliving it does: the
+                # context copy still says "soft", and appending would put the failure in a list nobody reads
                 return self._failure(outcome)
             if self._value_taint_reason is None:
                 self._value_taint_reason = outcome.message

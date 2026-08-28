@@ -243,9 +243,8 @@ if TYPE_CHECKING:
         def is_not_callable(self) -> Self: ...
         def is_iterable(self) -> Self: ...
         def is_not_iterable(self) -> Self: ...
-        # a protocol narrowing `satisfies` restates the whole overload set, ladder included.  The
-        # predicate stays `Any` here and is bound to the value in the views that know it: this one is
-        # the widest, and a guard about one type is exactly what a caller brings to a value of none
+        # a protocol narrowing `satisfies` restates the whole overload set, ladder included.  The predicate stays
+        # `Any` here and is bound to the value in the views that know it: this one is the widest
         @overload
         def satisfies(self, matcher: Callable[[Any], TypeIs[str]]) -> _StringAssertion: ...
         @overload
@@ -312,8 +311,7 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
         # a builder twin was tried and dropped: text and numeric ordering collide in one class.
-        # Both ways onto the builder stay untyped here: a pivot hands back `AssertionBuilder[_E]`,
-        # and so does everything the capability umbrella claims
+        # A pivot hands back `AssertionBuilder[_E]`, as does what the capability umbrella claims, so both stay untyped
         def check(self) -> _CheckCoreAssertion: ...
         @property
         def value(self) -> object: ...
@@ -499,9 +497,8 @@ if TYPE_CHECKING:
         def is_sorted(
             self, key: Callable[[str], object] = ..., reverse: bool = ..., *, allow_empty: bool = ...
         ) -> Self: ...
-        # the quantifiers walk a text the way the pipeline below does, character by character, and the
-        # runtime answers every one of them for a `str`.  They were absent for no reason anybody wrote
-        # down, so `assert_that("ab").each(...)` was a type error that ran
+        # the quantifiers walk a text character by character and the runtime answers every one for a `str`.  They
+        # were absent for no reason anybody wrote down, so `assert_that("ab").each(...)` was a type error that ran
         def each(self, matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...) -> Self: ...
         def all_satisfy(self, matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...) -> Self: ...
         def any_satisfy(self, matcher: Matcher[str] | Callable[[str], object]) -> Self: ...
@@ -718,14 +715,12 @@ if TYPE_CHECKING:
         def single(self) -> AssertionBuilder[_K]: ...
         def matches_structure(self, spec: dict[Any, Any]) -> Self: ...
 
-    # the shapes a checker recognises without importing the library that defines them.  Every member is
-    # one `pandas-stubs` declares: `pivot` and not `__dataframe__`, which the stubs answer through their
-    # catch-all and mypy then read as an array.  No series shape, since nothing separates a series from
-    # a `pandas.Index`
+    # the shapes a checker recognises without importing the library that defines them.  Every member is one
+    # `pandas-stubs` declares: `pivot` and not `__dataframe__`, which the stubs answer through their catch-all
+    # and mypy then reads as an array.  No series shape, since nothing separates a series from a `pandas.Index`
 
-    # the capability umbrella: a value answering to some capability keeps the whole surface, and only one
-    # with none is narrowed.  Members are keyed on what the runtime gate reads, so `__dict__` is out: it
-    # lives on `object` and matched every class
+    # the capability umbrella: a value answering to some capability keeps the whole surface, only one with none
+    # is narrowed.  Keyed on what the runtime gate reads, so `__dict__` is out: it lives on `object`
 
     class _CollectionShape(Protocol):
         # `__iter__` alone: a generator has no `__len__` and `contains()` works on one

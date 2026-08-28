@@ -186,21 +186,16 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     bytes_mixin.BytesMixin: ("_BytesAssertion",),
     collection.CollectionMixin: ("_IterableAssertion",),
     contains.ContainsMixin: ("_IterableAssertion", "_StringAssertion"),
-    # the datetime view alone, though both date views exist: every one of these seven refuses a plain
-    # date at run time, and pooling the two would let a name dropped from one be supplied by the other.
+    # the datetime view alone, though both date views exist: all seven refuse a plain date at run time, and
+    # pooling the two would let a name dropped from one be supplied by the other.
     #
-    # What this register cannot ask for is the other direction: a view carrying *part* of a mixin.  The
-    # five ordering declarations on each date view and the two closeness ones on the datetime view come
-    # from `NumericMixin`, which is covered by `_NumericAssertion`, so this file does not ask for them.
-    # A register of which methods each value type can answer was measured rather than assumed and is
-    # not being written: 55 of the 117 view-and-mixin pairs are partial, holding 210 declarations, and
-    # "the runtime answers this and the view is silent" runs 19 to 35 per view, about 450 in all.
-    #
-    # Half of it is covered elsewhere anyway: `tests/api_snapshot.json` records every view's members,
-    # so a *removal* fails the compatibility gate and is classified `typing`.  What stays open is an
-    # addition to a shared mixin that never reaches the view of a type that can answer it, and
-    # deriving that needs a real argument for each of the 157 methods rather than a stand-in: with one,
-    # a refusal about the argument reads the same as a type that can answer
+    # The other direction, a view carrying *part* of a mixin, is not asked for: the five ordering declarations
+    # on each date view and the two closeness ones come from `NumericMixin`, covered by `_NumericAssertion`.
+    # A register of what each value type can answer was measured and refused: 55 of the 117 view-and-mixin pairs
+    # are partial, holding 210 declarations, and "the runtime answers, the view is silent" runs 19 to 35 per
+    # view, about 450 in all.  `tests/api_snapshot.json` already fails a removal, so what stays open is an
+    # addition to a shared mixin, and deriving that needs a real argument for each of the 157 methods: with a
+    # stand-in, a refusal about the argument reads the same as a type that cannot answer
     date.DateMixin: ("_DateTimeAssertion",),
     dict_mixin.DictMixin: ("_DictAssertion",),
     exception.ExceptionMixin: ("_InvokedAssertion", "_CallableAssertion"),

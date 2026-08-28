@@ -241,10 +241,9 @@ def _formatted(source: str) -> str:
             cwd=_ROOT,
             check=False,
         )
-        # refuse rather than fall back to the input: falling back compared unformatted text against
-        # formatted, and passed everywhere the failure did not happen.  Zero and nothing else, because
-        # `ruff check --fix` exits 1 when violations remain after fixing rather than when it fixed
-        # something, so accepting 1 would let output ruff rejected through as if it were normalised
+        # refuse rather than fall back to the input: falling back compared unformatted text against formatted
+        # and passed everywhere the failure did not happen.  Zero and nothing else, because `ruff check --fix`
+        # exits 1 when violations remain, so accepting 1 would let output ruff rejected through
         if result.returncode != 0 or not result.stdout:
             raise RuntimeError(
                 f"{' '.join(command)} exited {result.returncode}, so this gate would compare the wrong "
@@ -357,10 +356,9 @@ class TestNothingTheBuilderOffersIsMissing:
         members that live on the builder rather than on a mixin were absent.  Built from the class it
         could not name what `__init__` sets, and four more went the same way.
         """
-        # constructed here rather than reached through `assert_that()`, which hands back a subclass
-        # carrying whatever extensions a suite has registered.  Measured: running `test_extensions.py`
-        # first left `is_even_integer` and three more on that subclass, and this read them as members
-        # the façade had dropped.  A gate whose verdict depends on what ran before it is worse than none
+        # constructed here rather than through `assert_that()`, which hands back a subclass carrying whatever a
+        # suite registered.  Measured: running `test_extensions.py` first left four names on that subclass and this
+        # read them as members the facade had dropped
         carried = {name for name in dir(AssertionBuilder({"id": 1})) if not name.startswith("_")}
         declared = set(_declarations()) | _attributes()
         assert_that(carried - declared).described_as("a member the umbrella used to offer").is_empty()

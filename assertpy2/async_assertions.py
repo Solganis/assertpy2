@@ -550,9 +550,8 @@ class AsyncAssertionBuilder:
         )
 
     async def _poll(self) -> Any:
-        # deliberately not imported at module level: asyncio costs 21ms of assertpy2's 59ms import and drags in
-        # socket/ssl/select, and only the async polling path needs it.  Anyone reaching this line is inside a running
-        # loop, so it is a dict lookup
+        # not imported at module level: asyncio costs 21ms of assertpy2's 59ms import and drags in socket/ssl/select,
+        # and only this path needs it.  Anyone reaching the line is inside a running loop, so it is a dict lookup
         import asyncio
 
         loop = asyncio.get_running_loop()

@@ -309,8 +309,8 @@ def identity_candidate(left: object, right: object) -> bool:
             return False
         return _defined_as(klass, "__eq__") and _defined_as(klass, "__ne__")
     except Exception:  # pragma: no cover - no input is known to reach it, see below
-        # every lookup above walks the class tree and runs none of the type's own code, and the guard stays because
-        # this runs on the way to a failure
+        # every lookup above walks the class tree and runs none of the type's own code, and the guard stays
+        # because this runs on the way to a failure
         return False
 
 

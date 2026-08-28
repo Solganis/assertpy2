@@ -114,9 +114,8 @@ def first_out_of_order(
     for index, current in enumerate(items):
         current_key = key(current)
         if index > 0:
-            # through `compare`, not `<`: raising here would put a broken `__lt__` in this frame, where
-            # the origin check mistakes it for a plain type mismatch.  The key is carried to the next
-            # round rather than recomputed, which doubled the calls
+            # through `compare`, not `<`: a broken `__lt__` raised in this frame reads to the origin check as a plain
+            # type mismatch.  The key is carried rather than recomputed, which doubled the calls
             broken = holds(current_key, previous_key, "gt" if reverse else "lt")
             if broken:
                 return index - 1, previous, current

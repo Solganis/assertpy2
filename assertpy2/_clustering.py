@@ -486,8 +486,7 @@ def render(
         lines.append(f"{len(omitted)} more cluster{'' if len(omitted) == 1 else 's'} not shown")
     covered = len({nodeid for cluster in found for nodeid in cluster.nodeids})
     if covered < total_failures:
-        # what the number measures, rather than "not clustered": two tests that share a difference under
-        # a floor of three are related, and the summary declined to print them, which is not the same as
-        # having found nothing about them
+        # what the number measures, rather than "not clustered": two tests sharing a difference under a
+        # floor of three are related, and the summary only declined to print them
         lines.append(f"{total_failures - covered} of {total_failures} outside any cluster of {minimum}")
     return lines

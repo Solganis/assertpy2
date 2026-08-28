@@ -36,15 +36,12 @@ WHAT_IT_DOES: Final = {
 # the gate accepts it
 NOT_AN_OPERATION: Final = frozenset({"builder", "check", "error", "not_", "value"})
 
-# the members that hand the subject itself back.  `assert assert_that(x).val` tests that value, so it is
-# not an assertion left uncalled, and the dangling check has to tell the two apart.  Nothing else on the
-# builder qualifies: reading `not_` hands back a proxy, `logger` an adapter that is truthy on every
-# subject there is, and the rest builder state, none of which the value under test decides
+# the members that hand the subject itself back, which the dangling check must not read as an assertion left
+# uncalled.  Nothing else qualifies: `not_` is a proxy, `logger` an adapter truthy on every subject, the rest state
 HANDS_THE_SUBJECT_BACK: Final = frozenset({"val", "value"})
 
 # the hybrids, which hand back a different value and test an expectation on the way.  Named rather than derived:
-# "reaches `self.error()`" does not separate a verdict from a precondition, which is how `errors()` first read as
-# asserting
+# "reaches `self.error()`" does not separate a verdict from a precondition, and `errors()` first read as asserting
 ALSO_ASSERTS: Final = frozenset(
     {
         "caused_by",

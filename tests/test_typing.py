@@ -118,10 +118,9 @@ if TYPE_CHECKING:
 
     assert_type(assert_that(object()), _ObjectAssertion[object])
 
-    # a dynamic assertion and an `add_extension` name resolve through the same hook, and no one signature is true of
-    # both.  A plain object gets the object view, which has no `__getattr__`, so `has_anything` on one is a type
-    # error.  A capable value has the hook, and the façade hands its own surface back rather than `Any`, so the
-    # assertions after a dynamic one are still read
+    # a dynamic assertion and an `add_extension` name resolve through the same hook, and no one signature is true
+    # of both.  A plain object gets the object view, which has no `__getattr__`, so `has_anything` on one is a
+    # type error.  A capable value has the hook, and the facade hands its own surface back rather than `Any`
     assert_type(assert_that(_Countable()).has_anything("value"), _CapableAssertion[_Countable])
 
     assert_type(assert_that(42).not_.is_equal_to(43), _NumericAssertion[int])
@@ -405,10 +404,10 @@ if TYPE_CHECKING:
     assert_type(assert_warn("foo", logger=_OwnLogger()), Any)
     assert_type(assert_warn("foo"), Any)
 
-    # comparator and placeholder tables built before the call, which is how the docs show them.  A
-    # `dict` parameter refuses these outright: it is invariant in both halves, so a table declared
-    # `dict[str, ...]` is not a `dict[object, ...]`, and one returning `bool` is not one returning
-    # `object`.  `Mapping[Any, ...]` is what accepts them, and the runtime only ever reads them
+    # comparator and placeholder tables built before the call, which is how the docs show them.  A `dict`
+    # parameter refuses these outright, being invariant in both halves: a table declared `dict[str, ...]` is not
+    # a `dict[object, ...]`, and one returning `bool` is not one returning `object`.  `Mapping[Any, ...]` is what
+    # accepts them, and the runtime only ever reads them
     by_type: dict[type, Callable[[float, float], bool]] = {float: lambda a, e: round(a, 2) == round(e, 2)}
     by_field: dict[str, Callable[[Any, Any], bool]] = {"name": lambda a, e: a.lower() == e.lower()}
     volatile: dict[str, Matcher[str]] = {"id": match.is_uuid()}

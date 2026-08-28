@@ -37,9 +37,8 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/pytest_plugin.py", "reportPossiblyUnboundVariable"): 6,
     # `executing` ships no annotations for the AST wrapper the inline-snapshot locator reads
     ("assertpy2/_inline.py", "reportAttributeAccessIssue"): 2,
-    # the verdict twins mirror the protocols, and they mirror their reports with them: the same two
-    # variance suggestions plus the one `_DictAssertion` carries, and one override report for the same
-    # reason the original has it
+    # the verdict twins mirror the protocols and their reports with them: the same two variance suggestions
+    # plus the one `_DictAssertion` carries, and one override report for the same reason the original has it
     ("assertpy2/_engine/_check_typing.py", "reportInvalidTypeVarUse"): 3,
     ("assertpy2/_engine/_check_typing.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
