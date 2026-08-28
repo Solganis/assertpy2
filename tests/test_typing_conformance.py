@@ -254,19 +254,19 @@ def _aliases() -> dict[str, set[str]]:
     two ways: the views spell the numeric bound through the alias and the runtime cannot, since the
     alias lives inside the `TYPE_CHECKING` block.
 
-    Two shapes, because the surface uses two.  A plain `X = Y` names one thing.  An annotated
-    `ClassInfo: TypeAlias = "type | UnionType | tuple[ClassInfo, ...]"` names several, and its value is a
-    string, so it is parsed rather than evaluated.  Reported as a name instead, it read as a runtime
-    shape of its own and the gate compared `ClassInfo` against `type` as though they were different
-    promises.
+    Three shapes, because the surface uses three.  A plain `X = Y` names one thing.  An annotated one
+    names several, written either as a string, which is parsed rather than evaluated, or as an
+    expression, which `ClassInfo` is: only its recursive reference is quoted, since ty ignores an alias
+    whose whole right-hand side is a string.  Reported as a name instead, it read as a runtime shape of
+    its own and the gate compared `ClassInfo` against `type` as though they were different promises.
 
-    The recursion needs nothing special: only top-level members are read, so `tuple[ClassInfo, ...]`
-    yields the head `tuple` and the alias never names itself in the result.
+    The recursion needs nothing special: only top-level members are read, so the nested tuple yields the
+    head `tuple` and the alias never names itself in the result.
     """
     found: dict[str, set[str]] = {}
     for source in (_typing.__file__, _matcher_impls.__file__):
         for node in ast.walk(ast.parse(pathlib.Path(source).read_text(encoding="utf-8"))):
-            name, value = _alias_parts(node)
+            name, value, annotated = _alias_parts(node)
             if not name:
                 continue
             if isinstance(value, ast.Name):
@@ -276,21 +276,25 @@ def _aliases() -> dict[str, set[str]]:
                 # it names
                 written = ast.parse(value.value, mode="eval").body
                 found[name] = {member.split("[", 1)[0] for member in _members_of(written)}
+            elif annotated and isinstance(value, ast.BinOp | ast.Subscript):
+                found[name] = {member.split("[", 1)[0] for member in _members_of(value)}
     return found
 
 
-def _alias_parts(node: ast.AST) -> tuple[str, ast.expr | None]:
-    """``(alias name, its value)`` for `X = Y` and for `X: TypeAlias = Y`, else an empty name.
+def _alias_parts(node: ast.AST) -> tuple[str, ast.expr | None, bool]:
+    """``(alias name, its value, whether it was annotated)``, or an empty name.
 
     The annotated form is read only when the annotation says `TypeAlias`: any other string-valued
     assignment in these modules is a value rather than a type, and parsing one as an expression fails.
+    The flag matters because an expression-valued alias is only trustworthy when annotated: every
+    `seen = seen | {pair_id}` in a walked module is an expression assigned to a name too.
     """
     if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-        return node.targets[0].id, node.value
+        return node.targets[0].id, node.value, False
     if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
         if _plain_annotation(node.annotation) == "TypeAlias":
-            return node.target.id, node.value
-    return "", None
+            return node.target.id, node.value, True
+    return "", None, False
 
 
 def _plain_annotation(node: ast.expr) -> str:
