@@ -25,7 +25,7 @@ import json
 from collections import Counter
 from typing import TYPE_CHECKING, Final
 
-from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -262,16 +262,10 @@ def _fields_of(value: object) -> dict | None:
 
 
 def _defined_as(klass: type, name: str) -> bool:
-    """Whether the definition of *name* the class tree carries is the one ``object`` carries.
-
-    Walked and read raw, which is the reading the interpreter does for an operator: no attribute access
-    on the class, so neither a metaclass nor a descriptor of the class's own gets to answer for it.
-    """
-    for base in type.__getattribute__(klass, "__mro__"):
-        found = type.__getattribute__(base, "__dict__").get(name)
-        if found is not None:
-            return found is object.__dict__[name]
-    return False  # pragma: no cover - `object` ends every tree and defines both names, so this is dead
+    """Whether the definition of *name* the class tree carries is the one ``object`` carries."""
+    found = definition_of(klass, name)
+    # pragma: no cover on the `None` half - `object` ends every tree and defines both names asked here
+    return found is not None and found[1] is object.__dict__[name]
 
 
 def identity_candidate(left: object, right: object) -> bool:

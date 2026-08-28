@@ -159,3 +159,20 @@ def materialized(value: Iterable[_T]) -> Iterable[_T]:
         return list(value) if iter(value) is value else value
     except TypeError:
         return value
+
+
+def definition_of(klass: type, name: str) -> tuple[type, object] | None:
+    """The class in *klass*'s tree that defines *name*, and the definition itself, or ``None``.
+
+    Walked and read raw, which is the reading the interpreter does for an operator: no attribute access
+    on the class, so neither a metaclass nor a descriptor of the class's own gets to answer for it.
+
+    A definition of ``None`` reads as no definition, so a class declaring `__hash__ = None` reports the
+    hashable base above it.  Callers that care ask the class about `__hash__` directly, which is the
+    cheaper question anyway.
+    """
+    for base in type.__getattribute__(klass, "__mro__"):
+        found = type.__getattribute__(base, "__dict__").get(name)
+        if found is not None:
+            return base, found
+    return None
