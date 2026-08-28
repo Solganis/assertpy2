@@ -162,6 +162,8 @@ _IMPORTS = """    import datetime
     _V = TypeVar("_V")
     _R = TypeVar("_R")
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")
     _Number = SupportsFloat
 
     # the rungs below restrict `self` with the annotations `assert_that()` overloads are written with
@@ -590,6 +592,7 @@ _BY_HAND: Final = frozenset(
     {
         "is_not_none",
         "is_instance_of",
+        "is_instance_of_any",
         "first",
         "last",
         "element",
@@ -701,6 +704,8 @@ if TYPE_CHECKING:
 
     # covariant: the façade only ever hands the subject back, through `value`
     _CapableT_co = TypeVar("_CapableT_co", covariant=True)
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")
     _E_co = TypeVar("_E_co", covariant=True)
 
     class _Orderable(Protocol):
@@ -750,9 +755,23 @@ if TYPE_CHECKING:
         @overload
         def is_not_none(self) -> Self: ...
         @overload
+        def is_instance_of(self, some_class: tuple[type[_U], type[_U2]]) -> AssertionBuilder[_U | _U2]: ...
+        @overload
+        def is_instance_of(
+            self, some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> AssertionBuilder[_U | _U2 | _U3]: ...
+        @overload
         def is_instance_of(self, some_class: type[_U]) -> AssertionBuilder[_U]: ...
         @overload
         def is_instance_of(self, some_class: ClassInfo) -> Self: ...
+        @overload
+        def is_instance_of_any(self, first: type[_U], second: type[_U2], /) -> AssertionBuilder[_U | _U2]: ...
+        @overload
+        def is_instance_of_any(
+            self, first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> AssertionBuilder[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> Self: ...
         @overload
         def first(self: _CapableAssertion[Mapping[_K, _V]]) -> AssertionBuilder[_K]: ...
         @overload

@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     _V = TypeVar("_V")
     _R = TypeVar("_R")
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")
     _Number = SupportsFloat
 
     # the rungs below restrict `self` with the annotations `assert_that()` overloads are written with
@@ -1171,11 +1173,28 @@ if TYPE_CHECKING:
         @overload
         def is_instance_of(self: _CheckAnyValue[_T], some_class: type[bytearray]) -> AssertionOutcome: ...
         @overload
+        def is_instance_of(self: _CheckAnyValue[_T], some_class: tuple[type[_U], type[_U2]]) -> AssertionOutcome: ...
+        @overload
+        def is_instance_of(
+            self: _CheckAnyValue[_T], some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> AssertionOutcome: ...
+        @overload
         def is_instance_of(self: _CheckAnyValue[_T], some_class: type[_U]) -> AssertionOutcome: ...
         @overload
         def is_instance_of(self: _CheckAnyValue[_T], some_class: ClassInfo) -> AssertionOutcome: ...
         @overload
         def is_instance_of(self, some_class: ClassInfo) -> AssertionOutcome: ...
+
+        @overload
+        def is_instance_of_any(self: _CheckAnyValue[_T], first: type[_U], second: type[_U2], /) -> AssertionOutcome: ...
+        @overload
+        def is_instance_of_any(
+            self: _CheckAnyValue[_T], first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_instance_of_any(self: _CheckAnyValue[_T], *some_classes: ClassInfo) -> AssertionOutcome: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> AssertionOutcome: ...
 
         def is_equal_to(
             self,
@@ -1202,8 +1221,6 @@ if TYPE_CHECKING:
         def is_none(self) -> AssertionOutcome: ...
 
         def is_type_of(self, some_type: type) -> AssertionOutcome: ...
-
-        def is_instance_of_any(self, *some_classes: ClassInfo) -> AssertionOutcome: ...
 
         def is_subclass_of(self, some_class: type) -> AssertionOutcome: ...
 

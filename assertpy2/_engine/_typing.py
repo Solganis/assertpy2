@@ -45,7 +45,9 @@ if TYPE_CHECKING:
     _K = TypeVar("_K")  # tracked dict key type
     _V = TypeVar("_V")  # tracked dict value type
     _B_co = TypeVar("_B_co", bytes, bytearray, covariant=True)  # tracked bytes type (output-only -> covariant)
-    _U = TypeVar("_U")  # the type a TypeIs predicate refines the tracked value to
+    _U = TypeVar("_U")
+    _U2 = TypeVar("_U2")
+    _U3 = TypeVar("_U3")  # the type a TypeIs predicate refines the tracked value to
     _Other = TypeVar("_Other")  # an element of the sequence a pairwise quantifier walks alongside
     _T_co = TypeVar("_T_co", covariant=True)  # the subject of a value no overload recognises
     _P_co = TypeVar("_P_co", covariant=True)  # what a polled probe hands back, which is what its chain asserts on
@@ -414,9 +416,24 @@ if TYPE_CHECKING:
         @overload
         def is_instance_of(self, some_class: type[bytearray]) -> _BytesAssertion[bytearray]: ...
         @overload
+        def is_instance_of(self, some_class: tuple[type[_U], type[_U2]]) -> _ObjectAssertion[_U | _U2]: ...
+        @overload
+        def is_instance_of(
+            self, some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> _ObjectAssertion[_U | _U2 | _U3]: ...
+        @overload
         def is_instance_of(self, some_class: type[_U]) -> _ObjectAssertion[_U]: ...
         @overload
         def is_instance_of(self, some_class: ClassInfo) -> Self: ...
+
+        @overload
+        def is_instance_of_any(self, first: type[_U], second: type[_U2], /) -> _ObjectAssertion[_U | _U2]: ...
+        @overload
+        def is_instance_of_any(
+            self, first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> _ObjectAssertion[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> Self: ...
 
     class _TextAssertion(_MembershipAssertion, _RepeatableAssertion[str], _SizedAssertion, _CoreAssertion, Protocol):
         """What a piece of text can be asked, whether a caller passed it in or the library caught it.
