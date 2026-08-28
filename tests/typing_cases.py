@@ -250,6 +250,10 @@ def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
 def _methods_that_do_not_fit_the_value() -> None:
     """Assertions the value's own type has no business answering."""
     assert_that(_Person()).is_positive()  # case: numeric-assertion-on-an-object
+    assert_that(_Person()).is_zero()  # case: conversion-assertion-on-an-object
+    # `is_nan` sits behind `numbers.Real` rather than `numbers.Number`, and no structural key tells the
+    # two registrations apart, so the fallback declares none of that four and `Fraction` keeps the refusal
+    assert_that(Fraction(3, 2)).is_not_nan()  # case: real-only-assertion-on-a-registered-number
     assert_that(_Person()).has_name("x")  # case: dynamic-attribute-on-an-object
     assert_that("text").is_close_to(1, 2)  # case: numeric-assertion-on-text
 
@@ -371,6 +375,11 @@ def _relations_that_must_keep_working() -> None:
     # the half that decides whether the float restriction can ship: a value the umbrella claims that converts
     assert_that(_ConvertibleRow()).is_nan()  # case: valid-capable-nan
     assert_that(_ConvertibleRow()).is_close_to(1, 1)  # case: valid-capable-closeness
+    # the object fallback carries the four numeric assertions a registered number answers whatever it
+    # registered as, so `Decimal` and `Fraction`, which no overload names, keep what the runtime gives
+    assert_that(Fraction(3, 2)).is_not_close_to(50, 5)  # case: valid-fraction-closeness
+    assert_that(Decimal("1.5")).is_close_to(1, 5)  # case: valid-decimal-closeness
+    assert_that(Decimal("1.5")).is_not_zero()  # case: valid-decimal-zero
     assert_that(1 + 2j).is_zero()  # case: valid-complex-zero
     assert_that(True).is_greater_than(0)  # case: valid-bool-compared
     assert_that(1).is_equal_to(True)  # case: valid-int-equals-bool

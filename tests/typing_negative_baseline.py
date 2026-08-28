@@ -174,6 +174,10 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "dynamic-attribute-on-an-object": _MISSING,
     # the umbrella's own protocol asks the value for an ordering; both used to type-check and raise `TypeError`
     "numeric-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
+    # the object fallback carries four of the numeric assertions, so a value that converts neither way is
+    # refused, and so is the family behind `numbers.Real`, which no structural key can name
+    "conversion-assertion-on-an-object": _NOT_THE_VALUES_KIND,
+    "real-only-assertion-on-a-registered-number": _MISSING,
     "numeric-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # the five numeric assertions for which `float()` is necessary, measured; the other five stay open
     "nan-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
@@ -315,6 +319,10 @@ VALID: frozenset[str] = frozenset(
         # a value the umbrella claims that converts, which is what the float restriction must not refuse
         "valid-capable-nan",
         "valid-capable-closeness",
+        # and the object fallback's half: a registered number no overload names
+        "valid-fraction-closeness",
+        "valid-decimal-closeness",
+        "valid-decimal-zero",
         "valid-numpy-int32",
         "valid-numpy-uint64",
         "valid-numpy-float32",

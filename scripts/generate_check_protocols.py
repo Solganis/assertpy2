@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     import datetime
 {abc}
     from pathlib import Path
-    from typing import Any, Protocol, SupportsFloat, TypeVar, overload
+    from typing import Any, Protocol, SupportsFloat, SupportsIndex, TypeVar, overload
 
     from typing_extensions import TypeIs
 
