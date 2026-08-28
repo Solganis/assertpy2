@@ -186,11 +186,10 @@ def test_over_cap_list_diff(benchmark):
     benchmark(run)
 
 
-# Everything above measures how the library walks a payload. These measure the fixed price of one
-# assertion, which is what most suites actually pay: thousands of small assertions where nothing is
-# walked. A regression in `assert_that()`, in the soft-mode ContextVar read or in per-link chaining
-# moves nothing above and everything in a real run. One assertion is too small to time, so each
-# repeats a fixed count.
+# Everything above measures how the library walks a payload.  These measure the fixed price of one
+# assertion, which is what most suites pay: thousands of them where nothing is walked.  A regression in
+# `assert_that()`, in the soft-mode ContextVar read or in per-link chaining moves nothing above and
+# everything in a real run.  One assertion is too small to time, so each case repeats a fixed count.
 _ASSERTIONS = 1000
 
 
@@ -268,11 +267,10 @@ def test_many_distinct_duplicates_reported(benchmark, size):
     benchmark(run)
 
 
-# Polling and clustering run per *poll* and per *failing test* rather than per assertion, so their cost
-# is multiplied by a loop nobody writes. The flight recorder is on by default and walks the probed value
-# twice, once to sanitise a sample and once to key it for change: a failing poll over two hundred
-# records measured 2.2 ms against 0.11 ms with the recorder off. Each case fixes the number of polls and
-# checks it, so a benchmark cannot silently time a shape it did not intend.
+# Polling and clustering run per *poll* and per *failing test* rather than per assertion, so a loop nobody
+# writes multiplies their cost.  The flight recorder is on by default and walks the probed value twice, once
+# to sanitise a sample and once to key it for change: a failing poll over two hundred records measured 2.2 ms
+# against 0.11 ms with it off.  Each case fixes the number of polls and checks it.
 _POLLS = 10
 
 _WIDE_FAIL, _WIDE_PASS = _records(200), _records(200)
@@ -352,3 +350,114 @@ def test_clustering_a_whole_run(benchmark):
     recorded = [(f"test_{index}", observations_of(_wide_failure(1))) for index in range(40)]
     assert len(clusters(recorded, 40)) == 1
     benchmark(lambda: render(clusters(recorded, 40), 40))
+
+
+# Everything above holds ints and strings, whose `==` and `hash()` are free, so the cost measured is the
+# library's. These measure what the value costs instead: an expensive `__eq__`, a collection the hashing
+# shortcut has to refuse, and an iterable that can be walked only once.
+
+
+class _Costly:
+    """A value whose `__eq__` is the expensive part, counted so a case can pin how often it was called.
+
+    Two hundred of these: the passing path calls it once per element, the failing path 4.2 times, because
+    composing the diff walks the pair again.
+    """
+
+    calls = 0
+    hashes = 0
+
+    def __init__(self, number: int) -> None:
+        self.number = number
+
+    def __eq__(self, other: object) -> bool:
+        type(self).calls += 1
+        return isinstance(other, _Costly) and self.number == other.number
+
+    def __hash__(self) -> int:
+        type(self).hashes += 1
+        return hash(self.number)
+
+    def __repr__(self) -> str:
+        return f"_Costly({self.number})"
+
+
+def test_expensive_equality_pass(benchmark):
+    left = [_Costly(index) for index in range(200)]
+    right = [_Costly(index) for index in range(200)]
+    _Costly.calls = 0
+    assert_that(left).is_equal_to(right)
+    # one call per element, which is the floor: anything above means the passing path walks twice
+    assert _Costly.calls == 200, f"the passing path called __eq__ {_Costly.calls} times, not 200"
+
+    benchmark(lambda: assert_that(left).is_equal_to(right))
+
+
+def test_expensive_equality_diff(benchmark):
+    left = [_Costly(index) for index in range(200)]
+    right = [_Costly(index) for index in range(200)]
+    right[-1] = _Costly(-1)
+
+    def run():
+        try:
+            assert_that(left).is_equal_to(right)
+        except AssertionFailure:
+            return
+        raise RuntimeError("the arrays compared equal, so this measures the wrong path")
+
+    run()
+    benchmark(run)
+
+
+@pytest.mark.parametrize(
+    ("shape", "make"),
+    [
+        ("hashable", lambda size: [*range(size), 0]),
+        ("unhashable", lambda size: [[index] for index in range(size)] + [[0]]),
+        ("mixed", lambda size: [index if index % 2 else [index] for index in range(size)] + [1]),
+    ],
+    ids=["hashable", "unhashable", "mixed"],
+)
+def test_finding_duplicates_by_hashability(benchmark, shape, make):
+    # `contains_duplicates` rather than its negation on purpose: the negation goes on to name every
+    # repeat, and for the two shapes that cannot hash that reporting is quadratic too, so timing it
+    # measures the two together. 2001 elements through the check alone: 0.04 ms hashable, 10.9 ms mixed,
+    # 14.7 ms unhashable, against 0.18, 32 and 43 with the reporting attached
+    values = make(2000)
+
+    def run():
+        assert_that(values).contains_duplicates()
+
+    run()
+    benchmark(run)
+
+
+def test_a_class_with_its_own_equality_pays_the_quadratic_path(benchmark):
+    """A hashable class is still walked pairwise when it defines `__eq__`, and that is on purpose.
+
+    `_safe` in `_engine/_membership.py` admits a type to the hashing shortcut only if it is a known one or
+    inherits `object.__eq__`. A custom `__eq__` may disagree with the type's `__hash__`, and a set would
+    then miss a duplicate. 2001 values: no hashes at all and 1 999 001 comparisons.
+    """
+    values = [_Costly(index) for index in range(2000)] + [_Costly(0)]
+    _Costly.hashes = 0
+    _Costly.calls = 0
+    assert_that(values).contains_duplicates()
+    assert _Costly.hashes == 0, f"the set path was taken after all, {_Costly.hashes} hashes"
+    assert _Costly.calls > len(values), "the pairwise walk is what this case exists to time"
+
+    benchmark(lambda: assert_that(values).contains_duplicates())
+
+
+@pytest.mark.parametrize("walkable", [False, True], ids=["list", "single-use iterator"])
+def test_a_single_use_iterable_is_read_once(benchmark, walkable):
+    # an iterator has to be read whole before anything can be asked of it twice, and `materialized()` is
+    # where that happens. Twenty thousand elements: 0.09 ms as a list against 0.42 ms as an iterator for
+    # `contains`, so the cost is the materialisation rather than the assertion
+    size = 20000
+
+    def run():
+        values = (index for index in range(size)) if walkable else list(range(size))
+        assert_that(values).contains(size - 1)
+
+    benchmark(run)
