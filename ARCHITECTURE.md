@@ -89,7 +89,7 @@ and the two move at different speeds.
 ## True, though it looks wrong
 
 - **`assert_that`'s implementation returns `Any`.** The real return made Pyright allocate four gigabytes against
-  a 150-method protocol and die. The overloads are what callers see.
+  a protocol carrying the whole surface and die. The overloads are what callers see.
 - **Some overlapping overloads are deliberate**, recorded per method in `tests/pyright_baseline.py`.
 - **Some variance suggestions are refused**, recorded there too, per TypeVar.
 - **`ty` is scoped to `assertpy2/` and `tests/test_typing.py`.** Over the whole tree it reports hundreds of
