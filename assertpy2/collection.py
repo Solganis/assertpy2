@@ -7,7 +7,7 @@ from ._engine._introspection import is_mapping_like, materialized
 from ._engine._membership import not_contained_in
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, first_out_of_order
-from ._engine._require import argument, refuse, require_type, sized_len
+from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
 from .matchers import _is_matcher
 
@@ -388,7 +388,7 @@ class CollectionMixin(_MixinBase):
         filtered = []
         for item in self.val:
             seen += 1
-            if matches(item):
+            if verdict(matches(item)):
                 filtered.append(item)
         return self.builder(
             filtered,

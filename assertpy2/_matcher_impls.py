@@ -33,7 +33,7 @@ from ._engine._membership import (
 )
 from ._engine._ordering import UnorderableError, first_out_of_order, holds
 from ._engine._path import _ROOT, _Path
-from ._engine._require import argument, raised_inside, refuse, reject_unknown_kwargs
+from ._engine._require import CoroutineVerdictError, argument, raised_inside, refuse, reject_unknown_kwargs, verdict
 from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
@@ -205,7 +205,7 @@ class BaseMatcher:
         """
         if type(self).matches is BaseMatcher.matches:
             raise NotImplementedError("a matcher must implement matches() or evaluate()")
-        if self.matches(value):
+        if verdict(self.matches(value), subject="the matcher"):
             return MatchResult(matched=True, description=self.describe())
         return _refused(self, value)
 
@@ -233,7 +233,9 @@ class BaseMatcher:
     def __eq__(self, other: object) -> bool:
         # an operand the predicate cannot evaluate means "no match"; ``==`` must never raise
         try:
-            return self.matches(other)
+            return bool(verdict(self.matches(other), subject="the matcher"))
+        except CoroutineVerdictError:  # never a non-match, always a mistake in the test
+            raise
         except (TypeError, ValueError):
             return False
 
@@ -251,13 +253,13 @@ class AllOfMatcher(BaseMatcher):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
-        return all(matcher.matches(value) for matcher in self.matchers)
+        return all(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
 
     def describe(self) -> str:
         return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
 
     def describe_mismatch(self, value: Any) -> str:
-        failed = [matcher for matcher in self.matchers if not matcher.matches(value)]
+        failed = [m for m in self.matchers if not verdict(m.matches(value), subject="the matcher")]
         return f"<{value}> did not satisfy: {', '.join(matcher.describe() for matcher in failed)}"
 
 
@@ -268,7 +270,7 @@ class AnyOfMatcher(BaseMatcher):
         self.matchers = matchers
 
     def matches(self, value: Any) -> bool:
-        return any(matcher.matches(value) for matcher in self.matchers)
+        return any(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
 
     def describe(self) -> str:
         return f"({' or '.join(matcher.describe() for matcher in self.matchers)})"
@@ -284,7 +286,7 @@ class NotMatcher(BaseMatcher):
         self.matcher = matcher
 
     def matches(self, value: Any) -> bool:
-        return not self.matcher.matches(value)
+        return not verdict(self.matcher.matches(value), subject="the matcher")
 
     def describe(self) -> str:
         return f"not {self.matcher.describe()}"
@@ -715,7 +717,7 @@ class HasPropertyMatcher(BaseMatcher):
         if not hasattr(value, self.name):
             return False
         if self.matcher is not None:
-            return self.matcher.matches(getattr(value, self.name))
+            return bool(verdict(self.matcher.matches(getattr(value, self.name)), subject="the matcher"))
         return True
 
     def describe(self) -> str:
@@ -1048,7 +1050,7 @@ class EachMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         try:
-            return all(self.matcher.matches(item) for item in value)
+            return all(verdict(self.matcher.matches(item), subject="the matcher") for item in value)
         except TypeError as exc:
             if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
                 raise
@@ -1060,7 +1062,7 @@ class EachMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         try:
             for i, item in enumerate(value):
-                if not self.matcher.matches(item):
+                if not verdict(self.matcher.matches(item), subject="the matcher"):
                     return f"item at index {i} <{item}> did not match {self.matcher.describe()}"
         except TypeError as exc:
             if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
@@ -1221,13 +1223,15 @@ class StructureMatcher(BaseMatcher):
                             mismatches.append(
                                 _SpecMismatch(path.key(key), actual, outcome.description, outcome.mismatch)
                             )
-                    elif not expected.matches(actual):
+                    elif not verdict(expected.matches(actual), subject="the matcher"):
                         # nothing is rendered until the leaf has failed, which is what keeps a passing spec cheap
                         mismatches.append(
                             _SpecMismatch(
                                 path.key(key), actual, expected.describe(), expected.describe_mismatch(actual)
                             )
                         )
+                except CoroutineVerdictError:  # never a mismatch, always a mistake in the test
+                    raise
                 except (TypeError, ValueError):
                     mismatches.append(_SpecMismatch(path.key(key), actual, expected.describe(), f"was <{actual}>"))
             elif isinstance(expected, dict):

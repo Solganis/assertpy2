@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 from ._introspection import definition_of, materialized
+from ._require import verdict
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -179,7 +180,7 @@ def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool],
     absent = []
     for item in items:
         if is_matcher(item):
-            if not any(item.matches(element) for element in walked):
+            if not any(verdict(item.matches(element), subject="the matcher") for element in walked):
                 absent.append(item)
         elif item not in present:
             absent.append(item)

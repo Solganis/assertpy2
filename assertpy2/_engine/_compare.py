@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ._introspection import is_mapping_like, is_model_dump_object
+from ._require import verdict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -313,7 +314,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             return "equal"  # a named field the expected side leaves None is not compared
         comparator = _resolve_comparator(actual, config, field=field)
         if comparator is not None:
-            return "equal" if comparator(actual, expected) else "leaf"
+            return "equal" if verdict(comparator(actual, expected), subject="the comparator") else "leaf"
         if config.strict_types:
             if actual is expected and not at_root:
                 # identity, which a container gets free from `PyObject_RichCompareBool`.  Not at the root, where it

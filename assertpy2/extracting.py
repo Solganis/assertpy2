@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_model_dump_object, is_namedtuple
 from ._engine._mixin_base import _MixinBase
-from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type
+from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, verdict
 
 _EXTRACTING_OPTIONS = frozenset({"filter", "sort"})
 
@@ -248,7 +248,7 @@ class ExtractingMixin(_MixinBase):
         seen = 0
         for index, item in enumerate(source):
             seen += 1
-            if _filter(item):
+            if verdict(_filter(item), subject="the filter"):
                 try:
                     extracted_values = [_extract(item, name) for name in names]
                 except ValueError as exc:

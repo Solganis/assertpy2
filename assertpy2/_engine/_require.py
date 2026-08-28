@@ -24,6 +24,7 @@ are not, and a rule with an exception is a rule nobody can rely on.
 from __future__ import annotations
 
 import difflib
+import inspect
 from typing import NoReturn, TypeVar
 
 from ..errors import _safe_repr, _truncated
@@ -133,3 +134,31 @@ def reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
         named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
     plural = "" if len(named) == 1 else "s"
     raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
+
+
+class CoroutineVerdictError(TypeError):
+    """A predicate handed back a coroutine, which is a mistake in the test rather than a non-match.
+
+    Its own type because several assertions catch `TypeError` from a probe on purpose, reading it as
+    "this one does not match", which is right for a predicate that cannot judge some item and wrong for
+    one that was never awaited: swallowed there, the refusal came back as an ordinary failed assertion.
+    """
+
+
+def verdict(answer: object, *, subject: str = "predicate") -> object:
+    """The answer a predicate gave, refusing a coroutine rather than reading it as truth.
+
+    A coroutine object is truthy, so an `async def` predicate passed every assertion that reads one
+    without ever running: measured, ten of the thirteen places that take a callable went green on a
+    predicate that always answers `False`.
+
+    Asked of the answer rather than of the callable, so a lambda handing one back is caught too, and
+    closed before raising so the refusal is not followed by "coroutine was never awaited".
+    """
+    if inspect.iscoroutine(answer):
+        answer.close()
+        raise CoroutineVerdictError(
+            f"{subject} handed back a coroutine instead of an answer; assertions here are synchronous, "
+            "so await the call yourself and assert on what it returned"
+        )
+    return answer

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
 
 from ._engine._introspection import is_same_implementation
-from ._engine._require import argument, refuse
+from ._engine._require import argument, refuse, verdict
 from ._matcher_impls import (
     AllOfMatcher,
     AnyOfMatcher,
@@ -85,9 +85,9 @@ def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object)
     ``matches``, a callable via its return value, and anything else raises ``TypeError``.
     """
     if _is_matcher(matcher):
-        return matcher.matches(value)
+        return bool(verdict(matcher.matches(value), subject="the matcher"))
     if callable(matcher):
-        return bool(cast("Callable[..., object]", matcher)(value))
+        return bool(verdict(cast("Callable[..., object]", matcher)(value)))
     refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
 
 
@@ -102,7 +102,7 @@ def _evaluate_matcher(matcher: Matcher[Any], value: object) -> MatchResult:
     evaluate = getattr(matcher, "evaluate", None)
     if evaluate is not None:
         return evaluate(value)
-    if matcher.matches(value):
+    if verdict(matcher.matches(value), subject="the matcher"):
         return MatchResult(matched=True, description=matcher.describe())
     return _refused(matcher, value)
 
