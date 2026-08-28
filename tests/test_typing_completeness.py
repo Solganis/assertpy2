@@ -119,9 +119,9 @@ def test_the_package_it_read_is_this_checkout() -> None:
 def test_the_engine_is_the_one_this_gate_was_recorded_against() -> None:
     """The wrapper falls back to whatever it has if the pin does not reach the subprocess.
 
-    That fallback is silent and it is not cosmetic: 1.1.411 rejects a union passed to a `TypeForm`
-    parameter and reads its return as `Unknown`, so a run that quietly used it would answer a different
-    question from the one this file claims to ask.
+    That fallback is silent, and a number recorded against one build and read from another is a number
+    about nothing. The two agree on this package today, measured, which is why the check is on the version
+    rather than on the count: agreement is what a drift would end.
     """
     assert_that(_report()["version"]).described_as("the pyright build that answered").is_equal_to(
         typing_harness.PYRIGHT_ENGINE

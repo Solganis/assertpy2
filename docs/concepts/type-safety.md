@@ -98,9 +98,9 @@ rather than asserted: [`tests/typing_cases.py`](https://github.com/Solganis/asse
 holds the spellings that were tried, and CI compares all three checkers against a recorded baseline in
 both directions.
 
-[ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy), and
-[Pyright](https://github.com/microsoft/pyright) all report these in the editor and in CI, turning a class
-of test bugs into errors you see while typing.
+[ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy),
+[Pyright](https://github.com/microsoft/pyright) and [Pyrefly](https://github.com/facebook/pyrefly) all
+report these in the editor and in CI, turning a class of test bugs into errors you see while typing.
 
 Every public `assert_that` overload is pinned by an `assert_type` check in
 [`tests/test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py). CI runs
@@ -288,7 +288,7 @@ paid = assert_that(order).satisfies(is_paid_order).value   # statically PaidOrde
 ```
 
 !!! warning "Checker support: not yet in PyCharm"
-    **ty, Pyright and mypy** solve this narrowing today, so it works in VS Code / Pylance and in CI.
+    **ty, mypy, Pyright and Pyrefly** solve this narrowing today, so it works in VS Code / Pylance and in CI.
 
     **PyCharm does not yet solve type variables through `TypeIs`.** There the result stays the
     un-narrowed type, and reading a narrowed-only member reports a false *Unresolved attribute
@@ -382,8 +382,8 @@ A few refinements keep it precise:
 Under mypy, one setting decides whether any of this reaches your tests. mypy does not look inside a
 function with no annotations at all, and a test written as `def test_orders():` is exactly that.
 
-So the same three mistakes below are reported six times by Pyright and `ty` out of the box, three times
-by mypy at its defaults, and six by mypy once it is told to read those bodies:
+So the same three mistakes below are reported six times by Pyright, `ty` and Pyrefly out of the box,
+three times by mypy at its defaults, and six by mypy once it is told to read those bodies:
 
 <!-- docs-guard: skip -->
 
@@ -396,7 +396,7 @@ def test_annotated() -> None:  # mypy default: checked
 ```
 
 Either annotate every test with `-> None`, or set `check_untyped_defs = true`, which `strict = true`
-already includes. Pyright and `ty` need neither.
+already includes. Pyright, `ty` and Pyrefly need neither.
 
 Strict mode then surfaces the most - a wrong method called on a narrowed value, a missing return
 annotation, a `.value` read where the type was never narrowed. Turn it on for your checker:
@@ -413,8 +413,8 @@ strict = true
 typeCheckingMode = "strict"
 ```
 
-`ty` needs no configuration - it reads the types out of the box. All three pick up `assertpy2`'s types
-automatically via the `py.typed` marker below. There is no stub package to install.
+`ty` and Pyrefly need no configuration - they read the types out of the box. All four pick up
+`assertpy2`'s types automatically via the `py.typed` marker below. There is no stub package to install.
 
 ## py.typed and PEP 561
 

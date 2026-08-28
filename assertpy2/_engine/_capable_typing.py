@@ -9,7 +9,7 @@ refusing a call that runs.
 
 What it exists to add is one restriction.  The six ordering assertions read the value with an ordering,
 so a builder over a value that has none is not one they can be asked of.  Before this,
-`assert_that(a_mapping).is_positive()` type-checked on all three checkers and raised `TypeError` when it
+`assert_that(a_mapping).is_positive()` type-checked on ty, mypy and Pyright, the three gated then, and raised
 ran.
 
 A protocol rather than a subclass of the builder: narrowing ``self`` in a subclass is an invalid

@@ -92,12 +92,12 @@ uv run --group typecheck pytest tests/test_pyright_baseline.py
 ```
 
 `PYRIGHT_PYTHON_FORCE_VERSION` picks the engine rather than the launcher. The `pyright` distribution on
-PyPI stopped at 1.1.411 on 25 June, npm has shipped 1.1.412 and 1.1.413 since, and the newer one is the
-first that resolves `TypeForm`. The gates that call pyright from Python pin the same build themselves,
-in `tests/typing_harness.py`, so only this direct invocation needs the variable.
+PyPI stopped at 1.1.411 on 25 June while npm has shipped 1.1.412 and 1.1.413 since, so the launcher and
+the engine move apart. The baseline is recorded against one engine, and `tests/typing_harness.py` pins
+the same build, so only this direct invocation needs the variable.
 
 `--pythonversion 3.14` is not decoration. Pyright reports against the interpreter it finds unless
-told otherwise, and the count moves with it: 108 diagnostics for this package on 3.10 against 102 on
+told otherwise, and the count moves with it: 174 diagnostics for this package on 3.10 against 169 on
 3.14.
 
 Without it a contributor on the supported floor meets a red baseline that says nothing about their

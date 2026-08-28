@@ -78,7 +78,7 @@ and the fix moves the number rather than the pass or fail. What it does move is 
 text with `pytest.raises(match=...)`.
 
 The fourth is the half worth planning for. Runtime does not change and your tests keep passing, but a
-CI stage running mypy, Pyright or ty can go red before them. Every narrowed chain is named in the
+CI stage running ty, mypy, Pyright or Pyrefly can go red before them. Every narrowed chain is named in the
 release notes, and these are the ones so far:
 
 | The chain | What it stopped offering |
