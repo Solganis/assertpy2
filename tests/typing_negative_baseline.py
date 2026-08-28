@@ -175,6 +175,10 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # the umbrella's own protocol asks the value for an ordering; both used to type-check and raise `TypeError`
     "numeric-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
     "numeric-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
+    # the five numeric assertions for which `float()` is necessary, measured; the other five stay open
+    "nan-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
+    "closeness-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
+    "nan-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # a polling chain: the declaration wins over `__getattr__`, which is what makes a typed chain worth having
     "text-assertion-on-a-polled-number": _NOT_THE_CHAINS_VALUE,
     # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
@@ -189,10 +193,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # quoted one is ignored outright, and the two that read the recursion cover the depth it gives up
     "a-tuple-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     "a-nested-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
+    # narrowing `is_close_to` on `self` moved this from a bad argument to no rung matching: an `int` fits
+    # both rungs and `"x"` fits neither, where the wide rung used to take the receiver and refuse the operand
     "bad-operand-on-a-polled-number": {
         "ty": frozenset({"no-matching-overload"}),
-        "mypy": frozenset({"arg-type"}),
-        "pyright": frozenset({"reportArgumentType"}),
+        "mypy": frozenset({"call-overload"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
     "negation-allows-a-non-negatable-name": {},
     # the hook has to stay: `has_status("PAID")` can be declared nowhere. With it there an unknown name is
@@ -306,6 +312,9 @@ VALID: frozenset[str] = frozenset(
         "valid-numpy-integer",
         "valid-numpy-float",
         "valid-numpy-tolerance",
+        # a value the umbrella claims that converts, which is what the float restriction must not refuse
+        "valid-numpy-nan",
+        "valid-numpy-closeness",
         "valid-numpy-int32",
         "valid-numpy-uint64",
         "valid-numpy-float32",
