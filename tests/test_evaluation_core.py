@@ -14,6 +14,7 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
+import enum
 import fractions
 import math
 from dataclasses import dataclass
@@ -79,8 +80,25 @@ class _NoHash:
     __hash__ = None
 
 
+class _Counted(int):
+    """A subclass that changes neither operation, so it answers exactly as `int` does."""
+
+
+class _HashesLikeText(int):
+    """One operation inherited and the other replaced, which is the disagreement the rule looks for."""
+
+    __hash__ = str.__hash__
+
+
+class _Status(enum.StrEnum):
+    PAID = "paid"
+    DUE = "due"
+
+
 # both halves of the membership rule in one generator: values a set may answer for, and values it may
-# not.  Mixing them is what makes the properties below test the classifier rather than the fast path
+# not.  Mixing them is what makes the properties below test the classifier rather than the fast path.
+# The last three are the subclass half of it: two that a set may answer for although their exact types
+# are not on the safe list, and one that inherits equality and hashes by another rule entirely
 _MIXED_ELEMENTS = st.one_of(
     st.integers(-5, 5),
     st.text(max_size=2),
@@ -90,6 +108,9 @@ _MIXED_ELEMENTS = st.one_of(
     st.builds(_ByField, st.integers(-2, 2)),
     st.builds(_NoHash),
     st.lists(st.integers(-2, 2), max_size=2),
+    st.builds(_Counted, st.integers(-2, 2)),
+    st.builds(_HashesLikeText, st.integers(-2, 2)),
+    st.sampled_from(_Status),
 )
 
 
@@ -820,6 +841,79 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(values).contains_only(*values)
         assert_that(values).is_subset_of(values)
         assert_that([*values, values[0]]).contains_duplicates()
+
+    def test_a_subclass_that_changes_neither_operation_takes_the_shortcut(self):
+        """The safe list holds exact types, so a subclass used to walk although it answers as its base.
+
+        `IntEnum` and `StrEnum` are the shapes a suite actually carries, a status field most of all.  Four
+        thousand of them cost 30 ms on the walk against 0.09 ms indexed, and the answer is the same either
+        way because the subclass inherits both operations unchanged.
+        """
+
+        class Money(int):
+            def __init__(self, *_: object) -> None:
+                self.currency = "USD"
+
+        class Status(enum.StrEnum):
+            PAID = "paid"
+            DUE = "due"
+
+        class Level(enum.IntEnum):
+            LOW = 1
+            HIGH = 2
+
+        for values in ([Money(index) for index in range(30)], list(Status) * 15, list(Level) * 15):
+            assert_that(_hash_safe(values)).described_as(f"{type(values[0]).__name__} is safe to index").is_true()
+            assert_that(only_faults(values, tuple(values))).is_equal_to(([], []))
+            assert_that(values).contains_only(*values)
+            assert_that(values).is_subset_of(values)
+
+        assert_that([*list(Status), Status.PAID]).contains_duplicates()
+        assert_that(_hash_safe([Level.LOW, 1, True])).described_as("mixed with the base type").is_true()
+
+    def test_a_subclass_that_replaces_one_operation_stays_on_the_walk(self):
+        """Inheriting one of the pair and redefining the other is exactly the disagreement to avoid.
+
+        Asked of the owner of each definition, so all four of these are refused: the first hashes by one
+        rule and compares by another, the second compares by its own, the third is not hashable at all
+        although its base is, and the fourth had equality assigned onto it after the class body ran.
+
+        That last one is the case the `__eq__` half of the rule exists for, and it takes a patched class
+        to build: writing `__eq__` in the body sets `__hash__` to `None` with it, so the hash half already
+        refuses those.  Patched, it keeps `int.__hash__` and answers `True` to every comparison, and a set
+        keeps two values the walk calls equal.
+        """
+
+        class HashesLikeText(int):
+            __hash__ = str.__hash__
+
+        class ComparesItsOwnWay(int):
+            def __eq__(self, other: object) -> bool:
+                return isinstance(other, ComparesItsOwnWay) and int(self) == int(other)
+
+            __hash__ = int.__hash__
+
+        class RefusesToHash(int):
+            __hash__ = None  # ty: ignore[invalid-assignment]  # the shape under test
+
+        class Patched(int):
+            pass
+
+        def _everything_is_equal(self: object, other: object) -> bool:
+            return True
+
+        Patched.__eq__ = _everything_is_equal  # ty: ignore[invalid-assignment]  # the shape under test
+
+        assert_that(Patched(1) == Patched(2)).described_as("the patched comparison").is_true()
+        assert_that({Patched(1), Patched(2)}).described_as("a set does not agree with it").is_length(2)
+
+        for kind in (HashesLikeText, ComparesItsOwnWay, RefusesToHash, Patched):
+            values = [kind(index) for index in range(30)]
+            assert_that(_hash_safe(values)).described_as(f"{kind.__name__} is not safe to index").is_false()
+
+        walked = [ComparesItsOwnWay(index) for index in range(30)]
+        assert_that(only_faults(walked, tuple(walked))).is_equal_to(([], []))
+        assert_that([*walked, walked[0]]).contains_duplicates()
 
     def test_fractions_stay_on_the_walk_and_answer_the_same(self):
         """Kept out of the shortcut for import cost, not for correctness, so both have to be shown."""

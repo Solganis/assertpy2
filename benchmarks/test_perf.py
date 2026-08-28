@@ -435,9 +435,10 @@ def test_finding_duplicates_by_hashability(benchmark, shape, make):
 def test_a_class_with_its_own_equality_pays_the_quadratic_path(benchmark):
     """A hashable class is still walked pairwise when it defines `__eq__`, and that is on purpose.
 
-    `_safe` in `_engine/_membership.py` admits a type to the hashing shortcut only if it is a known one or
-    inherits `object.__eq__`. A custom `__eq__` may disagree with the type's `__hash__`, and a set would
-    then miss a duplicate. 2001 values: no hashes at all and 1 999 001 comparisons.
+    `_agrees` in `_engine/_membership.py` admits a type whose `__eq__` and `__hash__` both come from a
+    known one, so a plain `class Money(int)` and a `StrEnum` are indexed.  This class defines both itself,
+    which is where the two may disagree and a set would miss a duplicate.  2001 values: no hashes at all
+    and 1 999 001 comparisons.
     """
     values = [_Costly(index) for index in range(2000)] + [_Costly(0)]
     _Costly.hashes = 0
