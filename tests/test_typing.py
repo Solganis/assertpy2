@@ -224,6 +224,10 @@ if TYPE_CHECKING:
     assert_type(invoked.error_of(KeyError).value, str)
     assert_type(invoked.error_of(KeyError).raised(), _CoreAssertion)
 
+    class _Alpha: ...
+
+    class _Beta: ...
+
     maybe_name = cast("str | None", "fred")
     anything = cast("object", "fred")
     assert_type(assert_that(maybe_name), _ObjectAssertion[str | None])
@@ -233,10 +237,20 @@ if TYPE_CHECKING:
     assert_type(assert_that(maybe_name).is_not_none().value, str)
     assert_type(assert_that(anything).is_instance_of(bool), _BoolAssertion)
     assert_type(assert_that(anything).is_instance_of(bool).value, bool)
-    assert_type(assert_that(anything).is_instance_of(bool | int), _ObjectAssertion[bool | int])
-    assert_type(assert_that(anything).is_instance_of(bool | int).value, bool | int)
-    assert_type(assert_that(anything).is_instance_of((bool, int)), _ObjectAssertion[object])
-    assert_type(assert_that(anything).is_instance_of((bool, int)).value, object)
+    # a tuple of alternatives lands on the widest rung, nested to any depth because that is the shape
+    # `isinstance` takes and a flat rung refuses it.
+    #
+    # A union has no line here on purpose.  What `_Alpha | _Beta` *is* in an argument position is where the
+    # four disagree, and no declaration reconciles them: pyrefly reads it as `type[_Alpha | _Beta]` and binds
+    # the rung above, pyright and mypy read it as `UnionType` and fall to this one, and for a union of two
+    # types the ladder does have rungs for, pyright distributes `bool | int` over `type[bool]` and
+    # `type[int]` while pyrefly collapses it to `type[int]`.  Binding the union ahead of the concrete rungs
+    # was measured too and costs `is_instance_of(int)` its `_NumericAssertion[int]`.  The runtime side is
+    # gated in `tests/test_class.py`, where all four spellings are accepted and named in the failure
+    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[object])
+    assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, object)
+    assert_type(assert_that(anything).is_instance_of((_Alpha, (_Beta, str))), _ObjectAssertion[object])
+    assert_type(assert_that(anything).is_instance_of_any((_Alpha, _Beta), (str, bytes)), _ObjectAssertion[object])
     assert_type(assert_that(maybe_name).is_not_none().is_instance_of(str).value, str)
     assert_type(assert_that(anything).is_not_none(), _ObjectAssertion[object])
 

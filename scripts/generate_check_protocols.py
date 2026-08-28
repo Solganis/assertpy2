@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import TypeIs
 
+    from .._matcher_impls import ClassInfo
     from ..errors import AssertionOutcome
     from ..matchers import Matcher
     from ._compat import Self

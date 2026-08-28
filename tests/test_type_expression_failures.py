@@ -11,10 +11,6 @@ so a suite stays green while the code is right, and the moment something breaks 
 `AttributeError` out of the formatter instead of reporting what went wrong.  It was found on
 `is_instance_of` by an external contributor and this table is what a sweep for the same shape turned up.
 
-Two of the methods are left out on purpose, with the reason and the exit written down in `_PENDING`.
-The point of the table is the class of defect, so an omission belongs in it visibly rather than as a
-method quietly missing from a list.
-
 The version matters and is not decoration.  On 3.14 and later a union renders as the useless but
 harmless `<Union>`, so half of these cases look fine there and fail on the supported floor.  Anything
 added here has to be run on 3.10 as well as on the development interpreter.
@@ -70,12 +66,6 @@ _COVERED = {
     "is_subclass_of": _subclass_of,
     "caused_by": _caused_by,
     "has_root_cause": _has_root_cause,
-}
-
-# `is_instance_of` and `is_instance_of_any` carry the same defect and are being fixed in PR #33 by the
-# contributor who reported it.  Listed rather than omitted so the table describes the whole class, and
-# so the day that lands is the day these two move up into `_COVERED` and this note goes away.
-_PENDING = {
     "is_instance_of": _instance_of,
     "is_instance_of_any": _instance_of_any,
 }
@@ -107,17 +97,6 @@ def test_the_message_names_the_members_rather_than_the_container(call, shape) ->
         call(shape)
     message = str(failure.value)
     assert_that(message).described_as("the failure message").contains("_Person").does_not_contain("<Union>")
-
-
-@pytest.mark.parametrize("call", _PENDING.values(), ids=_PENDING.keys())
-def test_the_pending_two_are_still_pending(call) -> None:
-    """Fails the day PR #33 lands, which is the reminder to move them into `_COVERED`.
-
-    A pending list nobody is forced to revisit is how an exclusion outlives the reason for it.
-    """
-    shape = _SHAPES["a tuple"]
-    with pytest.raises(AttributeError):
-        call(shape)
 
 
 def test_the_floor_is_where_this_hides() -> None:
