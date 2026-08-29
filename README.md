@@ -227,6 +227,7 @@ is open to anything else you build.
 - [**Dict comparison**](https://solganis.github.io/assertpy2/guides/assertions/#selective-comparison-ignore--include): `is_equal_to(ignore=..., include=...)` for selective key/field matching by name, regex, or type.
 - [**Recursive comparison**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-comparison-tolerance--custom-comparators): `is_equal_to()` with `tolerance`, `comparators`, or `ignore_null` for nested structures.
 - [**Extracting**](https://solganis.github.io/assertpy2/guides/assertions/#extracting-attributes-from-objects): flatten collections on attributes with `filter` and `sort` support.
+- [**Regex group extraction**](https://solganis.github.io/assertpy2/guides/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
 
 **Testing**
 
@@ -234,11 +235,14 @@ is open to anything else you build.
 - [**Polling assertions**](https://solganis.github.io/assertpy2/guides/testing/#async-assertions): `eventually()` (async) / `eventually_sync()` (blocking) retry for eventual consistency, with a convergence trace on timeout.
 - [**Expected exceptions**](https://solganis.github.io/assertpy2/guides/errors/#expected-exceptions): `raises().when_called_with()`, walk the cause chain (`caused_by()`, `has_root_cause()`), search an `ExceptionGroup` (`contains_error()`, `errors()`, `error_of()`), or pivot to the object (`raised()`).
 - [**HTTP responses**](https://solganis.github.io/assertpy2/recipes/#test-an-http-api-response): assert on the response itself and every failure names the request it came from, with `decoded_as_json()` to step into the body. No client library is a dependency.
+- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): an external JSON file, an [inline](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) value recorded into the test source, or a [value-tolerant contract](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots), all updated with `--assertpy2-snapshot-update`.
+- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi()` checks a JSON body against an operation's response schema, reporting every violation with its JSON path.
+
+**Failure reporting**
+
 - [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected` and `.diff`, and the diff renders into the message, so it shows off pytest too.
 - [**Assertions as values**](https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting): `check()` runs the next assertion for its verdict instead of raising, handing back an `AssertionOutcome`.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings.
-- [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): an external JSON file, an [inline](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) value recorded into the test source, or a [value-tolerant contract](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots), all updated with `--assertpy2-snapshot-update`.
-- [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi()` checks a JSON body against an operation's response schema, reporting every violation with its JSON path.
 
 **Plugin for pytest**
 
@@ -253,7 +257,6 @@ Set from the command line or from `[tool.pytest.ini_options]`, not from a call.
 
 - [**Custom matchers**](https://solganis.github.io/assertpy2/guides/matchers/#custom-matchers): `register_matcher()` composes existing ones, `BaseMatcher` carries its own predicate. Both compose with `&`, `|`, `~`.
 - [**Custom assertions**](https://solganis.github.io/assertpy2/extending/custom-assertions/): `add_extension()` adds a method to the builder.
-- [**Regex group extraction**](https://solganis.github.io/assertpy2/guides/data/#regex-group-extraction): `extracting_group()` and `matches_with_groups()` for regex captures.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/extending/integrations/">Integrations</a></h2>
 
