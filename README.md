@@ -78,7 +78,7 @@ Allure, Behave, JSON Path and Schema, pandas, polars, numpy, and OpenAPI respons
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/comparison/">Why fluent assertions?</a></h2>
 
-`assert` states a condition well, and pytest reports it well.
+`assert` states a condition well. pytest reports it well.
 
 What it cannot say is *where* two structures differ. It prints both and leaves the reading to you:
 
@@ -102,12 +102,12 @@ assert_that(response).is_equal_to(expected)
   <img src="https://raw.githubusercontent.com/Solganis/assertpy2/main/docs/assets/diff-equal.png" width="300" alt="Structured diff in the terminal: user.role shown with its path, removal in red and addition in green">
 </p>
 
-It recurses through nested containers, and matcher predicates get the same treatment.
+It recurses through nested containers. Matcher predicates get the same treatment.
 
 For dynamic fields like IDs, assert a subset with
 [`matches_structure()`](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching).
 
-The chain is the other half: one statement carries the whole intent, and your IDE offers only the
+The chain is the other half. Your IDE offers only the
 [methods that fit the value](https://solganis.github.io/assertpy2/concepts/type-safety/).
 
 <!-- docs-guard: skip -->
@@ -117,7 +117,7 @@ assert_that(items).is_instance_of(list).is_length(3).contains("admin")
 
 Matchers are ordinary values that answer `==`, the way `unittest.mock.ANY` does.
 
-Nothing is patched, so a matcher can sit inside the expected structure itself, at any depth:
+Nothing is patched, so a matcher can sit inside the expected structure at any depth:
 
 ```python
 response = {"id": 7, "user": {"name": "Alice", "age": 30}, "tags": ["a", "b"]}
@@ -158,7 +158,7 @@ Your IDE shows only methods relevant to the value you're testing, not the whole 
 - `assert_that(b"\x89PNG").` &rarr; bytes methods: `starts_with_bytes`, `is_valid_utf8`, `decoded_as`, ...
 
 15 type-specific Protocols instead of one `Any`.<br>
-Works in PyCharm, VS Code, and any LSP-compatible editor.
+Works in PyCharm, VS Code, and any editor that runs a type checker.
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/concepts/type-safety/#typed-narrowing-with-value">Typed narrowing</a></h2>
 
@@ -183,7 +183,7 @@ data = assert_conforms(response.json(), OrderModel).value  # data: OrderModel
 
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting">A failure you can read from code</a></h2>
 
-An exception is the right default, and a dead end for anything that wants to read the result.
+An exception is the right default. Reading the result means catching it.
 
 `check()` runs the next assertion for its verdict instead:
 
@@ -198,11 +198,11 @@ if not outcome and outcome.diff:
 ```
 
 It is truthy when the assertion held. When it did not, it carries `.message`, `.actual`, `.expected`
-and a walkable `.diff`, and so does `AssertionFailure`.
+and a walkable `.diff`. So does `AssertionFailure`.
 
 So a reporter reads structure instead of parsing a string. That is how the
-[Allure integration](https://solganis.github.io/assertpy2/extending/integrations/#allure) works, and it
-is open to anything else you build.
+[Allure integration](https://solganis.github.io/assertpy2/extending/integrations/#allure) works.
+Anything else you build can too.
 
 <h2 align="center">Features</h2>
 
