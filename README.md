@@ -210,8 +210,6 @@ is open to anything else you build.
 
 - [**Structural matching**](https://solganis.github.io/assertpy2/guides/matchers/#structural-matching): `matches_structure()` for declarative dict/API-response validation.
 - [**Recursive field assertions**](https://solganis.github.io/assertpy2/guides/assertions/#recursive-field-assertions): `all_fields_satisfy()` / `has_no_none_fields()` apply a predicate to every leaf of an object graph.
-- [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing.
-- [**Dangling-assertion detector**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-never-ran): `--assertpy2-dangling` warns when a chain builds an assertion and never runs it. `assert assert_that(x).is_positive` passes on any value, and neither ruff nor coverage sees it.
 - [**Universal negation**](https://solganis.github.io/assertpy2/guides/fluent/#universal-negation): `.not_` inverts any assertion, no dedicated `is_not_*` methods.
 - [**Collection pipeline**](https://solganis.github.io/assertpy2/guides/fluent/#collection-pipeline): `filtered_on()`, `mapped()`, `flat_mapped()`, `first()`, `last()`, `element()`, `single()`.
 - [**Positional & pairwise checks**](https://solganis.github.io/assertpy2/guides/assertions/#lists): `satisfies_exactly()`, `zip_satisfies()`, `contains_only_once()`, `has_same_size_as()`, plus `*_in_any_order` variants.
@@ -241,6 +239,15 @@ is open to anything else you build.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings.
 - [**Snapshot testing**](https://solganis.github.io/assertpy2/guides/testing/#snapshot-testing): an external JSON file, an [inline](https://solganis.github.io/assertpy2/guides/testing/#inline-snapshots) value recorded into the test source, or a [value-tolerant contract](https://solganis.github.io/assertpy2/guides/testing/#contract-snapshots), all updated with `--assertpy2-snapshot-update`.
 - [**OpenAPI response contracts**](https://solganis.github.io/assertpy2/reference/json/#assertpy2.json_mixin.JsonMixin.conforms_to_openapi): `conforms_to_openapi()` checks a JSON body against an operation's response schema, reporting every violation with its JSON path.
+
+**Plugin for pytest**
+
+Set from the command line or from `[tool.pytest.ini_options]`, not from a call.
+
+- [**Failure clustering**](https://solganis.github.io/assertpy2/guides/errors/#what-the-failures-had-in-common): forty failing tests are usually not forty problems. Where three or more differ at the same place, the run ends with a line saying where. On by default, `assertpy2_failure_clusters = "off"` turns it off.
+- [**Diagnostic profiles**](https://solganis.github.io/assertpy2/guides/errors/#configuration): `assertpy2_profile` turns the guards below on in one line. `compatible` (default) leaves them off, `safe` warns, `strict` fails the tests they find. A setting you name yourself still wins.
+- [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing.
+- [**Dangling-assertion detector**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-never-ran): `--assertpy2-dangling` warns when a chain builds an assertion and never runs it. `assert assert_that(x).is_positive` passes on any value, and neither ruff nor coverage sees it.
 
 **Extensibility**
 
