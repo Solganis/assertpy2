@@ -296,11 +296,20 @@ select = [
     "ERA",   # eradicate - no commented-out code
     "PERF",  # Perflint - performance anti-patterns
     "TC",    # flake8-type-checking - keep typing-only imports under TYPE_CHECKING
+    "C901",  # mccabe - a ratchet rather than a bar, see the threshold below
 ]
 
 # Intentionally empty: nothing is globally ignored. In particular E501 stays ON
 # (see line-length note above). Per-file relaxations go in per-file-ignores, not here.
 ignore = []
+
+[tool.ruff.lint.mccabe]
+# A ratchet, not a bar. Thirty functions sit above the default of 10 and the worst is 32, so a
+# threshold of 10 would fail today and a rewrite of `_build_equality_diff` for the sake of a number
+# would risk code that tests and mutation testing hold. This stops a new worst only, which is the
+# cheap half: `tests/test_complexity.py` records every one of the thirty and catches an individual
+# function growing, which neither a ceiling nor a count can see.
+max-complexity = 32
 
 [tool.ruff.lint.per-file-ignores]
 # The generated twins mirror the signatures they were generated from, `snapshot(id=...)` among them.  A suppression written into the generator would be a style decision made where nobody
