@@ -30,6 +30,7 @@ import types
 from typing import Any
 
 import assertpy2
+import assertpy2._engine._capable_typing
 import assertpy2._engine._typing
 import assertpy2.assertpy
 from assertpy2.assertpy import AssertionBuilder
@@ -180,6 +181,21 @@ def collect() -> dict[str, Any]:
     }
 
 
+def _view_sources() -> str:
+    """Both modules that declare a typed view, read as one.
+
+    `_capable_typing.py` was missing, and the omission was invisible in exactly the way this file exists
+    to prevent: narrowing six dict assertions on the umbrella façade produced no line here at all, while
+    the same change to `_ObjectAssertion` produced eight. The façade IS the public surface of a value the
+    umbrella claims, reached through an `assert_that` overload like any other view.
+    """
+    return "\n".join(
+        pathlib.Path(module.__file__).read_text(encoding="utf-8")
+        for module in (assertpy2._engine._typing, assertpy2._engine._capable_typing)
+        if module.__file__ is not None
+    )
+
+
 def _typed_views() -> dict[str, list[str]]:
     """``{protocol: the assertions it offers}``, resolved through its bases.
 
@@ -191,7 +207,7 @@ def _typed_views() -> dict[str, list[str]]:
     Resolved rather than declared, since a caller sees what a view inherits exactly as they see what it
     declares, and moving a name to a base is not a change to anybody.
     """
-    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    source = _view_sources()
     declared: dict[str, tuple[set[str], list[str]]] = {}
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.ClassDef) or not node.name.endswith("Assertion"):
@@ -232,7 +248,7 @@ def _view_shapes() -> dict[str, str]:
     renaming an alias reads as a change to every signature that spells it, which is a re-record and a
     line in review rather than a defect.
     """
-    source = pathlib.Path(assertpy2._engine._typing.__file__).read_text(encoding="utf-8")
+    source = _view_sources()
     declared: dict[str, tuple[dict[str, str], list[str]]] = {}
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.ClassDef) or not node.name.endswith("Assertion"):
@@ -266,21 +282,30 @@ def _view_shapes() -> dict[str, str]:
 
 
 def _spelled(method: ast.FunctionDef) -> str:
-    """One declaration as what it takes and what it hands back, `self` dropped.
+    """One declaration as what it takes and what it hands back.
 
     The return is here because a pivot is where a view differs from every other view offering the same
     name: `first()` takes no parameters at all, so four views declaring four different results recorded
     one identical empty string between them.
+
+    A bare `self` is dropped and an ANNOTATED one is kept, because a restricted receiver is what decides
+    whether the call is allowed at all.  Dropping it recorded a narrowing as no change: six dict
+    assertions gained `self: _CapableAssertion[_Keyed]` and every line here stayed identical.
     """
     arguments = method.args
     parameters = ", ".join(
-        [f"{_typed(argument)}/" for argument in arguments.posonlyargs if argument.arg != "self"]
-        + [_typed(argument) for argument in arguments.args if argument.arg != "self"]
+        [f"{_typed(argument)}/" for argument in arguments.posonlyargs if _carries(argument)]
+        + [_typed(argument) for argument in arguments.args if _carries(argument)]
         + ([f"*{_typed(arguments.vararg)}"] if arguments.vararg else [])
         + [f"*{_typed(argument)}" for argument in arguments.kwonlyargs]
         + ([f"**{_typed(arguments.kwarg)}"] if arguments.kwarg else [])
     )
     return f"({parameters}) -> {ast.unparse(method.returns) if method.returns else '?'}"
+
+
+def _carries(argument: ast.arg) -> bool:
+    """Whether a parameter says something a caller can be refused by, which a bare `self` does not."""
+    return argument.arg != "self" or argument.annotation is not None
 
 
 def _typed(argument: ast.arg) -> str:
