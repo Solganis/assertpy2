@@ -88,9 +88,11 @@ import numbers
 
 def is_multiple_of(self, other):
     if isinstance(self.val, numbers.Integral) is False or self.val <= 0:
-        raise TypeError("val must be a positive integer")
+        raise TypeError(f"val must be a positive integer, but was <{self.val}> ({type(self.val).__name__})")
     if isinstance(other, numbers.Integral) is False or other <= 0:
-        raise TypeError("given arg must be a positive integer")
+        raise TypeError(
+            f"given other arg must be a positive integer, but was <{other}> ({type(other).__name__})"
+        )
 
     _, rem = divmod(self.val, other)
     if rem > 0:
