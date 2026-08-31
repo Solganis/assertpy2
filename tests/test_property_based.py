@@ -12,7 +12,6 @@ import datetime
 import json
 import pathlib
 import re
-import warnings
 from collections import Counter, namedtuple
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
@@ -20,9 +19,8 @@ from itertools import pairwise
 from types import MappingProxyType
 
 import pytest
-from hypothesis import assume, find, given, settings
+from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
-from hypothesis.errors import HypothesisWarning
 
 import assertpy2._engine._typing
 import assertpy2.assertpy
@@ -58,10 +56,22 @@ try:
 except ImportError:  # pragma: no cover - exercised only in an env without the extra
     _HAS_JSONSCHEMA = False
 
-# JSON-like values: atoms plus nested lists/dicts. NaN is excluded so equality stays reflexive.
+# JSON-like values: atoms plus nested lists/dicts. NaN is out of `_values` because reflexivity is not
+# true of it, which is a property of `==` rather than of this library
 _atoms = st.none() | st.booleans() | st.integers() | st.floats(allow_nan=False) | st.text()
 _values = st.recursive(
     _atoms,
+    lambda children: st.lists(children) | st.dictionaries(st.text(), children),
+    max_leaves=20,
+)
+_NAN = float("nan")
+"""The shared object the pinned examples below use, because the container case turns on identity:
+`[x] == [x]` is true for the same `x` even when `x == x` is false, which is the shortcut
+`PyObject_RichCompareBool` applies per element.  The strategy builds fresh ones instead, so that
+`[nan] == [nan]` over two allocations, which is false, stays reachable."""
+
+_values_with_nan = st.recursive(
+    _atoms | st.builds(float, st.just("nan")),
     lambda children: st.lists(children) | st.dictionaries(st.text(), children),
     max_leaves=20,
 )
@@ -77,6 +87,27 @@ def test_is_equal_to_is_reflexive(value):
 @settings(deadline=None)
 @given(left=_values, right=_values)
 def test_is_equal_to_consistent_with_eq(left, right):
+    if left == right:
+        assert_that(left).is_equal_to(right)
+    else:
+        with pytest.raises(AssertionError):
+            assert_that(left).is_equal_to(right)
+
+
+@settings(deadline=None)
+# both pinned: a generated pair is not guaranteed to be the two cases that carry the story, and each
+# answers differently. `nan != nan` outright, while `[nan] == [nan]` holds through the identity
+# shortcut CPython applies inside a container
+@example(left=_NAN, right=_NAN)
+@example(left=[_NAN], right=[_NAN])
+@given(left=_values_with_nan, right=_values_with_nan)
+def test_is_equal_to_consistent_with_eq_over_nan(left, right):
+    """The half of the NaN story that is testable: reflexivity is not, agreement with `==` is.
+
+    `nan != nan`, so a bare one fails, while `[nan] == [nan]` holds through the identity shortcut
+    CPython applies inside a container. Both are what `==` answers, and this asserts the library
+    answers the same rather than deciding for itself.
+    """
     if left == right:
         assert_that(left).is_equal_to(right)
     else:
@@ -1176,6 +1207,14 @@ class _Money:
         return f"_Money({self.amount})"
 
 
+_UNDECOMPOSABLE = (_Money,)
+"""The shapes in the lattice the walkers cannot take apart, named rather than only built.
+
+The strictness property earns its keep only while the lattice still grows one, so narrowing it for
+speed would leave that property green and disarmed.  The guard below reads this tuple, which is the
+same one the strategy is built from, so removing a shape here fails there.
+"""
+
 # a value against a copy of itself: two different generated values would trip over the documented hash-matching gap
 _wide_atoms = (
     _atoms
@@ -1183,7 +1222,7 @@ _wide_atoms = (
     | st.decimals(allow_nan=False, allow_infinity=False)
     | st.dates()
     | st.uuids()
-    | st.builds(_Money, amount=st.integers())
+    | st.one_of(*(st.builds(shape, amount=st.integers()) for shape in _UNDECOMPOSABLE))
 )
 _wide_values = st.recursive(
     _wide_atoms,
@@ -1200,45 +1239,39 @@ _wide_values = st.recursive(
 )
 
 
-def _reachable(predicate):
-    """The minimal value in `_wide_values` satisfying *predicate*, or ``NoSuchExample``.
-
-    ``find`` is not deprecated.  The filters are for two warnings hypothesis raises about itself, which
-    this suite's ``filterwarnings = error`` would otherwise turn into failures: a ``DeprecationWarning``
-    about a missing ``__spec__.loader`` from its module introspection on 3.15, and a notice that a value
-    it drew renders to a very large repr, which is about what its own reporting would cost and says
-    nothing about the value this lattice is being asked to reach.  Both are matched by message rather
-    than by category, so another warning of either class still fails the run, and both are scoped to this
-    helper rather than to the project config, so neither ever covers the library itself.
-    """
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message="Module globals is missing", category=DeprecationWarning)
-        warnings.filterwarnings("ignore", message="Generating overly large repr", category=HypothesisWarning)
-        return find(_wide_values, predicate)
+def test_the_lattice_still_names_a_shape_the_walkers_cannot_take_apart() -> None:
+    """An empty tuple would skip every parametrised guard below rather than fail one, so the tuple
+    itself is asserted first.  The strictness property carries the shape as a pinned `@example`, which
+    is what actually keeps a narrowing from disarming it."""
+    assert_that(_UNDECOMPOSABLE).is_not_empty()
 
 
-def test_the_wide_lattice_reaches_a_value_the_nested_walker_cannot_decompose():
+@pytest.mark.parametrize("shape", _UNDECOMPOSABLE)
+def test_the_wide_lattice_reaches_a_value_the_nested_walker_cannot_decompose(shape) -> None:
     """`test_a_value_is_strictly_equal_to_itself` earns its keep only while the lattice grows values
-    the walkers cannot take apart.  Narrowing it for speed would leave that property green and
-    disarmed, so the reach is asserted rather than assumed - once per ladder, because the two answer
-    different questions and disagree (see the module docstring of ``assertpy2._engine._diff``)."""
-    found = _reachable(lambda value: type(value) not in _EQ_ATOMIC and _sub_diff_entries(value, value, _ROOT) is None)
-    assert_that(type(found) in _EQ_ATOMIC).is_false()
+    the walkers cannot take apart, so the reach is asserted rather than assumed - once per ladder,
+    because the two answer different questions and disagree (see the module docstring of
+    ``assertpy2._engine._diff``).
+
+    Asserted on the shape the lattice is built from rather than on one a search found: `find()` is a
+    randomised search and answered `NoSuchExample` once on a full run, which is a guard that lies in
+    both directions.
+    """
+    value = shape(amount=1)
+    assert_that(type(value) in _EQ_ATOMIC).is_false()
+    assert_that(_sub_diff_entries(value, value, _ROOT)).is_none()
 
 
-def test_the_wide_lattice_reaches_a_value_the_top_level_ladder_runs_out_on():
+@pytest.mark.parametrize("shape", _UNDECOMPOSABLE)
+def test_the_wide_lattice_reaches_a_value_the_top_level_ladder_runs_out_on(shape) -> None:
     """The nested guard above is satisfied by a set, which the *top-level* builder does handle - and
     the top-level fall-through is the branch the `UUID` regression actually lived in.  Mappings are
     excluded because their ``"scalar"`` kind means "routed to _dict_err before reaching the ladder",
     not "the ladder ran out"."""
-    found = _reachable(
-        lambda value: (
-            type(value) not in _EQ_ATOMIC
-            and not is_mapping_like(value)
-            and _build_equality_diff(value, value).kind == "scalar"
-        )
-    )
-    assert_that(type(found) in _EQ_ATOMIC).is_false()
+    value = shape(amount=1)
+    assert_that(type(value) in _EQ_ATOMIC).is_false()
+    assert_that(is_mapping_like(value)).is_false()
+    assert_that(_build_equality_diff(value, value).kind).is_equal_to("scalar")
 
 
 def _passes(callable_):
@@ -1265,7 +1298,21 @@ def test_strictness_only_ever_refines_equality(left, right):
         assert_that(left).is_equal_to(right)
 
 
+def _pinning_every_undecomposable(test):
+    """Pin one example per shape in `_UNDECOMPOSABLE`, read from the tuple rather than written out.
+
+    Hardcoding `_Money` here would leave the example testing it after a replacement, so the property
+    would go on passing over a shape the lattice no longer grows.
+    """
+    for undecomposable in _UNDECOMPOSABLE:
+        test = example(value=undecomposable(amount=1))(test)
+    return test
+
+
 @settings(deadline=None)
+# pinned so narrowing the lattice cannot disarm this: the shape the walkers cannot take apart is what
+# the property is here for, and a generated one is not guaranteed to arrive
+@_pinning_every_undecomposable
 @given(value=_wide_values)
 def test_a_value_is_strictly_equal_to_itself(value):
     # the first line pins the identity shortcut, the second that strictness does not depend on it
