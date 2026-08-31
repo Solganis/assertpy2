@@ -13,6 +13,7 @@ import pytest
 
 from assertpy2 import assert_that, match
 from assertpy2._clustering import clusters, observations_of, render
+from assertpy2._hints import diagnose
 from assertpy2.errors import AssertionFailure
 
 
@@ -332,6 +333,36 @@ def test_clustering_a_failure(benchmark):
     diff = _wide_failure(50)
     assert len(diff.entries) == 50
     benchmark(lambda: observations_of(diff))
+
+
+def _diff_of(left, right):
+    """The structured diff of one failure, built outside the measurement."""
+    with pytest.raises(AssertionFailure) as failure:
+        assert_that(left).is_equal_to(right)
+    return failure.value.diff
+
+
+# The hint ladder runs on every failure and grows a rung at a time, so what this guards is the growth
+# rather than today's number. Separable from the diff by construction: `diagnose()` takes one already
+# built, so nothing here measures the walk twice.
+#
+# Two cases, and the pair is what shows the shape, because the cost is NOT the distance travelled.
+# Measured over forty differing entries: a step that succeeds by parsing costs 38.5 us, while running
+# out costs 7.15 us across 5 single steps and all 10 pairs of them. A step that declines does so on the
+# type and leaves at once, so the ceiling is a rung that does real work, not the length of the search.
+def test_hint_found_on_the_first_rung(benchmark):
+    diff = _diff_of(
+        {f"k{index}": '{"id": 1}' for index in range(40)},
+        {f"k{index}": {"id": 1} for index in range(40)},
+    )
+    assert diagnose(diff) is not None
+    benchmark(lambda: diagnose(diff))
+
+
+def test_hint_the_ladder_runs_out(benchmark):
+    diff = _diff_of({f"k{index}": index for index in range(40)}, {f"k{index}": -index for index in range(40)})
+    assert diagnose(diff) is None
+    benchmark(lambda: diagnose(diff))
 
 
 # 200 rather than the 40 this started at: at 40 it was the smallest case in the file, 14.8 us against its
