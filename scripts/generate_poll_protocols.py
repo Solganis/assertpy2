@@ -140,7 +140,7 @@ _IMPORTS = """    import datetime
     from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Callable, _Orderable, _PathLike
+    from ._capable_typing import _Callable, _Keyed, _KeyedWithItems, _KeyedWithValues, _Orderable, _PathLike
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -501,6 +501,14 @@ _ASKS_A_SHAPE: Final = {
     "is_greater_than_or_equal_to": "_Orderable",
     "is_less_than": "_Orderable",
     "is_less_than_or_equal_to": "_Orderable",
+    # the dict family, split three ways because the necessity is: measured one capability at a time, the
+    # key pair reads `keys()` and the walk, entries add the lookup, and values add `values()`
+    "contains_key": "_Keyed",
+    "does_not_contain_key": "_Keyed",
+    "contains_entry": "_KeyedWithItems",
+    "does_not_contain_entry": "_KeyedWithItems",
+    "contains_value": "_KeyedWithValues",
+    "does_not_contain_value": "_KeyedWithValues",
     # the filesystem: a `str` never reaches here, the string overload being above, so `__fspath__` is what is left
     "exists": "_PathLike",
     "does_not_exist": "_PathLike",
@@ -722,6 +730,28 @@ if TYPE_CHECKING:
         """A value with an ordering, which is all the relational assertions ask of one."""
 
         def __lt__(self, other: Any, /) -> Any: ...
+
+    class _Keyed(Protocol):
+        """`keys()`, which the dict gate reads before anything else.
+
+        Iterability is read too and is deliberately NOT here: the gate asks
+        `isinstance(value, collections.abc.Iterable)`, which a class earns by registration, and
+        requiring `__iter__` structurally refused a registered value that runs.  Same blind spot as
+        `numbers.Number` in the numeric family, and the same answer.
+        """
+
+        def keys(self) -> Any: ...
+
+    class _KeyedWithItems(_Keyed, Protocol):
+        """And a lookup, which reading an entry needs and reading a key does not."""
+
+        def __getitem__(self, key: Any, /) -> Any: ...
+
+    class _KeyedWithValues(_Keyed, Protocol):
+        """And the values, which only the value pair reads.  A lookup is not enough: measured on a
+        subject carrying `keys` and `__getitem__`, `contains_value` still refuses."""
+
+        def values(self) -> Any: ...
 
     class _PathLike(Protocol):
         """A value the filesystem assertions can read a path out of, spelled as `os.PathLike` spells it."""

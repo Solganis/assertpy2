@@ -181,6 +181,10 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "numeric-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # the five numeric assertions for which `float()` is necessary, measured; the other five stay open
     "nan-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
+    # the dict family split three ways: keys and the walk, plus a lookup for entries, plus values
+    "key-assertion-on-a-value-with-no-keys": _NOT_THE_VALUES_KIND,
+    "entry-assertion-on-a-value-with-no-keys": _NOT_THE_VALUES_KIND,
+    "value-assertion-on-a-value-with-no-values": _NOT_THE_VALUES_KIND,
     "closeness-assertion-on-a-capable-value": _NOT_THE_VALUES_KIND,
     "nan-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # a polling chain: the declaration wins over `__getattr__`, which is what makes a typed chain worth having
@@ -318,6 +322,9 @@ VALID: frozenset[str] = frozenset(
         "valid-numpy-tolerance",
         # a value the umbrella claims that converts, which is what the float restriction must not refuse
         "valid-capable-nan",
+        "valid-capable-key",
+        "valid-capable-entry",
+        "valid-capable-value",
         "valid-capable-closeness",
         # and the object fallback's half: a registered number no overload names
         "valid-fraction-closeness",

@@ -120,6 +120,13 @@ class _ConvertibleRow(_TakesAnyKey):
         return 0.0
 
 
+class _Walkable:
+    """Capable by being iterable and by nothing else, which is the narrowest value the umbrella claims."""
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(())
+
+
 class _Ordered:
     """Ordered against anything and convertible to nothing, which both sides refuse alike."""
 
@@ -283,6 +290,11 @@ def _methods_that_do_not_fit_the_value() -> None:
     # the same assertion off the chain, which is where the width above comes from: `assert_that()` hands
     # a capable value the whole builder, and this call raises `TypeError` when it runs
     assert_that(_TakesAnyKey()).is_positive()  # case: numeric-assertion-on-a-capable-value
+    # the dict family splits three ways because the necessity does: the key pair reads `keys()` and the
+    # walk, entries add the lookup, values add `values()`
+    assert_that(_Walkable()).contains_key("a")  # case: key-assertion-on-a-value-with-no-keys
+    assert_that(_Walkable()).contains_entry({"a": 1})  # case: entry-assertion-on-a-value-with-no-keys
+    assert_that(_Walkable()).contains_value(1)  # case: value-assertion-on-a-value-with-no-values
     # `float()` is necessary for these and for no other numeric, so the umbrella asks the value for it
     assert_that(_TakesAnyKey()).is_nan()  # case: nan-assertion-on-a-capable-value
     assert_that(_TakesAnyKey()).is_close_to(1, 1)  # case: closeness-assertion-on-a-capable-value
@@ -374,6 +386,10 @@ def _relations_that_must_keep_working() -> None:
     assert_that(Fraction(3, 2)).is_greater_than(Fraction(1, 2))  # case: valid-fraction-order
     # the half that decides whether the float restriction can ship: a value the umbrella claims that converts
     assert_that(_ConvertibleRow()).is_nan()  # case: valid-capable-nan
+    # a real mapping carries all three shapes, so the split refuses none of them
+    assert_that(_TakesAnyKey()).contains_key("a")  # case: valid-capable-key
+    assert_that(_TakesAnyKey()).contains_entry({"a": "b"})  # case: valid-capable-entry
+    assert_that(_TakesAnyKey()).contains_value("b")  # case: valid-capable-value
     assert_that(_ConvertibleRow()).is_close_to(1, 1)  # case: valid-capable-closeness
     # the object fallback carries the four numeric assertions a registered number answers whatever it
     # registered as, so `Decimal` and `Fraction`, which no overload names, keep what the runtime gives

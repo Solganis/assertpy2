@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from .._matcher_impls import ClassInfo
     from ..matchers import Matcher
     from ..outcome import AssertionOutcome
-    from ._capable_typing import _Callable, _Orderable, _PathLike
+    from ._capable_typing import _Callable, _Keyed, _KeyedWithItems, _KeyedWithValues, _Orderable, _PathLike
     from ._introspection import MappingLike
     from ._typing import (
         _U,
@@ -906,29 +906,33 @@ if TYPE_CHECKING:
         @overload
         def contains_key(self: _CheckAnyValue[dict[_K, _V]], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
         @overload
-        def contains_key(self: _CheckAnyValue[_CapableT], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
+        def contains_key(self: _CheckAnyValue[_Keyed], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
 
         @overload
         def does_not_contain_key(self: _CheckAnyValue[dict[_K, _V]], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
         @overload
-        def does_not_contain_key(self: _CheckAnyValue[_CapableT], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
+        def does_not_contain_key(self: _CheckAnyValue[_Keyed], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
 
         @overload
         def contains_value(self: _CheckAnyValue[dict[_K, _V]], *values: _V | Matcher[_V]) -> AssertionOutcome: ...
         @overload
-        def contains_value(self: _CheckAnyValue[_CapableT], *values: _V | Matcher[_V]) -> AssertionOutcome: ...
+        def contains_value(self: _CheckAnyValue[_KeyedWithValues], *values: _V | Matcher[_V]) -> AssertionOutcome: ...
 
         @overload
         def does_not_contain_value(
             self: _CheckAnyValue[dict[_K, _V]], *values: _V | Matcher[_V]
         ) -> AssertionOutcome: ...
         @overload
-        def does_not_contain_value(self: _CheckAnyValue[_CapableT], *values: _V | Matcher[_V]) -> AssertionOutcome: ...
+        def does_not_contain_value(
+            self: _CheckAnyValue[_KeyedWithValues], *values: _V | Matcher[_V]
+        ) -> AssertionOutcome: ...
 
         @overload
         def contains_entry(self: _CheckAnyValue[dict[_K, _V]], *args: object, **kwargs: object) -> AssertionOutcome: ...
         @overload
-        def contains_entry(self: _CheckAnyValue[_CapableT], *args: object, **kwargs: object) -> AssertionOutcome: ...
+        def contains_entry(
+            self: _CheckAnyValue[_KeyedWithItems], *args: object, **kwargs: object
+        ) -> AssertionOutcome: ...
 
         @overload
         def does_not_contain_entry(
@@ -936,7 +940,7 @@ if TYPE_CHECKING:
         ) -> AssertionOutcome: ...
         @overload
         def does_not_contain_entry(
-            self: _CheckAnyValue[_CapableT], *args: object, **kwargs: object
+            self: _CheckAnyValue[_KeyedWithItems], *args: object, **kwargs: object
         ) -> AssertionOutcome: ...
 
         @overload

@@ -196,6 +196,28 @@ class _Bound:
 numbers.Real.register(_Bound)
 
 
+class _Keys(_Capable):
+    """Capable and keyed, which is what the key pair reads: `keys()` plus the walk `_Capable` brings."""
+
+    def keys(self):
+        return ("a",)
+
+
+class _KeysAndItems(_Keys):
+    """And the lookup, which reading an entry needs and reading a key does not."""
+
+    def __getitem__(self, key):
+        return 1
+
+
+class _KeysAndValues(_Keys):
+    """And the values, which only the value pair reads.  A lookup is not enough: a subject carrying
+    `keys`, the walk and `__getitem__` still refuses `contains_value`, measured."""
+
+    def values(self):
+        return (1,)
+
+
 class _Pathish(_Capable):
     """Capable and a path, which is the structural half of `isinstance(val, (str, os.PathLike))`."""
 
@@ -219,6 +241,9 @@ _CARRIES = {
     "_PathLike": (_Pathish,),
     "_Callable": (_Callish,),
     "SupportsFloat | SupportsIndex": (_Convertible, _Indexed),
+    "_Keyed": (_Keys,),
+    "_KeyedWithItems": (_KeysAndItems,),
+    "_KeyedWithValues": (_KeysAndValues,),
 }
 """Subjects per shape, each carrying that shape and no other, so a wrong key cannot read as right.
 
@@ -231,6 +256,11 @@ _WITHOUT = {
     "_PathLike": (_Capable, _Ordered, _Callish),
     "_Callable": (_Capable, _Ordered, _Pathish),
     "SupportsFloat | SupportsIndex": (_Capable, _Ordered, _Pathish, _Callish, _Opaque),
+    "_Keyed": (_Capable, _Ordered, _Pathish, _Callish),
+    # a subject with the keys and the walk but no lookup, and one with the values instead, are each a
+    # genuine non-carrier here: measured, both refuse an entry
+    "_KeyedWithItems": (_Capable, _Ordered, _Pathish, _Callish, _Keys, _KeysAndValues),
+    "_KeyedWithValues": (_Capable, _Ordered, _Pathish, _Callish, _Keys, _KeysAndItems),
 }
 """Subjects that genuinely lack each shape, listed rather than derived.
 
@@ -458,7 +488,15 @@ class TestWhatEachRestrictedAssertionAsksFor:
         assert_that(counted).described_as("what each key claims").is_equal_to(
             {
                 "shape": collections.Counter(
-                    {"_Orderable": 6, "_PathLike": 9, "_Callable": 5, "SupportsFloat | SupportsIndex": 5}
+                    {
+                        "_Orderable": 6,
+                        "_PathLike": 9,
+                        "_Callable": 5,
+                        "SupportsFloat | SupportsIndex": 5,
+                        "_Keyed": 2,
+                        "_KeyedWithItems": 2,
+                        "_KeyedWithValues": 2,
+                    }
                 ),
                 "type": collections.Counter({"int": 3, "str": 14, "datetime.datetime": 7, "bytes | bytearray": 7}),
             }
@@ -498,6 +536,9 @@ class TestWhatEachRestrictedAssertionAsksFor:
             ("_Orderable", ["__lt__"]),
             ("_PathLike", ["__fspath__"]),
             ("_Callable", ["__call__"]),
+            ("_Keyed", ["keys"]),
+            ("_KeyedWithItems", ["__getitem__"]),
+            ("_KeyedWithValues", ["values"]),
         ],
     )
     def test_each_shape_asks_for_what_the_runtime_reads(self, shape, members) -> None:
@@ -513,6 +554,16 @@ class TestWhatEachRestrictedAssertionAsksFor:
             node for node in ast.walk(ast.parse(_SOURCE)) if isinstance(node, ast.ClassDef) and node.name == shape
         )
         assert_that([item.name for item in declared.body if isinstance(item, ast.FunctionDef)]).is_equal_to(members)
+
+    @pytest.mark.parametrize(("derived", "base"), [("_KeyedWithItems", "_Keyed"), ("_KeyedWithValues", "_Keyed")])
+    def test_a_derived_shape_still_carries_the_one_it_was_built_on(self, derived, base) -> None:
+        """The members test above reads what a shape DECLARES, so a derived one dropping its base reads
+        as unchanged there: `_KeyedWithItems` would still declare `__getitem__` and nothing else, while
+        quietly no longer asking for `keys()`."""
+        declared = next(
+            node for node in ast.walk(ast.parse(_SOURCE)) if isinstance(node, ast.ClassDef) and node.name == derived
+        )
+        assert_that([ast.unparse(one) for one in declared.bases]).contains(base)
 
     def test_the_one_asked_of_the_chain_answers_after_what_it_waits_for(self) -> None:
         """`when_called_with()` is gated on a call before it rather than on the value, measured.
