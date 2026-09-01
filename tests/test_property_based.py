@@ -197,6 +197,59 @@ def test_contains_every_element(items):
     assert_that(items).contains(*items)
 
 
+class _SharedIterator:
+    """Answers `iter(self) is self` with False and still has one position, which is the recorded gap."""
+
+    def __init__(self, items):
+        self.walker = iter(items)
+
+    def __iter__(self):
+        return self.walker
+
+
+def _reported(subject, wanted) -> str | None:
+    """The first line of the failure `contains()` raises over *subject*, or `None` when it held."""
+    try:
+        assert_that(subject).contains(wanted)
+    except AssertionError as error:
+        return str(error).splitlines()[0]
+    return None
+
+
+_ONE_SHOT = [
+    lambda items: iter(items),
+    lambda items: (item for item in items),
+    lambda items: map(int, items),
+    lambda items: filter(lambda item: True, items),
+]
+
+
+@given(items=st.lists(st.integers(), max_size=8), wanted=st.integers(), which=st.sampled_from(range(len(_ONE_SHOT))))
+def test_a_one_shot_subject_reports_what_a_list_of_the_same_items_does(items, wanted, which):
+    """A value consumed by the first pass must not report less than a re-iterable one holding the same.
+
+    `materialized()` drains anything that is its own iterator, so the walk that decides and the walk
+    that describes see the same items.  Without it the second pass finds nothing and the message names
+    an empty value, which is the wrong contents rather than a wrong verdict.
+    """
+    assert_that(_reported(_ONE_SHOT[which](items), wanted)).is_equal_to(_reported(list(items), wanted))
+
+
+def test_a_wrapper_over_one_shared_iterator_is_the_recorded_exception():
+    """The other side of the same boundary, pinned because it is deliberate rather than missed.
+
+    Being its own iterator is not the only way to have one position.  A wrapper handing out a shared
+    one answers `iter(x) is x` with False, so `materialized()` leaves it alone and the message falls
+    back to its `repr`.  Copying anything that merely lacks a length instead would turn a Pydantic
+    model into a list of its field pairs, which is why this is left as it is.
+
+    The address inside that `repr` is not asserted: it moves between runs.
+    """
+    reported = _reported(_SharedIterator([1, 2, 3]), 9)
+    assert_that(reported).contains("_SharedIterator object at")
+    assert_that(reported).does_not_contain("[1, 2, 3]")
+
+
 @given(items=st.lists(st.integers()), candidate=st.integers())
 def test_contains_present_iff_member(items, candidate):
     if candidate in items:
