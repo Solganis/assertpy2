@@ -137,6 +137,35 @@ with soft_assertions():
 
 See [Soft assertions](guides/testing.md#soft-assertions).
 
+## Assert on what was logged
+
+`caplog` captures the records, and `extracting` reads the fields worth asserting on. A failure prints
+every record it captured, so the one you expected is compared against the whole set rather than against
+nothing:
+
+```python
+import logging
+
+logger = logging.getLogger("billing")
+
+
+def charge(order: dict[str, int]) -> None:
+    logger.error("timeout talking to billing for order %s", order["id"])
+
+
+def test_the_timeout_is_logged(caplog):
+    with caplog.at_level(logging.INFO):
+        charge({"id": 7})
+
+    assert_that(caplog.records).extracting("levelname", "message").contains(
+        ("ERROR", match.contains_string("timeout"))
+    )
+    assert_that(caplog.records).extracting("levelname").does_not_contain("WARNING")
+```
+
+A matcher works inside the extracted tuple, which is what keeps this readable when the message carries
+an id or a duration you do not want to spell out.
+
 ## Test exceptions and their cause chain
 
 Capture an exception with `raises().when_called_with()`, then keep asserting on it - the message, the
