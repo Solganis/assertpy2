@@ -92,19 +92,63 @@ jobs:
           # guard either way, so this cannot turn a real coverage drop into a green run.
           fail_ci_if_error: true
 
-  data-floor:
-    # `pyproject.toml` promises `numpy>=1.26`, `pandas>=2.0` and `polars>=1.0`, and the lockfile only
-    # ever resolves the newest of each, so the bottom of every one of those ranges was a claim nobody
-    # checked. This job checks it, and found a real defect the day it was written: the refusal gate
-    # keyed on numpy's wording for an unusable operand, and that wording is different below numpy 2.
+  declared-floors:
+    # Every lower bound on a published extra is a promise, and the lockfile only ever resolves the newest
+    # of each, so the bottom of every range was a claim nobody checked. This job checks them, and each
+    # widening of it found a real defect: first the data libraries, where the refusal gate keyed on
+    # numpy's wording for an unusable operand and that wording is different below numpy 2, then
+    # `asttokens>=2.0` and `behave>=1.2.6`, which were simply wrong, then `starlette>=0.40`, whose test
+    # client reaches a function deprecated in 3.14.
+    #
+    # Scope, said exactly: every extra in `[project.optional-dependencies]`, plus the `dev` and
+    # `integrations` groups, which is what running the suite needs. The `docs`, `typecheck`, `mutation`,
+    # `docs-examples` and `benchmark` groups are not here: each drives a tool with its own command rather
+    # than this suite, and none of them is a promise to anyone installing the package.
     #
     # Its own job rather than a cell in the matrix above. An `include` entry naming an `os` and a
     # `python-version` that already exist is merged into that combination instead of adding one, so a
-    # cell written that way would have replaced the ordinary 3.10 run rather than joining it.
-    #
-    # The exact `.0` of each, not `1.26.*`: a wildcard resolves to the newest patch, and the newest
-    # patch of the oldest minor is not what the metadata promises.
-    timeout-minutes: 10
+    # cell written that way would have replaced the ordinary runs rather than joining them.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev --group integrations"
+            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+          - python-version: "3.11"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev --group integrations"
+            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+          - python-version: "3.12"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev --group integrations"
+            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+          - python-version: "3.13"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev --group integrations"
+            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+          - python-version: "3.14"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev --group integrations"
+            imports: "numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave, attr, attrs, django, flask, httpx, httpx2, pydantic, requests, starlette"
+          # The one dependency every user gets, at its own floor, and it needs a cell to itself: pydantic
+          # 2.0 requires typing-extensions>=4.6.1, so every cell installing `integrations` resolves it
+          # above the declared bound. Measured 4.0.0 here against 4.6.1 in each of those.
+          - python-version: "3.10"
+            extras: "allure,behave,data,inline,json,numpy,pandas,polars"
+            groups: "--group dev"
+            imports: "typing_extensions, numpy, pandas, polars, asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
+            reduced: "no integrations, so pydantic cannot lift typing-extensions off its declared floor"
+          # 3.15 carries what is installable there: no combination of the data libraries publishes a
+          # wheel for it yet, and pydantic has no stable one either, which takes the whole `integrations`
+          # group with it. Move this cell up to the others when those wheels land.
+          - python-version: "3.15"
+            extras: "allure,behave,inline,json"
+            groups: "--group dev"
+            imports: "asttokens, executing, jsonschema, jsonpath_ng, referencing, allure_commons, behave"
+            reduced: "no data-library wheel for 3.15 yet, and pydantic has no stable one either"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,21 +158,150 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
-      - name: Install dependencies, then step the data libraries down to the declared floor
+      - name: Install every declared dependency at its lower bound
+        # `lowest-direct` resolves every direct dependency to the oldest its specifier allows, which is
+        # what the metadata promises. Hand-pinning `numpy==1.26.0` did the same for three of them and
+        # covered none of the rest.
+        #
+        # `--only-binary` because the oldest allowed release is not installable everywhere: pandas 2.0.0
+        # publishes no wheel above 3.11 and building it fails on a missing `pkg_resources`. With it the
+        # resolver lands on the oldest release that has a wheel for this interpreter, which is the oldest
+        # a user of it can actually get. Measured: pandas 2.0.0 on 3.10 and 3.11, 2.1.1 on 3.12, 2.2.3 on
+        # 3.13, 2.3.3 on 3.14.
+        #
+        # `uv pip install` and not `uv sync`, which was measured rewriting `uv.lock` wholesale: the tests
+        # that shell out then read a lockfile that is not the committed one, and six of them failed on
+        # exactly that.
+        #
+        # Every extra by name, `data` and the three it aggregates alike, because
+        # `tests/test_declared_floors.py` reads these lines and asks for each of them.
         run: |
-          uv sync --locked --extra json --extra inline --group integrations
-          uv pip install "numpy==1.26.0" "pandas==2.0.0" "polars==1.0.0"
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install --only-binary=:all: --resolution lowest-direct -e ".[${{ matrix.extras }}]" ${{ matrix.groups }}
+
+      - name: Every installed floor must import
+        # A release old enough to install and too old to import would otherwise leave the cell green:
+        # its tests answer `pytest.importorskip` with a skip, and a skip carrying its own reason is
+        # invisible to the missing-module guard in `tests/conftest.py`.
+        #
+        # The `integrations` group is in the list too, not only the published extras: it is installed by
+        # the same command and its tests skip the same way. The `dev` group is not, because nothing in it
+        # skips: the suite imports pytest and hypothesis to run at all, and the gates that shell out to
+        # ruff and ty refuse rather than skip when the tool does not answer.
+        run: uv run --no-sync python -c "import ${{ matrix.imports }}"
+
+      - name: What this cell resolved
+        # Just what is installed and at which version. Which of those are declared floors, and whether
+        # each was reached, is decided once in `floors-reached` below, where `tomllib` is available and
+        # a requirement carrying an environment marker parses rather than being mangled by a regex.
+        run: |
+          uv run --no-sync python - <<'PROBE'
+          import importlib.metadata as md
+          import pathlib
+
+          with pathlib.Path("resolved.txt").open("w", encoding="utf-8") as verdict:
+              for distribution in sorted(md.distributions(), key=lambda item: item.metadata["Name"] or ""):
+                  name = distribution.metadata["Name"]
+                  if name:
+                      print(f"{name} {distribution.version}", file=verdict)
+          print(pathlib.Path("resolved.txt").read_text(encoding="utf-8"))
+          PROBE
+
+      - name: Keep this cell's resolution for the aggregate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: floors-resolved-${{ matrix.python-version }}-${{ strategy.job-index }}
+          path: resolved.txt
+          retention-days: 1
 
       - name: Suite at the floor
         # `--no-sync` is load bearing here and nowhere else: a bare `uv run` restores the environment
-        # from the lockfile, which would put the newest numpy back and leave this job testing what the
-        # matrix above already tests
+        # from the lockfile, which would put the newest of everything back and leave this job testing
+        # what the matrix above already tests
         run: uv run --no-sync pytest -q --ignore=tests/test_docs_examples.py tests
+
+  floors-reached:
+    # The cross-cell half of the floor job, and it has to be cross-cell: `typing-extensions` reaches its
+    # floor only where pydantic is absent, and `attrs` only where it is installed by name rather than
+    # arriving through jsonschema. No cell reaches everything, and between them they do.
+    #
+    # Every declaration is read here rather than in the cells, with `tomllib` rather than a regex: a
+    # requirement carrying an environment marker holds quotes of its own, and reading it by pattern
+    # silently truncated `typing-extensions>=4.0; python_version < '3.11'` to nothing.
+    timeout-minutes: 5
+    needs: declared-floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: floors-resolved-*
+          path: resolutions
+
+      - name: Every declared floor is reached somewhere
+        run: |
+          uv run --no-project --with packaging python - <<'AGGREGATE'
+          import pathlib
+          import tomllib
+          from packaging.requirements import Requirement
+          from packaging.version import Version
+
+          # Reachable only under a fully lowest resolution, which pins transitive versions the suite does not
+          # survive: measured at 31 failures and 246 errors. The bound itself is honest, jsonschema 4.18 and
+          # jsonschema-specifications 2023.6.1 both accept it, so it stays as declared and is recorded here.
+          # keyed by name and floor, because two extras may declare two different bounds on one
+          # distribution and reaching either says nothing about the other
+          UNREACHED = {("referencing", "0.28.4"): "needs jsonschema-specifications 2023.x, never selected here"}
+
+          declared = {}
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
+          sources = [project["project"]["dependencies"]]
+          sources += list(project["project"]["optional-dependencies"].values())
+          sources += [project["dependency-groups"][name] for name in ("dev", "integrations")]
+          for group in sources:
+              for line in group:
+                  requirement = Requirement(line)
+                  floors = [spec.version for spec in requirement.specifier if spec.operator == ">="]
+                  if floors and requirement.name != "assertpy2":
+                      declared.setdefault(requirement.name, set()).add(floors[0])
+
+          installed = {}
+          files = sorted(pathlib.Path("resolutions").rglob("resolved.txt"))
+          if not files:
+              raise SystemExit("no cell reported a resolution, so this job proves nothing")
+          for path in files:
+              for row in path.read_text(encoding="utf-8").splitlines():
+                  name, version = row.rsplit(" ", 1)
+                  installed.setdefault(name.lower().replace("_", "-"), set()).add(version)
+
+          never, stale = [], []
+          for name, floors in sorted(declared.items()):
+              key = name.lower().replace("_", "-")
+              for floor in sorted(floors, key=Version):
+                  reached = any(Version(seen) == Version(floor) for seen in installed.get(key, ()))
+                  excused = (key, floor) in UNREACHED
+                  print(f"{name:18} floor {floor:10} {'reached' if reached else 'NEVER REACHED'}")
+                  if not reached and not excused:
+                      never.append(f"{name}>={floor}")
+                  if reached and excused:
+                      stale.append(f"{name}>={floor}")
+          if never:
+              raise SystemExit(f"declared floors no cell installs: {', '.join(never)}")
+          if stale:
+              raise SystemExit(f"recorded as unreachable and reached anyway, so the note is stale: {', '.join(stale)}")
+          AGGREGATE
 
   optional-integrations:
     # allure and behave get their own job because installing them is incompatible with the coverage
@@ -260,18 +433,20 @@ jobs:
 
   ci-ok:
     timeout-minutes: 5
-    needs: [test, data-floor, optional-integrations, lint]
+    needs: [test, declared-floors, floors-reached, optional-integrations, lint]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Verify required jobs succeeded
         env:
           TEST_RESULT: ${{ needs.test.result }}
-          FLOOR_RESULT: ${{ needs.data-floor.result }}
+          FLOOR_RESULT: ${{ needs.declared-floors.result }}
+          REACHED_RESULT: ${{ needs.floors-reached.result }}
           INTEGRATIONS_RESULT: ${{ needs.optional-integrations.result }}
           LINT_RESULT: ${{ needs.lint.result }}
         run: |
           [ "$TEST_RESULT" = "success" ] &&
           [ "$FLOOR_RESULT" = "success" ] &&
+          [ "$REACHED_RESULT" = "success" ] &&
           [ "$INTEGRATIONS_RESULT" = "success" ] &&
           [ "$LINT_RESULT" = "success" ]
