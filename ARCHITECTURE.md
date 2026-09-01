@@ -14,6 +14,19 @@ ladder on `assert_that` in `assertpy2/assertpy.py`. A checker sees only the prot
 
 Neither half knows about the other. Everything below keeps them from drifting apart.
 
+Most of it is not yours to edit:
+
+| file | protocols | declarations |
+|---|---|---|
+| `_engine/_typing.py` | 37 | 372 |
+| `_engine/_check_typing.py` | 29 | 310 |
+| `_engine/_builder_check_typing.py` | 1 | 311 |
+| `_engine/_capable_typing.py` | 8 | 183 |
+| `_engine/_poll_typing.py` | 2 | 731 |
+
+One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
+move on every edit to a generated file.
+
 ## What is generated
 
 | file | written by | built from |
@@ -63,6 +76,24 @@ The runtime comes first, because the rest is generated or recorded from it.
 Regenerating before step 1 produces a stale façade. Recording the snapshot before the mixin is composed makes
 its gate red again.
 
+## Adding an assertion to a type that exists
+
+The skipped step is the third.
+
+1. Write the method on its mixin.
+2. Declare it on the protocols it applies to in `_engine/_typing.py`, and on those only. A declaration
+   on `_CoreAssertion` offers it to every value, which is the thing the typed surface exists to avoid.
+3. Register it in `_engine/_operations.py` unless it is a plain assertion. No verdict goes in
+   `WITHOUT_A_VERDICT` under what it does instead, since `check()` and `not_` mean nothing on it and
+   both used to accept them. A pivot that also asserts goes in `ALSO_ASSERTS`, since reaching
+   `self.error()` does not separate a verdict from a precondition.
+4. Regenerate. The generators emit what they find, so a missing declaration surfaces not here but in
+   `test_protocol_parity.py::test_mixin_methods_are_declared_on_its_protocols`.
+5. Re-record the snapshot.
+
+A signature naming a type the generated files do not import produces a file that does not compile. The
+import lines are templates inside the generators.
+
 ## The gates
 
 | gate | the question it answers |
@@ -79,6 +110,21 @@ its gate red again.
 | `test_typing_negative.py` | do the checkers still refuse what they should |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
 | `test_typing_integrations.py`, `test_typing_http.py` | do real pandas, polars, numpy and HTTP values still resolve |
+| `test_overload_order.py` | is the frame overload still above every other shape-keyed one |
+| `test_operation_contract.py` | is the register of operations that reach no verdict still the true one |
+| `test_typing_claims.py` | are the four checkers still run with zero suppressions, as the badge says |
+| `test_docs_typing.py` | do the snippets in the README and the guides type-check |
+| `test_public_surface.py` | does `import assertpy2` still give what it gave |
+
+Which one goes red tells you what you did:
+
+- a declaration the runtime does not have: `test_protocol_parity.py`
+- a declaration whose parameters the runtime does not match: `test_typing_conformance.py`
+- a generated file edited by hand: that file's own gate, one of the three
+- a protocol changed without regenerating: the polling and verdict gates, never the facade one, which
+  reads the mixins instead
+- a subject resolving to the wrong protocol: `test_typing.py`, and only under whichever checker sees it
+- a public name added or moved: `test_api_compatibility.py`, which is a snapshot rather than a rule
 
 The four checkers are ty, mypy `--strict`, Pyright and Pyrefly. Where they disagree it is recorded, in
 `tests/typing_negative_baseline.py` and `tests/typing_integrations_baseline.py`.

@@ -1,3 +1,20 @@
+"""The typed surface itself: one protocol per kind of value, and the only one of the five written by hand.
+
+`assert_that()` picks between them with an overload ladder in `assertpy2/assertpy.py`, and a checker sees
+the protocol rather than the builder.  That is what makes `assert_that({}).is_positive()` an error before
+it is a `TypeError`.
+
+Three of the other four typed modules are generated from this one, so a declaration added here reaches
+the polling chain and both verdict proxies only after the generators run.  The fourth, the capability
+facade, reads the runtime mixins instead: it stands in for the builder rather than for a view.
+
+Declare a method on the protocols it applies to and on no others.  One on `_CoreAssertion` is offered to
+every value, which is the distinction this layer exists to make.
+
+Everything is under `TYPE_CHECKING`, so nothing here costs an import and nothing here enforces itself.
+`tests/test_protocol_parity.py` and `tests/test_typing_conformance.py` hold a declaration to the runtime.
+"""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

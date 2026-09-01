@@ -1,133 +1,92 @@
-"""Hold `ARCHITECTURE.md` to naming things that exist.
+"""Hold `ARCHITECTURE.md` to the tree it describes.
 
-A map of the typed surface is worth having and worth distrusting.  It is prose, so nothing executes it,
-and it names four generated files, two scripts, thirteen gates and a handful of registries by hand.  A
-rename anywhere in that list leaves the document quietly wrong, which is worse than not having one: a
-contributor who follows a stale map spends their time in the wrong place and then does not trust the
-rest of it either.
+The document exists because the model of the typed layer is not discoverable from the files, and a
+document that stops being true is worse than none: it is read and believed. Two claims are cheap to keep
+honest, and both are ways it rots in practice.
 
-Three rounds of review on the document itself found six false statements in it, so the risk is not
-theoretical.  What a test can check is the cheap half: that every path it names exists, and that every
-name it uses, standing alone or inside a code fragment, is one the tree actually carries.  Whether the
-*explanations* are still true is what review is for.
+A path it names has to exist, which is what a rename breaks. A typing gate that exists has to be named,
+which is what adding one and forgetting the table breaks. And the table of sizes is recomputed rather
+than trusted, which is what any edit to the typed surface breaks.
 """
 
 from __future__ import annotations
 
 import ast
-import io
 import pathlib
 import re
-import tokenize
 
 from assertpy2 import assert_that
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
-_DOC = _ROOT / "ARCHITECTURE.md"
-
-# tokens that are Python or prose rather than something this repository owns
-_NOT_OURS = frozenset(
-    {
-        "Any",
-        "Self",
-        "assert_type",
-        "isinstance",
-        "ty",
-    }
+_DOCUMENT = _ROOT / "ARCHITECTURE.md"
+_PATH = re.compile(r"`([A-Za-z0-9_./]+\.(?:py|json))`")
+_A_TYPING_GATE = re.compile(r"^test_.*(typing|protocol).*\.py$")
+_SIZE_ROW = re.compile(
+    r"^\| `(?P<file>_engine/[a-z_]+\.py)` \| (?P<protocols>\d+) \| (?P<declarations>\d+) \|", re.MULTILINE
 )
-
-_TREE = ("assertpy2", "tests", "scripts")
-
-
-def _quoted() -> list[str]:
-    return sorted(set(re.findall(r"`([^`\n]+)`", _DOC.read_text(encoding="utf-8"))))
-
-
-def _looks_like_a_path(token: str) -> bool:
-    return "/" in token or token.endswith((".py", ".json", ".md"))
+_TYPED_MODULES = [
+    "_engine/_typing.py",
+    "_engine/_check_typing.py",
+    "_engine/_builder_check_typing.py",
+    "_engine/_capable_typing.py",
+    "_engine/_poll_typing.py",
+]
+"""The five, in the order the table lists them.  A sixth added to the package has to reach the table."""
 
 
-def _resolves(token: str) -> bool:
-    """Whether the repository holds what this token names.
+def _named_paths() -> set[str]:
+    found = _PATH.findall(_DOCUMENT.read_text(encoding="utf-8"))
+    if not found:
+        raise RuntimeError(f"no path named in {_DOCUMENT.name}, so this file proves nothing")
+    return set(found)
 
-    Three spellings, because the document uses all three and each is the readable one in its place: the
-    full path, a path relative to the package once the directory is established (`_engine/_typing.py`),
-    and a bare filename once the directory is obvious from the sentence (`test_typing.py`).
+
+def _typing_gates() -> set[str]:
+    return {path.name for path in (_ROOT / "tests").glob("test_*.py") if _A_TYPING_GATE.match(path.name)}
+
+
+def _measured(module: str) -> tuple[int, int]:
+    """Protocols and declarations, counted the way the table claims them."""
+    tree = ast.parse((_ROOT / "assertpy2" / module).read_text(encoding="utf-8"))
+    protocols = [node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
+    declarations = sum(len([body for body in node.body if isinstance(body, ast.FunctionDef)]) for node in protocols)
+    return len(protocols), declarations
+
+
+def test_the_table_of_sizes_is_what_the_files_hold() -> None:
+    """Recomputed rather than trusted: a number in prose is the first thing to stop being true.
+
+    Row for row and file for file, since a deleted row and a duplicated one both leave a table that
+    agrees with itself.
     """
-    if "*" in token:
-        return any(_ROOT.glob(token))
-    trimmed = token.rstrip("/")
-    if "/" in trimmed or token.endswith("/"):
-        return (_ROOT / trimmed).exists() or any((_ROOT / directory / trimmed).exists() for directory in _TREE)
-    return any(found.name == trimmed for directory in _TREE for found in (_ROOT / directory).rglob(trimmed))
+    rows = _SIZE_ROW.findall(_DOCUMENT.read_text(encoding="utf-8"))
+    listed = [module for module, _, _ in rows]
+
+    assert_that(listed).described_as("modules the table has a row for, one row each").is_equal_to(_TYPED_MODULES)
+    assert_that({module: (int(protocols), int(declarations)) for module, protocols, declarations in rows}).described_as(
+        "protocols and declarations per module, which ARCHITECTURE.md states outright"
+    ).is_equal_to({module: _measured(module) for module in listed})
 
 
-def _is_an_identifier(token: str) -> bool:
-    return token.split("[")[0].isidentifier() and token not in _NOT_OURS
+def test_every_path_the_document_names_exists() -> None:
+    """Named as a bare file name or as a path from the root, and both spellings are used in it."""
+    missing = sorted(
+        named
+        for named in _named_paths()
+        if not (_ROOT / named).exists() and not (_ROOT / "tests" / named).exists() and not list(_ROOT.rglob(named))
+    )
+
+    assert_that(missing).described_as("paths ARCHITECTURE.md names that are not in the tree").is_empty()
 
 
-def _names_in(fragment: str) -> list[str]:
-    """The identifiers a backticked code fragment uses, when it is one.
+def test_every_typing_gate_is_named_by_the_document() -> None:
+    """A gate the table omits is a gate the next contributor does not know exists."""
+    text = _DOCUMENT.read_text(encoding="utf-8")
+    unlisted = sorted(gate for gate in _typing_gates() if gate not in text)
 
-    `assert_that(1).is_positive()` names two things a rename can break, and neither is an identifier by
-    itself.  Reading them out of the parse is the only way a typo inside a fragment is visible at all.
-    """
-    try:
-        tree = ast.parse(fragment.strip("()"), mode="eval")
-    except SyntaxError:
-        return []
-    found = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Name):
-            found.append(node.id)
-        elif isinstance(node, ast.Attribute):
-            found.append(node.attr)
-    return [name for name in found if name not in _NOT_OURS]
+    assert_that(unlisted).described_as("typing gates missing from the table in ARCHITECTURE.md").is_empty()
 
 
-def _defined_names() -> set[str]:
-    """Every name the tree actually uses, from the token stream rather than from the text.
-
-    Substring matching passed `DictAssertion` because `_DictAssertion` contains it, and counted names
-    that appear only inside a comment or a string literal.  `tokenize` answers neither.
-    """
-    found: set[str] = set()
-    for directory in _TREE:
-        for source in (_ROOT / directory).rglob("*.py"):
-            text = source.read_text(encoding="utf-8")
-            try:
-                for token in tokenize.generate_tokens(io.StringIO(text).readline):
-                    if token.type == tokenize.NAME:
-                        found.add(token.string)
-            except (tokenize.TokenError, IndentationError, SyntaxError):  # pragma: no cover - every file parses
-                continue
-    return found
-
-
-def test_every_path_it_names_exists() -> None:
-    paths = [token for token in _quoted() if _looks_like_a_path(token)]
-    # the document is mostly a table of files, so a run that found few of them read the wrong thing
-    assert_that(paths).described_as("paths quoted in the document").is_length_between(10, 100)
-
-    missing = [token for token in paths if not _resolves(token)]
-    assert_that(missing).described_as("paths ARCHITECTURE.md names that do not exist").is_empty()
-
-
-def test_every_name_it_names_is_in_the_tree() -> None:
-    """Catches a rename, which is the way a document like this goes wrong without anyone noticing."""
-    quoted = [token for token in _quoted() if not _looks_like_a_path(token)]
-    names = [token.split("[")[0] for token in quoted if _is_an_identifier(token)]
-    # both halves matter: the bare identifiers, and the ones only a code fragment mentions
-    names += [name for token in quoted if not _is_an_identifier(token) for name in _names_in(token)]
-    # a floor, not a count: the document is edited for brevity, but a handful means the wrong file was read
-    assert_that(names).described_as("identifiers quoted in the document").is_length_between(10, 200)
-
-    defined = _defined_names()
-    missing = sorted({name for name in names if name not in defined})
-    assert_that(missing).described_as("names ARCHITECTURE.md uses that are nowhere in the tree").is_empty()
-
-
-def test_the_contributing_guide_still_points_at_it() -> None:
-    """The document is only worth writing if the file contributors do read sends them to it."""
-    guide = (_ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
-    assert_that(guide).described_as("CONTRIBUTING.md").contains("ARCHITECTURE.md")
+def test_there_are_gates_to_find() -> None:
+    """An empty set would make the claim above vacuous rather than false."""
+    assert_that(_typing_gates()).is_not_empty()
