@@ -99,6 +99,7 @@ import lines are templates inside the generators.
 | gate | the question it answers |
 |---|---|
 | `test_typing.py` | does each subject resolve to the protocol it should, under all four checkers |
+| `test_pin_coverage.py` | does every declaration that changes the type have a pin above |
 | `test_protocol_parity.py` | does every declared method exist on the runtime builder |
 | `test_typing_conformance.py` | do the declaration and the runtime agree parameter by parameter |
 | `test_poll_protocols.py` | are the polling twins what the generator produces today |

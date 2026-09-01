@@ -13,18 +13,35 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import datetime
+    import decimal
+    import fractions
     import logging
     import pathlib
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
     from typing import Any, cast
 
     from typing_extensions import TypeIs, assert_type
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, assert_warn, match
+    from assertpy2._engine._builder_check_typing import _CheckAnyValue
     from assertpy2._engine._capable_typing import _CapableAssertion
     from assertpy2._engine._check_typing import (
+        _CheckArrayAssertion,
+        _CheckBoolAssertion,
+        _CheckBytesAssertion,
+        _CheckCallableAssertion,
+        _CheckComplexAssertion,
+        _CheckCoreAssertion,
+        _CheckDateAssertion,
+        _CheckDateTimeAssertion,
         _CheckDictAssertion,
+        _CheckFrameAssertion,
+        _CheckInvokedAssertion,
+        _CheckIterableAssertion,
+        _CheckListAssertion,
         _CheckNumericAssertion,
+        _CheckObjectAssertion,
+        _CheckPathAssertion,
         _CheckStringAssertion,
     )
     from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll
@@ -99,6 +116,13 @@ if TYPE_CHECKING:
 
     class _Countable:
         def __iter__(self) -> object: ...
+
+    class _Rowish(Mapping[str, int]):
+        """A capable value that is also a mapping, which is what the element pivot keys on."""
+
+        def __getitem__(self, key: str) -> int: ...
+        def __iter__(self) -> Iterator[str]: ...
+        def __len__(self) -> int: ...
 
     class _CallableResponse:
         """An ASGI or WSGI response: a callable, and the one thing an HTTP capability describes."""
@@ -416,3 +440,182 @@ if TYPE_CHECKING:
     assert_type(assert_that({"n": 1.0}).snapshot(id="a", comparators=by_type), _DictAssertion[str, float])
     assert_type(assert_that({"name": "A"}).snapshot(id="b", comparators=by_field), _DictAssertion[str, str])
     assert_type(assert_that({"id": "x"}).snapshot(id="c", placeholders=volatile), _DictAssertion[str, str])
+
+    # the pivots that change the type, which `tests/test_pin_coverage.py` requires a pin for. A pivot
+    # returning the wrong view is silent: the call runs and the assertions after it are read as something
+    # they are not
+    assert_type(assert_that([{"id": 1}]).extracting("id"), _ListAssertion[Any])
+    assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a.b"), _CoreAssertion)
+    assert_type(assert_that("v1.2").matches_with_groups(r"v(\d)\.(\d)"), AssertionBuilder[Any])
+    assert_type(assert_that(lambda: 1).when_called_with().returned(), _CoreAssertion)
+
+    # the object fallback carries four numeric assertions, so `Decimal` and `Fraction` keep them. Neither
+    # is an `int` or a `float`, so no overload names them and both land here
+    assert_type(assert_that(decimal.Decimal("1.5")).is_not_zero(), _ObjectAssertion[decimal.Decimal])
+    assert_type(assert_that(fractions.Fraction(3, 2)).is_close_to(1, 5), _ObjectAssertion[fractions.Fraction])
+    assert_type(assert_that(decimal.Decimal(0)).is_zero(), _ObjectAssertion[decimal.Decimal])
+    assert_type(assert_that(fractions.Fraction(0)).is_not_close_to(1, 5), _ObjectAssertion[fractions.Fraction])
+
+    # `check()` hands back the twin of the view it was reached from, and the twins are generated. A view
+    # returning somebody else's twin runs and reports a verdict about the wrong surface
+    assert_type(assert_that(True).check(), _CheckBoolAssertion)
+    assert_type(assert_that(complex(1, 2)).check(), _CheckComplexAssertion)
+    assert_type(assert_that(b"raw").check(), _CheckBytesAssertion[bytes])
+    assert_type(assert_that(pathlib.Path("/tmp")).check(), _CheckPathAssertion)
+    assert_type(assert_that(datetime.date(2026, 1, 1)).check(), _CheckDateAssertion)
+    assert_type(assert_that(datetime.datetime(2026, 1, 1, 12, 0)).check(), _CheckDateTimeAssertion)
+    assert_type(assert_that(["a"]).check(), _CheckIterableAssertion[str])
+    assert_type(assert_that(lambda: None).check(), _CheckCallableAssertion[None])
+    assert_type(assert_that(object()).check(), _CheckObjectAssertion[object])
+    assert_type(assert_that(cast("_FrameShape", object())).check(), _CheckFrameAssertion[_FrameShape])
+    assert_type(assert_that(cast("_ArrayShape", object())).check(), _CheckArrayAssertion[_ArrayShape])
+    assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a").check(), _CheckCoreAssertion)
+    assert_type(assert_that([{"id": 1}]).extracting("id").check(), _CheckListAssertion[Any])
+    assert_type(assert_that(len).raises(ValueError).when_called_with().check(), _CheckInvokedAssertion)
+
+    # the rest of the element pivot on the text view, of which only `first` was pinned
+    assert_type(assert_that(len).raises(ValueError).when_called_with().last(), _TextAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().element(0), _TextAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with().single(), _TextAssertion)
+
+    assert_type(assert_that(b"raw").decoded_as("utf-8"), _StringAssertion)
+    assert_type(assert_that(pathlib.Path("/tmp")).value, pathlib.Path)
+
+    # every rung of the three narrowing ladders. Each is an independent mapping from the type it
+    # narrows to onto the view that comes back, and `tests/test_pin_coverage.py` requires all of them
+    def _is_str(value: object) -> TypeIs[str]: ...
+    def _is_bool(value: object) -> TypeIs[bool]: ...
+    def _is_int(value: object) -> TypeIs[int]: ...
+    def _is_float(value: object) -> TypeIs[float]: ...
+    def _is_complex(value: object) -> TypeIs[complex]: ...
+    def _is_dict(value: object) -> TypeIs[dict[str, int]]: ...
+    def _is_list(value: object) -> TypeIs[list[str] | tuple[str, ...]]: ...
+    def _is_set(value: object) -> TypeIs[set[str] | frozenset[str]]: ...
+    def _is_datetime(value: object) -> TypeIs[datetime.datetime]: ...
+    def _is_date(value: object) -> TypeIs[datetime.date]: ...
+    def _is_path(value: object) -> TypeIs[pathlib.Path]: ...
+    def _is_bytes(value: object) -> TypeIs[bytes]: ...
+    def _is_bytearray(value: object) -> TypeIs[bytearray]: ...
+    def _is_callable(value: object) -> TypeIs[Callable[..., object]]: ...
+
+    assert_type(assert_that({"a": 1}).satisfies(_is_str), _StringAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_bool), _BoolAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_int), _NumericAssertion[int])
+    assert_type(assert_that({"a": 1}).satisfies(_is_float), _NumericAssertion[float])
+    assert_type(assert_that({"a": 1}).satisfies(_is_complex), _ComplexAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_dict), _DictAssertion[str, int])
+    assert_type(assert_that({"a": 1}).satisfies(_is_list), _IterableAssertion[str])
+    assert_type(assert_that({"a": 1}).satisfies(_is_set), _IterableAssertion[str])
+    assert_type(assert_that({"a": 1}).satisfies(_is_datetime), _DateTimeAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_date), _DateAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_path), _PathAssertion)
+    assert_type(assert_that({"a": 1}).satisfies(_is_bytes), _BytesAssertion[bytes])
+    assert_type(assert_that({"a": 1}).satisfies(_is_bytearray), _BytesAssertion[bytearray])
+    assert_type(assert_that({"a": 1}).satisfies(_is_callable), _CallableAssertion[Any])
+
+    assert_type(assert_that(42).satisfies(_is_str), _StringAssertion)
+    assert_type(assert_that(42).satisfies(_is_bool), _BoolAssertion)
+    assert_type(assert_that(42).satisfies(_is_int), _NumericAssertion[int])
+    assert_type(assert_that(42).satisfies(_is_float), _NumericAssertion[float])
+    assert_type(assert_that(42).satisfies(_is_complex), _ComplexAssertion)
+    assert_type(assert_that(42).satisfies(_is_dict), _DictAssertion[str, int])
+    assert_type(assert_that(42).satisfies(_is_list), _IterableAssertion[str])
+    assert_type(assert_that(42).satisfies(_is_set), _IterableAssertion[str])
+    assert_type(assert_that(42).satisfies(_is_datetime), _DateTimeAssertion)
+    assert_type(assert_that(42).satisfies(_is_date), _DateAssertion)
+    assert_type(assert_that(42).satisfies(_is_path), _PathAssertion)
+    assert_type(assert_that(42).satisfies(_is_bytes), _BytesAssertion[bytes])
+    assert_type(assert_that(42).satisfies(_is_bytearray), _BytesAssertion[bytearray])
+    assert_type(assert_that(42).satisfies(_is_callable), _CallableAssertion[Any])
+
+    assert_type(assert_that("text").satisfies(_is_str), _StringAssertion)
+    assert_type(assert_that("text").satisfies(_is_bool), _BoolAssertion)
+    assert_type(assert_that("text").satisfies(_is_int), _NumericAssertion[int])
+    assert_type(assert_that("text").satisfies(_is_float), _NumericAssertion[float])
+    assert_type(assert_that("text").satisfies(_is_complex), _ComplexAssertion)
+    assert_type(assert_that("text").satisfies(_is_dict), _DictAssertion[str, int])
+    assert_type(assert_that("text").satisfies(_is_list), _IterableAssertion[str])
+    assert_type(assert_that("text").satisfies(_is_set), _IterableAssertion[str])
+    assert_type(assert_that("text").satisfies(_is_datetime), _DateTimeAssertion)
+    assert_type(assert_that("text").satisfies(_is_date), _DateAssertion)
+    assert_type(assert_that("text").satisfies(_is_path), _PathAssertion)
+    assert_type(assert_that("text").satisfies(_is_bytes), _BytesAssertion[bytes])
+    assert_type(assert_that("text").satisfies(_is_bytearray), _BytesAssertion[bytearray])
+    assert_type(assert_that("text").satisfies(_is_callable), _CallableAssertion[Any])
+
+    assert_type(assert_that(cast("str | None", "text")).is_not_none(), _StringAssertion)
+    assert_type(assert_that(cast("complex | None", complex(1, 2))).is_not_none(), _ComplexAssertion)
+    assert_type(assert_that(cast("dict[str, int] | None", {"a": 1})).is_not_none(), _DictAssertion[str, int])
+    assert_type(assert_that(cast("list[str] | tuple[str, ...] | None", ["a"])).is_not_none(), _IterableAssertion[str])
+    assert_type(assert_that(cast("set[str] | frozenset[str] | None", {"a"})).is_not_none(), _IterableAssertion[str])
+    assert_type(assert_that(cast("datetime.date | None", datetime.date(2026, 1, 1))).is_not_none(), _DateAssertion)
+    assert_type(assert_that(cast("pathlib.Path | None", pathlib.Path("/tmp"))).is_not_none(), _PathAssertion)
+    assert_type(assert_that(cast("bytes | None", b"raw")).is_not_none(), _BytesAssertion[bytes])
+    assert_type(assert_that(cast("bytearray | None", bytearray(b"raw"))).is_not_none(), _BytesAssertion[bytearray])
+    assert_type(assert_that(cast("Callable[..., object] | None", len)).is_not_none(), _CallableAssertion[Any])
+
+    assert_type(assert_that(object()).is_instance_of(str), _StringAssertion)
+    assert_type(assert_that(object()).is_instance_of(bool), _BoolAssertion)
+    assert_type(assert_that(object()).is_instance_of(int), _NumericAssertion[int])
+    assert_type(assert_that(object()).is_instance_of(float), _NumericAssertion[float])
+    assert_type(assert_that(object()).is_instance_of(complex), _ComplexAssertion)
+    assert_type(assert_that(object()).is_instance_of(cast("type[dict[str, int]]", dict)), _DictAssertion[str, int])
+    assert_type(assert_that(object()).is_instance_of(cast("type[list[str]]", list)), _IterableAssertion[str])
+    assert_type(assert_that(object()).is_instance_of(cast("type[set[str]]", set)), _IterableAssertion[str])
+    assert_type(assert_that(object()).is_instance_of(datetime.datetime), _DateTimeAssertion)
+    assert_type(assert_that(object()).is_instance_of(datetime.date), _DateAssertion)
+    assert_type(assert_that(object()).is_instance_of(pathlib.Path), _PathAssertion)
+    assert_type(assert_that(object()).is_instance_of(bytes), _BytesAssertion[bytes])
+    assert_type(assert_that(object()).is_instance_of(bytearray), _BytesAssertion[bytearray])
+
+    # the flat pivot and the last element on each view that declares its own, which one pin on another
+    # view used to answer for
+    assert_type(assert_that(["a"]).flat_mapped(lambda item: [item]), _ListAssertion[str])
+    assert_type(assert_that({"a": 1}).flat_mapped(lambda key: [key]), _ListAssertion[str])
+    assert_type(assert_that(b"raw").flat_mapped(lambda byte: [byte]), _ListAssertion[int])
+    assert_type(assert_that(["a"]).last(), AssertionBuilder[str])
+    assert_type(assert_that({"a": 1}).last(), AssertionBuilder[str])
+    assert_type(assert_that(["a"]).mapped(str.upper), _ListAssertion[str])
+    assert_type(assert_that(["a"]).filtered_on(lambda item: item), _ListAssertion[str])
+
+    # the two rungs below the named ones: a capability, then anything at all
+    def _is_capable(value: object) -> TypeIs[Mapping[str, int]]: ...
+    def _is_anything(value: object) -> TypeIs[_Order]: ...
+
+    assert_type(assert_that({"a": 1}).satisfies(_is_capable), AssertionBuilder[Mapping[str, int]])
+    assert_type(assert_that(42).satisfies(_is_capable), AssertionBuilder[Mapping[str, int]])
+    assert_type(assert_that({"a": 1}).satisfies(_is_anything), _ObjectAssertion[_Order])
+    assert_type(assert_that(42).satisfies(_is_anything), _ObjectAssertion[_Order])
+    assert_type(assert_that("text").satisfies(_is_anything), _ObjectAssertion[_Order])
+
+    # the element pivot on each view that declares its own, reached from a subject the gate can read
+    assert_type(assert_that(["a"]).first(), AssertionBuilder[str])
+    assert_type(assert_that(["a"]).element(0), AssertionBuilder[str])
+    assert_type(assert_that(["a"]).single(), AssertionBuilder[str])
+    assert_type(assert_that({"a": 1}).element(0), AssertionBuilder[str])
+    assert_type(assert_that({"a": 1}).single(), AssertionBuilder[str])
+    assert_type(assert_that(object()).value, object)
+    assert_type(assert_that(cast("_FrameShape", object())).value, _FrameShape)
+    assert_type(assert_that(cast("_ArrayShape", object())).value, _ArrayShape)
+
+    # the capability facade's own pivots, and the two chains a callable view opens
+    assert_type(assert_that(lambda: int("1")).eventually(trace=False), _AsyncPoll[int])
+    assert_type(assert_that(lambda: int("1")).eventually_sync(timeout=2, trace=False), _SyncPoll[int])
+    assert_type(assert_that(_Countable()).eventually(trace=False), _AsyncPoll[Any])
+    assert_type(assert_that(_Countable()).eventually_sync(timeout=2, trace=False), _SyncPoll[Any])
+    assert_type(assert_that(_Countable()).builder(1), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).check(), _CheckAnyValue[_Countable])
+    assert_type(assert_that(_Countable()).value, _Countable)
+    assert_type(assert_that(_Countable()).first(), _CapableAssertion[_Countable])
+    assert_type(assert_that(_Countable()).last(), _CapableAssertion[_Countable])
+    assert_type(assert_that(_Countable()).single(), _CapableAssertion[_Countable])
+    assert_type(assert_that(_Countable()).element(0), _CapableAssertion[_Countable])
+    assert_type(assert_that(_Countable()).satisfies(_is_anything), AssertionBuilder[_Order])
+    assert_type(assert_that(_Countable()).is_instance_of(str), AssertionBuilder[str])
+    assert_type(assert_that(_Countable()).is_instance_of_any(str, int), AssertionBuilder[str | int])
+
+    # the element pivot on a capable value that is a mapping, which is the rung it keys on
+    assert_type(assert_that(_Rowish()).first(), AssertionBuilder[str])
+    assert_type(assert_that(_Rowish()).last(), AssertionBuilder[str])
+    assert_type(assert_that(_Rowish()).single(), AssertionBuilder[str])
+    assert_type(assert_that(_Rowish()).element(0), AssertionBuilder[str])
