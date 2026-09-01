@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import collections.abc
 import re
+import types
 from typing import TYPE_CHECKING, cast
 
 from ._compare import _guarded_not_equal, _keyed_types_differ, _node_decision, _spec_matches
@@ -24,6 +25,8 @@ from ._path import _ROOT
 from ._require import refuse
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from ._compare import _CompareConfig
     from ._introspection import MappingLike
 
@@ -56,6 +59,108 @@ def include_specs(include: object) -> list:
     return [entry[0] if type(entry) is tuple else entry for entry in normalize_key_specs(include, "include")]
 
 
+_NOT_DEFINED = object()
+
+
+def _defined_on(cls: type, name: str) -> object:
+    """What the interpreter's own type lookup finds for *name*, or `_NOT_DEFINED`.
+
+    A walk of the MRO namespaces, which is what `_PyType_Lookup` does and what `getattr` on the class
+    does not: the ordinary one runs through the metaclass, so a `__getattr__` there can fabricate a
+    member the C slot never sees, and a `__getattribute__` there can hide one it does.  Reached through
+    `type.__getattribute__` for the same reason.
+
+    A `None` found this way is a definition and not an absence.  It is how a subclass takes a special
+    member away, and the lookup stops on it exactly as it stops on a real one.
+    """
+    for base in type.__getattribute__(cls, "__mro__"):
+        namespace = type.__getattribute__(base, "__dict__")
+        if name in namespace:
+            return namespace[name]
+    return _NOT_DEFINED
+
+
+_DIRECTLY_CALLABLE = (
+    types.FunctionType,
+    types.BuiltinFunctionType,
+    types.MethodType,
+    types.MethodWrapperType,
+    types.WrapperDescriptorType,
+    types.BuiltinMethodType,
+)
+"""Callables answered without resolving anything.  A class is deliberately not one: a metaclass can null
+`__call__` out, and then `callable()` says yes and instantiating raises."""
+
+
+def _bound_special(candidate: object, name: str, hops: int) -> object:
+    """What the interpreter would call for *name* as a special member, or `_NOT_DEFINED`.
+
+    The type lookup plus the descriptor step, which together are `_PyObject_LookupSpecial`.  A
+    definition that cannot be resolved comes back as `None`, because that is what calling it amounts
+    to: not callable, and the caller says so in its own words.
+    """
+    raw = _defined_on(type(candidate), name)
+    if raw is _NOT_DEFINED:
+        return _NOT_DEFINED
+    binding = _defined_on(type(raw), "__get__")
+    if binding is _NOT_DEFINED:
+        return raw  # nothing to resolve through, so the definition found is the one called
+    if not _reachable_call(binding, hops):
+        return None  # a defined `__get__` is reached whatever it holds, so `__get__ = None` raises
+    resolve = cast("Callable[[object, object, type], object]", binding)
+    try:
+        return resolve(raw, candidate, type(candidate))
+    except Exception:
+        # a binding that raises would raise on the real lookup too, and this question is asked while
+        # rendering a failure, where a crash replaces the failure the reader came for
+        return None
+
+
+def _reachable_call(value: object, hops: int = 3) -> bool:
+    """Whether calling *value* reaches an implementation rather than raising `TypeError`.
+
+    `callable()` answers one level: it says the type has a call slot, and Python's own documentation
+    says that is not a promise the call succeeds.  `__call__ = None` fills the slot and fails when
+    reached, which is the same trick as `__getitem__ = None` one level down.
+
+    Bounded rather than fully recursive, and the bound is not arbitrary: almost every callable is a
+    function, a method or a class and is answered by the first test, so a chain deep enough to exhaust
+    the hops is one built on purpose.  A value that does is called what `callable()` calls it.
+    """
+    if not callable(value):
+        return False
+    if isinstance(value, _DIRECTLY_CALLABLE) or hops == 0:
+        return True
+    return _reachable_call(_bound_special(value, "__call__", hops - 1), hops - 1)
+
+
+def carries_callable(candidate: object, name: str) -> bool:
+    """Whether calling `candidate.name()` reaches an implementation rather than raising `TypeError`.
+
+    Deliberately no test for where the attribute came from.  Forwarding through `__getattr__` is how a
+    proxy delegates, and a rule against it refuses every wrapper over a mapping.  Two attempts at such a
+    rule were made and both were unsound: fabrication is not the offence, and no nominal test tells a
+    `unittest.mock` attribute from a delegated one.
+
+    A value that answers this and is then unreadable by key is handled where it shows, in `_dict_err`,
+    which falls back to a plain repr rather than letting the shape guess replace the failure.
+    """
+    return _reachable_call(getattr(candidate, name, None))
+
+
+def supports_subscript(candidate: object) -> bool:
+    """Whether `candidate[key]` will reach an implementation instead of raising `TypeError`.
+
+    Neither `hasattr` nor plain presence on the MRO answers this.  The operator is looked up on the
+    type, so a `__getattr__` on the instance answers `hasattr` for a subscript the object does not
+    have, and `__getitem__ = None` in a subclass shadows a working parent while still being present.
+
+    The descriptor step is not decoration: a `__getitem__` written as a `property` really is resolved
+    and really does work, measured against CPython.
+    """
+    return _reachable_call(_bound_special(candidate, "__getitem__", 3))
+
+
 def mapping_shaped(
     candidate: object, *, check_keys: bool = True, check_values: bool = True, check_getitem: bool = True
 ) -> bool:
@@ -68,11 +173,11 @@ def mapping_shaped(
         return True
     if not isinstance(candidate, collections.abc.Iterable):
         return False
-    if check_keys and not callable(getattr(candidate, "keys", None)):
+    if check_keys and not carries_callable(candidate, "keys"):
         return False
-    if check_values and not callable(getattr(candidate, "values", None)):
+    if check_values and not carries_callable(candidate, "values"):
         return False
-    return not (check_getitem and not hasattr(candidate, "__getitem__"))
+    return not check_getitem or supports_subscript(candidate)
 
 
 def values_differ(value: object, other: object, config: _CompareConfig | None, *, at_root: bool = False) -> bool:

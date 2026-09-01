@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _guarded_not_equal, _node_decision
-from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple
+from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple, keyed_snapshot
 from ._path import _ROOT, _Path
 
 if TYPE_CHECKING:
@@ -480,6 +480,48 @@ def _build_equality_diff(
     return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
 
 
+def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int], config) -> list[DiffEntry] | None:
+    """Path-level entries between two mappings, or ``None`` when either cannot be walked by key.
+
+    Both sides are snapshotted first, so the keys walked below are the ones that were proved readable
+    rather than a second reading of a value free to answer differently between passes.
+    """
+    kept, kept_expected = keyed_snapshot(actual), keyed_snapshot(expected)
+    if kept is None or kept_expected is None:
+        return None
+    entries: list[DiffEntry] = []
+    actual_keys = set(kept)
+    expected_keys = set(kept_expected)
+    if config is not None and config.strict_types:
+        # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
+        stored = {key: key for key in kept_expected}
+        for key in kept:
+            counterpart = stored.get(key, key)
+            if type(key) is not type(counterpart):
+                entries.append(prefix.key(key).entry(actual=key, expected=counterpart))
+    for key in _ordered_keys(kept, kept_expected):
+        if key not in expected_keys:
+            entries.append(prefix.key(key).entry(actual=kept[key], expected=None, absent="expected"))
+        elif key not in actual_keys:
+            entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=kept_expected[key]))
+        else:
+            decision = _node_decision(kept[key], kept_expected[key], config, field=key)
+            if decision == "leaf":
+                entries.append(prefix.key(key).entry(actual=kept[key], expected=kept_expected[key]))
+            elif decision != "equal":
+                entries.extend(
+                    _child_entries(
+                        kept[key],
+                        kept_expected[key],
+                        prefix.key(key),
+                        descended_for=decision,
+                        _seen=child_seen,
+                        config=config,
+                    )
+                )
+    return entries
+
+
 def _sub_diff_entries(
     actual: object, expected: object, prefix: _Path = _ROOT, *, _seen: set[int] | None = None, config=None
 ) -> list[DiffEntry] | None:
@@ -500,38 +542,7 @@ def _sub_diff_entries(
         return [prefix.entry(actual="<circular ref>", expected="<circular ref>")]
 
     if is_mapping_like(actual) and is_mapping_like(expected):
-        child_seen = _seen | {id(actual), id(expected)}
-        entries: list[DiffEntry] = []
-        actual_keys = set(actual)
-        expected_keys = set(expected)
-        if config is not None and config.strict_types:
-            # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
-            stored = {key: key for key in expected}
-            for key in actual:
-                counterpart = stored.get(key, key)
-                if type(key) is not type(counterpart):
-                    entries.append(prefix.key(key).entry(actual=key, expected=counterpart))
-        for key in _ordered_keys(actual, expected):
-            if key not in expected_keys:
-                entries.append(prefix.key(key).entry(actual=actual[key], expected=None, absent="expected"))
-            elif key not in actual_keys:
-                entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=expected[key]))
-            else:
-                decision = _node_decision(actual[key], expected[key], config, field=key)
-                if decision == "leaf":
-                    entries.append(prefix.key(key).entry(actual=actual[key], expected=expected[key]))
-                elif decision != "equal":
-                    entries.extend(
-                        _child_entries(
-                            actual[key],
-                            expected[key],
-                            prefix.key(key),
-                            descended_for=decision,
-                            _seen=child_seen,
-                            config=config,
-                        )
-                    )
-        return entries
+        return _mapping_diff_entries(actual, expected, prefix, _seen | {id(actual), id(expected)}, config)
     if (
         dataclasses.is_dataclass(actual)
         and not isinstance(actual, type)
@@ -563,11 +574,11 @@ def _sub_diff_entries(
                             config=config,
                         )
                     )
-        for field_name in expected._fields:
-            if field_name not in actual._fields:  # _fields, not hasattr (count/index collide)
-                entries.append(
-                    prefix.attr(field_name).entry(actual=None, absent="actual", expected=getattr(expected, field_name))
-                )
+        entries.extend(
+            prefix.attr(field_name).entry(actual=None, absent="actual", expected=getattr(expected, field_name))
+            for field_name in expected._fields
+            if field_name not in actual._fields  # _fields, not hasattr (count/index collide)
+        )
         return entries
     both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
     both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)

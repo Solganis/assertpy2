@@ -1,7 +1,7 @@
 """A complexity ratchet, so the measure cannot grow where nobody looks.
 
-Thirty functions in the package sit above mccabe's default of 10, the worst four being `extracting` at
-32, `_build_equality_diff` at 30, `_sub_diff_entries` at 27 and `_dict_err` at 20.
+Thirty-one functions in the package sit above mccabe's default of 10, the worst four being `extracting`
+at 32, `_build_equality_diff` at 30, `_object_hook` at 19 and `_dict_err` at 19.
 
 Getting them under 10 is deliberately NOT the goal. It fixes no defect, and rewriting
 `_build_equality_diff` for the sake of a number would risk code the suite and mutation testing hold.
@@ -30,9 +30,9 @@ _REPORTED = re.compile(r"`([^`]+)` is too complex \((\d+)")
 RECORDED: dict[str, int] = {
     "assertpy2/extracting.py::extracting": 32,
     "assertpy2/_engine/_diff.py::_build_equality_diff": 30,
-    "assertpy2/_engine/_diff.py::_sub_diff_entries": 27,
-    "assertpy2/helpers.py::_dict_err": 20,
     "assertpy2/_snapshot_codec.py::_object_hook": 19,
+    "assertpy2/helpers.py::_dict_err": 19,
+    "assertpy2/_engine/_diff.py::_sub_diff_entries": 17,
     "assertpy2/_hints.py::diagnose": 17,
     "assertpy2/_engine/_compare.py::_find_ambiguous_operand": 15,
     "assertpy2/_engine/_diff.py::_walk_leaves": 15,

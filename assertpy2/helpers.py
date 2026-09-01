@@ -16,13 +16,15 @@ from ._engine._compare import (
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._equality import (
     IncludeKeysMissingError,
+    carries_callable,
     ignore_specs,
     include_specs,
     mapping_differs,
     mapping_shaped,
     normalize_key_specs,
+    supports_subscript,
 )
-from ._engine._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
+from ._engine._introspection import MappingLike, is_attrs_instance, is_model_dump_object, is_namedtuple, keyed_snapshot
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type
@@ -112,6 +114,18 @@ def _elided_seq_repr(seq, counterpart) -> str:
     return _joined_parts(parts, elided=elided, opener=opener, closer=closer)
 
 
+def _keyed_pair(value: object, other: object) -> tuple[MappingLike, MappingLike] | None:
+    """Both sides as something safe to walk by key, or `None` when either cannot be walked that way.
+
+    Asked at every descent a message walks, not once at the top: a value that answers `keys` and cannot
+    be indexed by what it yields can sit nested inside a pair whose outer halves are ordinary dicts.
+    """
+    if not (mapping_shaped(value, check_values=False) and mapping_shaped(other, check_values=False)):
+        return None
+    kept, kept_other = keyed_snapshot(value), keyed_snapshot(other)
+    return None if kept is None or kept_other is None else (kept, kept_other)
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -198,21 +212,25 @@ class HelpersMixin(_MixinBase):
         return mapping_shaped(candidate, check_keys=check_keys, check_values=check_values, check_getitem=check_getitem)
 
     def _require_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True, name="val"):
-        """Raise ``TypeError`` unless *candidate* has the requested dict-like attributes."""
+        """Raise ``TypeError`` unless *candidate* has the requested dict-like attributes.
+
+        The same reading as `mapping_shaped`, one check at a time so each refusal can name what is
+        missing.  Reading it any other way here would accept a value the renderer then crashes on.
+        """
         if not isinstance(candidate, collections.abc.Iterable):
             refuse(candidate, "dict-like (this one is not iterable)", subject=name)
-        if check_keys and not callable(getattr(candidate, "keys", None)):
+        if check_keys and not carries_callable(candidate, "keys"):
             refuse(candidate, "dict-like (this one has no keys())", subject=name)
-        if check_values and not callable(getattr(candidate, "values", None)):
+        if check_values and not carries_callable(candidate, "values"):
             refuse(candidate, "dict-like (this one has no values())", subject=name)
-        if check_getitem and not hasattr(candidate, "__getitem__"):
+        if check_getitem and not supports_subscript(candidate):
             refuse(candidate, "dict-like (this one has no [] accessor)", subject=name)
 
     def _check_iterable(self, val, check_getitem=True, name="val"):
         """Helper to check if given val is iterable with optional item access."""
         if not isinstance(val, collections.abc.Iterable):
             refuse(val, "iterable", subject=name)
-        if check_getitem and not hasattr(val, "__getitem__"):
+        if check_getitem and not supports_subscript(val):
             refuse(val, "a value with a [] accessor", subject=name)
 
     def _dict_not_equal(self, val, other, ignore=None, include=None, config: _CompareConfig | None = None, _seen=None):
@@ -284,10 +302,25 @@ class HelpersMixin(_MixinBase):
             nested_include = [
                 entry[1:] for entry in self._dict_ignore(include) if type(entry) is tuple and entry[0] == key
             ] or None
-            if (nested_ignore or nested_include) and mapping_shaped(value, check_values=False):
-                value = self._selected_keys_only(value, nested_ignore, nested_include)
+            if nested_ignore or nested_include:
+                # the snapshot and not the value: recursing into the original would read it a third time
+                kept_value = keyed_snapshot(value) if mapping_shaped(value, check_values=False) else None
+                if kept_value is not None:
+                    value = self._selected_keys_only(kept_value, nested_ignore, nested_include)
             kept[key] = value
         return kept
+
+    def _key_filter_note(self, ignore: object, include: object) -> str:
+        """The ` ignoring keys ...` / ` including keys ...` tail of a dict failure, or an empty string."""
+        note = ""
+        for label, specs in (("ignoring", ignore), ("including", include)):
+            if specs:
+                spelled = [
+                    ".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry
+                    for entry in self._dict_ignore(specs)
+                ]
+                note += f" {label} keys {self._fmt_items(spelled)}"
+        return note
 
     def _dict_err(
         self,
@@ -324,10 +357,8 @@ class HelpersMixin(_MixinBase):
                         parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                     else:  # recurse
                         other_value = counterpart[key]
-                        if mapping_shaped(value, check_values=False) and mapping_shaped(
-                            other_value, check_values=False
-                        ):
-                            value_repr = _dict_repr(value, other_value, _seen)
+                        if (keyed := _keyed_pair(value, other_value)) is not None:
+                            value_repr = _dict_repr(*keyed, _seen)
                         elif _both_list_like(value, other_value):
                             value_repr = _list_repr(value, other_value, _seen)
                         else:
@@ -355,8 +386,8 @@ class HelpersMixin(_MixinBase):
                     ellip = True
                 elif decision == "leaf":
                     parts.append(_safe_repr(value))
-                elif mapping_shaped(value, check_values=False) and mapping_shaped(other_value, check_values=False):
-                    parts.append(_dict_repr(value, other_value, _seen))
+                elif (keyed := _keyed_pair(value, other_value)) is not None:
+                    parts.append(_dict_repr(*keyed, _seen))
                 elif _both_list_like(value, other_value):
                     parts.append(_list_repr(value, other_value, _seen))
                 else:
@@ -364,31 +395,19 @@ class HelpersMixin(_MixinBase):
             opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
             return _joined_parts(parts, elided=ellip, opener=opener, closer=closer)
 
-        ignore_err = include_err = ""
-        if ignore:
-            ignores = self._dict_ignore(ignore)
-            ignore_fmt = self._fmt_items(
-                [".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry for entry in ignores]
-            )
-            ignore_err = f" ignoring keys {ignore_fmt}"
-        if include:
-            includes = self._dict_ignore(include)
-            include_fmt = self._fmt_items(
-                [".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry for entry in includes]
-            )
-            include_err = f" including keys {include_fmt}"
-
-        reported_val = self._selected_keys_only(val, ignore, include)
-        reported_other = self._selected_keys_only(other, ignore, include)
-        diff_entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
-        diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
-
-        val_repr = _truncated(_dict_repr(reported_val, reported_other))
-        other_repr = _truncated(_dict_repr(reported_other, reported_val))
-        ignore_part = ignore_err if ignore else ""
-        include_part = include_err if include else ""
+        if (keyed := _keyed_pair(val, other)) is not None:
+            reported_val = self._selected_keys_only(keyed[0], ignore, include)
+            reported_other = self._selected_keys_only(keyed[1], ignore, include)
+            diff_entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
+            diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
+            val_repr = _truncated(_dict_repr(reported_val, reported_other))
+            other_repr = _truncated(_dict_repr(reported_other, reported_val))
+        else:
+            # the shape said keyed and the value is not, so the richer message is the thing given up here
+            diff = None
+            val_repr, other_repr = _safe_repr(val), _safe_repr(other)
         self.error(
-            f"Expected <{val_repr}> to be equal to <{other_repr}>{ignore_part}{include_part}, but was not."
+            f"Expected <{val_repr}> to be equal to <{other_repr}>{self._key_filter_note(ignore, include)}, but was not."
             f"{_config_note(config)}",
             actual=val,
             expected=other,
