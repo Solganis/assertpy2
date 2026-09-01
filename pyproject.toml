@@ -44,9 +44,11 @@ assertpy2 = "assertpy2.pytest_plugin"
 
 [project.optional-dependencies]
 allure = ["allure-pytest>=2.13"]
-behave = ["behave>=1.2.6"]
+# 1.2.6 has no `ParseMatcher.TYPE_REGISTRY`, so our parser never reaches behave's own registry
+behave = ["behave>=1.3.0"]
 data = ["assertpy2[numpy,pandas,polars]"]
-inline = ["executing>=2.2", "asttokens>=2.0"]
+# asttokens below 2.0.4 misreads a keyword argument and cannot mark the tokens of the file it rewrites
+inline = ["executing>=2.2", "asttokens>=2.0.4"]
 json = ["jsonpath-ng>=1.8", "jsonschema>=4.18", "referencing>=0.28.4"]
 numpy = ["numpy>=1.26"]
 pandas = ["pandas>=2.0"]
@@ -99,14 +101,18 @@ docs = [
 # Real third-party libraries the duck-typed integration paths are verified against in CI (the suite
 # otherwise skips these tests); pandas/polars/numpy come from the [data] extra instead.
 integrations = [
-    "attrs>=25.0",
+    # 25.0 was never released, so the bound named a version nobody can install
+    "attrs>=25.1.0",
     "django>=5.0",
     "flask>=3.0",
     "httpx>=0.28",
     "httpx2>=2.11",
     "pydantic>=2.0",
-    "requests>=2.32",
-    "starlette>=0.40",
+    # 2.32.0 and 2.32.1 are yanked over a CVE-2024-35195 mitigation conflict, so 2.32.2 is the floor
+    "requests>=2.32.2",
+    # below 0.46 its test client reaches `asyncio.iscoroutinefunction`, deprecated in 3.14, and our
+    # `-W error` turns that into a failure
+    "starlette>=0.46",
 ]
 typecheck = [
     "django-stubs>=5.0",
