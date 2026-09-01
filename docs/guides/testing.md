@@ -113,6 +113,11 @@ By default it polls for 5 seconds every 0.5 seconds. Tune with `within()` and `e
 await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
 ```
 
+The subject is a callable rather than a value, and that is the design rather than a limitation. A value
+is refused outright, because polling one would re-read nothing: an immutable subject could only spin to
+the timeout, and the library cannot tell one apart from a live object. The callable says what to read
+again, so `assert_that(lambda: element.text)` asks the element each round.
+
 Both sync and async callables work, and any assertion method is available after `eventually()`:
 
 <!-- docs-guard: skip -->
