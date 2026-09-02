@@ -139,8 +139,23 @@ def generate() -> str:
     return "\n".join(lines) + "\n"
 
 
+def _tidy(written: pathlib.Path) -> None:
+    """Format and autofix a generated file, refusing to report success when either step failed.
+
+    Swallowed, a missing `ruff` or a file that does not parse left the generator exiting zero, and the
+    caller went on to re-record a snapshot from a file nothing had checked.
+    """
+    for command in (
+        ["uv", "run", "ruff", "format", str(written)],
+        ["uv", "run", "ruff", "check", "--fix", str(written)],
+    ):
+        finished = subprocess.run(command, cwd=ROOT, check=False, capture_output=True, text=True)
+        if finished.returncode:
+            print(finished.stdout, finished.stderr, sep="", file=sys.stderr)
+            raise SystemExit(f"{' '.join(command[2:])} failed on {written.relative_to(ROOT)}")
+
+
 if __name__ == "__main__":
     TARGET.write_text(generate(), encoding="utf-8", newline="")
-    subprocess.run(["uv", "run", "ruff", "format", str(TARGET)], cwd=ROOT, check=False, capture_output=True)
-    subprocess.run(["uv", "run", "ruff", "check", "--fix", str(TARGET)], cwd=ROOT, check=False, capture_output=True)
+    _tidy(TARGET)
     print(f"wrote {TARGET.relative_to(ROOT)}")
