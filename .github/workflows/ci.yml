@@ -258,12 +258,9 @@ jobs:
           from packaging.requirements import Requirement
           from packaging.version import Version
 
-          # Reachable only under a fully lowest resolution, which pins transitive versions the suite does not
-          # survive: measured at 31 failures and 246 errors. The bound itself is honest, jsonschema 4.18 and
-          # jsonschema-specifications 2023.6.1 both accept it, so it stays as declared and is recorded here.
           # keyed by name and floor, because two extras may declare two different bounds on one
           # distribution and reaching either says nothing about the other
-          UNREACHED = {("referencing", "0.28.4"): "needs jsonschema-specifications 2023.x, never selected here"}
+          UNREACHED: dict[tuple[str, str], str] = {}
 
           declared = {}
           project = tomllib.loads(pathlib.Path("pyproject.toml").read_text(encoding="utf-8"))
