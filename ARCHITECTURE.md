@@ -50,12 +50,11 @@ One script writes three of them. That is the part people miss.
 ## Changing a signature
 
 ```bash
-uv run python scripts/generate_poll_protocols.py
-uv run python scripts/generate_check_protocols.py
-ASSERTPY2_UPDATE_API=1 uv run pytest tests/test_api_compatibility.py
+uv run python scripts/regenerate.py
 ```
 
-The last re-records `tests/api_snapshot.json`, which pins the public surface.
+That runs both generators, re-records `tests/api_snapshot.json`, which pins the public surface, and
+re-records the table of sizes above. Read the diff it leaves.
 
 **The generators carry hard-coded import lines.** A signature naming something the generated file did not
 already import produces a file that will not compile, and ruff reports `F821 Undefined name` against a file you
@@ -87,9 +86,11 @@ The skipped step is the third.
    `WITHOUT_A_VERDICT` under what it does instead, since `check()` and `not_` mean nothing on it and
    both used to accept them. A pivot that also asserts goes in `ALSO_ASSERTS`, since reaching
    `self.error()` does not separate a verdict from a precondition.
-4. Regenerate. The generators emit what they find, so a missing declaration surfaces not here but in
+4. If the polling twin is meant to leave it out, add the name to `_AFTER_A_CALL` in
+   `tests/test_poll_protocols.py`. The whole caught-exception family is absent from that twin, and the
+   list is what says so on purpose rather than by accident.
+5. Regenerate. The generators emit what they find, so a missing declaration surfaces not here but in
    `test_protocol_parity.py::test_mixin_methods_are_declared_on_its_protocols`.
-5. Re-record the snapshot.
 
 A signature naming a type the generated files do not import produces a file that does not compile. The
 import lines are templates inside the generators.
@@ -108,6 +109,7 @@ import lines are templates inside the generators.
 | `test_api_compatibility.py` | has the public surface moved without the snapshot being re-recorded |
 | `test_typing_completeness.py` | can a checker name a type for every exported symbol |
 | `test_pyright_baseline.py` | has a new pyright diagnostic appeared in the package |
+| `test_architecture_doc.py` | does this document still describe the tree, counts included |
 | `test_typing_negative.py` | do the checkers still refuse what they should |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
 | `test_typing_integrations.py`, `test_typing_http.py` | do real pandas, polars, numpy and HTTP values still resolve |

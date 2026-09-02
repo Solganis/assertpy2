@@ -12,6 +12,7 @@ than trusted, which is what any edit to the typed surface breaks.
 from __future__ import annotations
 
 import ast
+import os
 import pathlib
 import re
 
@@ -53,12 +54,31 @@ def _measured(module: str) -> tuple[int, int]:
     return len(protocols), declarations
 
 
+def _rewritten(rows: list[tuple[str, str, str]]) -> None:
+    """Put the measured counts back into the table, so the numbers are recorded and not typed."""
+    text = _DOCUMENT.read_text(encoding="utf-8")
+    for module, _, _ in rows:
+        protocols, declarations = _measured(module)
+        text = re.sub(
+            rf"^\| `{re.escape(module)}` \| \d+ \| \d+ \|",
+            f"| `{module}` | {protocols} | {declarations} |",
+            text,
+            flags=re.MULTILINE,
+        )
+    _DOCUMENT.write_text(text, encoding="utf-8", newline="")
+
+
 def test_the_table_of_sizes_is_what_the_files_hold() -> None:
     """Recomputed rather than trusted: a number in prose is the first thing to stop being true.
 
     Row for row and file for file, since a deleted row and a duplicated one both leave a table that
     agrees with itself.
+
+    Re-record with `ASSERTPY2_UPDATE_ARCHITECTURE=1`, the way the API snapshot is re-recorded, so the
+    counting rule has one implementation and the numbers are never typed by hand.
     """
+    if os.environ.get("ASSERTPY2_UPDATE_ARCHITECTURE"):
+        _rewritten(_SIZE_ROW.findall(_DOCUMENT.read_text(encoding="utf-8")))
     rows = _SIZE_ROW.findall(_DOCUMENT.read_text(encoding="utf-8"))
     listed = [module for module, _, _ in rows]
 
