@@ -756,6 +756,15 @@ assert_that(fred.name).is_equal_to("Fred Smith")          # property
 assert_that(fred.say_hello()).is_equal_to("Hello, Fred!")  # method
 ```
 
+`is_equal_to` compares values. It does not ask whether the corresponding parts of two structures are the
+same object, so a copy that rebuilt what it should have shared still passes. To require two members to
+be one object, compare them with `is_same_as`:
+
+<!-- docs-guard: skip -->
+```python
+assert_that(config["primary"]).is_same_as(config["fallback"])
+```
+
 ### Recursive field assertions
 
 `all_fields_satisfy` walks the whole object graph (mappings, dataclasses, namedtuples, attrs classes,
