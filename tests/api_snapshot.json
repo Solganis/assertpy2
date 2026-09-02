@@ -1760,6 +1760,19 @@
    ],
    "returns": "Self"
   },
+  "matches_error_tree": {
+   "kind": "callable",
+   "parameters": [
+    {
+     "annotation": "type | list[Any]",
+     "default": null,
+     "kind": "VAR_POSITIONAL",
+     "name": "expected",
+     "required": false
+    }
+   ],
+   "returns": "Self"
+  },
   "matches_inline": {
    "kind": "callable",
    "parameters": [
@@ -4106,6 +4119,7 @@
    "mapped",
    "matches",
    "matches_contract_snapshot",
+   "matches_error_tree",
    "matches_inline",
    "matches_json_schema",
    "matches_json_schema_from_file",
@@ -4496,6 +4510,7 @@
    "mapped",
    "matches",
    "matches_contract_snapshot",
+   "matches_error_tree",
    "matches_inline",
    "matches_with_groups",
    "none_satisfy",
@@ -5409,6 +5424,7 @@
   "_CapableAssertion.mapped": "(self: _ElementSource[_E], func: Callable[[_E], _R]) -> AssertionBuilder[list[_R]] | (func: Callable[..., Any]) -> Self",
   "_CapableAssertion.matches": "(self: _CapableAssertion[str], pattern: str) -> _CapableAssertion[_CapableT_co]",
   "_CapableAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
+  "_CapableAssertion.matches_error_tree": "(*expected: type | list[Any]) -> Self",
   "_CapableAssertion.matches_inline": "(expected: object, *ignore: object, *include: object, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_CapableAssertion.matches_json_schema": "(schema: dict[str, Any]) -> Self",
   "_CapableAssertion.matches_json_schema_from_file": "(path: str | Path) -> Self",
@@ -5781,6 +5797,7 @@
   "_InvokedAssertion.mapped": "(func: Callable[[str], _R]) -> _ListAssertion[_R]",
   "_InvokedAssertion.matches": "(pattern: str) -> Self",
   "_InvokedAssertion.matches_contract_snapshot": "(id: str | None, path: str) -> Self",
+  "_InvokedAssertion.matches_error_tree": "(*expected: type | list[Any]) -> Self",
   "_InvokedAssertion.matches_inline": "(expected: object, *ignore: _KeySpecs | None, *include: _KeySpecs | None, *tolerance: float | None, *comparators: dict[Any, Callable[[Any, Any], Any]] | None, *placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None) -> Self",
   "_InvokedAssertion.matches_with_groups": "(pattern: str) -> AssertionBuilder[Any]",
   "_InvokedAssertion.none_satisfy": "(matcher: Matcher[str] | Callable[[str], object]) -> Self",

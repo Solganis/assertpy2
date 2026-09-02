@@ -693,6 +693,32 @@ caught.error_of(ValueError).contains("bad id")
 happened to take. `contains_error()` and `error_of()` search the wider set, groups included, so the two
 always agree about whether a type is in there.
 
+To assert the shape itself, `matches_error_tree()` takes one entry per member and a list for a nested
+group. Nothing may be left over on either side, and a plain `list` of types is the only spelling of a
+subgroup, since a tuple already means "any of these" elsewhere in the library.
+
+Only a nested list looks inside a subgroup. A type entry matches a subgroup node the same way it matches
+a leaf, by `isinstance`, so `matches_error_tree(Exception)` holds for a group of one member whatever that
+member turns out to hold.
+
+<!-- docs-guard: untyped -->
+```python
+def run_tasks():
+    raise ExceptionGroup("failed", [ValueError("bad id"), ExceptionGroup("retries", [KeyError("missing")])])
+
+
+caught = assert_that(run_tasks).raises(ExceptionGroup).when_called_with()
+caught.contains_error(ValueError, KeyError)
+caught.matches_error_tree(ValueError, [KeyError])
+```
+
+`contains_error()` passes there whatever the nesting is. `matches_error_tree()` is the one that would
+notice `KeyError` moving out of `retries`.
+
+Entries pair with members rather than being read in order, so the same claim written either way round
+gets the same verdict. `matches_error_tree(Exception, ValueError)` and `matches_error_tree(ValueError,
+Exception)` both hold for a group of one `ValueError` and one `KeyError`.
+
 ### Expected warnings
 
 For a called function, assert it emits a warning and chain assertions on the warning message:

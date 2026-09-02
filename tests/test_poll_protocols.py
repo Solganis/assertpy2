@@ -135,7 +135,7 @@ def _names(source: str, protocol: str | None = None) -> set[str]:
     return found
 
 
-# reached through `when_called_with()` only. It adds these eight to the surface its value type
+# reached through `when_called_with()` only. It adds these nine to the surface its value type
 # would have, so the chain gives up its type at that pivot and they come off the hook
 _AFTER_A_CALL = frozenset(
     {
@@ -145,6 +145,7 @@ _AFTER_A_CALL = frozenset(
         "error_of",
         "errors",
         "has_root_cause",
+        "matches_error_tree",
         "raised",
         "returned",
     }

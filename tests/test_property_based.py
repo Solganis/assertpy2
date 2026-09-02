@@ -9,6 +9,7 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 import ast
 import copy
 import datetime
+import itertools
 import json
 import pathlib
 import re
@@ -45,6 +46,7 @@ from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _diff_sides, _disambiguated
+from assertpy2.exception import _matches_shape
 from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
 from tests.group_compat import BaseExceptionGroup, ExceptionGroup, needs_groups
@@ -2338,6 +2340,53 @@ class TestEveryLeafOfAGroupIsReachable:
             assert_that(caught.check().does_not_contain_error(wanted).passed).described_as(
                 f"does_not_contain_error({wanted.__name__}) against contains_error"
             ).is_equal_to(not present)
+
+
+class TestTheGroupShapeMatcherAgreesWithAnExhaustiveSearch:
+    """What `matches_error_tree()` claims, checked against trying every pairing.
+
+    The matcher pairs entries with members by augmenting paths, which is the part of this library where
+    a plausible-looking shortcut gives a wrong verdict rather than a wrong message.  At these widths the
+    permutations can all be tried, so the reference needs no cleverness to be trusted.
+    """
+
+    _KINDS = st.sampled_from([ValueError, KeyError, TypeError])
+
+    @staticmethod
+    def _pairs_somehow(spec, exceptions):
+        """Whether any assignment of members to entries satisfies all of them, tried exhaustively."""
+        if len(spec) != len(exceptions):
+            return False
+        return any(
+            all(isinstance(exceptions[order[entry]], spec[entry]) for entry in range(len(spec)))
+            for order in itertools.permutations(range(len(exceptions)))
+        )
+
+    @given(
+        spec=st.lists(st.sampled_from([ValueError, KeyError, TypeError, Exception]), min_size=1, max_size=6),
+        kinds=st.lists(_KINDS, min_size=1, max_size=6),
+    )
+    @settings(max_examples=300)
+    def test_the_verdict_is_the_one_an_exhaustive_search_gives(self, spec, kinds):
+        exceptions = tuple(kind("x") for kind in kinds)
+        assert_that(_matches_shape(spec, exceptions)).is_equal_to(self._pairs_somehow(spec, exceptions))
+
+    @given(
+        spec=st.lists(st.sampled_from([ValueError, KeyError, TypeError, Exception]), min_size=1, max_size=6),
+        kinds=st.lists(_KINDS, min_size=1, max_size=6),
+        data=st.data(),
+    )
+    @settings(max_examples=300)
+    def test_the_verdict_does_not_depend_on_the_order_either_side_is_written(self, spec, kinds, data):
+        """The claim is about the shape, so rewriting it in another order has to answer the same.
+
+        This is the property a greedy pairing fails: `pytest.RaisesGroup` accepts one spelling of a spec
+        and refuses the other on the same group.
+        """
+        exceptions = tuple(kind("x") for kind in kinds)
+        verdict = _matches_shape(spec, exceptions)
+        assert_that(_matches_shape(data.draw(st.permutations(spec)), exceptions)).is_equal_to(verdict)
+        assert_that(_matches_shape(spec, tuple(data.draw(st.permutations(exceptions))))).is_equal_to(verdict)
 
 
 _LEAVES = st.one_of(

@@ -870,5 +870,5 @@ See [Errors & Reporting](errors.md) for the full set:
 
 - [expected exceptions](errors.md#expected-exceptions) and [warnings](errors.md#expected-warnings)
 - the cause chain (`caused_by()`, `has_root_cause()`) and exception groups (`contains_error()`,
-  `does_not_contain_error()`, `errors()`, `error_of()`)
+  `does_not_contain_error()`, `matches_error_tree()`, `errors()`, `error_of()`)
 - pivoting to the raised exception (`raised()`) or the call's return value (`returned()`).

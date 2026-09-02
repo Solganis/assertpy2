@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._compat import BaseExceptionGroup
@@ -49,6 +50,166 @@ def _require_exception_type(ex: object) -> type[BaseException]:
     if not (isinstance(ex, type) and issubclass(ex, BaseException)):
         refuse(ex, "an exception type", subject=argument("exception"))
     return ex
+
+
+def _shaped(spec: object, at: str) -> object:
+    """Validate one node of a tree spec, returning it, and refuse anything the matcher cannot read.
+
+    A `list` is a subgroup and anything else has to be an exception type.  A `tuple` is refused by name:
+    elsewhere in this library a tuple of types means "any of these", and reading it as a subgroup here
+    would give one spelling two meanings.
+    """
+    if isinstance(spec, list):
+        if not spec:
+            refuse(
+                spec,
+                f"a non-empty subgroup at {at}, since a group with no members cannot be raised",
+                subject=argument("expected"),
+            )
+        return [_shaped(member, f"{at}[{index}]") for index, member in enumerate(spec)]
+    if isinstance(spec, tuple):
+        refuse(spec, f"a list for a subgroup at {at}, not a tuple", subject=argument("expected"))
+    return _require_exception_type(spec)
+
+
+def _matches_shape(spec: list[Any], exceptions: tuple[BaseException, ...]) -> bool:
+    """Whether every spec entry pairs with a distinct exception, and none is left over.
+
+    A complete matching rather than a greedy walk, and the difference is observable: pairing in the
+    order written makes `(Exception, ValueError)` refuse a group of `ValueError` and `KeyError` while
+    `(ValueError, Exception)` accepts it, so the same claim would depend on how it was typed.  Measured
+    against `pytest.RaisesGroup`, which does pair greedily and refuses the first spelling.
+
+    Recursion is over the *spec*, not the tree: a type entry stops the descent whatever is under it, so
+    the depth is what somebody wrote by hand rather than what a task group nested.
+    """
+    if len(spec) != len(exceptions):
+        return False
+    candidates = [
+        {
+            index
+            for index, exc in enumerate(exceptions)
+            if isinstance(exc, BaseExceptionGroup) and _matches_shape(entry, exc.exceptions)
+        }
+        if isinstance(entry, list)
+        else {index for index, exc in enumerate(exceptions) if isinstance(exc, entry)}
+        for entry in spec
+    ]
+    paired: dict[int, int] = {}
+    unpaired = []
+    for entry, options in enumerate(candidates):
+        free = next((index for index in options if index not in paired), None)
+        if free is None:
+            unpaired.append(entry)
+        else:
+            paired[free] = entry
+    return all(_augmented(entry, candidates, paired) for entry in unpaired)
+
+
+def _augmented(entry: int, candidates: list[set[int]], paired: dict[int, int]) -> bool:
+    """Whether one spec entry can be paired by displacing others, updating `paired` when it can.
+
+    Iterative, because the chain of displacements is as long as the spec is wide rather than as deep:
+    1100 entries of one type over 1100 exceptions of that type recursed past the limit and reported a
+    `RecursionError` for a group that matches.
+    """
+    seen: set[int] = set()
+    path: list[tuple[int, Iterator[int]]] = [(entry, iter(candidates[entry]))]
+    taken: list[int] = []
+    while path:
+        options = path[-1][1]
+        for index in options:
+            if index in seen:
+                continue
+            seen.add(index)
+            taken.append(index)
+            if index not in paired:
+                for step, (displaced, _) in reversed(list(enumerate(path))):
+                    paired[taken[step]] = displaced
+                return True
+            path.append((paired[index], iter(candidates[paired[index]])))
+            break
+        else:
+            path.pop()
+            if taken:
+                taken.pop()
+    return False
+
+
+def _naming(spec: list[Any], exc: BaseException) -> dict[int, str]:
+    """A name per class across both halves of the message, distinct however alike the classes are.
+
+    Two classes called `Error` from different modules otherwise render a mismatch as two identical trees,
+    which reads as the assertion contradicting itself.  Qualifying is enough for those and is applied only
+    where the short names collide, following `_disambiguated`: the common case keeps the short name.
+
+    Module and qualified name do not settle it either.  A class defined inside a function has both fixed,
+    so two calls to that function give two classes indistinguishable by name, and a reloaded module gives
+    the same.  Those get an ordinal, ordered by where they were met rather than by identity, since a set
+    of classes iterates differently between runs and a failure message has to read the same twice.
+
+    Keyed by `id`, because a class is only usually hashable: a metaclass setting `__hash__ = None` turned
+    the failure into a `TypeError`, where the other three group assertions reported it and carried on.
+    """
+
+    def in_spec(entries: list[Any]) -> Iterator[type]:
+        for entry in entries:
+            yield from in_spec(entry) if isinstance(entry, list) else (cast("type", entry),)
+
+    kinds: dict[int, type] = {}
+    for kind in in_spec(spec):
+        kinds.setdefault(id(kind), kind)
+    for node in _nodes(exc):
+        kinds.setdefault(id(type(node)), type(node))
+    short = Counter(kind.__name__ for kind in kinds.values())
+    qualified = {
+        key: f"{kind.__module__}.{kind.__qualname__}" if short[kind.__name__] > 1 else kind.__name__
+        for key, kind in kinds.items()
+    }
+    still_alike = Counter(qualified.values())
+    ordinals: Counter[str] = Counter()
+    names = {}
+    for key, label in qualified.items():
+        ordinals[label] += 1
+        names[key] = label if still_alike[label] == 1 else f"{label}#{ordinals[label]}"
+    return names
+
+
+def _shape_of(exc: BaseException, names: dict[int, str]) -> str:
+    """The tree as names, for the message: a group becomes a bracketed list of what it holds.
+
+    Built as text rather than as a list of strings, because the list would print its names in quotes and
+    a reader comparing two trees would be reading around them.
+
+    Iterative, because this runs on the failure path over a tree the program under test built rather than
+    over anything written by hand: a group 3000 deep turned the assertion into a `RecursionError`.
+
+    Emitted as pieces joined once, rather than as each node's finished text, because the latter has every
+    ancestor holding a copy of its child: 16000 deep cost 123 ms and 258 MB of peak for 32 KB of output.
+    """
+    pieces: list[str] = []
+    pending: list[BaseException | str] = [exc]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, str):
+            pieces.append(node)
+        elif isinstance(node, BaseExceptionGroup):
+            pieces.append("[")
+            pending.append("]")
+            for position, member in enumerate(reversed(node.exceptions)):
+                if position:
+                    pending.append(", ")
+                pending.append(member)
+        else:
+            pieces.append(names[id(type(node))])
+    return "".join(pieces)
+
+
+def _spec_shape(spec: object, names: dict[int, str]) -> str:
+    """The same rendering for a spec, so the two halves of the message line up."""
+    if isinstance(spec, list):
+        return f"[{', '.join(_spec_shape(entry, names) for entry in spec)}]"
+    return names[id(spec)]
 
 
 def _escaped(exc: BaseException) -> bool:
@@ -423,6 +584,57 @@ class ExceptionMixin(_MixinBase):
         pivoted = self.builder(str(found), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = found
         return pivoted
+
+    def matches_error_tree(self, *expected: type | list[Any]) -> Self:
+        """Asserts the caught group holds exactly these exceptions, in exactly this nesting.
+
+        The question [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error] does not ask.
+        That one searches the whole tree for a type and says nothing about how many others there are or
+        how deep it sat, so a group that grew an extra failure, or one whose members moved into a
+        subgroup, still passes it.  This one reads the shape.
+
+        A `list` is a subgroup and a type is one exception, so `(ValueError, [KeyError])` means a group of
+        two members whose second is a subgroup holding one `KeyError`.  A type matches by `isinstance`,
+        the way the rest of the family does, so `Exception` matches a subgroup node as readily as a leaf,
+        and stops there: only a nested list looks inside one, and what a matched subgroup holds is unsaid.
+
+        Order is not part of the shape.  Whoever raised the group usually did not choose it: an
+        `asyncio.TaskGroup` reports its failures in the order the tasks finished.
+
+        Examples:
+            Usage:
+
+                assert_that(run_tasks).raises(ExceptionGroup).when_called_with().matches_error_tree(
+                    ValueError, [KeyError, KeyError]
+                )
+
+        Args:
+            *expected: one entry per member of the group, a type for an exception and a list for a
+                subgroup
+
+        Returns:
+            AssertionBuilder: this instance, to chain further assertions on the group
+
+        Raises:
+            ValueError: if called with no entries at all, as the rest of the family does
+            TypeError: if an entry is neither an exception class nor a list, or is an empty list, which
+                is a group with no members and cannot be raised
+        """
+        if not expected:
+            raise ValueError("one or more args must be given")
+        spec = [_shaped(entry, f"[{index}]") for index, entry in enumerate(expected)]
+        exc = self._require_group("matches_error_tree")
+        if exc is None:
+            return cast("Self", _InertBuilder())
+        if not _matches_shape(spec, exc.exceptions):
+            names = _naming(spec, exc)
+            self.error(
+                f"Expected the raised exception group to match <{_spec_shape(spec, names)}>,"
+                f" but it was <{_shape_of(exc, names)}>.",
+                expected=spec,
+            )
+            return cast("Self", _InertBuilder())
+        return self
 
     def _require_group(self, method: str) -> Any:
         """The caught exception as a group, or ``None`` after reporting that it was not one.

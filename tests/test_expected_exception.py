@@ -621,3 +621,204 @@ class TestAnInterruptIsNotAMismatch:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(boom).raises(ValueError).when_called_with()
         assert_that(str(exc_info.value)).contains("but raised <TypeError>")
+
+
+@needs_groups
+class TestMatchesErrorTree:
+    """The shape of the group, which `contains_error` deliberately says nothing about.
+
+    That one searches the whole tree for a type, so a group that grew a third failure, or one whose
+    members moved into a subgroup, still passes it. These read the tree.
+    """
+
+    def test_the_flat_shape_matches(self):
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(ValueError, KeyError)
+
+    def test_order_is_not_part_of_the_shape(self):
+        """An `asyncio.TaskGroup` reports its failures in the order the tasks finished, not a chosen one."""
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(KeyError, ValueError)
+
+    def test_the_nested_shape_matches(self):
+        assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+            ValueError, [TypeError]
+        )
+
+    def test_a_flat_spec_refuses_a_nested_group(self):
+        """The gap this exists for: `contains_error(ValueError, TypeError)` passes on this very group."""
+        assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with().contains_error(
+            ValueError, TypeError
+        )
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+                ValueError, TypeError
+            )
+        assert_that(str(exc_info.value)).contains("[ValueError, TypeError]", "[ValueError, [TypeError]]")
+
+    def test_a_nested_spec_refuses_a_flat_group(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+                ValueError, [KeyError]
+            )
+        assert_that(str(exc_info.value)).contains("[ValueError, [KeyError]]")
+
+    def test_an_extra_exception_refuses(self):
+        def raise_three():
+            raise _ExceptionGroup("boom", [ValueError("v"), KeyError("k"), TypeError("t")])
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_three).raises(_ExceptionGroup).when_called_with().matches_error_tree(ValueError, KeyError)
+        assert_that(str(exc_info.value)).contains("[ValueError, KeyError, TypeError]")
+
+    def test_a_type_matches_a_subgroup_node(self):
+        """`isinstance` is what the rest of the family uses, and a group is an exception."""
+        assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+            ValueError, Exception
+        )
+
+    @pytest.mark.parametrize(
+        "spec",
+        [(Exception, ValueError), (ValueError, Exception)],
+        ids=["the wide entry written first", "written second"],
+    )
+    def test_the_verdict_does_not_depend_on_how_the_spec_is_ordered(self, spec):
+        """A complete matching, not a greedy walk.
+
+        Measured against `pytest.RaisesGroup`, which pairs greedily: it accepts the second spelling and
+        refuses the first, on the same group.
+        """
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(*spec)
+
+    def test_two_of_one_type_need_two_of_them(self):
+        with pytest.raises(AssertionError):
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+                ValueError, ValueError
+            )
+
+    def test_a_deep_tree_matches_entry_for_entry(self):
+        def raise_deep():
+            raise _ExceptionGroup("l0", [_ExceptionGroup("l1", [_ExceptionGroup("l2", [ValueError("v")])])])
+
+        assert_that(raise_deep).raises(_ExceptionGroup).when_called_with().matches_error_tree([[ValueError]])
+
+    def test_a_type_entry_leaves_the_subgroup_it_matches_unconstrained(self):
+        def raise_nested():
+            raise _ExceptionGroup("failed", [_ExceptionGroup("inner", [ValueError("a"), KeyError("b")])])
+
+        assert_that(raise_nested).raises(_ExceptionGroup).when_called_with().matches_error_tree(Exception)
+
+    def test_two_classes_of_one_name_are_told_apart_in_the_message(self):
+        expected = type("Error", (Exception,), {"__module__": "service.first"})
+        raised = type("Error", (Exception,), {"__module__": "service.second"})
+
+        def raise_theirs():
+            raise _ExceptionGroup("failed", [raised("b")])
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_theirs).raises(_ExceptionGroup).when_called_with().matches_error_tree(expected)
+        assert_that(str(exc_info.value)).contains("<[service.first.Error]>", "<[service.second.Error]>")
+
+    def test_two_classes_alike_to_the_qualified_name_get_an_ordinal(self):
+        def make_error():
+            class Error(Exception):
+                pass
+
+            return Error
+
+        expected, raised = make_error(), make_error()
+
+        def raise_theirs():
+            raise _ExceptionGroup("failed", [raised("b")])
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_theirs).raises(_ExceptionGroup).when_called_with().matches_error_tree(expected)
+        assert_that(str(exc_info.value)).contains("Error#1]>", "Error#2]>")
+
+    def test_an_unhashable_class_is_still_named(self):
+        """A metaclass can refuse to be hashed, and the message still has to arrive.
+
+        The other three group assertions report against such a class and carry on, so this one raising
+        `TypeError` instead would be the family disagreeing with itself.
+        """
+        raised = type("Unhashable", (type,), {"__hash__": None})("Error", (Exception,), {})
+
+        def raise_theirs():
+            raise _ExceptionGroup("failed", [raised("w")])
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_theirs).raises(_ExceptionGroup).when_called_with().matches_error_tree(ValueError)
+        assert_that(str(exc_info.value)).contains("<[ValueError]>", "<[Error]>")
+
+    def test_two_classes_equal_to_each_other_are_still_told_apart(self):
+        collapsing = type("Collapsing", (type,), {"__eq__": lambda cls, other: True, "__hash__": lambda cls: 0})
+        expected = collapsing("Error", (Exception,), {"__module__": "svc"})
+        raised = collapsing("Error", (Exception,), {"__module__": "svc"})
+
+        def raise_theirs():
+            raise _ExceptionGroup("failed", [raised("w")])
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_theirs).raises(_ExceptionGroup).when_called_with().matches_error_tree(expected)
+        assert_that(str(exc_info.value)).contains("<[svc.Error#1]>", "<[svc.Error#2]>")
+
+    def test_a_name_nothing_collides_with_stays_short(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+                TypeError, TypeError
+            )
+        assert_that(str(exc_info.value)).contains("<[TypeError, TypeError]>", "<[ValueError, KeyError]>")
+
+    def test_a_wide_group_of_one_type_matches_entry_for_entry(self):
+        def raise_wide():
+            raise _ExceptionGroup("wide", [ValueError(str(index)) for index in range(1100)])
+
+        assert_that(raise_wide).raises(_ExceptionGroup).when_called_with().matches_error_tree(*[Exception] * 1100)
+
+    def test_a_mismatch_against_a_deep_tree_still_reports(self):
+        def raise_very_deep():
+            error: BaseException = ValueError("leaf")
+            for _ in range(3000):
+                error = _ExceptionGroup("nested", [error])
+            raise error
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(raise_very_deep).raises(_ExceptionGroup).when_called_with().matches_error_tree(ValueError)
+        assert_that(str(exc_info.value)).contains("[[[")
+
+    def test_no_arguments_is_refused(self):
+        with pytest.raises(ValueError, match="one or more args"):
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree()
+
+    @pytest.mark.parametrize(
+        ("spec", "expected"),
+        [
+            (("ValueError",), "an exception type"),
+            ((ValueError, (KeyError,)), "a list for a subgroup"),
+            ((ValueError, []), "a non-empty subgroup"),
+            ((ValueError, [42]), "an exception type"),
+        ],
+        ids=["a string", "a tuple", "an empty subgroup", "a bad type inside one"],
+    )
+    def test_a_malformed_spec_is_refused_before_the_group_is_read(self, spec, expected):
+        with pytest.raises(TypeError) as exc_info:
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(*spec)
+        assert_that(str(exc_info.value)).contains(expected)
+
+    def test_not_a_group_fails(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().matches_error_tree(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_not_a_group_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_config).raises(_ConfigError).when_called_with().matches_error_tree(ValueError)
+        assert_that(str(exc_info.value)).contains("to be an exception group")
+
+    def test_a_mismatch_soft_collects(self):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(TypeError)
+        assert_that(str(exc_info.value)).contains("to match <[TypeError]>")
+
+    def test_the_chain_continues_after_it_holds(self):
+        assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
+            ValueError, KeyError
+        ).errors().is_length(2)

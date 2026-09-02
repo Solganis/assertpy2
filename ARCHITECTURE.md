@@ -18,10 +18,10 @@ Most of it is not yours to edit:
 
 | file | protocols | declarations |
 |---|---|---|
-| `_engine/_typing.py` | 37 | 372 |
-| `_engine/_check_typing.py` | 29 | 310 |
+| `_engine/_typing.py` | 37 | 373 |
+| `_engine/_check_typing.py` | 29 | 311 |
 | `_engine/_builder_check_typing.py` | 1 | 311 |
-| `_engine/_capable_typing.py` | 8 | 183 |
+| `_engine/_capable_typing.py` | 8 | 184 |
 | `_engine/_poll_typing.py` | 2 | 731 |
 
 One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
