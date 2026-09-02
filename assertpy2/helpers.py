@@ -126,6 +126,27 @@ def _keyed_pair(value: object, other: object) -> tuple[MappingLike, MappingLike]
     return None if kept is None or kept_other is None else (kept, kept_other)
 
 
+def _informative(val: object, other: object, val_repr: str, other_repr: str, *, whole: bool) -> tuple[str, str]:
+    """The two shape-aware renderings, or plain reprs when the walk rendered both sides the same.
+
+    A value answering `keys()` and iterating empty, which is what a `MagicMock` does, made an unequal
+    pair read `<{}>` against `<{}>`, and at the top level the diff was empty too, so the failure said
+    nothing at all.  The shape guess is given up there the way `_dict_err` already gives it up for a
+    value it cannot walk by key.
+
+    Only when the halves rendered were the *whole* values.  Under `ignore`, `include` or a compare
+    config they are a projection, and printing the originals put an ignored key back into the message:
+    two values differing in a leaf whose repr is the same on both sides render alike, and the fallback
+    then printed the key the caller had asked to keep out of the log.
+
+    Compared before truncating and truncated after, since two values agreeing for the first 4000
+    characters collide once cut, and the untruncated fallback then printed both in full.
+    """
+    if whole and val_repr == other_repr:
+        return _truncated(_safe_repr(val)), _truncated(_safe_repr(other))
+    return _truncated(val_repr), _truncated(other_repr)
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -400,8 +421,13 @@ class HelpersMixin(_MixinBase):
             reported_other = self._selected_keys_only(keyed[1], ignore, include)
             diff_entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
             diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
-            val_repr = _truncated(_dict_repr(reported_val, reported_other))
-            other_repr = _truncated(_dict_repr(reported_other, reported_val))
+            val_repr, other_repr = _informative(
+                val,
+                other,
+                _dict_repr(reported_val, reported_other),
+                _dict_repr(reported_other, reported_val),
+                whole=ignore is None and include is None and config is None,
+            )
         else:
             # the shape said keyed and the value is not, so the richer message is the thing given up here
             diff = None

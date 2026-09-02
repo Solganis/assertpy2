@@ -939,3 +939,72 @@ def test_a_nested_filter_reads_the_value_once():
         assert_that({"outer": Drifting()}).is_equal_to({"outer": {"keep": 9}}, ignore=("outer", "drop"))
 
     assert_that(str(failure.value)).contains("keep")
+
+
+def test_a_value_the_shape_walk_renders_as_its_counterpart_falls_back_to_its_repr():
+    """A `MagicMock` answers `keys()` and iterates empty, so the walk rendered an unequal pair alike.
+
+    `Expected <{}> to be equal to <{}>, but was not.` is a message that contradicts itself, and at the
+    top level the structured diff was empty as well, so the failure carried nothing a reader could act
+    on.  The shape guess is given up there, exactly as it is for a value that cannot be walked at all.
+    """
+    with pytest.raises(AssertionError) as failure:
+        assert_that(mock.MagicMock()).is_equal_to({})
+    assert_that(str(failure.value)).contains("MagicMock").does_not_contain("<{}> to be equal to <{}>")
+
+
+def test_the_fallback_reads_the_same_from_either_side():
+    with pytest.raises(AssertionError) as failure:
+        assert_that({}).is_equal_to(mock.MagicMock())
+    assert_that(str(failure.value)).contains("MagicMock")
+
+
+def test_a_nested_one_is_named_where_it_sits():
+    """The nested case already had a correct diff and a headline that disagreed with it."""
+    with pytest.raises(AssertionError) as failure:
+        assert_that({"k": mock.MagicMock()}).is_equal_to({"k": {}})
+    assert_that(str(failure.value).splitlines()[0]).contains("'k': <MagicMock", "to be equal to <{'k': {}}>")
+
+
+def test_two_ordinary_mappings_keep_the_shape_aware_rendering():
+    """The fallback is for renderings that agree, and two unequal dicts do not produce one."""
+    with pytest.raises(AssertionError) as failure:
+        assert_that({"a": 1, "b": 2}).is_equal_to({"a": 1, "b": 3})
+    assert_that(str(failure.value).splitlines()[0]).contains("'b': 2", "'b': 3")
+
+
+class _Alike:
+    """Two of these are unequal and read the same, which is what makes a projection render alike."""
+
+    def __init__(self, tag):
+        self.tag = tag
+
+    def __repr__(self):
+        return "same"
+
+    def __eq__(self, other):
+        return isinstance(other, _Alike) and other.tag == self.tag
+
+    def __hash__(self):
+        return hash(self.tag)
+
+
+def test_the_fallback_does_not_put_an_ignored_key_back_into_the_message():
+    """`ignore` governs the report as well as the verdict, and the fallback has to honour that.
+
+    The halves rendered under a filter are a projection, so printing the originals when they read alike
+    hands back the key the caller asked to keep out of the log.
+    """
+    with pytest.raises(AssertionError) as failure:
+        assert_that({"secret": "sk-live-LEFT", "shown": _Alike("a")}).is_equal_to(
+            {"secret": "sk-live-RIGHT", "shown": _Alike("b")}, ignore="secret"
+        )
+    assert_that(str(failure.value)).does_not_contain("sk-live")
+
+
+def test_the_fallback_stays_inside_the_length_cap():
+    """Compared before truncating, or two values agreeing for the first 4000 characters collide once cut
+    and the untruncated fallback prints both in full."""
+    with pytest.raises(AssertionError) as failure:
+        assert_that({"a": "x" * 5000 + "L"}).is_equal_to({"a": "x" * 5000 + "R"})
+    assert_that(str(failure.value).splitlines()[0]).contains("more chars)")
