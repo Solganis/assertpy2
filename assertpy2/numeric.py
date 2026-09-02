@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, SupportsFloat, SupportsIndex
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare
-from ._engine._require import _shown, argument, refuse, require_type
+from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -23,18 +23,30 @@ def _fmt_operand(value: object) -> object:
 
 
 def _is_nan(value) -> bool:
-    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN)."""
+    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
+
+    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
+    `is_not_nan()` held on a value nothing could read.
+    """
     try:
         return math.isnan(value)
-    except OverflowError:
+    except OverflowError as exc:
+        if raised_inside(exc):
+            raise
         return False
 
 
 def _is_inf(value) -> bool:
-    """`math.isinf` guarded so a bignum int/Decimal that overflows float reports False (never infinite)."""
+    """`math.isinf` guarded so a bignum int/Decimal that overflows float reports False (never infinite).
+
+    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
+    `is_not_inf()` held on a value nothing could read.
+    """
     try:
         return math.isinf(value)
-    except OverflowError:
+    except OverflowError as exc:
+        if raised_inside(exc):
+            raise
         return False
 
 

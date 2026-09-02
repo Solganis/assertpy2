@@ -1,4 +1,5 @@
 import math
+import numbers
 
 import pytest
 
@@ -44,6 +45,31 @@ def test_is_not_zero_bad_type_failure():
 def test_is_nan():
     assert_that(float("NaN")).is_nan()
     assert_that(float("Inf") - float("Inf")).is_nan()
+
+
+class _BrokenFloat:
+    """Accepted as a real number and unreadable as one, which is the shape the guard had to tell apart."""
+
+    def __float__(self) -> float:
+        raise OverflowError("my __float__ is broken")
+
+    def __repr__(self) -> str:
+        return "<BrokenFloat>"
+
+
+numbers.Real.register(_BrokenFloat)
+
+
+@pytest.mark.parametrize("question", ["is_nan", "is_not_nan", "is_inf", "is_not_inf"])
+def test_a_float_conversion_of_their_own_that_raises_is_not_an_answer(question):
+    """The guard for a bignum swallowed an `OverflowError` from the value's own `__float__` as well.
+
+    Swallowed, `is_not_nan()` and `is_not_inf()` held on a value nothing could read, which is an error
+    in the value reported as a verdict.  Told apart by where the traceback stops, the way the ordering
+    and matcher paths already tell it apart.
+    """
+    with pytest.raises(OverflowError, match="my __float__ is broken"):
+        getattr(assert_that(_BrokenFloat()), question)()
 
 
 def test_bignum_int_does_not_overflow_nan_inf_guards():
