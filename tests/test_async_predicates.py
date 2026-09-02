@@ -7,6 +7,13 @@ places that take a callable went green on a predicate that always answers `False
 The refusal is asked of the answer rather than of the callable, so a lambda handing one back is caught
 as well, and it carries its own exception type because several assertions catch `TypeError` from a probe
 on purpose and would otherwise report the mistake as an ordinary non-match.
+
+The same mistake reaches the *value* side, and this file covers that too: `assert_that(fetch())` on a
+forgotten `await` used to satisfy `is_true()` whatever awaiting it would have answered.
+
+The neighbouring shapes live with their own subjects rather than here: a value whose `__bool__` or
+`__eq__` raises in `test_equals.py` and `test_evaluation_core.py`, one whose `repr` raises in
+`test_refusals.py`, and an awaitable handed to `eventually_sync` as a probe in `test_sync_eventually.py`.
 """
 
 from __future__ import annotations
@@ -155,3 +162,34 @@ def test_an_ordinary_type_error_from_a_predicate_still_means_no_match() -> None:
         return value > 0  # ty: ignore[unsupported-operator]  # TypeError on the text
 
     assert_that(["ab", 1]).satisfies_exactly_in_any_order(only_sized, only_number)
+
+
+_TRUTH_READS = {"is_true": lambda builder: builder.is_true(), "is_false": lambda builder: builder.is_false()}
+
+
+@pytest.mark.parametrize("read", _TRUTH_READS.values(), ids=_TRUTH_READS.keys())
+def test_a_coroutine_handed_in_as_the_value_is_refused(read) -> None:
+    """The predicate guard read the answer; nothing read the value the assertion was built on.
+
+    Every coroutine is truthy, so `assert_that(fetch()).is_true()` held whatever `await fetch()` would
+    have answered, and the mirror refused for the same wrong reason.  `eventually_sync` already refuses
+    an awaitable probe by name, so one API over the same mistake was already a usage error.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with pytest.raises(CoroutineVerdictError) as refusal:
+            read(assert_that(_never(1)))
+    assert_that(str(refusal.value)).contains("handed back a coroutine", "await the call yourself")
+
+
+def test_an_assertion_that_is_answering_about_the_object_is_left_alone() -> None:
+    """Only the truthiness reads are guarded, because only they cannot mean anything about a coroutine.
+
+    `is_callable()` and `is_iterable()` answer correctly: a coroutine is neither.  Guarding those would
+    refuse a test that is deliberately asserting about the object it was handed.
+    """
+    coroutine = _never(1)
+    try:
+        assert_that(coroutine).is_not_callable().is_not_iterable().is_not_none()
+    finally:
+        coroutine.close()

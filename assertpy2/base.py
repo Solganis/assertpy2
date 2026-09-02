@@ -17,7 +17,7 @@ from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
-from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len
+from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
 from ._satisfies import SatisfiesMixin
 from .errors import _disambiguated, _truncated, _type_expression_name
@@ -465,8 +465,10 @@ class BaseMixin(SatisfiesMixin):
 
         Raises:
             AssertionError: if val **is** false
+            TypeError: if val is a coroutine, since every coroutine is truthy and this would hold
+                whatever awaiting it would have answered
         """
-        if not self.val:
+        if not verdict(self.val, subject="the call under test"):
             return self.error(f"Expected <{self.val}> to be <True>, but was not.", expected=True)
         return self
 
@@ -490,8 +492,10 @@ class BaseMixin(SatisfiesMixin):
 
         Raises:
             AssertionError: if val **is** true
+            TypeError: if val is a coroutine, since every coroutine is truthy and this would refuse
+                whatever awaiting it would have answered
         """
-        if self.val:
+        if verdict(self.val, subject="the call under test"):
             return self.error(f"Expected <{self.val}> to be <False>, but was not.", expected=False)
         return self
 
