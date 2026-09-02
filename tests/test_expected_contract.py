@@ -20,7 +20,7 @@ import pathlib
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import assert_that, match
 from assertpy2.errors import AssertionFailure
 
 _STAMP = datetime.datetime(2026, 2, 1)
@@ -171,6 +171,95 @@ def test_the_value_it_names_is_the_one_it_was_measured_against(call, expected) -
     with pytest.raises(AssertionFailure) as failure:
         call()
     assert_that(failure.value.expected).is_equal_to(expected)
+
+
+_MATCHER = match.greater_than(10)
+
+
+def _leaves(expected: object) -> list[object]:
+    """The expected side flattened one level, since a family may carry one operand or a collection."""
+    if isinstance(expected, dict):
+        return list(expected.values())
+    if isinstance(expected, (list, tuple)):
+        return list(expected)
+    return [expected]
+
+
+_CARRIES_THE_OPERAND = {
+    "is_equal_to": lambda: assert_that(5).is_equal_to(_MATCHER),
+    "contains": lambda: assert_that([5]).contains(_MATCHER),
+    "matches_structure": lambda: assert_that({"n": 5}).matches_structure({"n": _MATCHER}),
+}
+
+_CARRIES_A_DESCRIPTION = {
+    "satisfies": lambda: assert_that(5).satisfies(_MATCHER),
+    "each": lambda: assert_that([5]).each(_MATCHER),
+    "all_satisfy": lambda: assert_that([5]).all_satisfy(_MATCHER),
+    "any_satisfy": lambda: assert_that([5]).any_satisfy(_MATCHER),
+    "all_fields_satisfy": lambda: assert_that({"n": 5}).all_fields_satisfy(_MATCHER),
+    "has_no_none_fields": lambda: assert_that({"n": None}).has_no_none_fields(),
+    "satisfies_exactly": lambda: assert_that([5]).satisfies_exactly(_MATCHER),
+    "satisfies_exactly_in_any_order": lambda: assert_that([5]).satisfies_exactly_in_any_order(_MATCHER),
+}
+
+_NAMES_NOTHING = {"none_satisfy": lambda: assert_that([50]).none_satisfy(_MATCHER)}
+
+
+@pytest.mark.parametrize(
+    ("call", "carries_the_object"),
+    [
+        *((call, True) for call in _CARRIES_THE_OPERAND.values()),
+        *((call, False) for call in _CARRIES_A_DESCRIPTION.values()),
+    ],
+    ids=[*_CARRIES_THE_OPERAND, *_CARRIES_A_DESCRIPTION],
+)
+def test_what_each_matcher_family_puts_in_expected(call, carries_the_object) -> None:
+    """The split the stability page documents, held by a test rather than by intention.
+
+    Three families carry the matcher you passed and four carry its rendered description, and nothing in
+    the failure says which. Making them uniform was measured and refused: a matcher in `expected` changes
+    the Allure attachment shape, which is a versioned wire format, and compares as a predicate.
+
+    Identity rather than equality on purpose. `assert_that(expected).is_equal_to(_MATCHER)` would ask the
+    matcher about the matcher, which is the trap the page warns about.
+    """
+    with pytest.raises(AssertionFailure) as failure:
+        call()
+    leaves = _leaves(failure.value.expected)
+    if carries_the_object:
+        assert_that(any(leaf is _MATCHER for leaf in leaves)).described_as("carries the matcher").is_true()
+    else:
+        assert_that([type(leaf) for leaf in leaves]).described_as("carries descriptions").is_equal_to(
+            [str] * len(leaves)
+        )
+
+
+@pytest.mark.parametrize("call", _NAMES_NOTHING.values(), ids=_NAMES_NOTHING.keys())
+def test_an_assertion_naming_no_expectation_says_so(call) -> None:
+    """The third row of the table.  Which assertions belong in it is settled above by the source walk.
+
+    `filtered_on` looked like one and is not: it never fails, so the failure a chain after it produces
+    belongs to whatever came next and carries that assertion's expected value.
+    """
+    with pytest.raises(AssertionFailure) as failure:
+        call()
+    assert_that(failure.value.has_expected).described_as("has_expected").is_false()
+    assert_that(failure.value.expected).is_none()
+
+
+def test_an_assertion_taking_both_an_operand_and_a_predicate_names_the_operand() -> None:
+    """`zip_satisfies` is the one that takes both, and the operand is what the values were measured against."""
+    other = [5]
+    with pytest.raises(AssertionFailure) as failure:
+        assert_that([5]).zip_satisfies(other, lambda left, right: left > 10)
+    assert_that(failure.value.expected is other).described_as("carries the operand itself").is_true()
+
+
+def test_a_matcher_in_expected_compares_as_a_predicate() -> None:
+    """The trap that made uniformity unattractive, pinned so it is a decision and not a surprise."""
+    with pytest.raises(AssertionFailure) as failure:
+        assert_that(5).is_equal_to(_MATCHER)
+    assert_that(failure.value.expected == 50).described_as("greater_than(10) asked about 50").is_true()
 
 
 def test_no_entry_is_excusing_something_that_no_longer_happens() -> None:

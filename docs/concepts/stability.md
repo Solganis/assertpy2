@@ -29,13 +29,29 @@ rather than for the rendered text:
 
 | You want | Use |
 |---|---|
-| the values that were compared | `failure.actual`, `failure.expected` |
+| the value under test, and what it was measured against | `failure.actual`, `failure.expected` |
 | where they differ | `failure.diff.entries`, each with a `path` |
 | a location you can walk in code | [`entry.steps`](../guides/errors.md#paths-a-program-can-follow) |
 | every failure a soft block collected | `failure.failures` |
 | a verdict without an exception | [`check()`](../guides/errors.md#asking-instead-of-asserting) |
 
 Those fields are covered by the table above.
+
+**What `expected` holds depends on the family**, and the difference matters if you read it:
+
+| family | `expected` |
+|---|---|
+| assertions taking an operand: `is_equal_to`, `contains`, `is_instance_of`, `is_between` and the rest | what the value was measured against, a matcher included: usually the operand itself, a tuple where the assertion takes several, and the derived form where it derives one (`has_same_size_as` names the length, `contains_entry` the normalised entries) |
+| assertions taking a predicate: `satisfies`, `each`, `all_satisfy`, `any_satisfy`, `all_fields_satisfy`, `has_no_none_fields`, `satisfies_exactly` and its any-order twin | the predicate's **description**, a rendered string |
+| assertions whose claim is a negation, such as `none_satisfy` | `None`, and `has_expected` is `False` |
+
+An assertion taking both an operand and a predicate carries the operand: `zip_satisfies(other, predicate)`
+names `other` itself, since that is what the values were measured against.
+
+A description is wording, so it moves under the same rule as the message: read it to show a person, not
+to branch on. Where a matcher object is carried, remember that a matcher compares as a *predicate*, so
+`failure.expected == 50` asks the matcher about `50` rather than comparing two values. Use `is`, or read
+`describe()`.
 
 **Message wording is not.** It improves in minor releases, so a `pytest.raises(match=...)` written
 against our phrasing, or a snapshot of a failing run, is the one thing that predictably needs updating.
