@@ -60,6 +60,20 @@ assert_that(50).satisfies(complex_check)
 assert_that(-1).satisfies(complex_check)
 ```
 
+A failure reports the part that failed, not the whole expression, and each part keeps the reason its own
+matcher gave:
+
+<!-- docs-guard: raises -->
+```python
+assert_that(50).satisfies(match.is_instance_of(str) & match.contains("z"))
+# Expected (an instance of <str> and a collection containing 'z'), but <50> did not satisfy:
+# an instance of <str> (was <50> of type <int>), a collection containing 'z' (was <50>, which cannot be searched).
+```
+
+Under `|` every alternative is reported, each narrowed to what failed inside it. For `<50>` against
+`(> 0 and < 10) or (> 100 and < 200)` that is `a value less than <10> (was <50>) or a value greater than
+<100> (was <50>)`, rather than both branches restated whole.
+
 ## Drop-in with plain `==`
 
 Matchers implement `__eq__`, so they work with a bare `assert` and pytest introspection, with no

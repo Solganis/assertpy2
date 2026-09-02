@@ -110,7 +110,14 @@ def _has_own_evaluate(matcher: object) -> bool:
 
     `getattr` with a default rather than an attribute access: a duck-typed matcher satisfies the
     protocol with three methods and need not have `evaluate` at all.
+
+    A composite answers for what it holds rather than for its own class, since it walks a value only as
+    far as its parts do.  Asked by class, `greater_than(0) & less_than(10)` would take the one-call path
+    for nothing and pay a `MatchResult` and a recursive `describe()` per structural leaf: 0.35 ms became
+    0.75 ms over 200 records.
     """
+    if isinstance(matcher, (AllOfMatcher, AnyOfMatcher, NotMatcher)):
+        return matcher.walks_its_value
     return getattr(type(matcher), "evaluate", BaseMatcher.evaluate) is not BaseMatcher.evaluate
 
 
@@ -243,11 +250,36 @@ class BaseMatcher:
         return self.describe()
 
 
+def _failure(matcher: Matcher[Any], value: object) -> str | None:
+    """Why *matcher* turned *value* down, or `None` when it held.
+
+    What this recovers is the reason.  The composites used to list what a failing child *requires* and
+    drop what the child had computed about the value, so `an instance of <str>` arrived where the child
+    would have said `was <50> of type <int>`.  A composite answers for its own failing part, so a nested
+    one reaches a leaf rather than restating a sub-expression `describe()` has already shown.
+
+    One look per leaf, through `evaluate()` where the leaf has its own, for the reason in `_refused`: a
+    matcher over a one-shot value answers a second call from what the first walk left.
+    """
+    if isinstance(matcher, (AllOfMatcher, AnyOfMatcher, NotMatcher)):
+        held, failure = matcher.decide(value)
+        return None if held else failure or matcher.describe()
+    if _has_own_evaluate(matcher):
+        outcome = cast("BaseMatcher", matcher).evaluate(value)
+    elif verdict(matcher.matches(value), subject="the matcher"):
+        return None
+    else:
+        outcome = _refused(matcher, value)
+    return None if outcome.matched else f"{outcome.description} ({outcome.mismatch})"
+
+
 class AllOfMatcher(BaseMatcher):
     """Matches when all sub-matchers match (``&`` operator)."""
 
     def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
+        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
+        """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
         return all(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
@@ -255,9 +287,26 @@ class AllOfMatcher(BaseMatcher):
     def describe(self) -> str:
         return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
 
+    def decide(self, value: Any) -> tuple[bool, str]:
+        """The verdict and the reason from one pass, so the two cannot disagree.
+
+        Deriving the verdict from whether there was a reason instead read a satisfied child as a failure
+        and, on a matcher answering two calls differently, an unsatisfied one as a pass.
+        """
+        failed = [why for one in self.matchers if (why := _failure(one, value)) is not None]
+        return not failed, ", ".join(failed)
+
+    def evaluate(self, value: Any) -> MatchResult:
+        held, failure = self.decide(value)
+        if held:
+            return MatchResult(matched=True, description=self.describe())
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value, failure))
+
     def describe_mismatch(self, value: Any) -> str:
-        failed = [one for one in self.matchers if not verdict(one.matches(value), subject="the matcher")]
-        return f"<{value}> did not satisfy: {', '.join(matcher.describe() for matcher in failed)}"
+        return self._line(value, self.decide(value)[1])
+
+    def _line(self, value: Any, failure: str) -> str:
+        return f"<{value}> did not satisfy: {failure or self.describe()}"
 
 
 class AnyOfMatcher(BaseMatcher):
@@ -265,6 +314,8 @@ class AnyOfMatcher(BaseMatcher):
 
     def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
+        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
+        """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
         return any(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
@@ -272,8 +323,27 @@ class AnyOfMatcher(BaseMatcher):
     def describe(self) -> str:
         return f"({' or '.join(matcher.describe() for matcher in self.matchers)})"
 
+    def decide(self, value: Any) -> tuple[bool, str]:
+        """Held as soon as one alternative holds, and otherwise every alternative with its own reason."""
+        reasons = []
+        for one in self.matchers:
+            why = _failure(one, value)
+            if why is None:
+                return True, ""
+            reasons.append(why)
+        return False, " or ".join(reasons)
+
+    def evaluate(self, value: Any) -> MatchResult:
+        held, failure = self.decide(value)
+        if held:
+            return MatchResult(matched=True, description=self.describe())
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value, failure))
+
     def describe_mismatch(self, value: Any) -> str:
-        return f"<{value}> satisfied none of: {', '.join(matcher.describe() for matcher in self.matchers)}"
+        return self._line(value, self.decide(value)[1])
+
+    def _line(self, value: Any, failure: str) -> str:
+        return f"<{value}> satisfied none of: {failure or self.describe()}"
 
 
 class NotMatcher(BaseMatcher):
@@ -281,6 +351,8 @@ class NotMatcher(BaseMatcher):
 
     def __init__(self, matcher: Matcher[Any]):
         self.matcher = matcher
+        self.walks_its_value: bool = _has_own_evaluate(matcher)
+        """Whether the wrapped matcher has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
         return not verdict(self.matcher.matches(value), subject="the matcher")
@@ -288,7 +360,20 @@ class NotMatcher(BaseMatcher):
     def describe(self) -> str:
         return f"not {self.matcher.describe()}"
 
+    def decide(self, value: Any) -> tuple[bool, str]:
+        """Held when the wrapped matcher refused.  What failed, otherwise, is that the wrapped one held."""
+        held = _failure(self.matcher, value) is not None
+        return held, "" if held else f"{self.describe()} (it matched)"
+
+    def evaluate(self, value: Any) -> MatchResult:
+        if self.decide(value)[0]:
+            return MatchResult(matched=True, description=self.describe())
+        return MatchResult(matched=False, description=self.describe(), mismatch=self._line(value))
+
     def describe_mismatch(self, value: Any) -> str:
+        return self._line(value)
+
+    def _line(self, value: Any) -> str:
         return f"<{value}> unexpectedly matched {self.matcher.describe()}"
 
 

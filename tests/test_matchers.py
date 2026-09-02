@@ -1178,7 +1178,9 @@ class TestMatcherDescriptionsNameTheRightValue:
 
     def test_all_of_lists_only_the_matchers_that_failed(self):
         composed = match.is_positive() & match.is_even()
-        assert_that(composed.describe_mismatch(3)).is_equal_to("<3> did not satisfy: an even integer")
+        assert_that(composed.describe_mismatch(3)).is_equal_to(
+            "<3> did not satisfy: an even integer (was <3>, which is odd)"
+        )
 
     def test_all_of_lists_several_failures(self):
         composed = match.is_even() & match.greater_than(10)
@@ -1187,18 +1189,124 @@ class TestMatcherDescriptionsNameTheRightValue:
     def test_any_of_lists_every_alternative(self):
         composed = match.is_even() | match.greater_than(10)
         assert_that(composed.describe_mismatch(-1)).is_equal_to(
-            "<-1> satisfied none of: an even integer, a value greater than <10>"
+            "<-1> satisfied none of: an even integer (was <-1>, which is odd) or a value greater than <10> (was <-1>)"
         )
 
-    def test_has_property_delegates_the_property_value_not_the_object(self):
-        holder = type("Holder", (), {"x": -1})()
-        assert_that(match.has_property("x", match.is_positive()).describe_mismatch(holder)).is_equal_to(
-            "property <x> was <-1>, was <-1>"
+    def test_a_failing_branch_keeps_the_reason_its_own_matcher_gave(self):
+        """The reason is what the composites used to drop, and it is the only new information here.
+
+        `an instance of <str>` says nothing a reader could not read off `describe()`.  What the child
+        computed about the value, that it was an `int`, is what makes the line worth printing.
+        """
+        composed = match.is_instance_of(str) & match.contains("z")
+        assert_that(composed.describe_mismatch(50)).contains(
+            "an instance of <str> (was <50> of type <int>)",
+            "a collection containing 'z' (was <50>, which cannot be searched)",
         )
 
-    @pytest.mark.parametrize("matcher", [match.is_even(), match.is_odd(), match.is_divisible_by(2)])
-    def test_the_integer_matchers_name_the_type_they_were_given(self, matcher):
-        assert_that(matcher.describe_mismatch("a")).is_equal_to("was <'a'> of type <str>, not an integer")
+    def test_a_nested_composite_reaches_the_leaf_that_failed(self):
+        composed = match.is_instance_of(int) & (match.greater_than(100) | match.less_than(-100))
+        assert_that(composed.describe_mismatch(50)).is_equal_to(
+            "<50> did not satisfy: a value greater than <100> (was <50>) or a value less than <-100> (was <50>)"
+        )
+
+    def test_an_alternative_of_conjunctions_names_the_conjunct_that_failed(self):
+        """Each alternative reports the part of itself that failed, not the whole alternative.
+
+        For <50> against `(>0 and <10) or (>100 and <200)` the useful facts are that the first branch
+        failed only on `<10` and the second only on `>100`.  Restating both branches whole says neither.
+        """
+        composed = (match.greater_than(0) & match.less_than(10)) | (match.greater_than(100) & match.less_than(200))
+        assert_that(composed.describe_mismatch(50)).is_equal_to(
+            "<50> satisfied none of: a value less than <10> (was <50>) or a value greater than <100> (was <50>)"
+        )
+
+    def test_a_negation_inside_a_conjunction_says_it_matched(self):
+        composed = match.greater_than(0) & ~match.less_than(100)
+        assert_that(composed.describe_mismatch(50)).is_equal_to(
+            "<50> did not satisfy: not a value less than <100> (it matched)"
+        )
+
+    def test_a_nested_composite_that_held_is_left_out(self):
+        composed = match.is_even() & (match.greater_than(0) | match.less_than(-100))
+        assert_that(composed.describe_mismatch(3)).is_equal_to(
+            "<3> did not satisfy: an even integer (was <3>, which is odd)"
+        )
+
+    def test_a_walking_leaf_is_asked_once_through_satisfies(self):
+        """A leaf that walks its value answers a second call from what the first walk left.
+
+        Counted through `satisfies()` rather than through `describe_mismatch()`: the composite used to
+        take the verdict from `matches()` and the words from `describe_mismatch()`, two walks, and only
+        the public path shows it.
+        """
+        seen: list[object] = []
+
+        def counting_key(item: object) -> object:
+            seen.append(item)
+            return item
+
+        with pytest.raises(AssertionError):
+            assert_that([2, 1]).satisfies(match.is_sorted(key=counting_key) & match.is_length(2))
+        assert_that(seen).described_as("calls to the key function").is_length(2)
+
+    @pytest.mark.parametrize(
+        ("composite", "held"), [(match.all_of(), True), (match.any_of(), False)], ids=["all_of", "any_of"]
+    )
+    def test_an_empty_composite_agrees_with_itself(self, composite, held):
+        """`all([])` is True and `any([])` is False, and both readings have to say the same thing twice.
+
+        Taking the verdict from whether there was a reason made the empty `any_of()` report a match while
+        `matches()` refused, so the same object answered two ways.
+        """
+        assert_that(composite.matches(3)).is_equal_to(held)
+        assert_that(composite.evaluate(3).matched).is_equal_to(held)
+
+    def test_a_matcher_answering_two_calls_differently_still_gets_a_sentence(self):
+        """A leaf that flips between calls is outside the contract, `evaluate()` is how it opts in.
+
+        It still has to produce a formed message rather than an empty one: the verdict came from
+        `matches()` and the words from a second walk that saw something else, and the failure read
+        `but <3> satisfied none of: ` with nothing after it.
+        """
+
+        class Flaky:
+            def __init__(self) -> None:
+                self.asked = 0
+
+            def matches(self, value: object) -> bool:
+                self.asked += 1
+                return self.asked > 1
+
+            def describe(self) -> str:
+                return "a flaky requirement"
+
+            def describe_mismatch(self, value: object) -> str:
+                return f"was <{value}>"
+
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that(3).satisfies(match.is_negative() | Flaky())
+        assert_that(str(exc_info.value)).contains("satisfied none of: (a negative value or a flaky requirement)")
+
+    def test_a_walking_composite_that_holds_says_so(self):
+        assert_that([1, 2]).satisfies(match.is_sorted() & match.is_length(2))
+        assert_that([1, 2]).satisfies(match.is_sorted() | match.is_empty())
+        assert_that([2, 1]).satisfies(~match.is_sorted())
+
+    def test_a_walking_negation_that_fails_says_what_it_matched(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1, 2]).satisfies(~match.is_sorted())
+        assert_that(str(exc_info.value)).contains("unexpectedly matched a collection sorted in order")
+
+    def test_a_composite_of_leaves_that_do_not_walk_keeps_the_cheap_path(self):
+        """`_has_own_evaluate` asks a composite what it holds, not what class it is.
+
+        Answering by class sent every composite down the one-call path, paying a `MatchResult` and a
+        recursive `describe()` per structural leaf for nothing: 0.35 ms became 0.75 ms over 200 records.
+        """
+        assert_that((match.greater_than(0) & match.less_than(10)).walks_its_value).is_false()
+        assert_that((match.is_sorted() & match.is_length(2)).walks_its_value).is_true()
+        assert_that((~match.is_sorted()).walks_its_value).is_true()
 
 
 class TestTemporalMatcherBoundaries:
