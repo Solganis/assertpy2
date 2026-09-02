@@ -38,6 +38,53 @@ from assertpy2 import remove_extension
 remove_extension(is_5)
 ```
 
+## When you want the assertion typed
+
+`add_extension()` registers a name at run time. No checker learns that name or its signature: where a
+value keeps the whole builder the call is accepted as `Any`, and everywhere else it is rejected.
+
+Nothing adds it to the inferred type for you. You can declare a `Protocol` of your own carrying `is_5()`
+and `cast()` the builder to it, which types the call, but that protocol then carries only what you
+declare on it: `is_5().is_greater_than(0)` stops type-checking unless you write `is_greater_than` there
+too. The protocols the views are built from are private and stay that way, so the typed surface can keep
+moving.
+
+What is supported is writing the check as a matcher. It is typed end to end, it restricts the type it
+accepts, and it imports nothing private:
+
+```python
+from assertpy2 import Matcher, assert_that
+
+
+class MultipleOf:
+    def __init__(self, other: int) -> None:
+        self.other = other
+
+    def matches(self, value: int) -> bool:
+        return value % self.other == 0
+
+    def describe(self) -> str:
+        return f"a multiple of <{self.other}>"
+
+    def describe_mismatch(self, value: int) -> str:
+        return f"was <{value}>"
+
+
+def multiple_of(other: int) -> Matcher[int]:
+    return MultipleOf(other)
+
+
+assert_that(24).satisfies(multiple_of(6)).is_greater_than(0)
+```
+
+The chain keeps the numeric assertions after `satisfies()`, and a checker refuses `multiple_of(6)` on a
+string. What it does not do is narrow the value: `satisfies()` hands back the same view it was called
+on, and only a `TypeIs` predicate changes that. What you give up is the spelling:
+`satisfies(multiple_of(6))` rather than `is_multiple_of(6)`.
+
+Call the factory directly rather than registering the matcher under a dynamic name, for the same reason
+`add_extension` is untyped: a name resolved at run time is a name a checker cannot read.
+
 ## Project-wide reuse
 
 `is_5()` is only available in the file where `add_extension()` is called. To share extensions across
