@@ -208,7 +208,12 @@ def _rewrapped(mismatch: AssertionFailure, message: str) -> AssertionFailure:
     future break of that invariant into a silently record-less failure instead of a loud one.
     """
     failure = AssertionFailure(
-        message, actual=mismatch.actual, expected=mismatch.expected, diff=mismatch.diff, trace=mismatch.trace
+        message,
+        actual=mismatch.actual,
+        expected=mismatch.expected,
+        diff=mismatch.diff,
+        trace=mismatch.trace,
+        requirement=mismatch.requirement,
     )
     # ty: ignore[invalid-argument-type]  # never None here: both callers catch what `is_equal_to` raised
     failure._outcome = replace(mismatch._outcome, message=message)

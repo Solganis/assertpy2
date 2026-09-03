@@ -643,6 +643,13 @@
      "required": false
     },
     {
+     "annotation": "Requirement | None",
+     "default": "None",
+     "kind": "KEYWORD_ONLY",
+     "name": "requirement",
+     "required": false
+    },
+    {
      "annotation": "bool",
      "default": "False",
      "kind": "KEYWORD_ONLY",
@@ -2185,6 +2192,13 @@
      "required": false
     },
     {
+     "annotation": "Requirement | None",
+     "default": "None",
+     "kind": "KEYWORD_ONLY",
+     "name": "requirement",
+     "required": false
+    },
+    {
      "annotation": "tuple[AssertionOutcome, ...]",
      "default": "tuple[]",
      "kind": "KEYWORD_ONLY",
@@ -2204,6 +2218,7 @@
     "actual_provided",
     "expected",
     "diff",
+    "requirement",
     "trace",
     "group",
     "location",
@@ -2251,6 +2266,13 @@
      "default": "None",
      "kind": "KEYWORD_ONLY",
      "name": "diff",
+     "required": false
+    },
+    {
+     "annotation": "Requirement | None",
+     "default": "None",
+     "kind": "KEYWORD_ONLY",
+     "name": "requirement",
      "required": false
     },
     {
@@ -2665,6 +2687,40 @@
      "kind": "KEYWORD_ONLY",
      "name": "summary",
      "required": true
+    }
+   ],
+   "returns": "None"
+  },
+  "Requirement": {
+   "bases": [],
+   "construction": "assertpy2.outcome.Requirement",
+   "fields": [
+    "operation",
+    "parameters",
+    "negated"
+   ],
+   "kind": "class",
+   "parameters": [
+    {
+     "annotation": "str",
+     "default": null,
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "operation",
+     "required": true
+    },
+    {
+     "annotation": "Mapping[str, object]",
+     "default": "<dataclasses._HAS_DEFAULT_FACTORY_CLASS>",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "parameters",
+     "required": false
+    },
+    {
+     "annotation": "bool",
+     "default": "False",
+     "kind": "POSITIONAL_OR_KEYWORD",
+     "name": "negated",
+     "required": false
     }
    ],
    "returns": "None"
@@ -3163,6 +3219,7 @@
   "NegatedBuilder",
   "PollSample",
   "PollTrace",
+  "Requirement",
   "SnapshotCreatedWarning",
   "SnapshotKeyReusedWarning",
   "SnapshotUpdatedWarning",
@@ -3194,6 +3251,7 @@
   "expected": "instance attribute",
   "failures": "instance attribute",
   "has_expected": "property",
+  "requirement": "instance attribute",
   "trace": "instance attribute"
  },
  "matcher_protocol": {

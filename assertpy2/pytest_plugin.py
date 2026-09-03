@@ -899,8 +899,12 @@ def _attach_report_sections(item, report, exc) -> None:
     # what decides is `actual` being named, a value other than the subject; no record is the older path
     named_values = named_actual if outcome is not None else (named_actual or named_expected)
 
-    # the cheap exit: the terminal keeps quiet about a value the message prints, and Allure still attaches it
-    if not (named_actual or named_expected) and diff is None and trace is None:
+    requirement = getattr(exc, "requirement", None)
+
+    # the cheap exit: the terminal keeps quiet about a value the message prints, and Allure still attaches
+    # it.  A requirement alone keeps the failure here, since `is_empty()` names no value and is exactly
+    # the case the field exists for; nothing below prints a section for it
+    if not (named_actual or named_expected) and diff is None and trace is None and requirement is None:
         return
 
     if named_values:
@@ -936,6 +940,7 @@ def _attach_report_sections(item, report, exc) -> None:
                 trace=trace,
                 mode=mode,
                 max_entries=allure_max_entries,
+                requirement=requirement,
                 # the record's flags, not the section's: a value already in the message is still what a dashboard reads
                 named_actual=named_actual,
                 named_expected=named_expected,
@@ -1047,16 +1052,25 @@ def _diff_to_json(diff, max_entries=50):
     return json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False)
 
 
-def _attach_allure(actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50):
+def _attach_allure(
+    actual, expected, diff, *, named_actual, named_expected, trace=None, mode="diff", max_entries=50, requirement=None
+):
     # the flags say what the assertion named, not what the terminal shows, and are required rather than defaulted
     if mode == "off":
         return
-    if mode == "full" and (named_actual or named_expected):
-        data = {"format": 2}
+    if mode == "full" and (named_actual or named_expected or requirement is not None):
+        # format 3 adds `requirement`, so a consumer branching on the number keeps reading 2 as it did
+        data: dict[str, object] = {"format": 3}
         if named_actual:
             data["actual"] = _json_safe(actual)
         if named_expected:
             data["expected"] = _json_safe(expected)
+        if requirement is not None:
+            data["requirement"] = {
+                "operation": requirement.operation,
+                "parameters": {name: _json_safe(value) for name, value in requirement.parameters.items()},
+                "negated": requirement.negated,
+            }
         allure.attach(
             body=json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False),
             name="AssertionFailure",

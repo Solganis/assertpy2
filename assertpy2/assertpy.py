@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import contextvars
+import functools
+import inspect
 import logging
 import os
 import sys
@@ -49,8 +52,10 @@ from ._engine._compat import _LoggerAdapter
 from ._engine._contract import contract_drift
 from ._engine._introspection import WarningLogger, is_same_implementation
 from ._engine._operations import (
+    ALSO_ASSERTS,
     CONFIGURES,
     DESCRIBES,
+    NOT_AN_OPERATION,
     POLLS,
     TRANSFORMS,
     WHAT_IT_DOES,
@@ -75,7 +80,7 @@ from .helpers import HelpersMixin
 from .http_mixin import HttpMixin, response_note, response_of
 from .json_mixin import JsonMixin
 from .numeric import NumericMixin
-from .outcome import MISSING, AssertionOutcome
+from .outcome import MISSING, AssertionOutcome, Requirement
 from .snapshot import SnapshotMixin
 from .string import StringMixin
 from .warning import WarningMixin
@@ -155,6 +160,98 @@ def _caller_location() -> tuple[str, int] | None:
         inner_is_internal = is_internal
         frame = frame.f_back
     return location
+
+
+def _what_was_asked(builder: object, given: Requirement | None = None) -> Requirement | None:
+    """What the failure being composed was asked for.
+
+    A live extension call on this builder first, because it owns what runs under it the way
+    `is_positive()` owns the `is_greater_than(0)` it asks.  That has to beat *given*, which is what the
+    negated proxy and a dynamic ``has_`` assertion say about themselves: an extension delegating to
+    either of those was reporting the delegate.
+
+    The extension answers only for the builder it was called on.  An assertion it makes about some
+    other value is that assertion's own, exactly as one inside a `satisfies()` predicate is.
+    """
+    asked = _asked_of.get()
+    if asked is not None and asked.answers_for(builder):
+        return _extension_requirement(asked)
+    return given if given is not None else _requirement_of()
+
+
+def _requirement_of() -> Requirement | None:
+    """Which operation the failure being composed was asked for, read off the stack.
+
+    The name and the arguments live at the assertion's entry and not at its failure: of the 164 places
+    that reach `error()`, 144 are the public method itself and 20 are private helpers it calls.  So the
+    answer is read here instead of passed down from each of them, which costs a built-in assertion
+    nothing at all on the passing path and one microsecond on a failure that is already building a diff
+    and a hint.  An extension is the exception and pays a wrapper on every call, because a frame cannot
+    be tied back to a registration: `_ExtensionCall` says why.
+
+    The *outermost* assertion still inside the package, for the same reason `_caller_location()` walks
+    outwards: `is_positive()` asks `is_greater_than(0)` and `contains_key()` asks `contains()`, so the
+    innermost frame answers the delegate rather than the assertion in the test.  A predicate passed to
+    `satisfies()` is not our code, so the walk leaves the package there and an assertion inside the
+    predicate still answers itself.  An extension is not read off the stack at all: it says what it is
+    before its body runs, because a frame cannot be tied back to a registration.  Two instances of one
+    callable class, and two functions from one decorator factory, share a code object.
+
+    ``None`` where no operation was asked: `fail()`, and a bare `error()` with the caller's own message.
+    """
+    frame: types.FrameType | None = sys._getframe(3)  # skips this, `_what_was_asked` and `_compose`
+    found: types.FrameType | None = None
+    while frame is not None and frame.f_code.co_filename in ASSERTPY_FILES:
+        if frame.f_code.co_name in _ASSERTS:
+            found = frame
+        frame = frame.f_back
+    return None if found is None else Requirement(found.f_code.co_name, _bound_parameters(found))
+
+
+def _bound_parameters(frame: types.FrameType, receivers: int = 1) -> dict[str, object]:
+    """Every declared parameter of *frame* with the value it was bound to, minus the receiver.
+
+    A frame cannot say whether an argument was omitted, passed positionally or passed by keyword, so
+    what is read here is what the assertion ran with.  `Requirement.parameters` says why that is the
+    more useful of the two.
+    """
+    code = frame.f_code
+    local = frame.f_locals
+    names = code.co_varnames
+    taken = code.co_argcount + code.co_kwonlyargcount
+    found: dict[str, object] = {name: local[name] for name in names[receivers:taken] if name in local}
+    if code.co_flags & inspect.CO_VARARGS:
+        found[names[taken]] = tuple(local.get(names[taken], ()))
+        taken += 1
+    if code.co_flags & inspect.CO_VARKEYWORDS:
+        found[names[taken]] = dict(local.get(names[taken], {}))
+    return found
+
+
+@functools.cache
+def _method_signature(own: Callable[..., object]) -> inspect.Signature:
+    """The signature of an assertion as its caller writes it, without the receiver.
+
+    Cached on the function rather than on the bound method, which is a new object per attribute access.
+    `inspect.signature` costs 4.8 microseconds, three times what composing a negated failure costs
+    without it, and the set of assertion functions is fixed at import.
+    """
+    found = inspect.signature(own)
+    return found.replace(parameters=list(found.parameters.values())[1:])
+
+
+def _signature_of(attr: Callable[..., object]) -> inspect.Signature | None:
+    """As a caller writes it, for anything callable, or ``None`` where it cannot be read.
+
+    Only a bound method is cached: a dynamic ``has_`` assertion and a registered extension are closures
+    built per access, and holding them in a cache would grow it for the life of the process.
+    """
+    own = getattr(attr, "__func__", None)
+    try:
+        # only a function is cached: a callable object need not be hashable, and the key would refuse it
+        return _method_signature(own) if isinstance(own, types.FunctionType) else inspect.signature(attr)
+    except (TypeError, ValueError):
+        return None
 
 
 class _SoftBlock:
@@ -837,9 +934,10 @@ def add_extension(func: _Extension, *, override: bool = False) -> None:
             f"would be unreachable after eventually(); give it another name"
         )
     with _extensions_lock:
-        # re-adding the same implementation is a no-op, not a clash
-        same = is_same_implementation(vars(_ExtendedBuilder).get(name), func) or is_same_implementation(
-            _extensions.get(name), func
+        # re-adding the same implementation is a no-op, not a clash.  Compared against what was
+        # registered rather than against the wrapper naming it, whose code every extension shares
+        same = is_same_implementation(_registered(vars(_ExtendedBuilder).get(name)), func) or is_same_implementation(
+            _registered(_extensions.get(name)), func
         )
         if not override and not same:
             # an extension called `is_equal_to` used to replace the core assertion in silence
@@ -853,11 +951,12 @@ def add_extension(func: _Extension, *, override: bool = False) -> None:
                     f"{name!r} is already defined on the assertion builder; pass override=True to "
                     f"replace it deliberately, or give the extension another name"
                 )
+        named = _named_extension(name, func)
         if isinstance(func, types.FunctionType):
             # the descriptor protocol binds once here, and the subclass keeps `AssertionBuilder` pristine on removal
-            setattr(_ExtendedBuilder, name, func)
+            setattr(_ExtendedBuilder, name, named)
         else:
-            _extensions[name] = func
+            _extensions[name] = named
 
 
 def remove_extension(func: _Extension) -> None:
@@ -878,6 +977,92 @@ def remove_extension(func: _Extension) -> None:
     if func.__name__ in vars(_ExtendedBuilder):
         delattr(_ExtendedBuilder, func.__name__)
     _extensions.pop(func.__name__, None)
+    # a signature cached against a function nobody can call any more
+    _method_signature.cache_clear()
+
+
+class _ExtensionCall:
+    """One running call of one extension: what it was asked, on which builder, and whether it is still on.
+
+    ``alive`` exists for the same reason `_SoftBlock.active` does.  A task created inside the call
+    inherits the context variable by value and never sees the reset, so without it a failure raised
+    after the call had returned was still reported under the extension's name.
+    """
+
+    __slots__ = ("alive", "args", "builder", "func", "kwargs", "name")
+
+    def __init__(
+        self,
+        builder: object,
+        name: str,
+        func: Callable[..., object],
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> None:
+        self.builder = builder
+        self.name = name
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.alive = True
+
+    def answers_for(self, builder: object) -> bool:
+        """Whether a failure on *builder* is this call's to name."""
+        return self.alive and self.builder is builder
+
+
+_asked_of: contextvars.ContextVar[_ExtensionCall | None] = contextvars.ContextVar("assertpy2_asked_of", default=None)
+"""The extension call now running, set before its body and read only if it fails.
+
+An extension cannot be recognised from its frame.  Two instances of one callable class share
+``__call__``'s code, two functions built by one decorator factory share the wrapper's, and a
+`functools.partial` runs no Python frame of its own at all.  Naming it at the call is exact for every
+shape, and it costs an extension call rather than every assertion.
+
+Scoped to one builder, because the name belongs to a call and not to everything that runs during it.
+An extension asserting about some other value has that assertion answer for itself, exactly as one
+inside a `satisfies()` predicate does.  On the same builder the outer call keeps the name, which is
+what a built-in does: `is_positive()` reports itself rather than the `is_greater_than()` it asks.
+"""
+
+
+def _registered(installed: object) -> object:
+    """What was handed to `add_extension()`, behind the wrapper that names it."""
+    return getattr(installed, "__wrapped__", installed)
+
+
+def _named_extension(name: str, func: Callable[..., object]) -> Callable[..., object]:
+    """*func*, saying what it was asked for the length of the call."""
+
+    @functools.wraps(func)
+    def named(self: object, *args: object, **kwargs: object) -> object:
+        outer = _asked_of.get()
+        if outer is not None and outer.answers_for(self):
+            return func(self, *args, **kwargs)
+        call = _ExtensionCall(self, name, func, args, kwargs)
+        token = _asked_of.set(call)
+        try:
+            return func(self, *args, **kwargs)
+        finally:
+            call.alive = False
+            _asked_of.reset(token)
+
+    return named
+
+
+def _extension_requirement(asked: _ExtensionCall) -> Requirement:
+    """What the running extension was asked, bound to its own parameter names where they can be read."""
+    name, func, args, kwargs = asked.name, asked.func, asked.args, asked.kwargs
+    found = _signature_of(func)
+    if found is not None:
+        # the receiver is the builder, which the caller did not write
+        caller_writes = found.replace(parameters=list(found.parameters.values())[1:])
+        with contextlib.suppress(TypeError):
+            bound = caller_writes.bind(*args, **kwargs)
+            bound.apply_defaults()
+            return Requirement(name, dict(bound.arguments))
+    # a signature nothing can read, or a call it disagrees with: the operands as the caller passed them
+    return Requirement(name, {"args": args, "kwargs": kwargs})
 
 
 def _builder(val, description="", kind=None, expected=None, logger=None):
@@ -1021,6 +1206,24 @@ class NegatedBuilder(Generic[_S]):
         )
         return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}({rendered})"
 
+    def _asked(self, attr: Callable[..., object], name: str, *args: object, **kwargs: object) -> Requirement:
+        """What the negated call asked for, bound to the underlying assertion's parameter names.
+
+        Named here rather than read off the stack: a negated failure is composed after the assertion
+        it inverted has already returned, so its frame is gone by then.  Bound through the signature
+        so the parameters read the same as on the positive path, where they come out of the frame.
+        """
+        found = _signature_of(attr)
+        if found is None:
+            # a builtin with no introspectable signature, or a call the assertion itself will refuse
+            return Requirement(name, {"args": args, "kwargs": kwargs}, negated=True)
+        try:
+            bound = found.bind(*args, **kwargs)
+        except TypeError:
+            return Requirement(name, {"args": args, "kwargs": kwargs}, negated=True)
+        bound.apply_defaults()
+        return Requirement(name, dict(bound.arguments), negated=True)
+
     def _verdict(self, attr: Callable[..., object], *args: object, **kwargs: object) -> AssertionOutcome | None:
         """What the underlying assertion decided, or ``None`` when it held.
 
@@ -1050,7 +1253,11 @@ class NegatedBuilder(Generic[_S]):
             return self._builder
         # composed here rather than by `error()`, which would prefix the description twice
         raise AssertionBuilder._failure(
-            AssertionOutcome(message=self._make_msg(name, *args, **kwargs), actual=self._builder.val)
+            AssertionOutcome(
+                message=self._make_msg(name, *args, **kwargs),
+                actual=self._builder.val,
+                requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
+            )
         )
 
     def _negated_soft(
@@ -1069,6 +1276,7 @@ class NegatedBuilder(Generic[_S]):
                 actual=self._builder.val,
                 group=_soft_group.get(),
                 location=_caller_location(),
+                requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
             )
         )
         return self._builder
@@ -1080,7 +1288,9 @@ class NegatedBuilder(Generic[_S]):
             self._builder._check_sink = None
             return self._builder
         self._builder._check_sink = AssertionOutcome(
-            message=self._make_msg(name, *args, **kwargs), actual=self._builder.val
+            message=self._make_msg(name, *args, **kwargs),
+            actual=self._builder.val,
+            requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
         )
         return self._builder
 
@@ -1408,6 +1618,7 @@ class AssertionBuilder(
         expected: Any = MISSING,
         diff: DiffResult | None = None,
         trace: PollTrace | None = None,
+        requirement: Requirement | None = None,
         suppress_context: bool = False,
     ) -> Self:
         """Helper to raise an ``AssertionError`` with the given message.
@@ -1426,6 +1637,9 @@ class AssertionBuilder(
             expected: the expected value (for structured error reporting)
             diff: a [`DiffResult`][assertpy2.errors.DiffResult] instance (for structured error reporting)
             trace: a [`PollTrace`][assertpy2.errors.PollTrace] from a poll that timed out
+            requirement: what was asked, for a caller the stack cannot be read from.  A negated
+                assertion, a poll that timed out and a dynamic ``has_`` assertion each compose their
+                failure after or beside the frame that named the operation, so they say it here.
             suppress_context: raise ``from None``, dropping the exception currently being handled from
                 the traceback.  Pass it when the caught exception is your own plumbing and its text is
                 already folded into ``msg``, so the reader is not shown the same failure twice.  Leave
@@ -1439,7 +1653,9 @@ class AssertionBuilder(
             AssertionBuilder: this instance, to chain the next assertion, whenever the failure was
                 delivered some other way than by raising.
         """
-        failure = self._deliver(self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace))
+        failure = self._deliver(
+            self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace, requirement=requirement)
+        )
         if failure is None:
             return self
         # the raise stays here: a failure's traceback ends at `error`, three frames deep, pinned in test_traceback.py
@@ -1448,7 +1664,14 @@ class AssertionBuilder(
         raise failure
 
     def _compose(
-        self, msg: str, *, actual: object, expected: object, diff: DiffResult | None, trace: PollTrace | None
+        self,
+        msg: str,
+        *,
+        actual: object,
+        expected: object,
+        diff: DiffResult | None,
+        trace: PollTrace | None,
+        requirement: Requirement | None = None,
     ) -> AssertionOutcome:
         """Build the failure record.  Decides nothing about what happens to it."""
         # filled here rather than per call site, which is what puts it on all 163 failures instead of 34
@@ -1474,6 +1697,7 @@ class AssertionBuilder(
             diff=diff,
             trace=trace,
             hint=hint,
+            requirement=_what_was_asked(self, requirement),
         )
 
     def _deliver(self, outcome: AssertionOutcome) -> AssertionError | None:
@@ -1519,6 +1743,7 @@ class AssertionBuilder(
             actual=outcome.actual,
             expected=None if outcome.expected is MISSING else outcome.expected,
             diff=outcome.diff,
+            requirement=outcome.requirement,
         )
         failure._outcome = outcome
         return failure
@@ -1678,3 +1903,18 @@ class AssertionBuilder(
 class _ExtendedBuilder(AssertionBuilder[Any]):
     """Host for user extensions: `add_extension()` installs plain functions here, so binding happens
     once at registration and `AssertionBuilder` itself stays pristine when an extension is removed."""
+
+
+_ASSERTS: Final = frozenset(
+    name
+    for name in dir(AssertionBuilder)
+    if not name.startswith("_")
+    and name not in NOT_AN_OPERATION
+    and (name not in WITHOUT_A_VERDICT or name in ALSO_ASSERTS)
+) | {"assert_conforms"}
+"""The names `_requirement_of()` will answer with, derived rather than listed.
+
+The complement of the register, plus the one assertion that is a module function and so has no frame
+with a builder in it.  A hybrid such as `when_called_with()` belongs here: the register calls it a
+configurer because it hands a value back, and it reaches a verdict on the way.
+"""

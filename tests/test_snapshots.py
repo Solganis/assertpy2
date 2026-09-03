@@ -196,6 +196,13 @@ class TestSharedKeyHint:
                 assert_that(next(values)).snapshot(path=str(tmp_path))
         assert_that(str(failure.value)).matches(r"reached <.*snap-test_snapshots\.json::\d+> more than once")
 
+    def test_a_mismatch_still_says_what_was_asked(self, tmp_path):
+        """The failure is rebuilt around a new message, and the rebuild used to drop the requirement."""
+        _save(str(tmp_path / "snap-asked.json"), {"a": 1})
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 2}).snapshot(id="asked", path=str(tmp_path))
+        assert_that(failure.value.requirement.operation).is_equal_to("snapshot")
+
     def test_a_first_and_only_call_says_nothing(self, tmp_path):
         _save(str(tmp_path / "snap-once.json"), {"a": 1})
         with pytest.raises(AssertionError) as failure:

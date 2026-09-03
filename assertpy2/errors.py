@@ -8,7 +8,7 @@ from types import UnionType
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 
 if TYPE_CHECKING:
-    from .outcome import AssertionOutcome
+    from .outcome import AssertionOutcome, Requirement
 
 
 def _safe_repr(value: object) -> str:
@@ -506,6 +506,7 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         expected: object = None,
         diff: DiffResult | None = None,
         trace: PollTrace | None = None,
+        requirement: Requirement | None = None,
         failures: tuple[AssertionOutcome, ...] = (),
     ):
         super().__init__(message)
@@ -514,6 +515,12 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         self.expected = expected
         self.diff = diff
         self.trace = trace
+        self.requirement = requirement
+        """What was asked of the value, as data: the operation, its parameters, and whether it was negated.
+
+        ``None`` where no operation was asked, which is `fail()` and a bare `error()` carrying a message
+        of the caller's own.
+        """
         self.failures = failures
         """The failures a soft block collected, in the order they were collected.
 

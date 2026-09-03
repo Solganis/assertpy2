@@ -6,8 +6,20 @@ from typing import Any
 
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
+from .outcome import Requirement
 
 __tracebackhide__ = True
+
+
+_ONE_OPERAND = inspect.Signature([inspect.Parameter("other", inspect.Parameter.POSITIONAL_OR_KEYWORD)])
+
+
+def _one_operand(args: tuple[object, ...], kwargs: dict[str, object]) -> dict[str, object]:
+    """The operand by name, or the call as given when the arity is what the wrapper is about to refuse."""
+    try:
+        return dict(_ONE_OPERAND.bind_partial(*args, **kwargs).arguments)
+    except TypeError:
+        return {"args": args, "kwargs": kwargs}
 
 
 class DynamicMixin(_MixinBase):
@@ -76,8 +88,10 @@ class DynamicMixin(_MixinBase):
             err_msg = f"Expected attribute <{attr_name}>, but val has no attribute <{attr_name}>."
 
         def _wrapper(*args, **kwargs):
+            # named here rather than read off the stack: the operation is the attribute, not this closure
+            asked = Requirement(attr, _one_operand(args, kwargs))
             if err_msg:
-                return self.error(err_msg)  # ok to raise AssertionError now that we are inside wrapper
+                return self.error(err_msg, requirement=asked)  # ok to raise now that we are inside wrapper
             else:
                 if len(args) != 1:
                     raise TypeError(f"assertion <{attr}()> takes exactly 1 argument ({len(args)} given)")
@@ -99,8 +113,13 @@ class DynamicMixin(_MixinBase):
                 if actual != expected:
                     kind = "key" if is_dict else "attribute"
                     return self.error(
-                        f"Expected <{actual}> to be equal to <{expected}> on {kind} <{attr_name}>, but was not."
+                        f"Expected <{actual}> to be equal to <{expected}> on {kind} <{attr_name}>, but was not.",
+                        requirement=asked,
                     )
             return self
 
+        # the arity check above is the wrapper's own, so its signature says what a caller writes and
+        # `Requirement.parameters` reads the same key whether the call was negated or not.  Through
+        # `setattr` because typeshed declares no `__signature__` on a function, which both gates report
+        setattr(_wrapper, "__signature__", _ONE_OPERAND)  # noqa: B010 - see above
         return _wrapper

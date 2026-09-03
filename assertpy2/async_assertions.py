@@ -288,6 +288,9 @@ def _structured_of(last_error: Exception | None) -> dict[str, Any]:
     diff = getattr(last_error, "diff", None)
     if diff is not None:
         fields["diff"] = diff
+    # the inner assertion's, not the poll's: a timeout is that assertion's failure with a wait in front
+    if outcome is not None and outcome.requirement is not None:
+        fields["requirement"] = outcome.requirement
     return fields
 
 
@@ -310,6 +313,7 @@ def _timed_out(message: str, trace: PollTrace | None, last_error: Exception | No
         expected=getattr(last_error, "expected", None),
         diff=getattr(last_error, "diff", None),
         trace=trace,
+        requirement=getattr(last_error, "requirement", None),
     )
     failure._outcome = getattr(last_error, "_outcome", None)
     return failure

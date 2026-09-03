@@ -840,6 +840,44 @@ Unlike a failure collected by `soft_assertions()` or logged by `assert_warn()`, 
 mark the value as unverified: `.value` keeps working, because a question was asked, not an assertion
 made.
 
+### What was asked, as data
+
+`message` says what failed in English, and `actual`, `expected` and `diff` say what the values were.
+None of them says what was *asked* of the value, and `expected` cannot: it holds the operand for
+`is_equal_to(2)`, a tuple for `contains(2)`, a rendered description for `satisfies(...)`, a type for
+`is_instance_of(str)`, and nothing at all for `is_empty()`.
+
+`requirement` answers that in one shape, on every failure, whichever mode delivered it:
+
+```python
+outcome = assert_that(1).check().is_close_to(9, 0.1)
+assert outcome.requirement is not None
+
+print(outcome.requirement.operation)    # is_close_to
+print(outcome.requirement.parameters)   # {'other': 9, 'tolerance': 0.1}
+print(outcome.requirement.negated)      # False
+```
+
+The same three fields are on the raised
+[`AssertionFailure`][assertpy2.errors.AssertionFailure], on each entry of a soft block's `failures`,
+and in the Allure attachment. That is what lets a report group failures without parsing messages: every
+`is_close_to` failure in a run carries the same operation, and a negated one is marked rather than
+worded differently.
+
+Two details worth knowing before you build on it. Parameters are the values the assertion **ran with**,
+keyed by its own parameter names, so one left out appears with its default and `is_close_to(9, 0.1)`
+reads the same as `is_close_to(other=9, tolerance=0.1)`. And an assertion that delegates answers its
+own name: `is_positive()` asks `is_greater_than(0)` underneath, and reports `is_positive`.
+
+`requirement` is `None` where no operation was asked, and that is a limit rather than a gap. Three
+shapes have no operation to name: `fail()`, a bare `error()` carrying a message of your own, and a
+precondition of one of the few members that assert nothing on their own, where the failure is about
+the shape of the value rather than about a requirement you stated.
+
+Reading it costs a built-in assertion nothing when it passes, since nothing runs until a failure is
+composed. A registered extension is the exception: it says what it is at the call, so it pays a
+wrapper whether it passes or fails.
+
 ### Warnings instead of failures
 
 For defensive assertions outside tests, replace `assert_that` with `assert_warn`: failures log a

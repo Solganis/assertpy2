@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..errors import AssertionFailure, DiffResult, PollTrace
     from ..http_mixin import _Response
-    from ..outcome import AssertionOutcome
+    from ..outcome import AssertionOutcome, Requirement
     from ._compare import _CompareConfig
     from ._compat import Self
     from ._introspection import WarningLogger
@@ -45,6 +45,7 @@ class _MixinBase:
             actual: object = ...,
             expected: object = ...,
             diff: DiffResult | None = ...,
+            requirement: Requirement | None = ...,
             suppress_context: bool = ...,
         ) -> Self: ...
 
@@ -56,6 +57,7 @@ class _MixinBase:
             expected: object,
             diff: DiffResult | None,
             trace: PollTrace | None,
+            requirement: Requirement | None = ...,
         ) -> AssertionOutcome: ...
 
         @staticmethod

@@ -17,10 +17,12 @@ record too.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Final
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .errors import DiffResult, PollTrace
 
 
@@ -40,6 +42,40 @@ MISSING: Final = _Missing()
 expected value, and the two readings are then indistinguishable.  The same ambiguity in `DiffEntry`
 used to render a key whose value is ``None`` as a key that is not there at all.
 """
+
+
+@dataclass(frozen=True, slots=True)
+class Requirement:
+    """What was asked of the value, as data rather than as a sentence.
+
+    A consumer reading `AssertionOutcome` could tell what failed only by parsing the message: the
+    fields beside it answer what the values were, not what was asked of them.  `expected` carries five
+    different things depending on the family, the operand for `is_equal_to(2)`, a tuple for
+    `contains(2)`, a rendered description for `satisfies(...)`, a type for `is_instance_of(str)`, and
+    nothing at all for `is_empty()`, so grouping failures across a suite meant reading English.
+    """
+
+    operation: str
+    """The name the caller wrote, as it appears in the API.
+
+    A delegating assertion answers its own name rather than the one it delegates to: `is_positive()`
+    asks `is_greater_than(0)` underneath, and the reader wants the assertion in the test.
+    """
+
+    parameters: Mapping[str, object] = field(default_factory=dict)
+    """Every declared parameter with the value the assertion ran with, by name.
+
+    Bound values rather than the call as written, which means a parameter left out appears with its
+    default.  Two spellings of one requirement then group as one: `is_close_to(9, 0.1)` and
+    `is_close_to(other=9, tolerance=0.1)` both read ``{"other": 9, "tolerance": 0.1}``, where a
+    positional tuple would also be indistinguishable from a two-operand `contains`.
+
+    The values are the objects themselves, as `actual` and `expected` already are, so a consumer that
+    serialises has the same work to do here as there.
+    """
+
+    negated: bool = False
+    """Whether the assertion ran through `not_`, where holding is the failure."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -78,6 +114,15 @@ class AssertionOutcome:
 
     expected: object = MISSING
     diff: DiffResult | None = None
+
+    requirement: Requirement | None = None
+    """Which operation was asked, with which parameters, and whether it was negated.
+
+    ``None`` where no operation was asked, and that is a limit of the contract rather than a gap to be
+    closed later.  Three shapes have no operation to name: `fail()`, a bare `error()` carrying a
+    message of the caller's own, and a precondition of one of the few members `_operations.py` records
+    as asserting nothing, where the failure is about the value's shape and not about a requirement.
+    """
 
     trace: PollTrace | None = None
     """The convergence telemetry of a poll that timed out.

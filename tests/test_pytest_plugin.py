@@ -865,7 +865,7 @@ class TestAllureFullMode:
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         assert_that(mock.attach.call_count).is_equal_to(1)
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"format": 2, "actual": 1, "expected": 2})
+        assert_that(body).is_equal_to({"format": 3, "actual": 1, "expected": 2})
         assert_that(mock.attach.call_args_list[0].kwargs["name"]).is_equal_to("AssertionFailure")
         assert_that(mock.attach.call_args_list[0].kwargs["attachment_type"]).is_equal_to("json")
 
@@ -874,14 +874,28 @@ class TestAllureFullMode:
         exc = AssertionFailure("fail", actual=42)
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"format": 2, "actual": 42})
+        assert_that(body).is_equal_to({"format": 3, "actual": 42})
+
+    def test_a_failure_that_names_no_value_still_attaches_what_was_asked(self):
+        """`is_empty()` names neither side and builds no diff, which is the case the field exists for.
+
+        The report path used to leave before attaching whenever nothing was named and no diff was built.
+        """
+        mock = _mock_allure()
+        outcome = assert_that([1]).check().is_empty()
+        exc = AssertionFailure(outcome.message, requirement=outcome.requirement)
+        _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
+        body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
+        assert_that(body).is_equal_to(
+            {"format": 3, "requirement": {"operation": "is_empty", "parameters": {}, "negated": False}}
+        )
 
     def test_only_expected_when_full(self):
         mock = _mock_allure()
         exc = AssertionFailure("fail", expected="abc")
         _run_hook_with_allure(_make_report(), _make_call(exc=exc), mock, allure_mode="full")
         body = json.loads(mock.attach.call_args_list[0].kwargs["body"])
-        assert_that(body).is_equal_to({"format": 2, "expected": "abc"})
+        assert_that(body).is_equal_to({"format": 3, "expected": "abc"})
 
     def test_containers_attach_as_typed_json(self):
         mock = _mock_allure()
@@ -912,7 +926,9 @@ class TestAllureFullMode:
         report = _make_report()
         _run_hook_with_allure(report, _make_call(exc=failure.value), mock, allure_mode="full")
         attached = {call.kwargs["name"]: call.kwargs["body"] for call in mock.attach.call_args_list}
-        assert_that(json.loads(attached["AssertionFailure"])).is_equal_to({"format": 2, "expected": True})
+        assert_that(json.loads(attached["AssertionFailure"])).is_equal_to(
+            {"format": 3, "expected": True, "requirement": {"operation": "is_true", "parameters": {}, "negated": False}}
+        )
         assert_that([title for title, _ in report.sections]).described_as(
             "the terminal stays quiet: the message already says what was expected"
         ).does_not_contain("AssertionFailure")
@@ -931,7 +947,13 @@ class TestAllureFullMode:
         attached = {call.kwargs["name"]: call.kwargs["body"] for call in mock.attach.call_args_list}
         assert_that(attached).contains_key("AssertionFailure", "Structured Diff")
         body = json.loads(attached["AssertionFailure"])
-        assert_that(body).is_equal_to({"format": 2, "expected": ["x"]})
+        assert_that(body).is_equal_to(
+            {
+                "format": 3,
+                "expected": ["x"],
+                "requirement": {"operation": "contains_key", "parameters": {"keys": ["x"]}, "negated": False},
+            }
+        )
 
     def test_an_expected_of_none_is_attached_rather_than_read_as_unset(self):
         mock = _mock_allure()

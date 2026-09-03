@@ -7,7 +7,7 @@ an intention.
 
 | You can depend on | Enforced by |
 |---|---|
-| The 37 names `assertpy2` exports, and the fields of every record it hands you | [`test_public_surface.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_public_surface.py) pins both against a hand-written list |
+| The 38 names `assertpy2` exports, and the fields of every record it hands you | [`test_public_surface.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_public_surface.py) pins both against a hand-written list |
 | Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all twenty-nine protocols |
 | The signature you call: parameter names, their order, their defaults | [`test_api_compatibility.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_compatibility.py) compares a recorded snapshot of the whole surface and classifies every change as breaking, an addition, or typing-only |
 | The type your chain has after each step, and that the value at the end is that type | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 346 `assert_type` checks under ty, mypy `--strict`, Pyright and Pyrefly, zero suppressions |
@@ -17,7 +17,8 @@ an intention.
 | Your assertions keeping their verdict | the suite at 100 % branch coverage, plus mutation testing |
 
 The records in the first row are `AssertionOutcome`, `MatchResult`, `DiffEntry`, `DiffResult`, `Step`,
-`PollSample` and `PollTrace`. Fields are added, never renamed or removed, inside a major version.
+`PollSample`, `PollTrace` and `Requirement`. Fields are added, never renamed or removed, inside a
+major version.
 
 Documentation is held to the same bar: every example in these guides is executed and type-checked in
 CI, so a snippet you copy is one that ran.

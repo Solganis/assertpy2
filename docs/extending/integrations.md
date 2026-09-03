@@ -58,18 +58,29 @@ Anything JSON cannot express degrades to a marked fallback instead of failing th
 
 Oversized values are capped: strings at 4000 chars, containers at 100 items.
 
-An **AssertionFailure** attachment (mode `full` only) with the actual and expected values the
-assertion named:
+An **AssertionFailure** attachment (mode `full` only) with what was asked of the value, and with the
+actual and expected values the assertion named:
 
 ```json
 {
-  "format": 2,
+  "format": 3,
   "actual": {"name": "Alice", "age": 30},
-  "expected": {"name": "Alice", "age": 25}
+  "expected": {"name": "Alice", "age": 25},
+  "requirement": {
+    "operation": "is_equal_to",
+    "parameters": {"other": {"name": "Alice", "age": 25}},
+    "negated": false
+  }
 }
 ```
 
-A key appears only when the assertion named that side. Every failure carries the value under test, but
+The version moved from 2 to 3 to carry it, so a consumer branching on `format` needs a case for 3.
+
+`requirement` answers what `actual` and `expected` cannot: which assertion ran, with which parameters,
+and whether `not_` inverted it. Parameters are keyed by the assertion's own parameter names and carry
+the values it ran with, so a parameter the caller left out appears with its default and two spellings
+of one call group as one. It is absent where no operation was asked, which is `fail()` and a bare
+`error()`. A key appears only when the assertion named that side. Every failure carries the value under test, but
 most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would repeat
 what the reader already has.
 

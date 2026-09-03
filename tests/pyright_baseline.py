@@ -26,8 +26,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/helpers.py", "reportArgumentType"): 3,
     ("assertpy2/helpers.py", "reportGeneralTypeIssues"): 1,
     ("assertpy2/helpers.py", "reportIndexIssue"): 2,
-    # both are a `_JsonSafe` value written into a dict pyright reads as narrower than it is
-    ("assertpy2/pytest_plugin.py", "reportArgumentType"): 2,
     ("assertpy2/_engine/_compare.py", "reportArgumentType"): 2,
     ("assertpy2/_engine/_compare.py", "reportOperatorIssue"): 1,
     ("assertpy2/helpers.py", "reportOperatorIssue"): 2,

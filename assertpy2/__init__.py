@@ -35,7 +35,7 @@ from .matchers import (
     register_matcher,
     unregister_matcher,
 )
-from .outcome import AssertionOutcome
+from .outcome import AssertionOutcome, Requirement
 from .snapshot import (
     SnapshotCreatedWarning,
     SnapshotKeyReusedWarning,
@@ -57,6 +57,7 @@ __all__ = [
     "NegatedBuilder",
     "PollSample",
     "PollTrace",
+    "Requirement",
     "SnapshotCreatedWarning",
     "SnapshotKeyReusedWarning",
     "SnapshotUpdatedWarning",
