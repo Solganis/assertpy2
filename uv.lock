@@ -196,7 +196,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff", specifier = ">=0.16.4" },
-    { name = "ty", specifier = ">=0.0.76" },
+    { name = "ty", specifier = ">=0.0.78" },
     { name = "typing-extensions", specifier = ">=4.0" },
 ]
 docs = [
