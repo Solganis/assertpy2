@@ -18,6 +18,10 @@ What the chain is *not* held to is the surface of a value the capability umbrell
 assertion carries a last rung for it, because that is the surface `assert_that()` hands such a value,
 and Python's overload resolution has no way to say "only if no earlier rung matched".  So a `str`,
 being iterable, reaches rungs the string view does not carry.
+
+Its *operands* are held, though, where the value's own type says what they are: a rung is emitted per
+binding as well as per protocol, so a chain over text takes the elements text has rather than any the
+argument happens to be.
 """
 
 from __future__ import annotations
@@ -34,7 +38,15 @@ if TYPE_CHECKING:
     from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Callable, _Keyed, _KeyedWithItems, _KeyedWithValues, _Orderable, _PathLike
+    from ._capable_typing import (
+        _Callable,
+        _Indexed,
+        _Keyed,
+        _KeyedWithItems,
+        _KeyedWithValues,
+        _Orderable,
+        _PathLike,
+    )
     from ._introspection import MappingLike
     from ._typing import (
         _U,
@@ -596,6 +608,51 @@ if TYPE_CHECKING:
         def matches_with_groups(self: _SyncPoll[str], pattern: str) -> _SyncPoll[Any]: ...
 
         @overload
+        def exists(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def exists(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_exist(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_exist(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_file(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_file(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_directory(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_directory(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_named(self: _SyncPoll[str] | _SyncPoll[pathlib.Path], filename: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_named(self: _SyncPoll[_PathLike], filename: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_child_of(self: _SyncPoll[str] | _SyncPoll[pathlib.Path], parent: object) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_child_of(self: _SyncPoll[_PathLike], parent: object) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_readable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_readable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_writable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_writable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_executable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_executable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
         def is_subset_of(
             self: _SyncPoll[str]
             | _SyncPoll[list[_E]]
@@ -619,50 +676,44 @@ if TYPE_CHECKING:
         ) -> _SyncPoll[_P_co]: ...
 
         @overload
+        def contains_duplicates(self: _SyncPoll[str]) -> _SyncPoll[_P_co]: ...
+        @overload
         def contains_duplicates(
-            self: _SyncPoll[str]
-            | _SyncPoll[list[_E]]
-            | _SyncPoll[tuple[_E, ...]]
-            | _SyncPoll[set[_E]]
-            | _SyncPoll[frozenset[_E]],
+            self: _SyncPoll[list[_E]] | _SyncPoll[tuple[_E, ...]] | _SyncPoll[set[_E]] | _SyncPoll[frozenset[_E]],
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def contains_duplicates(self: _SyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
 
         @overload
+        def does_not_contain_duplicates(self: _SyncPoll[str]) -> _SyncPoll[_P_co]: ...
+        @overload
         def does_not_contain_duplicates(
-            self: _SyncPoll[str]
-            | _SyncPoll[list[_E]]
-            | _SyncPoll[tuple[_E, ...]]
-            | _SyncPoll[set[_E]]
-            | _SyncPoll[frozenset[_E]],
+            self: _SyncPoll[list[_E]] | _SyncPoll[tuple[_E, ...]] | _SyncPoll[set[_E]] | _SyncPoll[frozenset[_E]],
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def does_not_contain_duplicates(self: _SyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
 
         @overload
+        def contains_only_once(self: _SyncPoll[str], *items: object) -> _SyncPoll[_P_co]: ...
+        @overload
         def contains_only_once(
-            self: _SyncPoll[str]
-            | _SyncPoll[list[_E]]
-            | _SyncPoll[tuple[_E, ...]]
-            | _SyncPoll[set[_E]]
-            | _SyncPoll[frozenset[_E]],
+            self: _SyncPoll[list[_E]] | _SyncPoll[tuple[_E, ...]] | _SyncPoll[set[_E]] | _SyncPoll[frozenset[_E]],
             *items: object,
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def contains_only_once(self: _SyncPoll[_CapableT], *items: object) -> _SyncPoll[_P_co]: ...
 
         @overload
+        def contains_in_order(self: _SyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
         def contains_in_order(
-            self: _SyncPoll[str]
-            | _SyncPoll[list[_E]]
-            | _SyncPoll[tuple[_E, ...]]
-            | _SyncPoll[set[_E]]
-            | _SyncPoll[frozenset[_E]],
+            self: _SyncPoll[list[_E]] | _SyncPoll[tuple[_E, ...]] | _SyncPoll[set[_E]] | _SyncPoll[frozenset[_E]],
             *items: _E | Matcher[_E],
         ) -> _SyncPoll[_P_co]: ...
         @overload
-        def contains_in_order(self: _SyncPoll[_CapableT], *items: _E | Matcher[_E]) -> _SyncPoll[_P_co]: ...
+        def contains_in_order(
+            self: _SyncPoll[Iterable[_E] | _Indexed[_E]], *items: _E | Matcher[_E]
+        ) -> _SyncPoll[_P_co]: ...
 
         @overload
         def has_same_size_as(
@@ -764,51 +815,6 @@ if TYPE_CHECKING:
         ) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_empty(self: _SyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def exists(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def exists(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def does_not_exist(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def does_not_exist(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_file(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_file(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_directory(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_directory(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_named(self: _SyncPoll[str] | _SyncPoll[pathlib.Path], filename: str) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_named(self: _SyncPoll[_PathLike], filename: str) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_child_of(self: _SyncPoll[str] | _SyncPoll[pathlib.Path], parent: object) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_child_of(self: _SyncPoll[_PathLike], parent: object) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_readable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_readable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_writable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_writable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_executable(self: _SyncPoll[str] | _SyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_executable(self: _SyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_positive(self: _SyncPoll[bool] | _SyncPoll[int] | _SyncPoll[float]) -> _SyncPoll[_P_co]: ...
@@ -1930,6 +1936,51 @@ if TYPE_CHECKING:
         def matches_with_groups(self: _AsyncPoll[str], pattern: str) -> _AsyncPoll[Any]: ...
 
         @overload
+        def exists(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def exists(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_exist(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_exist(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_file(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_file(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_directory(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_directory(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_named(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path], filename: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_named(self: _AsyncPoll[_PathLike], filename: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_child_of(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path], parent: object) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_child_of(self: _AsyncPoll[_PathLike], parent: object) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_readable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_readable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_writable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_writable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_executable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_executable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
         def is_subset_of(
             self: _AsyncPoll[str]
             | _AsyncPoll[list[_E]]
@@ -1953,50 +2004,44 @@ if TYPE_CHECKING:
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
+        def contains_duplicates(self: _AsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
         def contains_duplicates(
-            self: _AsyncPoll[str]
-            | _AsyncPoll[list[_E]]
-            | _AsyncPoll[tuple[_E, ...]]
-            | _AsyncPoll[set[_E]]
-            | _AsyncPoll[frozenset[_E]],
+            self: _AsyncPoll[list[_E]] | _AsyncPoll[tuple[_E, ...]] | _AsyncPoll[set[_E]] | _AsyncPoll[frozenset[_E]],
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def contains_duplicates(self: _AsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
 
         @overload
+        def does_not_contain_duplicates(self: _AsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
         def does_not_contain_duplicates(
-            self: _AsyncPoll[str]
-            | _AsyncPoll[list[_E]]
-            | _AsyncPoll[tuple[_E, ...]]
-            | _AsyncPoll[set[_E]]
-            | _AsyncPoll[frozenset[_E]],
+            self: _AsyncPoll[list[_E]] | _AsyncPoll[tuple[_E, ...]] | _AsyncPoll[set[_E]] | _AsyncPoll[frozenset[_E]],
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def does_not_contain_duplicates(self: _AsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
 
         @overload
+        def contains_only_once(self: _AsyncPoll[str], *items: object) -> _AsyncPoll[_P_co]: ...
+        @overload
         def contains_only_once(
-            self: _AsyncPoll[str]
-            | _AsyncPoll[list[_E]]
-            | _AsyncPoll[tuple[_E, ...]]
-            | _AsyncPoll[set[_E]]
-            | _AsyncPoll[frozenset[_E]],
+            self: _AsyncPoll[list[_E]] | _AsyncPoll[tuple[_E, ...]] | _AsyncPoll[set[_E]] | _AsyncPoll[frozenset[_E]],
             *items: object,
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def contains_only_once(self: _AsyncPoll[_CapableT], *items: object) -> _AsyncPoll[_P_co]: ...
 
         @overload
+        def contains_in_order(self: _AsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
         def contains_in_order(
-            self: _AsyncPoll[str]
-            | _AsyncPoll[list[_E]]
-            | _AsyncPoll[tuple[_E, ...]]
-            | _AsyncPoll[set[_E]]
-            | _AsyncPoll[frozenset[_E]],
+            self: _AsyncPoll[list[_E]] | _AsyncPoll[tuple[_E, ...]] | _AsyncPoll[set[_E]] | _AsyncPoll[frozenset[_E]],
             *items: _E | Matcher[_E],
         ) -> _AsyncPoll[_P_co]: ...
         @overload
-        def contains_in_order(self: _AsyncPoll[_CapableT], *items: _E | Matcher[_E]) -> _AsyncPoll[_P_co]: ...
+        def contains_in_order(
+            self: _AsyncPoll[Iterable[_E] | _Indexed[_E]], *items: _E | Matcher[_E]
+        ) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def has_same_size_as(
@@ -2098,51 +2143,6 @@ if TYPE_CHECKING:
         ) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_empty(self: _AsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def exists(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def exists(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def does_not_exist(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def does_not_exist(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_file(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_file(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_directory(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_directory(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_named(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path], filename: str) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_named(self: _AsyncPoll[_PathLike], filename: str) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_child_of(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path], parent: object) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_child_of(self: _AsyncPoll[_PathLike], parent: object) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_readable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_readable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_writable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_writable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_executable(self: _AsyncPoll[str] | _AsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_executable(self: _AsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_positive(self: _AsyncPoll[bool] | _AsyncPoll[int] | _AsyncPoll[float]) -> _AsyncPoll[_P_co]: ...

@@ -31,6 +31,17 @@ working, and what it cannot refuse is a value whose own view is narrower than th
 resolution has no way to say "only if no earlier rung matched".  `str` binds `_CapableT` by being
 iterable, and there is no negation to exclude a type that has a view of its own.
 
+Half of that is reachable anyway, and the half that is turns on where the *operands* come from.  A rung
+is emitted per protocol *and per binding*, since `_TextAssertion` reaches `_RepeatableAssertion[str]`
+while `_ListAssertion[_E]` reaches `_RepeatableAssertion[_E]`, and one rung covering both left `_E`
+free for a text chain to bind off the argument.  The umbrella rung then has to read the element off the
+receiver rather than leave it open, which is what `contains_in_order` asks `Iterable[_E]` for.  Both are
+needed: measured, the split alone changes nothing, and the restriction alone changes nothing.
+
+What that closes is an operand of the wrong type on a polled string, on mypy and pyright.  What stays
+open is an assertion the value answers structurally, `is_positive()` on a polled string being the one
+recorded: `str` orders, so the umbrella rung matches however the operands are typed.
+
 Where that leaves the residue is worth naming, because it is not here.  `assert_that()` hands a value
 the umbrella claims the whole builder, so `assert_that(mapping_shaped).is_positive()` type-checks off
 the chain too and raises when it runs.  Narrowing the chain alone would leave a polled value stricter
@@ -49,7 +60,7 @@ import pathlib
 import re
 import subprocess
 import sys
-from typing import Final
+from typing import Final, NamedTuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VIEWS = ROOT / "assertpy2" / "_engine" / "_typing.py"
@@ -90,6 +101,10 @@ What the chain is *not* held to is the surface of a value the capability umbrell
 assertion carries a last rung for it, because that is the surface `assert_that()` hands such a value,
 and Python's overload resolution has no way to say "only if no earlier rung matched".  So a `str`,
 being iterable, reaches rungs the string view does not carry.
+
+Its *operands* are held, though, where the value's own type says what they are: a rung is emitted per
+binding as well as per protocol, so a chain over text takes the elements text has rather than any the
+argument happens to be.
 """
 
 from __future__ import annotations
@@ -141,7 +156,15 @@ _IMPORTS = """    import datetime
     from .._matcher_impls import ClassInfo
     from ..assertpy import AssertionBuilder
     from ..matchers import Matcher
-    from ._capable_typing import _Callable, _Keyed, _KeyedWithItems, _KeyedWithValues, _Orderable, _PathLike
+    from ._capable_typing import (
+        _Callable,
+        _Indexed,
+        _Keyed,
+        _KeyedWithItems,
+        _KeyedWithValues,
+        _Orderable,
+        _PathLike,
+    )
     from ._introspection import MappingLike
 
     from ._typing import (
@@ -329,8 +352,20 @@ def _refines(node: ast.FunctionDef) -> bool:
     return "TypeIs[" in ast.unparse(node.args)
 
 
-def _protocols(known: dict[str, ast.ClassDef], flavour: str) -> list[tuple[str, str | None, list[ast.FunctionDef]]]:
-    """``(protocol, self restriction, methods)`` for every protocol a dispatched view reaches."""
+class _Reached(NamedTuple):
+    """A protocol a dispatched view reaches, with everything the rungs for it are built from."""
+
+    protocol: str
+    restriction: str | None
+    methods: list[ast.FunctionDef]
+    """As the binding leaves them, which is what the named rungs carry."""
+    holders: int
+    declared: list[ast.FunctionDef]
+    """As the protocol wrote them, which is what the umbrella rung carries."""
+
+
+def _protocols(known: dict[str, ast.ClassDef], flavour: str) -> list[_Reached]:
+    """One entry per protocol a dispatched view reaches, per set of arguments the view gave it."""
     ordered_views: list[str] = []
     value_of: dict[str, list[str]] = {}
     for value, view in _dispatch():
@@ -342,15 +377,20 @@ def _protocols(known: dict[str, ast.ClassDef], flavour: str) -> list[tuple[str, 
         value_of.setdefault(name, []).append(value)
 
     named = [view for view in ordered_views if view != "_Umbrella"]
-    reach: dict[str, list[str]] = {}
+    # keyed by the arguments the view gave the protocol, not by the protocol alone: `_TextAssertion`
+    # reaches `_RepeatableAssertion[str]` and `_ListAssertion[_E]` reaches `_RepeatableAssertion[_E]`,
+    # and one rung covering both left `_E` free, so a polled string took an element of any type
+    reach: dict[tuple[str, tuple[tuple[str, str], ...]], list[str]] = {}
     for view in named:
-        for protocol in _lineage(view, known):
-            reach.setdefault(protocol, []).append(view)
+        for protocol, mapping in _bound(view, known):
+            reach.setdefault((protocol, tuple(sorted(mapping.items()))), []).append(view)
 
     found = []
-    for protocol, holders in sorted(reach.items(), key=lambda pair: min(named.index(one) for one in pair[1])):
+    for (protocol, binding), holders in sorted(
+        reach.items(), key=lambda pair: min(named.index(one) for one in pair[1])
+    ):
         skip = _SKIP_FOR_A_VERDICT if flavour == _VERDICT else _SKIP
-        methods = [
+        declared = [
             item
             for item in known[protocol].body
             if isinstance(item, ast.FunctionDef)
@@ -358,12 +398,13 @@ def _protocols(known: dict[str, ast.ClassDef], flavour: str) -> list[tuple[str, 
             and not item.name.startswith("_")
             and not _refines(item)
         ]
-        if not methods:
+        if not declared:
             continue
+        methods = [_Substituted(dict(binding)).visit(ast.parse(ast.unparse(item)).body[0]) for item in declared]
         values = [value for view in holders for value in value_of.get(view, [])]
         universal = len(holders) == len(named)
         restriction = None if universal else _polled(" | ".join(values), flavour)
-        found.append((protocol, restriction, methods, len(holders)))
+        found.append(_Reached(protocol, restriction, methods, len(holders), declared))
     return found
 
 
@@ -378,8 +419,8 @@ def _rungs(known: dict[str, ast.ClassDef], flavour: str) -> dict[str, list[ast.F
     open_to_any: dict[str, list[ast.FunctionDef]] = {}
     widest: dict[str, tuple[int, ast.FunctionDef]] = {}
     seen: set[str] = set()
-    for _protocol, restriction, methods, holders in _protocols(known, flavour):
-        for method in methods:
+    for _protocol, restriction, methods, holders, declared in _protocols(known, flavour):
+        for method, written_as in zip(methods, declared, strict=True):
             rendered = _rewritten(method, restriction, flavour, known)
             written = ast.unparse(rendered)
             if written in seen:
@@ -388,8 +429,9 @@ def _rungs(known: dict[str, ast.ClassDef], flavour: str) -> dict[str, list[ast.F
             # a rung open to any chain would make every later one unreachable, so it goes to the end
             narrowed = restriction is not None or _narrows_itself(method)
             (found if narrowed else open_to_any).setdefault(method.name, []).append(rendered)
-            if narrowed and holders > widest.get(method.name, (0, method))[0]:
-                widest[method.name] = (holders, method)
+            # the umbrella rung reads the declaration as written, since it is not the one a binding narrowed
+            if narrowed and holders > widest.get(method.name, (0, written_as))[0]:
+                widest[method.name] = (holders, written_as)
 
     # the umbrella rung comes after the named ones, and is skipped where an open rung already covers the chain
     for name, (_holders, method) in widest.items():
@@ -529,6 +571,11 @@ _ASKS_A_SHAPE: Final = {
     "is_inf": "SupportsFloat | SupportsIndex",
     "is_not_inf": "SupportsFloat | SupportsIndex",
     "is_close_to": "SupportsFloat | SupportsIndex",
+    # the one member whose operands are the value's own elements: bound off the receiver, the umbrella rung
+    # reads them from it instead of leaving them open, and a polled string stops taking a number.  Both
+    # ways of being a sequence, since `list(value)` walks either and refusing the older one refused a
+    # value that runs
+    "contains_in_order": "Iterable[_E] | _Indexed[_E]",
     # the call is structural, and the callable view sits below the umbrella, so this is the only description
     "raises": "_Callable",
     "does_not_raise": "_Callable",
@@ -732,6 +779,21 @@ if TYPE_CHECKING:
         """A value with an ordering, which is all the relational assertions ask of one."""
 
         def __lt__(self, other: Any, /) -> Any: ...
+
+    class _Indexed(Protocol[_E_co]):
+        """The older way to be a sequence: integer lookup that stops with `IndexError`, and no `__iter__`.
+
+        `list(value)` accepts it, so `contains_in_order()` runs on it, and asking only for `Iterable`
+        refused a value that works.
+
+        One shape gets through that the runtime refuses, and it cannot be spelled out of: a class with
+        this lookup and ``__iter__ = None`` disables the fallback, so `list(value)` raises while this
+        still matches.  Structural typing has no way to ask for the absence of a member, and the
+        direction is the safe one: the call is accepted here and refused with "val must be iterable"
+        when it runs, which is what every other umbrella rung already does.
+        """
+
+        def __getitem__(self, index: int, /) -> _E_co: ...
 
     class _Keyed(Protocol):
         """`keys()`, which the dict gate reads before anything else.

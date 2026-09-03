@@ -26,7 +26,15 @@ if TYPE_CHECKING:
     from .._matcher_impls import ClassInfo
     from ..matchers import Matcher
     from ..outcome import AssertionOutcome
-    from ._capable_typing import _Callable, _Keyed, _KeyedWithItems, _KeyedWithValues, _Orderable, _PathLike
+    from ._capable_typing import (
+        _Callable,
+        _Indexed,
+        _Keyed,
+        _KeyedWithItems,
+        _KeyedWithValues,
+        _Orderable,
+        _PathLike,
+    )
     from ._introspection import MappingLike
     from ._typing import (
         _U,
@@ -552,6 +560,53 @@ if TYPE_CHECKING:
         def matches_with_groups(self: _CheckAnyValue[str], pattern: str) -> AssertionOutcome: ...
 
         @overload
+        def exists(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def exists(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def does_not_exist(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def does_not_exist(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def is_file(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def is_file(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def is_directory(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def is_directory(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def is_named(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path], filename: str) -> AssertionOutcome: ...
+        @overload
+        def is_named(self: _CheckAnyValue[_PathLike], filename: str) -> AssertionOutcome: ...
+
+        @overload
+        def is_child_of(
+            self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path], parent: object
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_child_of(self: _CheckAnyValue[_PathLike], parent: object) -> AssertionOutcome: ...
+
+        @overload
+        def is_readable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def is_readable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def is_writable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def is_writable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
+        def is_executable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
+        @overload
+        def is_executable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
+
+        @overload
         def is_subset_of(
             self: _CheckAnyValue[str]
             | _CheckAnyValue[list[_E]]
@@ -575,9 +630,10 @@ if TYPE_CHECKING:
         ) -> AssertionOutcome: ...
 
         @overload
+        def contains_duplicates(self: _CheckAnyValue[str]) -> AssertionOutcome: ...
+        @overload
         def contains_duplicates(
-            self: _CheckAnyValue[str]
-            | _CheckAnyValue[list[_E]]
+            self: _CheckAnyValue[list[_E]]
             | _CheckAnyValue[tuple[_E, ...]]
             | _CheckAnyValue[set[_E]]
             | _CheckAnyValue[frozenset[_E]],
@@ -586,9 +642,10 @@ if TYPE_CHECKING:
         def contains_duplicates(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
 
         @overload
+        def does_not_contain_duplicates(self: _CheckAnyValue[str]) -> AssertionOutcome: ...
+        @overload
         def does_not_contain_duplicates(
-            self: _CheckAnyValue[str]
-            | _CheckAnyValue[list[_E]]
+            self: _CheckAnyValue[list[_E]]
             | _CheckAnyValue[tuple[_E, ...]]
             | _CheckAnyValue[set[_E]]
             | _CheckAnyValue[frozenset[_E]],
@@ -597,9 +654,10 @@ if TYPE_CHECKING:
         def does_not_contain_duplicates(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
 
         @overload
+        def contains_only_once(self: _CheckAnyValue[str], *items: object) -> AssertionOutcome: ...
+        @overload
         def contains_only_once(
-            self: _CheckAnyValue[str]
-            | _CheckAnyValue[list[_E]]
+            self: _CheckAnyValue[list[_E]]
             | _CheckAnyValue[tuple[_E, ...]]
             | _CheckAnyValue[set[_E]]
             | _CheckAnyValue[frozenset[_E]],
@@ -609,16 +667,19 @@ if TYPE_CHECKING:
         def contains_only_once(self: _CheckAnyValue[_CapableT], *items: object) -> AssertionOutcome: ...
 
         @overload
+        def contains_in_order(self: _CheckAnyValue[str], *items: str | Matcher[str]) -> AssertionOutcome: ...
+        @overload
         def contains_in_order(
-            self: _CheckAnyValue[str]
-            | _CheckAnyValue[list[_E]]
+            self: _CheckAnyValue[list[_E]]
             | _CheckAnyValue[tuple[_E, ...]]
             | _CheckAnyValue[set[_E]]
             | _CheckAnyValue[frozenset[_E]],
             *items: _E | Matcher[_E],
         ) -> AssertionOutcome: ...
         @overload
-        def contains_in_order(self: _CheckAnyValue[_CapableT], *items: _E | Matcher[_E]) -> AssertionOutcome: ...
+        def contains_in_order(
+            self: _CheckAnyValue[Iterable[_E] | _Indexed[_E]], *items: _E | Matcher[_E]
+        ) -> AssertionOutcome: ...
 
         @overload
         def has_same_size_as(
@@ -720,53 +781,6 @@ if TYPE_CHECKING:
         ) -> AssertionOutcome: ...
         @overload
         def is_not_empty(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
-
-        @overload
-        def exists(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def exists(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def does_not_exist(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def does_not_exist(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def is_file(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def is_file(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def is_directory(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def is_directory(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def is_named(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path], filename: str) -> AssertionOutcome: ...
-        @overload
-        def is_named(self: _CheckAnyValue[_PathLike], filename: str) -> AssertionOutcome: ...
-
-        @overload
-        def is_child_of(
-            self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path], parent: object
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_child_of(self: _CheckAnyValue[_PathLike], parent: object) -> AssertionOutcome: ...
-
-        @overload
-        def is_readable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def is_readable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def is_writable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def is_writable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
-
-        @overload
-        def is_executable(self: _CheckAnyValue[str] | _CheckAnyValue[pathlib.Path]) -> AssertionOutcome: ...
-        @overload
-        def is_executable(self: _CheckAnyValue[_PathLike]) -> AssertionOutcome: ...
 
         @overload
         def is_positive(

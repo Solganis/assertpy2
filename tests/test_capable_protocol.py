@@ -19,7 +19,7 @@ import numbers
 import pathlib
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 
@@ -218,6 +218,30 @@ class _KeysAndValues(_Keys):
         return (1,)
 
 
+class _Shaped:
+    """Claimed by the umbrella for a shape that is not a sequence, which is what isolates walking one.
+
+    Every other subject here walks, `_Capable` being the base of all of them, so none of them can stand
+    for a value the umbrella claims and `contains_in_order` refuses.  A dataclass is the cheapest of the
+    four such shapes to write out.
+    """
+
+    __dataclass_fields__: ClassVar[dict[str, object]] = {}
+
+
+class _Indexable(_Shaped):
+    """A sequence the older way: integer lookup ending in `IndexError`, and no `__iter__`.
+
+    `list(value)` walks it, so `contains_in_order()` runs on it, and a restriction asking only for
+    `Iterable` refused a value that works.
+    """
+
+    def __getitem__(self, index: int, /) -> int:
+        if index > 2:
+            raise IndexError(index)
+        return index
+
+
 class _Pathish(_Capable):
     """Capable and a path, which is the structural half of `isinstance(val, (str, os.PathLike))`."""
 
@@ -244,6 +268,7 @@ _CARRIES = {
     "_Keyed": (_Keys,),
     "_KeyedWithItems": (_KeysAndItems,),
     "_KeyedWithValues": (_KeysAndValues,),
+    "Iterable[_E] | _Indexed[_E]": (_Capable, _Indexable),
 }
 """Subjects per shape, each carrying that shape and no other, so a wrong key cannot read as right.
 
@@ -261,6 +286,7 @@ _WITHOUT = {
     # genuine non-carrier here: measured, both refuse an entry
     "_KeyedWithItems": (_Capable, _Ordered, _Pathish, _Callish, _Keys, _KeysAndValues),
     "_KeyedWithValues": (_Capable, _Ordered, _Pathish, _Callish, _Keys, _KeysAndItems),
+    "Iterable[_E] | _Indexed[_E]": (_Shaped,),
 }
 """Subjects that genuinely lack each shape, listed rather than derived.
 
@@ -496,6 +522,7 @@ class TestWhatEachRestrictedAssertionAsksFor:
                         "_Keyed": 2,
                         "_KeyedWithItems": 2,
                         "_KeyedWithValues": 2,
+                        "Iterable[_E] | _Indexed[_E]": 1,
                     }
                 ),
                 "type": collections.Counter({"int": 3, "str": 14, "datetime.datetime": 7, "bytes | bytearray": 7}),

@@ -225,7 +225,13 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # the runtime's to name, and a `str` reaches the umbrella rung of an assertion the string view lacks
     "a-name-that-exists-nowhere-on-a-chain": {},
     "numeric-assertion-on-polled-text": {},
-    "element-of-another-type-on-a-polled-string": {},
+    # the rung the chain reaches for a text probe now carries `str` operands rather than a free element,
+    # so two of the three refuse the number.  ty and pyrefly still bind the element off the argument
+    "element-of-another-type-on-a-polled-string": {
+        "ty": frozenset(),
+        "mypy": frozenset({"call-overload"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    },
     "ordering-matcher-takes-any-boundary": {},
     "ordering-matcher-judges-any-subject": {},
     "convertible-but-not-a-number": {},
@@ -239,16 +245,19 @@ SPLIT: frozenset[str] = frozenset(
         "text-verdict-on-a-pivoted-number",
         "a-tuple-member-that-is-not-a-class",
         "a-nested-member-that-is-not-a-class",
+        "element-of-another-type-on-a-polled-string",
     }
 )
 """The cases where the three do not agree, named so a new one has to be decided about.
 
-Three relations, and ty is the silent one in all of them.  The first two are a lambda over the subject reading a
+Six relations, and ty is the silent one in all of them.  The first two are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
 The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
 rung on its twin, which ty does not read either.  The last two are a member of a class-info tuple that
 is not a class: `ClassInfo` is written out one level with the recursion quoted, because ty ignores an
-alias whose whole right-hand side is a string, and it reads the outermost level only.
+alias whose whole right-hand side is a string, and it reads the outermost level only.  The sixth is an
+element of another type handed to a polled string, where the rung that matches carries `str` operands
+and the two that read it say so.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as three dialects agreeing.

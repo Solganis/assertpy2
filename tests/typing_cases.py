@@ -292,9 +292,8 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_a_number).eventually_sync().no_such_assertion()  # case: a-name-that-exists-nowhere-on-a-chain
     # a `str` is iterable, so it reaches the umbrella rung, as wide as a value the umbrella claims
     assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
-    # the chain declares one rung for text and the sequences at once, so `_E` binds to the operand
-    # through a sequence arm even when the receiver is the text one.  Splitting the rung per value type
-    # is what the module header measured and refused: it collapses on an unannotated probe
+    # the rung the chain reaches now carries `str` operands, so mypy and pyright refuse this.  ty and
+    # pyrefly still bind the element off the argument, which is what keeps the case here
     assert_that(_some_text).eventually_sync().contains_in_order(1)  # case: element-of-another-type-on-a-polled-string
     # the same assertion off the chain, which is where the width above comes from: `assert_that()` hands
     # a capable value the whole builder, and this call raises `TypeError` when it runs

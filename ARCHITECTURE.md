@@ -20,9 +20,9 @@ Most of it is not yours to edit:
 |---|---|---|
 | `_engine/_typing.py` | 37 | 390 |
 | `_engine/_check_typing.py` | 29 | 311 |
-| `_engine/_builder_check_typing.py` | 1 | 311 |
-| `_engine/_capable_typing.py` | 9 | 323 |
-| `_engine/_poll_typing.py` | 2 | 731 |
+| `_engine/_builder_check_typing.py` | 1 | 315 |
+| `_engine/_capable_typing.py` | 10 | 324 |
+| `_engine/_poll_typing.py` | 2 | 739 |
 
 One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
 move on every edit to a generated file.
