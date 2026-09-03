@@ -386,3 +386,94 @@ class TestExtensionBindingMechanics:
         from assertpy2.assertpy import AssertionBuilder
 
         assert_that(assert_that(1)).is_instance_of(AssertionBuilder)
+
+
+class TestAnOverrideLeavesOneImplementation:
+    """A name is registered in one of two places by shape, and an override can change the shape.
+
+    A plain function is set on the builder subclass, anything else is grafted onto each instance in
+    `_builder()`. An instance attribute shadows a class one, so leaving the old entry behind meant the
+    replaced implementation kept running while `add_extension()` reported success.
+    """
+
+    def test_a_callable_object_is_replaced_by_a_function(self):
+        class Refusing:
+            __name__ = "is_shape_changed"
+
+            def __call__(self, builder):
+                return builder.error("the callable object ran")
+
+        def is_shape_changed(self):
+            return self.error("the function ran")
+
+        add_extension(Refusing())
+        add_extension(is_shape_changed, override=True)
+        try:
+            with pytest.raises(AssertionError) as failure:
+                assert_that(1).is_shape_changed()
+            assert_that(str(failure.value)).is_equal_to("the function ran")
+            assert_that(assertpy2.assertpy._extensions).does_not_contain_key("is_shape_changed")
+        finally:
+            remove_extension(is_shape_changed)
+
+    def test_a_function_is_replaced_by_a_callable_object(self):
+        def is_shape_changed(self):
+            return self.error("the function ran")
+
+        class Refusing:
+            __name__ = "is_shape_changed"
+
+            def __call__(self, builder):
+                return builder.error("the callable object ran")
+
+        replacement = Refusing()
+        add_extension(is_shape_changed)
+        add_extension(replacement, override=True)
+        try:
+            with pytest.raises(AssertionError) as failure:
+                assert_that(1).is_shape_changed()
+            assert_that(str(failure.value)).is_equal_to("the callable object ran")
+            assert_that(vars(assertpy2.assertpy._ExtendedBuilder)).does_not_contain_key("is_shape_changed")
+        finally:
+            remove_extension(replacement)
+
+    def test_the_replaced_implementation_does_not_come_back_after_a_removal(self):
+        """Removal takes the name away rather than uncovering what the override replaced."""
+
+        class Refusing:
+            __name__ = "is_shape_changed"
+
+            def __call__(self, builder):
+                return builder.error("the callable object ran")
+
+        def is_shape_changed(self):
+            return self.error("the function ran")
+
+        add_extension(Refusing())
+        add_extension(is_shape_changed, override=True)
+        remove_extension(is_shape_changed)
+        with pytest.raises(AttributeError) as refused:
+            assert_that(1).is_shape_changed()
+        assert_that(str(refused.value)).contains("is_shape_changed")
+
+    def test_a_name_lives_in_exactly_one_half_whichever_way_it_was_overridden(self):
+        """The invariant the two directions share, stated once rather than implied by the pair above."""
+
+        class Refusing:
+            __name__ = "is_shape_changed"
+
+            def __call__(self, builder):
+                return builder
+
+        def is_shape_changed(self):
+            return self
+
+        first, second = Refusing(), Refusing()
+        for installed in (first, is_shape_changed, second):
+            add_extension(installed, override=True)
+            halves = [
+                "is_shape_changed" in vars(assertpy2.assertpy._ExtendedBuilder),
+                "is_shape_changed" in assertpy2.assertpy._extensions,
+            ]
+            assert_that(halves).described_as(f"where {installed!r} was registered").contains_only(True, False)
+        remove_extension(second)

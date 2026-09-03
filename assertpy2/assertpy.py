@@ -952,10 +952,15 @@ def add_extension(func: _Extension, *, override: bool = False) -> None:
                     f"replace it deliberately, or give the extension another name"
                 )
         named = _named_extension(name, func)
+        # one implementation per name, so an override that changes shape clears the other half too: a
+        # callable grafted onto the instance in `_builder()` shadows a function set on the class
         if isinstance(func, types.FunctionType):
+            _extensions.pop(name, None)
             # the descriptor protocol binds once here, and the subclass keeps `AssertionBuilder` pristine on removal
             setattr(_ExtendedBuilder, name, named)
         else:
+            if name in vars(_ExtendedBuilder):
+                delattr(_ExtendedBuilder, name)
             _extensions[name] = named
 
 
