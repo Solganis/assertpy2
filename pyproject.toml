@@ -251,7 +251,15 @@ branch = true
 source = ["assertpy2"]
 
 [tool.coverage.report]
-omit = ["tests/*", "assertpy2/__init__.py", "assertpy2/_typing.py", "assertpy2/_compat.py"]
+# the negation twins are protocol declarations only: nothing imports the module at run time, so its
+# two import lines are the whole of it and never execute
+omit = [
+    "tests/*",
+    "assertpy2/__init__.py",
+    "assertpy2/_typing.py",
+    "assertpy2/_compat.py",
+    "assertpy2/_engine/_negated_typing.py",
+]
 
 [tool.ruff]
 # 120 feeds both `ruff format` and the E501 lint. Unlike black-style configs we do
@@ -324,6 +332,7 @@ max-complexity = 32
 "assertpy2/_engine/_poll_typing.py" = ["A002"]
 "assertpy2/_engine/_builder_check_typing.py" = ["A002"]
 "assertpy2/_engine/_capable_typing.py" = ["A002"]
+"assertpy2/_engine/_negated_typing.py" = ["A002"]
 
 # Tests trade a few style rules for directness and literal fixtures:
 "tests/*" = [

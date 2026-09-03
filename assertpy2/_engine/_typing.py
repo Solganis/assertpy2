@@ -51,6 +51,26 @@ if TYPE_CHECKING:
         _CheckStringAssertion,
     )
     from ._compat import Self
+    from ._negated_typing import (
+        _NegatedArrayAssertion,
+        _NegatedBoolAssertion,
+        _NegatedBytesAssertion,
+        _NegatedCallableAssertion,
+        _NegatedComplexAssertion,
+        _NegatedCoreAssertion,
+        _NegatedDateAssertion,
+        _NegatedDateTimeAssertion,
+        _NegatedDictAssertion,
+        _NegatedFrameAssertion,
+        _NegatedInvokedAssertion,
+        _NegatedIterableAssertion,
+        _NegatedListAssertion,
+        _NegatedNumericAssertion,
+        _NegatedObjectAssertion,
+        _NegatedPathAssertion,
+        _NegatedStringAssertion,
+        _NegatedTextAssertion,
+    )
     from ._poll_typing import _AsyncPoll, _SyncPoll
 
     # ``ignore``/``include`` accept a single key, a nested-path tuple, or a list/set/frozenset of them.
@@ -229,6 +249,9 @@ if TYPE_CHECKING:
     class _CoreAssertion(Protocol):
         """Base protocol with assertions available for all types."""
 
+        @property
+        def not_(self) -> _NegatedCoreAssertion: ...
+
         def described_as(self, description: str) -> Self: ...
         def is_equal_to(
             self,
@@ -321,9 +344,6 @@ if TYPE_CHECKING:
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> Self: ...
-        # declared as this protocol: any other spelling let `assert_that(1).not_.starts_with('x')` pass
-        @property
-        def not_(self) -> Self: ...
         # a builder twin was tried and dropped: text and numeric ordering collide in one class.  A pivot
         # hands back `AssertionBuilder[_E]`, as does what the capability umbrella claims, so both stay untyped
         def check(self) -> _CheckCoreAssertion: ...
@@ -350,20 +370,22 @@ if TYPE_CHECKING:
         back as the builder would put all 152 names back at the first `is_not_none()`.
         """
 
-        def check(self) -> _CheckObjectAssertion[_T_co]: ...
+        @property
+        def not_(self) -> _NegatedObjectAssertion[_T_co]: ...
 
         @property
         def value(self) -> _T_co: ...
-
-        # attrs reaches mypy only, so the object view carries `matches_structure` rather than a shape
         def matches_structure(self, spec: dict[Any, Any]) -> Self: ...
-
         def is_greater_than(self, other: Any) -> Self: ...
         def is_greater_than_or_equal_to(self, other: Any) -> Self: ...
         def is_less_than(self, other: Any) -> Self: ...
         def is_less_than_or_equal_to(self, other: Any) -> Self: ...
         def is_between(self, low: Any, high: Any) -> Self: ...
         def is_not_between(self, low: Any, high: Any) -> Self: ...
+
+        def check(self) -> _CheckObjectAssertion[_T_co]: ...
+
+        # attrs reaches mypy only, so the object view carries `matches_structure` rather than a shape
 
         # the four numeric assertions an unrecognised value can answer whatever it registered as, which
         # is how `Decimal` and `Fraction` arrive here: neither is an `int` or a `float`, so no overload
@@ -481,6 +503,9 @@ if TYPE_CHECKING:
         exception, which the runtime then looks for on disk.
         """
 
+        @property
+        def not_(self) -> _NegatedTextAssertion: ...
+
         @overload
         def satisfies(self, matcher: Callable[[str], TypeIs[str]]) -> _StringAssertion: ...
         @overload
@@ -582,6 +607,9 @@ if TYPE_CHECKING:
         `str` at least as often as it is written as a `Path`.
         """
 
+        @property
+        def not_(self) -> _NegatedStringAssertion: ...
+
         def check(self) -> _CheckStringAssertion: ...
 
         # redeclared so a pivot keeps its result a `str` rather than the text capability
@@ -599,6 +627,9 @@ if TYPE_CHECKING:
         `complex` and `bool` have protocols of their own, each carrying what the runtime actually
         accepts for that type rather than the whole numeric set.
         """
+
+        @property
+        def not_(self) -> _NegatedNumericAssertion[_N]: ...
 
         def check(self) -> _CheckNumericAssertion[_N]: ...
 
@@ -652,6 +683,9 @@ if TYPE_CHECKING:
         the numeric protocol, so a checker suggested a method whose only outcome was a crash.
         """
 
+        @property
+        def not_(self) -> _NegatedComplexAssertion: ...
+
         def check(self) -> _CheckComplexAssertion: ...
 
         @property
@@ -665,6 +699,9 @@ if TYPE_CHECKING:
         `TypeError: val is not an integer, got bool`, and accepts the rest: `True > 0` is a real
         comparison.  The type now says the same thing.
         """
+
+        @property
+        def not_(self) -> _NegatedBoolAssertion: ...
 
         def check(self) -> _CheckBoolAssertion: ...
 
@@ -684,6 +721,9 @@ if TYPE_CHECKING:
         Generic over the element type ``_E`` so element-access pivots (``first``/``last``/``element``/
         ``single``) narrow the chain to the element, and ``value`` keeps the element type.
         """
+
+        @property
+        def not_(self) -> _NegatedIterableAssertion[_E]: ...
 
         def check(self) -> _CheckIterableAssertion[_E]: ...
 
@@ -727,6 +767,9 @@ if TYPE_CHECKING:
         already been left behind, and made callers narrow a type the library had already settled.
         """
 
+        @property
+        def not_(self) -> _NegatedListAssertion[_E]: ...
+
         def check(self) -> _CheckListAssertion[_E]: ...
 
         @property
@@ -734,6 +777,9 @@ if TYPE_CHECKING:
 
     class _DictAssertion(_StructureAssertion, _SizedAssertion, _CoreAssertion, Protocol[_K, _V]):
         """Assertions available for ``dict`` values, generic over the key and value types."""
+
+        @property
+        def not_(self) -> _NegatedDictAssertion[_K, _V]: ...
 
         def check(self) -> _CheckDictAssertion[(_K, _V)]: ...
 
@@ -856,6 +902,9 @@ if TYPE_CHECKING:
     class _FrameAssertion(_ArrayLikeAssertion, Protocol[_FrameT_co]):
         """Assertions available for a pandas or polars frame, which is array-like as well."""
 
+        @property
+        def not_(self) -> _NegatedFrameAssertion[_FrameT_co]: ...
+
         def check(self) -> _CheckFrameAssertion[_FrameT_co]: ...
 
         @property
@@ -864,6 +913,9 @@ if TYPE_CHECKING:
 
     class _ArrayAssertion(_ArrayLikeAssertion, Protocol[_ArrayT_co]):
         """Assertions available for a numpy array, which is everything a frame has but `is_frame_equal`."""
+
+        @property
+        def not_(self) -> _NegatedArrayAssertion[_ArrayT_co]: ...
 
         def check(self) -> _CheckArrayAssertion[_ArrayT_co]: ...
 
@@ -877,6 +929,9 @@ if TYPE_CHECKING:
         only on the operand, so `assert_that(day).is_before(stamp)` type-checked and raised for as long
         as one view served both types.  They live on the datetime view below.
         """
+
+        @property
+        def not_(self) -> _NegatedDateAssertion: ...
 
         def check(self) -> _CheckDateAssertion: ...
 
@@ -897,6 +952,9 @@ if TYPE_CHECKING:
         the date view brought its `is_less_than(other: datetime.date)` along, and
         `assert_that(stamp).is_less_than(day)` type-checked and raised.
         """
+
+        @property
+        def not_(self) -> _NegatedDateTimeAssertion: ...
 
         def check(self) -> _CheckDateTimeAssertion: ...
 
@@ -921,6 +979,9 @@ if TYPE_CHECKING:
     class _PathAssertion(_FilesystemAssertion, _CoreAssertion, Protocol):
         """Assertions available for ``pathlib.Path`` values."""
 
+        @property
+        def not_(self) -> _NegatedPathAssertion: ...
+
         def check(self) -> _CheckPathAssertion: ...
 
         @property
@@ -928,6 +989,9 @@ if TYPE_CHECKING:
 
     class _BytesAssertion(_MembershipAssertion, _SizedAssertion, _CoreAssertion, Protocol[_B_co]):
         """Assertions available for ``bytes`` and ``bytearray`` values, generic over which one."""
+
+        @property
+        def not_(self) -> _NegatedBytesAssertion[_B_co]: ...
 
         def check(self) -> _CheckBytesAssertion[_B_co]: ...
 
@@ -971,6 +1035,9 @@ if TYPE_CHECKING:
         type-safe by construction, never advertising methods that may not apply.
         """
 
+        @property
+        def not_(self) -> _NegatedInvokedAssertion: ...
+
         def check(self) -> _CheckInvokedAssertion: ...
 
         def returned(self) -> _CoreAssertion: ...
@@ -990,6 +1057,9 @@ if TYPE_CHECKING:
 
     class _CallableAssertion(_CoreAssertion, Protocol[_P_co]):
         """Assertions available for callable values."""
+
+        @property
+        def not_(self) -> _NegatedCallableAssertion[_P_co]: ...
 
         def check(self) -> _CheckCallableAssertion[_P_co]: ...
 

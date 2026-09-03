@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
     from assertpy2 import AssertionOutcome, assert_conforms, assert_that, assert_warn, match
     from assertpy2._engine._builder_check_typing import _CheckAnyValue
-    from assertpy2._engine._capable_typing import _CapableAssertion
+    from assertpy2._engine._capable_typing import _CapableAssertion, _NegatedCapableAssertion
     from assertpy2._engine._check_typing import (
         _CheckArrayAssertion,
         _CheckBoolAssertion,
@@ -44,6 +44,7 @@ if TYPE_CHECKING:
         _CheckPathAssertion,
         _CheckStringAssertion,
     )
+    from assertpy2._engine._negated_typing import _NegatedObjectAssertion
     from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll
     from assertpy2._engine._typing import (
         _ArrayAssertion,
@@ -260,6 +261,20 @@ if TYPE_CHECKING:
     # no intersection type, so a union keeps the view the chain already had.  The runtime side is gated in
     # `tests/test_class.py`, where all four spellings are accepted and named in the failure
     assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[_Alpha | _Beta])
+    assert_type(assert_that(anything).not_, _NegatedObjectAssertion[object])
+
+    def _narrows_to_str(value: object) -> TypeIs[str]: ...
+
+    # one negated step hands the positive view back, which is what `NegatedBuilder` does at run time
+    assert_type(assert_that(object()).not_.is_instance_of(str), _ObjectAssertion[object])
+    assert_type(assert_that(object()).not_.is_instance_of_any(str, bytes), _ObjectAssertion[object])
+    assert_type(assert_that(object()).not_.is_not_none(), _ObjectAssertion[object])
+    # and the positive rungs that answer the same view, pinned from a receiver the gate can read
+    assert_type(assert_that(object()).is_instance_of((_Alpha, _Beta)), _ObjectAssertion[_Alpha | _Beta])
+    assert_type(assert_that(object()).is_instance_of_any(_Alpha, _Beta), _ObjectAssertion[_Alpha | _Beta])
+    assert_type(assert_that(object()).is_not_none(), _ObjectAssertion[object])
+    assert_type(assert_that(object()).not_.satisfies(_narrows_to_str), _ObjectAssertion[object])
+    assert_type(assert_that(_Countable()).not_, _NegatedCapableAssertion[_Countable])
     assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, _Alpha | _Beta)
     assert_type(assert_that(anything).is_instance_of((int, str, bytes)), _ObjectAssertion[int | str | bytes])
     assert_type(assert_that(anything).is_instance_of_any(_Alpha, _Beta), _ObjectAssertion[_Alpha | _Beta])

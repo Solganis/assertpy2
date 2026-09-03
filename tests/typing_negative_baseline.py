@@ -208,11 +208,24 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "mypy": frozenset({"call-overload"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
     },
-    "negation-allows-a-non-negatable-name": {},
+    # the negation twins carry only what reaches a verdict, so the fourteen names that transform,
+    # configure or describe are now refused statically as well as at run time
+    "negation-allows-a-non-negatable-name": {
+        "ty": frozenset({"unresolved-attribute"}),
+        "mypy": frozenset({"attr-defined"}),
+        "pyright": frozenset({"reportAttributeAccessIssue"}),
+    },
+    "umbrella-negation-allows-a-non-negatable-name": {
+        "ty": frozenset({"unresolved-attribute"}),
+        "mypy": frozenset({"attr-defined"}),
+        "pyright": frozenset({"reportAttributeAccessIssue"}),
+    },
+    "negated-element-of-another-type": _ARGUMENT,
     # the hook has to stay: `has_status("PAID")` can be declared nowhere. With it there an unknown name is
     # the runtime's to name, and a `str` reaches the umbrella rung of an assertion the string view lacks
     "a-name-that-exists-nowhere-on-a-chain": {},
     "numeric-assertion-on-polled-text": {},
+    "element-of-another-type-on-a-polled-string": {},
     "ordering-matcher-takes-any-boundary": {},
     "ordering-matcher-judges-any-subject": {},
     "convertible-but-not-a-number": {},

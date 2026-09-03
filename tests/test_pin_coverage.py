@@ -62,6 +62,26 @@ _UNPINNABLE = {
     # no expression produces its receiver: a nullable capable value resolves to the object fallback,
     # measured, so `_CapableAssertion[_U | None]` is a `self` nothing hands back
     ("_CapableAssertion", "is_not_none", "_CapableAssertion", "*|None"),
+    # `not_` on every view, held by `test_negated_protocols.py` instead: it derives the pairs from the
+    # reachable closure, so a view added later is covered without a pin being remembered for it
+    ("_ArrayAssertion", "not_", "_NegatedArrayAssertion", "<the subject's own type>"),
+    ("_BoolAssertion", "not_", "_NegatedBoolAssertion", "<the subject's own type>"),
+    ("_BytesAssertion", "not_", "_NegatedBytesAssertion", "<the subject's own type>"),
+    ("_CallableAssertion", "not_", "_NegatedCallableAssertion", "<the subject's own type>"),
+    ("_ComplexAssertion", "not_", "_NegatedComplexAssertion", "<the subject's own type>"),
+    ("_CoreAssertion", "not_", "_NegatedCoreAssertion", "<the subject's own type>"),
+    ("_DateAssertion", "not_", "_NegatedDateAssertion", "<the subject's own type>"),
+    ("_DateTimeAssertion", "not_", "_NegatedDateTimeAssertion", "<the subject's own type>"),
+    ("_DictAssertion", "not_", "_NegatedDictAssertion", "<the subject's own type>"),
+    ("_FrameAssertion", "not_", "_NegatedFrameAssertion", "<the subject's own type>"),
+    ("_InvokedAssertion", "not_", "_NegatedInvokedAssertion", "<the subject's own type>"),
+    ("_IterableAssertion", "not_", "_NegatedIterableAssertion", "<the subject's own type>"),
+    ("_ListAssertion", "not_", "_NegatedListAssertion", "<the subject's own type>"),
+    ("_NumericAssertion", "not_", "_NegatedNumericAssertion", "<the subject's own type>"),
+    ("_ObjectAssertion", "not_", "_NegatedObjectAssertion", "<the subject's own type>"),
+    ("_PathAssertion", "not_", "_NegatedPathAssertion", "<the subject's own type>"),
+    ("_StringAssertion", "not_", "_NegatedStringAssertion", "<the subject's own type>"),
+    ("_TextAssertion", "not_", "_NegatedTextAssertion", "<the subject's own type>"),
 }
 """Rungs no pin can claim, each with what refuses it written above."""
 _THE_SUBJECT = "<the subject's own type>"

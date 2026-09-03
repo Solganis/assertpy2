@@ -18,10 +18,10 @@ Most of it is not yours to edit:
 
 | file | protocols | declarations |
 |---|---|---|
-| `_engine/_typing.py` | 37 | 373 |
+| `_engine/_typing.py` | 37 | 390 |
 | `_engine/_check_typing.py` | 29 | 311 |
 | `_engine/_builder_check_typing.py` | 1 | 311 |
-| `_engine/_capable_typing.py` | 8 | 184 |
+| `_engine/_capable_typing.py` | 9 | 323 |
 | `_engine/_poll_typing.py` | 2 | 731 |
 
 One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
@@ -36,6 +36,7 @@ move on every edit to a generated file.
 | `_engine/_poll_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py`, `assertpy.py`, `_engine/_operations.py` |
 | `_engine/_builder_check_typing.py` | `scripts/generate_poll_protocols.py` | the same three |
 | `_engine/_capable_typing.py` | `scripts/generate_poll_protocols.py` | the **runtime mixins** under `assertpy2/*.py` |
+| `_engine/_negated_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py` and `_engine/_operations.py` |
 | `_engine/_check_typing.py` | `scripts/generate_check_protocols.py` | `_typing.py`, `_engine/_operations.py` |
 
 One script writes three of them. That is the part people miss.
@@ -109,6 +110,8 @@ import lines are templates inside the generators.
 | `test_api_compatibility.py` | has the public surface moved without the snapshot being re-recorded |
 | `test_typing_completeness.py` | can a checker name a type for every exported symbol |
 | `test_pyright_baseline.py` | has a new pyright diagnostic appeared in the package |
+| `test_typing_promises.py` | is the object at the end of a chain the type the checker was promised |
+| `test_negated_protocols.py` | does every reachable view have a negation twin that hands the view back |
 | `test_architecture_doc.py` | does this document still describe the tree, counts included |
 | `test_typing_negative.py` | do the checkers still refuse what they should |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |

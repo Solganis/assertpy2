@@ -189,8 +189,13 @@ def _chaining_must_not_widen_what_the_value_offers() -> None:
     # `.not_` used to accept what the protocol does not, the proxy resolving any name through `__getattr__`.
     # It is declared as the protocol it was reached from, refusing the same calls the un-negated chain does
     assert_that(1 + 2j).not_.is_greater_than(0)  # case: negation-widens-the-protocol
-    # what the declaration allows and the runtime refuses: the fourteen names that transform or configure
+    # refused by all three now that the negation twins carry only what reaches a verdict, and the runtime
+    # refuses it too: `described_as() only sets the failure description, so it cannot be negated`
     assert_that(1).not_.described_as("x")  # case: negation-allows-a-non-negatable-name
+    # the twin substitutes what the view bound its base to, so the negated operand is held to `str`
+    assert_that("abc").not_.contains_in_order(1)  # case: negated-element-of-another-type
+    # the same rule on the surface a value no overload names by type gets, which lives in its own module
+    assert_that(_Walkable()).not_.described_as("x")  # case: umbrella-negation-allows-a-non-negatable-name
     # neither half of an ordering matcher is typed: a wrong-type boundary and a foreign subject both fit
     assert_that(1).satisfies(match.greater_than("x"))  # case: ordering-matcher-takes-any-boundary
     assert_that("x").satisfies(match.greater_than(0))  # case: ordering-matcher-judges-any-subject
@@ -287,6 +292,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_a_number).eventually_sync().no_such_assertion()  # case: a-name-that-exists-nowhere-on-a-chain
     # a `str` is iterable, so it reaches the umbrella rung, as wide as a value the umbrella claims
     assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
+    # the chain declares one rung for text and the sequences at once, so `_E` binds to the operand
+    # through a sequence arm even when the receiver is the text one.  Splitting the rung per value type
+    # is what the module header measured and refused: it collapses on an unannotated probe
+    assert_that(_some_text).eventually_sync().contains_in_order(1)  # case: element-of-another-type-on-a-polled-string
     # the same assertion off the chain, which is where the width above comes from: `assert_that()` hands
     # a capable value the whole builder, and this call raises `TypeError` when it runs
     assert_that(_TakesAnyKey()).is_positive()  # case: numeric-assertion-on-a-capable-value
