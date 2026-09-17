@@ -11,7 +11,7 @@ import collections
 import pytest
 
 from assertpy2 import assert_that
-from assertpy2.helpers import _both_list_like, _elided_seq_repr, _elided_text_repr, _joined_parts
+from assertpy2.helpers import _ELIDED, _both_list_like, _elided_seq_repr, _elided_text_repr, _joined_parts
 
 
 class TestSequenceElisionBoundaries:
@@ -54,7 +54,9 @@ class TestTextElisionBoundary:
     def test_four_lines_are_collapsed_to_the_changed_ones(self):
         # the cost of a multi-line value is vertical, and the message prints the value twice
         collapsed = _elided_text_repr("a\nb\nc\nd", "a\nZ\nc\nd")
-        assert_that(collapsed).is_equal_to(".., line 2: b")
+        # line 1 matched ahead of the change and lines 3-4 matched behind it, so the change is marked
+        # on both sides
+        assert_that(collapsed).is_equal_to(".., line 2: b, ..")
 
 
 class TestJoinedPartsCap:
@@ -62,23 +64,35 @@ class TestJoinedPartsCap:
     in full. The cap on spelled-out parts is what keeps that from becoming a wall of text."""
 
     def test_five_parts_are_all_spelled_out(self):
-        assert_that(_joined_parts([str(index) for index in range(5)], elided=False)).is_equal_to("0, 1, 2, 3, 4")
+        assert_that(_joined_parts([str(index) for index in range(5)])).is_equal_to("0, 1, 2, 3, 4")
 
     def test_the_sixth_part_turns_into_a_count(self):
-        assert_that(_joined_parts([str(index) for index in range(6)], elided=False)).is_equal_to(
+        assert_that(_joined_parts([str(index) for index in range(6)])).is_equal_to("0, 1, 2, 3, 4, ... and 1 more")
+
+    def test_the_count_names_how_many_were_dropped(self):
+        assert_that(_joined_parts([str(index) for index in range(9)])).is_equal_to("0, 1, 2, 3, 4, ... and 4 more")
+
+    def test_markers_do_not_count_against_the_cap(self):
+        # a marker stands for what was dropped for being equal; spending the cap on those would push
+        # the differing parts the message exists to show out of it
+        parts = [item for index in range(5) for item in (_ELIDED, str(index))]
+        assert_that(_joined_parts(parts)).is_equal_to(".., 0, .., 1, .., 2, .., 3, .., 4")
+
+    def test_a_marker_the_count_displaced_is_dropped(self):
+        # "... and N more" already stands for everything past the cap, marker included
+        assert_that(_joined_parts([*[str(index) for index in range(6)], _ELIDED])).is_equal_to(
             "0, 1, 2, 3, 4, ... and 1 more"
         )
 
-    def test_the_count_names_how_many_were_dropped(self):
-        assert_that(_joined_parts([str(index) for index in range(9)], elided=False)).is_equal_to(
-            "0, 1, 2, 3, 4, ... and 4 more"
-        )
+    def test_a_run_of_matches_collapses_to_one_marker(self):
+        assert_that(_joined_parts([_ELIDED, _ELIDED, _ELIDED, "x"], opener="[", closer="]")).is_equal_to("[.., x]")
 
-    def test_an_elided_prefix_marks_what_matched(self):
-        assert_that(_joined_parts(["x"], elided=True, opener="[", closer="]")).is_equal_to("[.., x]")
+    def test_the_marker_stands_where_the_matched_run_was(self):
+        assert_that(_joined_parts([_ELIDED, "x"], opener="[", closer="]")).is_equal_to("[.., x]")
+        assert_that(_joined_parts(["x", _ELIDED], opener="[", closer="]")).is_equal_to("[x, ..]")
 
     def test_an_all_matching_value_is_just_the_marker(self):
-        assert_that(_joined_parts([], elided=True, opener="{", closer="}")).is_equal_to("{..}")
+        assert_that(_joined_parts([_ELIDED], opener="{", closer="}")).is_equal_to("{..}")
 
 
 class TestElisionReachesTheMessage:
@@ -115,3 +129,38 @@ class TestNamedtuplesAreNotTreatedAsPlainSequences:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(self._Point(1, 2)).is_equal_to(self._Point(1, 3))
         assert_that(str(exc_info.value)).contains("y=2").contains("y=3")
+
+
+class TestElisionMarkerPlacement:
+    """``..`` stands where the collapsed elements were, so a changed head reads differently from a
+    changed tail.
+
+    A single leading marker said only *that* something matched, never where: a sequence differing
+    from its counterpart by one extra element at the front printed that element behind the marker,
+    as ``[.., 0]``, which reads as a changed tail.
+    """
+
+    def test_a_changed_head_keeps_the_marker_behind_it(self):
+        seq = [0, *range(1, 40)]
+        assert_that(_elided_seq_repr(seq, list(range(1, 40)))).is_equal_to("[0, ..]")
+
+    def test_a_changed_tail_keeps_the_marker_in_front(self):
+        assert_that(_elided_seq_repr([*[1] * 20, 2], [1] * 21)).is_equal_to("[.., 2]")
+
+    def test_a_changed_middle_is_marked_on_both_sides(self):
+        assert_that(_elided_seq_repr([*[1] * 10, 2, *[1] * 10], [1] * 21)).is_equal_to("[.., 2, ..]")
+
+    def test_a_changed_head_reaches_the_failure_message(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
+        assert_that(str(exc_info.value)).contains("<[0, ..]>")
+
+    def test_a_changed_first_line_keeps_the_marker_behind_it(self):
+        # the text path collapses by line and marks the run the same way
+        assert_that(_elided_text_repr("X\nb\nc\nd", "a\nb\nc\nd")).is_equal_to("line 1: X, ..")
+
+    def test_a_changed_first_key_keeps_the_marker_behind_it(self):
+        # and so does the mapping path, where the run is the keys that matched
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 2})
+        assert_that(str(exc_info.value)).contains("<{'a': 1, ..}>")

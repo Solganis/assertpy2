@@ -83,7 +83,10 @@ def test_failure_single_entry():
 def test_failure_multi_entry():
     with pytest.raises(AssertionError) as exc_info:
         assert_that({"a": 1, "b": 2, "c": 3}).is_equal_to({"a": 1, "b": 3, "c": 3})
-    assert_that(str(exc_info.value)).is_equal_to("Expected <{.., 'b': 2}> to be equal to <{.., 'b': 3}>, but was not.")
+    # 'a' matched ahead of the changed key and 'c' matched behind it, so 'b' is marked on both sides
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <{.., 'b': 2, ..}> to be equal to <{.., 'b': 3, ..}>, but was not."
+    )
 
 
 def test_failure_multi_entry_failure():
@@ -375,7 +378,7 @@ def test_failure_top_mismatch_when_ignoring_single_nested_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "c"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'a': 1}> to be equal to <{.., 'a': 2}> ignoring keys <b.c>, but was not."
+        "Expected <{'a': 1, ..}> to be equal to <{'a': 2, ..}> ignoring keys <b.c>, but was not."
     )
 
 
@@ -385,7 +388,7 @@ def test_failure_top_mismatch_when_ignoring_single_nested_sibling_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "d"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'a': 1}> to be equal to <{.., 'a': 2}> ignoring keys <b.d>, but was not."
+        "Expected <{'a': 1, ..}> to be equal to <{'a': 2, ..}> ignoring keys <b.d>, but was not."
     )
 
 
@@ -395,8 +398,8 @@ def test_failure_deep_mismatch_when_ignoring_double_nested_sibling_key():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected, ignore=("b", "f", "g"))
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <{.., 'b': {.., 'd': {'e': 3}}}> to be equal to "
-        "<{.., 'b': {.., 'd': {'e': 4}}}> ignoring keys <b.f.g>, but was not."
+        "Expected <{.., 'b': {.., 'd': {'e': 3}, ..}}> to be equal to "
+        "<{.., 'b': {.., 'd': {'e': 4}, ..}}> ignoring keys <b.f.g>, but was not."
     )
 
 

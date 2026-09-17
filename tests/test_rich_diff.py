@@ -460,18 +460,18 @@ class TestListMessageCollapse:
                 {"rows": [{"id": 1, "v": "x"}, {"id": 2, "v": "CHANGED"}, {"id": 3, "v": "z"}]}
             )
         msg = str(exc.value)
-        assert_that(msg).contains("[.., {.., 'v': 'y'}]")
+        assert_that(msg).contains("[.., {.., 'v': 'y'}, ..]")
         assert_that(msg).does_not_contain("'id': 1").does_not_contain("'id': 3")
 
     def test_scalar_list_collapses(self):
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1, 2, 3, 4, 5]}).is_equal_to({"a": [1, 2, 999, 4, 5]})
-        assert_that(str(exc.value)).contains("'a': [.., 3]")
+        assert_that(str(exc.value)).contains("'a': [.., 3, ..]")
 
     def test_tuple_renders_with_parens(self):
         with pytest.raises(AssertionError) as exc:
             assert_that({"t": (1, 2, 3)}).is_equal_to({"t": (1, 9, 3)})
-        assert_that(str(exc.value)).contains("'t': (.., 2)")
+        assert_that(str(exc.value)).contains("'t': (.., 2, ..)")
 
     def test_nested_list_of_lists(self):
         with pytest.raises(AssertionError) as exc:
@@ -486,7 +486,7 @@ class TestListMessageCollapse:
     def test_tolerance_mismatch_shows_element_as_leaf(self):
         with pytest.raises(AssertionError) as exc:
             assert_that({"a": [1.0, 2.0, 3.0]}).is_equal_to({"a": [1.0, 2.5, 3.0]}, tolerance=0.1)
-        assert_that(str(exc.value)).contains("'a': [.., 2.0]")
+        assert_that(str(exc.value)).contains("'a': [.., 2.0, ..]")
 
     def test_pure_dict_message_unchanged(self):
         with pytest.raises(AssertionError) as exc:
