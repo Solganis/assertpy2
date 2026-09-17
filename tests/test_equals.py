@@ -42,7 +42,7 @@ def test_is_equal_long_list_failure_elides_the_matching_elements():
     expected[27] = 999
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected)
-    assert_that(str(exc_info.value)).is_equal_to("Expected <[.., 27]> to be equal to <[.., 999]>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <[.., 27, ..]> to be equal to <[.., 999, ..]>, but was not.")
 
 
 def test_is_equal_few_but_long_elements_still_elides():
@@ -56,7 +56,7 @@ def test_is_equal_long_tuple_failure_keeps_tuple_brackets():
     expected[27] = 999
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(tuple(expected))
-    assert_that(str(exc_info.value)).is_equal_to("Expected <(.., 27)> to be equal to <(.., 999)>, but was not.")
+    assert_that(str(exc_info.value)).is_equal_to("Expected <(.., 27, ..)> to be equal to <(.., 999, ..)>, but was not.")
 
 
 def test_is_equal_multiline_failure_elides_the_matching_lines():
@@ -65,7 +65,7 @@ def test_is_equal_multiline_failure_elides_the_matching_lines():
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected)
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <.., line 6: line 5> to be equal to <.., line 6: line five>, but was not."
+        "Expected <.., line 6: line 5, ..> to be equal to <.., line 6: line five, ..>, but was not."
     )
 
 
@@ -74,7 +74,7 @@ def test_is_equal_multiline_failure_lists_every_changed_line():
     expected = actual.replace("line 1", "L1").replace("line 6", "L6")
     with pytest.raises(AssertionError) as exc_info:
         assert_that(actual).is_equal_to(expected)
-    assert_that(str(exc_info.value)).contains("line 2: line 1, line 7: line 6")
+    assert_that(str(exc_info.value)).contains("line 2: line 1, .., line 7: line 6")
 
 
 def test_is_equal_short_multiline_failure_is_printed_whole():
@@ -413,7 +413,7 @@ def test_is_equal_shifted_list_failure_elides_the_aligned_run():
     # elides on the alignment the diff pairs on: by position, every later element shifts out and both dump whole
     with pytest.raises(AssertionError) as exc_info:
         assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
-    assert_that(str(exc_info.value)).contains("Expected <[.., 0]> to be equal to <[..]>")
+    assert_that(str(exc_info.value)).contains("Expected <[0, ..]> to be equal to <[..]>")
 
 
 class TestFindAmbiguousOperandOnMismatchedShapes:

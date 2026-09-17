@@ -45,17 +45,50 @@ def _both_list_like(left: object, right: object) -> bool:
     )
 
 
-def _joined_parts(parts: list[str], *, elided: bool, opener: str = "", closer: str = "") -> str:
+class _Elided:
+    """Marker standing in a parts list for a run of elements equal to their counterpart.
+
+    Carried along with the parts rather than reduced to a flag because a flag can only put the ``..``
+    in front: a value differing from its counterpart by one extra leading element then printed as
+    ``[.., 0]``, which is the shape of a changed *tail*.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return ".."
+
+
+_ELIDED = _Elided()
+_Part = str | _Elided
+
+
+def _joined_parts(parts: list[_Part], *, opener: str = "", closer: str = "") -> str:
     """Assemble a collapsed repr, capping how many differing parts are spelled out.
 
     Collapsing only removes what matched, so a value where nearly everything differs still prints in
-    full. The cap is what keeps that case from becoming a wall of text on one line.
+    full. The cap is what keeps that case from becoming a wall of text on one line.  `_ELIDED` entries
+    mark where the matched runs were and never count against the cap.
     """
-    hidden = len(parts) - 5
-    if hidden > 0:
-        parts = [*parts[:5], f"... and {hidden} more"]
-    prefix = ".." if elided and not parts else ".., " if elided else ""
-    return f"{opener}{prefix}{', '.join(parts)}{closer}"
+    kept: list[_Part] = []
+    spelled = hidden = 0
+    for part in parts:
+        if isinstance(part, _Elided):
+            # one marker per run, however many elements the run swallowed
+            if not (kept and isinstance(kept[-1], _Elided)):
+                kept.append(part)
+            continue
+        spelled += 1
+        if spelled <= 5:
+            kept.append(part)
+        else:
+            hidden += 1
+    if hidden:
+        # the count stands for everything past the cap, so a marker it displaced says nothing more
+        while kept and isinstance(kept[-1], _Elided):
+            kept.pop()
+        kept.append(f"... and {hidden} more")
+    return f"{opener}{', '.join(str(part) for part in kept)}{closer}"
 
 
 def _elided_text_repr(text: str, counterpart: str) -> str:
@@ -70,14 +103,13 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
         # string with none of it near the change
         return _windowed(text, counterpart, width=320)[0] if len(text) > 320 else text
     other_lines = counterpart.splitlines()
-    parts = []
-    elided = False
+    parts: list[_Part] = []
     for index, line in enumerate(text.splitlines()):
         if index < len(other_lines) and line == other_lines[index]:
-            elided = True
+            parts.append(_ELIDED)
             continue
         parts.append(f"line {index + 1}: {line}")
-    return _joined_parts(parts, elided=elided)
+    return _joined_parts(parts)
 
 
 def _elided_seq_repr(seq, counterpart) -> str:
@@ -98,20 +130,16 @@ def _elided_seq_repr(seq, counterpart) -> str:
             # on a two-element list the ".." form is the longer of the two
             return rendered
     aligned = _aligned_match_indices(seq, counterpart)
-    parts = []
-    elided = False
+    parts: list[_Part] = []
     for index, value in enumerate(seq):
         # two loops rather than a per-element branch: this runs once per element of every rendered sequence
         if aligned is not None:
             matched = index in aligned
         else:
             matched = index < len(counterpart) and not _guarded_not_equal(value, counterpart[index])
-        if matched:
-            elided = True
-            continue
-        parts.append(_safe_repr(value))
+        parts.append(_ELIDED if matched else _safe_repr(value))
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
-    return _joined_parts(parts, elided=elided, opener=opener, closer=closer)
+    return _joined_parts(parts, opener=opener, closer=closer)
 
 
 def _keyed_pair(value: object, other: object) -> tuple[MappingLike, MappingLike] | None:
@@ -364,8 +392,7 @@ class HelpersMixin(_MixinBase):
             if id(mapping) in _seen:
                 return "{<circular ref>}"
             _seen = _seen | {id(mapping)}
-            parts = []
-            ellip = False
+            parts: list[_Part] = []
             # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
             for key, value in ((key, mapping[key]) for key in mapping):
                 if key not in counterpart:
@@ -373,7 +400,7 @@ class HelpersMixin(_MixinBase):
                 else:
                     decision = _node_decision(value, counterpart[key], config, field=key)
                     if decision == "equal":
-                        ellip = True
+                        parts.append(_ELIDED)
                     elif decision == "leaf":
                         parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
                     else:  # recurse
@@ -385,7 +412,7 @@ class HelpersMixin(_MixinBase):
                         else:
                             value_repr = _safe_repr(value)
                         parts.append(f"{_safe_repr(key)}: {value_repr}")
-            return _joined_parts(parts, elided=ellip, opener="{", closer="}")
+            return _joined_parts(parts, opener="{", closer="}")
 
         def _list_repr(seq, counterpart, _seen):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
@@ -395,8 +422,7 @@ class HelpersMixin(_MixinBase):
             if id(seq) in _seen:
                 return "[<circular ref>]"
             _seen = _seen | {id(seq)}
-            parts = []
-            ellip = False
+            parts: list[_Part] = []
             for index, value in enumerate(seq):
                 if index >= len(counterpart):
                     parts.append(_safe_repr(value))  # extra element beyond the counterpart's length
@@ -404,7 +430,7 @@ class HelpersMixin(_MixinBase):
                 other_value = counterpart[index]
                 decision = _node_decision(value, other_value, config, field=None)
                 if decision == "equal":
-                    ellip = True
+                    parts.append(_ELIDED)
                 elif decision == "leaf":
                     parts.append(_safe_repr(value))
                 elif (keyed := _keyed_pair(value, other_value)) is not None:
@@ -414,7 +440,7 @@ class HelpersMixin(_MixinBase):
                 else:
                     parts.append(_safe_repr(value))
             opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
-            return _joined_parts(parts, elided=ellip, opener=opener, closer=closer)
+            return _joined_parts(parts, opener=opener, closer=closer)
 
         if (keyed := _keyed_pair(val, other)) is not None:
             reported_val = self._selected_keys_only(keyed[0], ignore, include)

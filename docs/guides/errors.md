@@ -82,8 +82,8 @@ except AssertionError as e:
     #     + 99
 ```
 
-The `..` in that message stands for the parts that matched. Only what differs is spelled out, so a
-one-field change in a wide object reads as `{.., 'b': 2}` rather than as both objects in full.
+Each `..` in that message stands for a run of parts that matched, and stands where that run was, so a
+one-field change in a wide object reads as `{.., 'b': 2, ..}` rather than as both objects in full.
 
 Sequences collapse the same way once they grow past a line or so, which keeps a single changed element
 out of a forty-item dump:
@@ -93,7 +93,7 @@ try:
     assert_that(list(range(40))).is_equal_to([*range(27), 999, *range(28, 40)])
 except AssertionError as e:
     print(e)
-    # Expected <[.., 27]> to be equal to <[.., 999]>, but was not.
+    # Expected <[.., 27, ..]> to be equal to <[.., 999, ..]>, but was not.
     # diff (sequence):
     #   [27]:
     #     - 27
@@ -108,7 +108,7 @@ try:
     assert_that([0, *range(1, 40)]).is_equal_to(list(range(1, 40)))
 except AssertionError as e:
     print(e)
-    # Expected <[.., 0]> to be equal to <[..]>, but was not.
+    # Expected <[0, ..]> to be equal to <[..]>, but was not.
     # diff (sequence):
     #   actual[0]: - 0
 ```
