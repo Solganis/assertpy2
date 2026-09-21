@@ -146,7 +146,8 @@ the same way every other value in an attachment does.
 Each attachment is versioned on its own. The diff attachment is the one that moved, while the
 `AssertionFailure` and polling-trace attachments stay at `2` because nothing about them changed.
 
-Regardless of Allure mode, the plugin always adds human-readable sections to the pytest terminal output:
+Regardless of Allure mode, the plugin always adds human-readable sections to the failure itself, where
+the terminal, a JUnit report and an IDE runner all show them:
 
 ```
 --- AssertionFailure ---

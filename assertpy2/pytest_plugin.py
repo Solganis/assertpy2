@@ -13,6 +13,7 @@ from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
 from .errors import _diff_side, _diff_sides, _json_safe, _render_diff
+from .exception import _leaves
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -362,7 +363,7 @@ def pytest_configure(config: pytest.Config) -> None:
         stashed._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
         stashed._assertpy2_diff_max = 50
-    # the plugin renders the diff as a report section; the prior value is restored, not forced, so hooks stay balanced
+    # the plugin hangs the diff on the failure itself; the prior value is restored, not forced, so hooks stay balanced
     stashed._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
     stashed._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
@@ -871,41 +872,111 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
     exc = call.excinfo.value if call.excinfo is not None else None
     _record_for_clustering(item.config, report.nodeid, exc)
 
-    if call.excinfo is None or report.when != "call" or not isinstance(exc, AssertionError):
+    if exc is None:
         return
 
-    try:
-        _attach_report_sections(item, report, exc)
-    except Exception:  # pragma: no cover - the barrier; everything under it is tested directly
-        # built from somebody else's exception, and a `diff` property that raised took the whole run down
-        return
+    # pytest groups two failing finalizers, and numbering follows the order the traceback prints them in
+    leaves = _leaves(exc)
+    for position, leaf in enumerate(leaves, 1):
+        if not isinstance(leaf, AssertionError):
+            continue
+        suffix = f" ({position} of {len(leaves)})" if len(leaves) > 1 else ""
+        # two barriers: a `diff` property that raised took the whole run down, and one refusal must not cost the other
+        with contextlib.suppress(Exception):
+            _attach_report_sections(item, report, leaf, suffix=suffix)
+        with contextlib.suppress(Exception):
+            _attach_to_allure(item, report, leaf)
 
 
-def _attach_report_sections(item, report, exc) -> None:
-    """Build the report sections a failure of ours can add to its own entry."""
+def _named(exc) -> tuple[bool, bool]:
+    """Which sides a failure named, read from its record where it has one.
+
+    `expected` alone cannot tell "compared against None" from "no expected value".  A failure built by
+    hand, by `eventually()` or by a snapshot re-wrap has no record, and its values are all there is.
+    """
+    outcome = getattr(exc, "_outcome", None)
+    if outcome is None:
+        return getattr(exc, "actual", None) is not None, getattr(exc, "expected", None) is not None
+    return outcome.actual_provided, outcome.has_expected
+
+
+_COLORED: Final = "_assertpy2_colored"
+"""The report attribute holding each diff section's colored text, which xdist carries like any attribute."""
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    # every report passes here, on a worker and again on the controller, which rebuilds the representation
+    colored = vars(report).get(_COLORED)
+    if colored and callable(getattr(report.longrepr, "addsection", None)):
+        _color_when_drawn(report.longrepr, colored)
+
+
+def _color_when_drawn(longrepr: Any, colored: dict[str, str]) -> None:
+    longrepr.toterminal = _ColoredDrawing(longrepr, colored)
+
+
+class _ColoredDrawing:
+    """A representation's `toterminal`: the colored diff to a writer that takes color, the plain one to every other.
+
+    A section is one string every reader prints as it is, so color written into it reached a JUnit body
+    as escape codes.  pytest colors its own traceback as it draws it, and this does the same for ours:
+    the sections change only for the length of one drawing, with no other code running in between.
+
+    A class rather than a closure, because a closure made the representation refuse to pickle and kept a
+    deep copy drawing the original.
+    """
+
+    def __init__(self, longrepr: Any, colored: dict[str, str]) -> None:
+        self.longrepr = longrepr
+        self.colored = colored
+
+    def __call__(self, tw: Any) -> None:
+        longrepr = self.longrepr
+        draw = type(longrepr).toterminal
+        if not getattr(tw, "hasmarkup", False):
+            draw(longrepr, tw)
+            return
+        plain = longrepr.sections
+        longrepr.sections = [(name, self.colored.get(name, content), *rest) for name, content, *rest in plain]
+        try:
+            draw(longrepr, tw)
+        finally:
+            longrepr.sections = plain
+
+
+def _add_section(report: pytest.TestReport, name: str, content: str) -> None:
+    """Hang *content* on the failure's own representation, which every reader of the report renders.
+
+    `report.sections` is the channel for captured output.  Only the terminal prints it, and only when
+    `--show-capture` allows, so PyCharm's runner, a JUnit body and a run hiding captured output all got
+    the message with nothing under it.  A custom item or a plugin may render the failure as a string or
+    as its own representation with no sections, and every reader prints its text, the one xdist sends
+    too, so the section is written into that text.  A failure with no representation at all leaves the
+    report as the only channel.
+    """
+    longrepr = report.longrepr
+    add = getattr(longrepr, "addsection", None)
+    if callable(add):
+        add(name, content)
+    elif longrepr is not None:
+        report.longrepr = f"{longrepr}\n{f' {name} '.center(80, '-')}\n{content}"
+    else:
+        report.sections.append((name, content))
+
+
+def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
+    """Add the readable detail a failure of ours carries: the named values, the diff, the poll trace.
+
+    *suffix* tells one failure of a group from the next on every title.
+    """
     actual = getattr(exc, "actual", None)
     expected = getattr(exc, "expected", None)
     diff = getattr(exc, "diff", None)
     trace = getattr(exc, "trace", None)
-
-    # read from the record: `expected` cannot tell "compared against None" from "no expected value"
-    outcome = getattr(exc, "_outcome", None)
-    if outcome is None:
-        # built by hand, by `eventually()` or by a snapshot re-wrap: the values are all there is to go on
-        named_actual, named_expected = actual is not None, expected is not None
-    else:
-        named_actual, named_expected = outcome.actual_provided, outcome.has_expected
+    named_actual, named_expected = _named(exc)
 
     # what decides is `actual` being named, a value other than the subject; no record is the older path
-    named_values = named_actual if outcome is not None else (named_actual or named_expected)
-
-    requirement = getattr(exc, "requirement", None)
-
-    # the cheap exit: the terminal keeps quiet about a value the message prints, and Allure still attaches
-    # it.  A requirement alone keeps the failure here, since `is_empty()` names no value and is exactly
-    # the case the field exists for; nothing below prints a section for it
-    if not (named_actual or named_expected) and diff is None and trace is None and requirement is None:
-        return
+    named_values = named_actual if getattr(exc, "_outcome", None) is not None else (named_actual or named_expected)
 
     if named_values:
         # capped like the diff rows; the untouched values stay on the exception for anything that wants them
@@ -919,32 +990,35 @@ def _attach_report_sections(item, report, exc) -> None:
             lines.append(f"  actual:   {_diff_side(actual)}")
         else:
             lines.append(f"  expected: {_diff_side(expected)}")
-        report.sections.append(("AssertionFailure", "\n".join(lines)))
+        _add_section(report, f"AssertionFailure{suffix}", "\n".join(lines))
 
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
-        use_color = getattr(item.config.option, "color", "no") != "no"
         max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
-        report.sections.append(("Structured Diff", _format_diff(diff, color=use_color, max_entries=max_entries)))
+        title = f"Structured Diff{suffix}"
+        _add_section(report, title, _format_diff(diff, max_entries=max_entries))
+        vars(report).setdefault(_COLORED, {})[title] = _format_diff(diff, color=True, max_entries=max_entries)
 
     if trace is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
-        report.sections.append(("Polling Trace", _format_trace(trace)))
+        _add_section(report, f"Polling Trace{suffix}", _format_trace(trace))
 
-    if _HAS_ALLURE:
-        mode = getattr(item.config, "_assertpy2_allure_mode", "diff")
-        allure_max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
-        with contextlib.suppress(Exception):
-            _attach_allure(
-                actual,
-                expected,
-                diff,
-                trace=trace,
-                mode=mode,
-                max_entries=allure_max_entries,
-                requirement=requirement,
-                # the record's flags, not the section's: a value already in the message is still what a dashboard reads
-                named_actual=named_actual,
-                named_expected=named_expected,
-            )
+
+def _attach_to_allure(item, report, exc) -> None:
+    """Attach the structured failure to the Allure report, when Allure is installed."""
+    if not _HAS_ALLURE:
+        return
+    named_actual, named_expected = _named(exc)
+    _attach_allure(
+        getattr(exc, "actual", None),
+        getattr(exc, "expected", None),
+        getattr(exc, "diff", None),
+        trace=getattr(exc, "trace", None),
+        mode=getattr(item.config, "_assertpy2_allure_mode", "diff"),
+        max_entries=getattr(item.config, "_assertpy2_diff_max", 50),
+        requirement=getattr(exc, "requirement", None),
+        # the record's flags, not the section's: a value already in the message is still what a dashboard reads
+        named_actual=named_actual,
+        named_expected=named_expected,
+    )
 
 
 def _format_diff(diff, *, color: bool = False, max_entries: int = 50) -> str:

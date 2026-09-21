@@ -1,13 +1,20 @@
 import contextlib
+import copy
+import io
 import json
 import os
+import pathlib
+import pickle
 import subprocess
 import sys
 import warnings
+import xml.etree.ElementTree as ET
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from _pytest._code.code import TerminalRepr
+from _pytest._io import TerminalWriter
 from _pytest.config.argparsing import Parser
 
 from assertpy2 import _clustering, assert_that, async_assertions, match
@@ -35,6 +42,10 @@ from assertpy2.pytest_plugin import (
     pytest_testnodedown,
     pytest_unconfigure,
 )
+from tests.group_compat import ExceptionGroup
+
+# a child starting in `tmp_path` otherwise imports the installed copy, which a cached 3.10 floor build left stale
+_CHECKOUT = str(pathlib.Path(pytest_plugin.__file__).resolve().parents[1])
 
 
 class _FakeOutcome:
@@ -45,12 +56,28 @@ class _FakeOutcome:
         return self._report
 
 
+class _FailureRepr:
+    """The part of pytest's failure representation the plugin writes to, as pytest itself stores it."""
+
+    def __init__(self):
+        self.sections: list[tuple[str, str, str]] = []
+
+    def addsection(self, name, content, sep="-"):
+        self.sections.append((name, content, sep))
+
+
 def _make_report(*, when="call", failed=True, sections=None):
     report = MagicMock()
     report.when = when
     report.failed = failed
     report.sections = sections if sections is not None else []
+    report.longrepr = _FailureRepr()
     return report
+
+
+def _sections(report):
+    """``(name, content)`` for what the plugin hung on the failure, the shape `_sections(report)` has."""
+    return [(name, content) for name, content, _sep in report.longrepr.sections]
 
 
 def _make_call(*, exc=None):
@@ -68,7 +95,6 @@ def _make_item(*, allure_mode="diff"):
     item.config._assertpy2_allure_mode = allure_mode
     item.config._assertpy2_diff_enabled = True
     item.config._assertpy2_diff_max = 50
-    item.config.option.color = "no"
     return item
 
 
@@ -215,7 +241,11 @@ class TestTheProfileFromAConfigFile:
             text=True,
             timeout=180,
             # one of the three ways to ask for the vacuous guard, so a machine carrying it would answer for the suite
-            env={**{key: value for key, value in os.environ.items() if key != "ASSERTPY2_VACUOUS"}, **environment},
+            env={
+                **{key: value for key, value in os.environ.items() if key != "ASSERTPY2_VACUOUS"},
+                "PYTHONPATH": _CHECKOUT,
+                **environment,
+            },
         )
 
     @staticmethod
@@ -311,36 +341,169 @@ class TestTheProfileFromAConfigFile:
         self._reported(result).does_not_contain("VacuousAssertionWarning")
 
 
-class TestHookSkipsIrrelevantReports:
-    def test_skip_when_not_call_phase(self):
-        report = _make_report(when="setup")
-        call = _make_call(exc=AssertionError("x"))
-        _run_hook(report, call)
+class TestEveryPhaseGetsItsSections:
+    """A fixture's failure is as much a failure of ours as the test's, and the message leaves it the diff."""
+
+    @pytest.mark.parametrize("when", ["setup", "call", "teardown"])
+    def test_the_diff_is_hung_on_the_failure_in_every_phase(self, when):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report(when=when)
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff)))
+        assert_that([title for title, _ in _sections(report)]).contains("Structured Diff")
+
+
+class _OwnRepr(TerminalRepr):
+    def toterminal(self, tw):
+        tw.line("an item's own rendering")
+
+
+class _UnreadableError(AssertionError):
+    @property
+    def diff(self):
+        raise RuntimeError("a property that raises")
+
+
+class TestEachFailureOfAGroupGetsItsOwn:
+    """pytest groups two failing finalizers, and a task group wraps whatever its tasks raised."""
+
+    @staticmethod
+    def _failure(actual):
+        return AssertionFailure(
+            "fail", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=actual, expected=0)])
+        )
+
+    @staticmethod
+    def _titles(report):
+        return [title for title, _ in _sections(report)]
+
+    def test_each_is_numbered_in_the_order_the_traceback_prints_it(self):
+        report = _make_report(when="teardown")
+        _run_hook(report, _make_call(exc=ExceptionGroup("teardown", [self._failure(111), self._failure(222)])))
+        first, second = _sections(report)
+        assert_that(first).is_equal_to(("Structured Diff (1 of 2)", match.contains("111")))
+        assert_that(second).is_equal_to(("Structured Diff (2 of 2)", match.contains("222")))
+
+    def test_a_member_that_is_not_ours_keeps_its_place_in_the_count(self):
+        report = _make_report()
+        _run_hook(report, _make_call(exc=ExceptionGroup("tasks", [ValueError("not ours"), self._failure(1)])))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (2 of 2)"])
+
+    def test_a_nested_group_is_counted_flat(self):
+        inner = ExceptionGroup("inner", [ValueError("not ours"), self._failure(2)])
+        report = _make_report()
+        _run_hook(report, _make_call(exc=ExceptionGroup("outer", [self._failure(1), inner])))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (1 of 3)", "Structured Diff (3 of 3)"])
+
+    def test_a_group_with_nothing_of_ours_gets_nothing(self):
+        report = _make_report()
+        _run_hook(report, _make_call(exc=ExceptionGroup("tasks", [ValueError("not ours")])))
+        assert_that(_sections(report)).is_empty()
+
+    def test_one_failure_that_cannot_be_read_leaves_the_next_its_sections(self):
+        report = _make_report()
+        _run_hook(report, _make_call(exc=ExceptionGroup("teardown", [_UnreadableError("fail"), self._failure(1)])))
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (2 of 2)"])
+
+    def test_allure_gets_every_failure(self):
+        mock = _mock_allure()
+        group = ExceptionGroup("teardown", [self._failure(1), self._failure(2)])
+        _run_hook_with_allure(_make_report(), _make_call(exc=group), mock)
+        assert_that([one.kwargs for one in mock.attach.call_args_list]).is_equal_to(
+            [
+                {"body": match.contains('"actual": 1'), "name": "Structured Diff", "attachment_type": "json"},
+                {"body": match.contains('"actual": 2'), "name": "Structured Diff", "attachment_type": "json"},
+            ]
+        )
+
+    def test_an_attachment_refused_for_one_failure_leaves_the_next_its_own(self):
+        mock = _mock_allure()
+        mock.attach.side_effect = [RuntimeError("refused"), None]
+        group = ExceptionGroup("teardown", [self._failure(1), self._failure(2)])
+        _run_hook_with_allure(_make_report(), _make_call(exc=group), mock)
+        assert_that(mock.attach.call_args_list).is_length(2)
+        assert_that(mock.attach.call_args_list[1].kwargs["body"]).contains('"actual": 2')
+
+    def test_the_same_failure_listed_twice_is_shown_twice_as_the_traceback_prints_it(self):
+        mock = _mock_allure()
+        failure = self._failure(1)
+        report = _make_report()
+        _run_hook_with_allure(report, _make_call(exc=ExceptionGroup("tasks", [failure, failure])), mock)
+        assert_that(self._titles(report)).is_equal_to(["Structured Diff (1 of 2)", "Structured Diff (2 of 2)"])
+        assert_that(mock.attach.call_count).is_equal_to(2)
+
+
+class TestTheSectionsGoWhereEveryReaderLooks:
+    """On the failure's own representation, which the terminal, a JUnit body and an IDE runner all render."""
+
+    def test_nothing_is_left_on_the_captured_output_channel(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", actual=1, expected=2, diff=diff)))
         assert_that(report.sections).is_empty()
+        assert_that([title for title, _ in _sections(report)]).contains("AssertionFailure", "Structured Diff")
+
+    def test_a_failure_rendered_as_a_string_carries_the_section_in_the_string(self):
+        """What a custom item's `repr_failure` returns, and every reader prints it as it is."""
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        report.longrepr = "a failure some other plugin rendered"
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff)))
+        assert_that(report.longrepr).starts_with("a failure some other plugin rendered\n").contains(
+            " Structured Diff ", "diff (dict)"
+        )
+        assert_that(report.sections).is_empty()
+
+    def test_a_representation_with_no_sections_is_carried_as_its_text(self):
+        """A custom item's own representation, whose text is what JUnit and xdist read of it anyway."""
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        report.longrepr = _OwnRepr()
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff)))
+        assert_that(report.longrepr).starts_with("an item's own rendering\n").contains(
+            " Structured Diff ", "diff (dict)"
+        )
+        assert_that(report.sections).is_empty()
+
+    def test_a_failure_with_no_representation_at_all_falls_back_to_the_report(self):
+        diff = DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        report = _make_report()
+        report.longrepr = None
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=diff)))
+        assert_that([title for title, _ in report.sections]).contains("Structured Diff")
+
+    def test_a_representation_that_refuses_a_section_still_gets_its_allure_attachment(self):
+        mock = _mock_allure()
+        report = _make_report()
+        report.longrepr.addsection = MagicMock(side_effect=RuntimeError("no sections here"))
+        exc = AssertionFailure(
+            "fail", diff=DiffResult(kind="dict", entries=[DiffEntry(path="k", actual=1, expected=2)])
+        )
+        _run_hook_with_allure(report, _make_call(exc=exc), mock)
+        assert_that(mock.attach.call_count).is_equal_to(1)
 
     def test_skip_when_not_failed(self):
         report = _make_report(failed=False)
         call = _make_call(exc=AssertionError("x"))
         _run_hook(report, call)
-        assert_that(report.sections).is_empty()
+        assert_that(_sections(report)).is_empty()
 
     def test_skip_when_excinfo_is_none(self):
         report = _make_report()
         call = _make_call(exc=None)
         _run_hook(report, call)
-        assert_that(report.sections).is_empty()
+        assert_that(_sections(report)).is_empty()
 
     def test_skip_when_not_assertion_error(self):
         report = _make_report()
         call = _make_call(exc=ValueError("not assertion"))
         _run_hook(report, call)
-        assert_that(report.sections).is_empty()
+        assert_that(_sections(report)).is_empty()
 
     def test_skip_when_no_structured_data(self):
         report = _make_report()
         call = _make_call(exc=AssertionError("plain error"))
         _run_hook(report, call)
-        assert_that(report.sections).is_empty()
+        assert_that(_sections(report)).is_empty()
 
 
 class TestHookActualExpected:
@@ -348,9 +511,9 @@ class TestHookActualExpected:
         exc = AssertionFailure("fail", actual=1, expected=2)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        titles = [title for title, _ in report.sections]
+        titles = [title for title, _ in _sections(report)]
         assert_that(titles).contains("AssertionFailure")
-        body = dict(report.sections)["AssertionFailure"]
+        body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).contains("actual")
         assert_that(body).contains("expected")
 
@@ -358,7 +521,7 @@ class TestHookActualExpected:
         exc = AssertionFailure("fail", actual=42)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["AssertionFailure"]
+        body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).contains("actual")
         assert_that(body).contains("42")
         assert_that(body).does_not_contain("expected")
@@ -367,7 +530,7 @@ class TestHookActualExpected:
         exc = AssertionFailure("fail", expected="abc")
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["AssertionFailure"]
+        body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).contains("expected")
         assert_that(body).contains("abc")
         assert_that(body).does_not_contain("actual")
@@ -388,7 +551,7 @@ class TestTheValuesSectionShowsOnlyValuesTheAssertionNamed:
             assert_that({"a": 1}).contains_key("x")
         report = _make_report()
         _run_hook(report, _make_call(exc=failure.value))
-        titles = [title for title, _ in report.sections]
+        titles = [title for title, _ in _sections(report)]
         assert_that(failure.value.actual).is_equal_to({"a": 1})
         assert_that(titles).does_not_contain("AssertionFailure")
 
@@ -397,7 +560,7 @@ class TestTheValuesSectionShowsOnlyValuesTheAssertionNamed:
             assert_that({"a": 1}).is_equal_to({"a": 2})
         report = _make_report()
         _run_hook(report, _make_call(exc=failure.value))
-        body = dict(report.sections)["AssertionFailure"]
+        body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).contains("actual")
         assert_that(body).contains("expected")
 
@@ -407,7 +570,7 @@ class TestTheValuesSectionShowsOnlyValuesTheAssertionNamed:
             assert_that({"a": 1}).is_equal_to(None)
         report = _make_report()
         _run_hook(report, _make_call(exc=failure.value))
-        body = dict(report.sections)["AssertionFailure"]
+        body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).contains("expected: None")
 
 
@@ -422,9 +585,9 @@ class TestHookDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        titles = [title for title, _ in report.sections]
+        titles = [title for title, _ in _sections(report)]
         assert_that(titles).contains("Structured Diff")
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("key1")
 
     def test_diff_without_actual_expected(self):
@@ -437,7 +600,7 @@ class TestHookDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        titles = [title for title, _ in report.sections]
+        titles = [title for title, _ in _sections(report)]
         assert_that(titles).contains("Structured Diff")
         assert_that(titles).does_not_contain("AssertionFailure")
 
@@ -451,7 +614,7 @@ class TestHookDiff:
         exc = AssertionFailure("fail", actual={"x": 1}, expected={"x": 2}, diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        titles = [title for title, _ in report.sections]
+        titles = [title for title, _ in _sections(report)]
         assert_that(titles).contains("AssertionFailure")
         assert_that(titles).contains("Structured Diff")
 
@@ -462,7 +625,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("[0]:")
         assert_that(body).contains("- 1")
         assert_that(body).contains("+ 2")
@@ -472,7 +635,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("[1]: - 99")
 
     def test_sequence_expected_only(self):
@@ -480,7 +643,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("[2]: + 42")
 
     def test_set_extra_and_missing(self):
@@ -494,7 +657,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("extra:")
         assert_that(body).contains("5")
         assert_that(body).contains("missing:")
@@ -505,7 +668,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("line 1:")
         assert_that(body).contains("foo")
         assert_that(body).contains("bar")
@@ -515,7 +678,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("extra:")
         assert_that(body).does_not_contain("missing")
 
@@ -524,7 +687,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).contains("missing:")
         assert_that(body).does_not_contain("extra")
 
@@ -533,7 +696,7 @@ class TestFormatDiff:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Structured Diff"]
+        body = dict(_sections(report))["Structured Diff"]
         assert_that(body).is_empty()
 
 
@@ -729,7 +892,7 @@ class TestPollingTrace:
         report = _make_report()
         exc = AssertionFailure("fail", trace=_make_trace())
         _run_hook(report, _make_call(exc=exc))
-        body = dict(report.sections)["Polling Trace"]
+        body = dict(_sections(report))["Polling Trace"]
         assert_that(body).contains("polled 6 times over 1.2s; probe recovered")
         assert_that(body).contains("t=+0.0s error x2: ConnectionError('boot')")
         assert_that(body).contains("t=+0.8s fail x3:")
@@ -929,7 +1092,7 @@ class TestAllureFullMode:
         assert_that(json.loads(attached["AssertionFailure"])).is_equal_to(
             {"format": 3, "expected": True, "requirement": {"operation": "is_true", "parameters": {}, "negated": False}}
         )
-        assert_that([title for title, _ in report.sections]).described_as(
+        assert_that([title for title, _ in _sections(report)]).described_as(
             "the terminal stays quiet: the message already says what was expected"
         ).does_not_contain("AssertionFailure")
 
@@ -1276,6 +1439,162 @@ class TestSnapshotOrphans:
         assert_that(text).contains("obsolete snapshot file")
 
 
+class TestTheDiffTravelsWithTheFailure:
+    """What a reader other than the terminal sees, read out of real runs.
+
+    Every earlier check of this plugin read terminal text, and the diff lived on the channel for
+    captured output: PyCharm's runner, a JUnit body, a failing fixture and `--show-capture=no` all got
+    the message with nothing under it, and a CI log got raw escape codes.  Each case here is one of those.
+    """
+
+    _SUITE = (
+        "import sys\n\n"
+        "import pytest\n"
+        "from assertpy2 import assert_that\n\n"
+        "if sys.version_info < (3, 11):\n"
+        "    from exceptiongroup import ExceptionGroup\n\n\n"
+        "@pytest.fixture\n"
+        "def broken_setup():\n"
+        "    assert_that({'k': 0}).is_equal_to({'k': 1})\n\n\n"
+        "@pytest.fixture\n"
+        "def broken_teardown():\n"
+        "    yield\n"
+        "    assert_that({'k': 0}).is_equal_to({'k': 1})\n\n\n"
+        "@pytest.fixture\n"
+        "def second_broken_teardown():\n"
+        "    yield\n"
+        "    assert_that({'k': 2}).is_equal_to({'k': 3})\n\n\n"
+        "def test_in_call():\n"
+        "    assert_that({'k': 0}).is_equal_to({'k': 1})\n\n\n"
+        "def test_in_setup(broken_setup):\n"
+        "    pass\n\n\n"
+        "def test_in_teardown(broken_teardown):\n"
+        "    pass\n\n\n"
+        "def test_in_two_teardowns(broken_teardown, second_broken_teardown):\n"
+        "    pass\n\n\n"
+        "def test_in_a_group():\n"
+        "    try:\n"
+        "        assert_that({'k': 4}).is_equal_to({'k': 5})\n"
+        "    except AssertionError as failure:\n"
+        "        raise ExceptionGroup('tasks', [ValueError('not ours'), failure]) from None\n"
+    )
+
+    _DUMP = (
+        "import pytest\n\n"
+        "import assertpy2.pytest_plugin\n\n"
+        "with open('plugin.txt', 'w', encoding='utf-8') as sink:\n"
+        "    sink.write(assertpy2.pytest_plugin.__file__)\n\n\n"
+        "@pytest.hookimpl(trylast=True)\n"
+        "def pytest_runtest_logreport(report):\n"
+        "    if report.failed:\n"
+        "        with open('longreprtext.txt', 'a', encoding='utf-8') as sink:\n"
+        "            sink.write(report.longreprtext + '\\n=====\\n')\n\n\n"
+        "def pytest_terminal_summary(terminalreporter):\n"
+        "    reports = terminalreporter.stats.get('failed', []) + terminalreporter.stats.get('error', [])\n"
+        "    with open('summary.txt', 'w', encoding='utf-8') as sink:\n"
+        "        for report in reports:\n"
+        "            sink.write(str(report.longrepr))\n"
+        "            sink.write(''.join(content for _, content, _ in getattr(report.longrepr, 'sections', [])))\n"
+    )
+
+    _AS_TEXT = (
+        "\n\n@pytest.hookimpl(hookwrapper=True, trylast=True)\n"
+        "def pytest_runtest_makereport(item, call):\n"
+        "    outcome = yield\n"
+        "    report = outcome.get_result()\n"
+        "    if report.failed:\n"
+        "        report.longrepr = 'rendered as text'\n"
+    )
+
+    def _run(self, tmp_path, *arguments, conftest=""):
+        (tmp_path / "test_travel.py").write_text(self._SUITE, encoding="utf-8")
+        (tmp_path / "conftest.py").write_text(self._DUMP + conftest, encoding="utf-8")
+        result = subprocess.run(
+            [
+                *(sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-p", "no:randomly"),
+                *("--junitxml", "junit.xml", *arguments),
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+            env={**os.environ, "PYTHONPATH": _CHECKOUT},
+        )
+        assert_that(result.returncode).described_as(f"the child run: {result.stdout}{result.stderr}").is_equal_to(1)
+        imported = pathlib.Path((tmp_path / "plugin.txt").read_text(encoding="utf-8")).resolve()
+        assert_that(imported).described_as("the plugin the child ran").is_equal_to(
+            pathlib.Path(pytest_plugin.__file__).resolve()
+        )
+        return result
+
+    def test_a_failure_rendered_as_text_carries_it_too(self, tmp_path):
+        """A custom item's `repr_failure` returns a string, which JUnit writes out as it is."""
+        self._run(tmp_path, conftest=self._AS_TEXT)
+        bodies = self._junit_bodies(tmp_path)
+        assert_that(bodies).is_length(5).all_satisfy(match.contains("rendered as text", "diff (dict)"))
+
+    @staticmethod
+    def _junit_bodies(tmp_path):
+        root = ET.parse(tmp_path / "junit.xml").getroot()
+        return [one.text or "" for one in root.iter() if one.tag in {"failure", "error"}]
+
+    def test_a_junit_body_carries_the_diff_for_every_phase(self, tmp_path):
+        self._run(tmp_path)
+        bodies = self._junit_bodies(tmp_path)
+        assert_that(bodies).is_length(5)
+        assert_that(bodies).described_as("JUnit bodies without the diff").all_satisfy(match.contains("diff (dict)"))
+
+    def test_the_text_any_ide_runner_reads_carries_the_diff(self, tmp_path):
+        """`longreprtext` is what a runner reading the failure renders; PyCharm's is one of those."""
+        self._run(tmp_path)
+        dumped = (tmp_path / "longreprtext.txt").read_text(encoding="utf-8").split("=====")[:-1]
+        assert_that(dumped).is_length(5).all_satisfy(match.contains("diff (dict)"))
+
+    def test_each_failure_of_a_group_gets_its_own_numbered_diff(self, tmp_path):
+        self._run(tmp_path)
+        bodies = self._junit_bodies(tmp_path)
+        assert_that(bodies).any_satisfy(match.contains("Structured Diff (1 of 2)", "Structured Diff (2 of 2)"))
+        assert_that(bodies).any_satisfy(
+            match.all_of(match.contains("Structured Diff (2 of 2)"), match.not_(match.contains("(1 of 2)")))
+        )
+
+    def test_a_log_with_no_terminal_behind_it_gets_no_escape_codes(self, tmp_path):
+        result = self._run(tmp_path)
+        assert_that(result.stdout).contains("Structured Diff").does_not_contain("\x1b[")
+
+    @pytest.mark.parametrize("workers", [(), ("-n", "2")], ids=["in-process", "distributed"])
+    def test_forced_colour_reaches_the_terminal_and_no_other_reader(self, tmp_path, workers):
+        if workers:
+            pytest.importorskip("xdist", reason="the integration cell installs xdist and this one may not")
+        result = self._run(tmp_path, "--color=yes", *workers)
+        assert_that(result.stdout.count("\x1b[36mdiff (dict):")).described_as("coloured diffs").is_equal_to(6)
+        readers = [
+            *self._junit_bodies(tmp_path),
+            (tmp_path / "longreprtext.txt").read_text(encoding="utf-8"),
+            (tmp_path / "summary.txt").read_text(encoding="utf-8"),
+        ]
+        assert_that(readers).all_satisfy(
+            match.all_of(
+                match.contains("diff (dict)"), match.not_(match.contains("#x1B")), match.not_(match.contains("\x1b"))
+            )
+        )
+
+    def test_hiding_captured_output_does_not_hide_the_diff(self, tmp_path):
+        result = self._run(tmp_path, "--show-capture=no")
+        assert_that(result.stdout.count("Structured Diff")).is_equal_to(6)
+
+    def test_no_traceback_on_the_terminal_still_leaves_it_in_junit(self, tmp_path):
+        self._run(tmp_path, "--tb=no")
+        assert_that(self._junit_bodies(tmp_path)).all_satisfy(match.contains("diff (dict)"))
+
+    def test_a_distributed_run_carries_it_to_the_controller(self, tmp_path):
+        pytest.importorskip("xdist", reason="the integration cell installs xdist and this one may not")
+        self._run(tmp_path, "-n", "2")
+        bodies = self._junit_bodies(tmp_path)
+        assert_that(bodies).is_length(5).all_satisfy(match.contains("diff (dict)"))
+
+
 class TestAllureExceptionSafety:
     def test_allure_attach_failure_does_not_break_report(self):
         mock = _mock_allure()
@@ -1284,8 +1603,8 @@ class TestAllureExceptionSafety:
         exc = AssertionFailure("fail", diff=diff)
         report = _make_report()
         _run_hook_with_allure(report, _make_call(exc=exc), mock)
-        assert_that(report.sections).is_length(1)
-        assert_that(report.sections[0][0]).is_equal_to("Structured Diff")
+        assert_that(_sections(report)).is_length(1)
+        assert_that(_sections(report)[0][0]).is_equal_to("Structured Diff")
 
 
 class TestAllureNotAvailable:
@@ -1304,8 +1623,8 @@ class TestAllureNotAvailable:
         exc = AssertionFailure("fail", actual=1, expected=2)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        assert_that(report.sections).is_length(1)
-        assert_that(report.sections[0][0]).is_equal_to("AssertionFailure")
+        assert_that(_sections(report)).is_length(1)
+        assert_that(_sections(report)[0][0]).is_equal_to("AssertionFailure")
 
 
 class TestNearTimeoutReport:
@@ -1766,8 +2085,7 @@ class _RegisteredConfig:
 
 def _configured_item(**settings):
     """An item whose config carries exactly the attributes named, as a real config would."""
-    option = SimpleNamespace(**settings.pop("option", {}))
-    return SimpleNamespace(config=SimpleNamespace(option=option, **settings))
+    return SimpleNamespace(config=SimpleNamespace(**settings))
 
 
 def _diff_of(count):
@@ -2015,36 +2333,102 @@ class TestTheDiffSectionReadsItsSettingsOffTheConfig:
 
     def test_the_entry_cap_the_ini_set_reaches_the_section(self):
         report = _make_report()
-        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=2)
+        item = _configured_item(_assertpy2_diff_enabled=True, _assertpy2_diff_max=2)
         _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
-        assert_that(dict(report.sections)["Structured Diff"]).contains("and 3 more entries")
+        assert_that(dict(_sections(report))["Structured Diff"]).contains("and 3 more entries")
 
     def test_turning_the_sections_off_drops_both_the_diff_and_the_trace(self):
         report = _make_report()
-        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=False, _assertpy2_diff_max=50)
+        item = _configured_item(_assertpy2_diff_enabled=False, _assertpy2_diff_max=50)
         exc = AssertionFailure("fail", diff=_diff_of(5), trace=_make_trace())
         _run_hook(report, _make_call(exc=exc), item=item)
-        assert_that([title for title, _ in report.sections]).does_not_contain("Structured Diff", "Polling Trace")
+        assert_that([title for title, _ in _sections(report)]).does_not_contain("Structured Diff", "Polling Trace")
 
     def test_a_config_that_never_configured_still_gets_its_sections(self):
         report = _make_report()
         exc = AssertionFailure("fail", diff=_diff_of(51), trace=_make_trace())
         _run_hook(report, _make_call(exc=exc), item=_configured_item())
-        body = dict(report.sections)
+        body = dict(_sections(report))
         assert_that(body).contains_key("Structured Diff", "Polling Trace")
         assert_that(body["Structured Diff"]).does_not_contain("\x1b[").contains("and 1 more entries")
 
-    def test_a_terminal_that_takes_colour_gets_a_coloured_diff(self):
+    def test_the_failure_carries_plain_text_and_a_coloured_copy_beside_it(self):
         report = _make_report()
-        item = _configured_item(option={"color": "yes"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=50)
+        item = _configured_item(_assertpy2_diff_enabled=True, _assertpy2_diff_max=2)
         _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
-        assert_that(dict(report.sections)["Structured Diff"]).contains("\x1b[")
+        assert_that(dict(_sections(report))["Structured Diff"]).does_not_contain("\x1b[")
+        assert_that(vars(report)["_assertpy2_colored"]["Structured Diff"]).contains("\x1b[", "and 3 more entries")
 
-    def test_a_terminal_without_colour_gets_none(self):
-        report = _make_report()
-        item = _configured_item(option={"color": "no"}, _assertpy2_diff_enabled=True, _assertpy2_diff_max=50)
-        _run_hook(report, _make_call(exc=AssertionFailure("fail", diff=_diff_of(5))), item=item)
-        assert_that(dict(report.sections)["Structured Diff"]).does_not_contain("\x1b[")
+
+class TestTheDiffIsColouredAsItIsDrawn:
+    """Color reaches a writer that takes it and nothing else, as pytest's own traceback does."""
+
+    @staticmethod
+    def _logged(*, colored=True):
+        try:
+            raise AssertionFailure("fail")
+        except AssertionFailure:
+            longrepr = pytest.ExceptionInfo.from_current().getrepr()
+        longrepr.addsection("AssertionFailure", "values")
+        longrepr.addsection("Structured Diff", "plain")
+        report = SimpleNamespace(longrepr=longrepr)
+        if colored:
+            report._assertpy2_colored = {"Structured Diff": "\x1b[31mcoloured\x1b[0m"}
+        pytest_plugin.pytest_runtest_logreport(report)
+        return longrepr
+
+    @staticmethod
+    def _drawn(longrepr, *, markup):
+        sink = io.StringIO()
+        writer = TerminalWriter(file=sink)
+        writer.hasmarkup = markup
+        longrepr.toterminal(writer)
+        return sink.getvalue()
+
+    def test_a_writer_that_takes_colour_draws_the_coloured_copy(self):
+        assert_that(self._drawn(self._logged(), markup=True)).contains("\x1b[31mcoloured").does_not_contain("plain")
+
+    def test_every_other_reader_gets_the_plain_text(self):
+        longrepr = self._logged()
+        assert_that(self._drawn(longrepr, markup=False)).contains("plain").does_not_contain("\x1b[31m")
+        assert_that(str(longrepr)).contains("plain").does_not_contain("\x1b[31m")
+
+    def test_the_sections_are_plain_again_once_drawn(self):
+        longrepr = self._logged()
+        original = longrepr.sections
+        self._drawn(longrepr, markup=True)
+        assert_that(longrepr.sections).is_same_as(original)
+        assert_that(original).is_equal_to([("AssertionFailure", "values", "-"), ("Structured Diff", "plain", "-")])
+
+    def test_a_drawing_that_raises_still_puts_the_plain_text_back(self):
+        longrepr = self._logged()
+        original = longrepr.sections
+        writer = MagicMock(hasmarkup=True)
+        writer.sep.side_effect = RuntimeError("the terminal went away")
+        with pytest.raises(RuntimeError):
+            longrepr.toterminal(writer)
+        assert_that(longrepr.sections).is_same_as(original)
+        assert_that(original[-1]).is_equal_to(("Structured Diff", "plain", "-"))
+
+    def test_a_failure_with_no_coloured_copy_is_drawn_as_pytest_draws_it(self):
+        longrepr = self._logged(colored=False)
+        assert_that(vars(longrepr)).does_not_contain_key("toterminal")
+
+    def test_a_pickled_failure_still_draws_both(self):
+        """A plugin that pickles its reports got a `PicklingError` from the closure this used to be."""
+        restored = pickle.loads(pickle.dumps(self._logged()))
+        assert_that(self._drawn(restored, markup=True)).contains("\x1b[31mcoloured")
+        assert_that(self._drawn(restored, markup=False)).contains("plain").does_not_contain("\x1b[31m")
+
+    def test_a_deep_copy_draws_its_own_sections(self):
+        copied = copy.deepcopy(self._logged())
+        copied.sections.append(("Captured log", "only on the copy", "-"))
+        assert_that(self._drawn(copied, markup=True)).contains("\x1b[31mcoloured", "only on the copy")
+
+    def test_a_failure_carried_as_text_is_left_alone(self):
+        report = SimpleNamespace(longrepr="rendered as text", _assertpy2_colored={"Structured Diff": "\x1b[31m"})
+        pytest_plugin.pytest_runtest_logreport(report)
+        assert_that(report.longrepr).is_equal_to("rendered as text")
 
 
 class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
@@ -2065,7 +2449,7 @@ class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
 
     def test_the_entry_cap_the_ini_set_reaches_the_attachment(self):
         mock = _mock_allure()
-        item = _configured_item(option={"color": "no"}, _assertpy2_allure_mode="diff", _assertpy2_diff_max=2)
+        item = _configured_item(_assertpy2_allure_mode="diff", _assertpy2_diff_max=2)
         exc = AssertionFailure("fail", diff=_diff_of(5))
         with (
             patch("assertpy2.pytest_plugin._HAS_ALLURE", True),
@@ -2086,7 +2470,7 @@ class TestTheAllureAttachmentReadsItsSettingsOffTheConfig:
         ):
             exc = AssertionFailure("f", actual=1, expected=2, diff=_diff_of(5))
             pytest_plugin._attach_report_sections(_make_item(), report, exc)
-        assert_that(report.sections).is_length(2)
+        assert_that(_sections(report)).is_length(2)
 
 
 class TestTheValuesSectionOnAForeignException:
@@ -2097,27 +2481,27 @@ class TestTheValuesSectionOnAForeignException:
         exc.actual = 42
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        assert_that(dict(report.sections)["AssertionFailure"]).contains("42")
+        assert_that(dict(_sections(report))["AssertionFailure"]).contains("42")
 
     def test_an_exception_carrying_only_a_diff_still_gets_its_section(self):
         exc = AssertionError("fail")
         exc.diff = _diff_of(5)
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        assert_that(dict(report.sections)).contains_key("Structured Diff")
+        assert_that(dict(_sections(report))).contains_key("Structured Diff")
 
     def test_an_exception_carrying_only_a_trace_still_gets_its_section(self):
         exc = AssertionError("fail")
         exc.trace = _make_trace()
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        assert_that(dict(report.sections)).contains_key("Polling Trace")
+        assert_that(dict(_sections(report))).contains_key("Polling Trace")
 
     def test_the_pair_is_windowed_together_so_neither_side_is_dropped(self):
         exc = AssertionFailure("fail", actual="a" * 400 + "L", expected="a" * 400 + "R")
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        lines = dict(report.sections)["AssertionFailure"].splitlines()
+        lines = dict(_sections(report))["AssertionFailure"].splitlines()
         assert_that(lines).is_length(2)
         assert_that(lines[0].strip()).starts_with("actual:").contains("L")
         assert_that(lines[1].strip()).starts_with("expected:").contains("R")

@@ -447,7 +447,7 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
 _RENDER_DIFF_IN_MESSAGE: bool = True
 """Whether `AssertionFailure.__str__` appends the rendered diff to its message.
 
-The pytest plugin renders the diff itself as a dedicated colored report section, so it turns this off at
+The pytest plugin hangs the diff on the failure as a section of its own, so it turns this off at
 configure time to avoid showing the diff twice.  Off pytest (unittest, plain scripts, CI logs) it stays on,
 so the structured diff travels with ``str(exc)`` instead of being lost.
 """

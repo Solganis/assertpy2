@@ -89,9 +89,9 @@ You get these the moment you switch, without touching any test code:
   assertions were not thread-safe.
 - **Structured failures and rich diffs.** Failures carry `.actual` / `.expected` / `.diff`, and the
   diff is rendered into the message itself, so it shows in `unittest`, plain scripts and CI logs.
-  Under pytest the auto-registered plugin renders it as a colored report section instead, recursive
-  for lists, dicts, dataclasses, namedtuples, attrs classes and Pydantic models. Set
-  `assertpy2_diff = "off"` to turn that section off.
+  Under pytest the auto-registered plugin attaches it to the failure as a section instead, which the
+  terminal, JUnit reports and IDE runners all show, recursive for lists, dicts, dataclasses,
+  namedtuples, attrs classes and Pydantic models. Set `assertpy2_diff = "off"` to turn that section off.
 - **Static typing.** With `py.typed` and `@overload` protocols your editor filters autocomplete by the
   value's type, and a type checker flags misuse before the tests run. See
   [Type Safety](../concepts/type-safety.md).

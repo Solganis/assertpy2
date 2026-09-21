@@ -143,8 +143,13 @@ Either way every difference stays in the diff, so the shorter message loses noth
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
-Under pytest the plugin renders this same diff as a dedicated colored report section instead, keeping
-the message itself to a single line so the diff is never shown twice. It is auto-registered through the
+Under pytest the plugin attaches this same diff to the failure as its own section instead, keeping the
+message itself to a single line so the diff is never shown twice. The section travels with the failure,
+so the terminal, a JUnit report and an IDE runner such as PyCharm's all show it, and so does a failing
+fixture. When failures arrive as an exception group, as two fixtures failing in teardown do, each one
+gets its own section, numbered in the order the traceback prints them: `Structured Diff (2 of 3)`. The
+terminal colors it as it draws the failure, when it takes color at all, so a JUnit report, an IDE
+runner and a CI log without forced color all get plain text. The plugin is auto-registered through the
 `pytest11` entry point and needs no configuration.
 
 See [Rich pytest diffs](#rich-pytest-diffs) for supported types and configuration.
@@ -152,7 +157,7 @@ See [Rich pytest diffs](#rich-pytest-diffs) for supported types and configuratio
 ## Rich pytest diffs
 
 When `is_equal_to()` or `contains()`/`contains_exactly()` fail, the `DiffResult` on the exception is
-rendered by the plugin as colored diff sections.
+rendered by the plugin as diff sections on the failure.
 
 | Type | Diff kind | How it works |
 |---|---|---|
@@ -534,7 +539,8 @@ assertpy2_dangling_entries = "check"  # your own assert_that wrappers, for the c
 assertpy2_vacuous = "on"            # warn when a universal assertion passes over an empty value
 ```
 
-With `--color=yes`, diffs are colored: red removals, green additions, cyan headers. Entries beyond
+In a terminal that takes color, or with `--color=yes`, diffs are colored on screen: red removals, green
+additions, cyan headers. Every other reader of the failure gets the same diff as plain text. Entries beyond
 the limit are hidden behind a `... and N more entries` summary.
 
 The plugin also adds `assertpy2_allure` (see [Allure](../extending/integrations.md#allure)) and these
