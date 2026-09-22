@@ -161,7 +161,7 @@ source_paths = ["assertpy2/"]
 # into the mutants tree, and the typing-claims guard scans the package's own `.py` files - which under
 # mutation are the trampoline's rewrite of them, not the source anybody ships.
 #
-# The three subprocess classes are excluded for a third: they run pytest as a child, which starts from
+# The subprocess classes are excluded for a third: they run pytest as a child, which starts from
 # the `mutants/` tree. It exits non-zero, the assertions read an empty stdout, and the baseline goes
 # red. A subprocess carries the unmutated package in any case, so nothing is lost by leaving them out.
 pytest_add_cli_args = [
@@ -170,6 +170,8 @@ pytest_add_cli_args = [
     not TestPytestPluginDiffRendering \
     and not TestSnapshotKeyReuseUnderXdist \
     and not TestAForgottenAwaitUnderErrorFilters \
+    and not TestTheProfileFromAConfigFile \
+    and not TestTheDiffTravelsWithTheFailure \
     and not test_the_warning_points_at_the_line_that_reused_the_key \
     and not test_no_vararg_assertion_passes_with_nothing_to_assert \
     and not snapshot_roundtrip_all_types \
@@ -226,6 +228,23 @@ pytest_add_cli_args = [
     "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_the_derivation_itself_ran",
     "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_every_operation_without_a_verdict_is_registered",
     "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_every_operation_that_pivots_has_been_decided_about",
+    # the builder's public members, which the trampoline's renamed functions join
+    "--deselect=tests/test_capable_protocol.py::TestNothingTheBuilderOffersIsMissing::test_every_public_member_of_the_builder_is_declared",
+    # a failure's `requirement` is found on the stack by function name, which the trampoline renames
+    "--deselect=tests/test_openapi_contract.py::TestTheRequirementNamesTheCallersSpec",
+    "--deselect=tests/test_public_surface.py::TestWhatAFailureLetsYouRead::test_a_plain_failure_names_what_was_asked",
+    "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_that_names_no_value_still_attaches_what_was_asked",
+    "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_with_no_diff_at_all_still_attaches_its_expected",
+    "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_that_named_only_an_expected_still_attaches_it",
+    "--deselect=tests/test_snapshots.py::TestSharedKeyHint::test_a_mismatch_still_says_what_was_asked",
+    # a child pytest starts from the mutants tree
+    "--deselect=tests/test_skip_guard.py::test_a_skip_that_says_why_is_left_alone",
+    "--ignore=tests/test_requirement.py",
+    # read what the mutants tree does not carry: ARCHITECTURE.md, the CI workflow, the unmutated source
+    "--deselect=tests/test_public_surface.py::TestEveryExportHasAReferenceEntry",
+    "--ignore=tests/test_architecture_doc.py",
+    "--ignore=tests/test_complexity.py",
+    "--ignore=tests/test_declared_floors.py",
     "--ignore=tests/test_docs_examples.py",
     # loads its generator from `scripts/` at import, so no test in it can be deselected alone
     "--ignore=tests/test_poll_parity.py",
@@ -262,8 +281,6 @@ source = ["assertpy2"]
 omit = [
     "tests/*",
     "assertpy2/__init__.py",
-    "assertpy2/_typing.py",
-    "assertpy2/_compat.py",
     "assertpy2/_engine/_negated_typing.py",
 ]
 
