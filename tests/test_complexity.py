@@ -43,7 +43,7 @@ RECORDED: dict[str, int] = {
     "assertpy2/_snapshot_codec.py::default": 14,
     "assertpy2/errors.py::_render_diff": 14,
     "assertpy2/snapshot.py::snapshot": 14,
-    "assertpy2/errors.py::_json_safe": 13,
+    "assertpy2/errors.py::_json_native": 13,
     "assertpy2/string.py::contains_ignoring_case": 13,
     "assertpy2/_engine/_compare.py::_build_compare_config": 12,
     "assertpy2/async_assertions.py::record": 12,

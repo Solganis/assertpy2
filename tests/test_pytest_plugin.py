@@ -810,6 +810,101 @@ class TestJsonSafe:
         assert_that(_json_safe(float("nan"))).is_equal_to({"__repr__": "nan"})
         assert_that(_json_safe(float("inf"))).is_equal_to({"__repr__": "inf"})
 
+    @pytest.fixture
+    def printable_digits(self):
+        """The interpreter's default cap, set explicitly so an environment that lifted it cannot hide the case."""
+        if not hasattr(sys, "set_int_max_str_digits"):
+            pytest.skip("the digit cap arrived in 3.10.7")
+        previous = sys.get_int_max_str_digits()
+        sys.set_int_max_str_digits(4300)
+        yield
+        sys.set_int_max_str_digits(previous)
+
+    def test_an_integer_too_long_to_print_becomes_a_marker(self, printable_digits):
+        assert_that(_json_safe(10**5000)).is_equal_to({"__repr__": "<unreprable int>"})
+
+    def test_a_diff_holding_one_still_serialises(self, printable_digits):
+        """`json.dumps` raised on it, and the plugin's barrier dropped the whole attachment without a word."""
+        with pytest.raises(AssertionError) as failure:
+            assert_that(10**5000).is_equal_to(1)
+        entry = json.loads(_diff_to_json(failure.value.diff))["entries"][0]
+        assert_that(entry["actual"]).is_equal_to({"__repr__": "<unreprable int>"})
+
+    def test_a_repr_returning_a_refusing_string_is_read_as_plain_text(self):
+        """The fallback itself reads the `repr`, so a string whose `len()` raises escaped the boundary."""
+
+        class Loud(str):
+            def __len__(self):
+                raise RuntimeError("no length")
+
+        class Odd:
+            def __repr__(self):
+                return Loud("odd")
+
+        converted = _json_safe([Odd()])
+        assert_that(converted).is_equal_to([{"__repr__": "odd"}])
+        assert_that(type(converted[0]["__repr__"])).is_same_as(str)
+
+    def test_a_type_whose_name_raises_is_still_named(self):
+        """The marker for a broken `repr` names the type, and a metaclass can make that attribute raise too."""
+
+        class Nameless(type):
+            @property
+            def __name__(cls):
+                raise RuntimeError("no name")
+
+        class Hostile(metaclass=Nameless):
+            def __repr__(self):
+                raise RuntimeError("no repr")
+
+        assert_that(_json_safe([Hostile()])).is_equal_to([{"__repr__": "<unreprable Hostile>"}])
+
+    def test_a_type_named_with_a_refusing_string_is_still_named(self):
+        class Loud(str):
+            def __format__(self, spec):
+                raise RuntimeError("no format")
+
+        class Hostile:
+            def __repr__(self):
+                raise RuntimeError("no repr")
+
+        Hostile.__name__ = Loud("Hostile")
+        assert_that(_json_safe([Hostile()])).is_equal_to([{"__repr__": "<unreprable Hostile>"}])
+
+    def test_a_key_that_stopped_hashing_costs_nothing(self):
+        """Its text is copied into an exact `str` before it keys the output, so its own `__hash__` never runs."""
+
+        class Flaky(str):
+            armed = False
+
+            def __hash__(self):
+                if self.armed:
+                    raise RuntimeError("no hash")
+                return str.__hash__(self)
+
+        key = Flaky("k")
+        source = {key: 1, "b": 2}
+        Flaky.armed = True
+        assert_that(_json_safe(source)).is_equal_to({"k": 1, "b": 2})
+
+    def test_a_str_returning_a_refusing_string_is_read_as_plain_text(self):
+        class Loud(str):
+            def __len__(self):
+                raise RuntimeError("no length")
+
+        class Odd:
+            def __str__(self):
+                return Loud("odd")
+
+        assert_that(type(errors_module._safe_str(Odd()))).is_same_as(str)
+
+    def test_a_value_whose_own_method_raises_costs_only_itself(self):
+        class Refusing(dict):
+            def items(self):
+                raise RuntimeError("no items")
+
+        assert_that(_json_safe([1, Refusing(a=1)])).is_equal_to([1, {"__repr__": "{'a': 1}"}])
+
     def test_huge_string_is_truncated(self):
         result = _json_safe("x" * 10_000)
         assert_that(result).contains("more chars")

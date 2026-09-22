@@ -12,17 +12,22 @@ if TYPE_CHECKING:
 
 
 def _safe_repr(value: object) -> str:
-    """``repr(value)`` that never raises: error rendering must survive a broken user ``__repr__``."""
+    """``repr(value)`` as an exact `str`, with any `Exception` from a broken ``__repr__`` turned into a marker.
+
+    Error rendering must survive a broken user ``__repr__``.  An interrupt still propagates.
+    """
     try:
-        return repr(value)
+        return str.__str__(repr(value))  # a `__repr__` may return a `str` subclass whose own methods raise
     except Exception:  # any user exception here must not shadow the assertion failure being rendered
-        return f"<unreprable {type(value).__name__}>"
+        # the slot itself as an exact str: a metaclass or an assigned `str` subclass can make the name raise
+        name = str.__str__(type.__dict__["__name__"].__get__(type(value)))
+        return f"<unreprable {name}>"
 
 
 def _safe_str(value: object) -> str:
-    """``str(value)`` that never raises, falling back to `_safe_repr`."""
+    """``str(value)`` as an exact `str`, falling back to `_safe_repr` on any `Exception`."""
     try:
-        return str(value)
+        return str.__str__(str(value))
     except Exception:
         return _safe_repr(value)
 
@@ -87,39 +92,54 @@ def _json_safe(value, _depth=0, _seen=None) -> _JsonSafe:
     Scalars and containers pass through as real JSON values so the Allure viewer renders a tree and
     consumers can parse them.  Everything else degrades to a marked fallback instead of failing the
     attachment: ``{"__repr__": ...}`` for non-JSON values (objects, datetimes, non-finite floats,
-    cycles, over-deep nesting), the snapshot codec's ``{"__type__": "set", "__data__": [...]}``
-    envelope for sets, and `_truncated` caps on strings and container sizes.
+    integers too long to print, values whose own methods raise, cycles, over-deep nesting), the snapshot
+    codec's ``{"__type__": "set", "__data__": [...]}`` envelope for sets, and `_truncated` caps on strings
+    and container sizes.
+
+    Total means an `Exception` from a value's own method degrades that value alone.  An interrupt such as
+    `KeyboardInterrupt` is not a value's failure and still propagates.  An object built to make the
+    conversion's own reads raise, such as a key whose `__class__` property raises, can still cost the
+    container holding it: that is a boundary, not a goal.
     """
-    if _seen is None:
-        _seen = set()
-    if value is None or isinstance(value, (bool, int)):
+    try:
+        return _json_native(value, _depth, set() if _seen is None else _seen)
+    except Exception:  # a value's own method raised, and one value must not cost the whole attachment
+        return {"__repr__": _truncated(_safe_repr(value))}
+
+
+def _json_native(value, depth: int, seen: set[int]) -> _JsonSafe:
+    """The conversion itself, which `_json_safe` keeps total by catching what a value's own methods raise."""
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        int.__repr__(value)  # raises past `sys.get_int_max_str_digits()`, where `json.dumps` would
         return value
     if isinstance(value, float):
         return value if math.isfinite(value) else {"__repr__": repr(value)}
     if isinstance(value, str):
         return _truncated(value)
-    if _depth >= 6:
+    if depth >= 6:
         return {"__repr__": _truncated(_safe_repr(value))}
-    if id(value) in _seen:
+    if id(value) in seen:
         return {"__repr__": "<circular ref>"}
     if isinstance(value, dict):
-        seen = _seen | {id(value)}
+        inner = seen | {id(value)}
         items = list(value.items())
         out = {}
         for key, val in items[:100]:
-            out[key if isinstance(key, str) else _safe_repr(key)] = _json_safe(val, _depth + 1, seen)
+            out[str.__str__(key) if isinstance(key, str) else _safe_repr(key)] = _json_safe(val, depth + 1, inner)
         if len(items) > 100:
             out["__truncated__"] = f"... and {len(items) - 100} more keys"
         return out
     if isinstance(value, (list, tuple)):
-        seen = _seen | {id(value)}
-        out = [_json_safe(item, _depth + 1, seen) for item in value[:100]]
+        inner = seen | {id(value)}
+        out = [_json_safe(item, depth + 1, inner) for item in value[:100]]
         if len(value) > 100:
             out.append({"__repr__": f"... and {len(value) - 100} more items"})
         return out
     if isinstance(value, (set, frozenset)):
         items = sorted(value, key=_safe_repr)
-        return {"__type__": "set", "__data__": [_json_safe(item, _depth + 1, _seen) for item in items[:100]]}
+        return {"__type__": "set", "__data__": [_json_safe(item, depth + 1, seen) for item in items[:100]]}
     return {"__repr__": _truncated(_safe_repr(value))}
 
 

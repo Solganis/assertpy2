@@ -45,7 +45,7 @@ from assertpy2._hints import diagnose
 from assertpy2._inline import _format_literal, is_literalable
 from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.assertpy import _format_soft_errors
-from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _diff_sides, _disambiguated
+from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, _diff_sides, _disambiguated, _json_safe
 from assertpy2.exception import _matches_shape
 from assertpy2.outcome import AssertionOutcome
 from assertpy2.pytest_plugin import _format_diff
@@ -78,6 +78,80 @@ _values_with_nan = st.recursive(
     max_leaves=20,
 )
 _keys = st.text(min_size=1, max_size=5)
+
+
+class _Unreprable:
+    def __repr__(self):
+        raise RuntimeError("no repr")
+
+
+class _Refusing:
+    """A `repr` of its own, so Hypothesis's printer never calls the refusing method while it reports an example."""
+
+    def __repr__(self):
+        return f"{type(self).__name__}()"
+
+
+class _RefusingDict(_Refusing, dict):
+    def items(self):
+        raise RuntimeError("no items")
+
+
+class _RefusingList(_Refusing, list):
+    def __getitem__(self, index):
+        raise RuntimeError("no items")
+
+
+class _RefusingSet(_Refusing, set):
+    def __iter__(self):
+        raise RuntimeError("no items")
+
+
+class _RefusingStr(_Refusing, str):
+    def __len__(self):
+        raise RuntimeError("no length")
+
+
+_carried = st.recursive(
+    _atoms
+    | st.floats()
+    | st.binary()
+    | st.datetimes()
+    | st.integers(min_value=10**4300, max_value=10**4400)
+    | st.builds(_Unreprable)
+    | st.builds(_RefusingDict, st.dictionaries(st.text(), st.integers()))
+    | st.builds(_RefusingList, st.lists(st.integers()))
+    | st.builds(_RefusingSet, st.sets(st.integers()))
+    | st.builds(_RefusingStr, st.text()),
+    lambda children: (
+        st.lists(children)
+        | st.tuples(children, children)
+        | st.dictionaries(st.text() | st.integers(), children)
+        | st.frozensets(st.integers() | st.text())
+    ),
+    max_leaves=20,
+)
+"""What a failure can carry into an attachment: JSON atoms, values JSON cannot spell, and subclasses whose own
+methods raise."""
+
+
+@settings(deadline=None)
+@example(value=10**5000)
+@example(value={"nested": [10**5000]})
+@example(value=_RefusingDict(a=1))
+@example(value=_RefusingList([1]))
+@example(value=_RefusingSet({1}))
+@example(value=_RefusingStr("text"))
+@given(value=_carried)
+def test_an_attachment_value_always_serialises_and_costs_only_itself(value):
+    """A value `json.dumps` refuses costs the whole attachment, because the plugin's barrier swallows the error.
+
+    Held between two siblings, so a conversion that gave up on the whole structure would show.
+    """
+    converted = _json_safe(["before", value, "after"])
+    assert_that(json.dumps(converted, allow_nan=False)).is_instance_of(str)
+    assert_that(converted).is_length(3)
+    assert_that([converted[0], converted[2]]).is_equal_to(["before", "after"])
 
 
 @settings(deadline=None)
