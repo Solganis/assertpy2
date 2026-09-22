@@ -292,6 +292,10 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_a_number).eventually_sync().no_such_assertion()  # case: a-name-that-exists-nowhere-on-a-chain
     # a `str` is iterable, so it reaches the umbrella rung, as wide as a value the umbrella claims
     assert_that(_some_text).eventually_sync().is_positive()  # case: numeric-assertion-on-polled-text
+    # two more of the same family, from other capabilities, so the table `poll_parity_baseline.py`
+    # derives from the declarations is anchored to what the checkers actually accept
+    assert_that(_a_mapping).eventually_sync().starts_with("x")  # case: text-assertion-on-a-polled-mapping
+    assert_that(_some_bytes).eventually_sync().has_json_path("$.a")  # case: json-pivot-on-polled-bytes
     # the rung the chain reaches now carries `str` operands, so mypy and pyright refuse this.  ty and
     # pyrefly still bind the element off the argument, which is what keeps the case here
     assert_that(_some_text).eventually_sync().contains_in_order(1)  # case: element-of-another-type-on-a-polled-string
@@ -332,6 +336,14 @@ def _a_row() -> _TakesAnyKey:
 
 def _some_text() -> str:
     return "x"
+
+
+def _a_mapping() -> dict[str, int]:
+    return {"a": 1}
+
+
+def _some_bytes() -> bytes:
+    return b"x"
 
 
 def _some_rows() -> list[str]:

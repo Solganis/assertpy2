@@ -224,6 +224,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # the runtime's to name, and a `str` reaches the umbrella rung of an assertion the string view lacks
     "a-name-that-exists-nowhere-on-a-chain": {},
     "numeric-assertion-on-polled-text": {},
+    "text-assertion-on-a-polled-mapping": {},
+    "json-pivot-on-polled-bytes": {},
     # the rung the chain reaches for a text probe now carries `str` operands rather than a free element,
     # so two of the three refuse the number.  ty and pyrefly still bind the element off the argument
     "element-of-another-type-on-a-polled-string": {
