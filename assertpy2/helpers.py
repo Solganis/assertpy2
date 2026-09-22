@@ -48,9 +48,9 @@ def _both_list_like(left: object, right: object) -> bool:
 class _Elided:
     """Marker standing in a parts list for a run of elements equal to their counterpart.
 
-    Carried along with the parts rather than reduced to a flag because a flag can only put the ``..``
-    in front: a value differing from its counterpart by one extra leading element then printed as
-    ``[.., 0]``, which is the shape of a changed *tail*.
+    Handed to the join in its place among the parts rather than as one flag for the whole value, because
+    such a flag can only put the ``..`` in front: a value differing from its counterpart by one extra
+    leading element then printed as ``[.., 0]``, which is the shape of a changed *tail*.
     """
 
     __slots__ = ()
@@ -68,24 +68,23 @@ def _joined_parts(parts: list[_Part], *, opener: str = "", closer: str = "") -> 
 
     Collapsing only removes what matched, so a value where nearly everything differs still prints in
     full. The cap is what keeps that case from becoming a wall of text on one line.  `_ELIDED` entries
-    mark where the matched runs were and never count against the cap.
+    mark where the matched runs were and never count against the cap.  Past the cap the count stands
+    for everything that follows, so no marker is kept after it and none is left just before it.
     """
     kept: list[_Part] = []
     spelled = hidden = 0
     for part in parts:
-        if isinstance(part, _Elided):
-            # one marker per run, however many elements the run swallowed
-            if not (kept and isinstance(kept[-1], _Elided)):
+        if part is _ELIDED:
+            if not hidden:
                 kept.append(part)
             continue
         spelled += 1
-        if spelled <= 5:
-            kept.append(part)
-        else:
+        if spelled > 5:
             hidden += 1
+        else:
+            kept.append(part)
     if hidden:
-        # the count stands for everything past the cap, so a marker it displaced says nothing more
-        while kept and isinstance(kept[-1], _Elided):
+        if kept[-1] is _ELIDED:
             kept.pop()
         kept.append(f"... and {hidden} more")
     return f"{opener}{', '.join(str(part) for part in kept)}{closer}"
@@ -104,18 +103,24 @@ def _elided_text_repr(text: str, counterpart: str) -> str:
         return _windowed(text, counterpart, width=320)[0] if len(text) > 320 else text
     other_lines = counterpart.splitlines()
     parts: list[_Part] = []
+    pending = False
     for index, line in enumerate(text.splitlines()):
         if index < len(other_lines) and line == other_lines[index]:
-            parts.append(_ELIDED)
+            pending = True
             continue
+        if pending:
+            parts.append(_ELIDED)
+            pending = False
         parts.append(f"line {index + 1}: {line}")
+    if pending:
+        parts.append(_ELIDED)
     return _joined_parts(parts)
 
 
 def _elided_seq_repr(seq, counterpart) -> str:
     """Collapse elements equal to their counterpart into ``..`` so only the differing ones are printed.
 
-    A one-element change in a forty-element list reads as ``[.., 999]`` instead of dumping the list
+    A one-element change in a forty-element list reads as ``[.., 999, ..]`` instead of dumping the list
     twice into a message the reader then has to diff by eye.
 
     Matched elements are found by the alignment the diff uses
@@ -131,13 +136,21 @@ def _elided_seq_repr(seq, counterpart) -> str:
             return rendered
     aligned = _aligned_match_indices(seq, counterpart)
     parts: list[_Part] = []
+    pending = False
     for index, value in enumerate(seq):
-        # two loops rather than a per-element branch: this runs once per element of every rendered sequence
         if aligned is not None:
             matched = index in aligned
         else:
             matched = index < len(counterpart) and not _guarded_not_equal(value, counterpart[index])
-        parts.append(_ELIDED if matched else _safe_repr(value))
+        if matched:
+            pending = True
+            continue
+        if pending:
+            parts.append(_ELIDED)
+            pending = False
+        parts.append(_safe_repr(value))
+    if pending:
+        parts.append(_ELIDED)
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
     return _joined_parts(parts, opener=opener, closer=closer)
 
@@ -393,16 +406,18 @@ class HelpersMixin(_MixinBase):
                 return "{<circular ref>}"
             _seen = _seen | {id(mapping)}
             parts: list[_Part] = []
+            pending = False
             # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
             for key, value in ((key, mapping[key]) for key in mapping):
                 if key not in counterpart:
-                    parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
+                    part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                 else:
                     decision = _node_decision(value, counterpart[key], config, field=key)
                     if decision == "equal":
-                        parts.append(_ELIDED)
-                    elif decision == "leaf":
-                        parts.append(f"{_safe_repr(key)}: {_safe_repr(value)}")
+                        pending = True
+                        continue
+                    if decision == "leaf":
+                        part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                     else:  # recurse
                         other_value = counterpart[key]
                         if (keyed := _keyed_pair(value, other_value)) is not None:
@@ -411,34 +426,48 @@ class HelpersMixin(_MixinBase):
                             value_repr = _list_repr(value, other_value, _seen)
                         else:
                             value_repr = _safe_repr(value)
-                        parts.append(f"{_safe_repr(key)}: {value_repr}")
+                        part = f"{_safe_repr(key)}: {value_repr}"
+                if pending:
+                    parts.append(_ELIDED)
+                    pending = False
+                parts.append(part)
+            if pending:
+                parts.append(_ELIDED)
             return _joined_parts(parts, opener="{", closer="}")
 
         def _list_repr(seq, counterpart, _seen):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
-            the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}]``
+            the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}, ..]``
             instead of dumping the whole list.  Always reached through ``_dict_repr`` (a list is only ever
             a nested value), so ``_seen`` is passed in, never defaulted."""
             if id(seq) in _seen:
                 return "[<circular ref>]"
             _seen = _seen | {id(seq)}
             parts: list[_Part] = []
+            pending = False
             for index, value in enumerate(seq):
                 if index >= len(counterpart):
-                    parts.append(_safe_repr(value))  # extra element beyond the counterpart's length
-                    continue
-                other_value = counterpart[index]
-                decision = _node_decision(value, other_value, config, field=None)
-                if decision == "equal":
-                    parts.append(_ELIDED)
-                elif decision == "leaf":
-                    parts.append(_safe_repr(value))
-                elif (keyed := _keyed_pair(value, other_value)) is not None:
-                    parts.append(_dict_repr(*keyed, _seen))
-                elif _both_list_like(value, other_value):
-                    parts.append(_list_repr(value, other_value, _seen))
+                    part = _safe_repr(value)  # extra element beyond the counterpart's length
                 else:
-                    parts.append(_safe_repr(value))
+                    other_value = counterpart[index]
+                    decision = _node_decision(value, other_value, config, field=None)
+                    if decision == "equal":
+                        pending = True
+                        continue
+                    if decision == "leaf":
+                        part = _safe_repr(value)
+                    elif (keyed := _keyed_pair(value, other_value)) is not None:
+                        part = _dict_repr(*keyed, _seen)
+                    elif _both_list_like(value, other_value):
+                        part = _list_repr(value, other_value, _seen)
+                    else:
+                        part = _safe_repr(value)
+                if pending:
+                    parts.append(_ELIDED)
+                    pending = False
+                parts.append(part)
+            if pending:
+                parts.append(_ELIDED)
             opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
             return _joined_parts(parts, opener=opener, closer=closer)
 

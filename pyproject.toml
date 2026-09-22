@@ -318,10 +318,10 @@ select = [
 ignore = []
 
 [tool.ruff.lint.mccabe]
-# A ratchet, not a bar. Thirty functions sit above the default of 10 and the worst is 32, so a
+# A ratchet, not a bar. Thirty-one functions sit above the default of 10 and the worst is 32, so a
 # threshold of 10 would fail today and a rewrite of `_build_equality_diff` for the sake of a number
 # would risk code that tests and mutation testing hold. This stops a new worst only, which is the
-# cheap half: `tests/test_complexity.py` records every one of the thirty and catches an individual
+# cheap half: `tests/test_complexity.py` records every one of the thirty-one and catches an individual
 # function growing, which neither a ceiling nor a count can see.
 max-complexity = 32
 

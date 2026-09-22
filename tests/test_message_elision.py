@@ -9,9 +9,18 @@ is the only thing that tells them apart.
 import collections
 
 import pytest
+from hypothesis import example, given
+from hypothesis import strategies as st
 
-from assertpy2 import assert_that
-from assertpy2.helpers import _ELIDED, _both_list_like, _elided_seq_repr, _elided_text_repr, _joined_parts
+from assertpy2 import assert_that, helpers
+from assertpy2._engine._diff import _aligned_match_indices
+from assertpy2.helpers import (
+    _ELIDED,
+    _both_list_like,
+    _elided_seq_repr,
+    _elided_text_repr,
+    _joined_parts,
+)
 
 
 class TestSequenceElisionBoundaries:
@@ -73,19 +82,20 @@ class TestJoinedPartsCap:
         assert_that(_joined_parts([str(index) for index in range(9)])).is_equal_to("0, 1, 2, 3, 4, ... and 4 more")
 
     def test_markers_do_not_count_against_the_cap(self):
-        # a marker stands for what was dropped for being equal; spending the cap on those would push
-        # the differing parts the message exists to show out of it
+        """Spending the cap on matches would push out the differing parts the message exists to show."""
         parts = [item for index in range(5) for item in (_ELIDED, str(index))]
         assert_that(_joined_parts(parts)).is_equal_to(".., 0, .., 1, .., 2, .., 3, .., 4")
 
-    def test_a_marker_the_count_displaced_is_dropped(self):
-        # "... and N more" already stands for everything past the cap, marker included
-        assert_that(_joined_parts([*[str(index) for index in range(6)], _ELIDED])).is_equal_to(
+    def test_a_marker_just_before_the_count_is_dropped(self):
+        """The count already stands for everything past the cap, the matched run included."""
+        assert_that(_joined_parts([*[str(index) for index in range(5)], _ELIDED, "5"])).is_equal_to(
             "0, 1, 2, 3, 4, ... and 1 more"
         )
 
-    def test_a_run_of_matches_collapses_to_one_marker(self):
-        assert_that(_joined_parts([_ELIDED, _ELIDED, _ELIDED, "x"], opener="[", closer="]")).is_equal_to("[.., x]")
+    def test_no_marker_survives_past_the_cap(self):
+        assert_that(_joined_parts([*[str(index) for index in range(6)], _ELIDED, "6"])).is_equal_to(
+            "0, 1, 2, 3, 4, ... and 2 more"
+        )
 
     def test_the_marker_stands_where_the_matched_run_was(self):
         assert_that(_joined_parts([_ELIDED, "x"], opener="[", closer="]")).is_equal_to("[.., x]")
@@ -93,6 +103,92 @@ class TestJoinedPartsCap:
 
     def test_an_all_matching_value_is_just_the_marker(self):
         assert_that(_joined_parts([_ELIDED], opener="{", closer="}")).is_equal_to("{..}")
+
+
+class TestAMatchedRunIsOneMarker:
+    """Collapsed where the parts are built, so the join is handed one marker per run, not one per element.
+
+    A marker per matched element held a million references to print three parts, and a helper called per
+    element to avoid that cost a failing poll over 200 records a tenth of its time.
+    """
+
+    @staticmethod
+    def _handed(monkeypatch, render):
+        seen: list = []
+        real = helpers._joined_parts
+
+        def recording(parts, **options):
+            seen.append(list(parts))
+            return real(parts, **options)
+
+        monkeypatch.setattr(helpers, "_joined_parts", recording)
+        render()
+        return seen
+
+    def test_a_long_sequence(self, monkeypatch):
+        seen = self._handed(
+            monkeypatch, lambda: _elided_seq_repr(list(range(10_000)), [*range(5_000), -1, *range(5_001, 10_000)])
+        )
+        assert_that(seen).is_equal_to([[_ELIDED, "5000", _ELIDED]])
+
+    def test_a_long_text(self, monkeypatch):
+        lines = [f"row {index}" for index in range(1_000)]
+        changed = [*lines[:500], "changed", *lines[501:]]
+        seen = self._handed(monkeypatch, lambda: _elided_text_repr("\n".join(lines), "\n".join(changed)))
+        assert_that(seen).is_equal_to([[_ELIDED, "line 501: row 500", _ELIDED]])
+
+    def test_a_long_mapping_and_the_list_inside_it(self, monkeypatch):
+        left = {**{f"k{index}": index for index in range(1_000)}, "rows": list(range(1_000))}
+        right = {**left, "k500": -1, "rows": [*range(500), -1, *range(501, 1_000)]}
+
+        def fail():
+            with pytest.raises(AssertionError):
+                assert_that(left).is_equal_to(right)
+
+        seen = self._handed(monkeypatch, fail)
+        assert_that(seen).is_equal_to(
+            [
+                [_ELIDED, "500", _ELIDED],
+                [_ELIDED, "'k500': 500", _ELIDED, "'rows': [.., 500, ..]"],
+                [_ELIDED, "-1", _ELIDED],
+                [_ELIDED, "'k500': -1", _ELIDED, "'rows': [.., -1, ..]"],
+            ]
+        )
+
+
+@given(
+    st.lists(st.integers(min_value=0, max_value=9), min_size=21, max_size=60),
+    st.sets(st.integers(min_value=0, max_value=59), max_size=5),
+    st.booleans(),
+)
+# shifted with no alignment worth taking, where the positional fallback runs one past the counterpart
+@example(value=[0] * 21, changed={0}, shifted=True)
+def test_every_matched_run_is_one_marker_in_its_place(value, changed, shifted):
+    """Read off the tokens before the cap, since past it the count deliberately throws content away.
+
+    *shifted* puts an extra element in front, which sends the pair down the alignment path #41 was on.
+    """
+    counterpart = [99 if index in changed else item for index, item in enumerate(value)]
+    if shifted:
+        value = [42, *value]
+    matched = _aligned_match_indices(value, counterpart)
+    if matched is None:
+        matched = {index for index, item in enumerate(value) if index < len(counterpart) and item == counterpart[index]}
+    expected: list = []
+    for index, item in enumerate(value):
+        if index in matched:
+            if not expected or expected[-1] is not _ELIDED:
+                expected.append(_ELIDED)
+        else:
+            expected.append(repr(item))
+    seen: list = []
+    real = helpers._joined_parts
+    helpers._joined_parts = lambda parts, **options: (seen.append(list(parts)), real(parts, **options))[1]
+    try:
+        _elided_seq_repr(value, counterpart)
+    finally:
+        helpers._joined_parts = real
+    assert_that(seen).is_equal_to([expected])
 
 
 class TestElisionReachesTheMessage:
@@ -149,6 +245,11 @@ class TestElisionMarkerPlacement:
 
     def test_a_changed_middle_is_marked_on_both_sides(self):
         assert_that(_elided_seq_repr([*[1] * 10, 2, *[1] * 10], [1] * 21)).is_equal_to("[.., 2, ..]")
+
+    def test_two_separate_changes_keep_the_run_between_them(self):
+        value = list(range(40))
+        value[5], value[30] = 98, 99
+        assert_that(_elided_seq_repr(value, list(range(40)))).is_equal_to("[.., 98, .., 99, ..]")
 
     def test_a_changed_head_reaches_the_failure_message(self):
         with pytest.raises(AssertionError) as exc_info:
