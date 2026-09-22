@@ -19,12 +19,18 @@ Under a shuffling runner two seeds in four went red. A failure names the block i
 
 from __future__ import annotations
 
+import ast
+import builtins
 import datetime
 import inspect
+import io
 import json
 import logging
 import pathlib
 import re
+import sys
+import tokenize
+import traceback
 import types
 
 import pytest
@@ -34,7 +40,7 @@ pytest.importorskip("pytest_examples")
 from pytest_examples import CodeExample, EvalExample, find_examples
 
 import assertpy2
-from assertpy2 import matchers
+from assertpy2 import assert_that, errors, matchers
 from tests.docs_fixtures import PAGE_FIXTURES, documented_pages
 
 # pages this guard does not run, with reasons: a hand-kept list of pages to check stops growing quietly
@@ -121,3 +127,208 @@ def test_doc_examples_run(doc: str, eval_example: EvalExample) -> None:
         ran += 1
     if ran == 0:
         pytest.skip("every block on this page is marked non-executable")
+
+
+_BLOCK = "<docs block>"
+_RAISES = SKIP_MARKERS["docs-guard: raises"]
+_EXCEPTION = re.compile(r"^([A-Za-z_][\w.]*(?:Error|Exception|Failure|Warning)): (.*)$")
+
+
+def _uncommented(text: str) -> str:
+    """A comment's text without the ``#`` and the one space after it, keeping everything else it holds."""
+    return text.lstrip().removeprefix("#").removeprefix(" ")
+
+
+def _documented(source: str, statement: ast.stmt) -> list[str]:
+    """What the page says *statement* produces: its trailing comment, or the comment lines directly under it."""
+    comments = {
+        token.start[0]: token.string
+        for token in tokenize.generate_tokens(io.StringIO(source).readline)
+        if token.type == tokenize.COMMENT
+    }
+    last = statement.end_lineno or statement.lineno
+    if last in comments:
+        return [_uncommented(comments[last])]
+    lines = source.splitlines()
+    below: list[str] = []
+    for number in range(last + 1, len(lines) + 1):
+        if number not in comments or not lines[number - 1].lstrip().startswith("#"):
+            break
+        below.append(_uncommented(lines[number - 1]))
+    return below
+
+
+def _says(documented: list[str], actual: str) -> bool:
+    """Whether *documented* is *actual* as the page writes it.
+
+    The leading lines of it, character for character, except that one long line may be wrapped over
+    several comments, rejoined with a single space.  A single line may instead end in ``...`` for a
+    message cut short on purpose, or add ``: why`` after the output.
+    """
+    if len(documented) == 1:
+        (only,) = documented
+        if only.startswith(f"{actual}: "):
+            return True
+        if only.endswith("..."):
+            return actual.startswith(only.removesuffix("..."))
+    remaining = list(documented)
+    for line in actual.splitlines():
+        if not remaining:
+            return True
+        joined = remaining.pop(0)
+        while joined != line and remaining and line.startswith(f"{joined} "):
+            joined = f"{joined} {remaining.pop(0)}"
+        if joined != line:
+            return False
+    return not remaining
+
+
+@pytest.mark.parametrize(
+    ("documented", "actual", "said"),
+    [
+        (["a b"], "a b", True),
+        (["a b"], "a  b", False),
+        (["Expected <'a b'>"], "Expected <'a  b'>", False),
+        (["  b:"], "   b:", False),
+        (["x"], "x\ny", True),
+        (["x", "y", "z"], "x\ny", False),
+        (["one two", "three"], "one two three", True),
+        (["one two", "three"], "one two  three", False),
+        (["False: why"], "False", True),
+        (["True: why"], "False", False),
+        (["cut here; ..."], "cut here; and the rest", True),
+        (["cut here; ..."], "cut here;and the rest", False),
+        (["cut  here; ..."], "cut here; and the rest", False),
+        (["a "], "a", False),
+    ],
+)
+def test_the_comparison_is_exact_but_for_a_wrapped_line(documented: list[str], actual: str, said: bool) -> None:
+    """Whitespace inside a rendered value is part of it, so evening it out let a changed value read as the old one."""
+    assert_that(_says(documented, actual)).is_equal_to(said)
+
+
+@pytest.mark.parametrize(
+    ("source", "documented"),
+    [
+        ("print(1)  # 1 \n", ["1 "]),
+        ("print(1)\n#   b: \n#     - 2\n", ["  b: ", "    - 2"]),
+    ],
+    ids=["on-the-line", "under-it"],
+)
+def test_a_documented_output_is_read_whole(source: str, documented: list[str]) -> None:
+    """Only the ``#`` and the one space after it come off: an indent or a trailing space was printed too."""
+    (statement,) = _prints(source)
+    assert_that(_documented(source, statement)).is_equal_to(documented)
+
+
+class _Printed:
+    """A block's ``print``: what each call wrote, by the block line it was called from."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, str]] = []
+
+    def __call__(self, *values: object, sep: str = " ", end: str = "\n", **_options: object) -> None:
+        written = io.StringIO()
+        builtins.print(*values, sep=sep, end=end, file=written)
+        self.calls.append((sys._getframe(1).f_lineno, written.getvalue().rstrip("\n")))
+
+
+def _prints(source: str) -> list[ast.Expr]:
+    return [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
+        and node.value.func.id == "print"
+    ]
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [doc for doc, examples in _PAGES.items() if any("print(" in one.source for one in examples)],
+    ids=str,
+)
+@pytest.mark.usefixtures("_matchers_restored")
+def test_what_a_block_prints_is_what_the_page_says(doc: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The run above executes a block and never reads the comment showing its output.
+
+    So a message whose shape changed went on being shown in the old one.  Rendered the way the page
+    describes it, off pytest, where the diff travels in the message.
+    """
+    monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+    checked = 0
+    for example in _PAGES[doc]:
+        if _skip_reason(example) is not None or "print(" not in example.source:
+            continue
+        printed = _Printed()
+        exec(compile(example.source, _BLOCK, "exec"), _namespace(doc) | {"print": printed})
+        for statement in _prints(example.source):
+            documented = _documented(example.source, statement)
+            if not documented:
+                continue
+            where = f"{doc}:{example.start_line + statement.lineno}"
+            last = statement.end_lineno or statement.lineno
+            ran = [text for line, text in printed.calls if statement.lineno <= line <= last]
+            assert_that(ran).described_as(f"{where}: runs of the documented print").is_length(1)
+            assert_that(_says(documented, ran[0])).described_as(
+                f"{where}: printed {ran[0]!r}, the page says {documented!r}"
+            ).is_true()
+            checked += 1
+    assert_that(checked).described_as("documented prints compared on the page").is_positive()
+
+
+def _raising_line(failure: BaseException) -> int:
+    return [frame.lineno for frame in traceback.extract_tb(failure.__traceback__) if frame.filename == _BLOCK][-1]
+
+
+def _names(failure: BaseException) -> set[str]:
+    return {
+        name for kind in type(failure).__mro__ for name in (kind.__qualname__, f"{kind.__module__}.{kind.__qualname__}")
+    }
+
+
+@pytest.mark.parametrize(
+    "doc",
+    [doc for doc, examples in _PAGES.items() if any(_skip_reason(one) == _RAISES for one in examples)],
+    ids=str,
+)
+@pytest.mark.usefixtures("_matchers_restored")
+def test_a_raising_block_shows_the_failure_it_raises(doc: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A block marked as raising is skipped by the run above, so the failure its comment shows was never read.
+
+    Compared where the comment names an exception or quotes a message; a comment in prose (``# fails``)
+    says nothing to compare.
+    """
+    monkeypatch.setattr(errors, "_RENDER_DIFF_IN_MESSAGE", True)
+    checked = 0
+    for example in _PAGES[doc]:
+        if _skip_reason(example) != _RAISES:
+            continue
+        where = f"{doc}:{example.start_line}"
+        try:
+            exec(compile(example.source, _BLOCK, "exec"), _namespace(doc))
+        except Exception as failure:
+            line = _raising_line(failure)
+            statement = min(
+                (
+                    node
+                    for node in ast.walk(ast.parse(example.source))
+                    if isinstance(node, ast.stmt) and node.lineno <= line <= (node.end_lineno or node.lineno)
+                ),
+                key=lambda node: (node.end_lineno or node.lineno) - node.lineno,
+            )
+            documented = _documented(example.source, statement)
+            named = _EXCEPTION.match(documented[0]) if documented else None
+            if named is not None:
+                assert_that(_names(failure)).described_as(f"{where}: the exception raised").contains(named.group(1))
+                documented = [named.group(2), *documented[1:]]
+            elif not documented or not documented[0].startswith(("Expected", "[")):
+                continue
+            assert_that(_says(documented, str(failure))).described_as(
+                f"{where}: raised {str(failure)!r}, the page says {documented!r}"
+            ).is_true()
+            checked += 1
+        else:
+            pytest.fail(f"{where}: marked as raising, and ran clean")
+    assert_that(checked).described_as("failures compared with what the page shows").is_positive()
