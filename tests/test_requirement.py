@@ -7,12 +7,14 @@ nothing at all for `is_empty()`.  A consumer grouping failures across a suite ha
 
 from __future__ import annotations
 
+import ast
 import contextvars
 import datetime
 import functools
 import itertools
 import logging
 import pathlib
+import symtable
 
 import pytest
 
@@ -28,7 +30,7 @@ from assertpy2 import (
     soft_assertions,
     soft_fail,
 )
-from assertpy2.assertpy import NegatedBuilder
+from assertpy2.assertpy import _ASSERTS, ASSERTPY_FILES, NegatedBuilder
 
 _EARLIER = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 _LATER = datetime.datetime(2026, 1, 2, tzinfo=datetime.timezone.utc)
@@ -601,3 +603,71 @@ class TestAnExtensionAnswersOnlyForItsOwnValue:
             assert_that(assert_that({"a": 1}).check().is_shaped().requirement.operation).is_equal_to("is_shaped")
         finally:
             remove_extension(is_shaped)
+
+
+def _read_off_the_frame(function):
+    """The parameters `_bound_parameters` reads: all declared ones but the first, which is the receiver."""
+    arguments = function.args
+    named = [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs][1:]
+    return {argument.arg for argument in [*named, arguments.vararg, arguments.kwarg] if argument is not None}
+
+
+def _rebound_by_closure(table, names):
+    """Parameters a nested scope rebinds through `nonlocal`, which the enclosing scope's own flags do not show."""
+    for child in table.get_children():
+        for name in names & set(child.get_identifiers()):
+            if child.lookup(name).is_nonlocal() and child.lookup(name).is_assigned():
+                yield name
+        yield from _rebound_by_closure(child, names)
+
+
+def _function_tables(table):
+    for child in table.get_children():
+        if isinstance(child, symtable.Function):
+            yield child
+        yield from _function_tables(child)
+
+
+class TestTheFrameReadsWhatWasPassed:
+    """The stack is read when the failure is composed, so a parameter answers with its value at that moment.
+
+    An assertion that rebinds one before failing reports its own copy, while `not_`, bound through the
+    signature, reports the caller's. `conforms_to_openapi` did, with the spec it normalised to string keys.
+
+    So it is a source rule rather than a proof: no assertion rebinds a parameter the frame reads, in its own
+    scope or through a closure, not even to the same object, because the frame cannot tell `spec = spec`
+    from `spec = copy(spec)`.
+    """
+
+    def test_no_assertion_rebinds_a_parameter_the_frame_reads(self):
+        """The compiler's symbol table says what a scope binds, a walrus in a comprehension and `import as` included."""
+        rebound, unmatched, checked = [], [], set()
+        for filename in sorted(ASSERTPY_FILES):
+            source = pathlib.Path(filename).read_text(encoding="utf-8")
+            read = {
+                (function.name, function.lineno): _read_off_the_frame(function)
+                for function in ast.walk(ast.parse(source))
+                if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)) and function.name in _ASSERTS
+            }
+            tables = {
+                (table.get_name(), table.get_lineno()): table
+                for table in _function_tables(symtable.symtable(source, filename, "exec"))
+            }
+            checked |= {name for name, _ in read}
+            for (name, lineno), names in read.items():
+                table = tables.get((name, lineno))
+                if table is None:
+                    unmatched.append(f"{pathlib.Path(filename).name}:{lineno} {name}")
+                    continue
+                rebound += [
+                    f"{pathlib.Path(filename).name}:{lineno} {name}({parameter})"
+                    for parameter in sorted(names)
+                    if table.lookup(parameter).is_assigned() or table.lookup(parameter).is_imported()
+                ]
+                rebound += [
+                    f"{pathlib.Path(filename).name}:{lineno} {name}({parameter}, through a closure)"
+                    for parameter in sorted(set(_rebound_by_closure(table, names)))
+                ]
+        assert_that(sorted(_ASSERTS - checked)).described_as("assertions with no definition checked").is_empty()
+        assert_that(unmatched).described_as("assertions the symbol table did not place, left unchecked").is_empty()
+        assert_that(rebound).is_empty()

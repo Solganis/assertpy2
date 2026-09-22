@@ -506,3 +506,26 @@ class TestSwagger20NullableInsideArrays:
     def test_a_wrong_type_inside_the_branch_still_fails(self):
         with pytest.raises(AssertionError):
             assert_that({"who": 1}).conforms_to_openapi(self._SPEC, "/x", "get")
+
+
+class TestTheRequirementNamesTheCallersSpec:
+    """The spec is normalised to string keys before validation, and the failure reported that copy.
+
+    `not_` binds the caller's own spec through the signature, so one requirement had two answers
+    whenever the spec carried an integer status key, as YAML parses `200`.
+    """
+
+    _SPEC: typing.ClassVar = {
+        "openapi": "3.0.3",
+        "paths": {
+            "/x": {"get": {"responses": {200: {"content": {"application/json": {"schema": {"type": "integer"}}}}}}}
+        },
+    }
+
+    def test_a_failure_carries_the_spec_it_was_given(self):
+        asked = assert_that("text").check().conforms_to_openapi(self._SPEC, "/x", "get").requirement
+        assert_that(asked.parameters["spec"]).is_same_as(self._SPEC)
+
+    def test_the_negated_failure_carries_the_same(self):
+        asked = assert_that(1).check().not_.conforms_to_openapi(self._SPEC, "/x", "get").requirement
+        assert_that(asked.parameters["spec"]).is_same_as(self._SPEC)

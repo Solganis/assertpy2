@@ -1193,20 +1193,20 @@ class StructureMatcher(BaseMatcher):
         return value
 
     def matches(self, value: Any) -> bool:
-        value = self._as_mapping(value)
-        if not is_mapping_like(value):
+        mapping = self._as_mapping(value)
+        if not is_mapping_like(mapping):
             return False
-        return not self._walk(value, self._spec, _ROOT, set())
+        return not self._walk(mapping, self._spec, _ROOT, set())
 
     def describe(self) -> str:
         return f"a mapping matching structure {_describe_spec_value(self._spec)}"
 
     def describe_mismatch(self, value: Any) -> str:
-        value = self._as_mapping(value)
-        if not is_mapping_like(value):
-            return f"was not a mapping: <{value}>"
-        mismatches = self._walk(value, self._spec, _ROOT, set())
-        return self.render_mismatch(mismatches) if mismatches else f"was <{value}>"
+        mapping = self._as_mapping(value)
+        if not is_mapping_like(mapping):
+            return f"was not a mapping: <{mapping}>"
+        mismatches = self._walk(mapping, self._spec, _ROOT, set())
+        return self.render_mismatch(mismatches) if mismatches else f"was <{mapping}>"
 
     def evaluate(self, value: Any) -> MatchResult:
         """One walk of the spec instead of two.

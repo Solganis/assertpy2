@@ -184,16 +184,16 @@ class FileMixin(_MixinBase):
             AssertionError: if val does **not** exist, is **not** a file, or is **not** a child of given directory
         """
         self.is_file()
-        parent = require_type(parent, (str, os.PathLike), "a path", subject=argument("parent directory"))
+        parent_path = require_type(parent, (str, os.PathLike), "a path", subject=argument("parent directory"))
         val_abspath = os.path.abspath(self.val)
-        parent_abspath = os.path.abspath(parent)
+        parent_abspath = os.path.abspath(parent_path)
         try:
             is_child = os.path.commonpath([val_abspath, parent_abspath]) == parent_abspath
         except ValueError:  # pragma: no cover - Windows-only: paths on different drives share no common path
             is_child = False
         if not is_child:
             return self.error(
-                f"Expected file <{val_abspath}> to be a child of <{parent_abspath}>, but was not.", expected=parent
+                f"Expected file <{val_abspath}> to be a child of <{parent_abspath}>, but was not.", expected=parent_path
             )
         return self
 

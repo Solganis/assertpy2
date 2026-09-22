@@ -368,14 +368,14 @@ class JsonMixin(_MixinBase):
         import referencing
         from referencing.jsonschema import DRAFT4, DRAFT202012
 
-        spec = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
-        is_openapi_31 = str(spec.get("openapi", "")).startswith("3.1")
-        is_swagger_2 = str(spec.get("swagger", "")).startswith("2")
-        status_key, pointer = _openapi_resolve(spec, path, method, status, content_type)
+        normalized = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
+        is_openapi_31 = str(normalized.get("openapi", "")).startswith("3.1")
+        is_swagger_2 = str(normalized.get("swagger", "")).startswith("2")
+        status_key, pointer = _openapi_resolve(normalized, path, method, status, content_type)
         if is_openapi_31:
-            document = spec  # 3.1 is JSON Schema 2020-12 already, no nullable rewrite
+            document = normalized  # 3.1 is JSON Schema 2020-12 already, no nullable rewrite
         else:
-            document = _openapi_nullable_to_null(spec, "x-nullable" if is_swagger_2 else "nullable")
+            document = _openapi_nullable_to_null(normalized, "x-nullable" if is_swagger_2 else "nullable")
         specification = DRAFT202012 if is_openapi_31 else DRAFT4
         validator_cls = jsonschema_mod.Draft202012Validator if is_openapi_31 else jsonschema_mod.Draft4Validator
 
