@@ -239,6 +239,25 @@ def _shown(value: object) -> str:
     return _bounded(stable_repr(value))
 
 
+class _Absent:
+    """A side that held nothing at all.
+
+    An absent key carries `None`, and read as a value it printed as ``None`` and keyed with every
+    failure whose value really is `None`.
+    """
+
+    def __repr__(self) -> str:
+        return "<absent>"
+
+
+_ABSENT = _Absent()
+
+
+def _side_of(entry: DiffEntry, side: str) -> object:
+    """One side of an entry, or the absent marker where that side held nothing."""
+    return _ABSENT if entry.absent == side else (entry.actual if side == "actual" else entry.expected)
+
+
 def _identity(value: object) -> str:
     """A value as a cluster key: the whole of it, in a fixed number of characters.
 
@@ -265,7 +284,9 @@ def signature(diff: DiffResult, entry: DiffEntry, label: str | None = None) -> S
         return Signature(False, diff.kind, label=label)
     if diff.kind not in _VALUES_ARE_VALUES:
         return None
-    return Signature(False, diff.kind, values=(_identity(entry.actual), _identity(entry.expected)))
+    return Signature(
+        False, diff.kind, values=(_identity(_side_of(entry, "actual")), _identity(_side_of(entry, "expected")))
+    )
 
 
 def is_well_formed(key: Signature) -> bool:
@@ -305,7 +326,9 @@ def observations_of(diff: DiffResult | None, label: str | None = None) -> list[O
     for entry in diff.entries:
         key = signature(diff, entry, label)
         if key is not None:
-            seen.setdefault(key, Observation(key, _shown(entry.actual), _shown(entry.expected)))
+            seen.setdefault(
+                key, Observation(key, _shown(_side_of(entry, "actual")), _shown(_side_of(entry, "expected")))
+            )
     return list(seen.values())
 
 

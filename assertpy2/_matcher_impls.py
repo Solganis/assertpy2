@@ -893,12 +893,14 @@ class HasPropertyMatcher(BaseMatcher):
         return f"an object with property <{self.name}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        if not hasattr(value, self.name):
-            return f"<{value!r}> has no property <{self.name}>"
+        # one read: asked through `hasattr` and then again, a property that counts its reads answered twice
+        try:
+            held = getattr(value, self.name)
+        except AttributeError:
+            return f"<{_safe_repr(value)}> has no property <{self.name}>"
         if self.matcher is not None:
-            actual = getattr(value, self.name)
-            return f"property <{self.name}> was <{actual!r}>, {self.matcher.describe_mismatch(actual)}"
-        return f"was <{value!r}>"
+            return f"property <{self.name}> was <{_safe_repr(held)}>, {self.matcher.describe_mismatch(held)}"
+        return f"was <{_safe_repr(value)}>"
 
 
 # `str` and `bytes` are never each other's operands, and accepting `str` alone made a matcher disagree with itself

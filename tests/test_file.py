@@ -284,3 +284,14 @@ def test_is_executable_not_executable(tmpfile):
         with pytest.raises(AssertionError) as exc_info:
             assert_that(tmpfile.name).is_executable()
         assert_that(str(exc_info.value)).matches("Expected <.*> to be executable, but was not.")
+
+
+def test_a_missing_bytes_path_is_reported_as_the_missing_file_it_is():
+    """Only `str` and `PathLike` were re-checked, so a `bytes` path read as "not a file or path" instead."""
+    with pytest.raises(FileNotFoundError):
+        contents_of(b"nowhere-at-all-12345.txt")
+
+
+def test_something_that_is_not_a_path_at_all_still_says_so():
+    with pytest.raises(ValueError, match="val must be file or path"):
+        contents_of(123)

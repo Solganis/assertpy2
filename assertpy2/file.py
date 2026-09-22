@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
+from .errors import _safe_str
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -46,7 +47,7 @@ def contents_of(file: str | bytes | os.PathLike[str] | os.PathLike[bytes] | Read
         except TypeError:
             raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
         except OSError:
-            if not isinstance(file, (str, os.PathLike)):
+            if not isinstance(file, (str, bytes, os.PathLike)):
                 raise ValueError(f"val must be file or path, but was type <{type(file).__name__}>") from None
             raise
 
@@ -75,7 +76,7 @@ class FileMixin(_MixinBase):
         """
         require_type(self.val, (str, os.PathLike), "a path")
         if not os.path.exists(self.val):
-            return self.error(f"Expected <{self.val}> to exist, but was not found.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to exist, but was not found.")
         return self
 
     def does_not_exist(self) -> Self:
@@ -95,7 +96,7 @@ class FileMixin(_MixinBase):
         """
         require_type(self.val, (str, os.PathLike), "a path")
         if os.path.exists(self.val):
-            return self.error(f"Expected <{self.val}> to not exist, but was found.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to not exist, but was found.")
         return self
 
     def is_file(self) -> Self:
@@ -114,7 +115,7 @@ class FileMixin(_MixinBase):
         """
         self.exists()
         if not os.path.isfile(self.val):
-            return self.error(f"Expected <{self.val}> to be a file, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be a file, but was not.")
         return self
 
     def is_directory(self) -> Self:
@@ -133,7 +134,7 @@ class FileMixin(_MixinBase):
         """
         self.exists()
         if not os.path.isdir(self.val):
-            return self.error(f"Expected <{self.val}> to be a directory, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be a directory, but was not.")
         return self
 
     def is_named(self, filename: str) -> Self:
@@ -213,7 +214,7 @@ class FileMixin(_MixinBase):
         """
         self.exists()
         if not os.access(self.val, os.R_OK):
-            return self.error(f"Expected <{self.val}> to be readable, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be readable, but was not.")
         return self
 
     def is_writable(self) -> Self:
@@ -232,7 +233,7 @@ class FileMixin(_MixinBase):
         """
         self.exists()
         if not os.access(self.val, os.W_OK):
-            return self.error(f"Expected <{self.val}> to be writable, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be writable, but was not.")
         return self
 
     def is_executable(self) -> Self:
@@ -251,5 +252,5 @@ class FileMixin(_MixinBase):
         """
         self.exists()
         if not os.access(self.val, os.X_OK):
-            return self.error(f"Expected <{self.val}> to be executable, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be executable, but was not.")
         return self

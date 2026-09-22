@@ -145,7 +145,7 @@ class TestJsonPathIsCompiledOnce:
     """Parsing a path is the whole cost of a path assertion; the lookup is a rounding error."""
 
     def test_the_same_path_is_parsed_once(self):
-        json_mixin._parsed_json_path.cache_clear()
+        json_mixin._compiled_json_path.cache_clear()
         parse = _ensure_jsonpath_ng().parse
         with patch.object(_ensure_jsonpath_ng(), "parse", side_effect=parse) as spy:
             for _ in range(5):
@@ -154,7 +154,7 @@ class TestJsonPathIsCompiledOnce:
         assert_that(spy.call_count).is_equal_to(1)
 
     def test_a_different_path_is_parsed_again(self):
-        json_mixin._parsed_json_path.cache_clear()
+        json_mixin._compiled_json_path.cache_clear()
         parse = _ensure_jsonpath_ng().parse
         with patch.object(_ensure_jsonpath_ng(), "parse", side_effect=parse) as spy:
             assert_that(DATA).has_json_path("$.meta.total")
@@ -163,7 +163,7 @@ class TestJsonPathIsCompiledOnce:
 
     def test_the_cache_is_bounded(self):
         # a path built from test data is a fresh string, so an unbounded cache would grow with the suite
-        assert_that(json_mixin._parsed_json_path.cache_info().maxsize).is_not_none()
+        assert_that(json_mixin._compiled_json_path.cache_info().maxsize).is_not_none()
 
 
 class TestJsonImportErrors:
@@ -195,3 +195,15 @@ class TestJsonSoftMode:
         msg = str(exc_info.value)
         assert_that(msg).contains("1.")
         assert_that(msg).contains("2.")
+
+
+class TestAPathIsRefusedBeforeItIsHashed:
+    """The cache hashes its argument, so a list came back as "unhashable type: 'list'"."""
+
+    @pytest.mark.parametrize("path", [["a"], 5, None, {"a"}], ids=["list", "int", "none", "set"])
+    def test_a_path_that_is_not_a_string_names_the_argument(self, path):
+        with pytest.raises(TypeError, match="given path arg must be a string"):
+            assert_that({"a": 1}).at_json_path(path)
+
+    def test_a_string_path_still_answers(self):
+        assert_that({"a": 1}).at_json_path("$.a").is_equal_to(1)

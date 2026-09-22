@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
+from .errors import _safe_str
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -66,8 +67,7 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val >= other:
             return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                f"Expected <{_safe_str(self.val)}> to be before <{other}>, but was not.",
                 expected=other,
             )
         return self
@@ -105,8 +105,7 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val <= other:
             return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                f"Expected <{_safe_str(self.val)}> to be after <{other}>, but was not.",
                 expected=other,
             )
         return self
@@ -139,8 +138,7 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val > other:
             return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be before or equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                f"Expected <{_safe_str(self.val)}> to be before or equal to <{other}>, but was not.",
                 expected=other,
             )
         return self
@@ -173,8 +171,7 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val < other:
             return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be after or equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                f"Expected <{_safe_str(self.val)}> to be after or equal to <{other}>, but was not.",
                 expected=other,
             )
         return self

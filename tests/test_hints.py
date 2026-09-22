@@ -729,3 +729,38 @@ class TestEachLineIsStatedInFull:
     )
     def test_the_line_reads_exactly_as_written(self, actual, expected, line):
         assert_that(_hint(actual, expected)).is_equal_to(line)
+
+
+class TestAHintCoversEveryEntryOrIsNotSaid:
+    """A hint that explains part of a failure sends the reader back to the same failure."""
+
+    def test_values_swapped_between_two_lists_are_not_one_rearrangement(self):
+        outcome = assert_that({"x": [1, 2], "y": [3, 4]}).check().is_equal_to({"x": [3, 4], "y": [1, 2]})
+        assert_that(outcome.hint).described_as("across two containers").is_none()
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            pytest.param([1, 2], [2, 1], id="one-list"),
+            pytest.param({"x": [1, 2]}, {"x": [2, 1]}, id="one-nested-list"),
+        ],
+    )
+    def test_one_container_rearranged_still_says_so(self, actual, expected):
+        outcome = assert_that(actual).check().is_equal_to(expected)
+        assert_that(outcome.hint).contains("same elements, in a different order")
+
+    def test_a_nan_both_sides_hold_explains_nothing(self):
+        """The container's own `==` accepts it by identity, so it is not why the comparison failed."""
+        shared = float("nan")
+        outcome = assert_that({"a": shared, "b": 1}).check().is_equal_to({"a": shared, "b": 2})
+        assert_that(outcome.hint).is_none()
+        assert_that([entry.path for entry in outcome.diff.entries]).is_equal_to(["b"])
+
+    def test_two_separate_nans_are_still_the_reason(self):
+        outcome = assert_that([float("nan")]).check().is_equal_to([float("nan")])
+        assert_that(outcome.hint).contains("a NaN is equal to nothing")
+
+    def test_a_scalar_nan_against_itself_still_fails(self):
+        """The rule for a bare value is NaN's own, and only a container compares its members by identity."""
+        shared = float("nan")
+        assert_that(assert_that(shared).check().is_equal_to(shared).passed).is_false()

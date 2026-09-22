@@ -192,6 +192,8 @@ def diagnose(
 
     # one flat pass: this is the only part whose cost grows with the entry count
     pairs: list[tuple[object, object]] = []
+    # by the container each pair sits in: values swapped between two lists are not one list rearranged
+    per_container: dict[tuple[object, ...], list[tuple[object, object]]] = {}
     absent_seen = False
     absent_expected_only = True
     positional = True
@@ -204,6 +206,7 @@ def diagnose(
         absent = entry.absent
         if absent is None:
             pairs.append((left, right))
+            per_container.setdefault(entry.steps[:-1], []).append((left, right))
             absent_expected_only = False
         else:
             absent_seen = True
@@ -241,7 +244,11 @@ def diagnose(
         return typed
 
     # last, as the broadest thing that can be said; one differing value can never be a rearrangement
-    if len(pairs) >= 2 and positional and _same_values(pairs):
+    if (
+        len(pairs) >= 2
+        and positional
+        and all(len(group) >= 2 and _same_values(group) for group in per_container.values())
+    ):
         return "both sides hold the same elements, in a different order"
     return None
 

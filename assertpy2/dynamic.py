@@ -93,8 +93,12 @@ class DynamicMixin(_MixinBase):
             if err_msg:
                 return self.error(err_msg, requirement=asked)  # ok to raise now that we are inside wrapper
             else:
-                if len(args) != 1:
-                    raise TypeError(f"assertion <{attr}()> takes exactly 1 argument ({len(args)} given)")
+                try:
+                    # bound rather than counted: the signature says `other`, and writing it was refused
+                    bound = _ONE_OPERAND.bind(*args, **kwargs)
+                except TypeError:
+                    given = len(args) + len(kwargs)
+                    raise TypeError(f"assertion <{attr}()> takes exactly 1 argument ({given} given)") from None
 
                 val_attr = self.val[attr_name] if is_dict and not val_is_namedtuple else getattr(self.val, attr_name)
 
@@ -109,7 +113,7 @@ class DynamicMixin(_MixinBase):
                 else:
                     actual = val_attr
 
-                expected = args[0]
+                expected = bound.arguments["other"]
                 if actual != expected:
                     kind = "key" if is_dict else "attribute"
                     return self.error(

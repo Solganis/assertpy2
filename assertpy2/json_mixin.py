@@ -15,8 +15,25 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-@functools.lru_cache(maxsize=256)
+_OPENAPI_VERSION: Final = re.compile(r"3\.([012])(?:\.\d+)?")
+"""The versions whose dialect this reads, matched whole: a patch number is allowed and nothing else is."""
+
+_SWAGGER_2: Final = re.compile(r"2\.0(?:\.\d+)?")
+"""Swagger's one version, read the same way, so "20" is not it."""
+
+
 def _parsed_json_path(path: str):
+    """The compiled expression, refusing a path that is not a string before the cache hashes it.
+
+    A list reached the cache first and came back as "unhashable type: 'list'", which names the cache
+    rather than the argument.
+    """
+    require_type(path, str, "a string", subject=argument("path"))
+    return _compiled_json_path(path)
+
+
+@functools.lru_cache(maxsize=256)
+def _compiled_json_path(path: str):
     """The compiled form of a JSON path expression, kept across calls.
 
     Parsing is the whole cost of a path assertion and the lookup is a rounding error: on a twenty-record
@@ -27,8 +44,6 @@ def _parsed_json_path(path: str):
     Bounded rather than unbounded: a path built from test data (``$.users[7].name``) is a fresh string
     each time, and an unbounded cache would grow with the suite.
     """
-    # the parser indexes what it is handed, so a non-string comes back as jsonpath's own lexer error
-    require_type(path, str, "a string", subject=argument("path"))
     return _ensure_jsonpath_ng().parse(path)
 
 
@@ -209,8 +224,8 @@ class JsonMixin(_MixinBase):
         if not matches:
             raise ValueError(f"Expected JSON path <{path}> to exist, but it did not.")
         if len(matches) == 1:
-            return self.builder(matches[0].value, self.description, self.kind)
-        return self.builder([match.value for match in matches], self.description, self.kind)
+            return self.builder(matches[0].value, self.description, self.kind, logger=self.logger)
+        return self.builder([match.value for match in matches], self.description, self.kind, logger=self.logger)
 
     def has_json_path(self, path: str) -> Self:
         """Assert that the given JSON path exists in val.

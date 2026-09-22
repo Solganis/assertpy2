@@ -1312,8 +1312,14 @@ class TestTheShapeOfAValueKeyedSignature:
     """The values family is the one `signature()` builds by hand, and every field of it was unasserted."""
 
     @staticmethod
-    def _entry(actual, expected):
-        return SimpleNamespace(steps=(), actual=actual, expected=expected)
+    def _entry(actual, expected, absent=None):
+        return SimpleNamespace(steps=(), actual=actual, expected=expected, absent=absent)
+
+    def test_a_side_that_was_absent_keys_apart_from_one_that_holds_none(self):
+        """Read as a value, an absent key printed as `None` and joined the cluster of real `None`s."""
+        missing = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(None, 2, absent="actual"))
+        really_none = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(None, 2))
+        assert_that(missing).is_not_equal_to(really_none)
 
     def test_it_is_not_located_and_names_its_kind(self):
         key = signature(SimpleNamespace(kind="scalar", entries=()), self._entry(1, 2))
@@ -1544,3 +1550,17 @@ class TestTheControllerSideBookkeeping:
         config = SimpleNamespace()
         _record_for_clustering(config, "t.py::test_x", AssertionError("x"))
         assert_that(vars(config)).is_empty()
+
+
+class TestASideThatWasNotThereIsNotAValue:
+    """Read as a value, an absent key printed as `None` and joined the cluster of the real ones."""
+
+    def test_the_summary_says_it_was_absent(self):
+        outcome = assert_that({"a": 1}).check().is_equal_to({"a": 1, "b": 2})
+        actuals = [one.actual for one in observations_of(outcome.diff, outcome.hint)]
+        assert_that(actuals).contains("<absent>").does_not_contain("None")
+
+    def test_a_value_that_really_is_none_still_reads_as_none(self):
+        outcome = assert_that({"a": 1, "b": None}).check().is_equal_to({"a": 1, "b": 2})
+        actuals = [one.actual for one in observations_of(outcome.diff, outcome.hint)]
+        assert_that(actuals).contains("None")

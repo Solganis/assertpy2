@@ -135,3 +135,29 @@ def test_has_method_without_introspectable_signature():
         action = staticmethod(int)
 
     assert_that(Obj()).has_action(0)
+
+
+class TestTheOperandMayBeWrittenByName:
+    """The signature says `other`, and `Requirement.parameters` reads that name, but writing it was refused."""
+
+    def test_the_keyword_is_accepted(self):
+        assert_that({"name": "x"}).has_name(other="x")
+        assert_that(assert_that({"name": "x"}).check().has_name(other="y").passed).is_false()
+
+    def test_an_attribute_takes_it_too(self):
+        class Holder:
+            name = "x"
+
+        assert_that(Holder()).has_name(other="x")
+
+    @pytest.mark.parametrize(
+        ("args", "kwargs", "given"),
+        [
+            pytest.param((), {}, 0, id="none"),
+            pytest.param(("a", "b"), {}, 2, id="two-positional"),
+            pytest.param((), {"nope": 1}, 1, id="a-name-it-does-not-take"),
+        ],
+    )
+    def test_anything_else_is_still_refused(self, args, kwargs, given):
+        with pytest.raises(TypeError, match=f"takes exactly 1 argument \\({given} given\\)"):
+            assert_that({"name": "x"}).has_name(*args, **kwargs)
