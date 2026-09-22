@@ -1,7 +1,7 @@
 """A complexity ratchet, so the measure cannot grow where nobody looks.
 
 Thirty-one functions in the package sit above mccabe's default of 10, the worst four being `extracting`
-at 32, `_build_equality_diff` at 30, `_object_hook` at 19 and `_dict_err` at 19.
+at 32, `_build_equality_diff` at 30, `_dict_err` at 23 and `_object_hook` at 19.
 
 Getting them under 10 is deliberately NOT the goal. It fixes no defect, and rewriting
 `_build_equality_diff` for the sake of a number would risk code the suite and mutation testing hold.
@@ -30,8 +30,9 @@ _REPORTED = re.compile(r"`([^`]+)` is too complex \((\d+)")
 RECORDED: dict[str, int] = {
     "assertpy2/extracting.py::extracting": 32,
     "assertpy2/_engine/_diff.py::_build_equality_diff": 30,
+    # a flag per matched run instead of a call per matched element, which cost a failing is_equal_to 15%
+    "assertpy2/helpers.py::_dict_err": 23,
     "assertpy2/_snapshot_codec.py::_object_hook": 19,
-    "assertpy2/helpers.py::_dict_err": 19,
     "assertpy2/_engine/_diff.py::_sub_diff_entries": 17,
     "assertpy2/_hints.py::diagnose": 17,
     "assertpy2/_engine/_compare.py::_find_ambiguous_operand": 15,
@@ -54,6 +55,7 @@ RECORDED: dict[str, int] = {
     "assertpy2/assertpy.py::assert_conforms": 11,
     "assertpy2/async_assertions.py::__getattr__": 11,
     "assertpy2/contains.py::contains": 11,
+    "assertpy2/helpers.py::_dict_repr": 11,
     "assertpy2/helpers.py::_to_comparable_dict": 11,
     "assertpy2/json_mixin.py::_openapi_resolve": 11,
     "assertpy2/string.py::ends_with": 11,
