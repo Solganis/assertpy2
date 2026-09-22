@@ -54,7 +54,9 @@ renders them as a collapsible tree and downstream tooling can parse them.
 Anything JSON cannot express degrades to a marked fallback instead of failing the attachment:
 
 - `{"__repr__": "..."}` for arbitrary objects, datetimes, non-finite floats, and circular references
-- `{"__type__": "set", "__data__": [...]}` for sets.
+- `{"__type__": "set", "__data__": [...]}` for sets
+- `{"__type__": "dict", "__data__": [[key, value], ...]}` for a mapping with any non-string key, since a
+  JSON object has string keys only and rendering `1` as `"1"` drops whichever of the two came second.
 
 Oversized values are capped: strings at 4000 chars, containers at 100 items.
 
@@ -271,7 +273,9 @@ On failure the library's own detailed diff is carried in the assertion message.
 
 Two array assertions, both accepting any array-like numpy can coerce:
 
-- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`
+- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`, with the shapes compared first, so a
+  scalar is not broadcast over an array (pass `strict=False` to let numpy broadcast, or `strict=True` to
+  compare dtypes too)
 - `is_array_close_to()` - float-tolerant, via `numpy.testing.assert_allclose`, for comparing computed
   arrays.
 

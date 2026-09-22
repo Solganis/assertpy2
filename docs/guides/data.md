@@ -84,9 +84,12 @@ the other assertion libraries here offer.
 
 Three spec dialects are read:
 
-- **OpenAPI 3.1**, as written
+- **OpenAPI 3.1 and 3.2**, as written: both carry JSON Schema 2020-12
 - **OpenAPI 3.0**, including its `nullable` keyword
 - **Swagger 2.0**, where the schema sits directly on the response, including its `x-nullable` extension
+
+A spec declaring any other `openapi` version is refused. Read as one of these it would validate against
+the wrong dialect, which passes every keyword that dialect cannot spell.
 
 Inside any of them, `$ref`, `oneOf` / `allOf` / `anyOf`, `enum` and `format` validate with full
 JSON-Schema semantics.

@@ -19,3 +19,27 @@ and ``~``. See the [Matchers guide](../guides/matchers.md) for usage, compositio
       show_root_heading: true
       show_root_full_path: false
       show_root_toc_entry: true
+
+::: assertpy2.matchers.Matcher
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
+::: assertpy2.matchers.register_matcher
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
+::: assertpy2.matchers.unregister_matcher
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
+::: assertpy2.matchers.clear_custom_matchers
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true

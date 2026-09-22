@@ -29,6 +29,12 @@ drives editor autocomplete.
       show_root_full_path: false
       show_root_toc_entry: true
 
+::: assertpy2.assertpy.NegatedBuilder
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
 ::: assertpy2.outcome.AssertionOutcome
     options:
       show_root_heading: true
@@ -51,9 +57,21 @@ drives editor autocomplete.
       show_root_heading: true
       show_root_toc_entry: true
 
+::: assertpy2.assertpy.WarningLoggingAdapter
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
+
 ::: assertpy2.assertpy.soft_assertions
     options:
       show_root_heading: true
+      show_root_toc_entry: true
+
+::: assertpy2.assertpy.SoftAssertionCollector
+    options:
+      show_root_heading: true
+      show_root_full_path: false
       show_root_toc_entry: true
 
 ::: assertpy2.assertpy.assert_all

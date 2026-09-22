@@ -653,7 +653,9 @@ assert_that(naive).is_before(aware)                      # TypeError
 assert_that(naive).is_equal_to_ignoring_seconds(aware)   # TypeError
 ```
 
-Make both aware or both naive first, then the comparison is well defined.
+Make both aware or both naive first, then the comparison is well defined. Two aware values need not share
+a zone: the `ignoring_*` assertions read the expected side on the subject's clock before comparing, so
+`12:00Z` and `17:00+05:00` are the same instant to the second, and `12:00+05:00` is not.
 
 Equality can ignore units of time, and the numeric comparisons work on dates too:
 

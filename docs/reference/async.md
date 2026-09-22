@@ -18,5 +18,13 @@ callable value, chain the assertion you expect to eventually hold, and await the
       show_root_toc_entry: true
 
 ::: assertpy2.async_assertions.AsyncAssertionBuilder
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
 
 ::: assertpy2.async_assertions.SyncAssertionBuilder
+    options:
+      show_root_heading: true
+      show_root_full_path: false
+      show_root_toc_entry: true
