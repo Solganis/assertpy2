@@ -9,10 +9,14 @@ models (``model_dump``), ``attrs`` classes (``__attrs_attrs__``) and namedtuples
 
 from __future__ import annotations
 
+import collections
+import itertools
+import types
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, cast, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
+    from types import CellType
 
 _T = TypeVar("_T")
 
@@ -150,9 +154,12 @@ def keyed_snapshot(candidate: object) -> MappingLike | None:
         return cast("MappingLike", candidate)
     keyed = cast("MappingLike", candidate)
     try:
-        return {key: keyed[key] for key in keyed}
+        # an OrderedDict stays one, since its `==` reads the order a plain dict would forget
+        snapshot = collections.OrderedDict() if isinstance(candidate, collections.OrderedDict) else {}
+        snapshot.update((key, keyed[key]) for key in keyed)
     except Exception:
         return None
+    return snapshot
 
 
 def is_same_implementation(existing: object, candidate: object) -> bool:
@@ -166,11 +173,55 @@ def is_same_implementation(existing: object, candidate: object) -> bool:
 
     Callables without a ``__code__`` (instances with ``__call__``, builtins, partials) fall back to
     identity, which is the strictest answer available for them.
+
+    A decorator's wrapper shares its code with everything that decorator wraps, so the functions a
+    wrapper holds, in its closure, its defaults or its ``__wrapped__``, are compared the same way: two
+    wrappers are one implementation only if what they wrap is.  Anything else they hold is data and is
+    not compared, a callable without code (a builtin, a partial, a mock) included.  A fixture rebuilding
+    its function carries fresh data every time, and the latest registration replacing the earlier one
+    is the point of accepting it.
     """
+    return _same_implementation(existing, candidate, set())
+
+
+def _same_implementation(existing: object, candidate: object, seen: set[tuple[int, int]]) -> bool:
     if existing is candidate:
         return True
     left = getattr(existing, "__code__", None)
-    return left is not None and left is getattr(candidate, "__code__", None)
+    if left is None or left is not getattr(candidate, "__code__", None):
+        return False
+    # a closure that holds its own function reaches this pair again
+    if (id(existing), id(candidate)) in seen:
+        return True
+    seen.add((id(existing), id(candidate)))
+    return all(
+        _same_implementation(inner, other, seen)
+        for inner, other in _held(existing, candidate)
+        if isinstance(inner, types.FunctionType) or isinstance(other, types.FunctionType)
+    )
+
+
+def _held(existing: object, candidate: object) -> Iterator[tuple[object, object]]:
+    """What two functions of one code object hold, side by side: closure cells, defaults, what they wrap."""
+    # one code object, so one set of free variables on both sides
+    cells = zip(
+        getattr(existing, "__closure__", None) or (), getattr(candidate, "__closure__", None) or (), strict=True
+    )
+    yield from ((_cell_contents(mine), _cell_contents(theirs)) for mine, theirs in cells)
+    yield from itertools.zip_longest(
+        getattr(existing, "__defaults__", None) or (), getattr(candidate, "__defaults__", None) or ()
+    )
+    mine, theirs = getattr(existing, "__kwdefaults__", None) or {}, getattr(candidate, "__kwdefaults__", None) or {}
+    yield from ((mine.get(name), theirs.get(name)) for name in mine.keys() | theirs.keys())
+    yield getattr(existing, "__wrapped__", None), getattr(candidate, "__wrapped__", None)
+
+
+def _cell_contents(cell: CellType) -> object:
+    """What a closure cell holds, or ``None`` for one not yet filled."""
+    try:
+        return cell.cell_contents
+    except ValueError:
+        return None
 
 
 def materialized(value: Iterable[_T]) -> Iterable[_T]:

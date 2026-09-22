@@ -1,5 +1,5 @@
+import collections
 import collections.abc
-import dataclasses
 import datetime
 import math
 import numbers
@@ -17,14 +17,16 @@ from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._equality import (
     IncludeKeysMissingError,
     carries_callable,
+    comparable_fields,
     ignore_specs,
     include_specs,
+    key_specs_given,
     mapping_differs,
     mapping_shaped,
     normalize_key_specs,
     supports_subscript,
 )
-from ._engine._introspection import MappingLike, is_attrs_instance, is_model_dump_object, is_namedtuple, keyed_snapshot
+from ._engine._introspection import MappingLike, is_namedtuple, keyed_snapshot
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type
@@ -319,10 +321,12 @@ class HelpersMixin(_MixinBase):
         includes_fmt = self._fmt_items(
             [".".join([str(segment) for segment in key]) if type(key) is tuple else key for key in absent.includes]
         )
-        return self.error(
+        self.error(
             f"Expected <{absent.mapping}> to include key{keys_suffix} {includes_fmt},"
             f" but did not include key{missing_suffix} {self._fmt_items(absent.missing)}."
         )
+        # reported: a soft or warn builder is truthy, and read as "differs" it added a second, false failure
+        return False
 
     @staticmethod
     def _normalize_key_specs(specs, param):
@@ -349,16 +353,18 @@ class HelpersMixin(_MixinBase):
 
         Returns ``mapping`` itself when no filter is set, so the ordinary path allocates nothing.
         """
-        if not (ignore or include):
+        ignoring, including = key_specs_given(ignore), key_specs_given(include)
+        if not (ignoring or including):
             return mapping
-        ignores = self._dict_ignore(ignore)
-        includes = self._dict_include(include)
-        kept = {}
+        ignores = self._dict_ignore(ignore) if ignoring else []
+        includes = self._dict_include(include) if including else []
+        # an OrderedDict keeps its type, since its order is part of what was compared
+        kept: dict = collections.OrderedDict() if isinstance(mapping, collections.OrderedDict) else {}
         for key in mapping:  # ty: ignore[not-iterable]  # only ever called on the dict-like branch
             value = mapping[key]  # ty: ignore[not-subscriptable]  # same
-            if ignore and _spec_matches(key, value, ignores):
+            if ignoring and _spec_matches(key, value, ignores):
                 continue
-            if include and not _spec_matches(key, value, includes):
+            if including and not _spec_matches(key, value, includes):
                 continue
             nested_ignore = [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] or None
             nested_include = [
@@ -366,7 +372,9 @@ class HelpersMixin(_MixinBase):
             ] or None
             if nested_ignore or nested_include:
                 # the snapshot and not the value: recursing into the original would read it a third time
-                kept_value = keyed_snapshot(value) if mapping_shaped(value, check_values=False) else None
+                kept_value = (
+                    keyed_snapshot(value) if mapping_shaped(value, check_values=False) else comparable_fields(value)
+                )
                 if kept_value is not None:
                     value = self._selected_keys_only(kept_value, nested_ignore, nested_include)
             kept[key] = value
@@ -376,7 +384,7 @@ class HelpersMixin(_MixinBase):
         """The ` ignoring keys ...` / ` including keys ...` tail of a dict failure, or an empty string."""
         note = ""
         for label, specs in (("ignoring", ignore), ("including", include)):
-            if specs:
+            if key_specs_given(specs):
                 spelled = [
                     ".".join([str(segment) for segment in entry]) if type(entry) is tuple else entry
                     for entry in self._dict_ignore(specs)
@@ -481,7 +489,8 @@ class HelpersMixin(_MixinBase):
                 other,
                 _dict_repr(reported_val, reported_other),
                 _dict_repr(reported_other, reported_val),
-                whole=ignore is None and include is None and config is None,
+                # a compare config hides no key, so only a key filter keeps the whole values out of the message
+                whole=not (key_specs_given(ignore) or key_specs_given(include)),
             )
         else:
             # the shape said keyed and the value is not, so the richer message is the thing given up here
@@ -497,33 +506,8 @@ class HelpersMixin(_MixinBase):
 
     @staticmethod
     def _to_comparable_dict(obj):
-        """Convert an object with introspectable fields to a dict for comparison.
+        """Convert an object with introspectable fields to a dict for comparison; see `_engine._equality`.
 
         Returns None if the object cannot be converted.
         """
-        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-            # like `dataclasses.asdict` but by reference: asdict deep-copies and crashes on un-copyable fields
-            def as_shallow(node):
-                if dataclasses.is_dataclass(node) and not isinstance(node, type):
-                    return {field.name: as_shallow(getattr(node, field.name)) for field in dataclasses.fields(node)}
-                if isinstance(node, tuple) and hasattr(node, "_fields"):
-                    return type(node)(*[as_shallow(item) for item in node])
-                if isinstance(node, (list, tuple)):
-                    return type(node)(as_shallow(item) for item in node)
-                if isinstance(node, dict):
-                    return {as_shallow(key): as_shallow(value) for key, value in node.items()}
-                return node
-
-            return as_shallow(obj)
-        if is_namedtuple(obj):
-            return dict(obj._asdict())
-        if is_model_dump_object(obj):
-            return obj.model_dump()
-        if is_attrs_instance(obj):
-            # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import wherever attrs is installed
-            import attrs
-
-            return attrs.asdict(obj)
-        if hasattr(obj, "__dict__") and not isinstance(obj, type):
-            return dict(vars(obj))
-        return None
+        return comparable_fields(obj)

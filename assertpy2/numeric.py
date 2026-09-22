@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import datetime
+import decimal
 import math
 import numbers
 from typing import TYPE_CHECKING, Any, SupportsFloat, SupportsIndex
 
+from ._engine._compare import tolerance_window
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, compare
+from ._engine._ordering import UnorderableError, compare, holds
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
+from .errors import _safe_str
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -25,9 +28,14 @@ def _fmt_operand(value: object) -> object:
 def _is_nan(value) -> bool:
     """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
 
+    A `Decimal` answers for itself: a signalling NaN refuses to become a float, and reading it as "not a
+    NaN" is the one answer it certainly is not.
+
     A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
     `is_not_nan()` held on a value nothing could read.
     """
+    if isinstance(value, decimal.Decimal):
+        return value.is_nan()
     try:
         return math.isnan(value)
     except OverflowError as exc:
@@ -50,15 +58,9 @@ def _is_inf(value) -> bool:
         return False
 
 
-def _tolerance_window(other: Any, tolerance: Any) -> tuple[Any, Any]:
-    """The closed interval ``other`` plus and minus ``tolerance``.
-
-    Typed as `Any` because the pairing is a run-time fact: `_validate_close_to_args` has already refused
-    every combination but two, a number against a number and a datetime against a timedelta.  Neither
-    operand type supports the arithmetic on its own, so a checker reading the public signature alone is
-    right to refuse it.
-    """
-    return other - tolerance, other + tolerance
+def _within(value: Any, low: Any, high: Any) -> bool:
+    """Whether ``low <= value <= high``, asked through the ordering engine so a NaN answers rather than signals."""
+    return holds(value, low, "ge") and holds(value, high, "le")
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
@@ -159,7 +161,7 @@ class NumericMixin(_MixinBase):
         self._validate_number()
         self._validate_real()
         if not _is_nan(self.val):
-            return self.error(f"Expected <{self.val}> to be <NaN>, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be <NaN>, but was not.")
         return self
 
     def is_not_nan(self) -> Self:
@@ -202,7 +204,7 @@ class NumericMixin(_MixinBase):
         self._validate_number()
         self._validate_real()
         if not _is_inf(self.val):
-            return self.error(f"Expected <{self.val}> to be <Inf>, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be <Inf>, but was not.")
         return self
 
     def is_not_inf(self) -> Self:
@@ -260,7 +262,7 @@ class NumericMixin(_MixinBase):
             from the original assertpy, where ``NaN`` silently passes.
         """
         self._validate_compareable(other)
-        if not self.val > other:  # positive form so NaN (unordered) fails instead of slipping through
+        if not holds(self.val, other, "gt"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not.",
                 expected=other,
@@ -297,7 +299,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** greater than or equal to other
         """
         self._validate_compareable(other)
-        if not self.val >= other:  # positive form so NaN (unordered) fails instead of slipping through
+        if not holds(self.val, other, "ge"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be greater than or equal to"
                 f" <{_fmt_operand(other)}>, but was not.",
@@ -337,7 +339,7 @@ class NumericMixin(_MixinBase):
             ``NaN`` silently passes relational assertions.
         """
         self._validate_compareable(other)
-        if not self.val < other:  # positive form so NaN (unordered) fails instead of slipping through
+        if not holds(self.val, other, "lt"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not.",
                 expected=other,
@@ -375,7 +377,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** less than or equal to other
         """
         self._validate_compareable(other)
-        if not self.val <= other:  # positive form so NaN (unordered) fails instead of slipping through
+        if not holds(self.val, other, "le"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be less than or equal to"
                 f" <{_fmt_operand(other)}>, but was not.",
@@ -461,7 +463,7 @@ class NumericMixin(_MixinBase):
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if not low <= self.val <= high:  # positive form so NaN (unordered) fails instead of passing
+        if not _within(self.val, low, high):  # positive form so NaN (unordered) fails instead of passing
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be between"
                 f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not.",
@@ -491,7 +493,7 @@ class NumericMixin(_MixinBase):
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if low <= self.val <= high:
+        if _within(self.val, low, high):
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to not be between"
                 f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was."
@@ -520,7 +522,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_int()
         if self.val % 2 != 0:
-            return self.error(f"Expected <{self.val}> to be even, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be even, but was not.")
         return self
 
     def is_odd(self) -> Self:
@@ -541,7 +543,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_int()
         if self.val % 2 == 0:
-            return self.error(f"Expected <{self.val}> to be odd, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be odd, but was not.")
         return self
 
     def is_divisible_by(self, divisor: int) -> Self:
@@ -568,7 +570,9 @@ class NumericMixin(_MixinBase):
         if divisor == 0:
             raise ValueError("given divisor arg must not be zero")
         if self.val % divisor != 0:
-            return self.error(f"Expected <{self.val}> to be divisible by <{divisor}>, but was not.", expected=divisor)
+            return self.error(
+                f"Expected <{_safe_str(self.val)}> to be divisible by <{divisor}>, but was not.", expected=divisor
+            )
         return self
 
     def is_close_to(
@@ -607,11 +611,12 @@ class NumericMixin(_MixinBase):
 
         if not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other)):
             return self.error(
-                f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not.",
+                f"Expected <{_safe_str(self.val)}> to be close to <{other}> within tolerance "
+                f"<{tolerance}>, but was not.",
                 expected=(other, tolerance),
             )
-        low, high = _tolerance_window(other, tolerance)
-        if self.val < low or self.val > high:
+        low, high = tolerance_window(other, tolerance)
+        if not _within(self.val, low, high):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
@@ -621,7 +626,8 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{self.val}> to be close to <{other}> within tolerance <{tolerance}>, but was not.",
+                    f"Expected <{_safe_str(self.val)}> to be close to <{other}> within tolerance "
+                    f"<{tolerance}>, but was not.",
                     expected=(other, tolerance),
                 )
         return self
@@ -651,8 +657,8 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        low, high = _tolerance_window(other, tolerance)
-        if low <= self.val <= high:
+        low, high = tolerance_window(other, tolerance)
+        if _within(self.val, low, high):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"
@@ -661,6 +667,7 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{self.val}> to not be close to <{other}> within tolerance <{tolerance}>, but was.",
+                    f"Expected <{_safe_str(self.val)}> to not be close to <{other}> within tolerance "
+                    f"<{tolerance}>, but was.",
                 )
         return self

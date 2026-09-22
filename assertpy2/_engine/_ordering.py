@@ -14,6 +14,7 @@ answers "no match", because it feeds `==` and the combinators where raising woul
 
 from __future__ import annotations
 
+import decimal
 import numbers
 import operator
 from datetime import date, datetime, time, timedelta
@@ -24,8 +25,6 @@ from ._require import raised_inside
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-# types whose own `<` is defined but wrong across kinds: a `datetime` is only ordered against a `datetime`
-_KIND_BOUND = frozenset({datetime, timedelta, date, time})
 # ordering exists for real numbers and not for complex ones, whatever `numbers.Number` says
 _UNORDERED = frozenset({complex})
 # types whose ordering needs no rule at all: identical on both sides, total, and not kind-bound
@@ -46,6 +45,36 @@ class UnorderableError(Exception):
         self.wanted = wanted
 
 
+def nan_operand(value: Any) -> bool:
+    """A `float` or `Decimal` NaN, unordered against everything, the `Decimal` one by signalling.
+
+    Asked by type rather than through `math.isnan`, which would call `__float__` on somebody else's
+    number and raises on a signalling `Decimal` instead of answering.
+    """
+    if isinstance(value, float):
+        return value != value
+    return isinstance(value, decimal.Decimal) and value.is_nan()
+
+
+def _kind_of(value: Any) -> type | None:
+    """The date-and-time kind a value orders within, subclasses included, or ``None`` for anything else.
+
+    By kind rather than by exact type: `pandas.Timestamp` and `freezegun`'s clock are `datetime`
+    subclasses, and refusing them against a `datetime` boundary failed an assertion that holds.
+    """
+    for kind in (datetime, date, timedelta, time):  # `datetime` ahead of `date`, which it subclasses
+        if isinstance(value, kind):
+            return kind
+    return None
+
+
+def _equal(actual: Any, expected: Any) -> bool:
+    """``==``, with a NaN on either side answering ``False`` rather than signalling."""
+    if nan_operand(actual) or nan_operand(expected):
+        return False
+    return bool(actual == expected)
+
+
 def compare(actual: Any, expected: Any) -> int:
     """``-1``/``0``/``1`` for *actual* against *expected*, or `UnorderableError` when they cannot be ordered.
 
@@ -58,14 +87,18 @@ def compare(actual: Any, expected: Any) -> int:
         return (actual > expected) - (actual < expected)
     if actual_type in _UNORDERED:
         raise UnorderableError("value")
-    if actual_type in _KIND_BOUND and type(expected) is not actual_type:
-        raise UnorderableError("kind", wanted=actual_type)
+    actual_kind: Any = _kind_of(actual)
+    # a subclass that wrote its own `<` is asked instead: the rule is about the stock one being wrong across kinds
+    if actual_kind is not None and type(actual).__lt__ is actual_kind.__lt__ and _kind_of(expected) is not actual_kind:
+        raise UnorderableError("kind", wanted=actual_kind)
     if (
-        actual_type not in _KIND_BOUND
+        actual_kind is None
         and isinstance(actual, numbers.Number)
         and (not isinstance(expected, numbers.Number) or type(expected) in _UNORDERED)
     ):
         raise UnorderableError("kind", wanted=numbers.Number)
+    if nan_operand(actual) or nan_operand(expected):
+        return 0  # neither less nor greater, as a float NaN already answers, and `holds` keeps that from reading equal
     # deliberately dynamic: what may be ordered is decided above, and a checker reading the union sees no `<`
     left: Any = actual
     right: Any = expected
@@ -93,7 +126,7 @@ def holds(actual: Any, expected: Any, relation: str) -> bool:
         # the shortcut `compare` takes, one call earlier: building the answer through a dict of four keys cost most
         return _DIRECT[relation](actual, expected)
     order = compare(actual, expected)
-    if order == 0 and relation in ("le", "ge") and not bool(actual == expected):
+    if order == 0 and relation in ("le", "ge") and not _equal(actual, expected):
         return False
     return {"lt": order < 0, "le": order <= 0, "gt": order > 0, "ge": order >= 0}[relation]
 
@@ -113,7 +146,12 @@ def first_out_of_order(
         if index > 0:
             # through `compare`, not `<`: a raise here reads to the origin check as a plain type mismatch.
             # The key is carried rather than recomputed, which doubled the calls to the caller's `key`
-            broken = holds(current_key, previous_key, "gt" if reverse else "lt")
+            # a NaN orders against nothing, so the pair holding one vouches for no order at all
+            broken = (
+                nan_operand(current_key)
+                or nan_operand(previous_key)
+                or holds(current_key, previous_key, "gt" if reverse else "lt")
+            )
             if broken:
                 return index - 1, previous, current
         previous = current

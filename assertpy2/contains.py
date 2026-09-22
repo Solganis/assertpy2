@@ -9,6 +9,7 @@ from ._engine._diff import _sub_diff_entries
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
 from ._engine._membership import (
+    _hash_safe,
     has_duplicates,
     is_searchable,
     is_walkable,
@@ -20,7 +21,7 @@ from ._engine._membership import (
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
-from .errors import DiffEntry, DiffResult
+from .errors import DiffEntry, DiffResult, _safe_str
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -44,19 +45,36 @@ def _surplus(counted: Sequence[tuple[object, int]]) -> list[DiffEntry]:
     ]
 
 
-def _multiset_diff_entries(val_items, given_items):
-    """Build extra/missing `DiffEntry` rows between two item lists compared as multisets (order ignored)."""
+def _counted_difference(val_items, given_items):
+    """``(extra, missing)`` by `Counter`, or ``None`` where hashing cannot stand in for ``==``.
+
+    A matcher hashes by identity and compares by its predicate, so counting them called a matching item
+    missing where the ordered spelling accepted it.  The rule is membership's own.
+    """
+    if not (_hash_safe(val_items) and _hash_safe(given_items)):
+        return None
     try:
         val_counts, given_counts = Counter(val_items), Counter(given_items)
-        extra, missing = list((val_counts - given_counts).elements()), list((given_counts - val_counts).elements())
-    except TypeError:  # unhashable items: quadratic multiset subtraction via == instead of Counter
-        missing = list(given_items)
-        extra = []
-        for item in val_items:
-            if item in missing:
-                missing.remove(item)
-            else:
-                extra.append(item)
+    except TypeError:  # a value refused to hash after all
+        return None
+    return list((val_counts - given_counts).elements()), list((given_counts - val_counts).elements())
+
+
+def _walked_difference(val_items, given_items):
+    """``(extra, missing)`` by quadratic multiset subtraction through ``==``."""
+    missing = list(given_items)
+    extra = []
+    for item in val_items:
+        if item in missing:
+            missing.remove(item)
+        else:
+            extra.append(item)
+    return extra, missing
+
+
+def _multiset_diff_entries(val_items, given_items):
+    """Build extra/missing `DiffEntry` rows between two item lists compared as multisets (order ignored)."""
+    extra, missing = _counted_difference(val_items, given_items) or _walked_difference(val_items, given_items)
     entries = [
         DiffEntry(path="extra", actual=item, expected=None, absent="expected") for item in sorted(extra, key=repr)
     ]
@@ -345,7 +363,7 @@ class ContainsMixin(_MixinBase):
                     matched = items[: items.index(item)]
                     trail = f" after {self._fmt_items(matched)}" if matched else ""
                     return self.error(
-                        f"Expected <{self.val}> to contain sequence {self._fmt_items(items)}, but <{item}>"
+                        f"Expected <{_safe_str(self.val)}> to contain sequence {self._fmt_items(items)}, but <{item}>"
                         f" was not found{trail}.",
                         expected=items,
                     )
@@ -398,7 +416,7 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "iterable")
         if has_duplicates(values):
             return self
-        return self.error(f"Expected <{self.val}> to contain duplicates, but did not.")
+        return self.error(f"Expected <{_safe_str(self.val)}> to contain duplicates, but did not.")
 
     def does_not_contain_duplicates(self) -> Self:
         """Asserts that val is iterable and *does not* contain any duplicates.
@@ -426,7 +444,7 @@ class ContainsMixin(_MixinBase):
         repeated = repeated_counts(values)
         named = [value for value, _total in repeated]
         return self.error(
-            f"Expected <{self.val}> to not contain duplicates, but {self._fmt_items(named)}"
+            f"Expected <{_safe_str(self.val)}> to not contain duplicates, but {self._fmt_items(named)}"
             f" {'was' if len(named) == 1 else 'were'} repeated.",
             diff=DiffResult(kind="contains", entries=_surplus(repeated)),
         )
@@ -451,9 +469,9 @@ class ContainsMixin(_MixinBase):
         """
         if sized_len(self.val) != 0:
             if isinstance(self.val, str):
-                return self.error(f"Expected <{self.val}> to be empty string, but was not.")
+                return self.error(f"Expected <{_safe_str(self.val)}> to be empty string, but was not.")
             else:
-                return self.error(f"Expected <{self.val}> to be empty, but was not.")
+                return self.error(f"Expected <{_safe_str(self.val)}> to be empty, but was not.")
         return self
 
     def is_not_empty(self) -> Self:
@@ -511,7 +529,7 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "iterable")
         expected_list = list(items)
         if val_list != expected_list:
-            message = f"Expected <{self.val}> to contain exactly {self._fmt_items(items)}, but did not."
+            message = f"Expected <{_safe_str(self.val)}> to contain exactly {self._fmt_items(items)}, but did not."
             entries = _multiset_diff_entries(val_list, expected_list)
             if entries:
                 diff = DiffResult(kind="contains", entries=entries)
@@ -565,7 +583,8 @@ class ContainsMixin(_MixinBase):
         entries = _multiset_diff_entries(val_list, list(items))
         if entries:
             return self.error(
-                f"Expected <{self.val}> to contain exactly {self._fmt_items(items)} in any order, but did not.",
+                f"Expected <{_safe_str(self.val)}> to contain exactly {self._fmt_items(items)} in any order, "
+                f"but did not.",
                 diff=DiffResult(kind="contains", entries=entries),
                 expected=items,
             )
@@ -608,8 +627,8 @@ class ContainsMixin(_MixinBase):
             matched = items[:item_index]
             trail = f" after {self._fmt_items(matched)}" if matched else ""
             return self.error(
-                f"Expected <{self.val}> to contain {self._fmt_items(items)} in order, but <{items[item_index]}>"
-                f" did not follow{trail}.",
+                f"Expected <{_safe_str(self.val)}> to contain {self._fmt_items(items)} in order, "
+                f"but <{items[item_index]}> did not follow{trail}.",
                 expected=items,
             )
         return self
@@ -688,7 +707,9 @@ class ContainsMixin(_MixinBase):
             for item in items:
                 if self.val == item:
                     return self
-        return self.error(f"Expected <{self.val}> to be in {self._fmt_items(items)}, but was not.", expected=items)
+        return self.error(
+            f"Expected <{_safe_str(self.val)}> to be in {self._fmt_items(items)}, but was not.", expected=items
+        )
 
     def is_not_in(self, *items: object) -> Self:
         """Asserts that val is not equal to one of the given items.
@@ -713,5 +734,7 @@ class ContainsMixin(_MixinBase):
         else:
             for item in items:
                 if self.val == item:
-                    return self.error(f"Expected <{self.val}> to not be in {self._fmt_items(items)}, but was.")
+                    return self.error(
+                        f"Expected <{_safe_str(self.val)}> to not be in {self._fmt_items(items)}, but was."
+                    )
         return self

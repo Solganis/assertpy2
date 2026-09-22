@@ -233,6 +233,8 @@ def test_include_compares_only_listed_keys(common, left_extra, right_extra):
 
 @given(value=st.integers(), low=st.integers(), high=st.integers())
 def test_between_matcher_matches_python_semantics(value, low, high):
+    """Over a range the matcher accepts: swapped bounds are refused at construction, as the builder refuses them."""
+    low, high = sorted((low, high))
     assert match.between(low, high).matches(value) == (low <= value <= high)
 
 
@@ -243,6 +245,7 @@ def test_greater_than_matcher_matches_python_semantics(value, boundary):
 
 @given(value=st.integers(), low=st.integers(), high=st.integers())
 def test_satisfies_between_consistent_with_semantics(value, low, high):
+    low, high = sorted((low, high))
     if low <= value <= high:
         assert_that(value).satisfies(match.between(low, high))
     else:
@@ -544,7 +547,8 @@ def test_a_sequence_diff_pairs_off_every_position_it_leaves_unnamed(pair):
     unaccounted = [
         (left, right)
         for left, right in zip(kept_actual, kept_expected, strict=True)
-        if left not in named and actual[left] != expected[right]
+        # identity is equality here, which is the rule a container's own `==` applies to its members
+        if left not in named and actual[left] is not expected[right] and actual[left] != expected[right]
     ]
     assert unaccounted == []
 

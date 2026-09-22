@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+import importlib
 import json
 import pathlib
 import re
@@ -160,6 +161,57 @@ def _fields(record: type) -> list[str]:
     if dataclasses.is_dataclass(record):
         return [field.name for field in dataclasses.fields(record)]
     return list(record._fields)
+
+
+_DIRECTIVE = re.compile(r"^::: (\S+)\n((?:    .*\n)*)", re.MULTILINE)
+
+
+def _resolve(path: str) -> object:
+    """The object a mkdocstrings path names: the longest importable module, then attributes."""
+    parts = path.split(".")
+    for split in range(len(parts), 0, -1):
+        try:
+            found = importlib.import_module(".".join(parts[:split]))
+        except ModuleNotFoundError:
+            continue
+        for name in parts[split:]:
+            found = getattr(found, name)
+        return found
+    raise LookupError(path)
+
+
+def _headed_entries() -> dict[str, str]:
+    """Reference directives that give their object a heading, the only kind a link can land on."""
+    entries = {}
+    for page in sorted(pathlib.Path("docs/reference").glob("*.md")):
+        for path, options in _DIRECTIVE.findall(page.read_text(encoding="utf-8")):
+            if re.search(r"^ +show_root_heading: true$", options, re.MULTILINE):
+                entries[path.rsplit(".", 1)[-1]] = path
+    return entries
+
+
+class TestEveryExportHasAReferenceEntry:
+    """An export without a heading of its own in the reference has no anchor a link can land on.
+
+    Twelve had none, because a directive left at the site's default renders a class's members and not
+    the class itself.
+    """
+
+    # a string, and a namespace whose class is private: its page is the list of its members
+    WITHOUT_AN_ENTRY = frozenset({"__version__", "match"})
+
+    def test_every_export_has_a_heading(self):
+        missing = sorted(set(assertpy2.__all__) - set(_headed_entries()) - self.WITHOUT_AN_ENTRY)
+        assert_that(missing).described_as("exports with no heading in the reference").is_empty()
+
+    def test_each_heading_documents_the_exported_object(self):
+        entries = _headed_entries()
+        elsewhere = {
+            name: entries[name]
+            for name in sorted(set(assertpy2.__all__) & set(entries))
+            if _resolve(entries[name]) is not getattr(assertpy2, name)
+        }
+        assert_that(elsewhere).described_as("headings naming another object of the same name").is_empty()
 
 
 class TestExports:
@@ -319,6 +371,10 @@ class TestWhatAFailureLetsYouRead:
         assert_that(missing).described_as("documented attributes missing from a failure").is_empty()
         assert_that(failure.value.actual).is_equal_to(1)
         assert_that(failure.value.expected).is_equal_to(2)
+
+    def test_a_plain_failure_names_what_was_asked(self):
+        with pytest.raises(assertpy2.AssertionFailure) as failure:
+            assert_that(1).is_equal_to(2)
         assert_that(failure.value.requirement).is_equal_to(
             assertpy2.Requirement("is_equal_to", {"other": 2, "kwargs": {}})
         )

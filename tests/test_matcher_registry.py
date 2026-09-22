@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+
 import pytest
 
 from assertpy2 import assert_that, clear_custom_matchers, match, register_matcher, unregister_matcher
@@ -114,6 +116,25 @@ class TestRegisterMatcher:
         assert first is not second
         register_matcher("custom")(first)
         register_matcher("custom")(second)
+        assert_that(1).satisfies(match.custom())
+
+    def test_one_decorator_over_two_factories_is_a_clash(self):
+        def cached(factory):
+            @functools.wraps(factory)
+            def wrapper():
+                return factory()
+
+            return wrapper
+
+        def one():
+            return match.equal_to(1)
+
+        def two():
+            return match.equal_to(2)
+
+        register_matcher("custom")(cached(one))
+        with pytest.raises(ValueError, match="already registered"):
+            register_matcher("custom")(cached(two))
         assert_that(1).satisfies(match.custom())
 
     def test_replacing_deliberately_is_allowed(self):

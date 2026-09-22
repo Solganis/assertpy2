@@ -1,4 +1,5 @@
 import copy
+import dataclasses
 import datetime
 import decimal
 import re
@@ -10,7 +11,7 @@ from typing import ClassVar
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
 from assertpy2._engine._compare import _build_compare_config
 
 Pair = namedtuple("Pair", ["a", "b"])
@@ -1047,3 +1048,190 @@ class TestBuilderAndMatcherDecideAlike:
         except AssertionError:
             builder_passed = False
         assert_that(match.equal_to(right, strict_types=True).matches(left)).is_equal_to(builder_passed)
+
+
+@dataclass
+class _Order:
+    total: float
+
+
+@dataclass
+class _Invoice:
+    total: float
+
+
+@dataclass
+class _Reading:
+    value: float
+    taken_at: int = dataclasses.field(compare=False)
+
+
+@dataclass
+class _Account:
+    id: int
+    name: str
+
+
+class _RaisingEqualityList(list):
+    def __eq__(self, other):
+        raise RuntimeError("no equality here")
+
+    __hash__ = None
+
+
+class _TupleFriendlyList(list):
+    def __eq__(self, other):
+        return list(self) == list(other) if isinstance(other, tuple) else super().__eq__(other)
+
+    __hash__ = None
+
+
+@dataclass(eq=False)
+class _ByTotal:
+    total: float
+    note: str
+
+    def __eq__(self, other):
+        return self.total == getattr(other, "total", None)
+
+
+@dataclass(eq=False)
+class _ByTotalToo:
+    total: float
+    note: str
+
+
+class _Money(decimal.Decimal):
+    pass
+
+
+class _Label(str):
+    pass
+
+
+_OPTIONS = [
+    pytest.param({"tolerance": 0.01}, id="tolerance"),
+    pytest.param({"ignore_null": True}, id="ignore_null"),
+    pytest.param({"comparators": {str: lambda actual, expected: actual.lower() == expected.lower()}}, id="comparators"),
+    pytest.param({"strict_types": True}, id="strict_types"),
+]
+
+
+class TestAnOptionOnlyRelaxesTheLeaves:
+    """An option says how leaves compare, and never makes equal what `==` rejects by kind or by order.
+
+    With any option the verdict came from the structural walk, which compared parts: a list against a
+    tuple, or two dataclasses of different classes, had no differing part and passed.
+    """
+
+    @pytest.mark.parametrize("options", _OPTIONS)
+    def test_a_list_is_not_a_tuple(self, options):
+        assert_that(assert_that([1.0, 2.0]).check().is_equal_to((1.0, 2.0), **options).passed).is_false()
+        assert_that(assert_that({"xs": [1.0]}).check().is_equal_to({"xs": (1.0,)}, **options).passed).is_false()
+
+    @pytest.mark.parametrize("options", _OPTIONS)
+    def test_two_dataclass_classes_are_not_equal(self, options):
+        assert_that(assert_that(_Order(1.0)).check().is_equal_to(_Invoice(1.0), **options).passed).is_false()
+
+    @pytest.mark.parametrize("options", [option for option in _OPTIONS if option.id != "strict_types"])
+    def test_an_equality_of_its_own_is_still_asked(self, options):
+        """The kind decides only where both sides' `__eq__` decline the pair; a type may accept the other kind."""
+        assert_that(_TupleFriendlyList([1.0, 2.0])).is_equal_to((1.0, 2.001), **{**options, "tolerance": 0.01})
+        assert_that(_ByTotal(1.0, "x")).is_equal_to(_ByTotalToo(1.001, "x"), **{**options, "tolerance": 0.01})
+
+    def test_an_equality_that_raises_decides_nothing(self):
+        """`!=` goes through the inherited `list.__ne__`, so only the barrier's own question reaches `__eq__`."""
+        assert_that(_RaisingEqualityList([1.0])).is_equal_to((1.001,), tolerance=0.01)
+
+    @pytest.mark.parametrize("options", _OPTIONS)
+    def test_the_matcher_agrees(self, options):
+        assert_that(match.equal_to((1.0, 2.0), **options).matches([1.0, 2.0])).is_false()
+        assert_that(match.equal_to(_Invoice(1.0), **options).matches(_Order(1.0))).is_false()
+
+    @pytest.mark.parametrize("options", _OPTIONS)
+    def test_the_order_of_an_ordered_dict_still_counts(self, options):
+        first = OrderedDict([("a", 1), ("b", 2)])
+        second = OrderedDict([("b", 2), ("a", 1)])
+        outcome = assert_that(first).check().is_equal_to(second, **options)
+        assert_that(outcome.passed).is_false()
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in outcome.diff.entries]).is_equal_to(
+            [(".", ["a", "b"], ["b", "a"])]
+        )
+        assert_that(match.equal_to(second, **options).matches(first)).is_false()
+
+    def test_a_filtered_ordered_dict_keeps_its_order_too(self):
+        first = OrderedDict([("a", 1), ("b", 2), ("c", 3)])
+        second = OrderedDict([("b", 2), ("a", 1), ("c", 4)])
+        assert_that(assert_that(first).check().is_equal_to(second, ignore="c").passed).is_false()
+        assert_that(assert_that(first).check().is_equal_to(OrderedDict(first), ignore="c").passed).is_true()
+
+    @pytest.mark.parametrize("options", [*_OPTIONS, pytest.param({"ignore": "unrelated"}, id="ignore")])
+    def test_a_field_left_out_of_equality_stays_out(self, options):
+        assert_that(_Reading(1.0, taken_at=1)).is_equal_to(_Reading(1.0, taken_at=2), **options)
+
+
+class TestKeySelectorsReachEveryShape:
+    """`ignore` and `include` mean the same thing on every shape they accept, and are never dropped in silence."""
+
+    @pytest.mark.parametrize("spelled", [0, [0]], ids=["bare", "listed"])
+    def test_a_falsy_key_is_ignored(self, spelled):
+        assert_that({0: "a", 1: "b"}).is_equal_to({1: "b"}, ignore=spelled)
+        assert_that({"": "a", "k": "b"}).is_equal_to({"k": "b"}, ignore="")
+
+    def test_a_falsy_key_is_included(self):
+        assert_that({0: "a", 1: "b"}).is_equal_to({0: "a", 1: "c"}, include=0)
+        outcome = assert_that({1: "b"}).check().is_equal_to({1: "b"}, include=0)
+        assert_that(outcome.message).starts_with("Expected <{1: 'b'}> to include key <0>")
+
+    def test_an_empty_selector_still_asks_for_nothing(self):
+        assert_that(5).is_equal_to(5, ignore=[])
+        assert_that({"a": 1}).is_equal_to({"a": 1}, include=[])
+
+    @pytest.mark.parametrize(("left", "right"), [(_Money("1.00"), _Money("2.00")), (_Label("a"), _Label("b"))])
+    def test_a_builtin_subclass_is_compared_by_value(self, left, right):
+        assert_that(assert_that([left]).check().is_equal_to([right], ignore="id").passed).is_false()
+        assert_that([left]).is_equal_to([type(left)(left)], ignore="id")
+
+    def test_a_path_into_a_dataclass_held_by_a_mapping(self):
+        assert_that({"user": _Account(1, "a")}).is_equal_to({"user": _Account(2, "a")}, ignore=[("user", "id")])
+        outcome = (
+            assert_that({"user": _Account(1, "a")})
+            .check()
+            .is_equal_to({"user": _Account(2, "b")}, ignore=[("user", "id")])
+        )
+        assert_that(outcome.passed).is_false()
+        assert_that([entry.path for entry in outcome.diff.entries]).is_equal_to(["user.name"])
+
+    def test_an_object_against_a_mapping_answers_as_its_list_spelling(self):
+        assert_that(_Account(1, "a")).is_equal_to({"id": 9, "name": "a"}, ignore="id")
+        assert_that({"id": 9, "name": "a"}).is_equal_to(_Account(1, "a"), ignore="id")
+        assert_that([_Account(1, "a")]).is_equal_to([{"id": 9, "name": "a"}], ignore="id")
+
+    def test_a_missing_include_key_is_one_failure(self):
+        outcome = assert_that({"a": 1}).check().is_equal_to({"a": 1}, include="b")
+        assert_that(outcome.message).starts_with("Expected <{'a': 1}> to include key <b>")
+        with pytest.raises(AssertionError) as caught, soft_assertions():
+            assert_that({"a": 1}).is_equal_to({"a": 1}, include="b")
+        assert_that(caught.value.failures).is_length(1)
+
+    def test_the_matcher_takes_the_builders_route(self):
+        assert_that(match.equal_to(_Account(2, "a"), ignore="id").matches(_Account(1, "a"))).is_true()
+        assert_that(match.equal_to(_Account(2, "b"), ignore="id").matches(_Account(1, "a"))).is_false()
+        assert_that(match.equal_to([_Account(2, "a")], ignore="id").matches([_Account(1, "a")])).is_true()
+        assert_that(
+            match.equal_to([_Account(2, "a")], include="name").matches([_Account(1, "a"), _Account(3, "c")])
+        ).is_false()
+        assert_that(match.equal_to([_Account(2, "a")], include="nothing").matches([_Account(1, "a")])).is_false()
+
+    def test_a_value_without_fields_is_refused_by_both(self):
+        with pytest.raises(TypeError, match="ignore/include requires"):
+            assert_that(5).is_equal_to(5, ignore="x")
+        assert_that(match.equal_to(5, ignore="x").matches(5)).is_false()
+        assert_that(match.equal_to([5], ignore="x").matches([5])).is_true()
+        assert_that(match.equal_to([5], ignore="x").matches([6])).is_false()
+
+    def test_strict_types_reads_only_the_keys_still_compared(self):
+        assert_that({True: "a", "keep": 1}).is_equal_to({1: "a", "keep": 1}, include="keep", strict_types=True)
+        assert_that({True: "a", "keep": 1}).is_equal_to({1: "a", "keep": 1}, ignore=True, strict_types=True)
+        outcome = assert_that({True: "a", "keep": 1}).check().is_equal_to({1: "a", "keep": 1}, strict_types=True)
+        assert_that(outcome.passed).is_false()

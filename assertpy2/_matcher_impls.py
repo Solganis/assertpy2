@@ -20,25 +20,54 @@ from typing import (
     runtime_checkable,
 )
 
-from ._engine._compare import _build_compare_config, _config_note, _guarded_not_equal, _keyed_types_differ
-from ._engine._equality import IncludeKeysMissingError, mapping_differs, mapping_shaped, values_differ
-from ._engine._introspection import MappingLike, is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._engine._compare import (
+    WindowRefusedError,
+    _build_compare_config,
+    _config_note,
+    _guarded_not_equal,
+    _keyed_types_differ,
+    tolerance_window,
+)
+from ._engine._equality import (
+    IncludeKeysMissingError,
+    filtered_differs,
+    key_specs_given,
+    mapping_differs,
+    mapping_shaped,
+    values_differ,
+)
+from ._engine._introspection import (
+    MappingLike,
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    materialized,
+)
 from ._engine._membership import (
+    MembershipRefusedError,
     is_searchable,
     is_walkable,
     missing_items,
-    not_contained_in,
     only_faults,
     searchable,
+    subset_faults,
 )
 from ._engine._ordering import UnorderableError, first_out_of_order, holds
 from ._engine._path import _ROOT, _Path
-from ._engine._require import CoroutineVerdictError, argument, raised_inside, refuse, reject_unknown_kwargs, verdict
+from ._engine._require import (
+    NON_MATCHER_TYPES,
+    VerdictError,
+    argument,
+    raised_inside,
+    refuse,
+    reject_unknown_kwargs,
+    verdict,
+)
 from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
-from .errors import _type_expression_name
+from .errors import _safe_repr, _safe_str, _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -505,8 +534,29 @@ class LessThanOrEqualToMatcher(BaseMatcher):
         return f"a value less than or equal to <{self.boundary}>"
 
 
+def _plainly_ordered(value: object) -> bool:
+    """Whether a value's ordering is a builtin one, so asking it at construction runs nobody else's code."""
+    return type(value) in (int, float, Decimal, Fraction, datetime, date, time, timedelta)
+
+
+def _swapped(low: object, high: object) -> bool:
+    """Whether these two are the wrong way round, asked only where the answer costs nothing.
+
+    Two values may each order plainly and still not order against each other, a `datetime` against a
+    `date` among them, and a pair with no ordering is judged where it is used rather than here.
+    """
+    if not (_plainly_ordered(low) and _plainly_ordered(high)):
+        return False
+    try:
+        return holds(low, high, "gt")
+    except UnorderableError:
+        return False
+
+
 class BetweenMatcher(BaseMatcher):
     def __init__(self, low: object, high: object):
+        if _swapped(low, high):
+            raise ValueError("given low arg must be less than given high arg")
         self.low = low
         self.high = high
 
@@ -530,6 +580,9 @@ def _is_nan(value: Any) -> bool:
 
 class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
+        zero = timedelta(0) if isinstance(tolerance, timedelta) else 0
+        if _swapped(zero, tolerance):
+            raise ValueError("given tolerance arg must be positive")
         self.expected = expected
         self.tolerance = tolerance
 
@@ -538,11 +591,10 @@ class CloseToMatcher(BaseMatcher):
         if _is_nan(value) or _is_nan(self.expected) or _is_nan(self.tolerance):
             return False
         try:
-            return not (value - self.tolerance > self.expected or value + self.tolerance < self.expected)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            return False
+            low, high = tolerance_window(value, self.tolerance)
+            return holds(self.expected, low, "ge") and holds(self.expected, high, "le")
+        except (WindowRefusedError, UnorderableError):
+            return False  # operands that form no window are a non-match, as an unorderable pair is
 
     def describe(self) -> str:
         return f"a value within <{self.tolerance}> of <{self.expected}>"
@@ -682,11 +734,10 @@ class IsNotEmptyMatcher(BaseMatcher):
 
 class IsPositiveMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
+        # through the ordering engine, which answers for a NaN of either kind rather than signalling
         try:
-            return bool(value > 0)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
+            return holds(value, 0, "gt")
+        except UnorderableError:
             return False
 
     def describe(self) -> str:
@@ -696,10 +747,8 @@ class IsPositiveMatcher(BaseMatcher):
 class IsNegativeMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
-            return bool(value < 0)
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
+            return holds(value, 0, "lt")
+        except UnorderableError:
             return False
 
     def describe(self) -> str:
@@ -964,6 +1013,8 @@ class IsSubsetOfMatcher(BaseMatcher):
         given = superset[0] if len(superset) == 1 and is_searchable(superset[0]) else superset
         # drained here, not per call: a generator handed in as the superset was consumed by the first `matches()`
         self.superset = searchable(given)
+        # the assertion's own supersets: one collection, or several args, each flattened the way it flattens them
+        self.supersets: tuple[object, ...] = superset if len(superset) > 1 else (self.superset,)
 
     def matches(self, value: Any) -> bool:
         return self.evaluate(value).matched
@@ -979,9 +1030,11 @@ class IsSubsetOfMatcher(BaseMatcher):
         searched = searchable(value)
         if not is_walkable(searched):
             return MatchResult(
-                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be listed"
+                matched=False,
+                description=self.describe(),
+                mismatch=f"was <{_safe_repr(value)}>, which cannot be listed",
             )
-        absent = not_contained_in(searched, self.superset)
+        absent = subset_faults(searched, self.supersets)
         return MatchResult(
             matched=not absent,
             description=self.describe(),

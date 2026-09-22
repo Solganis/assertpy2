@@ -14,13 +14,13 @@ from ._engine._compare import (
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
-from ._engine._equality import mapping_shaped
+from ._engine._equality import key_specs_given, mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
 from ._satisfies import SatisfiesMixin
-from .errors import _disambiguated, _truncated, _type_expression_name
+from .errors import _disambiguated, _safe_str, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
@@ -90,11 +90,10 @@ class BaseMixin(SatisfiesMixin):
                 ``int``), and it wins over ``tolerance``, which says how far apart two numbers may be
                 and not that they may be different types.  A ``comparators`` entry still owns its
                 leaves, and a `Matcher` on the expected side is exempt, so composed matchers keep
-                working.  Anything matched *by hash* is outside it, which means both dictionary keys
-                and set elements: ``{True: "a"}`` against ``{1: "a"}`` and ``{1}`` against ``{1.0}``
-                both pass, because the pair is found before anything looks at its type and the
-                recursion never sees it.  The same values inside a list are covered normally, so
-                ``[True]`` against ``[1]`` does fail.  Defaults to ``False``.
+                working.  Dictionary keys and set elements are covered too, although a container
+                matches them by hash before any type is looked at: ``{True: "a"}`` against
+                ``{1: "a"}`` and ``{1}`` against ``{1.0}`` both fail, as ``[True]`` against ``[1]``
+                does.  Defaults to ``False``.
 
         Examples:
             Usage:
@@ -246,7 +245,7 @@ class BaseMixin(SatisfiesMixin):
         if mapping_shaped(self.val, check_values=False) and mapping_shaped(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
                 self._dict_err(self.val, other, ignore=ignore, include=include, config=config)
-        elif ignore or include:
+        elif key_specs_given(ignore) or key_specs_given(include):
             val_is_namedtuple = is_namedtuple(self.val)
             other_is_namedtuple = is_namedtuple(other)
             if (
@@ -288,8 +287,9 @@ class BaseMixin(SatisfiesMixin):
 
     def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two objects by converting to dicts and applying ignore/include filters."""
-        actual_dict = self._to_comparable_dict(actual)
-        expected_dict = self._to_comparable_dict(expected)
+        # a plain dict against an object is what the sequence path already compares element by element
+        actual_dict = actual if isinstance(actual, dict) else self._to_comparable_dict(actual)
+        expected_dict = expected if isinstance(expected, dict) else self._to_comparable_dict(expected)
         if actual_dict is None or expected_dict is None:
             raise TypeError(
                 "ignore/include requires dict-like objects or objects with introspectable fields"
@@ -411,7 +411,9 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if actual is **not** identical to expected
         """
         if self.val is not other:
-            return self.error(f"Expected <{self.val}> to be identical to <{other}>, but was not.", expected=other)
+            return self.error(
+                f"Expected <{_safe_str(self.val)}> to be identical to <{other}>, but was not.", expected=other
+            )
         return self
 
     def is_not_same_as(self, other: object) -> Self:
@@ -442,7 +444,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if actual **is** identical to expected
         """
         if self.val is other:
-            return self.error(f"Expected <{self.val}> to be not identical to <{other}>, but was.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be not identical to <{other}>, but was.")
         return self
 
     def is_true(self) -> Self:
@@ -469,7 +471,7 @@ class BaseMixin(SatisfiesMixin):
                 whatever awaiting it would have answered
         """
         if not verdict(self.val, subject="the call under test"):
-            return self.error(f"Expected <{self.val}> to be <True>, but was not.", expected=True)
+            return self.error(f"Expected <{_safe_str(self.val)}> to be <True>, but was not.", expected=True)
         return self
 
     def is_false(self) -> Self:
@@ -496,7 +498,7 @@ class BaseMixin(SatisfiesMixin):
                 whatever awaiting it would have answered
         """
         if verdict(self.val, subject="the call under test"):
-            return self.error(f"Expected <{self.val}> to be <False>, but was not.", expected=False)
+            return self.error(f"Expected <{_safe_str(self.val)}> to be <False>, but was not.", expected=False)
         return self
 
     def is_none(self) -> Self:
@@ -515,7 +517,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** none
         """
         if self.val is not None:
-            return self.error(f"Expected <{self.val}> to be <None>, but was not.", expected=None)
+            return self.error(f"Expected <{_safe_str(self.val)}> to be <None>, but was not.", expected=None)
         return self
 
     def is_not_none(self) -> Self:
@@ -573,7 +575,7 @@ class BaseMixin(SatisfiesMixin):
         if type(self.val) is not some_type:
             type_name = self._type(self.val)
             return self.error(
-                f"Expected <{self.val}:{type_name}> to be of type <{some_type.__name__}>, but was not.",
+                f"Expected <{_safe_str(self.val)}:{type_name}> to be of type <{some_type.__name__}>, but was not.",
                 expected=some_type,
             )
         return self
@@ -620,7 +622,8 @@ class BaseMixin(SatisfiesMixin):
                 type_name = self._type(self.val)
                 some_class_name = _type_expression_name(some_class)
                 return self.error(
-                    f"Expected <{self.val}:{type_name}> to be instance of class <{some_class_name}>, but was not.",
+                    f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of class "
+                    f"<{some_class_name}>, but was not.",
                     expected=some_class,
                 )
         except TypeError:
@@ -656,7 +659,8 @@ class BaseMixin(SatisfiesMixin):
                 type_name = self._type(self.val)
                 class_names = ", ".join(_type_expression_name(some_class) for some_class in some_classes)
                 return self.error(
-                    f"Expected <{self.val}:{type_name}> to be instance of any of <{class_names}>, but was not.",
+                    f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of any of "
+                    f"<{class_names}>, but was not.",
                     expected=some_classes,
                 )
         except TypeError:
@@ -732,7 +736,8 @@ class BaseMixin(SatisfiesMixin):
             raise ValueError("given arg must be a positive int")
         if sized_len(self.val) != length:
             return self.error(
-                f"Expected <{self.val}> to be of length <{length}>, but was <{sized_len(self.val)}>.", expected=length
+                f"Expected <{_safe_str(self.val)}> to be of length <{length}>, but was <{sized_len(self.val)}>.",
+                expected=length,
             )
         return self
 
@@ -773,7 +778,8 @@ class BaseMixin(SatisfiesMixin):
             raise ValueError("given low arg must be less than given high arg")
         if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to be of length between <{low}> and <{high}>, but was <{sized_len(self.val)}>.",
+                f"Expected <{_safe_str(self.val)}> to be of length between <{low}> and <{high}>, "
+                f"but was <{sized_len(self.val)}>.",
                 expected=(low, high),
             )
         return self

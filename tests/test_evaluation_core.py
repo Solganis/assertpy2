@@ -16,15 +16,23 @@ import datetime
 import decimal
 import enum
 import fractions
+import itertools
 import math
+import unittest.mock
 from dataclasses import dataclass
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import AssertionFailure, assert_that, match
-from assertpy2._engine._compare import _CompareConfig
+from assertpy2 import AssertionFailure, BaseMatcher, assert_that, match
+from assertpy2._engine._compare import (
+    WindowRefusedError,
+    _both_decline,
+    _CompareConfig,
+    _declines,
+    tolerance_window,
+)
 from assertpy2._engine._equality import (
     IncludeKeysMissingError,
     ignore_specs,
@@ -48,7 +56,9 @@ from assertpy2._engine._ordering import UnorderableError, compare, first_out_of_
 from assertpy2._engine._size import length_of
 from assertpy2._engine._text import contains as text_contains
 from assertpy2._engine._text import starts_with as text_starts_with
+from assertpy2.errors import _json_safe
 from assertpy2.matchers import _is_matcher
+from tests.group_compat import ExceptionGroup, needs_groups
 
 
 @dataclass
@@ -1312,3 +1322,861 @@ class TestAMatcherLooksAtItsValueOnce:
         assert_that(matcher.matches([1, 2])).is_true()
         assert_that(matcher.matches([2, 1])).is_false()
         assert_that(matcher.matches([1, 2])).is_true()
+
+
+class TestNumbersBeyondFloat:
+    """`Decimal`, `Fraction` and arbitrary-precision integers answer where a float would, or say why not.
+
+    A `Decimal` NaN signals `InvalidOperation` instead of answering `<`, and a `Decimal` refuses arithmetic
+    with a float outright, so every relation that reached the operator directly raised the value's own
+    exception where a verdict was promised.
+    """
+
+    _NAN = decimal.Decimal("NaN")
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda value: assert_that(value).is_greater_than(0), id="is_greater_than"),
+            pytest.param(lambda value: assert_that(value).is_less_than(0), id="is_less_than"),
+            pytest.param(lambda value: assert_that(value).is_greater_than_or_equal_to(0), id="is_greater_or_equal"),
+            pytest.param(lambda value: assert_that(value).is_less_than_or_equal_to(0), id="is_less_or_equal"),
+            pytest.param(lambda value: assert_that(value).is_positive(), id="is_positive"),
+            pytest.param(lambda value: assert_that(value).is_negative(), id="is_negative"),
+            pytest.param(lambda value: assert_that(value).is_between(0, 1), id="is_between"),
+            pytest.param(lambda value: assert_that([decimal.Decimal(1), value]).is_sorted(), id="is_sorted"),
+        ],
+    )
+    @pytest.mark.parametrize("nan", [decimal.Decimal("NaN"), decimal.Decimal("sNaN"), float("nan")], ids=str)
+    def test_a_nan_fails_every_relation_rather_than_signalling(self, call, nan):
+        with pytest.raises(AssertionFailure):
+            call(nan)
+
+    @pytest.mark.parametrize("nan", [decimal.Decimal("NaN"), decimal.Decimal("sNaN"), float("nan")], ids=str)
+    def test_a_nan_is_never_close_to_anything(self, nan):
+        """`is_close_to` reads the NaN itself, where a signalling `Decimal` refuses to become a float."""
+        with pytest.raises(AssertionFailure):
+            assert_that(nan).is_close_to(decimal.Decimal(1), 1)
+
+    @pytest.mark.parametrize(
+        "matcher",
+        [
+            pytest.param(match.greater_than(decimal.Decimal(5)), id="greater_than"),
+            pytest.param(match.between(decimal.Decimal(0), decimal.Decimal(9)), id="between"),
+            pytest.param(match.is_positive(), id="is_positive"),
+            pytest.param(match.is_negative(), id="is_negative"),
+            pytest.param(match.is_sorted(), id="is_sorted"),
+        ],
+    )
+    def test_a_matcher_answers_no_match_for_a_decimal_nan(self, matcher):
+        value = [decimal.Decimal(1), self._NAN] if matcher.describe().startswith("a sorted") else self._NAN
+        assert_that(matcher.matches(value)).is_false()
+        assert_that(matcher == value).is_false()
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "tolerance", "within"),
+        [
+            pytest.param({"price": decimal.Decimal("1.00")}, {"price": 1.0001}, 0.01, True, id="decimal-vs-float"),
+            pytest.param({"price": decimal.Decimal("1.00")}, {"price": 9.0}, 0.01, False, id="decimal-far-from-float"),
+            pytest.param({"n": 10**400}, {"n": 1.0}, 0.1, False, id="bignum-vs-float"),
+            pytest.param({"n": 10**400}, {"n": 10**400 + 1}, 2, True, id="bignum-vs-bignum"),
+            pytest.param({"x": decimal.Decimal("NaN")}, {"x": decimal.Decimal(1)}, 1, False, id="decimal-nan"),
+            pytest.param({"x": float("inf")}, {"x": 1.0}, 1, False, id="infinity"),
+            pytest.param({"x": float("inf")}, {"x": float("inf")}, 1, True, id="two-infinities"),
+            pytest.param({"x": decimal.Decimal("Infinity")}, {"x": 1.0}, 1, False, id="decimal-infinity"),
+        ],
+    )
+    def test_a_tolerance_measures_the_pair_rather_than_raising(self, actual, expected, tolerance, within):
+        assert_that(assert_that(actual).check().is_equal_to(expected, tolerance=tolerance).passed).is_equal_to(within)
+
+    @pytest.mark.parametrize(
+        ("value", "other", "tolerance"),
+        [
+            pytest.param(decimal.Decimal("1.0"), decimal.Decimal("1.05"), 0.1, id="decimal-pair-float-tolerance"),
+            pytest.param(1.0, decimal.Decimal("1.05"), 0.1, id="float-value-decimal-other"),
+            pytest.param(decimal.Decimal("1.0"), 1.05, 0.1, id="decimal-value-float-other"),
+        ],
+    )
+    def test_is_close_to_mixes_decimals_and_floats(self, value, other, tolerance):
+        assert_that(value).is_close_to(other, tolerance)
+        assert_that(value).is_not_close_to(other, tolerance / 100)
+
+    def test_a_datetime_subclass_is_a_datetime_to_the_ordering(self):
+        class Stamp(datetime.datetime):
+            pass
+
+        boundary = datetime.datetime(2026, 1, 1)
+        later = Stamp(2026, 6, 1)
+        assert_that(later).is_greater_than(boundary)
+        assert_that(boundary).is_less_than(later)
+        assert_that(match.greater_than(boundary).matches(later)).is_true()
+        assert_that(match.between(boundary, Stamp(2026, 12, 1)).matches(later)).is_true()
+        with pytest.raises(TypeError, match="must be a datetime"):
+            assert_that(later).is_greater_than(5)
+
+    @pytest.mark.parametrize(
+        ("build", "message"),
+        [
+            pytest.param(lambda: match.between(9, 1), "low arg must be less than", id="between"),
+            pytest.param(lambda: match.close_to(5, -1), "tolerance arg must be positive", id="close_to"),
+        ],
+    )
+    def test_a_matcher_refuses_what_the_builder_refuses(self, build, message):
+        with pytest.raises(ValueError, match=message):
+            build()
+
+    def test_a_tolerance_with_no_ordering_against_zero_is_left_to_the_call(self):
+        assert_that(match.close_to(datetime.datetime(2026, 1, 1), datetime.timedelta(hours=1)).describe()).contains(
+            "within"
+        )
+        with pytest.raises(ValueError, match="tolerance arg must be positive"):
+            match.close_to(datetime.datetime(2026, 1, 1), datetime.timedelta(hours=-1))
+
+    @pytest.mark.parametrize(
+        ("value", "other", "tolerance"),
+        [
+            pytest.param(
+                decimal.Decimal("1.0"), decimal.Decimal("1.05"), fractions.Fraction(1, 10), id="decimal-fraction"
+            ),
+            pytest.param(fractions.Fraction(1), fractions.Fraction(21, 20), 0.1, id="fraction-float"),
+        ],
+    )
+    def test_a_window_no_type_can_hold_is_measured_exactly(self, value, other, tolerance):
+        assert_that(value).is_close_to(other, tolerance)
+        assert_that(value).is_not_close_to(other, tolerance / 100)
+
+    def test_bounds_with_no_ordering_are_left_to_the_call(self):
+        matcher = match.between("a", 1)
+        assert_that(matcher.matches(0)).is_false()
+        assert_that(match.close_to(1, decimal.Decimal("0.5")).matches(1.2)).is_true()
+
+    def test_a_tolerance_with_no_ordering_at_all_is_left_to_the_call(self):
+        matcher = match.close_to(1, "a wide one")
+        assert_that(matcher.matches(1)).is_false()
+
+    def test_a_matcher_refusing_the_operand_is_not_equal_to_it(self):
+        class Refusing(BaseMatcher):
+            def matches(self, value):
+                raise TypeError("this matcher takes no such operand")
+
+            def describe(self):
+                return "a refusing matcher"
+
+        assert_that(Refusing() == 5).is_false()
+
+
+class TestSubsetIsOneDecision:
+    """`is_subset_of` had two implementations: the assertion's, and the matcher's own walk over a superset.
+
+    The matcher kept the superset whole, so a string superset answered substring membership and a set
+    superset hashed items that refuse to hash, and a mapping value was judged by its keys alone.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "supersets", "holds"),
+        [
+            pytest.param({"a": 999, "b": 2}, ({"a": 1, "b": 2, "c": 3},), False, id="mapping-wrong-value"),
+            pytest.param({"a": 1}, ({"a": 1, "b": 2},), True, id="mapping-pair-held"),
+            pytest.param(["ab"], ("abc",), False, id="string-superset-by-item"),
+            pytest.param([""], ("abc",), False, id="empty-string-is-no-item"),
+            pytest.param(["a", "b"], ("abc",), True, id="characters-are-items"),
+            pytest.param([[1]], ({1, 2},), False, id="unhashable-against-a-set"),
+            pytest.param([[1]], ([[1], [2]],), True, id="unhashable-held"),
+            pytest.param({"a": 1}, ({"a": 2}, {"a": 1}), True, id="second-superset-holds-it"),
+            pytest.param({"a": 1}, ({"a": 1}, {"a": 2}), True, id="first-superset-holds-it"),
+        ],
+    )
+    def test_the_assertion_and_the_matcher_answer_alike(self, value, supersets, holds):
+        outcome = assert_that(value).check().is_subset_of(*supersets)
+        assert_that(outcome.passed).described_as("the assertion").is_equal_to(holds)
+        assert_that(match.is_subset_of(*supersets).matches(value)).described_as("the matcher").is_equal_to(holds)
+
+    def test_one_nan_under_a_key_is_held_by_itself(self):
+        same = float("nan")
+        assert_that({"a": same}).is_subset_of({"a": same})
+
+    def test_a_missing_pair_names_the_supersets_as_given(self):
+        outcome = assert_that({"a": 1}).check().is_subset_of({"a": 2}, {"b": 3})
+        assert_that(outcome.message).contains("[{'a': 2}, {'b': 3}]")
+
+    def test_a_mapping_superset_is_shown_as_its_pairs(self):
+        """The failure has always printed pairs, so a mapping that reprs as something else is read first."""
+
+        class Terse:
+            def __init__(self, pairs):
+                self._pairs = pairs
+
+            def keys(self):
+                return self._pairs.keys()
+
+            def __iter__(self):
+                return iter(self._pairs)
+
+            def __getitem__(self, key):
+                return self._pairs[key]
+
+            def __repr__(self):
+                return "<terse>"
+
+        outcome = assert_that({"a": 1}).check().is_subset_of(Terse({"a": 2}))
+        assert_that(outcome.message).contains("{'a': 2}").does_not_contain("<terse>")
+        assert_that(outcome.expected).is_equal_to({"a": 2})
+
+    def test_a_one_shot_mapping_is_a_subset_of_itself(self):
+        """Its pairs were read for the comparison already, so reading it again as a superset finds nothing."""
+
+        class OneShot:
+            def __init__(self, pairs):
+                self._pairs = pairs
+                self._left = list(pairs)
+
+            def keys(self):
+                return list(self._pairs)
+
+            def __iter__(self):
+                left, self._left = self._left, []
+                return iter(left)
+
+            def __getitem__(self, key):
+                return self._pairs[key]
+
+        same = OneShot({"a": 1})
+        assert_that(same).is_subset_of(same)
+
+    def test_a_one_shot_superset_is_read_once(self):
+        """Read twice, a generator is empty the second time and every item reads as missing."""
+        assert_that([1, 2]).is_subset_of(item for item in [1, 2, 3])
+        assert_that(assert_that([1, 9]).check().is_subset_of(item for item in [1, 2, 3]).passed).is_false()
+
+
+class TestMembershipShortcutsKeepTheWalksAnswer:
+    """A set or a `Counter` may stand in for the walk only where hashing and ``==`` agree."""
+
+    @pytest.mark.parametrize("length", [66, 67], ids=["under-the-threshold", "over-the-threshold"])
+    def test_contains_only_on_a_string_answers_the_same_at_any_length(self, length):
+        """A set of a string's characters answers by character where the walk answers by substring."""
+        text = "ab" * length
+        assert_that(text).contains_only("a", "b", "ab")
+        assert_that(match.contains_only("a", "b", "ab").matches(text)).is_true()
+        assert_that(assert_that(text).check().contains_only("a", "ab").passed).is_false()
+
+    def test_a_matcher_item_is_counted_by_what_it_matches(self):
+        assert_that([1, 2]).contains_exactly_in_any_order(match.greater_than(0), 2)
+        assert_that([1, 2]).contains_exactly_in_any_order(2, match.greater_than(0))
+        assert_that([1, 2]).contains_exactly(match.greater_than(0), 2)
+
+    @pytest.mark.parametrize("size", [2, 20], ids=["walk", "set"])
+    def test_a_probe_whose_hash_raises_still_gets_a_verdict(self, size):
+        class Angry:
+            def __hash__(self):
+                raise RuntimeError("no hash from me")
+
+        probes = [Angry() for _ in range(size)]
+        haystack = list(range(size))
+        assert_that(assert_that(probes).check().is_subset_of(haystack).passed).is_false()
+        assert_that(assert_that(haystack).check().contains(*probes).passed).is_false()
+
+    def test_one_object_repeated_is_named_once_whatever_else_is_there(self):
+        same = float("nan")
+        for values in ([same, same], [same, same, []]):
+            outcome = assert_that(values).check().does_not_contain_duplicates()
+            assert_that(outcome.passed).is_false()
+            assert_that(outcome.message).contains("<nan> was repeated")
+
+    def test_a_collection_with_no_length_is_searched_all_the_same(self):
+        """The shortcut asks how big the pair is; a re-iterable without `__len__` cannot say, so it is tried."""
+
+        class Countless:
+            def __iter__(self):
+                return iter(range(30))
+
+        assert_that(not_contained_in([1, 2], Countless())).is_empty()
+        assert_that(not_contained_in([99], Countless())).is_equal_to([99])
+        assert_that(not_contained_in(Countless(), list(range(30)))).is_empty()
+
+    def test_counting_falls_back_where_a_value_refuses_to_hash(self):
+        """`Decimal` hashes as a rule and a signalling NaN still refuses, so the count gives way to the walk."""
+        signalling = decimal.Decimal("snan")
+        assert_that([signalling]).contains_exactly_in_any_order(signalling)
+        outcome = assert_that([signalling]).check().contains_exactly_in_any_order(signalling, 1)
+        assert_that(outcome.passed).is_false()
+
+
+class TestAnAnswerIsAnAnswer:
+    """A truthy object handed back by a predicate is not a verdict, and reading it as one passed anything."""
+
+    def test_a_predicate_handing_back_a_matcher_is_refused(self):
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that(5).satisfies(lambda value: match.greater_than(100))
+
+    def test_a_factory_that_was_never_called_is_refused(self):
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that([1, 2]).each(lambda value: match.is_none())
+
+    def test_the_refusal_survives_the_probes_that_swallow_type_errors(self):
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that([1, 2]).satisfies_exactly_in_any_order(lambda value: match.is_none(), lambda value: True)
+
+    def test_a_duck_typed_matcher_counts_as_one(self):
+        class Duck:
+            def matches(self, value):
+                return True
+
+            def describe(self):
+                return "anything"
+
+            def describe_mismatch(self, value):
+                return "nothing"
+
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that(5).satisfies(lambda value: Duck())
+
+    def test_an_ordinary_truthy_answer_is_still_an_answer(self):
+        assert_that(5).satisfies(lambda value: "yes")
+        assert_that(5).satisfies(lambda value: [0])
+
+    def test_a_matcher_that_holds_its_members_on_the_instance_is_refused(self):
+        """A matcher may install the three members in `__init__`, where reading the type alone misses them."""
+
+        class Installed:
+            def __init__(self):
+                self.matches = lambda value: True
+                self.describe = lambda: "installed"
+                self.describe_mismatch = lambda value: "no"
+
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that(5).satisfies(lambda value: Installed())
+
+    def test_an_object_that_answers_every_name_is_not_a_matcher(self):
+        """Read through `getattr`, a `Mock` has all three members and every answer became a refusal."""
+        assert_that(5).satisfies(lambda value: unittest.mock.Mock())
+
+
+class TestAMatcherAnswersWhereTheBuilderRefuses:
+    """A matcher that raises cannot be negated or combined, so a question it cannot ask is a non-match."""
+
+    @pytest.mark.parametrize(
+        ("matcher", "value"),
+        [
+            pytest.param(match.contains("a"), b"abc", id="str-item-in-bytes"),
+            pytest.param(match.contains(b"a"), "abc", id="bytes-item-in-str"),
+            pytest.param(match.contains(1), "abc", id="int-item-in-str"),
+            pytest.param(match.contains_only("a"), b"abc", id="only-str-item-in-bytes"),
+            pytest.param(match.contains_only(b"a"), "abc", id="only-bytes-item-in-str"),
+        ],
+    )
+    def test_an_item_the_value_cannot_be_searched_for_is_not_in_it(self, matcher, value):
+        assert_that(matcher.matches(value)).described_as("plain").is_false()
+        assert_that((~matcher).matches(value)).described_as("negated").is_true()
+        assert_that((matcher | match.has_length(3)).matches(value)).described_as("either").is_true()
+        assert_that(matcher.describe_mismatch(value)).contains("cannot be asked about")
+
+    def test_the_builder_still_refuses_the_same_question(self):
+        """The assertion names the mistake, since nothing downstream has to keep working."""
+        with pytest.raises(TypeError):
+            assert_that("abc").contains(b"a")
+
+    @pytest.mark.parametrize(
+        "ask",
+        [
+            pytest.param(lambda item: match.contains(item).matches([1]), id="contains"),
+            pytest.param(lambda item: match.contains(item).describe_mismatch([1]), id="contains-mismatch"),
+            pytest.param(lambda item: match.contains_only(item).matches([1]), id="contains-only"),
+        ],
+    )
+    def test_a_nested_matcher_that_answers_with_a_matcher_is_still_refused(self, ask):
+        """The refusal has to pass through the same `except TypeError` that turns a refusal into a no."""
+
+        class Sneaky(BaseMatcher):
+            def matches(self, value):
+                return match.is_none()
+
+            def describe(self):
+                return "sneaky"
+
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            ask(Sneaky())
+
+
+class TestAOneShotValueIsReadOnce:
+    """A generator handed to a composite was consumed by the first child, so the rest judged nothing."""
+
+    @pytest.mark.parametrize(
+        ("build", "held"),
+        [
+            pytest.param(lambda: match.contains(1) & match.contains(9), True, id="and-holding"),
+            pytest.param(lambda: match.contains(1) & match.contains(7), False, id="and-failing"),
+            pytest.param(lambda: match.contains(7) | match.contains(9), True, id="or-holding"),
+            pytest.param(lambda: match.contains(5) | match.contains(7), False, id="or-failing"),
+            pytest.param(lambda: match.all_of(match.contains(1), match.contains(9)), True, id="all-of"),
+            pytest.param(lambda: match.any_of(match.contains(7), match.contains(9)), True, id="any-of"),
+        ],
+    )
+    def test_every_child_sees_the_whole_value(self, build, held):
+        assert_that(build().matches(item for item in [1, 9])).is_equal_to(held)
+
+    def test_the_reason_reads_the_same_value_the_verdict_did(self):
+        composite = match.contains(1) & match.contains(7)
+        assert_that(composite.describe_mismatch(item for item in [1, 9])).contains("missing")
+
+    def test_each_item_names_the_item_that_failed(self):
+        """Deciding drained the generator, and describing afterwards saw only what was left of it."""
+        outcome = (
+            assert_that({"items": (item for item in [1, 2, -3])})
+            .check()
+            .matches_structure({"items": match.each_item(match.greater_than(0))})
+        )
+        assert_that(outcome.message).contains("item at index 2 <-3>")
+
+    def test_a_re_iterable_value_is_walked_rather_than_copied(self):
+        class Counting(list):
+            def __init__(self, items):
+                super().__init__(items)
+                self.walks = 0
+
+            def __iter__(self):
+                self.walks += 1
+                return super().__iter__()
+
+        value = Counting([1, 9])
+        assert_that((match.contains(1) & match.contains(9)).matches(value)).is_true()
+        assert_that(value.walks).described_as("walks").is_greater_than(0)
+
+
+class TestPairingIsIterative:
+    """Kuhn's augmenting path recursed as deep as the input is wide, and 1100 pairs is past the limit."""
+
+    def test_a_thousand_items_pair_without_running_out_of_stack(self):
+        items = list(range(1200))
+        assert_that(items).satisfies_exactly_in_any_order(*[match.greater_than(-1) for _ in items])
+
+    @needs_groups
+    def test_an_exception_group_of_a_thousand_still_matches(self):
+        def raise_group():
+            raise ExceptionGroup("many", [ValueError(str(index)) for index in range(1200)])
+
+        assert_that(raise_group).raises(ExceptionGroup).when_called_with().matches_error_tree(*([ValueError] * 1200))
+
+    def test_an_unpairable_item_is_still_named(self):
+        outcome = assert_that([1, 2]).check().satisfies_exactly_in_any_order(match.greater_than(5), match.less_than(5))
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).contains("no pairing covers 1 item")
+        assert_that([str(entry.expected) for entry in outcome.diff.entries]).contains(
+            match.contains_string("greater than")
+        )
+
+
+class TestAHostileValueCannotBreakTheReport:
+    """A value whose `__repr__` or `__str__` raises turned every failure into the user's own exception."""
+
+    def test_a_raising_repr_is_rendered_as_a_placeholder(self):
+        class BadRepr:
+            def __repr__(self):
+                raise RuntimeError("no repr from me")
+
+        class Holder:
+            colour = BadRepr()
+
+        assert_that(match.has_property("colour", match.is_none()).describe_mismatch(Holder())).contains("unreprable")
+        assert_that(match.has_property("missing", match.is_none()).describe_mismatch(BadRepr())).contains("unreprable")
+        for call in (
+            lambda: assert_that(BadRepr()).is_none(),
+            lambda: assert_that(BadRepr()).is_instance_of(int),
+            lambda: assert_that(BadRepr()).satisfies(match.is_none()),
+            lambda: assert_that([BadRepr()]).satisfies(match.each_item(match.is_none())),
+        ):
+            with pytest.raises(AssertionFailure, match="unreprable"):
+                call()
+
+    def test_a_raising_str_still_names_the_subject_of_a_negated_call(self):
+        class BadStr:
+            def __str__(self):
+                raise RuntimeError("no str from me")
+
+            def __repr__(self):
+                return "BadStr()"
+
+        with pytest.raises(AssertionFailure, match="BadStr"):
+            assert_that(BadStr()).not_.is_instance_of(BadStr)
+
+    def test_an_exception_whose_str_raises_still_pivots(self):
+        class BadStrError(Exception):
+            def __str__(self):
+                raise RuntimeError("no str from me")
+
+        def raise_it():
+            raise BadStrError
+
+        def raise_from_it():
+            try:
+                raise BadStrError
+            except BadStrError as cause:
+                raise ValueError("outer") from cause
+
+        assert_that(assert_that(raise_it).raises(BadStrError).when_called_with().val).contains("BadStrError")
+        pivoted = assert_that(raise_from_it).raises(ValueError).when_called_with().caused_by(BadStrError)
+        assert_that(pivoted.val).contains("BadStrError")
+
+
+class TestReadingOnceDoesNotReplaceTheValue:
+    """Reading a one-shot value for the children that walk it must not hand a list to the ones that do not."""
+
+    def test_a_type_check_beside_a_walk_still_sees_what_was_passed(self):
+        composite = match.is_instance_of(list) & match.contains(1)
+        assert_that(composite.matches(item for item in [1, 9])).described_as("a generator is not a list").is_false()
+        assert_that(composite.matches([1, 9])).described_as("a list is").is_true()
+
+    def test_an_alternative_that_holds_without_walking_reads_nothing(self):
+        walks = []
+
+        class Counting:
+            def __iter__(self):
+                walks.append(1)
+                return iter([1, 9])
+
+        assert_that(match.any_of(match.is_not_none(), match.contains(1)).matches(Counting())).is_true()
+        assert_that(walks).described_as("walks").is_empty()
+
+    def test_an_endless_value_is_answered_rather_than_read(self):
+        """`evaluate` decides and describes in one walk, so it must stop where the walk stops."""
+        endless = itertools.count()
+        result = match.each_item(match.less_than(3)).evaluate(endless)
+        assert_that(result.matched).is_false()
+        assert_that(result.mismatch).contains("item at index 3")
+
+
+class TestARefusalFromInsideTheValueIsNotAMismatch:
+    """Answering "no match" to somebody's own `TypeError` sends the reader looking in the wrong file."""
+
+    @pytest.mark.parametrize(
+        "build",
+        [
+            pytest.param(lambda: match.contains(1).matches, id="contains"),
+            pytest.param(lambda: match.contains(1).describe_mismatch, id="contains-mismatch"),
+            pytest.param(lambda: match.contains_only(1).matches, id="contains-only"),
+        ],
+    )
+    def test_a_container_whose_membership_raises_is_not_answered(self, build):
+        class Angry:
+            def __contains__(self, item):
+                raise TypeError("my own refusal")
+
+            def __iter__(self):
+                return iter([1])
+
+            def __eq__(self, other):
+                raise TypeError("my own refusal")
+
+            __hash__ = None
+
+        with pytest.raises(TypeError, match="my own refusal"):
+            build()(Angry())
+
+
+class TestBoundsAreCheckedOnlyWhereTheyCanBe:
+    """Two values that each order plainly need not order against each other."""
+
+    @pytest.mark.parametrize(
+        ("low", "high"),
+        [
+            pytest.param(datetime.datetime(2020, 1, 1), datetime.date(2020, 1, 2), id="datetime-against-date"),
+            pytest.param(datetime.time(1, tzinfo=datetime.timezone.utc), datetime.time(2), id="aware-against-naive"),
+        ],
+    )
+    def test_an_unorderable_pair_is_judged_where_it_is_used(self, low, high):
+        """Construction says nothing about a pair it cannot order, and matching answers "no"."""
+        assert_that(match.between(low, high).matches(low)).is_false()
+
+    def test_swapped_bounds_are_still_refused_at_construction(self):
+        with pytest.raises(ValueError, match="less than"):
+            match.between(10, 1)
+
+    def test_a_negative_tolerance_is_still_refused_at_construction(self):
+        with pytest.raises(ValueError, match="positive"):
+            match.close_to(1, -1)
+
+    def test_a_zero_tolerance_is_allowed(self):
+        assert_that(match.close_to(1, 0).matches(1)).is_true()
+
+
+class TestARefusalThatCannotBeReproducedIsNotRewritten:
+    """The second ask learns who refused, and a refusal it cannot find again is handed on as it was."""
+
+    def test_a_container_that_refuses_only_once_keeps_its_own_error(self):
+        class Moody:
+            def __init__(self):
+                self.asked = 0
+
+            def __contains__(self, item):
+                self.asked += 1
+                if self.asked == 1:
+                    raise TypeError("only the first time")
+                return False
+
+            def __iter__(self):
+                return iter([])
+
+        with pytest.raises(TypeError, match="only the first time"):
+            missing_items(Moody(), [1], _is_matcher)
+
+    def test_a_mapping_of_many_non_string_keys_says_how_many_it_dropped(self):
+        wide = {index: index for index in range(101)}
+        written = _json_safe(wide)
+        assert_that(written["__type__"]).is_equal_to("dict")
+        assert_that(written["__truncated__"]).contains("1 more keys")
+
+
+class TestWhatCountsAsAMatcherIsReadWithoutRunningAnything:
+    """The three members may live on the type, in the instance dictionary or in slots."""
+
+    def test_a_matcher_holding_its_members_in_slots_is_refused(self):
+        class Slotted:
+            __slots__ = ("describe", "describe_mismatch", "matches")
+
+            def __init__(self):
+                self.matches = lambda value: True
+                self.describe = lambda: "slotted"
+                self.describe_mismatch = lambda value: "no"
+
+        with pytest.raises(TypeError, match="handed back a matcher"):
+            assert_that(5).satisfies(lambda value: Slotted())
+
+    def test_an_object_whose_slots_were_never_filled_is_an_answer(self):
+        class Empty:
+            __slots__ = ("describe", "describe_mismatch", "matches")
+
+        assert_that(5).satisfies(lambda value: Empty())
+
+    @pytest.mark.parametrize("shape", ["a-slot-holding-something-else", "a-class-attribute-that-is-not-callable"])
+    def test_a_slotted_object_that_is_not_a_matcher_is_an_answer(self, shape):
+        """Slots of its own say nothing: the three names have to be there and have to be callable."""
+
+        class Counter:
+            __slots__ = ("matches",)
+
+            def __init__(self):
+                self.matches = 5
+
+        class Mixed:
+            __slots__ = ("matches",)
+            describe = "not callable at all"
+
+            def __init__(self):
+                self.matches = lambda value: True
+
+        answer = Counter() if shape.startswith("a-slot") else Mixed()
+        assert_that(5).satisfies(lambda value: answer)
+
+
+class TestAToleranceRefusalIsNotABug:
+    """The `Fraction` retry repairs a mixed pair, and a value whose own arithmetic raises is not that."""
+
+    def test_a_number_whose_subtraction_raises_is_handed_on(self):
+        class Angry(float):
+            def __sub__(self, other):
+                raise TypeError("my own refusal")
+
+            def __rsub__(self, other):
+                raise TypeError("my own refusal")
+
+        with pytest.raises(TypeError, match="my own refusal"):
+            assert_that({"a": Angry(1.0)}).is_equal_to({"a": 2.0}, tolerance=0.5)
+
+    def test_a_mixed_pair_is_still_repaired(self):
+        """A `Decimal` against a `float` refuses to subtract, which is the pair the retry is there for."""
+        assert_that({"a": decimal.Decimal("1.0")}).is_equal_to({"a": 1.05}, tolerance=0.1)
+
+
+class TestAPropertyIsReadOnce:
+    """Asked through `hasattr` and then again, a property that counts its reads answered the two apart."""
+
+    def test_describing_a_mismatch_reads_it_once(self):
+        class Counting:
+            def __init__(self):
+                self.reads = 0
+
+            @property
+            def size(self):
+                self.reads += 1
+                return self.reads
+
+        holder = Counting()
+        match.has_property("size", match.greater_than(100)).describe_mismatch(holder)
+        assert_that(holder.reads).described_as("reads").is_equal_to(1)
+
+    def test_a_property_that_is_not_there_still_says_so(self):
+        assert_that(match.has_property("nowhere").describe_mismatch(object())).contains("has no property")
+
+
+class TestNobodysCodeDecidesAVerdict:
+    """A value handed back as an answer is read, never asked: what it says is not its own verdict."""
+
+    def test_an_object_that_answers_every_read_by_raising_is_still_an_answer(self):
+        class Hostile:
+            def __getattribute__(self, name):
+                raise RuntimeError("my own code ran")
+
+        assert_that(5).satisfies(lambda value: Hostile())
+
+    def test_a_metaclass_that_fabricates_members_does_not_make_a_matcher(self):
+        class Fabricating(type):
+            def __getattr__(cls, name):
+                return lambda *args, **kwargs: True
+
+        class Fabricated(metaclass=Fabricating):
+            pass
+
+        assert_that(5).satisfies(lambda value: Fabricated())
+
+    def test_a_coroutine_is_still_refused(self):
+        async def probe():
+            return True
+
+        with pytest.raises(TypeError, match="handed back a coroutine"):
+            assert_that(5).satisfies(lambda value: probe())
+
+
+class TestAWindowThatCannotBeBuiltIsNotACrash:
+    """A matcher asks for the interval without refusing anything first, so a pair without one answers no."""
+
+    @pytest.mark.parametrize(
+        "middle",
+        [
+            pytest.param(decimal.Decimal("Infinity"), id="infinite-decimal"),
+            pytest.param(decimal.Decimal("NaN"), id="decimal-nan"),
+            pytest.param(float("inf"), id="infinite-float"),
+        ],
+    )
+    def test_a_middle_without_a_window_answers_no_match(self, middle):
+        assert_that(match.close_to(middle, 0.5).matches(1)).is_false()
+
+    @pytest.mark.parametrize(
+        "middle",
+        [
+            pytest.param(decimal.Decimal("NaN"), id="decimal-nan"),
+            pytest.param(decimal.Decimal("sNaN"), id="signalling-nan"),
+            pytest.param("text", id="not-a-number-at-all"),
+        ],
+    )
+    def test_a_pair_with_no_window_says_so_in_its_own_terms(self, middle):
+        """The exact conversion refuses too, and a stray `ValueError` is not what a matcher can answer."""
+        with pytest.raises(WindowRefusedError):
+            tolerance_window(middle, 0.5)
+
+    def test_a_pair_that_has_one_still_gets_it(self):
+        assert_that(tolerance_window(decimal.Decimal("1.5"), 0.5)).is_equal_to(
+            (fractions.Fraction(1), fractions.Fraction(2))
+        )
+
+    @pytest.mark.parametrize(
+        "middle",
+        [pytest.param(decimal.Decimal("Infinity"), id="decimal"), pytest.param(float("inf"), id="float")],
+    )
+    def test_an_infinite_expectation_fails_the_assertion_rather_than_breaking_it(self, middle):
+        """A float infinity has always failed here, and a `Decimal` one raised out of the conversion."""
+        assert_that(assert_that(1).check().is_close_to(middle, 0.5).passed).is_false()
+
+
+class TestTheEqualityProbeAsksWhatTheOperatorWouldAsk:
+    """`_both_decline` replays `==`, and replaying it through ordinary lookup asks a different question."""
+
+    def test_a_metaclass_cannot_fabricate_the_answer(self):
+        """`type(x).__eq__` is an ordinary read on the class, and `==` never makes one."""
+
+        class Hooked(type):
+            def __getattribute__(cls, name):
+                return (lambda *args: False) if name == "__eq__" else type.__getattribute__(cls, name)
+
+        class Plain(metaclass=Hooked):
+            pass
+
+        assert_that(_both_decline(Plain(), Plain())).described_as("what object's own __eq__ answers").is_true()
+
+    def test_two_sides_that_really_decline_still_decline(self):
+        class Declining:
+            def __eq__(self, other):
+                return NotImplemented
+
+            __hash__ = None
+
+        assert_that(_both_decline(Declining(), Declining())).is_true()
+        assert_that(_both_decline(1, "text")).described_as("an int against a string").is_true()
+        assert_that(_both_decline(1, 2)).described_as("two ints").is_false()
+
+
+class TestAnInfiniteWindowStillReadsItsTolerance:
+    """(inf, inf) is the right window only where the tolerance is one, or an infinity matches anything."""
+
+    @pytest.mark.parametrize("tolerance", [object(), "wide", None], ids=["object", "string", "none"])
+    def test_a_tolerance_that_is_not_a_number_has_no_window(self, tolerance):
+        assert_that(match.close_to(float("inf"), tolerance).matches(float("inf"))).is_false()
+
+    def test_an_infinity_against_itself_within_a_real_tolerance_holds(self):
+        assert_that(match.close_to(float("inf"), 0.5).matches(float("inf"))).is_true()
+        assert_that(match.close_to(decimal.Decimal("Infinity"), 0.5).matches(decimal.Decimal("Infinity"))).is_true()
+
+    def test_a_decimal_subclass_is_not_asked_whether_it_is_infinite(self):
+        """Its own `is_infinite` would decide this, and run before the arithmetic it is asked about."""
+
+        class Loud(decimal.Decimal):
+            def is_infinite(self):
+                raise RuntimeError("my own code ran")
+
+        assert_that(tolerance_window(Loud("1.5"), decimal.Decimal("0.5"))).is_equal_to(
+            (decimal.Decimal("1.0"), decimal.Decimal("2.0"))
+        )
+
+
+class TestTheProbeCallsWhatTheOperatorCalls:
+    """A class may hold its `__eq__` as anything the descriptor protocol binds, and `==` binds it."""
+
+    def test_a_staticmethod_eq_is_bound_the_way_it_is_written(self):
+        class Static:
+            @staticmethod
+            def __eq__(other):
+                return NotImplemented
+
+            __hash__ = None
+
+        assert_that(_both_decline(Static(), Static())).is_true()
+
+    def test_an_eq_that_binds_to_nothing_is_called_the_way_the_operator_calls_it(self):
+        """Read off the class and bound to nothing, it is called with the other side alone, as `==` does."""
+        calls = []
+
+        class Recording:
+            def __call__(self, *args):
+                calls.append(args)
+                return NotImplemented
+
+        class Odd:
+            __eq__ = Recording()
+            __hash__ = None
+
+        one, other = Odd(), Odd()
+        one == other  # noqa: B015  # asked for what the operator passes, not for the answer
+        by_the_operator = calls[0]  # the first of the two directions the operator tries
+        calls.clear()
+        assert_that(_declines(one, other)).described_as("declined").is_true()
+        assert_that(calls).described_as("calls the probe made").is_length(1)
+        assert_that(calls[0]).described_as("what the probe passed").is_equal_to(by_the_operator)
+
+    def test_a_plain_eq_still_answers(self):
+        assert_that(_both_decline(1, "text")).described_as("an int against a string").is_true()
+        assert_that(_both_decline(1, 2)).described_as("two ints").is_false()
+
+
+class TestAToleranceIsAnOrderedDistance:
+    """A window needs a real tolerance: a complex one has no order, and an infinity matched everything."""
+
+    @pytest.mark.parametrize("tolerance", [1j, complex(1, 0)], ids=["imaginary", "complex-with-no-imaginary-part"])
+    def test_a_complex_tolerance_has_no_window(self, tolerance):
+        assert_that(match.close_to(float("inf"), tolerance).matches(float("inf"))).is_false()
+
+    def test_a_decimal_tolerance_is_a_real_one(self):
+        assert_that(tolerance_window(decimal.Decimal(1), decimal.Decimal("0.5"))).is_equal_to(
+            (decimal.Decimal("0.5"), decimal.Decimal("1.5"))
+        )
+        assert_that(
+            match.close_to(decimal.Decimal("Infinity"), decimal.Decimal("0.5")).matches(decimal.Decimal("Infinity"))
+        ).is_true()

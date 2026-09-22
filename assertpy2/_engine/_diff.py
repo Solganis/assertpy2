@@ -27,6 +27,7 @@ or answered for the wrong one.  Ask the walker and read its answer instead: ``No
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import difflib
 from typing import TYPE_CHECKING, TypeVar
@@ -48,7 +49,7 @@ def _field_dict(obj, is_model):
     """Field mapping of a pydantic-style model (``model_dump()``) or an attrs instance (shallow)."""
     if is_model:
         return obj.model_dump()
-    return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__}
+    return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__ if field.eq is not False}
 
 
 def _child_entries(actual, expected, path: _Path, *, descended_for, _seen=None, config=None) -> list[DiffEntry]:
@@ -329,8 +330,9 @@ def _dataclass_diff_entries(actual, expected, prefix: _Path, seen, config=None) 
     so both report dataclass fields identically.
     """
     entries: list[DiffEntry] = []
-    actual_names = [field.name for field in dataclasses.fields(actual)]
-    expected_names = [field.name for field in dataclasses.fields(expected)]
+    # a field declared `compare=False` is outside the dataclass's own `==`, so it stays outside here
+    actual_names = [field.name for field in dataclasses.fields(actual) if field.compare]
+    expected_names = [field.name for field in dataclasses.fields(expected) if field.compare]
     in_actual, in_expected = set(actual_names), set(expected_names)
     for field in _ordered_keys(actual_names, expected_names):
         if field not in in_expected:
@@ -492,6 +494,7 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
     entries: list[DiffEntry] = []
     actual_keys = set(kept)
     expected_keys = set(kept_expected)
+    entries.extend(_order_entries(actual, expected, kept, kept_expected, prefix))
     if config is not None and config.strict_types:
         # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
         stored = {key: key for key in kept_expected}
@@ -520,6 +523,15 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
                     )
                 )
     return entries
+
+
+def _order_entries(actual, expected, kept, kept_expected, prefix: _Path) -> list[DiffEntry]:
+    """The key order of two `OrderedDict` values holding the same keys in different places, which their `==` reads."""
+    if not (isinstance(actual, collections.OrderedDict) and isinstance(expected, collections.OrderedDict)):
+        return []
+    if set(kept) != set(kept_expected) or list(kept) == list(kept_expected):
+        return []
+    return [prefix.leaf_entry(actual=list(kept), expected=list(kept_expected))]
 
 
 def _sub_diff_entries(

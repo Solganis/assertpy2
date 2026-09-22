@@ -14,13 +14,27 @@ calling `self._dict_not_equal(...)` still works, and the matcher calls the same 
 
 from __future__ import annotations
 
+import collections
 import collections.abc
+import dataclasses
+import datetime
+import enum
+import numbers
+import pathlib
 import re
 import types
-from typing import TYPE_CHECKING, cast
+import uuid
+from typing import TYPE_CHECKING, Any, cast
 
-from ._compare import _guarded_not_equal, _keyed_types_differ, _node_decision, _spec_matches
+from ._compare import (
+    _guarded_not_equal,
+    _keyed_types_differ,
+    _kinds_never_equal,
+    _node_decision,
+    _spec_matches,
+)
 from ._diff import _sub_diff_entries
+from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
 from ._path import _ROOT
 from ._require import refuse
 
@@ -44,6 +58,80 @@ def normalize_key_specs(specs: object, param: str) -> list:
     if isinstance(specs, (str, bytes, tuple)) or not isinstance(specs, collections.abc.Iterable):
         return [specs]
     refuse(specs, "a key, a nested-path tuple, or a list/set/frozenset of them", subject=param)
+
+
+def key_specs_given(specs: object) -> bool:
+    """Whether an ``ignore``/``include`` argument asks for anything, a falsy key such as ``0`` or ``""`` included.
+
+    Truthiness answered this and dropped a single falsy key in silence.  An empty collection still asks
+    for nothing, as it always did.
+    """
+    return specs is not None and not (isinstance(specs, (list, set, frozenset)) and not specs)
+
+
+def comparable_fields(obj: object) -> dict | None:
+    """An object with introspectable fields as a dict of them, or ``None`` when it has no fields to compare.
+
+    Dataclasses are converted by reference rather than through `dataclasses.asdict`, which deep-copies and
+    crashes on a field that cannot be copied, and a field declared ``compare=False`` is left out, as the
+    dataclass's own ``==`` leaves it out.  An attrs field declared ``eq=False`` is left out the same way.
+
+    A value of a builtin kind is not a bag of fields even when it carries a ``__dict__``: a subclass of
+    `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.
+    """
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return cast("dict", _shallow_fields(obj))
+    if is_namedtuple(obj):
+        return dict(obj._asdict())
+    if is_model_dump_object(obj):
+        return obj.model_dump()
+    if is_attrs_instance(obj):
+        # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import wherever attrs is installed
+        import attrs
+
+        return attrs.asdict(obj, filter=lambda attribute, _value: attribute.eq is not False)
+    builtin_kinds = (
+        type,
+        numbers.Number,
+        str,
+        bytes,
+        bytearray,
+        datetime.date,
+        datetime.time,
+        datetime.timedelta,
+        enum.Enum,
+        uuid.UUID,
+        pathlib.PurePath,
+    )
+    if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds):
+        return dict(vars(obj))
+    return None
+
+
+def _shallow_fields(node: Any) -> Any:
+    """`dataclasses.asdict` by reference, without the copy, and without the fields ``==`` leaves out."""
+    if dataclasses.is_dataclass(node) and not isinstance(node, type):
+        return {
+            field.name: _shallow_fields(getattr(node, field.name))
+            for field in dataclasses.fields(node)
+            if field.compare
+        }
+    if isinstance(node, tuple) and hasattr(node, "_fields"):
+        return type(node)(*[_shallow_fields(item) for item in node])
+    if isinstance(node, (list, tuple)):
+        return type(node)(_shallow_fields(item) for item in node)
+    if isinstance(node, dict):
+        return {_shallow_fields(key): _shallow_fields(value) for key, value in node.items()}
+    return node
+
+
+def _as_fields(value: object) -> dict | None:
+    """A plain dict as itself, anything else through `comparable_fields`."""
+    return value if isinstance(value, dict) else comparable_fields(value)
+
+
+def _plain_sequence(value: object) -> bool:
+    return isinstance(value, (list, tuple)) and not is_namedtuple(value)
 
 
 def ignore_specs(ignore: object) -> list:
@@ -193,6 +281,8 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         return False
     if config is None:
         return _guarded_not_equal(value, other)
+    if _kinds_never_equal(value, other) and _guarded_not_equal(value, other):
+        return True
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
         # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal
@@ -246,36 +336,29 @@ def mapping_differs(
         return False
     seen = seen | {pair}
 
-    if not (ignore or include or config is not None):
+    ignoring, including = key_specs_given(ignore), key_specs_given(include)
+    if not (ignoring or including or config is not None):
         return _guarded_not_equal(actual, expected)
 
-    ignores = ignore_specs(ignore) if ignore else []
-    if ignore or include:
-        includes = include_specs(include) if include else []
-        if include:
-            missing = missing_include_keys(left, includes)
-            if missing:
-                raise IncludeKeysMissingError(left, includes, missing)
-        keys_in_actual = {
-            key
-            for key in left
-            if (not ignore or not _spec_matches(key, left[key], ignores))
-            and (not include or _spec_matches(key, left[key], includes))
-        }
-        keys_in_expected = {
-            key
-            for key in right
-            if (not ignore or not _spec_matches(key, right[key], ignores))
-            and (not include or _spec_matches(key, right[key], includes))
-        }
-    else:
-        keys_in_actual = set(left)
-        keys_in_expected = set(right)
-
-    if keys_in_actual != keys_in_expected:
+    ignores = ignore_specs(ignore) if ignoring else []
+    includes = include_specs(include) if including else []
+    if includes:
+        missing = missing_include_keys(left, includes)
+        if missing:
+            raise IncludeKeysMissingError(left, includes, missing)
+    keys_in_actual = _kept_keys(left, ignores, includes)
+    keys_in_expected = _kept_keys(right, ignores, includes)
+    if keys_in_actual != keys_in_expected or _order_differs(actual, expected, keys_in_actual):
         return True
-    if config is not None and config.strict_types and _keyed_types_differ(actual, expected):
-        # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; the walk below sees only values
+    if (
+        config is not None
+        and config.strict_types
+        and _keyed_types_differ(
+            dict.fromkeys(key for key in left if key in keys_in_actual),
+            dict.fromkeys(key for key in right if key in keys_in_expected),
+        )
+    ):
+        # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; only the keys still compared
         return True
     for key in keys_in_actual:
         nested_left, nested_right = left[key], right[key]
@@ -285,18 +368,80 @@ def mapping_differs(
                 continue
             if decision == "leaf":
                 return True
-        nested_ignore = [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignore else None
+        nested_ignore = (
+            [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignoring else None
+        )
         # the nested half of an include keeps whole paths, and the level above already consumed the first segment
         nested_include = (
             [entry[1:] for entry in ignore_specs(include) if type(entry) is tuple and entry[0] == key]
-            if include
+            if including
             else None
         )
-        if mapping_shaped(nested_left, check_values=False) and mapping_shaped(nested_right, check_values=False):
-            if mapping_differs(
-                nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, seen=seen
-            ):
-                return True
-        elif values_differ(nested_left, nested_right, config):
+        if _nested_differs(
+            nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, seen=seen
+        ):
             return True
     return False
+
+
+def _kept_keys(mapping: MappingLike, ignores: list, includes: list) -> set:
+    """The keys a comparison looks at: those no ignore-spec names, and an include-spec does when there are any."""
+    return {
+        key
+        for key in mapping
+        if not (ignores and _spec_matches(key, mapping[key], ignores))
+        and (not includes or _spec_matches(key, mapping[key], includes))
+    }
+
+
+def _order_differs(actual: object, expected: object, kept: set) -> bool:
+    """Whether two `OrderedDict` values hold the compared keys in different orders, which their `==` reads."""
+    if not (isinstance(actual, collections.OrderedDict) and isinstance(expected, collections.OrderedDict)):
+        return False
+    return [key for key in actual if key in kept] != [key for key in expected if key in kept]
+
+
+def _nested_differs(
+    left: object, right: object, *, ignore: object, include: object, config: _CompareConfig | None, seen: frozenset
+) -> bool:
+    """One value under a key, compared with the rest of the key path that reaches into it."""
+    if mapping_shaped(left, check_values=False) and mapping_shaped(right, check_values=False):
+        return mapping_differs(left, right, ignore=ignore, include=include, config=config, seen=seen)
+    if key_specs_given(ignore) or key_specs_given(include):
+        # a path that goes on into a dataclass, a model or an object is followed through its fields
+        left_fields, right_fields = comparable_fields(left), comparable_fields(right)
+        if left_fields is not None and right_fields is not None:
+            return mapping_differs(left_fields, right_fields, ignore=ignore, include=include, config=config, seen=seen)
+    return values_differ(left, right, config)
+
+
+def filtered_differs(
+    actual: object, expected: object, *, ignore: object, include: object, config: _CompareConfig | None
+) -> bool:
+    """`is_equal_to`'s verdict under ``ignore``/``include`` for a pair that is not two mappings.
+
+    The builder takes a sequence pair element by element and anything else through its fields.  A matcher
+    answering the same question takes the same route, or `match.equal_to(user, ignore="updated_at")`
+    compared ``updated_at`` anyway.  An element with no fields is compared whole, as the builder compares
+    it.  At the top a value with no fields is one the builder refuses with a `TypeError`, and a matcher,
+    which must not raise, answers that it differs.
+    """
+    if _plain_sequence(actual) and _plain_sequence(expected):
+        sequence_actual = cast("list | tuple", actual)
+        sequence_expected = cast("list | tuple", expected)
+        if len(sequence_actual) != len(sequence_expected):
+            return True
+        return any(
+            _filtered_pair_differs(item, counterpart, ignore=ignore, include=include, config=config, at_root=False)
+            for item, counterpart in zip(sequence_actual, sequence_expected, strict=True)
+        )
+    return _filtered_pair_differs(actual, expected, ignore=ignore, include=include, config=config, at_root=True)
+
+
+def _filtered_pair_differs(
+    actual: object, expected: object, *, ignore: object, include: object, config: _CompareConfig | None, at_root: bool
+) -> bool:
+    left, right = _as_fields(actual), _as_fields(expected)
+    if left is None or right is None:
+        return at_root or values_differ(actual, expected, config)
+    return mapping_differs(left, right, ignore=ignore, include=include, config=config)

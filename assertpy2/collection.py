@@ -4,11 +4,12 @@ import collections.abc
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._introspection import is_mapping_like, materialized
-from ._engine._membership import not_contained_in
+from ._engine._membership import flattened_supersets, subset_faults
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, first_out_of_order
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
+from .errors import _safe_str
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -106,39 +107,30 @@ class CollectionMixin(_MixinBase):
         if is_mapping_like(self.val):
             # read whole first: a superset sharing this iterator leaves nothing, and a subset of nothing is anything
             entries = [(key, self.val[key]) for key in self.val]
-            superdict = {}
+            # each read once and kept apart: merging printed a value under a key no superset held it under
+            subject = dict(entries)
+            read = []
             for superset_index, superset in enumerate(supersets):
                 self._require_dict_like(superset, check_values=False, name=f"arg #{superset_index + 1}")
                 mapping = cast("MappingLike", superset)
-                for key in mapping:
-                    superdict.update({key: mapping[key]})
-
-            walked = 0
-            for key, value in entries:
-                walked += 1
-                if key not in superdict:
-                    missing.append({key: value})  # bad key
-                elif value != superdict[key]:
-                    missing.append({key: value})  # bad val
+                # a one-shot subject given as its own superset has nothing left to read, and is its own subset
+                read.append(subject if superset is self.val else {key: mapping[key] for key in mapping})
+            missing.extend(subset_faults(subject, read))
+            searched_in = read[0] if len(read) == 1 else read
             if missing:
                 return self.error(
-                    f"Expected <{self.val}> to be subset of <{superdict}>, "
+                    f"Expected <{_safe_str(self.val)}> to be subset of <{searched_in}>, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
-                    expected=superdict,
+                    expected=searched_in,
                 )
-            if not walked:
+            if not entries:
                 _warn_vacuous("is_subset_of", allow_empty)
         else:
             walked = list(materialized(self.val))
-            collected = []
-            for superset in supersets:
-                try:
-                    # the `except` is what decides this, so the cast asserts nothing the code does not already handle
-                    collected.extend(cast("Iterable[object]", superset))
-                except TypeError:  # noqa: PERF203  # a non-iterable superset is treated as a single value
-                    collected.append(superset)
+            # flattened once: a one-shot superset is drained by the first pass and reads empty to a second
+            collected = flattened_supersets(supersets)
             # the same core the matcher uses: a bare `set()` called a value whose hash disagrees with `==` missing
-            missing.extend(not_contained_in(walked, collected))
+            missing.extend(subset_faults(walked, (collected,)))
             try:
                 # for the message only: the failure has always shown the superset as a set where that was possible
                 superset_values: object = set(collected)
@@ -146,7 +138,7 @@ class CollectionMixin(_MixinBase):
                 superset_values = collected
             if missing:
                 return self.error(
-                    f"Expected <{self.val}> to be subset of {self._fmt_items(superset_values)}, "
+                    f"Expected <{_safe_str(self.val)}> to be subset of {self._fmt_items(superset_values)}, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
                     expected=superset_values,
                 )
@@ -217,7 +209,7 @@ class CollectionMixin(_MixinBase):
             index, earlier, later = broken
             direction = " reverse" if reverse else ""
             return self.error(
-                f"Expected <{self.val}> to be sorted{direction}, "
+                f"Expected <{_safe_str(self.val)}> to be sorted{direction}, "
                 f"but subset {self._fmt_items([earlier, later])} at index {index} is not."
             )
         if not walked:
@@ -249,7 +241,7 @@ class CollectionMixin(_MixinBase):
         other_len = sized_len(other, subject=argument("other"))
         if actual_len != other_len:
             return self.error(
-                f"Expected <{self.val}> to have same size as <{other}> of length <{other_len}>,"
+                f"Expected <{_safe_str(self.val)}> to have same size as <{other}> of length <{other_len}>,"
                 f" but was length <{actual_len}>.",
                 expected=other_len,
             )
@@ -283,7 +275,8 @@ class CollectionMixin(_MixinBase):
         actual = sized_len(self.val)
         if actual <= size:
             return self.error(
-                f"Expected <{self.val}> to have size greater than <{size}>, but was <{actual}>.", expected=size
+                f"Expected <{_safe_str(self.val)}> to have size greater than <{size}>, but was <{actual}>.",
+                expected=size,
             )
         return self
 
@@ -315,7 +308,7 @@ class CollectionMixin(_MixinBase):
         actual = sized_len(self.val)
         if actual >= size:
             return self.error(
-                f"Expected <{self.val}> to have size less than <{size}>, but was <{actual}>.", expected=size
+                f"Expected <{_safe_str(self.val)}> to have size less than <{size}>, but was <{actual}>.", expected=size
             )
         return self
 
@@ -351,7 +344,8 @@ class CollectionMixin(_MixinBase):
             raise ValueError("given low arg must be less than given high arg")
         if not low <= sized_len(self.val) <= high:
             return self.error(
-                f"Expected <{self.val}> to have size between <{low}> and <{high}>, but was <{sized_len(self.val)}>.",
+                f"Expected <{_safe_str(self.val)}> to have size between <{low}> "
+                f"and <{high}>, but was <{sized_len(self.val)}>.",
                 expected=(low, high),
             )
         return self

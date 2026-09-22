@@ -41,10 +41,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_poll_typing.py", "reportInvalidTypeVarUse"): 1,
     # both refused: `_N` is read back through `value`, and `_E` sits in a contravariant `Matcher` where flips cancel
     ("assertpy2/_engine/_typing.py", "reportInvalidTypeVarUse"): 1,
-    # the negated view hides three narrowing ladders on purpose; a sibling protocol avoids the violation
-    # and took pyright past its 4 GB heap, measured
-    ("assertpy2/assertpy.py", "reportIncompatibleMethodOverride"): 3,
-    ("assertpy2/helpers.py", "reportIncompatibleMethodOverride"): 2,
     ("assertpy2/assertpy.py", "reportAttributeAccessIssue"): 3,
     # what a dynamic hook hands back: two of a former four went when the implementation's return became `Any`
     ("assertpy2/assertpy.py", "reportReturnType"): 2,

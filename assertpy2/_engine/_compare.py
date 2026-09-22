@@ -293,6 +293,51 @@ def _keyed_types_differ(actual, expected) -> bool:
     return False
 
 
+def _kinds_never_equal(actual, expected) -> bool:
+    """Whether ``==`` rejects the pair by its kind alone, which a walk over the parts cannot see.
+
+    Under a compare config the walker decides by parts, so ``[1.0]`` against ``(1.0,)``, or two dataclasses
+    of different classes holding the same fields, had no differing part and passed, while ``==`` rejects
+    both outright.  Asked only once ``==`` has already said no, so it never fails a pair ``==`` accepts.
+
+    The kind alone is not the answer: a list subclass may define ``__eq__`` to accept a tuple.  So a pair
+    of different kinds counts only when both sides' own ``__eq__`` decline it, which leaves ``==`` at
+    identity whatever the parts hold.  A pydantic model answers ``False`` rather than declining, so which of
+    class or fields decided cannot be told apart, and models are left to the walk.
+    """
+    if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
+        kinds_differ = isinstance(actual, list) is not isinstance(expected, list)
+    else:
+        both_dataclasses = all(
+            dataclasses.is_dataclass(side) and not isinstance(side, type) for side in (actual, expected)
+        )
+        both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
+        kinds_differ = (both_dataclasses or both_attrs) and type(actual) is not type(expected)
+    return kinds_differ and _both_decline(actual, expected)
+
+
+def _declines(value: Any, other: Any) -> bool:
+    """Whether *value*'s own ``__eq__`` answers ``NotImplemented`` for *other*, asked as ``==`` asks it.
+
+    Read statically off the type, since `type(x).__eq__` is an ordinary read that a metaclass answers,
+    and bound through the descriptor protocol, since that is what turns a function, a `staticmethod` or
+    anything else on the class into the callable the operator uses.
+    """
+    held: Any = inspect.getattr_static(type(value), "__eq__", None)
+    bind: Any = getattr(type(held), "__get__", None)
+    # measured against `==` itself: a callable that binds to nothing is called with the other side alone
+    asking = held if bind is None else bind(held, value, type(value))
+    return asking(other) is NotImplemented
+
+
+def _both_decline(actual: Any, expected: Any) -> bool:
+    """Whether each side's own ``__eq__`` answers ``NotImplemented`` for the other."""
+    try:
+        return _declines(actual, expected) and _declines(expected, actual)
+    except Exception:  # an `__eq__` that raises decides nothing here, and the walk goes on as before
+        return False
+
+
 def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None, at_root: bool = False) -> str:
     """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"`` or ``"strict"``.
 
@@ -327,7 +372,18 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
                 return "strict"
         if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
             return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"
-    return "recurse" if _guarded_not_equal(actual, expected) else "equal"
+    return _plain_decision(actual, expected, config, at_root=at_root)
+
+
+def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root: bool = False) -> str:
+    """``==``'s answer as a decision, where under a config a pair ruled out by its kind alone is a leaf."""
+    if actual is expected and not at_root:
+        # the same rule a container's own `==` applies to its members, and the verdict came from that `==`:
+        # without it the diff listed a NaN both sides hold as differing, and the hint blamed it
+        return "equal"
+    if not _guarded_not_equal(actual, expected):
+        return "equal"
+    return "leaf" if config is not None and _kinds_never_equal(actual, expected) else "recurse"
 
 
 def _spec_matches(key, value, specs) -> bool:

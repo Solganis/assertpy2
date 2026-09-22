@@ -1,4 +1,6 @@
+import functools
 import numbers
+from unittest import mock
 
 import pytest
 
@@ -249,6 +251,164 @@ def test_a_function_rebuilt_by_a_fixture_is_not_a_clash():
         add_extension(second)
     finally:
         remove_extension(first)
+
+
+def _logged(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
+
+def test_one_decorator_over_two_functions_is_a_clash():
+    """Everything one decorator wraps shares the wrapper's code, so only what it wraps tells them apart."""
+
+    def decorated(self):
+        return self
+
+    def another(self):
+        return self.error("the other one")
+
+    another.__name__ = "decorated"
+    add_extension(_logged(decorated))
+    try:
+        with pytest.raises(ValueError, match="already been added"):
+            add_extension(_logged(another))
+    finally:
+        remove_extension(decorated)
+
+
+def _defaulted(func):
+    def wrapper(self, _impl=func):
+        return _impl(self)
+
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
+def _keyword_defaulted(func):
+    def wrapper(self, *, _impl=func):
+        return _impl(self)
+
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
+def _via_wrapped(func):
+    def wrapper(self):
+        return wrapper.__wrapped__(self)
+
+    wrapper.__wrapped__ = func
+    wrapper.__name__ = func.__name__
+    return wrapper
+
+
+@pytest.mark.parametrize("decorate", [_defaulted, _keyword_defaulted, _via_wrapped])
+def test_a_decorator_keeping_what_it_wraps_elsewhere_still_tells_two_apart(decorate):
+    """A wrapper may hold the wrapped function in a default or in `__wrapped__` rather than its closure."""
+
+    def kept(self):
+        return self
+
+    def other(self):
+        return self.error("the other one")
+
+    other.__name__ = "kept"
+    add_extension(decorate(kept))
+    try:
+        add_extension(decorate(kept))
+        with pytest.raises(ValueError, match="already been added"):
+            add_extension(decorate(other))
+    finally:
+        remove_extension(kept)
+
+
+def test_one_decorator_over_one_function_rebuilt_is_not_a_clash():
+    def decorated_again(self):
+        return self
+
+    add_extension(_logged(decorated_again))
+    try:
+        add_extension(_logged(decorated_again))
+    finally:
+        remove_extension(decorated_again)
+
+
+def test_a_function_rebuilt_with_fresh_data_is_not_a_clash():
+    """A fixture's closure holds new objects on every run, and the latest registration is meant to win."""
+
+    def build(limit):
+        def is_within(self):
+            return self if self.val in limit else self.error(f"{self.val} is outside {limit}")
+
+        return is_within
+
+    add_extension(build([1]))
+    try:
+        add_extension(build([2]))
+        assert_that(2).is_within()
+    finally:
+        remove_extension(build([]))
+
+
+class _NoCode:
+    __code__ = None
+
+    def __call__(self):
+        return None
+
+
+@pytest.mark.parametrize("fresh", [mock.Mock, _NoCode], ids=["mock", "no-code"])
+def test_a_function_rebuilt_around_a_fresh_callable_is_not_a_clash(fresh):
+    """A callable that is not a function is data: a fresh mock, or an object whose `__code__` is not a code object."""
+
+    def build():
+        spy = fresh()
+
+        def is_spied(self):
+            spy()
+            return self
+
+        return is_spied
+
+    add_extension(build())
+    try:
+        add_extension(build())
+    finally:
+        remove_extension(build())
+
+
+def test_a_rebuilt_function_that_holds_itself_is_not_a_clash():
+    def build():
+        def recursive(self):
+            return recursive
+
+        return recursive
+
+    add_extension(build())
+    try:
+        add_extension(build())
+    finally:
+        remove_extension(build())
+
+
+def test_a_rebuilt_function_with_an_unfilled_closure_is_not_a_clash():
+    """A name the function closes over but its builder never assigned leaves an empty cell behind."""
+
+    def build(ready=False):
+        def pending(self):
+            return later(self)
+
+        if ready:
+            later = _logged
+        return pending
+
+    add_extension(build())
+    try:
+        add_extension(build())
+    finally:
+        remove_extension(build())
 
 
 def test_a_callable_object_falls_back_to_identity():

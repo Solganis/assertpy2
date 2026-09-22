@@ -17,10 +17,10 @@ import datetime
 import decimal
 from collections import Counter
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 
-from ._introspection import definition_of, materialized
-from ._require import verdict
+from ._introspection import definition_of, is_mapping_like, materialized
+from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -158,6 +158,33 @@ def _hash_safe(items: Any) -> bool:
     return _safe(_kinds(items))
 
 
+class MembershipRefusedError(TypeError):
+    """The operands refuse the question: this item cannot be searched for in this value at all.
+
+    Its own type so a matcher can answer "no match" to it, while a `TypeError` raised inside the value's
+    own `__contains__` or `__eq__` still reaches the reader as the bug in that value it is.
+    """
+
+
+def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError) -> NoReturn:
+    """Ask again one expression at a time, so an operand refusal can be told from a bug in their code.
+
+    Reached only where a walk has already raised, so the second ask costs a passing run nothing.  Asked
+    whole, the walk is several frames deep and `raised_inside` cannot see which frame tried the operator;
+    asked one `in` at a time, it reads exactly that.
+    """
+    for items, container in pairs:
+        for item in items:
+            try:
+                if item in container:
+                    continue
+            except TypeError as refusal:
+                if raised_inside(refusal):
+                    raise
+                raise MembershipRefusedError(str(refusal)) from refusal
+    raise original
+
+
 def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
     """Which of *items* are not in *value*, in the order they were asked for.
 
@@ -171,7 +198,11 @@ def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object
     walked = materialized(value)
     wanted = materialized(items)
     present = _index(walked, wanted) if isinstance(walked, (list, tuple)) else None
-    return _absent_from(walked if present is None else present, wanted, is_matcher, walked)
+    searched = walked if present is None else present
+    try:
+        return _absent_from(searched, wanted, is_matcher, walked)
+    except TypeError as refusal:
+        _told_apart(((wanted, searched),), refusal)
 
 
 def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool], walked: Any) -> list[Any]:
@@ -195,15 +226,21 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
     # walked three times below, and idempotent for the callers that already did it
     walked, wanted_items = materialized(value), materialized(items)
     # each side is searched for the other, and building both together is what makes either refusal fall back
-    both = _index_both(wanted_items, walked)
-    if both is None:
-        return (
-            [item for item in walked if item not in wanted_items],
-            [item for item in wanted_items if item not in walked],
-        )
-    wanted, present = both
-    extra = [item for item in walked if item not in wanted]
-    missing = [item for item in wanted_items if item not in present]
+    # only over sequences, as the other two searches are: a set of a string's characters answers by character
+    # where the walk answers by substring, and the verdict then moved with the length of the string
+    indexable = isinstance(walked, (list, tuple)) and isinstance(wanted_items, (list, tuple))
+    both = _index_both(wanted_items, walked) if indexable else None
+    try:
+        if both is None:
+            return (
+                [item for item in walked if item not in wanted_items],
+                [item for item in wanted_items if item not in walked],
+            )
+        wanted, present = both
+        extra = [item for item in walked if item not in wanted]
+        missing = [item for item in wanted_items if item not in present]
+    except TypeError as refusal:
+        _told_apart(((walked, wanted_items), (wanted_items, walked)), refusal)
     return extra, missing
 
 
@@ -241,7 +278,7 @@ def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
         named: list[tuple[Any, int]] = []
         for value in values:
             total = values.count(value)
-            if total > 1 and not any(value == earlier for earlier, _ in named):
+            if total > 1 and not any(earlier is value or earlier == value for earlier, _ in named):
                 named.append((value, total))
         return named
     seen: set[Any] = set()
@@ -256,6 +293,46 @@ def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
 def repeated_items(values: Sequence[Any]) -> list[Any]:
     """Which elements appear more than once, each named once, in order of first appearance."""
     return [value for value, _count in repeated_counts(values)]
+
+
+def flattened_supersets(supersets: Sequence[Any]) -> list[Any]:
+    """The supersets of `is_subset_of` as one collection of items, which is what the value is searched in.
+
+    A superset that cannot be iterated is a single item, and a string is its characters, which is what
+    ``in`` over a flattened list answers.  The matcher used to keep the superset whole, so a string
+    superset answered substring membership and a `set` superset hashed items that refuse to hash.
+    """
+    collected: list[Any] = []
+    for superset in supersets:
+        try:
+            collected.extend(materialized(superset))
+        except TypeError:  # noqa: PERF203  # a non-iterable superset is one item, as the assertion has always read it
+            collected.append(superset)
+    return collected
+
+
+def subset_faults(value: Any, supersets: Sequence[Any]) -> list[Any]:
+    """What no superset holds: the pairs of a mapping value, or the elements of anything else.
+
+    A pair holds when any one superset holds it, rather than when the mapping left after merging them
+    does: merging let a later superset overwrite an earlier one, so the verdict moved with the order the
+    supersets were written in.
+    """
+    if is_mapping_like(value):
+        pairs = [(key, value[key]) for key in value]
+        return [{key: item} for key, item in pairs if not _pair_held(key, item, supersets)]
+    return not_contained_in(list(materialized(value)), flattened_supersets(supersets))
+
+
+def _pair_held(key: Any, item: Any, supersets: Sequence[Any]) -> bool:
+    """Whether one key/value pair is in any of the supersets, by identity first, as a container asks."""
+    for superset in supersets:
+        if not is_mapping_like(superset) or key not in superset:
+            continue
+        held = superset[key]
+        if held is item or held == item:
+            return True
+    return False
 
 
 def not_contained_in(value: Any, container: Any) -> list[Any]:
@@ -296,8 +373,9 @@ def _index(container: Any, probes: Any) -> set[Any] | None:
         return None
     try:
         indexed = set(container)
-        if probe_kinds is not None and probe_kinds & _HASH_MAY_REFUSE:
-            # only the classified types that may still refuse, collected once above
+        if probe_kinds is not None and (probe_kinds & _HASH_MAY_REFUSE or not probe_kinds <= _HASH_SAFE):
+            # anything but an exact builtin may still refuse: a `Decimal("snan")`, or a class of one's own
+            # that inherits identity equality and writes a `__hash__` that raises
             for probe in probes:
                 hash(probe)
     except Exception:  # any Exception raised while hashing means the walk answers instead
