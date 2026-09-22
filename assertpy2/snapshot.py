@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import inspect
 import os
+import sys
 import time
 import warnings
 from dataclasses import replace
@@ -384,6 +385,11 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
         except FileExistsError:  # noqa: PERF203  # retry the O_EXCL acquire each poll until the lock frees
             if time.monotonic() >= deadline:
                 raise TimeoutError(f"could not acquire snapshot lock <{lockpath}> within {timeout}s") from None
+            time.sleep(poll)
+        except PermissionError:
+            # Windows refuses to create a lock file its last holder is still deleting, as access denied
+            if sys.platform != "win32" or time.monotonic() >= deadline:
+                raise
             time.sleep(poll)
     try:
         yield

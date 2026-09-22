@@ -1048,6 +1048,73 @@ def test_file_lock_times_out_when_held(tmp_path):
         pass
 
 
+class _Clock:
+    """Stands in for the lock's `time`: only its own sleeps move it, so a deadline falls on a known attempt."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+
+
+class TestALockFileBeingDeleted:
+    """Windows answers creating a lock file its last holder is still deleting with access denied.
+
+    Read as a failure, it took a snapshot write down under xdist whenever two workers met on one key:
+    three acquisitions in 1600 across four processes, measured on Windows.
+    """
+
+    @staticmethod
+    def _refusing(monkeypatch, times):
+        """`os.open` refusing the lock *times* times as access denied, then creating it."""
+        calls = []
+        real = os.open
+
+        def refusing(path, flags, *mode):
+            calls.append(path)
+            if len(calls) <= times:
+                raise PermissionError(13, "Permission denied", path)
+            return real(path, flags, *mode)
+
+        monkeypatch.setattr(os, "open", refusing)
+        return calls
+
+    @pytest.fixture
+    def clock(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(_snapshot, "time", clock)
+        return clock
+
+    def test_windows_waits_for_it(self, tmp_path, monkeypatch, clock):
+        monkeypatch.setattr(sys, "platform", "win32")
+        calls = self._refusing(monkeypatch, times=2)
+        with _file_lock(str(tmp_path / "data"), poll=0.25):
+            pass
+        assert_that(calls).is_length(3)
+        assert_that(clock.now).is_equal_to(0.5)
+
+    def test_windows_names_a_refusal_that_outlasts_the_wait(self, tmp_path, monkeypatch, clock):
+        """A directory it may not write to is not a lock being released, and says so rather than timing out."""
+        monkeypatch.setattr(sys, "platform", "win32")
+        calls = self._refusing(monkeypatch, times=10_000)
+        with pytest.raises(PermissionError), _file_lock(str(tmp_path / "data"), timeout=1.0, poll=0.25):
+            pass
+        assert_that(calls).is_length(5)
+        assert_that(clock.now).is_equal_to(1.0)
+
+    @pytest.mark.parametrize("platform", ["linux", "darwin"])
+    def test_elsewhere_access_denied_is_what_it_says(self, tmp_path, monkeypatch, platform):
+        monkeypatch.setattr(sys, "platform", platform)
+        calls = self._refusing(monkeypatch, times=1)
+        with pytest.raises(PermissionError), _file_lock(str(tmp_path / "data"), poll=0.001):
+            pass
+        assert_that(calls).is_length(1)
+
+
 def test_file_lock_serializes_concurrent_writes(tmp_path):
     target = str(tmp_path / "shared.json")
     with open(target, "w") as fp:
