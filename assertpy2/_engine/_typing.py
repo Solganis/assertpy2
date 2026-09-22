@@ -87,7 +87,7 @@ if TYPE_CHECKING:
     _U3 = TypeVar("_U3")  # the type a TypeIs predicate refines the tracked value to
     _Other = TypeVar("_Other")  # an element of the sequence a pairwise quantifier walks alongside
     _T_co = TypeVar("_T_co", covariant=True)  # the subject of a value no overload recognises
-    _P_co = TypeVar("_P_co", covariant=True)  # what a polled probe hands back, which is what its chain asserts on
+    _P_co = TypeVar("_P_co", covariant=True)  # what a polled probe hands back, covariant so a subclass reaches its rung
 
     # a capability, not a list: the list said `float | Decimal | Fraction` and refused `numpy.int64`
     _Number = SupportsFloat

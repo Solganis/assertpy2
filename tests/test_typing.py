@@ -12,8 +12,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import collections
     import datetime
     import decimal
+    import enum
     import fractions
     import logging
     import pathlib
@@ -228,6 +230,21 @@ if TYPE_CHECKING:
     assert_type(assert_that(len).eventually_sync().is_positive().val, int)
     assert_type(assert_that(len).eventually().is_positive(), _AsyncPoll[int])
     assert_that(len).eventually_sync(timeout=2, trace=False).not_.is_equal_to(2)
+
+    # a subclass value reaches the rung written for its base only through covariance: invariant, all three refused
+    class _Shade(str, enum.Enum):
+        DARK = "dark"
+
+    def _shade() -> _Shade: ...
+    def _ordered() -> collections.OrderedDict[str, int]: ...
+    def _defaulted() -> collections.defaultdict[str, int]: ...
+
+    assert_type(assert_that(_shade).eventually_sync().is_equal_to_ignoring_case("DARK"), _SyncPoll[_Shade])
+    assert_type(assert_that(_shade).eventually().is_equal_to_ignoring_case("DARK"), _AsyncPoll[_Shade])
+    assert_type(assert_that(_ordered).eventually_sync().contains_key("a"), _SyncPoll[collections.OrderedDict[str, int]])
+    assert_type(
+        assert_that(_defaulted).eventually().contains_entry({"a": 0}), _AsyncPoll[collections.defaultdict[str, int]]
+    )
 
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)

@@ -38,7 +38,7 @@ _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_check_typing.py", "_CheckRepeatableAssertion", "_E", "contravariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckNumericAssertion", "_N", "covariant"),
     ("assertpy2/_engine/_check_typing.py", "_CheckDictAssertion", "_V", "contravariant"),
-    # awaiting a chain hands back the invariant builder, so pyright asks the same of the chain. Refused
+    # invariant, a subclass value misses the rung written for its base on all three checkers. Refused
     ("assertpy2/_engine/_poll_typing.py", "_AsyncPoll", "_P_co", "invariant"),
 )
 
@@ -122,13 +122,19 @@ def test_the_ladder_overlaps_are_the_ones_still_reported() -> None:
 
 
 def test_the_recorded_variance_refusals_are_the_ones_still_reported() -> None:
-    """Name the two variance suggestions the package refuses, rather than counting them.
+    """Name the variance suggestions the package refuses, rather than counting them.
 
     The counting gate above cannot tell one diagnostic of a rule from another in the same file, so a new
-    `reportInvalidTypeVarUse` could take the place of a resolved one and nothing would move.  These two
-    are refused for reasons written down beside them, and each reason is about a specific TypeVar: `_N`
+    `reportInvalidTypeVarUse` could take the place of a resolved one and nothing would move.  Each is
+    refused for a reason written down beside it, and each reason is about a specific TypeVar: `_N`
     would break its inputs if made covariant, and `_E` is used covariantly through `Matcher[_E]` despite
     appearing only in parameters, which `typing_cases.py` demonstrates on all three checkers.
+
+    `_P_co` stays covariant because a polling rung is chosen by a `self` type written for a base class,
+    and a subclass value (a string enum member, an `OrderedDict`) reaches it only through covariance.
+    Made invariant, ty, mypy and pyright all refused those calls, and `test_typing.py` pins them now.
+    The price is the one every covariant container pays: a chain widened on purpose to a base type
+    accepts an operand of that base type, as `Sequence[Base]` accepts one in `in`.
     """
     read = [
         (item, re.search(r'variable "(\w+)".*Protocol "(\w+)".*should be (\w+)', item["message"], re.DOTALL))
