@@ -31,11 +31,15 @@ assert_that(5).not_.is_none().is_positive()
 assert_that("hello").not_.is_empty().is_length(5).is_alpha()
 ```
 
-Static types survive the inversion too. A negated step hands back the same assertion type the
-un-negated one would, so the value type is kept:
+Static types survive the inversion too. A negated step hands back the type the chain had before
+`.not_`, so the value type is kept, and a negated narrowing narrows nothing:
 
 ```python
 value = assert_that(42).not_.is_equal_to(43).value  # int, not object
+
+
+def check(payload: object) -> None:
+    assert_that(payload).not_.is_instance_of(str)  # still the object view, not the str one
 ```
 
 And a wrong-domain assertion after it is still caught:

@@ -130,7 +130,7 @@ try:
     assert_that("line 1\nline 2\nline 3\nline 4").is_equal_to("line 1\nline 2\nline THREE\nline 4")
 except AssertionError as e:
     print(e)
-    # Expected <.., line 3: line 3> to be equal to <.., line 3: line THREE>, but was not.
+    # Expected <.., line 3: line 3, ..> to be equal to <.., line 3: line THREE, ..>, but was not.
 ```
 
 Short values are printed whole, since collapsing them would hide context to save a few characters.

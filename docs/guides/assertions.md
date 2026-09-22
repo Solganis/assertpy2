@@ -207,7 +207,7 @@ value was:
 async def is_positive(value: int) -> bool:
     return value > 0
 
-assert_that(-1).satisfies(is_positive)  # TypeError: handed back a coroutine instead of an answer
+assert_that(-1).satisfies(is_positive)  # TypeError: predicate handed back a coroutine instead of an answer; ...
 ```
 
 Await the call and assert on what it returned, `assert_that(await is_positive(-1)).is_true()`. Every
