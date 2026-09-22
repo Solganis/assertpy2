@@ -54,6 +54,11 @@ def _prepare(value, _seen: frozenset[int] = frozenset()):
     return value
 
 
+def _hashable(item):
+    """An element as it was written: JSON has no tuple, and a list cannot have been one, since it cannot hash."""
+    return tuple(_hashable(inner) for inner in item) if isinstance(item, list) else item
+
+
 def _rehash_key(key):
     """Restore a hashable dict key from its json form: a list can only be a re-encoded tuple (a list is
     not hashable and so could never have been a key), so convert it back to a tuple recursively."""
@@ -101,7 +106,8 @@ class _Encoder(json.JSONEncoder):
                 "__type__": "instance",
                 "__class__": o.__class__.__name__,
                 "__module__": o.__class__.__module__,
-                "__data__": o.__dict__,
+                # prepared like any other mapping: a non-string key inside an attribute came back a string
+                "__data__": _prepare(o.__dict__),
             }
         return json.JSONEncoder.default(self, o)
 
@@ -115,7 +121,7 @@ class _Decoder(json.JSONDecoder):
             if decoded["__type__"] == "dict":
                 return {_rehash_key(key): item for key, item in decoded["__data__"]}
             elif decoded["__type__"] == "set":
-                return set(decoded["__data__"])
+                return {_hashable(item) for item in decoded["__data__"]}
             elif decoded["__type__"] == "complex":
                 return complex(decoded["__data__"][0], decoded["__data__"][1])
             elif decoded["__type__"] == "datetime":
@@ -145,7 +151,15 @@ class _Decoder(json.JSONDecoder):
                 return decoded  # no serializer registered for this tag this run - leave the marker as-is
             elif decoded["__type__"] == "enum":
                 target_class = _resolve_class(decoded["__module__"], decoded["__class__"])
-                return target_class(decoded["__data__"]) if target_class is not None else decoded
+                if target_class is None:
+                    return decoded
+                raw = decoded["__data__"]
+                try:
+                    return target_class(raw)
+                except ValueError:
+                    if not isinstance(raw, list):
+                        raise
+                    return target_class(_hashable(raw))
             elif decoded["__type__"] == "instance":
                 target_class = _resolve_class(decoded["__module__"], decoded["__class__"])
                 if target_class is None:

@@ -400,7 +400,11 @@ def _file_lock(target: str, *, timeout: float = 10.0, poll: float = 0.05) -> Ite
 
 def _name(path, name):
     try:
-        return os.path.join(path, f"snap-{name.replace(' ', '_').lower()}.json")
+        cleaned = name.replace(" ", "_").lower()
+        if os.sep in cleaned or (os.altsep and os.altsep in cleaned):
+            # it reached the lock file first, and the reader met a FileNotFoundError naming a directory nobody chose
+            raise ValueError(f"snapshot id cannot contain a path separator, but was {name!r}")
+        return os.path.join(path, f"snap-{cleaned}.json")
     except (TypeError, AttributeError):
         raise ValueError("failed to create snapshot filename, either bad path or bad name") from None
 

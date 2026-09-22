@@ -18,6 +18,7 @@ from assertpy2 import (
     AssertionFailure,
     SnapshotCreatedWarning,
     SnapshotUpdatedWarning,
+    _snapshot_codec,
     assert_that,
     assert_warn,
     fail,
@@ -1685,3 +1686,63 @@ class TestSnapshotMessages:
             assert_that(drifted).matches_contract_snapshot(id="ct-actual", path=str(tmp_path))
         assert_that(failure.value.actual).is_equal_to(drifted)
         assert_that(failure.value._outcome.actual_provided).is_true()
+
+
+class _TupleColour(enum.Enum):
+    RED = (255, 0, 0)
+
+
+class _Holder:
+    def __init__(self, mapping):
+        self.mapping = mapping
+
+    def __eq__(self, other):
+        return isinstance(other, _Holder) and other.mapping == self.mapping
+
+    __hash__ = None
+
+
+class TestWhatWasWrittenCanBeReadBack:
+    """A value the codec writes and cannot read again fails every snapshot in that file, not only its own."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param({(1, 2), (3, 4)}, id="set-of-tuples"),
+            pytest.param({((1, 2), 3)}, id="set-of-nested-tuples"),
+            pytest.param({(1, 2), 3}, id="set-of-mixed"),
+            pytest.param(_TupleColour.RED, id="enum-with-a-tuple-value"),
+            pytest.param(_Holder({1: "a", "1": "b"}), id="instance-holding-a-non-string-keyed-dict"),
+            pytest.param([{(1, 2)}, {"k": _TupleColour.RED}], id="nested-in-a-container"),
+        ],
+    )
+    def test_a_value_round_trips_through_the_codec(self, value):
+        written = json.dumps(_snapshot_codec._prepare(value), cls=_snapshot_codec._Encoder)
+        assert_that(json.loads(written, cls=_snapshot_codec._Decoder)).is_equal_to(value)
+
+    def test_an_instance_without_odd_keys_is_written_as_it_always_was(self):
+        """Preparing the attributes must not change what an ordinary snapshot file holds."""
+        written = json.dumps(_snapshot_codec._prepare(_Holder({"a": 1})), cls=_snapshot_codec._Encoder)
+        assert_that(json.loads(written)["__data__"]).is_equal_to({"mapping": {"a": 1}})
+
+    def test_an_enum_whose_value_is_simply_wrong_still_says_so(self):
+        marker = {
+            "__type__": "enum",
+            "__class__": "_TupleColour",
+            "__module__": _TupleColour.__module__,
+            "__data__": "not a colour",
+        }
+        with pytest.raises(ValueError, match="not a valid"):
+            json.loads(json.dumps(marker), cls=_snapshot_codec._Decoder)
+
+
+class TestASnapshotIdNamesOneFile:
+    def test_a_separator_is_refused_by_name(self):
+        """It reached the lock file first, and the reader met a FileNotFoundError naming a directory."""
+        with pytest.raises(ValueError, match="cannot contain a path separator"):
+            assert_that("foo").snapshot(id="group/case")
+
+    def test_an_ordinary_id_still_works(self, tmp_path):
+        with pytest.warns(SnapshotCreatedWarning):
+            assert_that("foo").snapshot(id="Group Case", path=str(tmp_path))
+        assert_that(sorted(entry.name for entry in tmp_path.iterdir())).contains("snap-group_case.json")

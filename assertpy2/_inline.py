@@ -33,14 +33,18 @@ def _ensure_inline_tooling():
 
 
 def is_literalable(value: object) -> bool:
-    """Whether ``value`` round-trips as a source literal (dict/list/tuple/set of scalars)."""
+    """Whether ``value`` round-trips as a source literal (dict/list/tuple/set of scalars).
+
+    By exact type, since a subclass renders as its own repr: an `IntEnum` is an `int` and writes
+    ``<Status.ACTIVE: 1>``, which is not source at all.
+    """
     if isinstance(value, dict):
-        return all(is_literalable(key) and is_literalable(item) for key, item in value.items())
+        return type(value) is dict and all(is_literalable(key) and is_literalable(item) for key, item in value.items())
     if isinstance(value, (list, tuple, set, frozenset)):
-        return all(is_literalable(item) for item in value)
+        return type(value) in (list, tuple, set, frozenset) and all(is_literalable(item) for item in value)
     if isinstance(value, float):
-        return math.isfinite(value)  # nan/inf/-inf render as bare names, invalid as source literals
-    return isinstance(value, _LITERAL_TYPES)
+        return type(value) is float and math.isfinite(value)  # nan/inf/-inf render as bare names, not literals
+    return type(value) in _LITERAL_TYPES
 
 
 def _format_literal(value: object, column: int) -> str:

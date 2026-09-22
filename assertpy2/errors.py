@@ -125,12 +125,22 @@ def _json_native(value, depth: int, seen: set[int]) -> _JsonSafe:
     if isinstance(value, dict):
         inner = seen | {id(value)}
         items = list(value.items())
-        out = {}
-        for key, val in items[:100]:
-            out[str.__str__(key) if isinstance(key, str) else _safe_repr(key)] = _json_safe(val, depth + 1, inner)
-        if len(items) > 100:
-            out["__truncated__"] = f"... and {len(items) - 100} more keys"
-        return out
+        shown, dropped = items[:100], max(0, len(items) - 100)
+        if any(not isinstance(key, str) for key in value):
+            # the codec's own envelope: rendered as text, `1` and `"1"` were the same key and one was lost
+            envelope: dict[str, _JsonSafe] = {
+                "__type__": "dict",
+                "__data__": [
+                    [_json_safe(key, depth + 1, inner), _json_safe(val, depth + 1, inner)] for key, val in shown
+                ],
+            }
+            if dropped:
+                envelope["__truncated__"] = f"... and {dropped} more keys"
+            return envelope
+        rendered: dict[str, _JsonSafe] = {str.__str__(key): _json_safe(val, depth + 1, inner) for key, val in shown}
+        if dropped:
+            rendered["__truncated__"] = f"... and {dropped} more keys"
+        return rendered
     if isinstance(value, (list, tuple)):
         inner = seen | {id(value)}
         out = [_json_safe(item, depth + 1, inner) for item in value[:100]]

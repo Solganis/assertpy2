@@ -243,3 +243,30 @@ class TestASnapshotMismatchCarriesTheRecordTheComparisonComposed:
         # as with a directly raised failure: `__str__` appends the diff, the record holds the composed message
         assert_that(failure.value._outcome.message).contains("Inline snapshot")
         assert_that(str(failure.value)).starts_with(failure.value._outcome.message)
+
+
+class TestOnlySourceGoesIntoSource:
+    """An inline snapshot rewrites the test file, so what it writes has to be a literal that parses."""
+
+    def test_a_subclass_of_a_literal_type_is_refused(self):
+        """An `IntEnum` is an `int` and wrote `<Status.ACTIVE: 1>`, which is not source at all."""
+        import enum
+
+        class Status(enum.IntEnum):
+            ACTIVE = 1
+
+        assert_that(is_literalable(Status.ACTIVE)).described_as("the member").is_false()
+        assert_that(is_literalable([Status.ACTIVE])).described_as("inside a list").is_false()
+        assert_that(is_literalable({"state": Status.ACTIVE})).described_as("under a key").is_false()
+        with pytest.raises(TypeError, match="must be a dict/list/tuple/set of scalars"):
+            _snap._inline_literal_or_raise(Status.ACTIVE)
+
+    def test_containers_of_their_own_kind_are_refused(self):
+        import collections
+
+        assert_that(is_literalable(collections.OrderedDict(a=1))).described_as("OrderedDict").is_false()
+        assert_that(is_literalable(collections.namedtuple("Point", "x")(1))).described_as("namedtuple").is_false()
+
+    def test_the_plain_literals_still_pass(self):
+        assert_that(is_literalable({"a": [1, (2, 3), {4}], "b": None})).is_true()
+        assert_that(is_literalable(True)).described_as("bool").is_true()
