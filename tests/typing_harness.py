@@ -54,6 +54,16 @@ def checker_env() -> dict[str, str]:
     return {**os.environ, "PYRIGHT_PYTHON_FORCE_VERSION": PYRIGHT_ENGINE}
 
 
+def assert_type(value: object, _type: object, /) -> object:
+    """`assert_type` at runtime, where it hands the value back and checks nothing.
+
+    For a module the checkers read and the suite also runs: the reduced 3.10 floor cell installs
+    `typing_extensions` 4.0, which has no `assert_type`, and no floor cell reaches 4.10, where `TypeIs`
+    arrived.  Kept here rather than in that module, whose public functions are its cases.
+    """
+    return value
+
+
 def run(*command: str, cwd: pathlib.Path | None = None, python: str | None = None) -> str:
     """Run a checker and hand back everything it said.
 

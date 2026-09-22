@@ -14,12 +14,14 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import TypeIs, assert_type
-
 from assertpy2 import assert_that
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from typing_extensions import TypeIs, assert_type
+else:
+    from tests.typing_harness import assert_type
 
 
 def _is_str(value: object) -> TypeIs[str]:
