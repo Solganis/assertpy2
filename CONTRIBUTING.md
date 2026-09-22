@@ -86,15 +86,16 @@ Run these after the main gate, not before. `uv run --group typecheck` adds the c
 
 ```bash
 uv run --group typecheck mypy --strict --follow-imports=silent tests/test_typing.py
-PYRIGHT_PYTHON_FORCE_VERSION=1.1.413 uv run --group typecheck pyright --pythonversion 3.14 tests/test_typing.py
+PYRIGHT_PYTHON_FORCE_VERSION=1.1.414 uv run --group typecheck pyright --pythonversion 3.14 tests/test_typing.py
 uv run --group typecheck pyrefly check tests/test_typing.py
 uv run --group typecheck pytest tests/test_pyright_baseline.py
 ```
 
 `PYRIGHT_PYTHON_FORCE_VERSION` picks the engine rather than the launcher. The `pyright` distribution on
-PyPI stopped at 1.1.411 on 25 June while npm has shipped 1.1.412 and 1.1.413 since, so the launcher and
-the engine move apart. The baseline is recorded against one engine, and `tests/typing_harness.py` pins
-the same build, so only this direct invocation needs the variable.
+PyPI is released separately from the npm engine it launches, and the two have drifted apart before: PyPI
+stayed at 1.1.411 from June to September while npm shipped two builds. The baseline is recorded against
+one engine, and `tests/typing_harness.py` pins the same build, so only this direct invocation needs the
+variable.
 
 `--pythonversion 3.14` is not decoration. Pyright reports against the interpreter it finds unless
 told otherwise, and the count moves with it: 174 diagnostics for this package on 3.10 against 169 on

@@ -89,8 +89,8 @@ dev = [
     # not for running the suite in parallel, but so the xdist controller sweep can be tested against
     # real worker processes instead of a fake node
     "pytest-xdist>=3.8.0",
-    "ruff>=0.16.6",
-    "ty>=0.0.78",
+    "ruff>=0.16.8",
+    "ty>=0.0.82",
     "typing_extensions>=4.0",
 ]
 docs = [
@@ -120,8 +120,8 @@ typecheck = [
     # pandas ships no `py.typed`, so its public typing contract lives here.  Without it a checker
     # either reads pandas' source or gives up, and the frame/array classification changes per checker
     "pandas-stubs>=2.2",
-    "pyrefly>=1.2",
-    "pyright>=1.1.411",
+    "pyrefly>=1.3.1",
+    "pyright>=1.1.414",
 ]
 # Mutation testing. Its own group because mutmut forks and calls os.wait: it does not run on
 # Windows at all, so it must not sit in the dev group every contributor installs.

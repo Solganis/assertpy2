@@ -78,8 +78,7 @@ _JsonSafe: TypeAlias = bool | int | float | str | list["_JsonSafe"] | dict[str, 
 call moved two unrelated diagnostics in another module.
 
 Only the recursive reference is quoted.  Written as one string, ty ignores the alias and reads the
-return as `Divergent`, and a misuse of the result went uncaught; written this way it resolves the outer
-level and pyright and mypy keep the whole depth.  The same reading applies to `ClassInfo`."""
+return as `Divergent`, and a misuse of the result went uncaught."""
 
 
 def _json_safe(value, _depth=0, _seen=None) -> _JsonSafe:

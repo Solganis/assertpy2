@@ -38,7 +38,7 @@ _ARGUMENT: dict[str, frozenset[str]] = {
 }
 
 _CLASS_INFO_MEMBER: dict[str, frozenset[str]] = {
-    "ty": frozenset(),
+    "ty": frozenset({"no-matching-overload"}),
     "mypy": frozenset({"arg-type"}),
     "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
 }
@@ -197,8 +197,7 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "predicate-reading-a-missing-numeric-method": _PREDICATE_OVER_THE_SUBJECT,
     "text-verdict-on-a-pivoted-number": _NOT_THE_VALUES_VIEW,
     "text-assertion-after-a-dynamic-one": _NOT_THE_CHAINS_VALUE,
-    # ty answers on the outermost level only. The alias is written out rather than recursive because a fully
-    # quoted one is ignored outright, and the two that read the recursion cover the depth it gives up
+    # ty was silent on both until 0.0.82, which reads a recursive alias to every depth
     "a-tuple-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     "a-nested-member-that-is-not-a-class": _CLASS_INFO_MEMBER,
     # narrowing `is_close_to` on `self` moved this from a bad argument to no rung matching: an `int` fits
@@ -243,21 +242,17 @@ SPLIT: frozenset[str] = frozenset(
         "predicate-reading-a-missing-string-method",
         "predicate-reading-a-missing-numeric-method",
         "text-verdict-on-a-pivoted-number",
-        "a-tuple-member-that-is-not-a-class",
-        "a-nested-member-that-is-not-a-class",
         "element-of-another-type-on-a-polled-string",
     }
 )
 """The cases where the three do not agree, named so a new one has to be decided about.
 
-Six relations, and ty is the silent one in all of them.  The first two are a lambda over the subject reading a
-name the value has not got, where ty resolves the parameter through the overload set less precisely.
-The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
-rung on its twin, which ty does not read either.  The last two are a member of a class-info tuple that
-is not a class: `ClassInfo` is written out one level with the recursion quoted, because ty ignores an
-alias whose whole right-hand side is a string, and it reads the outermost level only.  The sixth is an
-element of another type handed to a polled string, where the rung that matches carries `str` operands
-and the two that read it say so.
+Four relations, and ty is the silent one in all of them.  The first two are a lambda over the subject
+reading a name the value has not got, where ty resolves the parameter through the overload set less
+precisely.  The third is a verdict asked of a value the builder holds, refused through the ``self``
+annotation of a rung on its twin, which ty does not read either.  The fourth is an element of another
+type handed to a polled string, where the rung that matches carries `str` operands and the two that
+read it say so.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as three dialects agreeing.

@@ -35,18 +35,17 @@ def tagged_lines(path: pathlib.Path) -> dict[int, str]:
     return found
 
 
-PYRIGHT_ENGINE: Final = "1.1.413"
+PYRIGHT_ENGINE: Final = "1.1.414"
 """The pyright build every gate here asks for, rather than whichever one the wrapper defaults to.
 
-The `pyright` distribution on PyPI is a launcher for a node package, and the two move at different
-speeds: PyPI stopped at 1.1.411 on 25 June while npm has shipped 1.1.412 and 1.1.413 since. Pinning the
-version through the wrapper's own variable is what keeps a contributor, CI and this table looking at
-the same checker.
+The `pyright` distribution on PyPI is a launcher for a node package, and the two are released
+separately: PyPI stayed at 1.1.411 from June to September while npm shipped 1.1.412 and 1.1.413.
+Pinning the version through the wrapper's own variable is what keeps a contributor, CI and this table
+looking at the same checker, whichever launcher is installed.
 
 One build rather than whichever the launcher resolves, because every recorded number here was recorded
-against one. Measured today on both: 169 diagnostics for the package under each, so the pin buys
-reproducibility rather than a behaviour difference. It was originally taken for `TypeForm`, which 1.1.411
-refuses a union against, and that construct is no longer in the package.
+against one. Moving from 1.1.413 to 1.1.414 left the record unchanged. The pin was originally taken for
+`TypeForm`, which 1.1.411 refuses a union against, and that construct is no longer in the package.
 """
 
 

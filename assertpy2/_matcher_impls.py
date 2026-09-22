@@ -51,8 +51,7 @@ if TYPE_CHECKING:
 
     # nested because `isinstance()` accepts tuples nested to any depth.  Only the recursive reference is
     # quoted: ty ignores an alias whose whole right-hand side is a string, and `is_instance_of("int")`
-    # stopped being a type error.  This way pyright and mypy check a member at any depth and ty the outermost.
-    # A PEP 695 `type` statement is read by all of them and is a SyntaxError on 3.10
+    # stopped being a type error.  A PEP 695 `type` statement is read by all three and is a SyntaxError on 3.10
     ClassInfo: TypeAlias = type | UnionType | tuple[type | UnionType | tuple["ClassInfo", ...], ...]
 
 
