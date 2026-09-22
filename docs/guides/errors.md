@@ -875,10 +875,14 @@ keyed by its own parameter names, so one left out appears with its default and `
 reads the same as `is_close_to(other=9, tolerance=0.1)`. And an assertion that delegates answers its
 own name: `is_positive()` asks `is_greater_than(0)` underneath, and reports `is_positive`.
 
-`requirement` is `None` where no operation was asked, and that is a limit rather than a gap. Three
-shapes have no operation to name: `fail()`, a bare `error()` carrying a message of your own, and a
-precondition of one of the few members that assert nothing on their own, where the failure is about
-the shape of the value rather than about a requirement you stated.
+`requirement` is `None` where the failure is not one assertion's, and that is a limit rather than a
+gap. `fail()`, `soft_fail()` and a bare `error()` carrying a message of your own name no operation. A
+precondition of one of the few members that assert nothing on their own is about the shape of the value
+rather than about a requirement you stated. The failure a soft block or `assert_all` raises for
+everything it collected leaves the answer to each entry in its `failures`. A polling timeout carries
+the requirement of whatever its last attempt raised: usually the assertion that kept failing, and
+`None` when the probe raised something that is not one of this library's failures, such as an
+exception it was told to ignore or a bare `AssertionError`.
 
 Reading it costs a built-in assertion nothing when it passes, since nothing runs until a failure is
 composed. A registered extension is the exception: it says what it is at the call, so it pays a

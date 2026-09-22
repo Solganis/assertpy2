@@ -303,11 +303,11 @@ class TestWhatAFailureLetsYouRead:
     """The failure itself, which the records above do not cover.
 
     `EXPECTED_FIELDS` pins dataclasses and named tuples, and an exception is neither, so nothing here
-    held the five attributes the errors guide teaches callers to read. The functional tests do exercise
+    held the attributes the errors guide teaches callers to read. The functional tests do exercise
     them, which is a different guarantee: they would notice a value going wrong, not a name going away.
     """
 
-    READABLE = ("actual", "expected", "has_expected", "diff", "trace", "failures")
+    READABLE = ("actual", "expected", "has_expected", "diff", "requirement", "trace", "failures")
 
     def test_it_stays_an_assertion_error(self):
         assert_that(issubclass(assertpy2.AssertionFailure, AssertionError)).is_true()
@@ -319,6 +319,9 @@ class TestWhatAFailureLetsYouRead:
         assert_that(missing).described_as("documented attributes missing from a failure").is_empty()
         assert_that(failure.value.actual).is_equal_to(1)
         assert_that(failure.value.expected).is_equal_to(2)
+        assert_that(failure.value.requirement).is_equal_to(
+            assertpy2.Requirement("is_equal_to", {"other": 2, "kwargs": {}})
+        )
 
     def test_a_soft_block_reports_what_it_collected(self):
         with pytest.raises(assertpy2.AssertionFailure) as failure, assertpy2.soft_assertions():

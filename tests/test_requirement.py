@@ -18,8 +18,11 @@ import pytest
 
 from assertpy2 import (
     add_extension,
+    assert_all,
     assert_conforms,
     assert_that,
+    assert_warn,
+    fail,
     match,
     remove_extension,
     soft_assertions,
@@ -124,11 +127,85 @@ class TestEveryDeliveryCarriesTheSame:
         assert_that(caught.value.requirement.operation).is_equal_to("is_equal_to")
 
     def test_a_warn_mode_failure_reaches_the_same_composer(self, caplog):
-        from assertpy2 import assert_warn
-
         with caplog.at_level(logging.WARNING):
             assert_warn(1).is_equal_to(2)
         assert_that(caplog.text).contains("to be equal to")
+
+
+def _raise_value_error():
+    raise ValueError("not ready")
+
+
+def _raise_bare_assertion():
+    raise AssertionError("the probe's own check")
+
+
+def _soft_block():
+    with soft_assertions():
+        assert_that(1).is_equal_to(2)
+
+
+class TestNoSingleAssertionFailed:
+    """`None` wherever the failure is not one assertion's, and the stability page names each such shape."""
+
+    @pytest.mark.parametrize(
+        "raising",
+        [
+            pytest.param(lambda: fail("mine"), id="fail"),
+            pytest.param(lambda: assert_that(1).error("mine"), id="bare-error"),
+            pytest.param(
+                lambda: assert_that(_raise_value_error).raises(ValueError).when_called_with().errors(),
+                id="errors-precondition",
+            ),
+        ],
+    )
+    def test_no_operation_is_named(self, raising):
+        with pytest.raises(AssertionError) as caught:
+            raising()
+        assert_that(caught.value.requirement).is_none()
+
+    @pytest.mark.parametrize(
+        "gathering",
+        [
+            pytest.param(_soft_block, id="soft-block"),
+            pytest.param(lambda: assert_all(lambda: assert_that(1).is_equal_to(2)), id="assert-all"),
+        ],
+    )
+    def test_a_failure_gathering_others_leaves_it_to_each(self, gathering):
+        with pytest.raises(AssertionError) as caught:
+            gathering()
+        assert_that(caught.value.requirement).is_none()
+        assert_that([entry.requirement.operation for entry in caught.value.failures]).is_equal_to(["is_equal_to"])
+
+    @pytest.mark.parametrize(
+        "polling",
+        [
+            pytest.param(
+                lambda: (
+                    assert_that(_raise_value_error).eventually_sync(timeout=0.05, interval=0.01).ignoring(ValueError)
+                ),
+                id="ignored-exception",
+            ),
+            pytest.param(
+                lambda: assert_that(_raise_bare_assertion).eventually_sync(timeout=0.05, interval=0.01),
+                id="bare-assertion-error",
+            ),
+        ],
+    )
+    def test_a_timeout_whose_probe_raised_names_nothing(self, polling):
+        with pytest.raises(AssertionError) as caught:
+            polling().is_equal_to(2)
+        assert_that(caught.value.requirement).is_none()
+
+    def test_a_timeout_whose_probe_asserted_names_that_assertion(self):
+        """Whatever the last attempt raised, so an assertion inside the probe answers instead of the chain's."""
+
+        def probe():
+            assert_that(1).is_equal_to(3)
+
+        with pytest.raises(AssertionError) as caught:
+            assert_that(probe).eventually_sync(timeout=0.05, interval=0.01).is_equal_to(2)
+        assert_that(caught.value.requirement.parameters).contains_entry({"other": 3})
 
 
 class TestTheSurfacesThatNameThemselves:

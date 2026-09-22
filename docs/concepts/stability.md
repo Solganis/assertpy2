@@ -32,6 +32,7 @@ rather than for the rendered text:
 | You want | Use |
 |---|---|
 | the value under test, and what it was measured against | `failure.actual`, `failure.expected` |
+| which assertion failed, and the arguments it ran with | [`failure.requirement`](../guides/errors.md#what-was-asked-as-data) |
 | where they differ | `failure.diff.entries`, each with a `path` |
 | a location you can walk in code | [`entry.steps`](../guides/errors.md#paths-a-program-can-follow) |
 | every failure a soft block collected | `failure.failures` |
@@ -63,9 +64,16 @@ Where the promise ends, so the edges are decided rather than assumed:
 
 - `AssertionFailure` is an `AssertionError`, and stays one. An existing `except AssertionError` keeps
   working.
-- On a failure raised by this library, `actual`, `expected`, `diff`, `trace` and `failures` are there to
-  read. `trace` is set for polling assertions, `failures` for a soft block, and both are `None` and empty
-  elsewhere.
+- On a failure raised by this library, `actual`, `expected`, `diff`, `requirement`, `trace` and `failures`
+  are there to read. `trace` is set for polling assertions, `failures` for a soft block, and both are
+  `None` and empty elsewhere.
+- `requirement` is `None` where the failure is not one of this library's assertions: `fail()` and
+  `soft_fail()`, a bare `error()` carrying a message of your own, a precondition of one of the few
+  members that assert nothing on their own, and the failure a soft block or `assert_all` raises for
+  everything it collected, where each entry in `failures` carries its own. A polling timeout carries
+  the requirement of whatever its last attempt raised, so it is `None` when the probe raised something
+  that is not one of this library's failures, such as an exception it was told to ignore or a bare
+  `AssertionError`.
 - `has_expected` says whether an expectation was named at all, which `expected is None` cannot. It
   does not separate `is_equal_to(None)` from `is_none()`, and is not meant to: both compare against
   `None`, so both named one.
