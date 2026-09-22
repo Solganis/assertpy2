@@ -25,14 +25,8 @@ _A_TYPING_GATE = re.compile(r"^test_.*(typing|protocol).*\.py$")
 _SIZE_ROW = re.compile(
     r"^\| `(?P<file>_engine/[a-z_]+\.py)` \| (?P<protocols>\d+) \| (?P<declarations>\d+) \|", re.MULTILINE
 )
-_TYPED_MODULES = [
-    "_engine/_typing.py",
-    "_engine/_check_typing.py",
-    "_engine/_builder_check_typing.py",
-    "_engine/_capable_typing.py",
-    "_engine/_poll_typing.py",
-]
-"""The five, in the order the table lists them.  A sixth added to the package has to reach the table."""
+_TYPED_MODULES = sorted(f"_engine/{path.name}" for path in (_ROOT / "assertpy2" / "_engine").glob("*_typing.py"))
+"""Read off the tree rather than listed here, which let the negation twins go unrecorded."""
 
 
 def _named_paths() -> set[str]:
@@ -82,7 +76,8 @@ def test_the_table_of_sizes_is_what_the_files_hold() -> None:
     rows = _SIZE_ROW.findall(_DOCUMENT.read_text(encoding="utf-8"))
     listed = [module for module, _, _ in rows]
 
-    assert_that(listed).described_as("modules the table has a row for, one row each").is_equal_to(_TYPED_MODULES)
+    assert_that(sorted(listed)).described_as("modules the table has a row for").is_equal_to(_TYPED_MODULES)
+    assert_that(listed).described_as("rows per module").does_not_contain_duplicates()
     assert_that({module: (int(protocols), int(declarations)) for module, protocols, declarations in rows}).described_as(
         "protocols and declarations per module, which ARCHITECTURE.md states outright"
     ).is_equal_to({module: _measured(module) for module in listed})

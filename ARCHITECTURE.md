@@ -23,6 +23,7 @@ Most of it is not yours to edit:
 | `_engine/_builder_check_typing.py` | 1 | 315 |
 | `_engine/_capable_typing.py` | 10 | 324 |
 | `_engine/_poll_typing.py` | 2 | 739 |
+| `_engine/_negated_typing.py` | 18 | 862 |
 
 One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
 move on every edit to a generated file.
@@ -39,12 +40,13 @@ move on every edit to a generated file.
 | `_engine/_negated_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py` and `_engine/_operations.py` |
 | `_engine/_check_typing.py` | `scripts/generate_check_protocols.py` | `_typing.py`, `_engine/_operations.py` |
 
-One script writes three of them. That is the part people miss.
+One script writes four of them. That is the part people miss.
 
 - **polling twins** answer `eventually()` and `eventually_sync()`, so every assertion hands back the chain.
 - **verdict twins** answer `check()`, returning an `AssertionOutcome` instead of `Self`.
 - **the capability façade** stands in for the builder itself, so it reads the mixins rather than the views:
   reading the views would narrow it to what one value type answers. It skips its own hand-written list.
+- **negation twins** answer `.not_`, where one assertion hands back the view the chain had before it.
 
 `_engine/_operations.py` decides what the first two leave out: `NOT_AN_OPERATION`, `WITHOUT_A_VERDICT`.
 
@@ -111,7 +113,7 @@ import lines are templates inside the generators.
 | `test_typing_completeness.py` | can a checker name a type for every exported symbol |
 | `test_pyright_baseline.py` | has a new pyright diagnostic appeared in the package |
 | `test_typing_promises.py` | is the object at the end of a chain the type the checker was promised |
-| `test_negated_protocols.py` | does every reachable view have a negation twin that hands the view back |
+| `test_negated_protocols.py` | does every reachable view have a negation twin that hands the view back, and is the file what the generator produces |
 | `test_architecture_doc.py` | does this document still describe the tree, counts included |
 | `test_typing_negative.py` | do the checkers still refuse what they should |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
@@ -126,9 +128,9 @@ Which one goes red tells you what you did:
 
 - a declaration the runtime does not have: `test_protocol_parity.py`
 - a declaration whose parameters the runtime does not match: `test_typing_conformance.py`
-- a generated file edited by hand: that file's own gate, one of the three
-- a protocol changed without regenerating: the polling and verdict gates, never the facade one, which
-  reads the mixins instead
+- a generated file edited by hand: that file's own gate, one of the four
+- a protocol changed without regenerating: the polling, verdict and negation gates, never the facade one,
+  which reads the mixins instead
 - a subject resolving to the wrong protocol: `test_typing.py`, and only under whichever checker sees it
 - a public name added or moved: `test_api_compatibility.py`, which is a snapshot rather than a rule
 

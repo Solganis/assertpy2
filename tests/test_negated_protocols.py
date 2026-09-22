@@ -23,6 +23,7 @@ from assertpy2._engine._operations import (
     TRANSFORMS,
     WITHOUT_A_VERDICT,
 )
+from tests.test_capable_protocol import _formatted, _generator
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 _VIEWS = _ROOT / "assertpy2" / "_engine" / "_typing.py"
@@ -391,3 +392,15 @@ class _Wanted(_Middle[str], Protocol): ...
     assert_that(_bound("_Wanted", known)).described_as("the substitution down each path").is_equal_to(
         [("_Wanted", {}), ("_Middle", {"_Y": "str"}), ("_Held", {"_X": "list[str]"}), ("_Plain", {})]
     )
+
+
+def test_the_file_is_what_the_generator_writes() -> None:
+    """Every test above checks the rule, so a hand edit that keeps it passed them all and a rerun erased it.
+
+    The file as it stands against what the generator writes after ruff, so a formatting-only hand edit
+    shows too: formatting both sides would even it out.  Line endings are read as text on both sides,
+    so a file differing only in those still passes.
+    """
+    assert_that(_formatted(_generator().generate_negated(), str(_TWINS))).described_as(
+        "the negation twins are out of step; run python scripts/generate_poll_protocols.py"
+    ).is_equal_to(_TWINS.read_text(encoding="utf-8"))

@@ -349,11 +349,11 @@ def _generator() -> ModuleType:
     return generate_poll_protocols
 
 
-def _formatted(source: str) -> str:
-    """Both steps the generator runs after writing, so the comparison is of the same thing twice."""
+def _formatted(source: str, path: str = _capable_typing.__file__) -> str:
+    """*source* after the two steps the generator runs once it has written *path*: ruff format, then ruff's fixes."""
     for command in (
-        ["ruff", "format", "--stdin-filename", _capable_typing.__file__, "-"],
-        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", _capable_typing.__file__, "-"],
+        ["ruff", "format", "--stdin-filename", path, "-"],
+        ["ruff", "check", "--fix", "--quiet", "--stdin-filename", path, "-"],
     ):
         result = subprocess.run(
             [sys.executable, "-m", *command],
