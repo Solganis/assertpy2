@@ -141,3 +141,18 @@ def test_warn_carries_the_diff_paths():
 def test_warn_on_a_scalar_stays_a_single_line():
     out = _captured_warn(1, 2)
     assert_that(out.strip().splitlines()).is_length(1)
+
+
+def test_a_pivot_keeps_the_warn_logger():
+    """Six pivots built the next builder without the logger, so warn mode fell back to the root one."""
+    capture = StringIO()
+    logger = logging.getLogger("pivot-capture")
+    logger.handlers.clear()
+    logger.addHandler(logging.StreamHandler(capture))
+    adapted = WarningLoggingAdapter(logger, None)
+
+    assert_warn(b"abc", logger=adapted).decoded_as("utf-8").is_equal_to("xyz")
+    assert_warn("a1", logger=adapted).matches_with_groups(r"(a)(\d)").is_equal_to(("x", "y"))
+    assert_warn({"a": 1}, logger=adapted).at_json_path("$.a").is_equal_to(2)
+
+    assert_that(capture.getvalue().count("Expected")).described_as("warnings").is_equal_to(3)

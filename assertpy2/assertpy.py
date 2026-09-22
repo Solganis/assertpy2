@@ -135,6 +135,15 @@ ASSERTPY_FILES: Final = frozenset(
 )
 
 
+_run_as_written: contextvars.ContextVar[bool] = contextvars.ContextVar("assertpy2_run_as_written", default=False)
+"""Whether the assertion being located was written inside a callable we are running.
+
+`assert_all()` calls what it was given, so the outermost handover is its own call site and every failure
+it collected was tagged with that one line.  A callable passed to it holds the assertions as written, so
+theirs is the line to report.
+"""
+
+
 def _caller_location() -> tuple[str, int] | None:
     """The ``(filename, lineno)`` of the user frame that called into assertpy2, skipping internal frames.
 
@@ -150,6 +159,7 @@ def _caller_location() -> tuple[str, int] | None:
     instead of crashing on unpacking.
     """
     frame: types.FrameType | None = sys._getframe(1)  # CPython accessor; the inspect equivalent is 10x slower here
+    innermost = _run_as_written.get()
     location: tuple[str, int] | None = None
     inner_is_internal = False
     while frame:
@@ -157,6 +167,8 @@ def _caller_location() -> tuple[str, int] | None:
         is_internal = filename in ASSERTPY_FILES
         if inner_is_internal and not is_internal:
             location = (filename, frame.f_lineno)
+            if innermost:
+                return location
         inner_is_internal = is_internal
         frame = frame.f_back
     return location
@@ -422,8 +434,11 @@ class _SoftAssertions:
 
     def __enter__(self) -> SoftAssertionCollector:
         ctx = _soft_ctx.get()
-        if ctx == 0 or _soft_err.get(None) is None:
+        block = _soft_err.get(None)
+        if ctx == 0 or block is None or not block.active:
+            # a task outliving the block it inherited holds a closed one: collecting into it reaches nobody
             _soft_err.set(_SoftBlock())
+            ctx = 0
         _soft_ctx.set(ctx + 1)
         return SoftAssertionCollector()
 
@@ -516,10 +531,15 @@ def assert_all(*callables: Callable[[], object]) -> None:
 
     Raises:
         AssertionError: if any of the callables produce assertion failures
+        TypeError: if a callable hands back a coroutine, which has asserted nothing
     """
     with soft_assertions():
         for call in callables:
-            call()
+            located = _run_as_written.set(True)
+            try:
+                verdict(call(), subject="the callable")
+            finally:
+                _run_as_written.reset(located)
 
 
 @overload
@@ -1271,20 +1291,21 @@ class NegatedBuilder(Generic[_S]):
     ) -> AssertionBuilder:
         if self._verdict(attr, *args, **kwargs) is not None:
             return self._builder
-        block = _collecting()
-        err_list = block.failures if block is not None else []
         msg = self._make_msg(name, *args, **kwargs)
+        outcome = AssertionOutcome(
+            message=msg,
+            actual=self._builder.val,
+            group=_soft_group.get(),
+            location=_caller_location(),
+            requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
+        )
+        block = _collecting()
+        if block is None:
+            # the block has closed, which an outliving task does: appending puts the failure in a list nobody reads
+            raise self._builder._failure(outcome)
         if self._builder._value_taint_reason is None:
             self._builder._value_taint_reason = msg
-        err_list.append(
-            AssertionOutcome(
-                message=msg,
-                actual=self._builder.val,
-                group=_soft_group.get(),
-                location=_caller_location(),
-                requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
-            )
-        )
+        block.failures.append(outcome)
         return self._builder
 
     def _negated_check(
@@ -1687,7 +1708,8 @@ class AssertionBuilder(
             # an empty derived value carries no context of its own, so name the step that produced it
             out = f"{out} The value is empty because {self._value_origin}."
         hint = _hints.diagnose(diff, actual, expected, identity=self._equality_comparison)
-        if hint is not None:
+        # a message quoting a failure that already carries the hint printed it twice, the poll timeout among them
+        if hint is not None and hint not in out:
             # on its own line, so the original message stays a prefix and a `match=` written against it keeps working
             out = f"{out}\n{hint}"
         response = self._response if self._response is not None else response_of(self.val)

@@ -215,4 +215,4 @@ class HttpMixin(_MixinBase):
             shown = f"it starts with {preview!r}" if preview else "it is empty"
             raise ValueError(f"the response body is not JSON: {named} and {shown}") from exc
         # `builder()` is declared to hand back the same kind, wrong for a step whose result holds the document
-        return cast("AssertionBuilder[object]", self.builder(document, self.description, self.kind))
+        return cast("AssertionBuilder[object]", self.builder(document, self.description, self.kind, logger=self.logger))

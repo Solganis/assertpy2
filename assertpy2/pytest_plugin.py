@@ -389,6 +389,8 @@ def pytest_unconfigure(config: pytest.Config) -> None:
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
+    # the report reads this at the end of a session, so a second one in the same process reported the first
+    _retried.clear()
     # module-level, so a second session would open with the first one's failures, consumed by a hook that may not run
     _controller_failures.clear()
     _controller_failure_count[0] = 0

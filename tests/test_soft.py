@@ -1,8 +1,9 @@
 import contextlib
+import contextvars
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, fail, soft_assertions, soft_fail
+from assertpy2 import AssertionFailure, assert_all, assert_that, fail, soft_assertions, soft_fail
 
 
 def test_success():
@@ -540,3 +541,81 @@ class TestTheInvariantBehindAllOfThem:
         with pytest.raises(AssertionFailure) as failure, soft_assertions():
             assert_that("x").is_equal_to("y")
         assert_that(str(failure.value)).does_not_contain("<1> to be equal to <2>")
+
+
+class TestAFailureReachesSomebody:
+    """A soft failure appended to a block nobody reads is a test that passed without asserting."""
+
+    def test_a_negated_failure_raises_once_the_block_has_closed(self):
+        with soft_assertions():
+            outliving = assert_that(5)
+        with pytest.raises(AssertionFailure, match="NOT satisfy"):
+            outliving.not_.is_equal_to(5)
+
+    def test_a_negated_failure_is_still_collected_inside_the_block(self):
+        with pytest.raises(AssertionFailure, match="NOT satisfy"), soft_assertions():
+            assert_that(5).not_.is_equal_to(5)
+
+    def test_a_task_outliving_the_block_opens_its_own(self):
+        """The inherited block has closed, so collecting into it raised at the first failure instead."""
+        collected = []
+
+        def outliving():
+            try:
+                with soft_assertions():
+                    assert_that(1).is_equal_to(2)
+                    assert_that(3).is_equal_to(4)
+            except AssertionFailure as raised:
+                collected.append(str(raised))
+
+        with soft_assertions():
+            inherited = contextvars.copy_context()
+        # the block is closed by now, and the copy still carries it, which is what an outliving task holds
+        inherited.run(outliving)
+        assert_that(collected).is_length(1)
+        assert_that(collected[0].count("Expected")).described_as("failures in one report").is_equal_to(2)
+
+
+class TestAssertAllRunsWhatItWasGiven:
+    """Its callables are the assertions, so a coroutine is a mistake and each failure has its own line."""
+
+    def test_an_async_callable_is_refused(self):
+        async def probe():
+            assert_that(1).is_equal_to(2)
+
+        with pytest.raises(TypeError, match="handed back a coroutine"):
+            assert_all(probe)
+
+    def test_each_failure_is_located_where_it_was_written(self):
+        def first():
+            assert_that(1).is_equal_to(2)
+
+        def second():
+            assert_that(3).is_equal_to(4)
+
+        with pytest.raises(AssertionFailure) as caught:
+            assert_all(first, second)
+        lines = sorted(
+            int(line.rsplit(":", 1)[1].rstrip("]")) for line in str(caught.value).splitlines() if line.endswith("]")
+        )
+        assert_that(lines).is_length(2)
+        assert_that(lines[0]).described_as("two distinct lines").is_not_equal_to(lines[1])
+
+    def test_an_ordinary_callable_still_runs(self):
+        with pytest.raises(AssertionFailure, match="Expected"):
+            assert_all(lambda: assert_that(1).is_equal_to(2))
+
+
+class TestAnInertChainHandsBackNothing:
+    """`.value` promises a value every assertion on it passed, and absorbed calls have asserted nothing."""
+
+    def test_value_after_a_failed_raises_refuses(self):
+        with contextlib.suppress(AssertionFailure), soft_assertions():
+            chain = assert_that(lambda: None).raises(ValueError).when_called_with()
+            with pytest.raises(TypeError, match=r"cannot extract \.value"):
+                _ = chain.value
+
+    def test_the_chain_itself_still_absorbs(self):
+        with contextlib.suppress(AssertionFailure), soft_assertions():
+            chain = assert_that(lambda: None).raises(ValueError).when_called_with()
+            assert_that(chain.is_equal_to(1).is_none()).is_not_none()

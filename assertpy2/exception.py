@@ -212,6 +212,18 @@ class _InertBuilder:
     Silently absorbs all chained assertions so they don't crash on wrong val type.
     """
 
+    @property
+    def value(self) -> object:
+        """The refusal `.value` promises after a failure under soft or warn mode.
+
+        Absorbed like everything else, it handed back the absorbing lambda, which is truthy and reads as
+        a value that passed.
+        """
+        raise TypeError(
+            "cannot extract .value: the underlying assertion failed under soft or warn mode "
+            "(read .value in strict mode, or after the soft-assertions block)"
+        )
+
     def __getattr__(self, name):
         return lambda *args, **kwargs: self
 

@@ -1463,3 +1463,52 @@ class TestAForgottenAwaitUnderErrorFilters:
         result = self._run(tmp_path, "[pytest]\n")
         assert_that(result.returncode).described_as("child exit code").is_zero()
         assert_that(result.stdout).contains("2 passed")
+
+
+class TestAPollDeliversItsOwnFailure:
+    """A poll waits and then fails by itself, so there is no verdict to hand back and no value to carry on."""
+
+    def test_check_after_a_sync_poll_is_refused(self):
+        with pytest.raises(TypeError, match="check\\(\\) cannot follow a poll"):
+            assertpy2.assert_that(lambda: 1).eventually_sync(timeout=0.1, interval=0.01).check()
+
+    def test_check_after_an_async_poll_is_refused(self):
+        chain = assertpy2.assert_that(lambda: 1).eventually(timeout=0.1, interval=0.01)
+        with pytest.raises(TypeError, match="check\\(\\) cannot follow a poll"):
+            chain.check()
+        chain.close()
+
+    def test_a_timed_out_soft_chain_asserts_nothing_more(self):
+        """It timed out without a value, so everything after it was asked about `None`."""
+        with pytest.raises(assertpy2.AssertionFailure) as caught, assertpy2.soft_assertions():
+            timed_out = assertpy2.assert_that(lambda: 1).eventually_sync(timeout=0.04, interval=0.01).is_equal_to(2)
+            timed_out.is_none()
+            timed_out.is_equal_to(7)
+        report = str(caught.value)
+        assertpy2.assert_that(report.count("condition not met")).described_as("entries").is_equal_to(1)
+        assertpy2.assert_that(report).does_not_contain("<None>")
+
+    def test_a_timed_out_warn_chain_asserts_nothing_more(self):
+        capture = StringIO()
+        logger = logging.getLogger("poll-warn-capture")
+        logger.handlers.clear()
+        logger.addHandler(logging.StreamHandler(capture))
+        adapted = assertpy2.WarningLoggingAdapter(logger, None)
+        timed_out = (
+            assertpy2.assert_warn(lambda: 1, logger=adapted).eventually_sync(timeout=0.04, interval=0.01).is_equal_to(2)
+        )
+        timed_out.is_none()
+        logged = capture.getvalue()
+        assertpy2.assert_that(logged.count("condition not met")).described_as("warnings").is_equal_to(1)
+        assertpy2.assert_that(logged).does_not_contain("<None>")
+
+    @pytest.mark.parametrize("timeout", [0.04, 0.123456789], ids=["short", "past-six-digits"])
+    def test_the_budget_is_printed_as_it_was_given(self, timeout):
+        with pytest.raises(assertpy2.AssertionFailure) as caught:
+            assertpy2.assert_that(lambda: 1).eventually_sync(timeout=timeout, interval=0.01).is_equal_to(2)
+        assertpy2.assert_that(str(caught.value)).contains(f"after {timeout} seconds")
+
+    def test_a_hint_the_quoted_failure_carries_is_not_repeated(self):
+        with pytest.raises(assertpy2.AssertionFailure) as caught, assertpy2.soft_assertions():
+            assertpy2.assert_that(lambda: [1, 2]).eventually_sync(timeout=0.04, interval=0.01).is_equal_to([2, 1])
+        assertpy2.assert_that(str(caught.value).count("same elements, in a different order")).is_equal_to(1)

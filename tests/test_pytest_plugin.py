@@ -913,8 +913,17 @@ class TestJsonSafe:
     def test_containers_stay_typed(self):
         assert_that(_json_safe({"a": [1, (2, 3)]})).is_equal_to({"a": [1, [2, 3]]})
 
-    def test_non_string_keys_become_reprs(self):
-        assert_that(_json_safe({1: "a", (2, 3): "b"})).is_equal_to({"1": "a", "(2, 3)": "b"})
+    def test_a_mapping_with_a_non_string_key_is_written_as_pairs(self):
+        """Rendered as text, `1` and `"1"` were the same key and one of the two was lost."""
+        assert_that(_json_safe({1: "a", (2, 3): "b"})).is_equal_to(
+            {"__type__": "dict", "__data__": [[1, "a"], [[2, 3], "b"]]}
+        )
+        assert_that(_json_safe({1: "a", "1": "b"})).is_equal_to(
+            {"__type__": "dict", "__data__": [[1, "a"], ["1", "b"]]}
+        )
+
+    def test_a_string_keyed_mapping_is_written_as_it_was(self):
+        assert_that(_json_safe({"a": 1, "b": [2]})).is_equal_to({"a": 1, "b": [2]})
 
     def test_oversized_dict_gets_truncation_marker(self):
         result = _json_safe({f"k{i:03d}": i for i in range(150)})
@@ -2784,3 +2793,13 @@ class TestTheSnapshotReportNamesItself:
         lines = [call.args[0] for call in reporter.write_line.call_args_list]
         assert_that(lines[0]).described_as("held off the run's output by a blank line").is_empty()
         assert_that(lines).contains("assertpy2 snapshots:")
+
+
+class TestTheNearTimeoutReportIsPerSession:
+    def test_unconfigure_clears_what_the_report_reads(self):
+        """Module-level, so a second session in the same process opened with the first one's polls."""
+        pytest_plugin._retried.append(("some_test", 3, 0.9, 1.0))
+        config = _make_config()
+        pytest_configure(config)
+        pytest_unconfigure(config)
+        assert_that(pytest_plugin._retried).is_empty()

@@ -7,9 +7,10 @@ import time
 import warnings
 from collections import OrderedDict, deque
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
+from .exception import _InertBuilder
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -256,12 +257,17 @@ def _last_failure_text(exc: BaseException) -> str:
     return _safe_str(exc) if isinstance(exc, AssertionError) else _safe_repr(exc)
 
 
+def _seconds(timeout: float) -> str:
+    """The budget as it was given: `:.1f` printed 0.04 as 0.0, and `:g` rounds past six digits."""
+    return str(float(timeout))
+
+
 def _timeout_failure(recorder: _PollRecorder | None, timeout: float, elapsed: float, failure: str):
     """Build the ``(message, trace)`` pair for a timed-out poll; without a recorder there is no trace."""
     if recorder is None:
-        return f"Expected condition not met after {timeout:.1f} seconds. Last failure: {failure}", None
+        return f"Expected condition not met after {_seconds(timeout)} seconds. Last failure: {failure}", None
     trace = recorder.build(elapsed)
-    message = f"Expected condition not met after {timeout:.1f} seconds ({trace.summary}). Last failure: {failure}"
+    message = f"Expected condition not met after {_seconds(timeout)} seconds ({trace.summary}). Last failure: {failure}"
     return message, trace
 
 
@@ -359,6 +365,11 @@ def _record_poll(recorder: _PollRecorder | None, exc: Exception, probed: object,
     return failure
 
 
+_NO_VERDICT_AFTER_A_POLL: Final = (
+    "check() cannot follow a poll; a poll delivers its own failure, so there is no verdict to hand back"
+)
+
+
 def _out_of_time(
     chain: AsyncAssertionBuilder | SyncAssertionBuilder,
     recorder: _PollRecorder | None,
@@ -370,9 +381,11 @@ def _out_of_time(
     message, trace = _timeout_failure(recorder, chain._timeout, elapsed, failure)
     if chain._kind in ("soft", "warn"):
         # empty description: the inner failure already carries it, and two would read as a double prefix
-        return chain._builder_func(None, "", chain._kind, None, chain._logger).error(
+        chain._builder_func(None, "", chain._kind, None, chain._logger).error(
             message, **_structured_of(last_error), trace=trace
         )
+        # the poll never reached a value, so anything after it asserted about `None` and failed again
+        return _InertBuilder()
     raise _timed_out(message, trace, last_error) from last_error
 
 
@@ -481,6 +494,8 @@ class AsyncAssertionBuilder:
             if not self._steps:
                 raise AttributeError(name)  # nothing recorded yet, so there is no coroutine to describe
             return getattr(self._coroutine(), name)
+        if name == "check":
+            raise TypeError(_NO_VERDICT_AFTER_A_POLL)
         if name == "val":
             raise AttributeError("val is available on the builder that awaiting this chain returns")
         if name == "not_":
@@ -686,6 +701,8 @@ class SyncAssertionBuilder:
         # `Any` rather than the inferred union, which made a checker refuse `eventually_sync().is_equal_to(1)`
         if name.startswith("_"):
             raise AttributeError(name)
+        if name == "check":
+            raise TypeError(_NO_VERDICT_AFTER_A_POLL)
         if name == "val":  # reached only when the property above found no poll to read it from
             raise AttributeError("val is available once an assertion on this chain has passed")
         if name == "not_":
