@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Any, cast
 from ._engine._diff import _walk_leaves
 from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
 from ._engine._mixin_base import _MixinBase
+from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
-from ._engine._require import CoroutineVerdictError, argument, refuse, verdict
+from ._engine._require import VerdictError, argument, refuse, verdict
 from ._matcher_impls import _has_own_evaluate
-from .errors import DiffEntry, DiffResult, VacuousAssertionWarning
+from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _safe_str
 from .matchers import (
     IsNotNoneMatcher,
     Matcher,
@@ -41,20 +42,8 @@ def _describe_unpaired(matcher, raised_count):
 
 
 def _max_bipartite_assignment(satisfied: list[list[bool]]) -> list[int | None]:
-    """Pair each row with a distinct satisfying column via Kuhn's augmenting paths (None if unpairable)."""
-    column_owner: dict[int, int] = {}
-
-    def _augment(row: int, visited: set[int]) -> bool:
-        for column, ok in enumerate(satisfied[row]):
-            if ok and column not in visited:
-                visited.add(column)
-                if column not in column_owner or _augment(column_owner[column], visited):
-                    column_owner[column] = row
-                    return True
-        return False
-
-    for row in range(len(satisfied)):
-        _augment(row, set())
+    """Pair each row with a distinct satisfying column (None where no pairing reaches it)."""
+    column_owner = maximum_pairing([{column for column, ok in enumerate(row) if ok} for row in satisfied])
     assignment: list[int | None] = [None] * len(satisfied)
     for column, row in column_owner.items():
         assignment[row] = column
@@ -229,7 +218,7 @@ class SatisfiesMixin(_MixinBase):
         elif callable(matcher):
             if not verdict(cast("Callable[..., object]", matcher)(self.val)):
                 return self.error(
-                    f"Expected <{self.val}> to satisfy {_describe_matcher(matcher)}, but did not.",
+                    f"Expected <{_safe_str(self.val)}> to satisfy {_describe_matcher(matcher)}, but did not.",
                     expected=_describe_matcher(matcher),
                 )
         else:
@@ -347,7 +336,7 @@ class SatisfiesMixin(_MixinBase):
                 mismatch.path.entry(actual=mismatch.actual, expected=mismatch.expected_desc) for mismatch in mismatches
             ]
             return self.error(
-                f"Expected <{self.val}> to match structure {matcher.describe()}, but"
+                f"Expected <{_safe_str(self.val)}> to match structure {matcher.describe()}, but"
                 f" {matcher.render_mismatch(mismatches)}.",
                 actual=self.val,
                 expected=spec,
@@ -371,7 +360,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val is **not** callable
         """
         if not callable(self.val):
-            return self.error(f"Expected <{self.val}> to be callable, but was not.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to be callable, but was not.")
         return self
 
     def is_not_callable(self) -> Self:
@@ -390,7 +379,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val **is** callable
         """
         if callable(self.val):
-            return self.error(f"Expected <{self.val}> to not be callable, but was.")
+            return self.error(f"Expected <{_safe_str(self.val)}> to not be callable, but was.")
         return self
 
     def any_satisfy(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
@@ -623,7 +612,7 @@ class SatisfiesMixin(_MixinBase):
             for column, matcher in enumerate(matchers):
                 try:
                     row.append(_apply_matcher(matcher, item))
-                except CoroutineVerdictError:  # noqa: PERF203  # never a non-match, always a mistake
+                except VerdictError:  # noqa: PERF203  # never a non-match, always a mistake
                     raise
                 except TypeError:  # every probe may raise independently on a mixed collection
                     raised_counts[column] += 1

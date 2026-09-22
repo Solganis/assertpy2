@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, refuse
+from .errors import _safe_str
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -90,7 +91,7 @@ class DictMixin(_MixinBase):
         missing = [value for value in values if value not in self.val.values()]
         if missing:
             return self.error(
-                f"Expected <{self.val}> to contain values {self._fmt_items(values)},"
+                f"Expected <{_safe_str(self.val)}> to contain values {self._fmt_items(values)},"
                 f" but did not contain {self._fmt_items(missing)}.",
                 expected=values,
             )
@@ -123,7 +124,7 @@ class DictMixin(_MixinBase):
             found = [value for value in values if value in self.val.values()]
             if found:
                 return self.error(
-                    f"Expected <{self.val}> to not contain values {self._fmt_items(values)},"
+                    f"Expected <{_safe_str(self.val)}> to not contain values {self._fmt_items(values)},"
                     f" but did contain {self._fmt_items(found)}."
                 )
         return self
@@ -179,7 +180,7 @@ class DictMixin(_MixinBase):
                 missing.append(entry)  # bad val
         if missing:
             return self.error(
-                f"Expected <{self.val}> to contain entries {self._fmt_items(entries)},"
+                f"Expected <{_safe_str(self.val)}> to contain entries {self._fmt_items(entries)},"
                 f" but did not contain {self._fmt_items(missing)}.",
                 expected=entries,
             )
@@ -227,7 +228,7 @@ class DictMixin(_MixinBase):
                 found.append(pair)
         if found:
             return self.error(
-                f"Expected <{self.val}> to not contain entries {self._fmt_items(entries)},"
+                f"Expected <{_safe_str(self.val)}> to not contain entries {self._fmt_items(entries)},"
                 f" but did contain {self._fmt_items(found)}."
             )
         return self

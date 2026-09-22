@@ -25,7 +25,8 @@ from __future__ import annotations
 
 import difflib
 import inspect
-from typing import NoReturn, TypeVar
+import types
+from typing import Final, NoReturn, TypeVar
 
 from ..errors import _safe_repr, _truncated
 from ._size import length_of
@@ -136,29 +137,81 @@ def reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
     raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
 
 
-class CoroutineVerdictError(TypeError):
-    """A predicate handed back a coroutine, which is a mistake in the test rather than a non-match.
+class VerdictError(TypeError):
+    """A predicate handed back something that is not an answer: a mistake in the test, not a non-match.
 
     Its own type because several assertions catch `TypeError` from a probe on purpose, reading it as
     "this one does not match", which is right for a predicate that cannot judge some item and wrong for
-    one that was never awaited: swallowed there, the refusal came back as an ordinary failed assertion.
+    one that was never asked: swallowed there, the refusal came back as an ordinary failed assertion.
     """
+
+
+class CoroutineVerdictError(VerdictError):
+    """A predicate handed back a coroutine, so nothing ever ran."""
+
+
+class MatcherVerdictError(VerdictError):
+    """A predicate handed back a matcher, so nothing was ever asked of the value."""
+
+
+_MATCHER_MEMBERS: Final = ("matches", "describe", "describe_mismatch")
+
+NON_MATCHER_TYPES: Final = frozenset(
+    {int, float, bool, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset, type(None)}
+)
+"""Types no matcher is, which is what an ordinary answer is: one frozenset lookup instead of three reads."""
+
+
+def _answers_like_a_matcher(answer: object) -> bool:
+    """Whether this object is a matcher by the only rule that matters: it has the three members.
+
+    Read statically, wherever a matcher keeps its members: on the type, in the instance dictionary or in
+    slots.  Never through `getattr`, which runs a `__getattr__`, a property or a metaclass hook: a `Mock`
+    answers every name with something callable, and a hostile object could decide its own verdict.
+
+    The frozenset first because the static read costs 1.08 us against 0.11 us for a plain `getattr`, and
+    the answers that reach here are almost always an ordinary value of a builtin type.
+    """
+    if type(answer) in NON_MATCHER_TYPES:
+        return False
+    for member in _MATCHER_MEMBERS:
+        held = inspect.getattr_static(answer, member, None)
+        if isinstance(held, types.MemberDescriptorType):
+            # a slot: its own `__get__` reads the value, which is a C-level read and not their code
+            try:
+                held = held.__get__(answer)
+            except AttributeError:
+                return False  # the slot was never filled
+        if not callable(held):
+            return False
+    return True
 
 
 def verdict(answer: object, *, subject: str = "predicate") -> object:
-    """The answer a predicate gave, refusing a coroutine rather than reading it as truth.
+    """The answer a predicate gave, refusing what is not one rather than reading it as truth.
 
     A coroutine object is truthy, so an `async def` predicate passed every assertion that reads one
     without ever running: measured, ten of the thirteen places that take a callable went green on a
-    predicate that always answers `False`.
+    predicate that always answers `False`.  A matcher is truthy the same way, so a factory that was
+    named but never called, or a predicate written in matcher style, passed on any value at all.
 
-    Asked of the answer rather than of the callable, so a lambda handing one back is caught too, and
-    closed before raising so the refusal is not followed by "coroutine was never awaited".
+    Asked of the answer rather than of the callable, so a lambda handing one back is caught too, and a
+    coroutine is closed before raising so the refusal is not followed by "was never awaited".
     """
-    if inspect.iscoroutine(answer):
+    if answer is True or answer is False:
+        return answer
+    # the exact type, since `inspect.iscoroutine` and even `isinstance` read attributes off the answer,
+    # and a hostile `__getattribute__` then decides a failure that is not about it at all.  Nothing
+    # subclasses a coroutine, so `is` asks the same question
+    if type(answer) is types.CoroutineType:
         answer.close()
         raise CoroutineVerdictError(
             f"{subject} handed back a coroutine instead of an answer; assertions here are synchronous, "
             "so await the call yourself and assert on what it returned"
+        )
+    if _answers_like_a_matcher(answer):
+        raise MatcherVerdictError(
+            f"{subject} handed back a matcher instead of an answer; pass the matcher where one is taken, "
+            "or ask it about the value and answer with what it said"
         )
     return answer

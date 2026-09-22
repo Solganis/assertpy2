@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
+from ._engine._pairing import maximum_pairing
 from ._engine._require import argument, refuse
-from .errors import _callable_name, _type_expression_name
+from .errors import _callable_name, _safe_str, _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -95,45 +96,7 @@ def _matches_shape(spec: list[Any], exceptions: tuple[BaseException, ...]) -> bo
         else {index for index, exc in enumerate(exceptions) if isinstance(exc, entry)}
         for entry in spec
     ]
-    paired: dict[int, int] = {}
-    unpaired = []
-    for entry, options in enumerate(candidates):
-        free = next((index for index in options if index not in paired), None)
-        if free is None:
-            unpaired.append(entry)
-        else:
-            paired[free] = entry
-    return all(_augmented(entry, candidates, paired) for entry in unpaired)
-
-
-def _augmented(entry: int, candidates: list[set[int]], paired: dict[int, int]) -> bool:
-    """Whether one spec entry can be paired by displacing others, updating `paired` when it can.
-
-    Iterative, because the chain of displacements is as long as the spec is wide rather than as deep:
-    1100 entries of one type over 1100 exceptions of that type recursed past the limit and reported a
-    `RecursionError` for a group that matches.
-    """
-    seen: set[int] = set()
-    path: list[tuple[int, Iterator[int]]] = [(entry, iter(candidates[entry]))]
-    taken: list[int] = []
-    while path:
-        options = path[-1][1]
-        for index in options:
-            if index in seen:
-                continue
-            seen.add(index)
-            taken.append(index)
-            if index not in paired:
-                for step, (displaced, _) in reversed(list(enumerate(path))):
-                    paired[taken[step]] = displaced
-                return True
-            path.append((paired[index], iter(candidates[paired[index]])))
-            break
-        else:
-            path.pop()
-            if taken:
-                taken.pop()
-    return False
+    return len(maximum_pairing(candidates)) == len(spec)
 
 
 def _naming(spec: list[Any], exc: BaseException) -> dict[int, str]:
@@ -324,7 +287,7 @@ class ExceptionMixin(_MixinBase):
             self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), self.expected):
-                captured = self.builder(str(e), self.description, self.kind, logger=self.logger)
+                captured = self.builder(_safe_str(e), self.description, self.kind, logger=self.logger)
                 captured._raised_exception = e
                 return captured
             elif _escaped(e):
@@ -418,7 +381,7 @@ class ExceptionMixin(_MixinBase):
                 expected=ex,
             )
             return cast("Self", _InertBuilder())
-        pivoted = self.builder(str(cause), self.description, self.kind, logger=self.logger)
+        pivoted = self.builder(_safe_str(cause), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = cause
         return pivoted
 
@@ -445,7 +408,7 @@ class ExceptionMixin(_MixinBase):
                 expected=ex,
             )
             return cast("Self", _InertBuilder())
-        pivoted = self.builder(str(root), self.description, self.kind, logger=self.logger)
+        pivoted = self.builder(_safe_str(root), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = root
         return pivoted
 
@@ -581,7 +544,7 @@ class ExceptionMixin(_MixinBase):
         if found is None:
             self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex)
             return cast("Self", _InertBuilder())
-        pivoted = self.builder(str(found), self.description, self.kind, logger=self.logger)
+        pivoted = self.builder(_safe_str(found), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = found
         return pivoted
 

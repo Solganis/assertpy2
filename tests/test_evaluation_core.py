@@ -941,11 +941,15 @@ class TestTheCoresUnderTheAwkwardCases:
         assert_that(values).contains_only(*values)
         assert_that(values).is_subset_of(values)
 
-    def test_naming_repeats_of_an_unhashable_value_answers_like_the_shipped_release(self):
+    def test_naming_repeats_of_one_object_never_compares_it_with_itself(self):
+        """Thirty references to one signalling NaN: identity answers, where `==` on it signals.
+
+        The walk used to reach `==` twice for every element, once to count and once to see whether the
+        value had already been named, and the second reading raised where the first had answered.
+        """
         same_object = [decimal.Decimal("snan")] * 30
         assert_that(has_duplicates(same_object)).described_as("one object, thirty times").is_true()
-        with pytest.raises(decimal.InvalidOperation):
-            repeated_items(same_object)
+        assert_that(repeated_items(same_object)).is_length(1)
 
     def test_a_value_whose_class_cannot_be_hashed_keeps_the_walk(self):
         """The classifier hashes the types, and a metaclass may refuse that.

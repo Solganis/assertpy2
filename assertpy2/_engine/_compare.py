@@ -16,6 +16,8 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import decimal
+import fractions
+import inspect
 import math
 import numbers
 import pathlib
@@ -24,8 +26,9 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ._introspection import is_mapping_like, is_model_dump_object
-from ._require import verdict
+from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._ordering import nan_operand
+from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -225,16 +228,73 @@ def _is_real_number(value) -> bool:
 def _within_tolerance(actual, expected, tolerance) -> bool:
     """Return whether two real numbers are within ``tolerance`` (absolute); ``NaN`` is never within.
 
-    Only actual ``float`` operands are checked for ``NaN`` (other reals cannot be ``NaN``), which also keeps
-    ``math.isnan`` off arbitrary-precision ``int`` values that would overflow it.
+    Checked by type rather than through `math.isnan`, which overflows on an arbitrary-precision ``int``
+    and signals on a `Decimal` NaN.
+
+    The subtraction is tried as written, so two floats keep the arithmetic they always had.  A `Decimal`
+    against a ``float`` refuses to subtract at all and a bignum ``int`` overflows one, and those two pairs
+    are measured exactly instead, through `fractions.Fraction`.
     """
-    if isinstance(actual, float) and math.isnan(actual):
-        return False
-    if isinstance(expected, float) and math.isnan(expected):
+    if nan_operand(actual) or nan_operand(expected):
         return False
     if actual == expected:  # equal values (including inf == inf) are within any tolerance
         return True
-    return abs(actual - expected) <= tolerance
+    if _is_infinite(actual) or _is_infinite(expected):
+        return False  # unequal, and no distance from an infinity is within a finite tolerance
+    try:
+        return abs(actual - expected) <= tolerance
+    except (TypeError, OverflowError) as error:
+        if raised_inside(error):  # their own `__sub__` or `__abs__` raised: a bug in the value, not a refusal
+            raise
+        return abs(fractions.Fraction(actual) - fractions.Fraction(expected)) <= fractions.Fraction(tolerance)
+
+
+def _is_infinite(value) -> bool:
+    """A `float` or `Decimal` infinity, asked by type so nothing else is converted to a float to answer.
+
+    Through `Decimal`'s own method rather than the value's: a subclass overriding `is_infinite` would
+    otherwise decide this, and run its code before the arithmetic it is being asked about.
+    """
+    if isinstance(value, float):
+        return math.isinf(value)
+    return isinstance(value, decimal.Decimal) and decimal.Decimal.is_infinite(value)
+
+
+class WindowRefusedError(TypeError):
+    """The two operands form no window: neither the arithmetic nor an exact conversion takes them.
+
+    A `TypeError` still, so a caller that let the operand's own refusal out keeps letting this one out,
+    and a matcher, which may not raise, can tell it from a `__sub__` of somebody's own that raised.
+    """
+
+
+def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
+    """The closed interval ``middle`` plus and minus ``tolerance``.
+
+    Typed as `Any` because the pairing is a run-time fact: the assertion has refused every combination
+    but two before it asks, a number against a number and a datetime against a timedelta, and a checker
+    reading the public signature alone is right to refuse the arithmetic.  The matcher asks without
+    refusing anything first, which is what `WindowRefusedError` is for: it hands back the operands' own
+    refusal as something a matcher may answer "no match" to.
+    """
+    if _is_infinite(middle) and _is_real_number(tolerance):
+        # its own window, the way a float infinity already gets one: no distance from it is finite.  The
+        # tolerance is still read, or an infinity paired with anything at all would answer "close enough"
+        return middle, middle
+    try:
+        return middle - tolerance, middle + tolerance
+    except TypeError as refusal:
+        if raised_inside(refusal):  # their own `__sub__` raised: that is a bug in the value
+            raise
+        if not all(isinstance(operand, numbers.Number) for operand in (middle, tolerance)):
+            raise WindowRefusedError(str(refusal)) from None
+        # a `Decimal` refuses arithmetic with a `float` or a `Fraction`, which both convert exactly, while
+        # an infinite or NaN one does not convert at all
+        try:
+            exact, span = fractions.Fraction(middle), fractions.Fraction(tolerance)
+        except (TypeError, ValueError, OverflowError) as failed:
+            raise WindowRefusedError(str(failed)) from None
+        return exact - span, exact + span
 
 
 def _resolve_comparator(actual, config: _CompareConfig, *, field):

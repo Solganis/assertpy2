@@ -4,7 +4,9 @@ import math
 import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from fractions import Fraction
 from types import UnionType
 from typing import (
     TYPE_CHECKING,
@@ -108,12 +110,6 @@ class Matcher(Protocol[_M_contra]):
     def describe_mismatch(self, value: _M_contra) -> str: ...
 
 
-# a frozenset test skips the runtime_checkable isinstance for the common operand of contains and satisfies
-_NON_MATCHER_TYPES: Final = frozenset(
-    {int, float, bool, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset, type(None)}
-)
-
-
 def _refused(matcher: Matcher[Any], value: object) -> MatchResult:
     """The result for a value a matcher has already turned down, without asking it again.
 
@@ -159,7 +155,7 @@ def _is_matcher(obj: object) -> TypeIs[Matcher[Any]]:
     ~5x faster than the protocol walk).  Any other object - including a duck-typed custom matcher that
     does not inherit ``BaseMatcher`` - falls through to the full protocol check unchanged.
     """
-    if type(obj) in _NON_MATCHER_TYPES:
+    if type(obj) in NON_MATCHER_TYPES:
         return False
     if isinstance(obj, BaseMatcher):
         return True
@@ -245,7 +241,7 @@ class BaseMatcher:
         raise NotImplementedError
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value}>"
+        return f"was <{_safe_str(value)}>"
 
     def __and__(self, other: Matcher[Any]) -> AllOfMatcher:
         _require_matcher(other, "&")
@@ -266,7 +262,7 @@ class BaseMatcher:
         # an operand the predicate cannot evaluate means "no match"; ``==`` must never raise
         try:
             return bool(verdict(self.matches(other), subject="the matcher"))
-        except CoroutineVerdictError:  # never a non-match, always a mistake in the test
+        except VerdictError:  # never a non-match, always a mistake in the test
             raise
         except (TypeError, ValueError):
             return False
@@ -301,16 +297,43 @@ def _failure(matcher: Matcher[Any], value: object) -> str | None:
     return None if outcome.matched else f"{outcome.description} ({outcome.mismatch})"
 
 
+class _ReadOnce:
+    """The value as each child should see it: drained at most once, and only for a child that walks.
+
+    A one-shot value handed whole to several children is consumed by the first of them, so the rest
+    judge what is left of it.  Draining it for every child instead is also wrong: a type or identity
+    check would be asked about a list the caller never passed.
+    """
+
+    __slots__ = ("_drained", "_value")
+
+    def __init__(self, value: Any):
+        self._value = value
+        self._drained: Any = None
+
+    def for_child(self, walks: bool) -> Any:
+        if not walks:
+            return self._value
+        if self._drained is None:
+            self._drained = materialized(self._value)
+        return self._drained
+
+
 class AllOfMatcher(BaseMatcher):
     """Matches when all sub-matchers match (``&`` operator)."""
 
     def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
-        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
+        self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
+        self.walks_its_value: bool = any(self._walkers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
-        return all(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
+        read = _ReadOnce(value)
+        return all(
+            verdict(matcher.matches(read.for_child(walks)), subject="the matcher")
+            for matcher, walks in zip(self.matchers, self._walkers, strict=True)
+        )
 
     def describe(self) -> str:
         return f"({' and '.join(matcher.describe() for matcher in self.matchers)})"
@@ -321,7 +344,12 @@ class AllOfMatcher(BaseMatcher):
         Deriving the verdict from whether there was a reason instead read a satisfied child as a failure
         and, on a matcher answering two calls differently, an unsatisfied one as a pass.
         """
-        failed = [why for one in self.matchers if (why := _failure(one, value)) is not None]
+        read = _ReadOnce(value)
+        failed = [
+            why
+            for one, walks in zip(self.matchers, self._walkers, strict=True)
+            if (why := _failure(one, read.for_child(walks))) is not None
+        ]
         return not failed, ", ".join(failed)
 
     def evaluate(self, value: Any) -> MatchResult:
@@ -334,7 +362,7 @@ class AllOfMatcher(BaseMatcher):
         return self._line(value, self.decide(value)[1])
 
     def _line(self, value: Any, failure: str) -> str:
-        return f"<{value}> did not satisfy: {failure or self.describe()}"
+        return f"<{_safe_str(value)}> did not satisfy: {failure or self.describe()}"
 
 
 class AnyOfMatcher(BaseMatcher):
@@ -342,20 +370,26 @@ class AnyOfMatcher(BaseMatcher):
 
     def __init__(self, *matchers: Matcher[Any]):
         self.matchers = matchers
-        self.walks_its_value: bool = any(_has_own_evaluate(one) for one in matchers)
+        self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
+        self.walks_its_value: bool = any(self._walkers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
 
     def matches(self, value: Any) -> bool:
-        return any(verdict(matcher.matches(value), subject="the matcher") for matcher in self.matchers)
+        read = _ReadOnce(value)
+        return any(
+            verdict(matcher.matches(read.for_child(walks)), subject="the matcher")
+            for matcher, walks in zip(self.matchers, self._walkers, strict=True)
+        )
 
     def describe(self) -> str:
         return f"({' or '.join(matcher.describe() for matcher in self.matchers)})"
 
     def decide(self, value: Any) -> tuple[bool, str]:
         """Held as soon as one alternative holds, and otherwise every alternative with its own reason."""
+        read = _ReadOnce(value)
         reasons = []
-        for one in self.matchers:
-            why = _failure(one, value)
+        for one, walks in zip(self.matchers, self._walkers, strict=True):
+            why = _failure(one, read.for_child(walks))
             if why is None:
                 return True, ""
             reasons.append(why)
@@ -371,7 +405,7 @@ class AnyOfMatcher(BaseMatcher):
         return self._line(value, self.decide(value)[1])
 
     def _line(self, value: Any, failure: str) -> str:
-        return f"<{value}> satisfied none of: {failure or self.describe()}"
+        return f"<{_safe_str(value)}> satisfied none of: {failure or self.describe()}"
 
 
 class NotMatcher(BaseMatcher):
@@ -402,7 +436,7 @@ class NotMatcher(BaseMatcher):
         return self._line(value)
 
     def _line(self, value: Any) -> str:
-        return f"<{value}> unexpectedly matched {self.matcher.describe()}"
+        return f"<{_safe_str(value)}> unexpectedly matched {self.matcher.describe()}"
 
 
 class EqualToMatcher(BaseMatcher):
@@ -448,6 +482,13 @@ class EqualToMatcher(BaseMatcher):
         if self.strict_types and _keyed_types_differ(value, self.expected):
             # the flag walks to the leaves: a composite whose `==` is true says nothing about the types inside
             return False  # a set the walker does not decompose, and a mapping key it walks straight past
+        if key_specs_given(self.ignore) or key_specs_given(self.include):
+            try:
+                return not filtered_differs(
+                    value, self.expected, ignore=self.ignore, include=self.include, config=self.config
+                )
+            except IncludeKeysMissingError:
+                return False
         return not values_differ(value, self.expected, self.config, at_root=True)
 
     def _settings(self) -> str:
@@ -474,8 +515,8 @@ class EqualToMatcher(BaseMatcher):
 
     def describe_mismatch(self, value: Any) -> str:
         if self.strict_types and type(value) is not type(self.expected):
-            return f"was <{value}> of type <{type(value).__name__}>"
-        return f"was <{value}>"
+            return f"was <{_safe_str(value)}> of type <{type(value).__name__}>"
+        return f"was <{_safe_str(value)}>"
 
 
 class GreaterThanMatcher(BaseMatcher):
@@ -654,7 +695,7 @@ class IsInstanceOfMatcher(BaseMatcher):
         return f"an instance of <{_type_expression_name(self.expected_type)}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value}> of type <{type(value).__name__}>"
+        return f"was <{_safe_str(value)}> of type <{type(value).__name__}>"
 
 
 class IsTypeOfMatcher(BaseMatcher):
@@ -678,7 +719,7 @@ class IsTypeOfMatcher(BaseMatcher):
         return f"exactly type <{_type_expression_name(self.expected_type)}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value}> of type <{type(value).__name__}>"
+        return f"was <{_safe_str(value)}> of type <{type(value).__name__}>"
 
 
 class IsTruthyMatcher(BaseMatcher):
@@ -711,8 +752,8 @@ class HasLengthMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         length = length_of(value)
         if length is None:
-            return f"was <{value!r}>, which has no length"
-        return f"was <{value}> with length <{length}>"
+            return f"was <{_safe_repr(value)}>, which has no length"
+        return f"was <{_safe_str(value)}> with length <{length}>"
 
 
 class IsEmptyMatcher(BaseMatcher):
@@ -772,8 +813,8 @@ class IsEvenMatcher(BaseMatcher):
 
     def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
-            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
-        return f"was <{value}>, which is odd"
+            return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{_safe_str(value)}>, which is odd"
 
 
 class IsOddMatcher(BaseMatcher):
@@ -785,8 +826,8 @@ class IsOddMatcher(BaseMatcher):
 
     def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
-            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
-        return f"was <{value}>, which is even"
+            return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{_safe_str(value)}>, which is even"
 
 
 class IsDivisibleByMatcher(BaseMatcher):
@@ -803,8 +844,8 @@ class IsDivisibleByMatcher(BaseMatcher):
 
     def describe_mismatch(self, value: Any) -> str:
         if isinstance(value, bool) or not isinstance(value, int):
-            return f"was <{value!r}> of type <{type(value).__name__}>, not an integer"
-        return f"was <{value}>, which has remainder <{value % self.divisor}>"
+            return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
+        return f"was <{_safe_str(value)}>, which has remainder <{value % self.divisor}>"
 
 
 class IsCallableMatcher(BaseMatcher):
@@ -815,7 +856,7 @@ class IsCallableMatcher(BaseMatcher):
         return "a callable"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value!r}> of type <{type(value).__name__}>, which is not callable"
+        return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, which is not callable"
 
 
 class IsInMatcher(BaseMatcher):
@@ -826,10 +867,10 @@ class IsInMatcher(BaseMatcher):
         return value in self.values
 
     def describe(self) -> str:
-        return f"a value in <{self.values}>"
+        return f"a value in <{_safe_repr(self.values)}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        return f"was <{value!r}>, which is not in <{self.values}>"
+        return f"was <{_safe_repr(value)}>, which is not in <{_safe_repr(self.values)}>"
 
 
 class HasPropertyMatcher(BaseMatcher):
@@ -838,10 +879,12 @@ class HasPropertyMatcher(BaseMatcher):
         self.matcher = matcher
 
     def matches(self, value: Any) -> bool:
-        if not hasattr(value, self.name):
+        try:
+            held = getattr(value, self.name)
+        except AttributeError:
             return False
         if self.matcher is not None:
-            return bool(verdict(self.matcher.matches(getattr(value, self.name)), subject="the matcher"))
+            return bool(verdict(self.matcher.matches(held), subject="the matcher"))
         return True
 
     def describe(self) -> str:
@@ -914,7 +957,12 @@ class EndsWithMatcher(BaseMatcher):
 
 def _listed(items: Any) -> str:
     """Items as a reader sees them, with a matcher naming itself rather than showing its repr."""
-    return ", ".join(item.describe() if _is_matcher(item) else repr(item) for item in items)
+    return ", ".join(item.describe() if _is_matcher(item) else _safe_repr(item) for item in items)
+
+
+def _unsearchable(searched: object, refusal: MembershipRefusedError) -> str:
+    """Why a membership question could not be asked at all, kept as a mismatch so `~` and `|` still work."""
+    return f"was <{_safe_str(searched)}>, which cannot be asked about these items: {refusal}"
 
 
 class ContainsMatcher(BaseMatcher):
@@ -934,7 +982,10 @@ class ContainsMatcher(BaseMatcher):
         searched = searchable(value)
         if not is_searchable(searched):
             return False  # a value membership cannot be asked of simply does not contain anything
-        return not missing_items(searched, self.items, _is_matcher)
+        try:
+            return not missing_items(searched, self.items, _is_matcher)
+        except MembershipRefusedError:
+            return False  # an item this value cannot even be searched for is not one it holds
 
     def describe(self) -> str:
         return f"a collection containing {_listed(self.items)}"
@@ -952,13 +1003,18 @@ class ContainsMatcher(BaseMatcher):
         searched = searchable(value)
         if not is_searchable(searched):
             return MatchResult(
-                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be searched"
+                matched=False,
+                description=self.describe(),
+                mismatch=f"was <{_safe_repr(value)}>, which cannot be searched",
             )
-        absent = missing_items(searched, self.items, _is_matcher)
+        try:
+            absent = missing_items(searched, self.items, _is_matcher)
+        except MembershipRefusedError as refusal:
+            return MatchResult(matched=False, description=self.describe(), mismatch=_unsearchable(searched, refusal))
         return MatchResult(
             matched=not absent,
             description=self.describe(),
-            mismatch="" if not absent else f"was <{searched}>, missing {_listed(absent)}",
+            mismatch="" if not absent else f"was <{_safe_str(searched)}>, missing {_listed(absent)}",
         )
 
 
@@ -989,9 +1045,14 @@ class ContainsOnlyMatcher(BaseMatcher):
         if not is_walkable(searched):
             # membership is not enough: every element must be seen, and `__contains__` alone cannot be listed
             return MatchResult(
-                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be listed"
+                matched=False,
+                description=self.describe(),
+                mismatch=f"was <{_safe_repr(value)}>, which cannot be listed",
             )
-        extra, missing = only_faults(searched, self.items)
+        try:
+            extra, missing = only_faults(searched, self.items)
+        except MembershipRefusedError as refusal:
+            return MatchResult(matched=False, description=self.describe(), mismatch=_unsearchable(searched, refusal))
         faults = []
         if extra:
             faults.append(f"also had {_listed(extra)}")
@@ -1062,7 +1123,9 @@ class IsSortedMatcher(BaseMatcher):
         """One walk, which also means the user's `key` is called once per element rather than twice."""
         if not is_walkable(value):
             return MatchResult(
-                matched=False, description=self.describe(), mismatch=f"was <{value!r}>, which cannot be walked"
+                matched=False,
+                description=self.describe(),
+                mismatch=f"was <{_safe_repr(value)}>, which cannot be walked",
             )
         items = searchable(value)
         try:
@@ -1183,15 +1246,28 @@ class EachMatcher(BaseMatcher):
         return f"each item matching {self.matcher.describe()}"
 
     def describe_mismatch(self, value: Any) -> str:
+        return self.evaluate(value).mismatch
+
+    def evaluate(self, value: Any) -> MatchResult:
+        """One walk: deciding drained a one-shot value, and describing afterwards named its remainder.
+
+        The walk stops at the first item that fails, so an endless value is answered rather than read.
+        """
         try:
-            for i, item in enumerate(value):
+            for index, item in enumerate(value):
                 if not verdict(self.matcher.matches(item), subject="the matcher"):
-                    return f"item at index {i} <{item}> did not match {self.matcher.describe()}"
+                    return MatchResult(
+                        matched=False,
+                        description=self.describe(),
+                        mismatch=f"item at index {index} <{_safe_str(item)}> did not match {self.matcher.describe()}",
+                    )
         except TypeError as exc:
             if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
                 raise
-            return f"was not iterable: <{value}>"
-        return f"was <{value}>"
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was not iterable: <{_safe_str(value)}>"
+            )
+        return MatchResult(matched=True, description=self.describe(), mismatch=f"was <{_safe_str(value)}>")
 
 
 class _MissingSentinel:
@@ -1211,7 +1287,7 @@ def _describe_spec_value(value: object) -> str:
     if isinstance(value, dict):
         parts = [f"{key}: {_describe_spec_value(sub_value)}" for key, sub_value in value.items()]
         return f"{{{', '.join(parts)}}}"
-    return f"<{value}>"
+    return f"<{_safe_str(value)}>"
 
 
 class _SpecMismatch(NamedTuple):
@@ -1350,10 +1426,12 @@ class StructureMatcher(BaseMatcher):
                                 path.key(key), actual, expected.describe(), expected.describe_mismatch(actual)
                             )
                         )
-                except CoroutineVerdictError:  # never a mismatch, always a mistake in the test
+                except VerdictError:  # never a mismatch, always a mistake in the test
                     raise
                 except (TypeError, ValueError):
-                    mismatches.append(_SpecMismatch(path.key(key), actual, expected.describe(), f"was <{actual}>"))
+                    mismatches.append(
+                        _SpecMismatch(path.key(key), actual, expected.describe(), f"was <{_safe_str(actual)}>")
+                    )
             elif isinstance(expected, dict):
                 normalized = self._as_mapping(actual)
                 if is_mapping_like(normalized):

@@ -62,7 +62,7 @@ from ._engine._operations import (
     WITHOUT_A_VERDICT,
 )
 from ._engine._path import _ROOT, _Path
-from ._engine._require import argument, refuse
+from ._engine._require import argument, refuse, verdict
 from .async_assertions import AsyncAssertionBuilder, SyncAssertionBuilder, _normalize_ignoring
 from .base import BaseMixin
 from .bytes_mixin import BytesMixin
@@ -1210,7 +1210,7 @@ class NegatedBuilder(Generic[_S]):
         rendered = ", ".join(
             [_safe_repr(arg) for arg in args] + [f"{key}={_safe_repr(value)}" for key, value in kwargs.items()]
         )
-        return f"{desc}Expected <{self._builder.val}> to NOT satisfy: {name}({rendered})"
+        return f"{desc}Expected <{_safe_str(self._builder.val)}> to NOT satisfy: {name}({rendered})"
 
     def _asked(self, attr: Callable[..., object], name: str, *args: object, **kwargs: object) -> Requirement:
         """What the negated call asked for, bound to the underlying assertion's parameter names.
