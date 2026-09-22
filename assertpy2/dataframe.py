@@ -130,7 +130,15 @@ class DataFrameMixin(_MixinBase):
             AssertionError: if the arrays are not equal (carrying numpy's own diff message)
             ImportError: if numpy is not installed
         """
-        _, testing = _load("numpy")
+        numpy, testing = _load("numpy")
+        # shape first: left to numpy a scalar broadcasts, so an empty array "equals" 5, against the shape
+        # the docstring promises.  numpy's own `strict` is about dtype and is passed through untouched
+        actual_shape, expected_shape = numpy.shape(self.val), numpy.shape(expected)
+        if actual_shape != expected_shape:
+            return self.error(
+                f"Expected an array of shape <{expected_shape}>, but was of shape <{actual_shape}>.",
+                expected=expected,
+            )
         try:
             testing.assert_array_equal(self.val, expected, **options)
         except AssertionError as exc:

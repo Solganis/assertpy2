@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import functools
 import json
+import re
 from pathlib import Path, PurePath
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
@@ -384,8 +385,15 @@ class JsonMixin(_MixinBase):
         from referencing.jsonschema import DRAFT4, DRAFT202012
 
         normalized = _stringify_keys(spec)  # YAML may parse numeric-looking keys (e.g. status 200) as ints
-        is_openapi_31 = str(normalized.get("openapi", "")).startswith("3.1")
-        is_swagger_2 = str(normalized.get("swagger", "")).startswith("2")
+        version = str(normalized.get("openapi", ""))
+        is_swagger_2 = _SWAGGER_2.fullmatch(str(normalized.get("swagger", ""))) is not None
+        # matched whole, not by prefix: "3.10.0" starts with "3.1", and "3.1.garbage" is no version at all
+        read = _OPENAPI_VERSION.fullmatch(version)
+        if version and read is None:
+            # read as 3.0 an unknown version validates against Draft 4, which passes anything it cannot spell
+            raise ValueError(f"openapi version <{version}> is not one this can validate (3.0, 3.1 and 3.2 are)")
+        # 3.2 keeps 3.1's dialect: the schema object is JSON Schema 2020-12 in both
+        is_openapi_31 = read is not None and read.group(1) in ("1", "2")
         status_key, pointer = _openapi_resolve(normalized, path, method, status, content_type)
         if is_openapi_31:
             document = normalized  # 3.1 is JSON Schema 2020-12 already, no nullable rewrite

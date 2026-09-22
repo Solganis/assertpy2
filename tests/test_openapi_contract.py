@@ -529,3 +529,90 @@ class TestTheRequirementNamesTheCallersSpec:
     def test_the_negated_failure_carries_the_same(self):
         asked = assert_that(1).check().not_.conforms_to_openapi(self._SPEC, "/x", "get").requirement
         assert_that(asked.parameters["spec"]).is_same_as(self._SPEC)
+
+
+class TestTheDialectFollowsTheVersion:
+    """Read as 3.0 a newer spec validates against Draft 4, which passes every keyword it cannot spell."""
+
+    @staticmethod
+    def _spec(version):
+        return {
+            "openapi": version,
+            "paths": {
+                "/x": {
+                    "get": {"responses": {"200": {"content": {"application/json": {"schema": {"const": "only-this"}}}}}}
+                }
+            },
+        }
+
+    @pytest.mark.parametrize("version", ["3.1.0", "3.2.0"])
+    def test_a_2020_12_keyword_is_read(self, version):
+        outcome = assert_that("other").check().conforms_to_openapi(self._spec(version), "/x", "get", status=200)
+        assert_that(outcome.passed).is_false()
+
+    def test_an_unknown_version_is_refused_rather_than_guessed(self):
+        with pytest.raises(ValueError, match="is not one this can validate"):
+            assert_that("other").conforms_to_openapi(self._spec("4.0.0"), "/x", "get", status=200)
+
+    def test_three_zero_still_validates_as_draft_four(self):
+        assert_that("other").conforms_to_openapi(self._spec("3.0.3"), "/x", "get", status=200)
+
+
+class TestTheVersionIsReadRatherThanPrefixed:
+    """`"3.10.0"` starts with `"3.1"` and is not it, and a spec read in the wrong dialect passes anything."""
+
+    @staticmethod
+    def _spec(version):
+        return {
+            "openapi": version,
+            "paths": {"/x": {"get": {"responses": {"200": {"content": {"application/json": {"schema": {}}}}}}}},
+        }
+
+    @pytest.mark.parametrize("version", ["3.10.0", "3.20.0", "3.2garbage", "4.0.0", "2.0"])
+    def test_a_version_that_is_not_one_of_the_three_is_refused(self, version):
+        with pytest.raises(ValueError, match="is not one this can validate"):
+            assert_that({}).conforms_to_openapi(self._spec(version), "/x", "get", status=200)
+
+    @pytest.mark.parametrize("version", ["3.0.3", "3.1.0", "3.2.0"])
+    def test_the_three_it_reads_are_read(self, version):
+        assert_that({}).conforms_to_openapi(self._spec(version), "/x", "get", status=200)
+
+
+class TestAVersionIsMatchedWhole:
+    """A prefix is not a version: "3.10.0" starts with "3.1" and "20" is not Swagger's "2.0"."""
+
+    @staticmethod
+    def _openapi(version):
+        return {
+            "openapi": version,
+            "paths": {"/x": {"get": {"responses": {"200": {"content": {"application/json": {"schema": {}}}}}}}},
+        }
+
+    @staticmethod
+    def _swagger(version):
+        return {
+            "swagger": version,
+            "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "object", "nullable": True}}}}}},
+        }
+
+    @pytest.mark.parametrize("version", ["3.1.garbage", "3.1.", "3.1x", " 3.1.0"])
+    def test_a_version_that_only_looks_like_one_is_refused(self, version):
+        with pytest.raises(ValueError, match="is not one this can validate"):
+            assert_that({}).conforms_to_openapi(self._openapi(version), "/x", "get", status=200)
+
+    def test_a_patch_number_is_still_a_version(self):
+        assert_that({}).conforms_to_openapi(self._openapi("3.1.99"), "/x", "get", status=200)
+
+    @staticmethod
+    def _nullable(version):
+        """A spec whose schema says `nullable`, which only the OpenAPI 3.0 rewrite turns into a null type."""
+        return {
+            "swagger": version,
+            "paths": {"/x": {"get": {"responses": {"200": {"schema": {"type": "string", "nullable": True}}}}}},
+        }
+
+    def test_swagger_is_its_own_version_and_not_a_prefix(self):
+        """Read by prefix, "20" took the Swagger path, which rewrites `x-nullable` and not `nullable`."""
+        with pytest.raises(AssertionError, match="to conform to the OpenAPI schema"):
+            assert_that(None).conforms_to_openapi(self._nullable("2.0"), "/x", "get", status=200)
+        assert_that(None).conforms_to_openapi(self._nullable("20"), "/x", "get", status=200)

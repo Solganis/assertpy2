@@ -18,6 +18,16 @@ def _require_datetime(value: object, label: str) -> None:
     require_type(value, datetime.datetime, "a datetime", subject=label)
 
 
+def _read_in_the_zone_of(value: datetime.datetime, reference: datetime.datetime) -> datetime.datetime:
+    """*value* as the same instant reads on *reference*'s clock, so wall-clock fields compare like with like.
+
+    The guide says making both sides aware is what makes these comparisons well defined.  Compared field
+    by field they were not: two instants five hours apart in different zones read equal to the second.
+    Both sides are aware or both naive by then, and a naive pair has no zone to be read in.
+    """
+    return value.astimezone(reference.tzinfo) if reference.tzinfo is not None else value
+
+
 def _require_comparable_datetimes(first: datetime.datetime, second: datetime.datetime) -> None:
     """Reject a naive-vs-aware pair with a clear message.
 
@@ -201,15 +211,16 @@ class DateMixin(_MixinBase):
         _require_datetime(self.val, "val")
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
+        instant = _read_in_the_zone_of(other, self.val)
         if (
-            self.val.date() != other.date()
-            or self.val.hour != other.hour
-            or self.val.minute != other.minute
-            or self.val.second != other.second
+            self.val.date() != instant.date()
+            or self.val.hour != instant.hour
+            or self.val.minute != instant.minute
+            or self.val.second != instant.second
         ):
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+                f" <{instant.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
                 expected=other,
             )
         return self
@@ -239,10 +250,11 @@ class DateMixin(_MixinBase):
         _require_datetime(self.val, "val")
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
-        if self.val.date() != other.date() or self.val.hour != other.hour or self.val.minute != other.minute:
+        instant = _read_in_the_zone_of(other, self.val)
+        if self.val.date() != instant.date() or self.val.hour != instant.hour or self.val.minute != instant.minute:
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d %H:%M')}>, but was not.",
+                f" <{instant.strftime('%Y-%m-%d %H:%M')}>, but was not.",
                 expected=other,
             )
         return self
@@ -272,10 +284,11 @@ class DateMixin(_MixinBase):
         _require_datetime(self.val, "val")
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
-        if self.val.date() != other.date():
+        instant = _read_in_the_zone_of(other, self.val)
+        if self.val.date() != instant.date():
             return self.error(
                 f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
-                f" <{other.strftime('%Y-%m-%d')}>, but was not.",
+                f" <{instant.strftime('%Y-%m-%d')}>, but was not.",
                 expected=other,
             )
         return self

@@ -34,8 +34,13 @@ class TestIsValidEncoding:
         assert_that(b"\xe4\xf6\xfc").is_valid_encoding("latin-1")
 
     def test_invalid_encoding_name(self):
-        with pytest.raises(AssertionError, match="decoding failed"):
+        """A codec that does not exist is a mistake in the call, and reported as a failure it passed twice."""
+        with pytest.raises(LookupError, match="nonexistent-encoding"):
             assert_that(b"hello").is_valid_encoding("nonexistent-encoding")
+        with pytest.raises(LookupError, match="nonexistent-encoding"):
+            assert_that(b"hello").not_.is_valid_encoding("nonexistent-encoding")
+        with pytest.raises(LookupError, match="nonexistent-encoding"):
+            assert_that(b"hello").check().is_valid_encoding("nonexistent-encoding")
 
     def test_non_bytes_raises(self):
         with pytest.raises(TypeError, match="val must be bytes or a bytearray"):

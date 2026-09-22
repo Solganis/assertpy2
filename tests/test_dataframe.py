@@ -50,6 +50,17 @@ def _fake_numpy(*, fail):
         if fail:
             raise AssertionError(f"numpy not close; rtol={rtol} atol={atol} equal_nan={equal_nan} options={options}")
 
+    def shape(value):
+        """As numpy reads it: the attribute where there is one, and the length of each level otherwise."""
+        held = getattr(value, "shape", None)
+        if isinstance(held, tuple):
+            return held
+        if isinstance(value, (list, tuple)):
+            inner = {shape(item) for item in value}
+            return (len(value), *inner.pop()) if len(inner) == 1 else (len(value),)
+        return ()
+
+    library.shape = shape
     testing.assert_array_equal = assert_array_equal
     testing.assert_allclose = assert_allclose
     with patch.dict(sys.modules, {"numpy": library, "numpy.testing": testing}):
@@ -258,3 +269,31 @@ class TestRealLibraries:
         assert_that(actual).is_array_equal(expected)
         with pytest.raises(AssertionError):
             assert_that(actual).is_array_equal(expected, strict=True)
+
+
+class TestAnArrayIsComparedByItsShape:
+    """`is_array_equal` promises shape and every element, and numpy broadcasts a scalar over both."""
+
+    def test_a_scalar_does_not_equal_an_array(self):
+        numpy = pytest.importorskip("numpy")
+        assert_that(assert_that(numpy.array([5, 5])).check().is_array_equal(5).passed).is_false()
+
+    def test_an_empty_array_equals_nothing_but_an_empty_one(self):
+        numpy = pytest.importorskip("numpy")
+        assert_that(assert_that(numpy.array([])).check().is_array_equal(5).passed).is_false()
+        assert_that(numpy.array([])).is_array_equal(numpy.array([]))
+
+    def test_the_message_names_both_shapes(self):
+        numpy = pytest.importorskip("numpy")
+        outcome = assert_that(numpy.array([[1, 2]])).check().is_array_equal(numpy.array([1, 2]))
+        assert_that(outcome.message).contains("(1, 2)").contains("(2,)")
+
+    def test_numpys_strict_is_about_dtype_and_not_a_way_out_of_the_shape(self):
+        """`strict=False` is numpy's default and says nothing about shape, which is what is promised here."""
+        numpy = pytest.importorskip("numpy")
+        assert_that(assert_that(numpy.array([5, 5])).check().is_array_equal(5, strict=False).passed).is_false()
+        assert_that(numpy.array([1, 2])).is_array_equal(numpy.array([1.0, 2.0]), strict=False)
+
+    def test_element_types_are_not_part_of_the_promise(self):
+        numpy = pytest.importorskip("numpy")
+        assert_that(numpy.array([1, 2])).is_array_equal(numpy.array([1.0, 2.0]))

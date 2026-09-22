@@ -45,11 +45,13 @@ class BytesMixin(_MixinBase):
 
         Raises:
             AssertionError: if val cannot be decoded with the given encoding
+            LookupError: if there is no such codec, which is a mistake in the call rather than a verdict
+                about the value: reported as a failure, ``not_`` and ``check()`` said the value was fine
         """
         self._check_bytes()
         try:
             self.val.decode(encoding)
-        except (UnicodeDecodeError, LookupError):
+        except UnicodeDecodeError:
             return self.error(f"Expected valid {encoding} encoding, but decoding failed.", expected=encoding)
         return self
 
@@ -151,4 +153,4 @@ class BytesMixin(_MixinBase):
         """
         self._check_bytes()
         decoded = self.val.decode(encoding)
-        return self.builder(decoded, self.description, self.kind)
+        return self.builder(decoded, self.description, self.kind, logger=self.logger)

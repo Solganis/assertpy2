@@ -17,8 +17,8 @@ def test_is_before_failure():
         other_time = datetime.datetime.today()
         assert_that(other_time).is_before(reference_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be before "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be before "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -44,8 +44,8 @@ def test_is_after_failure():
         other_time = datetime.datetime.today()
         assert_that(reference_time).is_after(other_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be after "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be after "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -71,7 +71,7 @@ def test_is_equal_to_ignoring_milliseconds_failure():
         assert_that(reference_time).is_equal_to_ignoring_milliseconds(other_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be equal to "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -148,7 +148,7 @@ def test_is_greater_than_failure():
         assert_that(reference_time).is_greater_than(other_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -170,7 +170,7 @@ def test_is_greater_than_or_equal_to_failure():
         assert_that(reference_time).is_greater_than_or_equal_to(other_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than or equal to "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -193,7 +193,7 @@ def test_is_less_than_failure():
         assert_that(other_time).is_less_than(reference_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -215,7 +215,7 @@ def test_is_less_than_or_equal_to_failure():
         assert_that(other_time).is_less_than_or_equal_to(reference_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than or equal to "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -240,7 +240,7 @@ def test_is_between_failure():
         assert_that(reference_time).is_between(other_time, third_time)
     assert_that(str(exc_info.value)).matches(
         r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be between "
-        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was not."
+        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -671,3 +671,65 @@ class TestDynamicComponentAssertions:
         moment = datetime.datetime(1980, 1, 2, 3, 4, 5, 6)
         with pytest.raises(AssertionError, match="year"):
             assert_that(moment).has_year(1981)
+
+
+class TestAMessageNamesTheWholeInstant:
+    """Rendered with `strftime`, two instants five hours apart read as "12:00 is not before 14:00"."""
+
+    def test_the_offset_and_the_fraction_are_printed(self):
+        east = datetime.timezone(datetime.timedelta(hours=3))
+        later = datetime.datetime(2026, 1, 1, 14, tzinfo=datetime.timezone.utc)
+        earlier = datetime.datetime(2026, 1, 1, 12, 0, 0, 500000, tzinfo=east)
+        outcome = assert_that(later).check().is_before(earlier)
+        assert_that(outcome.message).contains("+00:00").contains("+03:00").contains(".500000")
+
+    def test_a_naive_pair_still_reads_as_it_always_did(self):
+        outcome = assert_that(datetime.datetime(2026, 1, 1, 14)).check().is_before(datetime.datetime(2026, 1, 1, 12))
+        assert_that(outcome.message).contains("<2026-01-01 14:00:00> to be before <2026-01-01 12:00:00>")
+
+    @pytest.mark.parametrize("call", ["is_after", "is_before_or_equal_to", "is_after_or_equal_to"])
+    def test_every_relational_message_carries_it(self, call):
+        east = datetime.timezone(datetime.timedelta(hours=3))
+        one = datetime.datetime(2026, 1, 1, 12, tzinfo=datetime.timezone.utc)
+        other = datetime.datetime(2026, 1, 1, 12, tzinfo=east)
+        first, second = (other, one) if call.startswith("is_after") else (one, other)
+        outcome = getattr(assert_that(first).check(), call)(second)
+        assert_that(outcome.passed).described_as("the pair chosen to fail").is_false()
+        assert_that(outcome.message).contains("+03:00")
+
+
+class TestTwoZonesAreOneInstant:
+    """The guide says making both sides aware is what makes these well defined, and field-by-field they were not."""
+
+    @pytest.mark.parametrize(
+        "call",
+        ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds"],
+    )
+    def test_the_same_wall_clock_in_two_zones_is_not_the_same_instant(self, call):
+        east = datetime.timezone(datetime.timedelta(hours=5))
+        outcome = getattr(assert_that(datetime.datetime(2026, 1, 1, 12, tzinfo=datetime.timezone.utc)).check(), call)(
+            datetime.datetime(2026, 1, 1, 12, tzinfo=east)
+        )
+        assert_that(outcome.passed).is_false()
+
+    @pytest.mark.parametrize(
+        "call",
+        ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds", "is_equal_to_ignoring_time"],
+    )
+    def test_one_instant_written_two_ways_is_equal(self, call):
+        east = datetime.timezone(datetime.timedelta(hours=5))
+        getattr(assert_that(datetime.datetime(2026, 1, 1, 12, tzinfo=datetime.timezone.utc)), call)(
+            datetime.datetime(2026, 1, 1, 17, tzinfo=east)
+        )
+
+    def test_a_day_is_the_day_of_the_value_under_test(self):
+        """Read in the subject's zone: the same instant falls on a different date in another one."""
+        east = datetime.timezone(datetime.timedelta(hours=5))
+        assert_that(datetime.datetime(2026, 1, 1, 22, tzinfo=datetime.timezone.utc)).is_equal_to_ignoring_time(
+            datetime.datetime(2026, 1, 2, 3, tzinfo=east)
+        )
+
+    def test_a_naive_pair_is_left_as_it_is(self):
+        assert_that(datetime.datetime(2026, 1, 1, 12, 0, 5)).is_equal_to_ignoring_seconds(
+            datetime.datetime(2026, 1, 1, 12, 0, 55)
+        )
