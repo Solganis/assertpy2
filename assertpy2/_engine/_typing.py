@@ -1,12 +1,13 @@
-"""The typed surface itself: one protocol per kind of value, and the only one of the five written by hand.
+"""The typed surface itself: one protocol per kind of value, and the only one of the six written by hand.
 
 `assert_that()` picks between them with an overload ladder in `assertpy2/assertpy.py`, and a checker sees
 the protocol rather than the builder.  That is what makes `assert_that({}).is_positive()` an error before
 it is a `TypeError`.
 
-Three of the other four typed modules are generated from this one, so a declaration added here reaches
-the polling chain and both verdict proxies only after the generators run.  The fourth, the capability
-facade, reads the runtime mixins instead: it stands in for the builder rather than for a view.
+Four of the other five typed modules are generated from this one, so a declaration added here reaches
+the polling chain, both verdict proxies and the negation twins only after the generators run.  The
+fifth, the capability facade, reads the runtime mixins instead: it stands in for the builder rather
+than for a view.
 
 Declare a method on the protocols it applies to and on no others.  One on `_CoreAssertion` is offered to
 every value, which is the distinction this layer exists to make.

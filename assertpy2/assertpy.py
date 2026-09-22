@@ -1157,9 +1157,10 @@ def _refuse_without_a_verdict(target: object, name: str, proxy: str, remedies: d
 class NegatedBuilder(Generic[_S]):
     """Proxy that inverts the next assertion. Created by ``assert_that(val).not_``.
 
-    Generic over the assertion type it was reached from, so inverting a step returns what the
-    un-inverted step would have: ``assert_that("x").not_.starts_with("y")`` stays a string assertion
-    rather than collapsing to the untyped builder and letting a numeric assertion follow it.
+    Generic over the assertion type it was reached from, so inverting a step returns the view the chain
+    had before ``.not_``: ``assert_that("x").not_.starts_with("y")`` stays a string assertion rather
+    than collapsing to the untyped builder and letting a numeric assertion follow it, and a negated
+    narrowing narrows nothing.
     """
 
     if TYPE_CHECKING:

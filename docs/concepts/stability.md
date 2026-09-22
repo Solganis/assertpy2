@@ -20,8 +20,9 @@ The records in the first row are `AssertionOutcome`, `MatchResult`, `DiffEntry`,
 `PollSample`, `PollTrace` and `Requirement`. Fields are added, never renamed or removed, inside a
 major version.
 
-Documentation is held to the same bar: every example in these guides is executed and type-checked in
-CI, so a snippet you copy is one that ran.
+Documentation is held to the same bar: the examples in these guides are type-checked in CI, and every
+page that can run in the suite is executed, with what each block prints compared against the page. A
+page left out of either is named in the tests with the reason, and a block left out is marked in the page.
 
 ## Reading a failure from code
 

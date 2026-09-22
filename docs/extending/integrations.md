@@ -79,8 +79,9 @@ The version moved from 2 to 3 to carry it, so a consumer branching on `format` n
 `requirement` answers what `actual` and `expected` cannot: which assertion ran, with which parameters,
 and whether `not_` inverted it. Parameters are keyed by the assertion's own parameter names and carry
 the values it ran with, so a parameter the caller left out appears with its default and two spellings
-of one call group as one. It is absent where no operation was asked, which is `fail()` and a bare
-`error()`. A key appears only when the assertion named that side. Every failure carries the value under test, but
+of one call group as one. It is absent where no operation was asked: `fail()`, a bare `error()`, and a
+precondition of one of the few members that assert nothing on their own. A key appears only when the
+assertion named that side. Every failure carries the value under test, but
 most messages open with it (`Expected <[1, 2]> to contain ...`), so attaching it again would repeat
 what the reader already has.
 
@@ -143,8 +144,9 @@ different elements.
 entry whose path is a label rather than a coordinate. A step value that JSON cannot express degrades
 the same way every other value in an attachment does.
 
-Each attachment is versioned on its own. The diff attachment is the one that moved, while the
-`AssertionFailure` and polling-trace attachments stay at `2` because nothing about them changed.
+Each attachment is versioned on its own. The diff attachment is at `4` and the `AssertionFailure`
+attachment at `3`, each moved for a key of its own, while the polling-trace attachment stays at `2`
+because nothing about it changed.
 
 Regardless of Allure mode, the plugin always adds human-readable sections to the failure itself, where
 the terminal, a JUnit report and an IDE runner all show them:

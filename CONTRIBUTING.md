@@ -25,7 +25,7 @@ Read more about how pulls work on GitHub's [About pull requests](https://help.gi
 
 ## Before you change a public signature
 
-Read [ARCHITECTURE.md](ARCHITECTURE.md). Four files under `assertpy2/_engine/` are generated, the public
+Read [ARCHITECTURE.md](ARCHITECTURE.md). Five files under `assertpy2/_engine/` are generated, the public
 surface is pinned by a recorded snapshot, and neither is discoverable from the files themselves.
 
 ## Verification pipeline
@@ -124,9 +124,11 @@ Write tests for every new feature or bug fix. Use `assertpy2` assertions in test
 
 ## Documentation examples
 
-Guide code blocks are executed and type-checked in CI, so an example you add has to run. A block that
+Guide code blocks are type-checked in CI, and every page that can run in the suite is executed, with what
+each block prints compared with the comment beside it, so an example you add has to run. A block that
 cannot (pseudo-context, a deliberate failure, a rejected counter-example) is marked with an HTML comment
-above the fence: `tests/test_docs_examples.py` lists the markers and what each one exempts.
+above the fence. `tests/test_docs_examples.py` lists the markers and what each one exempts, and it and
+`tests/test_docs_typing.py` each name the pages they leave out, with the reason.
 
 Setup a page assumes (a domain class, a repository, an HTTP response) goes in
 `tests/docs_fixtures.py`, not into an extra block on the page.

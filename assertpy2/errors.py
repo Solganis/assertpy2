@@ -517,8 +517,8 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         self.requirement = requirement
         """What was asked of the value, as data: the operation, its parameters, and whether it was negated.
 
-        ``None`` where no operation was asked, which is `fail()` and a bare `error()` carrying a message
-        of the caller's own.
+        ``None`` where no operation was asked: `fail()`, a bare `error()` carrying a message of the
+        caller's own, and a precondition of one of the few members that assert nothing on their own.
         """
         self.failures = failures
         """The failures a soft block collected, in the order they were collected.

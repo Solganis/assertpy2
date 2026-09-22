@@ -15,7 +15,11 @@ import sys
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 _STEPS: list[tuple[str, list[str], dict[str, str]]] = [
-    ("polling, builder-check and capability twins", [sys.executable, "scripts/generate_poll_protocols.py"], {}),
+    (
+        "polling, builder-check, capability and negation twins",
+        [sys.executable, "scripts/generate_poll_protocols.py"],
+        {},
+    ),
     ("verdict twins", [sys.executable, "scripts/generate_check_protocols.py"], {}),
     (
         "the public surface snapshot",
