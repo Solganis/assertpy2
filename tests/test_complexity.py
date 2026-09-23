@@ -52,7 +52,6 @@ RECORDED: dict[str, int] = {
     "assertpy2/_dangling.py::_survey": 11,
     "assertpy2/_dangling.py::findings": 11,
     "assertpy2/_engine/_contract.py::contract_drift": 11,
-    "assertpy2/_satisfies.py::satisfies_exactly_in_any_order": 11,
     "assertpy2/assertpy.py::assert_conforms": 11,
     # one more name refused by the poll chain: check() after a poll used to skip the wait and answer nothing
     "assertpy2/async_assertions.py::__getattr__": 12,

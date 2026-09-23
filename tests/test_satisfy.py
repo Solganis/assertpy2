@@ -460,3 +460,107 @@ class TestAMatcherIsAskedAboutTheValueUnderTest:
 
     def test_each_asks_about_each_item(self):
         assert_that([1, 2, 3]).each(self._Positive())
+
+
+class TestTheArgumentIsReadOnce:
+    """A loop reads what the argument is once, in the order `_apply_matcher` reads it, and holds to it."""
+
+    def test_a_duck_typed_matcher_is_asked_about_every_item(self):
+        """Read once as a matcher, it is then asked about every item through the member read at the start."""
+
+        class Counting:
+            def __init__(self):
+                self.asked = 0
+
+            def matches(self, value):
+                self.asked += 1
+                return False
+
+            def describe(self):
+                return "counting"
+
+            def describe_mismatch(self, value):
+                return "no"
+
+        counting = Counting()
+        assert_that(assert_that([1, 2, 3]).check().any_satisfy(counting).passed).is_false()
+        assert_that(counting.asked).described_as("times it was asked").is_equal_to(3)
+
+    def test_a_library_matcher_and_a_lambda_answer_the_same_as_before(self):
+        assert_that([1, 2, 3]).any_satisfy(match.greater_than(2))
+        assert_that([1, 2, 3]).any_satisfy(lambda item: item > 2)
+        assert_that(assert_that([1, 2, 3]).check().any_satisfy(match.greater_than(9)).passed).is_false()
+        assert_that(assert_that([1, 2, 3]).check().any_satisfy(lambda item: item > 9).passed).is_false()
+
+    def test_a_partial_is_a_callable_the_loop_reads_once(self):
+        import functools
+
+        assert_that([1, 2, 3]).any_satisfy(functools.partial(lambda bound, item: item > bound, 2))
+
+    def test_a_predicate_that_grows_matcher_members_keeps_being_a_predicate(self):
+        """Declared: what the argument is is read once for a loop, so it cannot change kind halfway."""
+        used = []
+
+        def predicate(value):
+            used.append("called")
+            predicate.matches = lambda item: used.append("matches") or False
+            predicate.describe = lambda: "grown"
+            predicate.describe_mismatch = lambda item: "no"
+            return False
+
+        outcome = assert_that([1, 2, 3]).check().any_satisfy(predicate)
+        assert_that(outcome.passed).is_false()
+        assert_that(used).described_as("how it was asked").is_equal_to(["called", "called", "called"])
+        assert_that(outcome.message).described_as("what the failure says it asked").does_not_contain("grown")
+
+    @pytest.mark.parametrize("shape", ["function", "partial"])
+    def test_something_that_is_a_matcher_and_a_callable_is_read_as_a_matcher(self, shape):
+        """The protocol comes first, as it always has: a callable carrying the three members is one."""
+        import functools
+
+        def refusing(*args):
+            raise AssertionError("asked as a callable")
+
+        matcher = refusing if shape == "function" else functools.partial(refusing, 1)
+        matcher.matches = lambda value: value > 2
+        matcher.describe = lambda: "a callable that is also a matcher"
+        matcher.describe_mismatch = lambda value: "no"
+        assert_that([1, 2, 3]).any_satisfy(matcher)
+        outcome = assert_that([1, 2]).check().any_satisfy(matcher)
+        assert_that(outcome.message).contains("a callable that is also a matcher")
+
+    def test_a_matcher_that_takes_its_own_member_away_is_still_asked_the_same_way(self):
+        """The method is bound at the reading, so a loop cannot be handed a different one halfway."""
+
+        class Vanishing:
+            def __init__(self):
+                self.asked = 0
+
+            def matches(self, value):
+                self.asked += 1
+                if self.asked == 1:
+                    del type(self).matches
+                return False
+
+            def describe(self):
+                return "vanishing"
+
+            def describe_mismatch(self, value):
+                return "no"
+
+        vanishing = Vanishing()
+        outcome = assert_that([1, 2, 3]).check().any_satisfy(vanishing)
+        assert_that(outcome.passed).is_false()
+        assert_that(vanishing.asked).described_as("times it was asked").is_equal_to(3)
+        assert_that(outcome.message).contains("vanishing")
+
+    def test_something_that_is_neither_a_matcher_nor_a_callable_is_refused(self):
+        """The dispatch is decided once now, and it has to refuse what it always refused."""
+        with pytest.raises(TypeError, match="must be a Matcher or a callable"):
+            assert_that([1, 2]).any_satisfy(5)
+        with pytest.raises(TypeError, match="must be a Matcher or a callable"):
+            assert_that({"a": 1}).all_fields_satisfy(5)
+
+    def test_something_that_is_neither_is_still_refused(self):
+        with pytest.raises(TypeError, match="must be a Matcher or a callable"):
+            assert_that([1, 2]).any_satisfy(object())

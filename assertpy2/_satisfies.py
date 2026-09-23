@@ -22,6 +22,7 @@ from .matchers import (
     _evaluate_matcher,
     _is_matcher,
     _refused,
+    _resolved,
 )
 
 if TYPE_CHECKING:
@@ -120,8 +121,6 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if any leaf does **not** satisfy the matcher
             TypeError: if matcher is neither a Matcher nor callable
         """
-        if not _is_matcher(matcher) and not callable(matcher):
-            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
         return self._every_field(matcher, allow_empty, "all_fields_satisfy")
 
     def _every_field(self, matcher, allow_empty: bool, name: str) -> Self:
@@ -129,11 +128,13 @@ class SatisfiesMixin(_MixinBase):
         description = None
         walked = 0
         failures = []
+        reading = _resolved(matcher)
+        apply = reading.apply  # read once: the attribute lookup is per leaf otherwise
         for path, leaf in _walk_leaves(self.val):
             walked += 1
-            if not _apply_matcher(matcher, leaf):
+            if not apply(leaf):
                 # asked on the first refusal: a self-describing matcher would otherwise read the subject first
-                description = _describe_matcher(matcher) if description is None else description
+                description = reading.describe() if description is None else description
                 failures.append(path.leaf_entry(actual=leaf, expected=description))
         if failures:
             count = len(failures)
@@ -408,27 +409,27 @@ class SatisfiesMixin(_MixinBase):
         """
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
-        if _is_matcher(matcher) or callable(matcher):
-            values = materialized(self.val)
-            if not any(_apply_matcher(matcher, item) for item in values):
-                # asked once the verdict is in, since it is wanted only for the message
-                description = _describe_matcher(matcher)
-                # "none did" alone leaves the reader to fetch the items themselves
-                items = list(values)
-                return self.error(
-                    f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
-                    actual=values,
-                    expected=description,
-                    diff=DiffResult(
-                        kind="match",
-                        entries=[
-                            _ROOT.index(index).entry(actual=item, expected=description)
-                            for index, item in enumerate(items[:5])
-                        ],
-                    ),
-                )
-        else:
-            refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
+        # resolving is what refuses, so the matcher is inspected once rather than here and again there
+        reading = _resolved(matcher)
+        apply = reading.apply  # read once: the attribute lookup is per item otherwise
+        values = materialized(self.val)
+        if not any(apply(item) for item in values):
+            # asked once the verdict is in, since it is wanted only for the message
+            description = reading.describe()
+            # "none did" alone leaves the reader to fetch the items themselves
+            items = list(values)
+            return self.error(
+                f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
+                actual=values,
+                expected=description,
+                diff=DiffResult(
+                    kind="match",
+                    entries=[
+                        _ROOT.index(index).entry(actual=item, expected=description)
+                        for index, item in enumerate(items[:5])
+                    ],
+                ),
+            )
         return self
 
     def all_satisfy(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
@@ -593,9 +594,8 @@ class SatisfiesMixin(_MixinBase):
         """
         if len(matchers) == 0:
             raise ValueError("one or more args must be given")
-        for matcher in matchers:
-            if not _is_matcher(matcher) and not callable(matcher):
-                refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
+        # resolved here rather than asked again per item, and the resolution is what refuses a bad one
+        appliers = [reading.apply for reading in (_resolved(matcher) for matcher in matchers)]
         if not isinstance(self.val, collections.abc.Iterable):
             refuse(self.val, "iterable")
         items = list(self.val)
@@ -609,9 +609,9 @@ class SatisfiesMixin(_MixinBase):
         satisfied = []
         for item in items:
             row = []
-            for column, matcher in enumerate(matchers):
+            for column, apply in enumerate(appliers):
                 try:
-                    row.append(_apply_matcher(matcher, item))
+                    row.append(apply(item))
                 except VerdictError:  # noqa: PERF203  # never a non-match, always a mistake
                     raise
                 except TypeError:  # every probe may raise independently on a mixed collection

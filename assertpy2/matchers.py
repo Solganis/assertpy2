@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, cast, overload
 
 from ._engine._introspection import is_same_implementation
 from ._engine._require import argument, refuse, verdict
@@ -75,6 +75,42 @@ if TYPE_CHECKING:
     _Item = TypeVar("_Item")
 
     from ._matcher_impls import ClassInfo
+
+
+class _Resolved(NamedTuple):
+    """What one reading of the argument decided: how to ask it, and how to say what was asked."""
+
+    apply: Callable[[object], bool]
+    describe: Callable[[], str]
+
+
+def _resolved(matcher: Matcher[Any] | Callable[..., object]) -> _Resolved:
+    """`_apply_matcher`'s dispatch, decided once for a matcher a loop is about to ask many times.
+
+    `_is_matcher` walks the protocol for anything that is not a `BaseMatcher`, which a loop over ten
+    thousand items pays per item: `any_satisfy` over ten thousand measured 13.05 ms against 0.59 ms.
+
+    Kept beside `_apply_matcher` rather than under it: routing the single-call form through a closure
+    measured 2.54 ms against 2.75 ms over two thousand matchers asked once each, which is what
+    `satisfies_exactly` does.
+
+    The rule this states for a whole loop, in the same order `_apply_matcher` reads it: the matcher
+    protocol first, a callable second, and that reading holds for every value the loop asks about.  An
+    argument that grows or drops the three members while the loop runs keeps being asked the way it was
+    read at the start, and the description in the failure comes from that same reading rather than from
+    reading it again afterwards.  Nothing here is an immutability claim: a function and a
+    `functools.partial` both take attributes, which is exactly why the reading is fixed rather than
+    repeated.
+    """
+    if _is_matcher(matcher):
+        # bound here, not looked up per value: a matcher that replaces its own member mid-loop would
+        # otherwise be asked something other than what was read, and the lookup costs per item besides
+        matches = matcher.matches
+        return _Resolved(lambda value: bool(verdict(matches(value), subject="the matcher")), matcher.describe)
+    if callable(matcher):
+        predicate = cast("Callable[..., object]", matcher)
+        return _Resolved(lambda value: bool(verdict(predicate(value))), lambda: _describe_callable(predicate))
+    refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))
 
 
 def _apply_matcher(matcher: Matcher[Any] | Callable[..., object], value: object) -> bool:
