@@ -10,10 +10,12 @@ from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
 from ._engine._membership import (
     _hash_safe,
+    _index,
     has_duplicates,
     is_searchable,
     is_walkable,
     missing_items,
+    occurrences,
     only_faults,
     repeated_counts,
     searchable,
@@ -257,6 +259,11 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         values = materialized(self.val)
+        probes = [item for item in items if not _is_matcher(item)]
+        # the index `contains` already builds for the same question: asked one item at a time, each of
+        # them walks the whole collection
+        searched = _index(values, probes) if len(probes) > 1 else None
+        lookup = values if searched is None else searched
 
         def described(item: object) -> object:
             return item.describe() if _is_matcher(item) else item
@@ -265,7 +272,7 @@ class ContainsMixin(_MixinBase):
             # a matcher handed here was compared with `in`, which asks the wrong question
             if _is_matcher(item):
                 return any(verdict(item.matches(value), subject="the matcher") for value in values)
-            return item in values
+            return item in lookup
 
         if len(items) == 1:
             if present(items[0]):
@@ -665,12 +672,13 @@ class ContainsMixin(_MixinBase):
             val_list = list(materialized(self.val))
         except TypeError:
             refuse(self.val, "iterable")
-        # list.count compares with == so unhashable items (dicts, lists) work, unlike Counter/hashing
-        missing = [item for item in items if val_list.count(item) == 0]
-        duplicated = [item for item in items if val_list.count(item) > 1]
+        counts = occurrences(val_list, items)
+        missing = [item for item, total in zip(items, counts, strict=True) if total == 0]
+        repeats = [(item, total) for item, total in zip(items, counts, strict=True) if total > 1]
+        duplicated = [item for item, _ in repeats]
         if missing or duplicated:
             entries = [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
-            entries.extend(_surplus([(item, val_list.count(item)) for item in duplicated]))
+            entries.extend(_surplus(repeats))
             problems = []
             if missing:
                 problems.append(f"did not contain {self._fmt_items(missing)}")

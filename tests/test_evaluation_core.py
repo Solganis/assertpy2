@@ -48,6 +48,7 @@ from assertpy2._engine._membership import (
     has_duplicates,
     missing_items,
     not_contained_in,
+    occurrences,
     only_faults,
     repeated_items,
     searchable,
@@ -2184,3 +2185,54 @@ class TestAToleranceIsAnOrderedDistance:
         assert_that(
             match.close_to(decimal.Decimal("Infinity"), decimal.Decimal("0.5")).matches(decimal.Decimal("Infinity"))
         ).is_true()
+
+
+class TestTheShortcutAndTheWalkAgree:
+    """Each of these reads a collection in one pass where it read it once per item; the answer is the same."""
+
+    @pytest.mark.parametrize(
+        ("values", "items"),
+        [
+            pytest.param([1, 2, 3], [1, 9], id="hashable"),
+            pytest.param([[1], [2]], [[1], [9]], id="unhashable"),
+            pytest.param([1, 1, 2], [1, 2, 3], id="repeats"),
+            pytest.param(list(range(80)), list(range(70, 90)), id="past-the-threshold"),
+            pytest.param([True, 1, 2], [1, True], id="bool-against-int"),
+            pytest.param([decimal.Decimal("1.0"), 1], [1], id="decimal-against-int"),
+            pytest.param([], [1], id="empty"),
+        ],
+    )
+    def test_occurrences_counts_what_the_walk_counts(self, values, items):
+        assert_that(occurrences(values, items)).is_equal_to([values.count(item) for item in items])
+
+    def test_a_type_that_passes_the_rule_and_still_refuses_falls_back(self):
+        """A signalling NaN is a `Decimal`, which the rule allows, and it refuses to hash all the same."""
+        signalling = decimal.Decimal("snan")
+        values = [signalling] * 30
+        assert_that(occurrences(values, [signalling] * 30)).is_equal_to([30] * 30)
+
+    def test_a_value_that_refuses_to_hash_falls_back_to_the_walk(self):
+        class Angry:
+            def __hash__(self):
+                raise RuntimeError("no hash from me")
+
+            def __eq__(self, other):
+                return self is other
+
+        one = Angry()
+        assert_that(occurrences([one, one], [one])).is_equal_to([2])
+
+    @pytest.mark.parametrize(
+        ("values", "items"),
+        [
+            pytest.param(list(range(50)), [60, 70], id="absent"),
+            pytest.param(list(range(50)), [1, 60], id="one-present"),
+            pytest.param([[1], [2]], [[3]], id="unhashable"),
+            pytest.param("abcdef", ["cd", "xy"], id="substring"),
+            pytest.param([1, 2], [True, 5], id="bool-against-int"),
+        ],
+    )
+    def test_does_not_contain_answers_as_the_walk_did(self, values, items):
+        walked = [item for item in items if item in values]
+        outcome = assert_that(values).check().does_not_contain(*items)
+        assert_that(outcome.passed).is_equal_to(not walked)

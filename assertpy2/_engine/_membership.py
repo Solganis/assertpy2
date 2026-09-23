@@ -261,6 +261,29 @@ def has_duplicates(values: Sequence[Any]) -> bool:
     return False
 
 
+def occurrences(values: Sequence[Any], items: Sequence[Any]) -> list[int]:
+    """How often each of *items* appears in *values*, in the order they were asked for.
+
+    `list.count()` per item walks the whole collection once per item: a thousand items over ten thousand
+    elements is ten million comparisons, and the failure report asked for another pass.  Where both sides
+    are safe to hash, by the same rule membership uses, one `Counter` answers all of them.
+
+    The probes are hashed inside the guard and looked up outside it, as `_index` does: a lookup runs
+    `__eq__` on a collision, and a comparison that raises is a bug in the value rather than a count.
+    """
+    counted = None
+    if _classified(values, items):
+        try:
+            counted = Counter(values)
+            for item in items:
+                hash(item)
+        except TypeError:  # a value that refuses to hash despite its type, such as a signalling NaN
+            counted = None
+    if counted is None:
+        return [values.count(item) for item in items]
+    return [counted[item] for item in items]
+
+
 def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
     """Each element appearing more than once with how often, in order of first appearance.
 
