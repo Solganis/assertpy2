@@ -97,8 +97,6 @@ def compare(actual: Any, expected: Any) -> int:
         and (not isinstance(expected, numbers.Number) or type(expected) in _UNORDERED)
     ):
         raise UnorderableError("kind", wanted=numbers.Number)
-    if nan_operand(actual) or nan_operand(expected):
-        return 0  # neither less nor greater, as a float NaN already answers, and `holds` keeps that from reading equal
     # deliberately dynamic: what may be ordered is decided above, and a checker reading the union sees no `<`
     left: Any = actual
     right: Any = expected
@@ -111,7 +109,13 @@ def compare(actual: Any, expected: Any) -> int:
         if raised_inside(exc):
             raise
         raise UnorderableError("pair") from None
-    return 0
+    except decimal.InvalidOperation as exc:
+        # a `Decimal` NaN signals rather than answering.  Asked here rather than before the comparison:
+        # checked first, `'a'` against a NaN read as a verdict where the same pair without one is refused
+        if raised_inside(exc):
+            raise
+        return 0
+    return 0  # neither less nor greater, which is what a float NaN answers and `holds` keeps from reading equal
 
 
 def holds(actual: Any, expected: Any, relation: str) -> bool:

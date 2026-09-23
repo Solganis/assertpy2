@@ -51,10 +51,13 @@ RECORDED: dict[str, int] = {
     "assertpy2/dynamic.py::__getattr__": 12,
     "assertpy2/_dangling.py::_survey": 11,
     "assertpy2/_dangling.py::findings": 11,
+    # 11: the NaN answer moved inside the try, so the pair is tried before a NaN answers for it
+    "assertpy2/_engine/_ordering.py::compare": 11,
     "assertpy2/_engine/_contract.py::contract_drift": 11,
     "assertpy2/assertpy.py::assert_conforms": 11,
     # one more name refused by the poll chain: check() after a poll used to skip the wait and answer nothing
-    "assertpy2/async_assertions.py::__getattr__": 12,
+    # 13: the chain refuses `value` by name, where the hook used to record it as an assertion
+    "assertpy2/async_assertions.py::__getattr__": 13,
     "assertpy2/contains.py::contains": 11,
     "assertpy2/helpers.py::_dict_repr": 11,
     "assertpy2/json_mixin.py::_openapi_resolve": 11,

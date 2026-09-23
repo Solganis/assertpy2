@@ -83,8 +83,10 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_poll_typing.py", "is_less_than"): 4,
     ("assertpy2/_engine/_poll_typing.py", "is_less_than_or_equal_to"): 4,
     ("assertpy2/_engine/_poll_typing.py", "is_not_between"): 4,
-    ("assertpy2/_engine/_poll_typing.py", "is_not_none"): 60,
     ("assertpy2/_engine/_poll_typing.py", "matches_structure"): 4,
+    # 34 rather than 60: on a negated chain the ladder hands back the chain it already had, so its rungs
+    # differ only in what they accept and the pairs pyright called redundant there are gone
+    ("assertpy2/_engine/_poll_typing.py", "is_not_none"): 34,
     ("assertpy2/_engine/_typing.py", "is_instance_of"): 5,
     ("assertpy2/_engine/_typing.py", "is_not_none"): 15,
     ("assertpy2/_engine/_typing.py", "satisfies"): 9,

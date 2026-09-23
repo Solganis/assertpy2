@@ -37,6 +37,7 @@ class _MixinBase:
         _expected_warning: type[Warning] | None
         _return_value: object
         _raised_exception: object
+        _value_taint_reason: str | None
 
         def error(
             self,

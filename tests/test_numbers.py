@@ -1,3 +1,4 @@
+import decimal
 import math
 import numbers
 
@@ -616,6 +617,43 @@ def test_comparable_no_ordering_failure():
     message = str(exc_info.value)
     assert_that(message).starts_with("given other arg must be comparable with val <")
     assert_that(message).ends_with("(NoOrder)")
+
+
+@pytest.mark.parametrize("value", ["a", b"a", [1], (1,), {"a": 1}], ids=["str", "bytes", "list", "tuple", "dict"])
+def test_a_nan_on_the_right_does_not_make_an_unorderable_pair_a_verdict(value):
+    """Answered before the pair was tried, a NaN turned "these cannot be compared" into "it was not".
+
+    `assert_that("a").is_less_than(1)` refuses the operands; with a NaN in its place the same pair
+    reported a failed comparison, which says a comparison happened.
+    """
+    with pytest.raises(TypeError) as caught:
+        assert_that(value).is_less_than(float("nan"))
+    assert_that(str(caught.value)).starts_with("given other arg must be comparable with val <")
+
+
+def test_a_decimal_nan_still_answers_rather_than_signalling():
+    """It signals instead of answering, which is why the pre-check existed: the answer is still neither."""
+    with pytest.raises(AssertionError) as caught:
+        assert_that(decimal.Decimal(1)).is_less_than(decimal.Decimal("NaN"))
+    assert_that(str(caught.value)).is_equal_to("Expected <1> to be less than <NaN>, but was not.")
+
+    with pytest.raises(AssertionError) as caught:
+        assert_that(decimal.Decimal("NaN")).is_greater_than(decimal.Decimal(1))
+    assert_that(str(caught.value)).is_equal_to("Expected <NaN> to be greater than <1>, but was not.")
+
+
+def test_a_signal_raised_inside_their_own_comparison_travels_out():
+    """A bug in the value, not a pair without an order: answering it would send the reader elsewhere."""
+
+    class Signalling(decimal.Decimal):
+        def __lt__(self, other):
+            raise decimal.InvalidOperation("from my own __lt__")
+
+        def __gt__(self, other):
+            raise decimal.InvalidOperation("from my own __gt__")
+
+    with pytest.raises(decimal.InvalidOperation, match="from my own"):
+        assert_that(Signalling(1)).is_less_than(decimal.Decimal(2))
 
 
 def test_is_even():

@@ -243,10 +243,17 @@ beyond returning the value.
       `assert_warn()`): a failure is *collected* instead of halting, so reading `.value` would read past
       an unestablished fact. Rather than leak a value that could violate its static type, `.value`
       **raises** `TypeError` - and a pivot like `first()` or `extracting()` rejects the untrusted value
-      on its own input check.
+      on its own input check. `.val`, the name a polling chain hands its value back under, refuses
+      in the same position and for the same reason, and both refusals name the failure that caused
+      them. `check()` answers rather than refusing: reading a verdict is what it promises, so it hands
+      back `AssertionOutcome(passed=False)` carrying that same failure.
 
     Either way nothing unsound escapes: in soft mode you get an exception, never a wrong-typed value.
     Read `.value` in strict mode, or after the soft block has closed.
+
+    A **negated** assertion narrows nothing. `not_.is_not_none()` says the value *is* `None` and
+    `not_.is_instance_of(str)` says it is not a string, so what comes back carries the type it already
+    had rather than the one that was denied.
 
     What a refinement hands back is the view `assert_that()` would have given for the refined type, so
     `is_not_none()` on a `str | None` continues as a string. Refining to a class the library does not

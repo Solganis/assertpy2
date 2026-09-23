@@ -193,6 +193,44 @@ class TestWhatTheTwinsCarry:
         )
 
     @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
+    def test_a_negated_chain_never_narrows_the_value(self, flavour) -> None:
+        """A negated assertion denies what the positive one claims, so it cannot narrow to it.
+
+        Copied from the positive chain, `not_.is_not_none()` handed back a chain over the type without
+        `None` while asserting the value *was* `None`, and `not_.is_instance_of(str)` handed back a
+        chain over `str` while asserting the value was not one.  Every checker read `.val` as the
+        denied type.  Stated here over the whole class rather than per assertion, since the ladders are
+        generated and a new one would arrive with the same defect.
+        """
+        source = ast.parse(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"))
+        twin = f"_Negated{flavour[1:]}"
+        allowed = {f"{flavour}[_P_co]", f"{twin}[_P_co]", "_P_co", "None"}
+        narrowed = [
+            f"{item.name} -> {ast.unparse(item.returns)}"
+            for node in ast.walk(source)
+            if isinstance(node, ast.ClassDef) and node.name == twin
+            for item in node.body
+            if isinstance(item, ast.FunctionDef)
+            and item.returns is not None
+            and ast.unparse(item.returns) not in allowed
+            and not item.name.startswith("__")
+        ]
+        assert_that(narrowed).described_as(f"{twin} rungs handing back something other than the chain").is_empty()
+
+    @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
+    def test_a_negated_chain_keeps_every_assertion_the_chain_offers(self, flavour) -> None:
+        """Collapsing the ladders must cost arguments, not assertions.
+
+        The fix for the narrowing above is to drop the *result* type, never the rung, so the negation
+        offers the same names as the chain it negates.  What it drops is what is not an assertion.
+        """
+        source = pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")
+        chain = _names(source, flavour)
+        twin = _names(source, f"_Negated{flavour[1:]}")
+        missing = chain - twin - NOT_AN_OPERATION - set(WITHOUT_A_VERDICT) - _THE_CHAIN_ITSELF - {"__getattr__"}
+        assert_that(missing).described_as("offered by the chain and lost by its negation").is_empty()
+
+    @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
     def test_a_negated_chain_is_not_a_subclass_of_the_chain(self, flavour) -> None:
         """The twin carries the rungs rather than inheriting them, and the reason is a crash.
 

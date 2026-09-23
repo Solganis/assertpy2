@@ -265,6 +265,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "called-with-on-a-chain-over-a-callable": _NO_EXPECTATION_YET,
     "called-with-on-an-async-chain": _NO_EXPECTATION_YET,
     # declared as a member with a type nothing can call, which is what beats `__getattr__`
+    "value-on-a-sync-poll": _MISSING,
+    "value-on-an-async-poll": _MISSING,
     "check-on-a-sync-poll": _NOT_CALLABLE,
     "check-on-an-async-poll": _NOT_CALLABLE,
     "describe-on-a-negated-poll": _NOT_CALLABLE,

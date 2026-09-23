@@ -128,6 +128,14 @@ if TYPE_CHECKING:
         it where it is written rather than where it runs.
         """
 
+    class _NoValueOnAChain:
+        """The type of `value` on a polling chain, which is not callable and says why.
+
+        A chain hands its value back under `val`, and `value` is a name only the builder has.  Left to
+        `__getattr__` it was recorded as an assertion and failed inside the replay, where the message
+        named a type and not the mistake.
+        """
+
     class _NoExpectationOnAChain:
         """The type of `when_called_with` on a chain with no expectation set, which is not callable.
 
@@ -155,6 +163,7 @@ if TYPE_CHECKING:
         @property
         def val(self) -> _P_co: ...
         check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
         when_called_with: _NoExpectationOnAChain
         def __getattr__(self, name: str) -> Callable[..., _SyncPoll[_P_co]]: ...
 {sync}
@@ -216,6 +225,7 @@ if TYPE_CHECKING:
         def not_(self) -> _NegatedAsyncPoll[_P_co]: ...
         def __await__(self) -> Generator[Any, None, AssertionBuilder[_P_co]]: ...
         check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
         when_called_with: _NoExpectationOnAChain
         def __getattr__(self, name: str) -> Callable[..., _AsyncPoll[_P_co]]: ...
 {asynchronous}
@@ -353,10 +363,17 @@ def _handed_back(
     text.  The umbrella rung is the exception, since the value it pivots to is the one thing a
     capability does not say.  The verdict twin hands back a verdict instead of a chain, so none of
     that applies to it.
+
+    A negated chain keeps the value whatever the declaration says it narrows to, because the negation
+    is what it asserts: `not_.is_not_none()` says the value *is* `None`, and `not_.is_instance_of(str)`
+    says it is not a `str`.  Read narrowed, both handed back a chain over the type they had just denied,
+    and `.val` on it was that type to every checker while the run time had the original value.  The
+    builder's own negation twins answer the same way, over their receiver's parameter.
     """
     if flavour == _VERDICT:
         return "AssertionOutcome"
-    flavour = returns_as or flavour
+    if returns_as is not None:
+        return f"{returns_as}[_P_co]"
     if node.returns is None:
         return f"{flavour}[Any]"
     rendered = ast.unparse(node.returns)

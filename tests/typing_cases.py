@@ -312,6 +312,11 @@ def _methods_that_do_not_fit_the_value() -> None:
         ValueError
     ).when_called_with()  # case: valid-async-call-after-an-expectation
     # a poll delivers its own failure, so `check()` is refused at run time and declared as not callable
+    # a chain hands its value back under `val`; `value` is the builder's name and was recorded as an
+    # assertion, which failed inside the replay rather than where it was written.  Read through a use,
+    # since the declaration is a type nothing can do anything with rather than a missing name
+    assert_that(_a_number).eventually_sync().value.bit_length()  # case: value-on-a-sync-poll
+    assert_that(_a_number).eventually().value.bit_length()  # case: value-on-an-async-poll
     assert_that(_a_number).eventually_sync().check()  # case: check-on-a-sync-poll
     assert_that(_a_number).eventually().check()  # case: check-on-an-async-poll
     # `not_` negates the assertion after it, and a description, a transform and an expectation are not

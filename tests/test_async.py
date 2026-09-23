@@ -1479,6 +1479,22 @@ class TestAPollDeliversItsOwnFailure:
             chain.check()
         chain.close()
 
+    def test_value_on_a_sync_chain_names_the_accessor_a_chain_has(self):
+        """Left to the hook it was recorded as an assertion and failed inside the replay.
+
+        The message there named a type (`'str' object is not callable`) rather than the mistake, which
+        is reading the builder's accessor on a chain that hands its value back under `val`.
+        """
+        chain = assertpy2.assert_that(lambda: "ready").eventually_sync(timeout=0.3, interval=0.01)
+        with pytest.raises(TypeError, match="value cannot be read on a polling chain"):
+            _ = chain.value
+
+    def test_value_on_an_async_chain_points_at_the_builder_awaiting_it_returns(self):
+        chain = assertpy2.assert_that(lambda: "ready").eventually(timeout=0.3, interval=0.01)
+        with pytest.raises(AttributeError, match="value is available on the builder"):
+            _ = chain.value
+        chain.close()
+
     def test_a_timed_out_soft_chain_asserts_nothing_more(self):
         """It timed out without a value, so everything after it was asked about `None`."""
         with pytest.raises(assertpy2.AssertionFailure) as caught, assertpy2.soft_assertions():

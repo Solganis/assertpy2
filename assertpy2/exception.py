@@ -8,6 +8,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._pairing import maximum_pairing
 from ._engine._require import argument, refuse
 from .errors import _callable_name, _safe_str, _type_expression_name
+from .outcome import AssertionOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -209,8 +210,25 @@ def _effective_cause(exc: BaseException) -> BaseException | None:
 class _InertBuilder:
     """No-op builder returned after a failed raises/when_called_with in soft mode.
 
-    Silently absorbs all chained assertions so they don't crash on wrong val type.
+    Silently absorbs all chained assertions so they don't crash on wrong val type.  What it must not
+    absorb is a name the typed surface declares as data: every lambda is truthy, so `passed` read as a
+    pass and `.value` read as a value that had been checked.
     """
+
+    def __init__(self, reason: str | None = None) -> None:
+        self._reason = reason
+
+    def _refusal(self, name: str) -> str:
+        """Why the accessor refuses, carrying the failure that made this builder inert.
+
+        The reason and not only the rule: the ordinary builder's `.value` names the root failure, and a
+        refusal without it sends the reader looking for which assertion went wrong.
+        """
+        because = f" - {self._reason}" if self._reason else ""
+        return (
+            f"cannot extract .{name}: the underlying assertion failed under soft or warn mode{because}"
+            f" (read .{name} in strict mode, or after the soft-assertions block)"
+        )
 
     @property
     def value(self) -> object:
@@ -219,13 +237,43 @@ class _InertBuilder:
         Absorbed like everything else, it handed back the absorbing lambda, which is truthy and reads as
         a value that passed.
         """
-        raise TypeError(
-            "cannot extract .value: the underlying assertion failed under soft or warn mode "
-            "(read .value in strict mode, or after the soft-assertions block)"
-        )
+        raise TypeError(self._refusal("value"))
+
+    @property
+    def val(self) -> object:
+        """The same refusal, for the name a polling chain hands the value back under.
+
+        A chain declares `val` where the builder declares `value`, so absorbing it handed a typed
+        accessor the absorbing lambda instead of the value it promises.
+        """
+        raise TypeError(self._refusal("val"))
+
+    def check(self) -> _InertVerdict:
+        """A verdict about a chain that already failed, which is what made this builder inert.
+
+        Absorbed, it answered with this builder, whose `passed` and `message` are the absorbing lambda:
+        `passed` is declared `bool` and every lambda is truthy, so a failed chain read as a pass.  It
+        answers rather than raising, because reading a verdict is the one thing `check()` promises and
+        there is a real failure to report.
+        """
+        return _InertVerdict(self._reason or "")
 
     def __getattr__(self, name):
         return lambda *args, **kwargs: self
+
+
+class _InertVerdict:
+    """The verdict of a chain that failed before the assertion being asked about ran.
+
+    Every assertion on it answers with the same outcome: the failure that made the chain inert is the
+    one a reader acts on, and the assertion after it never ran to have a verdict of its own.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self._outcome = AssertionOutcome(passed=False, message=reason)
+
+    def __getattr__(self, name: str) -> Any:
+        return lambda *args, **kwargs: self._outcome
 
 
 class ExceptionMixin(_MixinBase):
@@ -311,14 +359,14 @@ class ExceptionMixin(_MixinBase):
                     f" but raised <{type(e).__name__}>.",
                     expected=self.expected,
                 )
-                return cast("Self", _InertBuilder())
+                return cast("Self", _InertBuilder(self._value_taint_reason))
 
         self.error(
             f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
             expected=self.expected,
         )
-        return cast("Self", _InertBuilder())
+        return cast("Self", _InertBuilder(self._value_taint_reason))
 
     def returned(self) -> Self:
         """Pivots the chain to the value ``val()`` returned during
@@ -392,7 +440,7 @@ class ExceptionMixin(_MixinBase):
                 f"Expected <{type(exc).__name__}> to be caused by <{expected_name}>, but the cause was {found}.",
                 expected=ex,
             )
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         pivoted = self.builder(_safe_str(cause), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = cause
         return pivoted
@@ -419,7 +467,7 @@ class ExceptionMixin(_MixinBase):
                 f" but the root cause was <{type(root).__name__}>.",
                 expected=ex,
             )
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         pivoted = self.builder(_safe_str(root), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = root
         return pivoted
@@ -449,13 +497,13 @@ class ExceptionMixin(_MixinBase):
             _require_exception_type(ex)
         exc = self._require_group("contains_error")
         if exc is None:
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         for ex in ex_types:
             if _first_of(exc, ex) is None:
                 self.error(
                     f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex
                 )
-                return cast("Self", _InertBuilder())
+                return cast("Self", _InertBuilder(self._value_taint_reason))
         return self
 
     def does_not_contain_error(self, *ex_types: type) -> Self:
@@ -486,11 +534,11 @@ class ExceptionMixin(_MixinBase):
             _require_exception_type(ex)
         exc = self._require_group("does_not_contain_error")
         if exc is None:
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         for ex in ex_types:
             if _first_of(exc, ex) is not None:
                 self.error(f"Expected the raised exception group to not contain <{ex.__name__}>, but it did.")
-                return cast("Self", _InertBuilder())
+                return cast("Self", _InertBuilder(self._value_taint_reason))
         return self
 
     def errors(self) -> Self:
@@ -519,7 +567,7 @@ class ExceptionMixin(_MixinBase):
         """
         exc = self._require_group("errors")
         if exc is None:
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         return self.builder(_leaves(exc), self.description, self.kind, logger=self.logger)
 
     def error_of(self, ex: type) -> Self:
@@ -551,11 +599,11 @@ class ExceptionMixin(_MixinBase):
         _require_exception_type(ex)
         exc = self._require_group("error_of")
         if exc is None:
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         found = _first_of(exc, ex)
         if found is None:
             self.error(f"Expected the raised exception group to contain <{ex.__name__}>, but it did not.", expected=ex)
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         pivoted = self.builder(_safe_str(found), self.description, self.kind, logger=self.logger)
         pivoted._raised_exception = found
         return pivoted
@@ -600,7 +648,7 @@ class ExceptionMixin(_MixinBase):
         spec = [_shaped(entry, f"[{index}]") for index, entry in enumerate(expected)]
         exc = self._require_group("matches_error_tree")
         if exc is None:
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         if not _matches_shape(spec, exc.exceptions):
             names = _naming(spec, exc)
             self.error(
@@ -608,7 +656,7 @@ class ExceptionMixin(_MixinBase):
                 f" but it was <{_shape_of(exc, names)}>.",
                 expected=spec,
             )
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         return self
 
     def _require_group(self, method: str) -> Any:
@@ -642,7 +690,7 @@ class ExceptionMixin(_MixinBase):
                     f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                     f" but did raise <{type(e).__name__}>."
                 )
-                return cast("Self", _InertBuilder())
+                return cast("Self", _InertBuilder(self._value_taint_reason))
             if _escaped(e):
                 raise
             return self

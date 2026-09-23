@@ -375,6 +375,8 @@ _NO_VERDICT_AFTER_A_POLL: Final = (
     "check() cannot follow a poll; a poll delivers its own failure, so there is no verdict to hand back"
 )
 
+_NO_VALUE_ON_A_CHAIN: Final = "value cannot be read on a polling chain; read `.val` once an assertion on it has passed"
+
 
 def _out_of_time(
     chain: AsyncAssertionBuilder | SyncAssertionBuilder,
@@ -502,8 +504,8 @@ class AsyncAssertionBuilder:
             return getattr(self._coroutine(), name)
         if name == "check":
             raise TypeError(_NO_VERDICT_AFTER_A_POLL)
-        if name == "val":
-            raise AttributeError("val is available on the builder that awaiting this chain returns")
+        if name in ("val", "value"):
+            raise AttributeError(f"{name} is available on the builder that awaiting this chain returns")
         if name == "not_":
             return self._chained((*self._steps, (name, None, None)))  # read, not called: no arguments
 
@@ -709,6 +711,8 @@ class SyncAssertionBuilder:
             raise AttributeError(name)
         if name == "check":
             raise TypeError(_NO_VERDICT_AFTER_A_POLL)
+        if name == "value":
+            raise TypeError(_NO_VALUE_ON_A_CHAIN)
         if name == "val":  # reached only when the property above found no poll to read it from
             raise AttributeError("val is available once an assertion on this chain has passed")
         if name == "not_":

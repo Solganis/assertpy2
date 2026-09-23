@@ -1,6 +1,15 @@
 import pytest
 
-from assertpy2 import assert_that, assert_warn, soft_assertions
+from assertpy2 import AssertionOutcome, assert_that, assert_warn, soft_assertions
+
+
+def _inert_builder():
+    """The proxy a failed `raises(...)` hands back under warn mode, where the chain goes on absorbing."""
+
+    def boom() -> int:
+        raise ValueError("x")
+
+    return assert_warn(boom).raises(TypeError).when_called_with()
 
 
 class TestValue:
@@ -60,6 +69,45 @@ class TestValue:
     def test_value_after_failed_warn_assertion_raises(self):
         with pytest.raises(TypeError, match=r"cannot extract .value"):
             _ = assert_warn(None).is_not_none().value
+
+    @pytest.mark.parametrize("name", ["value", "val"])
+    def test_an_inert_builder_refuses_the_value_rather_than_absorbing_it(self, name):
+        """The defect this whole family is: an absorbing proxy answering an accessor with its lambda.
+
+        Both names are declared as data on the typed surface, one by the builder and one by a polling
+        chain, and every lambda is truthy, so reading either looked like a value that had been checked.
+        Stated over the names rather than one at a time, since the proxy absorbs by default and a new
+        accessor arrives absorbed.
+        """
+        with pytest.raises(TypeError) as refused:
+            getattr(_inert_builder(), name)
+        assert_that(str(refused.value)).described_as(f"why {name} is refused").contains("soft or warn mode").contains(
+            "to raise <TypeError>"
+        )
+
+    def test_an_inert_builder_answers_a_verdict_carrying_the_failure_that_made_it_inert(self):
+        """`check()` promises a verdict rather than a raise, so it answers with the failure it has.
+
+        Absorbed, it handed back the proxy itself, whose `passed` is the absorbing lambda: declared
+        `bool` and truthy, so a failed chain read as a pass.
+        """
+        outcome = _inert_builder().check().is_equal_to(1)
+        assert_that(outcome).is_instance_of(AssertionOutcome)
+        assert_that(outcome.passed).described_as("a chain that already failed").is_false()
+        assert_that(outcome.message).described_as("the failure that made it inert").contains("to raise <TypeError>")
+
+    def test_val_on_an_inert_chain_refuses_the_way_value_does(self):
+        # a polling chain declares `val` where the builder declares `value`, and an inert builder
+        # absorbed it: the typed accessor handed back the absorbing lambda instead of the value
+        def never() -> str | None:
+            return None
+
+        with pytest.raises(TypeError, match=r"cannot extract .val"), soft_assertions():
+            _ = assert_that(never).eventually_sync(timeout=0.02, interval=0.01).is_not_none().val
+
+    def test_val_on_a_chain_that_passed_still_hands_the_value_back(self):
+        got = assert_that(lambda: "ready").eventually_sync(timeout=0.5, interval=0.01).is_not_none().val
+        assert_that(got).is_equal_to("ready")
 
     def test_taint_is_per_value_pivot_washes_orthogonal_failure(self):
         # the taint is per-value: after a failed orthogonal assertion a real sub-value still extracts cleanly

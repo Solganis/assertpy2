@@ -55,8 +55,50 @@ class _Counted:
 _ONE_ITERABLE = _OnlyIterable()
 
 
+def _maybe_text() -> str | None:
+    return None
+
+
+def _a_number() -> int:
+    return 7
+
+
+def _ready() -> str | None:
+    return "ready"
+
+
 def a_string_stays_a_string() -> str:
     return assert_type(assert_that("alice").is_not_empty().value, str)
+
+
+def a_polled_value_narrows_when_the_assertion_holds() -> str:
+    return assert_type(assert_that(_ready).eventually_sync(timeout=0.5, interval=0.01).is_not_none().val, str)
+
+
+def a_negated_poll_keeps_the_value_it_had() -> str | None:
+    """`not_.is_not_none()` asserts the value *is* `None`, so narrowing it to `str` was backwards."""
+    return assert_type(
+        assert_that(_maybe_text).eventually_sync(timeout=0.5, interval=0.01).not_.is_not_none().val, "str | None"
+    )
+
+
+def a_negated_poll_instance_check_keeps_the_value() -> int:
+    """`not_.is_instance_of(str)` asserts the value is *not* a `str`, so it cannot hand back one."""
+    return assert_type(
+        assert_that(_a_number).eventually_sync(timeout=0.5, interval=0.01).not_.is_instance_of(str).val, int
+    )
+
+
+def a_negated_poll_instance_pair_keeps_the_value() -> int:
+    return assert_type(
+        assert_that(_a_number).eventually_sync(timeout=0.5, interval=0.01).not_.is_instance_of_any(str, bytes).val, int
+    )
+
+
+def a_negated_poll_predicate_keeps_the_value() -> int:
+    return assert_type(
+        assert_that(_a_number).eventually_sync(timeout=0.5, interval=0.01).not_.satisfies(_is_str).val, int
+    )
 
 
 def a_number_stays_a_number() -> int:
