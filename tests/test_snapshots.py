@@ -1746,3 +1746,31 @@ class TestASnapshotIdNamesOneFile:
         with pytest.warns(SnapshotCreatedWarning):
             assert_that("foo").snapshot(id="Group Case", path=str(tmp_path))
         assert_that(sorted(entry.name for entry in tmp_path.iterdir())).contains("snap-group_case.json")
+
+
+class TestWhatIsWrittenIsWrittenWhole:
+    """The file is rendered before it is opened, so a value that cannot be encoded leaves nothing behind."""
+
+    def test_the_bytes_are_what_the_encoder_produces(self, tmp_path):
+        value = {"a": [1, {2, 3}], "b": decimal.Decimal("1.5")}
+        target = tmp_path / "snap.json"
+        _save(str(target), value)
+        expected = json.dumps(
+            _snapshot_codec._prepare(value),
+            indent=2,
+            separators=(",", ": "),
+            sort_keys=True,
+            cls=_snapshot_codec._Encoder,
+        )
+        assert_that(target.read_text()).is_equal_to(expected)
+
+    def test_a_value_the_encoder_refuses_leaves_no_file(self, tmp_path):
+        class Refusing:
+            @property
+            def __dict__(self):
+                raise RuntimeError("no state from me")
+
+        target = tmp_path / "snap.json"
+        with contextlib.suppress(Exception):
+            _save(str(target), {"a": Refusing()})
+        assert_that(sorted(entry.name for entry in tmp_path.iterdir())).is_empty()
