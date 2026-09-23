@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from ..matchers import Matcher
     from ..outcome import AssertionOutcome
     from ._capable_typing import (
-        _Callable,
         _Indexed,
         _Keyed,
         _KeyedWithItems,
@@ -1134,15 +1133,6 @@ if TYPE_CHECKING:
             atol: float = ...,
             equal_nan: bool = ...,
             **options: Any,
-        ) -> AssertionOutcome: ...
-
-        @overload
-        def when_called_with(
-            self: _CheckAnyValue[Callable[..., _P]], *some_args: object, **some_kwargs: object
-        ) -> AssertionOutcome: ...
-        @overload
-        def when_called_with(
-            self: _CheckAnyValue[_Callable], *some_args: object, **some_kwargs: object
         ) -> AssertionOutcome: ...
 
         @overload

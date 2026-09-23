@@ -40,6 +40,7 @@ _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_check_typing.py", "_CheckDictAssertion", "_V", "contravariant"),
     # invariant, a subclass value misses the rung written for its base on all three checkers. Refused
     ("assertpy2/_engine/_poll_typing.py", "_AsyncPoll", "_P_co", "invariant"),
+    ("assertpy2/_engine/_poll_typing.py", "_NegatedAsyncPoll", "_P_co", "invariant"),
 )
 
 

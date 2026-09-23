@@ -718,6 +718,9 @@ RECORDED: dict[str, frozenset[str]] = {
             "does_not_have_json_path",
             "does_not_raise",
             "does_not_warn",
+            # callable as well as everything else, so the rung a second poll restricts to matches
+            "eventually",
+            "eventually_sync",
             "element",
             "ends_with",
             "exists",
@@ -762,7 +765,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "single",
             "starts_with",
             "warns",
-            "when_called_with",
             "zip_satisfies",
         }
     ),
@@ -851,6 +853,9 @@ RECORDED: dict[str, frozenset[str]] = {
             "does_not_have_json_path",
             "does_not_raise",
             "does_not_warn",
+            # callable as well as everything else, so the rung a second poll restricts to matches
+            "eventually",
+            "eventually_sync",
             "element",
             "ends_with",
             "exists",
@@ -896,7 +901,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "single",
             "starts_with",
             "warns",
-            "when_called_with",
             "zip_satisfies",
         }
     ),

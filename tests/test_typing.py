@@ -32,11 +32,15 @@ if TYPE_CHECKING:
         _CheckBoolAssertion,
         _CheckBytesAssertion,
         _CheckCallableAssertion,
+        _CheckCompletedAssertion,
         _CheckComplexAssertion,
         _CheckCoreAssertion,
         _CheckDateAssertion,
         _CheckDateTimeAssertion,
         _CheckDictAssertion,
+        _CheckExpectedCompletionAssertion,
+        _CheckExpectedRaiseAssertion,
+        _CheckExpectedWarningAssertion,
         _CheckFrameAssertion,
         _CheckInvokedAssertion,
         _CheckIterableAssertion,
@@ -45,6 +49,7 @@ if TYPE_CHECKING:
         _CheckObjectAssertion,
         _CheckPathAssertion,
         _CheckStringAssertion,
+        _CheckWarnedAssertion,
     )
     from assertpy2._engine._negated_typing import _NegatedObjectAssertion
     from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll
@@ -54,11 +59,15 @@ if TYPE_CHECKING:
         _BoolAssertion,
         _BytesAssertion,
         _CallableAssertion,
+        _CompletedAssertion,
         _ComplexAssertion,
         _CoreAssertion,
         _DateAssertion,
         _DateTimeAssertion,
         _DictAssertion,
+        _ExpectedCompletionAssertion,
+        _ExpectedRaiseAssertion,
+        _ExpectedWarningAssertion,
         _FrameAssertion,
         _FrameShape,
         _InvokedAssertion,
@@ -69,6 +78,7 @@ if TYPE_CHECKING:
         _PathAssertion,
         _StringAssertion,
         _TextAssertion,
+        _WarnedAssertion,
     )
     from assertpy2.assertpy import AssertionBuilder
     from assertpy2.matchers import IsInstanceOfMatcher, IsTypeOfMatcher, Matcher
@@ -246,6 +256,14 @@ if TYPE_CHECKING:
         assert_that(_defaulted).eventually().contains_entry({"a": 0}), _AsyncPoll[collections.defaultdict[str, int]]
     )
 
+    # the four ways to set an expectation, each landing the call somewhere different: an exception
+    # message, a warning message, or the callable itself with the return value reachable
+    assert_type(assert_that(len).raises(ValueError), _ExpectedRaiseAssertion[int])
+    assert_type(assert_that(len).warns(), _ExpectedWarningAssertion[int])
+    assert_type(assert_that(len).does_not_raise(ValueError), _ExpectedCompletionAssertion[int])
+    assert_type(assert_that(len).does_not_warn(), _ExpectedCompletionAssertion[int])
+    assert_type(assert_that(len).warns().when_called_with(), _WarnedAssertion)
+    assert_type(assert_that(len).does_not_raise(ValueError).when_called_with(), _CompletedAssertion[int])
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion)
@@ -479,7 +497,8 @@ if TYPE_CHECKING:
     assert_type(assert_that([{"id": 1}]).extracting("id"), _ListAssertion[Any])
     assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a.b"), _CoreAssertion)
     assert_type(assert_that("v1.2").matches_with_groups(r"v(\d)\.(\d)"), AssertionBuilder[Any])
-    assert_type(assert_that(lambda: 1).when_called_with().returned(), _CoreAssertion)
+    assert_type(assert_that(lambda: 1).does_not_raise(ValueError).when_called_with().returned(), _CoreAssertion)
+    assert_type(assert_that(lambda: 1).warns().when_called_with().returned(), _CoreAssertion)
 
     # the object fallback carries four numeric assertions, so `Decimal` and `Fraction` keep them. Neither
     # is an `int` or a `float`, so no overload names them and both land here
@@ -504,6 +523,11 @@ if TYPE_CHECKING:
     assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a").check(), _CheckCoreAssertion)
     assert_type(assert_that([{"id": 1}]).extracting("id").check(), _CheckListAssertion[Any])
     assert_type(assert_that(len).raises(ValueError).when_called_with().check(), _CheckInvokedAssertion)
+    assert_type(assert_that(len).raises(ValueError).check(), _CheckExpectedRaiseAssertion[int])
+    assert_type(assert_that(len).warns().check(), _CheckExpectedWarningAssertion[int])
+    assert_type(assert_that(len).does_not_raise(ValueError).check(), _CheckExpectedCompletionAssertion[int])
+    assert_type(assert_that(len).warns().when_called_with().check(), _CheckWarnedAssertion)
+    assert_type(assert_that(len).does_not_raise(ValueError).when_called_with().check(), _CheckCompletedAssertion[int])
 
     # the rest of the element pivot on the text view, of which only `first` was pinned
     assert_type(assert_that(len).raises(ValueError).when_called_with().last(), _TextAssertion)

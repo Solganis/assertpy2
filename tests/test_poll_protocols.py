@@ -93,7 +93,10 @@ class TestTheVerdictTwinOfAValueTheBuilderHolds:
 
     def test_every_assertion_reaching_a_verdict_is_on_it(self) -> None:
         views = _names(pathlib.Path(_typing.__file__).read_text(encoding="utf-8"))
-        skip = NOT_AN_OPERATION | set(WITHOUT_A_VERDICT) | _AFTER_A_CALL
+        # `when_called_with()` is absent for the reason the chain's own is: without an expectation the
+        # call raises, and the umbrella is reached from the builder, where no expectation has been set.
+        # A verdict after one is asked of the expectation view's own twin, which carries it
+        skip = NOT_AN_OPERATION | set(WITHOUT_A_VERDICT) | _AFTER_A_CALL | {"when_called_with"}
         missing = {name for name in views - self._declared() - skip if not name.startswith("_")}
         assert_that(missing).described_as("asked of a value but not of a verdict on one").is_empty()
 
@@ -157,15 +160,56 @@ _THE_CHAIN_ITSELF = frozenset({"within", "every", "ignoring", "val", "close"})
 
 class TestWhatTheTwinsCarry:
     def test_every_assertion_a_view_declares_is_reachable_on_a_chain(self) -> None:
+        source = pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")
         views = _names(pathlib.Path(_typing.__file__).read_text(encoding="utf-8"))
-        twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), "_SyncPoll")
+        # `when_called_with()` lives on the state an expectation puts the chain in, which is the only
+        # place a rung chosen by `self` can tell "an expectation was set" from the absence of one
+        twins = _names(source, "_SyncPoll") | _names(source, "_SyncPollExpecting")
         skip = NOT_AN_OPERATION | _AFTER_A_CALL | {name for name, kind in WITHOUT_A_VERDICT.items() if kind == POLLS}
         missing = {name for name in views - twins - skip if not name.startswith("_")}
         assert_that(missing).described_as("declared for a value but not for a chain over one").is_empty()
 
-    def test_a_chain_cannot_start_another_one(self) -> None:
-        twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), "_SyncPoll")
-        assert_that(twins & {name for name, kind in WITHOUT_A_VERDICT.items() if kind == POLLS}).is_empty()
+    @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
+    def test_a_chain_polls_again_only_over_a_callable(self, flavour) -> None:
+        """A second poll asks the value the first hands back to be callable, and says so in every rung.
+
+        Left undeclared the hook answered it, and `eventually_sync()` on a chain over a number type
+        checked on all four while the run time refused the value.  Declared without a rung open to any
+        chain, the refusal is the overload resolution itself.
+        """
+        source = ast.parse(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"))
+        polls = {name for name, kind in WITHOUT_A_VERDICT.items() if kind == POLLS}
+        rungs = [
+            item
+            for node in ast.walk(source)
+            if isinstance(node, ast.ClassDef) and node.name == flavour
+            for item in node.body
+            if isinstance(item, ast.FunctionDef) and item.name in polls
+        ]
+        assert_that(rungs).described_as(f"the poll rungs {flavour} carries").is_length(4)
+        receivers = {ast.unparse(item.args.args[0].annotation or ast.Constant(value=None)) for item in rungs}
+        assert_that(sorted(receivers)).described_as("what each poll rung asks its chain to hold").is_equal_to(
+            [f"{flavour}[Callable[..., _P]]", f"{flavour}[_Callable]"]
+        )
+
+    @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
+    def test_a_negated_chain_is_not_a_subclass_of_the_chain(self, flavour) -> None:
+        """The twin carries the rungs rather than inheriting them, and the reason is a crash.
+
+        A protocol inheriting the one whose `not_` hands it back overflowed ty's stack, so a reader
+        tempted to shorten the generated file by inheriting instead would take the crash with it.
+        Checked here rather than left to the gate, where it shows up as a checker dying and not as a
+        statement about the shape.
+        """
+        source = ast.parse(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"))
+        twin = f"_Negated{flavour[1:]}"
+        bases = [
+            ast.unparse(base)
+            for node in ast.walk(source)
+            if isinstance(node, ast.ClassDef) and node.name == twin
+            for base in node.bases
+        ]
+        assert_that(bases).described_as(f"what {twin} is built from").is_equal_to(["Protocol[_P_co]"])
 
     @pytest.mark.parametrize("flavour", ["_SyncPoll", "_AsyncPoll"])
     def test_the_knobs_and_the_hook_are_declared(self, flavour) -> None:
@@ -199,8 +243,20 @@ class TestWhereAPivotLands:
         assert_that(self._returns("first")).contains("_SyncPoll[str]", "_SyncPoll[_K]")
 
     def test_the_invoked_pivot_gives_the_type_up(self) -> None:
-        # its view adds eight names, so calling the chain one over text would answer them off the hook
-        assert_that(set(self._returns("when_called_with"))).is_equal_to({"_SyncPoll[Any]"})
+        """The call is declared on the state an expectation puts the chain in, and erases the value.
+
+        Its landing view adds eight names, so a chain that kept its type through the call would answer
+        those off the hook and claim the caught message was whatever went in.
+        """
+        source = pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")
+        returns = {
+            ast.unparse(item.returns)
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ClassDef) and node.name.endswith("Expecting")
+            for item in node.body
+            if isinstance(item, ast.FunctionDef) and item.name == "when_called_with" and item.returns is not None
+        }
+        assert_that(returns).is_equal_to({"_SyncPoll[Any]", "_AsyncPoll[Any]"})
 
 
 class TestTheRuntimeAnswersThroughThem:

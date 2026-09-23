@@ -186,7 +186,7 @@ def pairs():
 
 def test_the_comparison_itself_has_something_to_compare(pairs) -> None:
     # a walk that found nothing would pass every assertion below it
-    assert_that(pairs).described_as("declarations with a runtime method to compare").is_length_between(600, 1200)
+    assert_that(pairs).described_as("declarations with a runtime method to compare").is_length_between(600, 1600)
 
 
 def test_the_methods_behind_a_variadic_tail_are_compared_by_their_head(pairs) -> None:

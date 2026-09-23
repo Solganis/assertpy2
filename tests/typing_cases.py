@@ -12,7 +12,8 @@ checkers.  A gap nobody wrote down is a gap nobody can close on purpose.
 from __future__ import annotations
 
 import datetime
-from collections.abc import Mapping
+import warnings
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 from enum import Enum
 from fractions import Fraction
@@ -189,7 +190,7 @@ def _chaining_must_not_widen_what_the_value_offers() -> None:
     # `.not_` used to accept what the protocol does not, the proxy resolving any name through `__getattr__`.
     # It is declared as the protocol it was reached from, refusing the same calls the un-negated chain does
     assert_that(1 + 2j).not_.is_greater_than(0)  # case: negation-widens-the-protocol
-    # refused by all three now that the negation twins carry only what reaches a verdict, and the runtime
+    # refused by all four now that the negation twins carry only what reaches a verdict, and the runtime
     # refuses it too: `described_as() only sets the failure description, so it cannot be negated`
     assert_that(1).not_.described_as("x")  # case: negation-allows-a-non-negatable-name
     # the twin substitutes what the view bound its base to, so the negated operand is held to `str`
@@ -296,6 +297,32 @@ def _methods_that_do_not_fit_the_value() -> None:
     # derives from the declarations is anchored to what the checkers actually accept
     assert_that(_a_mapping).eventually_sync().starts_with("x")  # case: text-assertion-on-a-polled-mapping
     assert_that(_some_bytes).eventually_sync().has_json_path("$.a")  # case: json-pivot-on-polled-bytes
+    # a call with no expectation set, which raises.  Refused here because the rung asks the chain to hold
+    # a callable and this one holds a number
+    assert_that(_adder).eventually_sync().when_called_with(1, 2)  # case: called-with-on-a-chain-over-a-number
+    # the same call where the chain does hold a callable, refused because the chain declares the name as
+    # a refusal and only what `raises()` and the rest hand back carries the call
+    assert_that(_a_factory).eventually_sync().when_called_with()  # case: called-with-on-a-chain-over-a-callable
+    assert_that(_a_factory).eventually().when_called_with()  # case: called-with-on-an-async-chain
+    # and the same call once an expectation is set, which is what the state exists for
+    assert_that(_a_factory).eventually_sync().raises(
+        ValueError
+    ).when_called_with()  # case: valid-call-after-an-expectation
+    assert_that(_a_factory).eventually().does_not_raise(
+        ValueError
+    ).when_called_with()  # case: valid-async-call-after-an-expectation
+    # a poll delivers its own failure, so `check()` is refused at run time and declared as not callable
+    assert_that(_a_number).eventually_sync().check()  # case: check-on-a-sync-poll
+    assert_that(_a_number).eventually().check()  # case: check-on-an-async-poll
+    # `not_` negates the assertion after it, and a description, a transform and an expectation are not
+    # assertions.  The chain's negation carries them as refusals, since `__getattr__` answers anything
+    assert_that(_a_number).eventually_sync().not_.described_as("x")  # case: describe-on-a-negated-poll
+    assert_that(_some_rows).eventually_sync().not_.first()  # case: pivot-on-a-negated-poll
+    assert_that(_a_number).eventually().not_.raises(ValueError)  # case: expectation-on-a-negated-poll
+    # a second poll asks the value the first hands back to be callable, which a number is not.  The rung
+    # is restricted rather than left open, so the refusal is the overload resolution itself
+    assert_that(_a_number).eventually_sync().eventually_sync()  # case: poll-on-a-sync-poll
+    assert_that(_a_number).eventually().eventually()  # case: poll-on-an-async-poll
     # the rung the chain reaches now carries `str` operands, so mypy and pyright refuse this.  ty and
     # pyrefly still bind the element off the argument, which is what keeps the case here
     assert_that(_some_text).eventually_sync().contains_in_order(1)  # case: element-of-another-type-on-a-polled-string
@@ -321,9 +348,38 @@ def _methods_that_do_not_fit_the_value() -> None:
         "x"
     )
 
+    # the call ladder, whose four landings the run time tells apart and the one view did not.  Each of
+    # these raises: no expectation set, no return value captured, no exception captured, or the value
+    # under test is the callable and not a message
+    assert_that(_adder).when_called_with(1, 2)  # case: called-with-no-expectation
+    assert_that(_boom).raises(ValueError).when_called_with().returned()  # case: returned-after-raises
+    assert_that(_adder).does_not_raise(ValueError).when_called_with(1, 2).raised()  # case: raised-after-no-raise
+    assert_that(_noisy).warns(DeprecationWarning).when_called_with().raised()  # case: raised-after-warns
+    assert_that(_noisy).warns(DeprecationWarning).when_called_with().caused_by(TypeError)  # case: caused-by-after-warns
+    assert_that(_noisy).warns(DeprecationWarning).when_called_with().errors()  # case: errors-after-warns
+    assert_that(_adder).does_not_raise(ValueError).when_called_with(1, 2).starts_with("x")  # case: text-after-no-raise
+    assert_that(_adder).does_not_warn(UserWarning).when_called_with(1, 2).contains("x")  # case: contains-after-no-warn
+
 
 def _a_number() -> int:
     return 1
+
+
+def _adder(first: int, second: int) -> int:
+    return first + second
+
+
+def _a_factory() -> Callable[..., int]:
+    return lambda: 1
+
+
+def _boom() -> int:
+    raise ValueError("bad thing")
+
+
+def _noisy() -> int:
+    warnings.warn("old", DeprecationWarning, stacklevel=2)
+    return 7
 
 
 def _a_person() -> _Person:

@@ -37,11 +37,15 @@ if TYPE_CHECKING:
         _CheckBoolAssertion,
         _CheckBytesAssertion,
         _CheckCallableAssertion,
+        _CheckCompletedAssertion,
         _CheckComplexAssertion,
         _CheckCoreAssertion,
         _CheckDateAssertion,
         _CheckDateTimeAssertion,
         _CheckDictAssertion,
+        _CheckExpectedCompletionAssertion,
+        _CheckExpectedRaiseAssertion,
+        _CheckExpectedWarningAssertion,
         _CheckFrameAssertion,
         _CheckInvokedAssertion,
         _CheckIterableAssertion,
@@ -50,6 +54,7 @@ if TYPE_CHECKING:
         _CheckObjectAssertion,
         _CheckPathAssertion,
         _CheckStringAssertion,
+        _CheckWarnedAssertion,
     )
     from ._compat import Self
     from ._negated_typing import (
@@ -57,11 +62,15 @@ if TYPE_CHECKING:
         _NegatedBoolAssertion,
         _NegatedBytesAssertion,
         _NegatedCallableAssertion,
+        _NegatedCompletedAssertion,
         _NegatedComplexAssertion,
         _NegatedCoreAssertion,
         _NegatedDateAssertion,
         _NegatedDateTimeAssertion,
         _NegatedDictAssertion,
+        _NegatedExpectedCompletionAssertion,
+        _NegatedExpectedRaiseAssertion,
+        _NegatedExpectedWarningAssertion,
         _NegatedFrameAssertion,
         _NegatedInvokedAssertion,
         _NegatedIterableAssertion,
@@ -71,6 +80,7 @@ if TYPE_CHECKING:
         _NegatedPathAssertion,
         _NegatedStringAssertion,
         _NegatedTextAssertion,
+        _NegatedWarnedAssertion,
     )
     from ._poll_typing import _AsyncPoll, _SyncPoll
 
@@ -240,6 +250,15 @@ if TYPE_CHECKING:
         def does_not_contain_duplicates(self) -> Self: ...
         def contains_only_once(self, *items: object) -> Self: ...
         def contains_in_order(self, *items: _E | Matcher[_E]) -> Self: ...
+
+    class _ReturningAssertion(Protocol):
+        """The value a completed call produced, which both non-raising landings hand back.
+
+        Its static type is unknown, so what comes back offers the assertions every value can answer
+        and nothing beyond them.
+        """
+
+        def returned(self) -> _CoreAssertion: ...
 
     class _ZeroAssertion(Protocol):
         """Zero and its negation, which every numeric spelling shares, complex included."""
@@ -1026,14 +1045,14 @@ if TYPE_CHECKING:
         def is_less_than_or_equal_to(self, other: bytes | bytearray) -> Self: ...
 
     class _InvokedAssertion(_TextAssertion, Protocol):
-        """Assertions available after ``when_called_with()`` captured an exception/warning message.
+        """Assertions available after ``when_called_with()`` captured an exception message.
 
         The captured message is a ``str`` (hence the text assertions, though not the ones reading a
-        path: a message is not a filename);
-        [`returned()`][assertpy2.exception.ExceptionMixin.returned] pivots to the value the callable
-        returned.  Its static type is unknown, so ``returned()`` exposes the
-        type-agnostic core assertions (``is_equal_to``, ``is_instance_of``, ``satisfies``, ...) -
-        type-safe by construction, never advertising methods that may not apply.
+        path: a message is not a filename).
+
+        `returned()` is absent and that is measured: after `raises()` the call never completed, so it
+        raises `no return value captured`.  A call that did complete lands on `_WarnedAssertion` or
+        `_CompletedAssertion`, which carry it instead.
         """
 
         @property
@@ -1041,7 +1060,6 @@ if TYPE_CHECKING:
 
         def check(self) -> _CheckInvokedAssertion: ...
 
-        def returned(self) -> _CoreAssertion: ...
         # `caused_by` and `has_root_cause` walk the chain and pivot to that cause's message
         def raised(self) -> _CoreAssertion: ...
         def caused_by(self, ex: type) -> Self: ...
@@ -1056,8 +1074,26 @@ if TYPE_CHECKING:
         # history, and naming it would suggest a precision the checkers do not carry
         def matches_error_tree(self, *expected: type | list[Any]) -> Self: ...
 
+    class _WarnedAssertion(_TextAssertion, _ReturningAssertion, Protocol):
+        """Assertions available after ``when_called_with()`` captured a warning message.
+
+        The message is text like the invoked view's, and the call completed, so
+        [`returned()`][assertpy2.exception.ExceptionMixin.returned] reads the value it produced.  The
+        exception family is absent: nothing was caught, and every one of those eight raises
+        `no exception captured`, measured.
+        """
+
+        @property
+        def not_(self) -> _NegatedWarnedAssertion: ...
+
+        def check(self) -> _CheckWarnedAssertion: ...
+
     class _CallableAssertion(_CoreAssertion, Protocol[_P_co]):
-        """Assertions available for callable values."""
+        """Assertions available for callable values.
+
+        `when_called_with()` is not here.  It refuses a chain with no expectation set, so the four
+        methods that set one hand back the view carrying it.
+        """
 
         @property
         def not_(self) -> _NegatedCallableAssertion[_P_co]: ...
@@ -1066,11 +1102,10 @@ if TYPE_CHECKING:
 
         @property
         def value(self) -> Callable[..., _P_co]: ...
-        def raises(self, ex: type) -> Self: ...
-        def does_not_raise(self, ex: type) -> Self: ...
-        def warns(self, warning: type[Warning] = ...) -> Self: ...
-        def does_not_warn(self, warning: type[Warning] = ...) -> Self: ...
-        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _InvokedAssertion: ...
+        def raises(self, ex: type) -> _ExpectedRaiseAssertion[_P_co]: ...
+        def does_not_raise(self, ex: type) -> _ExpectedCompletionAssertion[_P_co]: ...
+        def warns(self, warning: type[Warning] = ...) -> _ExpectedWarningAssertion[_P_co]: ...
+        def does_not_warn(self, warning: type[Warning] = ...) -> _ExpectedCompletionAssertion[_P_co]: ...
         def eventually(
             self,
             *,
@@ -1087,3 +1122,46 @@ if TYPE_CHECKING:
             ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
             trace: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
+
+    class _CompletedAssertion(_CallableAssertion[_P_co], _ReturningAssertion, Protocol[_P_co]):
+        """Assertions available after a `does_not_raise()` or `does_not_warn()` call completed.
+
+        The value under test is still the callable, not a message, so the text assertions are absent:
+        every one of them raises `val must be a string or an iterable`, measured.  What the call
+        produced is reachable through `returned()`.
+        """
+
+        @property
+        def not_(self) -> _NegatedCompletedAssertion[_P_co]: ...
+
+        def check(self) -> _CheckCompletedAssertion[_P_co]: ...
+
+    class _ExpectedRaiseAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
+        """A callable with a `raises()` expectation set, waiting for the call that tests it."""
+
+        @property
+        def not_(self) -> _NegatedExpectedRaiseAssertion[_P_co]: ...
+
+        def check(self) -> _CheckExpectedRaiseAssertion[_P_co]: ...
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _InvokedAssertion: ...
+
+    class _ExpectedWarningAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
+        """A callable with a `warns()` expectation set, waiting for the call that tests it."""
+
+        @property
+        def not_(self) -> _NegatedExpectedWarningAssertion[_P_co]: ...
+
+        def check(self) -> _CheckExpectedWarningAssertion[_P_co]: ...
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _WarnedAssertion: ...
+
+    class _ExpectedCompletionAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
+        """A callable expected to complete, which is what `does_not_raise()` and `does_not_warn()` set."""
+
+        @property
+        def not_(self) -> _NegatedExpectedCompletionAssertion[_P_co]: ...
+
+        def check(self) -> _CheckExpectedCompletionAssertion[_P_co]: ...
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _CompletedAssertion[_P_co]: ...

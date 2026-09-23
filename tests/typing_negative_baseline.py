@@ -15,7 +15,7 @@ and the argument is missing.  `ty` sometimes answers `no-matching-overload` wher
 argument: same family, different route through an overload set.
 
 **What stays uncaught, and why.** A value with no protocol of its own now gets the core surface, so
-`assert_that(Person()).is_positive()` is refused by all three.  What is left is the ordering matchers,
+`assert_that(Person()).is_positive()` is refused by all four.  What is left is the ordering matchers,
 which take and judge anything, and the entries below say why every spelling that closes that trades a
 correct call for an incorrect one.
 
@@ -35,42 +35,63 @@ _ARGUMENT: dict[str, frozenset[str]] = {
     "ty": frozenset({"invalid-argument-type"}),
     "mypy": frozenset({"arg-type"}),
     "pyright": frozenset({"reportArgumentType"}),
+    "pyrefly": frozenset({"bad-argument-type"}),
 }
 
 _CLASS_INFO_MEMBER: dict[str, frozenset[str]] = {
     "ty": frozenset({"no-matching-overload"}),
     "mypy": frozenset({"arg-type"}),
     "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+    "pyrefly": frozenset({"no-matching-overload"}),
 }
 
 _MISSING: dict[str, frozenset[str]] = {
     "ty": frozenset({"unresolved-attribute"}),
     "mypy": frozenset({"attr-defined"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
+    "pyrefly": frozenset({"missing-attribute"}),
 }
 
 _NOT_THE_VALUES_VIEW: dict[str, frozenset[str]] = {
     "ty": frozenset(),
     "mypy": frozenset({"misc"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
+    "pyrefly": frozenset({"no-matching-overload"}),
 }
 
 _NOT_THE_VALUES_KIND: dict[str, frozenset[str]] = {
     "ty": frozenset({"invalid-argument-type"}),
     "mypy": frozenset({"misc"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
+    "pyrefly": frozenset({"bad-argument-type"}),
 }
 
 _NOT_THE_CHAINS_VALUE: dict[str, frozenset[str]] = {
     "ty": frozenset({"no-matching-overload"}),
     "mypy": frozenset({"misc"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
+    "pyrefly": frozenset({"no-matching-overload"}),
 }
 
 _PREDICATE_OVER_THE_SUBJECT: dict[str, frozenset[str]] = {
     "ty": frozenset(),
     "mypy": frozenset({"arg-type"}),
     "pyright": frozenset({"reportAttributeAccessIssue"}),
+    "pyrefly": frozenset({"missing-attribute"}),
+}
+
+_NO_EXPECTATION_YET: dict[str, frozenset[str]] = {
+    "ty": frozenset({"call-non-callable"}),
+    "mypy": frozenset(),
+    "pyright": frozenset({"reportCallIssue"}),
+    "pyrefly": frozenset({"not-callable"}),
+}
+
+_NOT_CALLABLE: dict[str, frozenset[str]] = {
+    "ty": frozenset({"call-non-callable"}),
+    "mypy": frozenset({"operator"}),
+    "pyright": frozenset({"reportCallIssue"}),
+    "pyrefly": frozenset({"not-callable"}),
 }
 
 CAUGHT: dict[str, dict[str, frozenset[str]]] = {
@@ -95,6 +116,7 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     # the four membership and ordering matchers judge a collection, so a scalar is the wrong subject. Kept
     # apart from the text matcher because their binding is the new part: without it, `Matcher[Any]`
@@ -102,21 +124,25 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     "only-matcher-for-a-scalar": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     "subset-matcher-for-a-scalar": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     "sorted-matcher-for-a-scalar": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"arg-type"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     "repeats-of-a-wider-element-substituted": _ARGUMENT,
     "numeric-assertion-after-a-json-path": _MISSING,
@@ -133,23 +159,27 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "ty": frozenset({"missing-argument"}),
         "mypy": frozenset({"call-arg"}),
         "pyright": frozenset({"reportCallIssue"}),
+        "pyrefly": frozenset({"bad-argument-count"}),
     },
     "extracting-with-an-unknown-option": {
         "ty": frozenset({"unknown-argument"}),
         "mypy": frozenset({"call-arg"}),
         "pyright": frozenset({"reportCallIssue"}),
+        "pyrefly": frozenset({"unexpected-keyword"}),
     },
     # mypy adds `misc` beside `arg-type` to say the lambda itself does not fit, not only its result
     "extracting-filter-of-wrong-arity": {
         "ty": frozenset({"invalid-argument-type"}),
         "mypy": frozenset({"arg-type", "misc"}),
         "pyright": frozenset({"reportArgumentType"}),
+        "pyrefly": frozenset({"bad-argument-type"}),
     },
     # the arity, not the verdict: `sort` and `filter` hand over one item, so a two-parameter callable is refused
     "extracting-sort-of-wrong-arity": {
         "ty": frozenset({"invalid-argument-type"}),
         "mypy": frozenset({"arg-type", "misc"}),
         "pyright": frozenset({"reportArgumentType"}),
+        "pyrefly": frozenset({"bad-argument-type"}),
     },
     "complex-ordered": _MISSING,
     "complex-signed": _MISSING,
@@ -206,6 +236,7 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"call-overload"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
     },
     # the negation twins carry only what reaches a verdict, so the fourteen names that transform,
     # configure or describe are now refused statically as well as at run time
@@ -213,11 +244,13 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
         "ty": frozenset({"unresolved-attribute"}),
         "mypy": frozenset({"attr-defined"}),
         "pyright": frozenset({"reportAttributeAccessIssue"}),
+        "pyrefly": frozenset({"missing-attribute"}),
     },
     "umbrella-negation-allows-a-non-negatable-name": {
         "ty": frozenset({"unresolved-attribute"}),
         "mypy": frozenset({"attr-defined"}),
         "pyright": frozenset({"reportAttributeAccessIssue"}),
+        "pyrefly": frozenset({"missing-attribute"}),
     },
     "negated-element-of-another-type": _ARGUMENT,
     # the hook has to stay: `has_status("PAID")` can be declared nowhere. With it there an unknown name is
@@ -226,12 +259,36 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "numeric-assertion-on-polled-text": {},
     "text-assertion-on-a-polled-mapping": {},
     "json-pivot-on-polled-bytes": {},
+    "called-with-on-a-chain-over-a-number": _NOT_CALLABLE,
+    # mypy alone is silent: it reads `assert_that()` over a probe that returns a callable as `Any`, so
+    # there is no chain for it to refuse the name on.  The other three read the declared refusal
+    "called-with-on-a-chain-over-a-callable": _NO_EXPECTATION_YET,
+    "called-with-on-an-async-chain": _NO_EXPECTATION_YET,
+    # declared as a member with a type nothing can call, which is what beats `__getattr__`
+    "check-on-a-sync-poll": _NOT_CALLABLE,
+    "check-on-an-async-poll": _NOT_CALLABLE,
+    "describe-on-a-negated-poll": _NOT_CALLABLE,
+    "pivot-on-a-negated-poll": _NOT_CALLABLE,
+    "expectation-on-a-negated-poll": _NOT_CALLABLE,
+    "poll-on-a-sync-poll": _NOT_THE_CHAINS_VALUE,
+    "poll-on-an-async-poll": _NOT_THE_CHAINS_VALUE,
+    # the call ladder: the expectation views carry `when_called_with()`, and each landing carries what
+    # the run time lets it be asked.  All four checkers read a missing declaration the same way
+    "called-with-no-expectation": _MISSING,
+    "returned-after-raises": _MISSING,
+    "raised-after-no-raise": _MISSING,
+    "raised-after-warns": _MISSING,
+    "caused-by-after-warns": _MISSING,
+    "errors-after-warns": _MISSING,
+    "text-after-no-raise": _MISSING,
+    "contains-after-no-warn": _MISSING,
     # the rung the chain reaches for a text probe now carries `str` operands rather than a free element,
     # so two of the three refuse the number.  ty and pyrefly still bind the element off the argument
     "element-of-another-type-on-a-polled-string": {
         "ty": frozenset(),
         "mypy": frozenset({"call-overload"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset(),
     },
     "ordering-matcher-takes-any-boundary": {},
     "ordering-matcher-judges-any-subject": {},
@@ -243,25 +300,28 @@ SPLIT: frozenset[str] = frozenset(
     {
         "predicate-reading-a-missing-string-method",
         "predicate-reading-a-missing-numeric-method",
+        "called-with-on-a-chain-over-a-callable",
+        "called-with-on-an-async-chain",
         "text-verdict-on-a-pivoted-number",
         "element-of-another-type-on-a-polled-string",
     }
 )
-"""The cases where the three do not agree, named so a new one has to be decided about.
+"""The cases the four do not agree on, named so a new one has to be decided about.
 
-Four relations, and ty is the silent one in all of them.  The first two are a lambda over the subject
-reading a name the value has not got, where ty resolves the parameter through the overload set less
-precisely.  The third is a verdict asked of a value the builder holds, refused through the ``self``
-annotation of a rung on its twin, which ty does not read either.  The fourth is an element of another
-type handed to a polled string, where the rung that matches carries `str` operands and the two that
-read it say so.
+Four relations, and ty is silent in all of them.  The first two are a lambda over the subject reading a
+name the value has not got, where ty resolves the parameter through the overload set less precisely.
+The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
+rung on its twin, which ty does not read.  The fourth is an element of another type handed to a polled
+string, where the rung that matches carries `str` operands and only mypy and pyright say so.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
-missing checker would read as three dialects agreeing.
+missing checker would read as the dialects agreeing.
 """
 
 VALID: frozenset[str] = frozenset(
     {
+        "valid-call-after-an-expectation",
+        "valid-async-call-after-an-expectation",
         "valid-verdict-after-a-pivot",
         "valid-text-verdict-after-a-pivot",
         "valid-verdict-after-a-loose-pivot",
@@ -365,7 +425,7 @@ VALID: frozenset[str] = frozenset(
         "valid-datetime-against-datetime",
     }
 )
-"""Ordinary usage, which must stay accepted by all three.
+"""Ordinary usage, which must stay accepted by all four.
 
 A checker rejecting one of these is a defect in the typing, not a win.  They are the half of the
 measurement that decides whether a tightened signature can ship: `contains` has to keep taking a

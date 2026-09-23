@@ -8,7 +8,7 @@ usage that has to keep working.
 **A rejection is recorded with its diagnostic code, not as a yes.** An earlier version asked only
 whether a line was reported, and a counter-example whose fixture was missing a name reported an
 undefined-reference instead of a type error: green, for the wrong reason, on a case that proved
-nothing.  The codes also make the three checkers comparable, which is how a relation only one of them
+nothing.  The codes also make the four checkers comparable, which is how a relation only one of them
 refuses becomes visible rather than comfortable.
 
 Skipped where the checkers are absent: they live in the `typecheck` group, so this runs in the
@@ -42,6 +42,7 @@ def reported() -> dict[str, dict[int, set[str]]]:
         "ty": typing_harness.ty(_CASES),
         "mypy": typing_harness.mypy(_CASES),
         "pyright": typing_harness.pyright(_CASES),
+        "pyrefly": typing_harness.pyrefly(_CASES),
     }
 
 
@@ -56,7 +57,7 @@ class TestTheMeasurementItselfRan:
     def test_every_recorded_case_is_present_in_the_file(self, by_case):
         assert_that(set(by_case)).is_equal_to(set(CAUGHT) | VALID)
 
-    def test_all_three_checkers_reported_something(self, reported):
+    def test_every_checker_reported_something(self, reported):
         silent = [checker for checker, found in reported.items() if not found]
         assert_that(silent).described_as("a checker reported nothing at all: it did not run").is_empty()
 
@@ -80,6 +81,8 @@ _REFUSED_THROUGH_SELF = {
     "ty": {"no-matching-overload", "invalid-argument-type"},
     "mypy": {"misc"},
     "pyright": {"reportAttributeAccessIssue"},
+    # pyrefly words the same refusal two ways: no rung matched, or the receiver is the wrong argument
+    "pyrefly": {"no-matching-overload", "bad-argument-type"},
 }
 
 
@@ -103,8 +106,8 @@ class TestWhatTheCheckersRefuse:
     def test_the_cases_the_checkers_disagree_on_are_the_recorded_ones(self, by_case):
         """A relation only some checkers catch is a fact to state, not a comfort to leave implicit.
 
-        Read from the codes rather than from the checkers listed.  Every row names all three, so asking
-        how many are listed answered three every time and this gate could not fail.  What separates a
+        Read from the codes rather than from the checkers listed.  Every row names all four, so asking
+        how many are listed answered four every time and this gate could not fail.  What separates a
         split from an agreement is which of them reports anything.
         """
         split = sorted(name for name, expected in CAUGHT.items() if expected and not all(expected.values()))
@@ -112,7 +115,7 @@ class TestWhatTheCheckersRefuse:
             sorted(SPLIT)
         )
 
-    def test_the_codes_say_the_same_thing_in_three_dialects(self, by_case):
+    def test_the_codes_say_the_same_thing_in_every_dialect(self, by_case):
         """A relation refused for one reason by one checker and another by the next is not one relation.
 
         Families are read per checker rather than as one pool of codes, and the reason is a code that
@@ -128,12 +131,14 @@ class TestWhatTheCheckersRefuse:
                 "ty": {"invalid-argument-type", "no-matching-overload"},
                 "mypy": {"arg-type", "misc", "call-overload"},
                 "pyright": {"reportArgumentType", "reportCallIssue"},
+                "pyrefly": {"bad-argument-type", "no-matching-overload"},
             },
             # a method the value's protocol does not have
             {
                 "ty": {"unresolved-attribute"},
                 "mypy": {"attr-defined"},
                 "pyright": {"reportAttributeAccessIssue"},
+                "pyrefly": {"missing-attribute"},
             },
             # refused through a rung's `self`, on a polling chain or the umbrella. Each checker words it differently:
             # no rung matched, the `self` argument does not fit, the attribute is not there
@@ -148,19 +153,28 @@ class TestWhatTheCheckersRefuse:
                 "ty": {"unknown-argument"},
                 "mypy": {"call-arg"},
                 "pyright": {"reportCallIssue"},
+                "pyrefly": {"unexpected-keyword"},
             },
             # kept apart from the keyword family: `call-arg` and `reportCallIssue` cover both, only ty tells them apart
             {
                 "ty": {"missing-argument"},
                 "mypy": {"call-arg"},
                 "pyright": {"reportCallIssue"},
+                "pyrefly": {"bad-argument-count"},
+            },
+            # a member declared with a type nothing can call, which is how a polling chain refuses `check()`
+            {
+                "ty": {"call-non-callable"},
+                "mypy": {"operator"},
+                "pyright": {"reportCallIssue"},
+                "pyrefly": {"not-callable"},
             },
         ]
         mixed = {}
         for name, expected in CAUGHT.items():
-            # `set()` is a subset of any family, so a row missing a checker would read as three dialects agreeing.
+            # `set()` is a subset of any family, so a row missing a checker would read as the dialects agreeing.
             # A checker named with no codes is recorded silence, which is a measurement rather than a gap
-            speaks_for_all = set(expected) == {"ty", "mypy", "pyright"} and any(expected.values())
+            speaks_for_all = set(expected) == {"ty", "mypy", "pyright", "pyrefly"} and any(expected.values())
             fits_one = any(
                 all(set(expected.get(checker, ())) <= codes for checker, codes in family.items()) for family in families
             )

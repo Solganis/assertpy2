@@ -1,8 +1,8 @@
-"""Run the three checkers over one file and read back what each reported, per line.
+"""Run the four checkers over one file and read back what each reported, per line.
 
-Split out of `test_typing_negative.py` when the integration matrix needed the same three parsers.  The
+Split out of `test_typing_negative.py` when the integration matrix needed the same parsers.  The
 parsing is the whole of it: each checker names its diagnostics differently, and comparing them at all
-means reducing three output formats to `{line: {code}}`.
+means reducing four output formats to `{line: {code}}`.
 
 The environment is passed rather than discovered.  `ty` picks its environment from `VIRTUAL_ENV`, then
 from a `.venv` beside the project, and its target version from `requires-python`'s lower bound, none of
@@ -105,6 +105,28 @@ def ty(path: pathlib.Path, *options: str) -> Reported:
     found: Reported = {}
     for number, code in re.findall(rf"{re.escape(path.name)}:(\d+):\d+: error\[([\w-]+)\]", output):
         found.setdefault(int(number), set()).add(code)
+    return found
+
+
+def pyrefly(path: pathlib.Path, *options: str) -> Reported:
+    """Two lines per diagnostic: `ERROR <message> [<code>]`, then `--> <path>:<line>:<col>`.
+
+    Read as a pair rather than with one pattern, since the message itself runs to several lines and can
+    carry a bracketed word of its own.
+    """
+    output = run("pyrefly", "check", *options, str(path))
+    found: Reported = {}
+    code = None
+    for line in output.splitlines():
+        stripped = line.strip()
+        named = re.search(r"\[([\w-]+)\]$", stripped)
+        if stripped.startswith("ERROR") and named:
+            code = named.group(1)
+            continue
+        place = re.search(rf"--> .*{re.escape(path.name)}:(\d+):", stripped)
+        if place and code:
+            found.setdefault(int(place.group(1)), set()).add(code)
+            code = None
     return found
 
 

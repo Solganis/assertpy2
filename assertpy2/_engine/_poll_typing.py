@@ -73,6 +73,30 @@ if TYPE_CHECKING:
     _T = TypeVar("_T")
     _P = TypeVar("_P")
 
+    class _NoVerdictAfterAPoll:
+        """The type of `check` on a polling chain, which is not callable and says why in the diagnostic.
+
+        A poll delivers its own failure, so there is no verdict to hand back and `check()` is refused at
+        run time.  Declared here so the three checkers that read a declaration over `__getattr__` refuse
+        it where it is written rather than where it runs.
+        """
+
+    class _NoExpectationOnAChain:
+        """The type of `when_called_with` on a chain with no expectation set, which is not callable.
+
+        The call raises `no expectation set` at run time.  Which expectation was set is a state, and a
+        rung is chosen by its ``self`` annotation alone, so the state has to be the type `raises()`,
+        `warns()` and the two `does_not_*` hand back.
+        """
+
+    class _NotAnAssertionToNegate:
+        """The type of a name a negated polling chain refuses, which is not callable and says why.
+
+        `not_` negates the assertion after it.  A transform, an expectation, a description and a second
+        negation are not assertions, so each raises at run time.  Declared rather than left to
+        `__getattr__`, which answers any name the class does not carry.
+        """
+
     class _SyncPoll(Protocol[_P_co]):
         """A blocking polling chain over a probe returning `_P_co`."""
 
@@ -80,9 +104,13 @@ if TYPE_CHECKING:
         def every(self, interval: float) -> _SyncPoll[_P_co]: ...
         def ignoring(self, *exceptions: type[Exception]) -> _SyncPoll[_P_co]: ...
         @property
-        def not_(self) -> _SyncPoll[_P_co]: ...
+        def not_(self) -> _NegatedSyncPoll[_P_co]: ...
         @property
         def val(self) -> _P_co: ...
+
+        check: _NoVerdictAfterAPoll
+        when_called_with: _NoExpectationOnAChain
+
         def __getattr__(self, name: str) -> Callable[..., _SyncPoll[_P_co]]: ...
 
         @overload
@@ -1187,32 +1215,63 @@ if TYPE_CHECKING:
         ) -> _SyncPoll[_P_co]: ...
 
         @overload
-        def raises(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPoll[_P_co]: ...
+        def raises(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPollExpecting[_P_co]: ...
         @overload
-        def raises(self: _SyncPoll[_Callable], ex: type) -> _SyncPoll[_P_co]: ...
+        def raises(self: _SyncPoll[_Callable], ex: type) -> _SyncPollExpecting[_P_co]: ...
 
         @overload
-        def does_not_raise(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPoll[_P_co]: ...
+        def does_not_raise(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPollExpecting[_P_co]: ...
         @overload
-        def does_not_raise(self: _SyncPoll[_Callable], ex: type) -> _SyncPoll[_P_co]: ...
+        def does_not_raise(self: _SyncPoll[_Callable], ex: type) -> _SyncPollExpecting[_P_co]: ...
 
         @overload
-        def warns(self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _SyncPoll[_P_co]: ...
+        def warns(self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
         @overload
-        def warns(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPoll[_P_co]: ...
+        def warns(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
 
         @overload
-        def does_not_warn(self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _SyncPoll[_P_co]: ...
+        def does_not_warn(
+            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+        ) -> _SyncPollExpecting[_P_co]: ...
         @overload
-        def does_not_warn(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPoll[_P_co]: ...
+        def does_not_warn(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
 
         @overload
-        def when_called_with(
-            self: _SyncPoll[Callable[..., _P]], *some_args: object, **some_kwargs: object
+        def eventually(
+            self: _SyncPoll[Callable[..., _P]],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
         @overload
-        def when_called_with(
-            self: _SyncPoll[_Callable], *some_args: object, **some_kwargs: object
+        def eventually(
+            self: _SyncPoll[_Callable],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _SyncPoll[Any]: ...
+
+        @overload
+        def eventually_sync(
+            self: _SyncPoll[Callable[..., _P]],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _SyncPoll[Any]: ...
+        @overload
+        def eventually_sync(
+            self: _SyncPoll[_Callable],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
 
         @overload
@@ -1387,6 +1446,1342 @@ if TYPE_CHECKING:
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
+    class _SyncPollExpecting(Protocol[_P_co]):
+        """A chain with an expectation set, which is the one state `when_called_with()` needs.
+
+        Its own protocol rather than a subclass, for the reason the negated chain is one: a protocol
+        inheriting the one that hands it back overflowed ty's stack.
+
+        The assertions come off the hook rather than being repeated here.  Nothing in the tree or the
+        docs writes an assertion between an expectation and the call, and repeating them costs about
+        1300 declarations for that shape alone.
+        """
+
+        def within(self, timeout: float) -> _SyncPollExpecting[_P_co]: ...
+        def every(self, interval: float) -> _SyncPollExpecting[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollExpecting[_P_co]: ...
+        @property
+        def val(self) -> _P_co: ...
+
+        check: _NoVerdictAfterAPoll
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _SyncPoll[Any]: ...
+        def __getattr__(self, name: str) -> Callable[..., _SyncPoll[_P_co]]: ...
+
+    class _NegatedSyncPoll(Protocol[_P_co]):
+        """What `not_` hands back: the same chain, with what cannot be negated declared as refused.
+
+        Its own protocol rather than a subclass of the chain: inheriting the protocol whose `not_` hands
+        this one back overflowed ty's stack (0.0.83) on
+        `assert_type(assert_that(len), _CallableAssertion[int])`, bisected to that one line.
+
+        The assertions hand back the plain chain, since a negation covers the one assertion after it,
+        measured on both the chain and the builder.  Setting the budget keeps it, so those hand back
+        this one.
+        """
+
+        def within(self, timeout: float) -> _NegatedSyncPoll[_P_co]: ...
+        def every(self, interval: float) -> _NegatedSyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPoll[_P_co]: ...
+        @property
+        def val(self) -> _P_co: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _SyncPoll[_P_co]]: ...
+
+        @overload
+        def satisfies(
+            self: _NegatedSyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies(
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], matcher: Matcher[_N] | Callable[[_N], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies(self, matcher: Matcher[Any] | Callable[[Any], object]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains(self: _NegatedSyncPoll[dict[_K, _V]], *items: object) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], *items: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedSyncPoll[_FrameT_co] | _NegatedSyncPoll[_ArrayT_co], *items: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains(self: _NegatedSyncPoll[_CapableT], *items: object) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_case(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_whitespace(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_ignoring_case(self: _NegatedSyncPoll[str], *items: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_ignoring_case(self: _NegatedSyncPoll[_CapableT], *items: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def starts_with(self: _NegatedSyncPoll[str], prefix: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def starts_with(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            prefix: _E,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def starts_with(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], prefix: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def starts_with(self: _NegatedSyncPoll[_CapableT], prefix: str) -> _SyncPoll[_P_co]: ...
+
+        def starts_with_ignoring_case(self: _NegatedSyncPoll[str], prefix: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def ends_with(self: _NegatedSyncPoll[str], suffix: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def ends_with(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            suffix: _E,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def ends_with(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], suffix: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def ends_with(self: _NegatedSyncPoll[_CapableT], suffix: str) -> _SyncPoll[_P_co]: ...
+
+        def ends_with_ignoring_case(self: _NegatedSyncPoll[str], suffix: str) -> _SyncPoll[_P_co]: ...
+
+        def matches(self: _NegatedSyncPoll[str], pattern: str) -> _SyncPoll[_P_co]: ...
+
+        def does_not_match(self: _NegatedSyncPoll[str], pattern: str) -> _SyncPoll[_P_co]: ...
+
+        def is_alpha(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        def is_digit(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        def is_lower(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        def is_upper(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        def is_alphanumeric(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        def is_whitespace(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_any_of(self: _NegatedSyncPoll[str], *items: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_any_of(self: _NegatedSyncPoll[_CapableT], *items: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_none_of(self: _NegatedSyncPoll[str], *items: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_none_of(self: _NegatedSyncPoll[_CapableT], *items: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_unicode(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_unicode(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_greater_than(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedSyncPoll[datetime.date], other: datetime.date) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], other: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedSyncPoll[_T], other: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedSyncPoll[_Orderable], other: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedSyncPoll[datetime.date], other: datetime.date
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], other: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedSyncPoll[_T], other: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedSyncPoll[_Orderable], other: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_less_than(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedSyncPoll[datetime.date], other: datetime.date) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], other: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedSyncPoll[_T], other: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedSyncPoll[_Orderable], other: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedSyncPoll[str], other: str) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedSyncPoll[datetime.date], other: datetime.date
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], other: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedSyncPoll[_T], other: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedSyncPoll[_Orderable], other: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(self: _NegatedSyncPoll[dict[_K, _V]], *items: object) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(self: _NegatedSyncPoll[_CapableT], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_only(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only(self: _NegatedSyncPoll[dict[_K, _V]], *keys: object) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only(
+            self: _NegatedSyncPoll[_FrameT_co] | _NegatedSyncPoll[_ArrayT_co], *items: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only(self: _NegatedSyncPoll[_CapableT], *items: object) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_sequence(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_sequence(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_sequence(self: _NegatedSyncPoll[_CapableT], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_exactly(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly(self: _NegatedSyncPoll[_CapableT], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedSyncPoll[str], *items: str | Matcher[str]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedSyncPoll[_CapableT], *items: str | Matcher[str]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_sorted(
+            self: _NegatedSyncPoll[str],
+            key: Callable[[str], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedSyncPoll[dict[_K, _V]],
+            key: Callable[[_K], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            key: Callable[[_E], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray],
+            key: Callable[[int], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedSyncPoll[_CapableT],
+            key: Callable[[str], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def each(
+            self: _NegatedSyncPoll[str], matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedSyncPoll[dict[_K, _V]],
+            matcher: Matcher[_K] | Callable[[_K], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedSyncPoll[_CapableT],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def all_satisfy(
+            self: _NegatedSyncPoll[str], matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedSyncPoll[dict[_K, _V]],
+            matcher: Matcher[_K] | Callable[[_K], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedSyncPoll[_CapableT],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def any_satisfy(
+            self: _NegatedSyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def any_satisfy(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def any_satisfy(
+            self: _NegatedSyncPoll[_CapableT], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def none_satisfy(
+            self: _NegatedSyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def none_satisfy(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def none_satisfy(
+            self: _NegatedSyncPoll[_CapableT], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def satisfies_exactly(
+            self: _NegatedSyncPoll[str], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *matchers: Matcher[_E] | Callable[[_E], object],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly(
+            self: _NegatedSyncPoll[_CapableT], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedSyncPoll[str], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *matchers: Matcher[_E] | Callable[[_E], object],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedSyncPoll[_CapableT], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def zip_satisfies(
+            self: _NegatedSyncPoll[str],
+            other: Iterable[_Other],
+            predicate: Callable[[str, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def zip_satisfies(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            other: Iterable[_Other],
+            predicate: Callable[[_E, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def zip_satisfies(
+            self: _NegatedSyncPoll[_CapableT],
+            other: Iterable[_Other],
+            predicate: Callable[[str, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        def extracting_group(self: _NegatedSyncPoll[str], pattern: str, group: int | str = ...) -> _SyncPoll[_P_co]: ...
+
+        def matches_with_groups(self: _NegatedSyncPoll[str], pattern: str) -> _SyncPoll[Any]: ...
+
+        @overload
+        def exists(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def exists(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_exist(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_exist(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_file(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_file(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_directory(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_directory(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_named(
+            self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path], filename: str
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_named(self: _NegatedSyncPoll[_PathLike], filename: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_child_of(
+            self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path], parent: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_child_of(self: _NegatedSyncPoll[_PathLike], parent: object) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_readable(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_readable(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_writable(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_writable(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_executable(self: _NegatedSyncPoll[str] | _NegatedSyncPoll[pathlib.Path]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_executable(self: _NegatedSyncPoll[_PathLike]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_subset_of(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            *supersets: object,
+            allow_empty: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_subset_of(
+            self: _NegatedSyncPoll[dict[_K, _V]], *supersets: Mapping[Any, Any] | MappingLike, allow_empty: bool = ...
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_subset_of(
+            self: _NegatedSyncPoll[_CapableT], *supersets: object, allow_empty: bool = ...
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_duplicates(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_duplicates(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_duplicates(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_duplicates(self: _NegatedSyncPoll[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_duplicates(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_duplicates(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_only_once(self: _NegatedSyncPoll[str], *items: object) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only_once(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: object,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_only_once(self: _NegatedSyncPoll[_CapableT], *items: object) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_in_order(self: _NegatedSyncPoll[str], *items: str | Matcher[str]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_in_order(
+            self: _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_in_order(
+            self: _NegatedSyncPoll[Iterable[_E] | _Indexed[_E]], *items: _E | Matcher[_E]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_same_size_as(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            other: Sized,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_same_size_as(self: _NegatedSyncPoll[_CapableT], other: Sized) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_greater_than(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            size: int,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_size_greater_than(self: _NegatedSyncPoll[_CapableT], size: int) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_less_than(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            size: int,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_size_less_than(self: _NegatedSyncPoll[_CapableT], size: int) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_between(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+            low: int,
+            high: int,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_size_between(self: _NegatedSyncPoll[_CapableT], low: int, high: int) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_empty(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_empty(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_empty(
+            self: _NegatedSyncPoll[str]
+            | _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]]
+            | _NegatedSyncPoll[bytes]
+            | _NegatedSyncPoll[bytearray]
+            | _NegatedSyncPoll[_FrameT_co]
+            | _NegatedSyncPoll[_ArrayT_co],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_empty(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_positive(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_positive(self: _NegatedSyncPoll[_Orderable]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_negative(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_negative(self: _NegatedSyncPoll[_Orderable]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_nan(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_nan(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_nan(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_nan(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_inf(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_inf(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_inf(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_inf(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+            other: _Number,
+            tolerance: _Number,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
+            other: _Number,
+            tolerance: _Number,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[_CapableT], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_between(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], low: _Number, high: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_between(self: _NegatedSyncPoll[_T], low: Any, high: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_between(self: _NegatedSyncPoll[_CapableT], low: _Number, high: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_between(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], low: _Number, high: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_between(
+            self: _NegatedSyncPoll[datetime.datetime], low: datetime.datetime, high: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_between(
+            self: _NegatedSyncPoll[datetime.date], low: datetime.date, high: datetime.date
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_between(self: _NegatedSyncPoll[_T], low: Any, high: Any) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_between(self: _NegatedSyncPoll[_CapableT], low: _Number, high: _Number) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_zero(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float] | _NegatedSyncPoll[complex],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_zero(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_zero(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_zero(
+            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float] | _NegatedSyncPoll[complex],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_zero(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_zero(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_even(self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_even(self: _NegatedSyncPoll[int]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_odd(self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_odd(self: _NegatedSyncPoll[int]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_divisible_by(
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], divisor: int
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_divisible_by(self: _NegatedSyncPoll[int], divisor: int) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_key(self: _NegatedSyncPoll[dict[_K, _V]], *keys: _K | Matcher[_K]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_key(self: _NegatedSyncPoll[_Keyed], *keys: _K | Matcher[_K]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_key(self: _NegatedSyncPoll[dict[_K, _V]], *keys: _K | Matcher[_K]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_key(self: _NegatedSyncPoll[_Keyed], *keys: _K | Matcher[_K]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_value(self: _NegatedSyncPoll[dict[_K, _V]], *values: _V | Matcher[_V]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_value(self: _NegatedSyncPoll[_KeyedWithValues], *values: _V | Matcher[_V]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_value(
+            self: _NegatedSyncPoll[dict[_K, _V]], *values: _V | Matcher[_V]
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_value(
+            self: _NegatedSyncPoll[_KeyedWithValues], *values: _V | Matcher[_V]
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_entry(
+            self: _NegatedSyncPoll[dict[_K, _V]], *args: object, **kwargs: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_entry(
+            self: _NegatedSyncPoll[_KeyedWithItems], *args: object, **kwargs: object
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_entry(
+            self: _NegatedSyncPoll[dict[_K, _V]], *args: object, **kwargs: object
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_entry(
+            self: _NegatedSyncPoll[_KeyedWithItems], *args: object, **kwargs: object
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def matches_structure(self: _NegatedSyncPoll[dict[_K, _V]], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def matches_structure(self: _NegatedSyncPoll[_T], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def matches_structure(self: _NegatedSyncPoll[_CapableT], spec: dict[Any, Any]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_json_path(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            path: str,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_json_path(self: _NegatedSyncPoll[_CapableT], path: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_have_json_path(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            path: str,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def does_not_have_json_path(self: _NegatedSyncPoll[_CapableT], path: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def matches_json_schema(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            schema: dict[str, Any],
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def matches_json_schema(self: _NegatedSyncPoll[_CapableT], schema: dict[str, Any]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def matches_json_schema_from_file(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            path: str | Path,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def matches_json_schema_from_file(self: _NegatedSyncPoll[_CapableT], path: str | Path) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def conforms_to_openapi(
+            self: _NegatedSyncPoll[dict[_K, _V]]
+            | _NegatedSyncPoll[list[_E]]
+            | _NegatedSyncPoll[tuple[_E, ...]]
+            | _NegatedSyncPoll[set[_E]]
+            | _NegatedSyncPoll[frozenset[_E]],
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def conforms_to_openapi(
+            self: _NegatedSyncPoll[_CapableT],
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_before(self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime) -> _SyncPoll[_P_co]: ...
+
+        def is_after(self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime) -> _SyncPoll[_P_co]: ...
+
+        def is_before_or_equal_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_after_or_equal_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_milliseconds(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_seconds(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_time(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_valid_utf8(self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_valid_utf8(self: _NegatedSyncPoll[bytes | bytearray]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_valid_encoding(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], encoding: str
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_valid_encoding(self: _NegatedSyncPoll[bytes | bytearray], encoding: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def starts_with_bytes(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], prefix: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def starts_with_bytes(
+            self: _NegatedSyncPoll[bytes | bytearray], prefix: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def contains_bytes(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], sub: bytes | bytearray
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def contains_bytes(self: _NegatedSyncPoll[bytes | bytearray], sub: bytes | bytearray) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def has_byte_at(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], index: int, expected: int
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def has_byte_at(self: _NegatedSyncPoll[bytes | bytearray], index: int, expected: int) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_hex_equal_to(
+            self: _NegatedSyncPoll[bytes] | _NegatedSyncPoll[bytearray], expected_hex: str
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_hex_equal_to(self: _NegatedSyncPoll[bytes | bytearray], expected_hex: str) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_frame_equal(
+            self: _NegatedSyncPoll[_FrameT_co], expected: object, **options: Any
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_frame_equal(self: _NegatedSyncPoll[_CapableT], expected: object, **options: Any) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_array_equal(
+            self: _NegatedSyncPoll[_FrameT_co] | _NegatedSyncPoll[_ArrayT_co], expected: object, **options: Any
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_array_equal(self: _NegatedSyncPoll[_CapableT], expected: object, **options: Any) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_array_close_to(
+            self: _NegatedSyncPoll[_FrameT_co] | _NegatedSyncPoll[_ArrayT_co],
+            expected: object,
+            *,
+            rtol: float = ...,
+            atol: float = ...,
+            equal_nan: bool = ...,
+            **options: Any,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_array_close_to(
+            self: _NegatedSyncPoll[_CapableT],
+            expected: object,
+            *,
+            rtol: float = ...,
+            atol: float = ...,
+            equal_nan: bool = ...,
+            **options: Any,
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[str | None]) -> _SyncPoll[str]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[bool | None]) -> _SyncPoll[bool]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[int | None]) -> _SyncPoll[int]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[float | None]) -> _SyncPoll[float]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[complex | None]) -> _SyncPoll[complex]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[dict[_K, _V] | None]) -> _SyncPoll[dict[_K, _V]]: ...
+        @overload
+        def is_not_none(
+            self: _NegatedSyncPoll[list[_E] | tuple[_E, ...] | None],
+        ) -> _SyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_not_none(
+            self: _NegatedSyncPoll[set[_E] | frozenset[_E] | None],
+        ) -> _SyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[datetime.datetime | None]) -> _SyncPoll[datetime.datetime]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[datetime.date | None]) -> _SyncPoll[datetime.date]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[Path | None]) -> _SyncPoll[Path]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[bytes | None]) -> _SyncPoll[bytes]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[bytearray | None]) -> _SyncPoll[bytearray]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[Callable[..., object] | None]) -> _SyncPoll[Callable[..., Any]]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[_U | None]) -> _SyncPoll[_U]: ...
+        @overload
+        def is_not_none(self: _NegatedSyncPoll[_T]) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_none(self) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[str]) -> _SyncPoll[str]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[bool]) -> _SyncPoll[bool]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[int]) -> _SyncPoll[int]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[float]) -> _SyncPoll[float]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[complex]) -> _SyncPoll[complex]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[dict[_K, _V]]) -> _SyncPoll[dict[_K, _V]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedSyncPoll[_T], some_class: type[list[_E] | tuple[_E, ...]]
+        ) -> _SyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedSyncPoll[_T], some_class: type[set[_E] | frozenset[_E]]
+        ) -> _SyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedSyncPoll[_T], some_class: type[datetime.datetime]
+        ) -> _SyncPoll[datetime.datetime]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[datetime.date]) -> _SyncPoll[datetime.date]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[Path]) -> _SyncPoll[Path]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[bytes]) -> _SyncPoll[bytes]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[bytearray]) -> _SyncPoll[bytearray]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedSyncPoll[_T], some_class: tuple[type[_U], type[_U2]]
+        ) -> _SyncPoll[_U | _U2]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedSyncPoll[_T], some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> _SyncPoll[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: type[_U]) -> _SyncPoll[_U]: ...
+        @overload
+        def is_instance_of(self: _NegatedSyncPoll[_T], some_class: ClassInfo) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_instance_of(self, some_class: ClassInfo) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_instance_of_any(
+            self: _NegatedSyncPoll[_T], first: type[_U], second: type[_U2], /
+        ) -> _SyncPoll[_U | _U2]: ...
+        @overload
+        def is_instance_of_any(
+            self: _NegatedSyncPoll[_T], first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> _SyncPoll[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of_any(self: _NegatedSyncPoll[_T], *some_classes: ClassInfo) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> _SyncPoll[_P_co]: ...
+
+        def is_equal_to(
+            self,
+            other: object,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            ignore_null: bool = ...,
+            strict_types: bool = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        def is_not_equal_to(self, other: object) -> _SyncPoll[_P_co]: ...
+
+        def is_same_as(self, other: object) -> _SyncPoll[_P_co]: ...
+
+        def is_not_same_as(self, other: object) -> _SyncPoll[_P_co]: ...
+
+        def is_true(self) -> _SyncPoll[_P_co]: ...
+
+        def is_false(self) -> _SyncPoll[_P_co]: ...
+
+        def is_none(self) -> _SyncPoll[_P_co]: ...
+
+        def is_type_of(self, some_type: type) -> _SyncPoll[_P_co]: ...
+
+        def is_subclass_of(self, some_class: type) -> _SyncPoll[_P_co]: ...
+
+        def is_length(self, length: int) -> _SyncPoll[_P_co]: ...
+
+        def is_length_between(self, low: int, high: int) -> _SyncPoll[_P_co]: ...
+
+        def is_callable(self) -> _SyncPoll[_P_co]: ...
+
+        def is_not_callable(self) -> _SyncPoll[_P_co]: ...
+
+        def is_iterable(self) -> _SyncPoll[_P_co]: ...
+
+        def is_not_iterable(self) -> _SyncPoll[_P_co]: ...
+
+        def all_fields_satisfy(
+            self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...
+        ) -> _SyncPoll[_P_co]: ...
+
+        def has_no_none_fields(self, *, allow_empty: bool = ...) -> _SyncPoll[_P_co]: ...
+
+        def is_in(self, *items: object) -> _SyncPoll[_P_co]: ...
+
+        def is_not_in(self, *items: object) -> _SyncPoll[_P_co]: ...
+
+        def snapshot(
+            self,
+            id: str | None = ...,
+            path: str = ...,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
+        def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> _SyncPoll[_P_co]: ...
+
+        def matches_inline(
+            self,
+            expected: object = ...,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
+        ) -> _SyncPoll[_P_co]: ...
+
     class _AsyncPoll(Protocol[_P_co]):
         """An awaitable polling chain over a probe returning `_P_co`.
 
@@ -1399,8 +2794,12 @@ if TYPE_CHECKING:
         def ignoring(self, *exceptions: type[Exception]) -> _AsyncPoll[_P_co]: ...
         def close(self) -> None: ...
         @property
-        def not_(self) -> _AsyncPoll[_P_co]: ...
+        def not_(self) -> _NegatedAsyncPoll[_P_co]: ...
         def __await__(self) -> Generator[Any, None, AssertionBuilder[_P_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        when_called_with: _NoExpectationOnAChain
+
         def __getattr__(self, name: str) -> Callable[..., _AsyncPoll[_P_co]]: ...
 
         @overload
@@ -2523,32 +3922,63 @@ if TYPE_CHECKING:
         ) -> _AsyncPoll[_P_co]: ...
 
         @overload
-        def raises(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPoll[_P_co]: ...
+        def raises(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPollExpecting[_P_co]: ...
         @overload
-        def raises(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPoll[_P_co]: ...
+        def raises(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPollExpecting[_P_co]: ...
 
         @overload
-        def does_not_raise(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPoll[_P_co]: ...
+        def does_not_raise(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPollExpecting[_P_co]: ...
         @overload
-        def does_not_raise(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPoll[_P_co]: ...
+        def does_not_raise(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPollExpecting[_P_co]: ...
 
         @overload
-        def warns(self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _AsyncPoll[_P_co]: ...
+        def warns(self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
         @overload
-        def warns(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPoll[_P_co]: ...
+        def warns(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
 
         @overload
-        def does_not_warn(self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _AsyncPoll[_P_co]: ...
+        def does_not_warn(
+            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+        ) -> _AsyncPollExpecting[_P_co]: ...
         @overload
-        def does_not_warn(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPoll[_P_co]: ...
+        def does_not_warn(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
 
         @overload
-        def when_called_with(
-            self: _AsyncPoll[Callable[..., _P]], *some_args: object, **some_kwargs: object
+        def eventually(
+            self: _AsyncPoll[Callable[..., _P]],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
         @overload
-        def when_called_with(
-            self: _AsyncPoll[_Callable], *some_args: object, **some_kwargs: object
+        def eventually(
+            self: _AsyncPoll[_Callable],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _AsyncPoll[Any]: ...
+
+        @overload
+        def eventually_sync(
+            self: _AsyncPoll[Callable[..., _P]],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
+        ) -> _AsyncPoll[Any]: ...
+        @overload
+        def eventually_sync(
+            self: _AsyncPoll[_Callable],
+            *,
+            timeout: float = ...,
+            interval: float = ...,
+            ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
+            trace: bool = ...,
         ) -> _AsyncPoll[Any]: ...
 
         @overload
@@ -2647,6 +4077,1350 @@ if TYPE_CHECKING:
         def is_instance_of_any(self, *some_classes: ClassInfo) -> _AsyncPoll[_P_co]: ...
 
         def described_as(self, description: str) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to(
+            self,
+            other: object,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            ignore_null: bool = ...,
+            strict_types: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_not_equal_to(self, other: object) -> _AsyncPoll[_P_co]: ...
+
+        def is_same_as(self, other: object) -> _AsyncPoll[_P_co]: ...
+
+        def is_not_same_as(self, other: object) -> _AsyncPoll[_P_co]: ...
+
+        def is_true(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_false(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_none(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_type_of(self, some_type: type) -> _AsyncPoll[_P_co]: ...
+
+        def is_subclass_of(self, some_class: type) -> _AsyncPoll[_P_co]: ...
+
+        def is_length(self, length: int) -> _AsyncPoll[_P_co]: ...
+
+        def is_length_between(self, low: int, high: int) -> _AsyncPoll[_P_co]: ...
+
+        def is_callable(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_not_callable(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_iterable(self) -> _AsyncPoll[_P_co]: ...
+
+        def is_not_iterable(self) -> _AsyncPoll[_P_co]: ...
+
+        def all_fields_satisfy(
+            self, matcher: Matcher[Any] | Callable[[Any], object], *, allow_empty: bool = ...
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def has_no_none_fields(self, *, allow_empty: bool = ...) -> _AsyncPoll[_P_co]: ...
+
+        def is_in(self, *items: object) -> _AsyncPoll[_P_co]: ...
+
+        def is_not_in(self, *items: object) -> _AsyncPoll[_P_co]: ...
+
+        def snapshot(
+            self,
+            id: str | None = ...,
+            path: str = ...,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def matches_contract_snapshot(self, id: str | None = ..., path: str = ...) -> _AsyncPoll[_P_co]: ...
+
+        def matches_inline(
+            self,
+            expected: object = ...,
+            *,
+            ignore: _KeySpecs | None = ...,
+            include: _KeySpecs | None = ...,
+            tolerance: float | None = ...,
+            comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
+            placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+    class _AsyncPollExpecting(Protocol[_P_co]):
+        """The awaitable chain with an expectation set, built the same way."""
+
+        def within(self, timeout: float) -> _AsyncPollExpecting[_P_co]: ...
+        def every(self, interval: float) -> _AsyncPollExpecting[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollExpecting[_P_co]: ...
+        def close(self) -> None: ...
+        @property
+        def val(self) -> _P_co: ...
+
+        check: _NoVerdictAfterAPoll
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _AsyncPoll[Any]: ...
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPoll[_P_co]]: ...
+
+    class _NegatedAsyncPoll(Protocol[_P_co]):
+        """The awaitable chain's negation, built the same way and refusing the same names."""
+
+        def within(self, timeout: float) -> _NegatedAsyncPoll[_P_co]: ...
+        def every(self, interval: float) -> _NegatedAsyncPoll[_P_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPoll[_P_co]: ...
+        def close(self) -> None: ...
+        def __await__(self) -> Generator[Any, None, AssertionBuilder[_P_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPoll[_P_co]]: ...
+
+        @overload
+        def satisfies(
+            self: _NegatedAsyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies(
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], matcher: Matcher[_N] | Callable[[_N], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies(self, matcher: Matcher[Any] | Callable[[Any], object]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains(self: _NegatedAsyncPoll[dict[_K, _V]], *items: object) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], *items: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains(
+            self: _NegatedAsyncPoll[_FrameT_co] | _NegatedAsyncPoll[_ArrayT_co], *items: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains(self: _NegatedAsyncPoll[_CapableT], *items: object) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_case(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_whitespace(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_ignoring_case(self: _NegatedAsyncPoll[str], *items: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_ignoring_case(self: _NegatedAsyncPoll[_CapableT], *items: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def starts_with(self: _NegatedAsyncPoll[str], prefix: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def starts_with(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            prefix: _E,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def starts_with(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], prefix: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def starts_with(self: _NegatedAsyncPoll[_CapableT], prefix: str) -> _AsyncPoll[_P_co]: ...
+
+        def starts_with_ignoring_case(self: _NegatedAsyncPoll[str], prefix: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def ends_with(self: _NegatedAsyncPoll[str], suffix: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def ends_with(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            suffix: _E,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def ends_with(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], suffix: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def ends_with(self: _NegatedAsyncPoll[_CapableT], suffix: str) -> _AsyncPoll[_P_co]: ...
+
+        def ends_with_ignoring_case(self: _NegatedAsyncPoll[str], suffix: str) -> _AsyncPoll[_P_co]: ...
+
+        def matches(self: _NegatedAsyncPoll[str], pattern: str) -> _AsyncPoll[_P_co]: ...
+
+        def does_not_match(self: _NegatedAsyncPoll[str], pattern: str) -> _AsyncPoll[_P_co]: ...
+
+        def is_alpha(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        def is_digit(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        def is_lower(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        def is_upper(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        def is_alphanumeric(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        def is_whitespace(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_any_of(self: _NegatedAsyncPoll[str], *items: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_any_of(self: _NegatedAsyncPoll[_CapableT], *items: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_none_of(self: _NegatedAsyncPoll[str], *items: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_none_of(self: _NegatedAsyncPoll[_CapableT], *items: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_unicode(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_unicode(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_greater_than(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedAsyncPoll[datetime.date], other: datetime.date) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], other: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedAsyncPoll[_T], other: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than(self: _NegatedAsyncPoll[_Orderable], other: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.date], other: datetime.date
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], other: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedAsyncPoll[_T], other: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_greater_than_or_equal_to(self: _NegatedAsyncPoll[_Orderable], other: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_less_than(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedAsyncPoll[datetime.date], other: datetime.date) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], other: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedAsyncPoll[_T], other: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than(self: _NegatedAsyncPoll[_Orderable], other: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedAsyncPoll[str], other: str) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.date], other: datetime.date
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], other: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedAsyncPoll[_T], other: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_less_than_or_equal_to(self: _NegatedAsyncPoll[_Orderable], other: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(self: _NegatedAsyncPoll[dict[_K, _V]], *items: object) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain(self: _NegatedAsyncPoll[_CapableT], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_only(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only(self: _NegatedAsyncPoll[dict[_K, _V]], *keys: object) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only(
+            self: _NegatedAsyncPoll[_FrameT_co] | _NegatedAsyncPoll[_ArrayT_co], *items: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only(self: _NegatedAsyncPoll[_CapableT], *items: object) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_sequence(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_sequence(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_sequence(self: _NegatedAsyncPoll[_CapableT], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_exactly(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly(self: _NegatedAsyncPoll[_CapableT], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedAsyncPoll[str], *items: str | Matcher[str]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_exactly_in_any_order(
+            self: _NegatedAsyncPoll[_CapableT], *items: str | Matcher[str]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_sorted(
+            self: _NegatedAsyncPoll[str],
+            key: Callable[[str], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedAsyncPoll[dict[_K, _V]],
+            key: Callable[[_K], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            key: Callable[[_E], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray],
+            key: Callable[[int], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_sorted(
+            self: _NegatedAsyncPoll[_CapableT],
+            key: Callable[[str], object] = ...,
+            reverse: bool = ...,
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def each(
+            self: _NegatedAsyncPoll[str], matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedAsyncPoll[dict[_K, _V]],
+            matcher: Matcher[_K] | Callable[[_K], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def each(
+            self: _NegatedAsyncPoll[_CapableT],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def all_satisfy(
+            self: _NegatedAsyncPoll[str], matcher: Matcher[str] | Callable[[str], object], *, allow_empty: bool = ...
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedAsyncPoll[dict[_K, _V]],
+            matcher: Matcher[_K] | Callable[[_K], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def all_satisfy(
+            self: _NegatedAsyncPoll[_CapableT],
+            matcher: Matcher[Any] | Callable[[Any], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def any_satisfy(
+            self: _NegatedAsyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def any_satisfy(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def any_satisfy(
+            self: _NegatedAsyncPoll[_CapableT], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def none_satisfy(
+            self: _NegatedAsyncPoll[str], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def none_satisfy(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            matcher: Matcher[_E] | Callable[[_E], object],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def none_satisfy(
+            self: _NegatedAsyncPoll[_CapableT], matcher: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def satisfies_exactly(
+            self: _NegatedAsyncPoll[str], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *matchers: Matcher[_E] | Callable[[_E], object],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly(
+            self: _NegatedAsyncPoll[_CapableT], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedAsyncPoll[str], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *matchers: Matcher[_E] | Callable[[_E], object],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def satisfies_exactly_in_any_order(
+            self: _NegatedAsyncPoll[_CapableT], *matchers: Matcher[str] | Callable[[str], object]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def zip_satisfies(
+            self: _NegatedAsyncPoll[str],
+            other: Iterable[_Other],
+            predicate: Callable[[str, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def zip_satisfies(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            other: Iterable[_Other],
+            predicate: Callable[[_E, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def zip_satisfies(
+            self: _NegatedAsyncPoll[_CapableT],
+            other: Iterable[_Other],
+            predicate: Callable[[str, _Other], object],
+            *,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def extracting_group(
+            self: _NegatedAsyncPoll[str], pattern: str, group: int | str = ...
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def matches_with_groups(self: _NegatedAsyncPoll[str], pattern: str) -> _AsyncPoll[Any]: ...
+
+        @overload
+        def exists(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def exists(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_exist(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_exist(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_file(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_file(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_directory(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_directory(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_named(
+            self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path], filename: str
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_named(self: _NegatedAsyncPoll[_PathLike], filename: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_child_of(
+            self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path], parent: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_child_of(self: _NegatedAsyncPoll[_PathLike], parent: object) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_readable(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_readable(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_writable(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_writable(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_executable(self: _NegatedAsyncPoll[str] | _NegatedAsyncPoll[pathlib.Path]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_executable(self: _NegatedAsyncPoll[_PathLike]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_subset_of(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            *supersets: object,
+            allow_empty: bool = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_subset_of(
+            self: _NegatedAsyncPoll[dict[_K, _V]], *supersets: Mapping[Any, Any] | MappingLike, allow_empty: bool = ...
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_subset_of(
+            self: _NegatedAsyncPoll[_CapableT], *supersets: object, allow_empty: bool = ...
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_duplicates(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_duplicates(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_duplicates(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_duplicates(self: _NegatedAsyncPoll[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_duplicates(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_duplicates(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_only_once(self: _NegatedAsyncPoll[str], *items: object) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only_once(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: object,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_only_once(self: _NegatedAsyncPoll[_CapableT], *items: object) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_in_order(self: _NegatedAsyncPoll[str], *items: str | Matcher[str]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_in_order(
+            self: _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            *items: _E | Matcher[_E],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_in_order(
+            self: _NegatedAsyncPoll[Iterable[_E] | _Indexed[_E]], *items: _E | Matcher[_E]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_same_size_as(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            other: Sized,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_same_size_as(self: _NegatedAsyncPoll[_CapableT], other: Sized) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_greater_than(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            size: int,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_size_greater_than(self: _NegatedAsyncPoll[_CapableT], size: int) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_less_than(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            size: int,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_size_less_than(self: _NegatedAsyncPoll[_CapableT], size: int) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_size_between(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+            low: int,
+            high: int,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_size_between(self: _NegatedAsyncPoll[_CapableT], low: int, high: int) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_empty(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_empty(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_empty(
+            self: _NegatedAsyncPoll[str]
+            | _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]]
+            | _NegatedAsyncPoll[bytes]
+            | _NegatedAsyncPoll[bytearray]
+            | _NegatedAsyncPoll[_FrameT_co]
+            | _NegatedAsyncPoll[_ArrayT_co],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_empty(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_positive(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_positive(self: _NegatedAsyncPoll[_Orderable]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_negative(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_negative(self: _NegatedAsyncPoll[_Orderable]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_nan(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_nan(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_nan(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_nan(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_inf(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_inf(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_inf(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_inf(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            other: _Number,
+            tolerance: _Number,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            other: _Number,
+            tolerance: _Number,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[_CapableT], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_between(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            low: _Number,
+            high: _Number,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_between(self: _NegatedAsyncPoll[_T], low: Any, high: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_between(self: _NegatedAsyncPoll[_CapableT], low: _Number, high: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_between(
+            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
+            low: _Number,
+            high: _Number,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_between(
+            self: _NegatedAsyncPoll[datetime.datetime], low: datetime.datetime, high: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_between(
+            self: _NegatedAsyncPoll[datetime.date], low: datetime.date, high: datetime.date
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_between(self: _NegatedAsyncPoll[_T], low: Any, high: Any) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_between(self: _NegatedAsyncPoll[_CapableT], low: _Number, high: _Number) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_zero(
+            self: _NegatedAsyncPoll[bool]
+            | _NegatedAsyncPoll[int]
+            | _NegatedAsyncPoll[float]
+            | _NegatedAsyncPoll[complex],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_zero(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_zero(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_zero(
+            self: _NegatedAsyncPoll[bool]
+            | _NegatedAsyncPoll[int]
+            | _NegatedAsyncPoll[float]
+            | _NegatedAsyncPoll[complex],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_zero(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_zero(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_even(self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_even(self: _NegatedAsyncPoll[int]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_odd(self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_odd(self: _NegatedAsyncPoll[int]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_divisible_by(
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], divisor: int
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_divisible_by(self: _NegatedAsyncPoll[int], divisor: int) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_key(self: _NegatedAsyncPoll[dict[_K, _V]], *keys: _K | Matcher[_K]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_key(self: _NegatedAsyncPoll[_Keyed], *keys: _K | Matcher[_K]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_key(
+            self: _NegatedAsyncPoll[dict[_K, _V]], *keys: _K | Matcher[_K]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_key(self: _NegatedAsyncPoll[_Keyed], *keys: _K | Matcher[_K]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_value(self: _NegatedAsyncPoll[dict[_K, _V]], *values: _V | Matcher[_V]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_value(
+            self: _NegatedAsyncPoll[_KeyedWithValues], *values: _V | Matcher[_V]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_value(
+            self: _NegatedAsyncPoll[dict[_K, _V]], *values: _V | Matcher[_V]
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_value(
+            self: _NegatedAsyncPoll[_KeyedWithValues], *values: _V | Matcher[_V]
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_entry(
+            self: _NegatedAsyncPoll[dict[_K, _V]], *args: object, **kwargs: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_entry(
+            self: _NegatedAsyncPoll[_KeyedWithItems], *args: object, **kwargs: object
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_contain_entry(
+            self: _NegatedAsyncPoll[dict[_K, _V]], *args: object, **kwargs: object
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_contain_entry(
+            self: _NegatedAsyncPoll[_KeyedWithItems], *args: object, **kwargs: object
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def matches_structure(self: _NegatedAsyncPoll[dict[_K, _V]], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def matches_structure(self: _NegatedAsyncPoll[_T], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def matches_structure(self: _NegatedAsyncPoll[_CapableT], spec: dict[Any, Any]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_json_path(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            path: str,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_json_path(self: _NegatedAsyncPoll[_CapableT], path: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def does_not_have_json_path(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            path: str,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def does_not_have_json_path(self: _NegatedAsyncPoll[_CapableT], path: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def matches_json_schema(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            schema: dict[str, Any],
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def matches_json_schema(self: _NegatedAsyncPoll[_CapableT], schema: dict[str, Any]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def matches_json_schema_from_file(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            path: str | Path,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def matches_json_schema_from_file(
+            self: _NegatedAsyncPoll[_CapableT], path: str | Path
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def conforms_to_openapi(
+            self: _NegatedAsyncPoll[dict[_K, _V]]
+            | _NegatedAsyncPoll[list[_E]]
+            | _NegatedAsyncPoll[tuple[_E, ...]]
+            | _NegatedAsyncPoll[set[_E]]
+            | _NegatedAsyncPoll[frozenset[_E]],
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def conforms_to_openapi(
+            self: _NegatedAsyncPoll[_CapableT],
+            spec: dict[str, Any],
+            path: str,
+            method: str,
+            *,
+            status: str | int | None = ...,
+            content_type: str = ...,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_before(self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime) -> _AsyncPoll[_P_co]: ...
+
+        def is_after(self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime) -> _AsyncPoll[_P_co]: ...
+
+        def is_before_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_after_or_equal_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_milliseconds(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_seconds(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+
+        def is_equal_to_ignoring_time(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_valid_utf8(self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_valid_utf8(self: _NegatedAsyncPoll[bytes | bytearray]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_valid_encoding(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], encoding: str
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_valid_encoding(self: _NegatedAsyncPoll[bytes | bytearray], encoding: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def starts_with_bytes(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], prefix: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def starts_with_bytes(
+            self: _NegatedAsyncPoll[bytes | bytearray], prefix: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def contains_bytes(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], sub: bytes | bytearray
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def contains_bytes(self: _NegatedAsyncPoll[bytes | bytearray], sub: bytes | bytearray) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def has_byte_at(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], index: int, expected: int
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def has_byte_at(self: _NegatedAsyncPoll[bytes | bytearray], index: int, expected: int) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_hex_equal_to(
+            self: _NegatedAsyncPoll[bytes] | _NegatedAsyncPoll[bytearray], expected_hex: str
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_hex_equal_to(self: _NegatedAsyncPoll[bytes | bytearray], expected_hex: str) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_frame_equal(
+            self: _NegatedAsyncPoll[_FrameT_co], expected: object, **options: Any
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_frame_equal(
+            self: _NegatedAsyncPoll[_CapableT], expected: object, **options: Any
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_array_equal(
+            self: _NegatedAsyncPoll[_FrameT_co] | _NegatedAsyncPoll[_ArrayT_co], expected: object, **options: Any
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_array_equal(
+            self: _NegatedAsyncPoll[_CapableT], expected: object, **options: Any
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_array_close_to(
+            self: _NegatedAsyncPoll[_FrameT_co] | _NegatedAsyncPoll[_ArrayT_co],
+            expected: object,
+            *,
+            rtol: float = ...,
+            atol: float = ...,
+            equal_nan: bool = ...,
+            **options: Any,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_array_close_to(
+            self: _NegatedAsyncPoll[_CapableT],
+            expected: object,
+            *,
+            rtol: float = ...,
+            atol: float = ...,
+            equal_nan: bool = ...,
+            **options: Any,
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[str | None]) -> _AsyncPoll[str]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[bool | None]) -> _AsyncPoll[bool]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[int | None]) -> _AsyncPoll[int]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[float | None]) -> _AsyncPoll[float]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[complex | None]) -> _AsyncPoll[complex]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[dict[_K, _V] | None]) -> _AsyncPoll[dict[_K, _V]]: ...
+        @overload
+        def is_not_none(
+            self: _NegatedAsyncPoll[list[_E] | tuple[_E, ...] | None],
+        ) -> _AsyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_not_none(
+            self: _NegatedAsyncPoll[set[_E] | frozenset[_E] | None],
+        ) -> _AsyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[datetime.datetime | None]) -> _AsyncPoll[datetime.datetime]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[datetime.date | None]) -> _AsyncPoll[datetime.date]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[Path | None]) -> _AsyncPoll[Path]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[bytes | None]) -> _AsyncPoll[bytes]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[bytearray | None]) -> _AsyncPoll[bytearray]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[Callable[..., object] | None]) -> _AsyncPoll[Callable[..., Any]]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[_U | None]) -> _AsyncPoll[_U]: ...
+        @overload
+        def is_not_none(self: _NegatedAsyncPoll[_T]) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_none(self) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[str]) -> _AsyncPoll[str]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[bool]) -> _AsyncPoll[bool]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[int]) -> _AsyncPoll[int]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[float]) -> _AsyncPoll[float]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[complex]) -> _AsyncPoll[complex]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[dict[_K, _V]]) -> _AsyncPoll[dict[_K, _V]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: type[list[_E] | tuple[_E, ...]]
+        ) -> _AsyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: type[set[_E] | frozenset[_E]]
+        ) -> _AsyncPoll[list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: type[datetime.datetime]
+        ) -> _AsyncPoll[datetime.datetime]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: type[datetime.date]
+        ) -> _AsyncPoll[datetime.date]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[Path]) -> _AsyncPoll[Path]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[bytes]) -> _AsyncPoll[bytes]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[bytearray]) -> _AsyncPoll[bytearray]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: tuple[type[_U], type[_U2]]
+        ) -> _AsyncPoll[_U | _U2]: ...
+        @overload
+        def is_instance_of(
+            self: _NegatedAsyncPoll[_T], some_class: tuple[type[_U], type[_U2], type[_U3]]
+        ) -> _AsyncPoll[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: type[_U]) -> _AsyncPoll[_U]: ...
+        @overload
+        def is_instance_of(self: _NegatedAsyncPoll[_T], some_class: ClassInfo) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_instance_of(self, some_class: ClassInfo) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_instance_of_any(
+            self: _NegatedAsyncPoll[_T], first: type[_U], second: type[_U2], /
+        ) -> _AsyncPoll[_U | _U2]: ...
+        @overload
+        def is_instance_of_any(
+            self: _NegatedAsyncPoll[_T], first: type[_U], second: type[_U2], third: type[_U3], /
+        ) -> _AsyncPoll[_U | _U2 | _U3]: ...
+        @overload
+        def is_instance_of_any(self: _NegatedAsyncPoll[_T], *some_classes: ClassInfo) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_instance_of_any(self, *some_classes: ClassInfo) -> _AsyncPoll[_P_co]: ...
 
         def is_equal_to(
             self,

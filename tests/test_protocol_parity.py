@@ -82,6 +82,12 @@ _VALUE_VIEWS: frozenset[str] = frozenset(
         "_FrameAssertion",
         "_ArrayAssertion",
         "_InvokedAssertion",
+        # the other two landings of `when_called_with()`, and the three expectation views that reach them
+        "_WarnedAssertion",
+        "_CompletedAssertion",
+        "_ExpectedRaiseAssertion",
+        "_ExpectedWarningAssertion",
+        "_ExpectedCompletionAssertion",
         # not a dispatch type but what every pipeline step hands back: always a `list`, whatever went in
         "_ListAssertion",
     }
@@ -112,6 +118,7 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_TextAssertion",
         "_StringAssertion",
         "_InvokedAssertion",
+        "_WarnedAssertion",
         "_IterableAssertion",
         "_ListAssertion",
         "_DictAssertion",
@@ -128,6 +135,7 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_TextAssertion",
         "_StringAssertion",
         "_InvokedAssertion",
+        "_WarnedAssertion",
         "_IterableAssertion",
         "_ListAssertion",
         "_BytesAssertion",
@@ -141,11 +149,14 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
         "_TextAssertion",
         "_StringAssertion",
         "_InvokedAssertion",
+        "_WarnedAssertion",
         "_IterableAssertion",
         "_ListAssertion",
     ),
     # what a message and a string share, which is everything except reading the value as a path
-    "_TextAssertion": ("_StringAssertion", "_InvokedAssertion"),
+    "_TextAssertion": ("_StringAssertion", "_InvokedAssertion", "_WarnedAssertion"),
+    # what the two landings of a call that completed share, which is the value it produced
+    "_ReturningAssertion": ("_WarnedAssertion", "_CompletedAssertion"),
 }
 
 # Where a protocol redeclares what it inherits in order to narrow it. The pair of overloads is
@@ -187,14 +198,20 @@ _COVERAGE: dict[type, tuple[str, ...]] = {
     # cannot answer
     date.DateMixin: ("_DateTimeAssertion",),
     dict_mixin.DictMixin: ("_DictAssertion",),
-    exception.ExceptionMixin: ("_InvokedAssertion", "_CallableAssertion"),
+    exception.ExceptionMixin: (
+        "_InvokedAssertion",
+        "_CallableAssertion",
+        "_ExpectedRaiseAssertion",
+        "_ExpectedCompletionAssertion",
+        "_CompletedAssertion",
+    ),
     extracting.ExtractingMixin: ("_DictAssertion", "_IterableAssertion"),
     file.FileMixin: ("_PathAssertion",),
     json_mixin.JsonMixin: ("_DictAssertion", "_IterableAssertion"),
     numeric.NumericMixin: ("_NumericAssertion",),
     snapshot.SnapshotMixin: ("_CoreAssertion",),
     string.StringMixin: ("_StringAssertion",),
-    warning.WarningMixin: ("_CallableAssertion",),
+    warning.WarningMixin: ("_CallableAssertion", "_ExpectedWarningAssertion"),
     _satisfies.SatisfiesMixin: ("_IterableAssertion", "_CoreAssertion", "_DictAssertion"),
     dynamic.DynamicMixin: (),
     helpers.HelpersMixin: (),

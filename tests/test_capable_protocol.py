@@ -517,7 +517,7 @@ class TestWhatEachRestrictedAssertionAsksFor:
                     {
                         "_Orderable": 6,
                         "_PathLike": 9,
-                        "_Callable": 5,
+                        "_Callable": 7,
                         "SupportsFloat | SupportsIndex": 5,
                         "_Keyed": 2,
                         "_KeyedWithItems": 2,

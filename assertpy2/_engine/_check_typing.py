@@ -150,6 +150,12 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
+    class _CheckReturningAssertion(Protocol):
+        """The verdict twin of `_ReturningAssertion`."""
+
+        @property
+        def not_(self) -> Self: ...
+
     class _CheckZeroAssertion(Protocol):
         """The verdict twin of `_ZeroAssertion`."""
 
@@ -679,8 +685,40 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
+    class _CheckWarnedAssertion(_CheckTextAssertion, _CheckReturningAssertion, Protocol):
+        """The verdict twin of `_WarnedAssertion`."""
+
+        @property
+        def not_(self) -> Self: ...
+
     class _CheckCallableAssertion(_CheckCoreAssertion, Protocol[_P_co]):
         """The verdict twin of `_CallableAssertion`."""
+
+        @property
+        def not_(self) -> Self: ...
+
+    class _CheckCompletedAssertion(_CheckCallableAssertion[_P_co], _CheckReturningAssertion, Protocol[_P_co]):
+        """The verdict twin of `_CompletedAssertion`."""
+
+        @property
+        def not_(self) -> Self: ...
+
+    class _CheckExpectedRaiseAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co]):
+        """The verdict twin of `_ExpectedRaiseAssertion`."""
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> AssertionOutcome: ...
+        @property
+        def not_(self) -> Self: ...
+
+    class _CheckExpectedWarningAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co]):
+        """The verdict twin of `_ExpectedWarningAssertion`."""
+
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> AssertionOutcome: ...
+        @property
+        def not_(self) -> Self: ...
+
+    class _CheckExpectedCompletionAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co]):
+        """The verdict twin of `_ExpectedCompletionAssertion`."""
 
         def when_called_with(self, *some_args: object, **some_kwargs: object) -> AssertionOutcome: ...
         @property

@@ -68,6 +68,10 @@ _UNPINNABLE = {
     ("_BoolAssertion", "not_", "_NegatedBoolAssertion", "<the subject's own type>"),
     ("_BytesAssertion", "not_", "_NegatedBytesAssertion", "<the subject's own type>"),
     ("_CallableAssertion", "not_", "_NegatedCallableAssertion", "<the subject's own type>"),
+    ("_CompletedAssertion", "not_", "_NegatedCompletedAssertion", "<the subject's own type>"),
+    ("_ExpectedCompletionAssertion", "not_", "_NegatedExpectedCompletionAssertion", "<the subject's own type>"),
+    ("_ExpectedRaiseAssertion", "not_", "_NegatedExpectedRaiseAssertion", "<the subject's own type>"),
+    ("_ExpectedWarningAssertion", "not_", "_NegatedExpectedWarningAssertion", "<the subject's own type>"),
     ("_ComplexAssertion", "not_", "_NegatedComplexAssertion", "<the subject's own type>"),
     ("_CoreAssertion", "not_", "_NegatedCoreAssertion", "<the subject's own type>"),
     ("_DateAssertion", "not_", "_NegatedDateAssertion", "<the subject's own type>"),
@@ -82,6 +86,7 @@ _UNPINNABLE = {
     ("_PathAssertion", "not_", "_NegatedPathAssertion", "<the subject's own type>"),
     ("_StringAssertion", "not_", "_NegatedStringAssertion", "<the subject's own type>"),
     ("_TextAssertion", "not_", "_NegatedTextAssertion", "<the subject's own type>"),
+    ("_WarnedAssertion", "not_", "_NegatedWarnedAssertion", "<the subject's own type>"),
 }
 """Rungs no pin can claim, each with what refuses it written above."""
 _THE_SUBJECT = "<the subject's own type>"

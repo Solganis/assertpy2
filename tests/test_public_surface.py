@@ -87,6 +87,7 @@ _WORDS = {
     29: "twenty-nine",
     30: "thirty",
     31: "thirty-one",
+    35: "thirty-five",
 }
 
 EXPECTED_EXPORTS = [
