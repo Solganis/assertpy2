@@ -24,6 +24,7 @@ from assertpy2 import (
     WarningLoggingAdapter,
     assert_that,
     assert_warn,
+    async_assertions,
     errors,
     soft_assertions,
     soft_fail,
@@ -1512,3 +1513,41 @@ class TestAPollDeliversItsOwnFailure:
         with pytest.raises(assertpy2.AssertionFailure) as caught, assertpy2.soft_assertions():
             assertpy2.assert_that(lambda: [1, 2]).eventually_sync(timeout=0.04, interval=0.01).is_equal_to([2, 1])
         assertpy2.assert_that(str(caught.value).count("same elements, in a different order")).is_equal_to(1)
+
+
+class TestTheChangeKeyRendersAsItAlwaysDid:
+    """A key that renders differently reads as a value that moved, which is what the poll report is about."""
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [
+            pytest.param(1, "v1:1", id="int"),
+            pytest.param(1.0, "v3:1.0", id="float-that-equals-the-int"),
+            pytest.param(None, "v4:None", id="none"),
+            pytest.param("x:1", "v5:'x:1'", id="string-with-punctuation"),
+            pytest.param("[1, 2]", "v8:'[1, 2]'", id="string-that-looks-like-a-list"),
+            pytest.param([], "l", id="empty-list"),
+            pytest.param([1, 2], "l4:v1:14:v1:2", id="list"),
+            pytest.param((1, 2), "t4:v1:14:v1:2", id="tuple"),
+            pytest.param({1, 2}, "s4:v1:14:v1:2", id="set"),
+            pytest.param({"a": 1}, "d6:v3:'a'4:v1:1", id="dict"),
+            pytest.param(OrderedDict([("b", 1), ("a", 2)]), "o6:v3:'b'4:v1:16:v3:'a'4:v1:2", id="ordered-dict"),
+            pytest.param({"a": [1, {2}]}, "d6:v3:'a'16:l4:v1:17:s4:v1:2", id="nested"),
+        ],
+    )
+    def test_a_value_renders_to_exactly_this(self, value, rendered):
+        assertpy2.assert_that(async_assertions._canonical(value)).is_equal_to(rendered)
+
+    def test_a_leaf_that_appears_twice_is_rendered_twice(self):
+        """Only a container can reach back to itself, so sharing a leaf is not a cycle."""
+        shared = [1]
+        assertpy2.assert_that(async_assertions._canonical([shared, shared])).is_equal_to("l7:l4:v1:17:l4:v1:1")
+
+    def test_a_container_that_holds_itself_is_marked(self):
+        cyclic: list[object] = []
+        cyclic.append(cyclic)
+        assertpy2.assert_that(async_assertions._canonical(cyclic)).is_equal_to("l1:c")
+
+    def test_two_values_that_differ_only_in_type_do_not_share_a_key(self):
+        distinct = {async_assertions._canonical(value) for value in ([1], (1,), {1}, "1", 1, 1.0, True, {"1": 1})}
+        assertpy2.assert_that(distinct).is_length(8)

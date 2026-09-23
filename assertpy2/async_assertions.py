@@ -22,6 +22,10 @@ __tracebackhide__ = True
 _PROBE_UNSET = object()
 
 
+_CONTAINERS: Final = (dict, set, frozenset, tuple, list)
+"""The kinds `_canonical` looks inside, which are also the only ones that can reach back to themselves."""
+
+
 def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
     """A type-faithful rendering of *value*, with containers ordered where their type has no order.
 
@@ -46,6 +50,10 @@ def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
     time can follow it.  The ordered pair is the one honoured, because that is where the order carries
     the meaning.
     """
+    if not isinstance(value, _CONTAINERS):
+        # a leaf cannot reach back to anything, and the two set operations cost more than rendering it
+        rendered = repr(value)
+        return f"v{len(rendered)}:{rendered}"
     if id(value) in _seen:
         return "c"  # a container that reaches back to its own root, as `repr` marks with `...`
     inner = _seen | {id(value)}
@@ -57,9 +65,7 @@ def _canonical(value: object, _seen: frozenset[int] = frozenset()) -> str:
         return "s" + "".join(sorted(_framed(_canonical(member, inner)) for member in value))
     if isinstance(value, tuple):
         return "t" + "".join(_framed(_canonical(member, inner)) for member in value)
-    if isinstance(value, list):
-        return "l" + "".join(_framed(_canonical(member, inner)) for member in value)
-    return "v" + _framed(repr(value))
+    return "l" + "".join(_framed(_canonical(member, inner)) for member in value)
 
 
 def _framed(text: str) -> str:
