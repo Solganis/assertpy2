@@ -28,14 +28,16 @@ def _fmt_operand(value: object) -> object:
 def _is_nan(value) -> bool:
     """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
 
-    A `Decimal` answers for itself: a signalling NaN refuses to become a float, and reading it as "not a
-    NaN" is the one answer it certainly is not.
+    A `Decimal` is asked through its base type: a signalling NaN refuses to become a float, and reading
+    it as "not a NaN" is the one answer it certainly is not.  Not through the value's own `is_nan`,
+    which a subclass owns: measured, one saying it was a NaN turned a passing `is_close_to` into a
+    failure.  `_is_infinite` reads the same question the same way.
 
     A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
     `is_not_nan()` held on a value nothing could read.
     """
     if isinstance(value, decimal.Decimal):
-        return value.is_nan()
+        return decimal.Decimal.is_nan(value)
     try:
         return math.isnan(value)
     except OverflowError as exc:

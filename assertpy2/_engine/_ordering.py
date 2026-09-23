@@ -50,10 +50,15 @@ def nan_operand(value: Any) -> bool:
 
     Asked by type rather than through `math.isnan`, which would call `__float__` on somebody else's
     number and raises on a signalling `Decimal` instead of answering.
+
+    Through the base type's own operator and method rather than the value's, the rule `_is_infinite`
+    already follows: this answer decides whether an `InvalidOperation` is a verdict or a bug in the
+    value, so a subclass overriding `is_nan` could have its own signal absorbed, and one overriding
+    `__ne__` could call itself unordered against everything.
     """
     if isinstance(value, float):
-        return value != value
-    return isinstance(value, decimal.Decimal) and value.is_nan()
+        return bool(float.__ne__(value, value))
+    return isinstance(value, decimal.Decimal) and decimal.Decimal.is_nan(value)
 
 
 def _kind_of(value: Any) -> type | None:

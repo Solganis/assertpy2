@@ -665,6 +665,61 @@ def test_a_nan_is_absorbed_however_deep_the_signal_comes_from():
     assert_that(str(caught.value)).starts_with("Expected <NaN> to be less than <1>")
 
 
+def test_a_subclass_does_not_decide_whether_its_own_signal_is_a_verdict():
+    """It is not a NaN, and saying so must not turn its own `InvalidOperation` into a failed comparison."""
+
+    class Liar(decimal.Decimal):
+        def is_nan(self):
+            return True
+
+        def __lt__(self, other):
+            raise decimal.InvalidOperation("own comparison failed")
+
+        def __gt__(self, other):
+            raise decimal.InvalidOperation("own comparison failed")
+
+    with pytest.raises(decimal.InvalidOperation, match="own comparison failed"):
+        assert_that(Liar(1)).is_less_than(decimal.Decimal(2))
+
+
+def test_a_subclass_cannot_hide_that_it_is_a_nan():
+    """The other direction: a real NaN saying it is not must still answer rather than signal."""
+
+    class Hidden(decimal.Decimal):
+        def is_nan(self):
+            return False
+
+    with pytest.raises(AssertionError) as caught:
+        assert_that(Hidden("NaN")).is_less_than(decimal.Decimal(2))
+    assert_that(str(caught.value)).starts_with("Expected <NaN> to be less than <2>")
+
+
+def test_a_float_subclass_does_not_call_itself_unordered():
+    """`value != value` is the NaN test, and a subclass owning `__ne__` owned the answer with it."""
+
+    class Contrary(float):
+        def __ne__(self, other):
+            return True
+
+        def __hash__(self):
+            return 0
+
+    assert_that([Contrary(1.0), 2.0]).is_sorted()
+    with pytest.raises(AssertionError):
+        assert_that([2.0, Contrary(1.0)]).is_sorted()
+
+
+def test_a_subclass_saying_it_is_a_nan_does_not_change_a_tolerance_verdict():
+    """The same lie in the other helper: it turned a passing `is_close_to` into a failure."""
+
+    class Liar(decimal.Decimal):
+        def is_nan(self):
+            return True
+
+    assert_that(Liar(1)).is_close_to(decimal.Decimal(1), decimal.Decimal("0.1"))
+    assert_that(decimal.Decimal("NaN")).is_not_close_to(decimal.Decimal(1), decimal.Decimal("0.1"))
+
+
 def test_a_signal_raised_inside_their_own_comparison_travels_out():
     """A bug in the value, not a pair without an order: answering it would send the reader elsewhere."""
 
