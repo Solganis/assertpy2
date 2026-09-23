@@ -114,6 +114,20 @@ change. The baseline test passes the same target itself, so it gives one answer 
 - `tests/test_docs_examples.py` is run separately because it executes the snippets in `docs/`, which
   needs the `docs-examples` group and a different collection.
 
+### When a gate says an answer moved
+
+Two gates record what the library currently decides rather than what it should. Both fail on a change
+and neither is a failure to paper over: read the diff, decide whether the change is meant to ship, then
+re-record it in the same commit so the diff carries the decision into review.
+
+```bash
+ASSERTPY2_UPDATE_API=1 uv run pytest tests/test_api_compatibility.py      # the public surface
+ASSERTPY2_UPDATE_VERDICTS=1 uv run pytest tests/test_verdict_corpus.py    # what each input decides
+```
+
+The second one's diff is the draft of the release's Behaviour changes section, so read it before
+writing that section rather than after.
+
 ## Commit style
 
 Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`, etc.

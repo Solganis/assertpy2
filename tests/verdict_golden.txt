@@ -1,0 +1,123 @@
+# What each input decides, recorded at the last release. See test_verdict_corpus.py.
+arrays/array close to array	passed
+arrays/array equals a scalar	FAILED | Expected an array of shape <()>, but was of shape <(0,)>.
+arrays/array equals array	passed
+arrays/arrays of different dtype	passed
+arrays/arrays of different shape	FAILED | Expected an array of shape <(2, 1)>, but was of shape <(2,)>.
+arrays/numpy integer operand	passed
+arrays/zero dimensional length	TypeError | len() of unsized object
+awaited/awaited and held	passed -> 'ready'
+awaited/awaited and timed out	FAILED | Expected condition not met after N seconds (value unchanged across N polls). Last failure: Expected <1> to be equal to <2>, but was not.
+awaited/awaited negation	passed -> 'None'
+awaited/awaited soft timeout	passed -> 'Expected condition not met after N seconds (value unchanged across N 
+awaited/check after an async poll	TypeError | check() cannot follow a poll; a poll delivers its own failure, so there is no verdict to hand back
+awaited/closed without awaiting	passed -> 'closed without awaiting'
+containers/contains an undecided	passed
+containers/contains duplicates	passed
+containers/contains over a generator	passed
+containers/contains_only over a set	passed
+containers/contains_only_once	FAILED | Expected <[1, 2, 2]> to contain <1, 2> only once, but contained <2> more than once.
+containers/counter equals mapping	passed
+containers/defaultdict equals mapping	passed
+containers/does not contain an undecided	passed
+containers/each_item over a generator	FAILED | Expected <{'items': <generator object _containers.<locals>.<lambda>.<locals>.<genexpr> at 0xADDR>}> to match structure a mapping matching structure {items: each item matching a value greater than <0>}, but at <items>: expected each item matching a value greater than <0>, but item at index 2 <-3> did not match a value greater than <0>.
+containers/extracting a missing field	ValueError | item keys ['a'] did not contain key <b> (at index 0, item is <dict>)
+containers/json path as a list	TypeError | given path arg must be a string, but was <['a']> (list)
+containers/list equals set	FAILED | Expected <[1, 2]> to be equal to <{1, 2}>, but was not.
+containers/list equals tuple	FAILED | Expected <[1, 2]> to be equal to <(1, 2)>, but was not.
+containers/mapping equals ordered	passed
+containers/namedtuple equals tuple	passed
+containers/nested list in a mapping	FAILED | Expected <{'a': [.., 2]}> to be equal to <{'a': [.., 3]}>, but was not.
+containers/ordered equals mapping	passed
+containers/ordered equals ordered	FAILED | Expected <OrderedDict({'a': 1, 'b': 2})> to be equal to <OrderedDict({'b': 2, 'a': 1})>, but was not.
+containers/set equals frozenset	passed
+containers/str subclass equals str	passed
+containers/the same two swapped	passed
+containers/tuple equals list	FAILED | Expected <(1, 2)> to be equal to <[1, 2]>, but was not.
+containers/two mapping supersets	passed
+containers/wide pairing in any order	passed
+extensions/a different body under a taken name	ValueError | an assertion named 'corpus_probe' has already been added; pass override=True to replace it, or remove_extension() it first
+extensions/a name a polling chain owns	ValueError | 'within' is how a polling chain spells one of its own, so an extension of that name would be unreachable after eventually(); give it another name
+extensions/one body differing in its closure	passed -> 'the second was accepted'
+extensions/the same one twice	passed -> 'the second was accepted'
+models/a value whose repr raises	FAILED | Expected <<unreprable Unreprable>> to be <None>, but was not.
+models/dataclass equals dataclass	FAILED | Expected <Point(x=1, y=2)> to be equal to <Point(x=1, y=3)>, but was not.
+models/dataclass equals mapping	FAILED | Expected <Point(x=1, y=2)> to be equal to <{'x': 1, 'y': 2}>, but was not.
+models/dataclass equals other shape	FAILED | Expected <Point(x=1, y=2)> to be equal to <Point3(x=1, y=2, z=0)>, but was not.
+models/dataclass structure	TypeError | val must be a mapping, a pydantic-style model, or an attrs instance, but was <Point(x=1, y=2)> (Point)
+models/dynamic field by keyword	passed
+models/no none fields	passed
+models/plain object dynamic field	passed
+models/plain object equality	FAILED | Expected <<tests.verdict_corpus.Plain object at 0xADDR>> to be equal to <<tests.verdict_corpus.Plain object at 0xADDR>>, but was not.
+models/undecided against a plain	FAILED | Expected <<tests.verdict_corpus.Undecided object at 0xADDR>> to be equal to <<tests.verdict_corpus.Plain object at 0xADDR>>, but was not.
+models/undecided equality	FAILED | Expected <<tests.verdict_corpus.Undecided object at 0xADDR>> to be equal to <<tests.verdict_corpus.Undecided object at 0xADDR>>, but was not.
+modes/an async callable in assert_all	CoroutineVerdictError | the callable handed back a coroutine instead of an answer; assertions here are synchronous, so await the call yourself and assert on what it returned
+modes/contents of a missing bytes path	FileNotFoundError | [Errno 2] No such file or directory: b'nowhere-at-all-12345.txt'
+modes/does not raise then returned	passed
+modes/one shot through and	passed -> True
+modes/predicate hands back a matcher	MatcherVerdictError | predicate handed back a matcher instead of an answer; pass the matcher where one is taken, or ask it about the value and answer with what it said
+modes/raises the wrong type	FAILED | Expected <_boom> to raise <TypeError> when called with (), but raised <ValueError>.
+modes/soft block collects two	FAILED | soft assertion failures:
+modes/soft block outlived	FAILED | Expected <5> to NOT satisfy: is_equal_to(5)
+modes/unknown codec negated	LookupError | unknown encoding: nonexistent-encoding
+modes/value after a failed soft	TypeError | cannot extract .value: the underlying assertion failed under soft or warn mode - Expected not <None>, but was. (read .value in strict mode, or after the soft-assertions block)
+modes/value after a timeout	TypeError | cannot extract .val: the underlying assertion failed under soft or warn mode - Expected condition not met after N seconds (value unchanged across N polls). Last failure: Expected not <None>, but was. (read .val in strict mode, or after the soft-assertions block)
+modes/verdict after a failed warn	passed -> False
+modes/verdict after a timeout	passed -> 'Expected condition not met after N seconds (value unchanged across N 
+modes/warns then returned	passed
+numbers/bool equals one	passed
+numbers/bytes less than nan	TypeError | given other arg must be comparable with val <b'a'> (bytes), but was <nan> (float)
+numbers/complex equals complex	passed
+numbers/complex is zero	passed
+numbers/complex ordered	TypeError | val must be a value with an ordering (complex numbers have none), but was <(1+2j)> (complex)
+numbers/decimal against float tolerance	passed
+numbers/decimal equals float	passed
+numbers/decimal lying that it is a nan	passed
+numbers/decimal nan hiding it	FAILED | Expected <NaN> to be less than <2>, but was not.
+numbers/decimal nan relation	FAILED | Expected <NaN> to be greater than <0>, but was not.
+numbers/decimal snan relation	FAILED | Expected <sNaN> to be less than <0>, but was not.
+numbers/even on a float	TypeError | val must be an integer, but was <2.0> (float)
+numbers/fraction close to float	passed
+numbers/fraction equals float	passed
+numbers/infinite tolerance	passed
+numbers/infinity between	passed
+numbers/infinity close to itself	passed
+numbers/int subclass equals int	passed
+numbers/is_nan on a decimal	TypeError | val must be a real number, but was <Decimal('NaN')> (Decimal)
+numbers/list less than nan	TypeError | given other arg must be comparable with val <[1]> (list), but was <nan> (float)
+numbers/mapping less than nan	TypeError | given other arg must be comparable with val <{'a': 1}> (dict), but was <nan> (float)
+numbers/nan close to nan	FAILED | Expected <nan> to be close to <nan> within tolerance <1>, but was not.
+numbers/nan equals nan	FAILED | Expected <nan:float> to be equal to <nan:float>, but was not.
+numbers/nan less than one	FAILED | Expected <nan> to be less than <1>, but was not.
+numbers/one less than nan	FAILED | Expected <1> to be less than <nan>, but was not.
+numbers/sorted holding a nan	FAILED | Expected <[1, nan, 2]> to be sorted, but subset <1, nan> at index 0 is not.
+numbers/text less than nan	TypeError | given other arg must be comparable with val <'a'> (str), but was <nan> (float)
+numbers/text less than one	TypeError | given other arg must be comparable with val <'a'> (str), but was <1> (int)
+responses/a response is not a mapping	TypeError | val must be dict-like (this one is not iterable), but was <<tests.verdict_corpus._responses.<locals>.Response object at... (20 more chars)> (Response)
+responses/json path through a response	FAILED | Expected <A-1> to be equal to <B-2>, but was not.
+responses/status differs	FAILED | Expected <404> to be equal to <200> on attribute <status_code>, but was not.
+responses/status holds	passed
+specs/openapi three ten	ValueError | openapi version <3.10.0> is not one this can validate (3.0, 3.1 and 3.2 are)
+specs/openapi three two	FAILED | Expected the value to conform to the OpenAPI schema for <GET /x> response <200>, but found 1 violation.
+specs/openapi three zero	passed
+text/a value holding the poll sentence	FAILED | Expected <condition not met after N seconds (value unchanged across N polls)> to be equal to <condition not met after N seconds (value unchanged across N polls)>, but was not.
+text/a value that looks like an address	FAILED | Expected <<thing at 0xADDR>> to be equal to <<thing at 0xADDR>>, but was not.
+text/a value that merely counts seconds	FAILED | Expected <1.25 seconds> to be equal to <2.50 seconds>, but was not.
+text/bytes difference	FAILED | Expected <b'abd'> to be equal to <b'abc'>, but was not.
+text/contains ignoring case	passed
+text/is_length on a number	TypeError | val must be a sized object, but was <1> (int)
+text/long line difference	FAILED | Expected <xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxA> to be equal to <xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxB>, but was not.
+text/matches with groups	passed
+text/multiline difference	FAILED | Expected <a
+text/starts_with on a number	TypeError | val must be a string or an iterable, but was <1> (int)
+text/valid utf8	FAILED | Expected valid UTF-8, but decoding failed.
+times/aware after aware	passed
+times/aware before aware	FAILED | Expected <2026-01-01 12:00:00+00:00> to be before <2026-01-01 12:00:00+05:00>, but was not.
+times/aware ignoring milliseconds	FAILED | Expected <2026-01-01 12:00:00> to be equal to <2026-01-01 07:00:00>, but was not.
+times/aware ignoring seconds	FAILED | Expected <2026-01-01 12:00> to be equal to <2026-01-01 07:00>, but was not.
+times/aware ignoring time	passed
+times/date before datetime	TypeError | val must be a datetime, but was <datetime.date(2026, 1, 1)> (date)
+times/naive before aware	TypeError | cannot compare a timezone-naive datetime with a timezone-aware one. Make both aware or both naive first
+times/naive ignoring milliseconds	passed
+times/time ordering	passed
+times/timedelta ordering	passed
