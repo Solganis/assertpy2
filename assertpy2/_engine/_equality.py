@@ -342,6 +342,9 @@ def mapping_differs(
 
     ignores = ignore_specs(ignore) if ignoring else []
     includes = include_specs(include) if including else []
+    # read once for the whole mapping: asked per key, a five-hundred path include normalised itself five
+    # hundred times.  After `include_specs`, so a one-shot iterable is still refused under its own name
+    nested_paths = ignore_specs(include) if including else []
     if includes:
         missing = missing_include_keys(left, includes)
         if missing:
@@ -373,9 +376,7 @@ def mapping_differs(
         )
         # the nested half of an include keeps whole paths, and the level above already consumed the first segment
         nested_include = (
-            [entry[1:] for entry in ignore_specs(include) if type(entry) is tuple and entry[0] == key]
-            if including
-            else None
+            [entry[1:] for entry in nested_paths if type(entry) is tuple and entry[0] == key] if including else None
         )
         if _nested_differs(
             nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, seen=seen
