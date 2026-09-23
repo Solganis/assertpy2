@@ -38,7 +38,9 @@ if TYPE_CHECKING:
 # `"1.25 seconds"` or `"0xDEADBEEF"` out of the record, and a regression in one would read as unchanged.
 # `verdict_golden.txt` carries a case per pattern holding a string shaped like what it rewrites, whole
 # sentence included, so what survives and what does not is recorded rather than asserted here
-_ADDRESS = re.compile(r"(?<= at )0x[0-9a-fA-F]{6,}(?=>)")
+_ADDRESS = re.compile(r"(?<= at )0x[0-9a-fA-F]{6,}")
+_GENERATOR = re.compile(r"<generator object [\w.<>]+ at 0xADDR>")
+_ORDERED_REPR = re.compile(r"OrderedDict\(\[([^\]]*)\]\)")
 _POLL_BUDGET = re.compile(r"condition not met after \d+\.\d+ seconds \(value unchanged across \d+ polls\)")
 
 
@@ -63,8 +65,13 @@ class Point3:
 
 
 class Plain:
+    """A repr of its own, because the default one carries an address this record must not hold."""
+
     def __init__(self, x: int) -> None:
         self.x = x
+
+    def __repr__(self) -> str:
+        return f"Plain({self.x})"
 
 
 class Undecided:
@@ -72,6 +79,9 @@ class Undecided:
 
     def __init__(self, x: int) -> None:
         self.x = x
+
+    def __repr__(self) -> str:
+        return f"Undecided({self.x})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Undecided):
@@ -438,6 +448,9 @@ def _responses() -> dict[str, Case]:
     """A value that looks like an HTTP response, which carries its own provenance into a failure."""
 
     class Response:
+        def __repr__(self) -> str:
+            return f"Response({self.status_code})"
+
         def __init__(self, status: int, body: str) -> None:
             self.status_code = status
             self.headers = {"content-type": "application/json"}
@@ -586,4 +599,16 @@ def _normalised(error: BaseException) -> str:
 
 def _scrub(text: str) -> str:
     text = _ADDRESS.sub("0xADDR", text)
+    text = _GENERATOR.sub("<generator>", text)
+    # `OrderedDict([('a', 1)])` before 3.12 and `OrderedDict({'a': 1})` from it: the interpreter's
+    # rendering, not a decision, and CI found it as a moved answer on every cell but the newest
+    text = _ORDERED_REPR.sub(lambda found: "OrderedDict({" + _as_mapping(found.group(1)) + "})", text)
     return _POLL_BUDGET.sub("condition not met after N seconds (value unchanged across N polls)", text)
+
+
+def _as_mapping(pairs: str) -> str:
+    """`('a', 1), ('b', 2)` as `'a': 1, 'b': 2`, which is how 3.12 and later render it."""
+    return ", ".join(
+        f"{one.strip()}: {other.strip()}"
+        for one, other in (item.strip(" (),").split(", ", 1) for item in re.findall(r"\([^)]*\)", pairs))
+    )

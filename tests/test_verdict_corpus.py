@@ -15,6 +15,7 @@ from __future__ import annotations
 import importlib.util
 import os
 import pathlib
+import re
 
 import pytest
 
@@ -107,6 +108,26 @@ def test_no_input_decides_differently(asked: dict[str, str]) -> None:
     assert_that(moved).described_as(
         "an input decides differently. Meant to ship? Re-record with ASSERTPY2_UPDATE_VERDICTS=1"
     ).is_empty()
+
+
+_VOLATILE = {
+    "a raw address": re.compile(r"0x[0-9a-fA-F]{6,}"),
+    "a pre-3.12 OrderedDict repr": re.compile(r"OrderedDict\(\["),
+    "a generator's identity": re.compile(r"<generator object"),
+}
+
+
+@pytest.mark.parametrize("what", sorted(_VOLATILE), ids=lambda one: one)
+def test_no_recorded_answer_holds_something_that_moves_on_its_own(what: str) -> None:
+    """Asking twice in one process missed this class; CI found it on every cell but the newest.
+
+    An address is a different length on another platform and a repr is rendered differently by another
+    interpreter, so an answer holding either is re-recorded by whoever runs the suite next rather than
+    by whoever changes a decision.  Held over the file, which is the only place all of them are.
+    """
+    pattern = _VOLATILE[what]
+    holding = sorted(name for name, said in _recorded().items() if pattern.search(said))
+    assert_that(holding).described_as(f"recorded answers holding {what}").is_empty()
 
 
 def test_asking_twice_gives_the_same_answer(asked: dict[str, str]) -> None:

@@ -20,7 +20,7 @@ containers/contains_only_once	FAILED | Expected <[1, 2, 2]> to contain <1, 2> on
 containers/counter equals mapping	passed
 containers/defaultdict equals mapping	passed
 containers/does not contain an undecided	passed
-containers/each_item over a generator	FAILED | Expected <{'items': <generator object _containers.<locals>.<lambda>.<locals>.<genexpr> at 0xADDR>}> to match structure a mapping matching structure {items: each item matching a value greater than <0>}, but at <items>: expected each item matching a value greater than <0>, but item at index 2 <-3> did not match a value greater than <0>.
+containers/each_item over a generator	FAILED | Expected <{'items': <generator>}> to match structure a mapping matching structure {items: each item matching a value greater than <0>}, but at <items>: expected each item matching a value greater than <0>, but item at index 2 <-3> did not match a value greater than <0>.
 containers/extracting a missing field	ValueError | item keys ['a'] did not contain key <b> (at index 0, item is <dict>)
 containers/json path as a list	TypeError | given path arg must be a string, but was <['a']> (list)
 containers/list equals set	FAILED | Expected <[1, 2]> to be equal to <{1, 2}>, but was not.
@@ -48,9 +48,9 @@ models/dataclass structure	TypeError | val must be a mapping, a pydantic-style m
 models/dynamic field by keyword	passed
 models/no none fields	passed
 models/plain object dynamic field	passed
-models/plain object equality	FAILED | Expected <<tests.verdict_corpus.Plain object at 0xADDR>> to be equal to <<tests.verdict_corpus.Plain object at 0xADDR>>, but was not.
-models/undecided against a plain	FAILED | Expected <<tests.verdict_corpus.Undecided object at 0xADDR>> to be equal to <<tests.verdict_corpus.Plain object at 0xADDR>>, but was not.
-models/undecided equality	FAILED | Expected <<tests.verdict_corpus.Undecided object at 0xADDR>> to be equal to <<tests.verdict_corpus.Undecided object at 0xADDR>>, but was not.
+models/plain object equality	FAILED | Expected <Plain(1):Plain> to be equal to <Plain(1):Plain>, but was not.
+models/undecided against a plain	FAILED | Expected <Undecided(1)> to be equal to <Plain(1)>, but was not.
+models/undecided equality	FAILED | Expected <Undecided(1)> to be equal to <Undecided(2)>, but was not.
 modes/an async callable in assert_all	CoroutineVerdictError | the callable handed back a coroutine instead of an answer; assertions here are synchronous, so await the call yourself and assert on what it returned
 modes/contents of a missing bytes path	FileNotFoundError | [Errno 2] No such file or directory: b'nowhere-at-all-12345.txt'
 modes/does not raise then returned	passed
@@ -93,7 +93,7 @@ numbers/one less than nan	FAILED | Expected <1> to be less than <nan>, but was n
 numbers/sorted holding a nan	FAILED | Expected <[1, nan, 2]> to be sorted, but subset <1, nan> at index 0 is not.
 numbers/text less than nan	TypeError | given other arg must be comparable with val <'a'> (str), but was <nan> (float)
 numbers/text less than one	TypeError | given other arg must be comparable with val <'a'> (str), but was <1> (int)
-responses/a response is not a mapping	TypeError | val must be dict-like (this one is not iterable), but was <<tests.verdict_corpus._responses.<locals>.Response object at... (20 more chars)> (Response)
+responses/a response is not a mapping	TypeError | val must be dict-like (this one is not iterable), but was <Response(200)> (Response)
 responses/json path through a response	FAILED | Expected <A-1> to be equal to <B-2>, but was not.
 responses/status differs	FAILED | Expected <404> to be equal to <200> on attribute <status_code>, but was not.
 responses/status holds	passed
