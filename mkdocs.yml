@@ -1,5 +1,5 @@
 site_name: assertpy2
-site_description: Fluent assertion library for Python with composable matchers, structural matching, and full type safety
+site_description: "Fluent, fully typed assertion library for Python: your type checker sees only the assertions that fit the value, and every failure carries a structured diff."
 site_url: https://solganis.github.io/assertpy2/
 repo_url: https://github.com/Solganis/assertpy2
 repo_name: Solganis/assertpy2
