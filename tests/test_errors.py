@@ -1,8 +1,11 @@
 import dataclasses
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, DiffEntry, DiffResult, assert_that, errors, fail, soft_assertions
+from assertpy2.errors import _first_difference
 from assertpy2.outcome import MISSING
 
 
@@ -431,3 +434,31 @@ class TestEveryDifferenceCarriesAMachineReadablePath:
         for step in failure.value.diff.entries[0].steps:
             cursor = cursor[step.value]
         assert_that(cursor).is_equal_to("admin")
+
+
+class TestFindingTheFirstDifference:
+    """The window around a change is cut there, and the search for it used to run character by character."""
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "at"),
+        [
+            pytest.param("abc", "abd", 2, id="last"),
+            pytest.param("abc", "xbc", 0, id="first"),
+            pytest.param("abc", "abc", 3, id="equal"),
+            pytest.param("", "abc", 0, id="empty-left"),
+            pytest.param("abc", "", 0, id="empty-right"),
+            pytest.param("abc", "abcdef", 3, id="prefix"),
+            pytest.param("\U0001f600x", "\U0001f600y", 1, id="astral"),
+        ],
+    )
+    def test_it_lands_where_the_character_walk_lands(self, actual, expected, at):
+        assert_that(_first_difference(actual, expected)).is_equal_to(at)
+
+    @settings(max_examples=300, deadline=None)
+    @given(actual=st.text(alphabet="ab", max_size=12), expected=st.text(alphabet="ab", max_size=12))
+    @example(actual="", expected="")
+    @example(actual="ab", expected="ab")
+    def test_it_agrees_with_the_character_walk(self, actual, expected):
+        shared = min(len(actual), len(expected))
+        walked = next((index for index in range(shared) if actual[index] != expected[index]), shared)
+        assert_that(_first_difference(actual, expected)).is_equal_to(walked)
