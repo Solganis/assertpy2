@@ -109,12 +109,14 @@ def compare(actual: Any, expected: Any) -> int:
         if raised_inside(exc):
             raise
         raise UnorderableError("pair") from None
-    except decimal.InvalidOperation as exc:
+    except decimal.InvalidOperation:
         # a `Decimal` NaN signals rather than answering.  Asked here rather than before the comparison:
-        # checked first, `'a'` against a NaN read as a verdict where the same pair without one is refused
-        if raised_inside(exc):
-            raise
-        return 0
+        # checked first, `'a'` against a NaN read as a verdict where the same pair without one is refused.
+        # The operands decide and not the traceback: measured, a signal comes from one frame under the C
+        # accelerator and from four under `_pydecimal`, so `raised_inside` answered the interpreter build
+        if nan_operand(actual) or nan_operand(expected):
+            return 0
+        raise
     return 0  # neither less nor greater, which is what a float NaN answers and `holds` keeps from reading equal
 
 

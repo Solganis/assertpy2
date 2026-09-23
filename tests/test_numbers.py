@@ -642,6 +642,29 @@ def test_a_decimal_nan_still_answers_rather_than_signalling():
     assert_that(str(caught.value)).is_equal_to("Expected <NaN> to be greater than <1>, but was not.")
 
 
+def test_a_nan_is_absorbed_however_deep_the_signal_comes_from():
+    """The operands decide, not the traceback: `Decimal` signals from one frame or from four.
+
+    Measured, the C accelerator raises at the comparison site and `_pydecimal` raises four frames in,
+    so reading the depth answered which interpreter build was running rather than what was compared.
+    CI found it on a build this machine does not have.
+    """
+
+    class Deeply(decimal.Decimal):
+        def __lt__(self, other):
+            return self._signal()
+
+        def __gt__(self, other):
+            return self._signal()
+
+        def _signal(self):
+            return decimal.Decimal("NaN") < decimal.Decimal(1)
+
+    with pytest.raises(AssertionError) as caught:
+        assert_that(Deeply("NaN")).is_less_than(decimal.Decimal(1))
+    assert_that(str(caught.value)).starts_with("Expected <NaN> to be less than <1>")
+
+
 def test_a_signal_raised_inside_their_own_comparison_travels_out():
     """A bug in the value, not a pair without an order: answering it would send the reader elsewhere."""
 
