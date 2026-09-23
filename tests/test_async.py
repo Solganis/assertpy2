@@ -1505,6 +1505,20 @@ class TestAPollDeliversItsOwnFailure:
         assertpy2.assert_that(report.count("condition not met")).described_as("entries").is_equal_to(1)
         assertpy2.assert_that(report).does_not_contain("<None>")
 
+    def test_a_timed_out_chain_carries_its_timeout_into_what_it_hands_back(self):
+        """The failure a reader acts on is the timeout, so the inert chain has to carry it.
+
+        Built without it, `check()` answered `passed=False` with an empty message and the refusals on
+        `.val` and `.value` named the rule rather than the wait that ran out.
+        """
+        with pytest.raises(assertpy2.AssertionFailure), assertpy2.soft_assertions():
+            timed_out = assertpy2.assert_that(lambda: 1).eventually_sync(timeout=0.04, interval=0.01).is_equal_to(2)
+            outcome = timed_out.check().is_equal_to(7)
+            assertpy2.assert_that(outcome.passed).is_false()
+            assertpy2.assert_that(outcome.message).contains("condition not met")
+            with pytest.raises(TypeError, match="condition not met"):
+                _ = timed_out.val
+
     def test_a_timed_out_warn_chain_asserts_nothing_more(self):
         capture = StringIO()
         logger = logging.getLogger("poll-warn-capture")

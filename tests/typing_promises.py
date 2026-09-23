@@ -82,6 +82,18 @@ def a_negated_poll_keeps_the_value_it_had() -> str | None:
     )
 
 
+async def an_awaited_poll_narrows_when_the_assertion_holds() -> str:
+    """The awaitable chain hands back a builder, so its promise is about `.value` rather than `.val`."""
+    chain = await assert_that(_ready).eventually(timeout=0.5, interval=0.01).is_not_none()
+    return assert_type(chain.value, str)
+
+
+async def an_awaited_negated_poll_keeps_the_value_it_had() -> str | None:
+    """The defect on the sync chain, asked of the asynchronous twin it was generated beside."""
+    chain = await assert_that(_maybe_text).eventually(timeout=0.5, interval=0.01).not_.is_not_none()
+    return assert_type(chain.value, "str | None")
+
+
 def a_negated_poll_instance_check_keeps_the_value() -> int:
     """`not_.is_instance_of(str)` asserts the value is *not* a `str`, so it cannot hand back one."""
     return assert_type(

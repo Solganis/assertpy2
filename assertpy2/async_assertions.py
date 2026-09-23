@@ -392,8 +392,10 @@ def _out_of_time(
         chain._builder_func(None, "", chain._kind, None, chain._logger).error(
             message, **_structured_of(last_error), trace=trace
         )
-        # the poll never reached a value, so anything after it asserted about `None` and failed again
-        return _InertBuilder()
+        # the poll never reached a value, so anything after it asserted about `None` and failed again.
+        # It carries the timeout, which is the failure a reader acts on: without it `check()` answered
+        # `passed=False` with an empty message and the refusals named the rule and not the cause
+        return _InertBuilder(message)
     raise _timed_out(message, trace, last_error) from last_error
 
 

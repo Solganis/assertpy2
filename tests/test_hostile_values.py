@@ -7,6 +7,12 @@ by hand, both from the same subclass trick, so the rule is stated here over the 
 The rule is narrow on purpose.  Duck typing is the library's contract and a value answers for almost
 everything it is asked.  What it must not answer is the library's *own* question about what kind of
 thing it is, because that answer decides which of two error paths a reader is sent down.
+
+When the syntactic rule below fails, do not add the receiver to an allowlist to make it pass.  The set
+of names is derived from this interpreter's `Decimal` and `float`, so a domain object of somebody's own
+with an `is_integer()` would be stopped by it, and whether that call classifies a number or asks a
+question of its own is a judgement nobody can make from the name.  Establish what the call means first.
+The two tests under it do not depend on the name at all, which is what makes relaxing the rule safe.
 """
 
 from __future__ import annotations

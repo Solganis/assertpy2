@@ -6,6 +6,7 @@ fails here rather than reaching a user.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import types
 import typing
@@ -14,6 +15,11 @@ import pytest
 
 from assertpy2 import assert_that
 from tests import typing_harness, typing_promises
+
+
+async def _awaited(coroutine):
+    return await coroutine
+
 
 _CASES = {
     name: case
@@ -42,6 +48,9 @@ def test_the_object_is_what_the_annotation_promised(name: str) -> None:
     checked = tuple(typing.get_origin(arm) or arm for arm in arms)
 
     value = case()
+    if inspect.iscoroutine(value):
+        # an awaitable chain is the one shape whose promise is about what `await` hands back
+        value = asyncio.run(_awaited(value))
     assert_that(isinstance(value, checked)).described_as(
         f"{name}() promised {promised} and returned {value!r} of type {type(value).__name__}"
     ).is_true()
