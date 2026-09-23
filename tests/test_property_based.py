@@ -9,6 +9,8 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 import ast
 import copy
 import datetime
+import decimal
+import fractions
 import itertools
 import json
 import pathlib
@@ -651,6 +653,57 @@ def test_is_subset_of_matches_set_subset(items, superset):
             assert_that(items).is_subset_of(superset)
 
 
+@settings(deadline=None)
+@given(
+    items=st.dictionaries(st.sampled_from("abcd"), st.integers(0, 3), max_size=3),
+    supersets=st.lists(st.dictionaries(st.sampled_from("abcd"), st.integers(0, 3), max_size=3), min_size=2, max_size=3),
+    data=st.data(),
+)
+def test_is_subset_of_reads_the_same_whatever_order_the_supersets_arrive_in(items, supersets, data):
+    """Several supersets are one question, so the answer cannot follow the order they were written in.
+
+    They were merged into one mapping once, where a later key overwrote an earlier one and the verdict
+    moved with the argument order.
+    """
+    shuffled = data.draw(st.permutations(supersets))
+    first = _holds(lambda: assert_that(items).is_subset_of(*supersets))
+    again = _holds(lambda: assert_that(items).is_subset_of(*shuffled))
+    assert_that(first).described_as(f"is_subset_of{tuple(supersets)} against {tuple(shuffled)}").is_equal_to(again)
+
+
+_BROKEN = [object(), type("NoOrder", (), {})(), float("nan")]
+
+
+@settings(deadline=None)
+@given(
+    value=st.sampled_from(_BROKEN),
+    call=st.sampled_from(
+        [
+            ("is_less_than", (1,)),
+            ("is_greater_than", (1,)),
+            ("is_between", (0, 1)),
+            ("contains", ("a",)),
+            ("is_length", (1,)),
+            ("starts_with", ("a",)),
+            ("has_size_greater_than", (1,)),
+            ("is_close_to", (1, 1)),
+        ]
+    ),
+)
+def test_not_does_not_turn_a_foreign_error_into_a_passing_negation(value, call):
+    """`not_` inverts a verdict, never an error: what the value cannot answer it cannot answer negated.
+
+    An assertion catching `Exception` too widely would report the negation as held, which reads as a
+    checked fact about a value the library never managed to examine.
+    """
+    name, arguments = call
+    positive = _ordering_answer(lambda: getattr(assert_that(value), name)(*arguments))
+    if positive != "refused":
+        return
+    negated = _ordering_answer(lambda: getattr(assert_that(value).not_, name)(*arguments))
+    assert_that(negated).described_as(f"not_.{name}{arguments} on {value!r}").is_equal_to("refused")
+
+
 @given(val=st.lists(st.integers(), max_size=6), expected=st.lists(st.integers(), min_size=1, max_size=6))
 def test_contains_exactly_in_any_order_matches_multiset_equality(val, expected):
     if Counter(val) == Counter(expected):
@@ -1222,6 +1275,78 @@ def test_is_after_is_the_exact_complement_of_is_before_or_equal_to(left, right):
     after = _holds(lambda: assert_that(left).is_after(right))
     before_or_equal = _holds(lambda: assert_that(left).is_before_or_equal_to(right))
     assert_that(after).is_not_equal_to(before_or_equal)
+
+
+def _ordering_answer(call):
+    """A verdict, or the refusal that says the operands cannot be ordered at all."""
+    try:
+        call()
+    except TypeError:
+        return "refused"
+    except AssertionError:
+        return "failed"
+    return "passed"
+
+
+_MIXED = st.sampled_from(
+    [
+        0,
+        1,
+        -1,
+        True,
+        1.5,
+        float("nan"),
+        float("inf"),
+        decimal.Decimal(1),
+        decimal.Decimal("NaN"),
+        fractions.Fraction(1, 2),
+        complex(1, 2),
+        "a",
+        b"a",
+        [1],
+        (1,),
+        {"a": 1},
+        datetime.datetime(2026, 1, 1),
+        datetime.date(2026, 1, 1),
+        datetime.timedelta(seconds=1),
+        datetime.time(12, 0),
+    ]
+)
+
+
+_MIRRORED = [
+    ("is_less_than", "is_greater_than"),
+    ("is_less_than_or_equal_to", "is_greater_than_or_equal_to"),
+]
+
+
+@settings(deadline=None)
+@given(left=_MIXED, right=_MIXED, pair=st.sampled_from(_MIRRORED))
+def test_an_ordering_relation_reads_the_same_from_either_side(left, right, pair):
+    """`a < b` and `b > a` are one question, and a pair that cannot be ordered is refused in both.
+
+    Written after a NaN on the right answered for a pair before it had been tried: `is_less_than(nan)`
+    on a string reported a failed comparison where `is_less_than(1)` on the same string refuses the
+    operands, so an unorderable pair read as a verdict from one side only.
+    """
+    forward, backward = pair
+    one = _ordering_answer(lambda: getattr(assert_that(left), forward)(right))
+    other = _ordering_answer(lambda: getattr(assert_that(right), backward)(left))
+    assert_that(one).described_as(f"{forward}({right!r}) on {left!r} against its mirror").is_equal_to(other)
+
+
+@settings(deadline=None)
+@given(value=_MIXED, low=_MIXED, high=_MIXED)
+def test_a_range_refuses_the_operands_its_halves_refuse(value, low, high):
+    """`is_between` is two relations, so it cannot accept operands either half would refuse."""
+    halves = {
+        _ordering_answer(lambda: assert_that(value).is_greater_than_or_equal_to(low)),
+        _ordering_answer(lambda: assert_that(value).is_less_than_or_equal_to(high)),
+    }
+    if "refused" not in halves:
+        return
+    between = _ordering_answer(lambda: assert_that(value).is_between(low, high))
+    assert_that(between).described_as(f"is_between({low!r}, {high!r}) on {value!r}").is_equal_to("refused")
 
 
 # not "no message shows an address": a value's own repr is inherited, and this covers the text written around it

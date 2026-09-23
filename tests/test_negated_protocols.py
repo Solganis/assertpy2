@@ -238,11 +238,27 @@ def test_every_view_reaches_its_own_twin(view: str) -> None:
 
 @pytest.mark.parametrize("view", _REACHABLE)
 def test_every_twin_hands_the_positive_view_back(view: str) -> None:
-    """The whole rule in one check: a negated assertion is one step, not a permanent state."""
+    """The whole rule in one check: a negated assertion is one step, not a permanent state.
+
+    The parameters as well as the name.  Read with `starts_with` this passed a twin handing back
+    `_IterableAssertion[list[_E]]` from a receiver over `list[_E] | None`, which is the shape the
+    polling twins were found narrowing: a negated `is_not_none()` answering with the type it denied.
+    """
     twin = _NEGATED[f"_Negated{view[1:]}"]
+    parameters = _own_parameters(twin)
+    promised = f"{view}[{parameters}]" if parameters else view
     returns = {ast.unparse(item.returns) for item in twin.body if isinstance(item, ast.FunctionDef) and item.returns}
-    unexpected = sorted(one for one in returns if not one.startswith(view))
-    assert_that(unexpected).described_as(f"_Negated{view[1:]} members answering something else").is_empty()
+    unexpected = sorted(one for one in returns if one != promised)
+    assert_that(unexpected).described_as(f"_Negated{view[1:]} members answering something but {promised}").is_empty()
+
+
+def _own_parameters(node: ast.ClassDef) -> str:
+    """The type variables a protocol is written over, as it writes them."""
+    for base in node.bases:
+        rendered = ast.unparse(base)
+        if rendered.startswith("Protocol["):
+            return rendered[len("Protocol[") : -1]
+    return ""
 
 
 @pytest.mark.parametrize("view", _REACHABLE)

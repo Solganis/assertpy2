@@ -113,6 +113,96 @@ def _polled(case: Case) -> Delivered:
 
 SURFACES = {"soft": _soft, "warn": _warn, "polling": _polled}
 
+
+class Verdict(NamedTuple):
+    """An assertion over a value, asked in every mode, which must answer the same in each."""
+
+    name: str
+    subject: object
+    check: Callable[..., object]
+
+
+def _answer(call: Callable[[], object]) -> str:
+    """What a mode said: it held, it did not, or the operands were refused before either."""
+    try:
+        call()
+    except TypeError:
+        return "refused"
+    except AssertionFailure:
+        return "failed"
+    return "passed"
+
+
+def _hard_verdict(case: Verdict) -> str:
+    return _answer(lambda: case.check(assert_that(case.subject)))
+
+
+def _soft_verdict(case: Verdict) -> str:
+    def run() -> None:
+        with soft_assertions():
+            case.check(assert_that(case.subject))
+
+    return _answer(run)
+
+
+def _warn_verdict(case: Verdict) -> str:
+    stream = io.StringIO()
+    logger = logging.getLogger(f"verdict.{case.name}")
+    logger.handlers = [logging.StreamHandler(stream)]
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+    answer = _answer(lambda: case.check(assert_warn(case.subject, logger=logger)))
+    # warn never raises for a failure, so the verdict is whether it logged one
+    return "failed" if answer == "passed" and stream.getvalue().strip() else answer
+
+
+def _check_verdict(case: Verdict) -> str:
+    outcome = None
+
+    def run() -> None:
+        nonlocal outcome
+        outcome = case.check(assert_that(case.subject).check())
+
+    answer = _answer(run)
+    if answer != "passed":
+        return answer
+    return "passed" if getattr(outcome, "passed", False) else "failed"
+
+
+def _polled_verdict(case: Verdict) -> str:
+    return _answer(lambda: case.check(assert_that(lambda: case.subject).eventually_sync(timeout=0.02, interval=0.01)))
+
+
+MODES = {
+    "hard": _hard_verdict,
+    "soft": _soft_verdict,
+    "warn": _warn_verdict,
+    "check": _check_verdict,
+    "polling": _polled_verdict,
+}
+
+VERDICTS = [
+    Verdict("equality holds", 1, lambda builder: builder.is_equal_to(1)),
+    Verdict("equality fails", 1, lambda builder: builder.is_equal_to(2)),
+    Verdict("membership holds", [1, 2], lambda builder: builder.contains(1)),
+    Verdict("membership fails", [1, 2], lambda builder: builder.contains(9)),
+    Verdict("length holds", "abc", lambda builder: builder.is_length(3)),
+    Verdict("length fails", "abc", lambda builder: builder.is_length(4)),
+    Verdict("ordering holds", 3, lambda builder: builder.is_greater_than(1)),
+    Verdict("ordering fails", 3, lambda builder: builder.is_greater_than(10)),
+    Verdict("negation holds", 1, lambda builder: builder.not_.is_equal_to(2)),
+    Verdict("negation fails", 1, lambda builder: builder.not_.is_equal_to(1)),
+    Verdict("text holds", "hello", lambda builder: builder.starts_with("he")),
+    Verdict("text fails", "hello", lambda builder: builder.starts_with("xx")),
+    Verdict("mapping holds", {"a": 1}, lambda builder: builder.contains_key("a")),
+    Verdict("mapping fails", {"a": 1}, lambda builder: builder.contains_key("b")),
+    Verdict("predicate holds", 4, lambda builder: builder.satisfies(lambda value: value % 2 == 0)),
+    Verdict("predicate fails", 5, lambda builder: builder.satisfies(lambda value: value % 2 == 0)),
+    # the operands cannot be compared at all, which is a refusal and not a verdict in any mode
+    Verdict("operands refused", "a", lambda builder: builder.is_greater_than(1)),
+    Verdict("subject refused", 1, lambda builder: builder.starts_with("a")),
+]
+
 CASES = [
     Case("dict", {"id": 1, "name": "a"}, lambda builder: builder.is_equal_to({"id": 2, "name": "b"})),
     Case("nested dict", {"a": {"b": 1}}, lambda builder: builder.is_equal_to({"a": {"b": 2}})),
@@ -254,6 +344,18 @@ def test_a_long_line_keeps_its_position_of_change_everywhere():
 
 
 # every name on both surfaces; `is_falsy`, `is_truthy`, `is_uuid`, `filtered_on` and `extracting` have no twin
+@pytest.mark.parametrize("case", VERDICTS, ids=lambda case: case.name)
+def test_every_mode_reaches_the_same_verdict(case: Verdict) -> None:
+    """The surfaces differ in shape on purpose; what they must not differ in is the answer.
+
+    `assertpy.py` returns from five separate places depending on the mode, and the modes have twice
+    diverged in content already.  A misuse stays a misuse everywhere too: an operand the assertion
+    cannot read is refused rather than reported as a failed comparison.
+    """
+    answers = {mode: read(case) for mode, read in MODES.items()}
+    assert_that(set(answers.values())).described_as(f"{case.name}: {answers}").is_length(1)
+
+
 TWINS = [
     ("is_greater_than", match.greater_than, (0,)),
     ("is_greater_than_or_equal_to", match.greater_than_or_equal_to, (0,)),
