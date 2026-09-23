@@ -1466,6 +1466,15 @@ class TestAForgottenAwaitUnderErrorFilters:
         assert_that(result.stdout).contains("2 passed")
 
 
+def _refusal_of(chain) -> str:
+    """Why the chain refuses to hand its value back, as the text of the refusal."""
+    try:
+        _ = chain.val
+    except TypeError as refused:
+        return str(refused)
+    return "it did not refuse"
+
+
 class TestAPollDeliversItsOwnFailure:
     """A poll waits and then fails by itself, so there is no verdict to hand back and no value to carry on."""
 
@@ -1510,14 +1519,37 @@ class TestAPollDeliversItsOwnFailure:
 
         Built without it, `check()` answered `passed=False` with an empty message and the refusals on
         `.val` and `.value` named the rule rather than the wait that ran out.
+
+        Read outside the block: an assertion written inside one is collected, so a test that checks the
+        outcome there cannot fail on what it found.
         """
+        read = {}
         with pytest.raises(assertpy2.AssertionFailure), assertpy2.soft_assertions():
             timed_out = assertpy2.assert_that(lambda: 1).eventually_sync(timeout=0.04, interval=0.01).is_equal_to(2)
-            outcome = timed_out.check().is_equal_to(7)
-            assertpy2.assert_that(outcome.passed).is_false()
-            assertpy2.assert_that(outcome.message).contains("condition not met")
-            with pytest.raises(TypeError, match="condition not met"):
-                _ = timed_out.val
+            read["outcome"] = timed_out.check().is_equal_to(7)
+            read["refusal"] = _refusal_of(timed_out)
+        assertpy2.assert_that(read["outcome"].passed).described_as("a chain that timed out").is_false()
+        assertpy2.assert_that(read["outcome"].message).described_as("the verdict's message").contains(
+            "condition not met"
+        )
+        assertpy2.assert_that(read["refusal"]).described_as("why .val refuses").contains("condition not met")
+
+    def test_an_awaited_timed_out_chain_carries_its_timeout_too(self):
+        """The same claim for the awaitable chain, asked rather than inferred from the shared path."""
+
+        async def collected():
+            return await assertpy2.assert_that(lambda: 1).eventually(timeout=0.04, interval=0.01).is_equal_to(2)
+
+        read = {}
+        with pytest.raises(assertpy2.AssertionFailure), assertpy2.soft_assertions():
+            timed_out = asyncio.run(collected())
+            read["outcome"] = timed_out.check().is_equal_to(7)
+            read["refusal"] = _refusal_of(timed_out)
+        assertpy2.assert_that(read["outcome"].passed).described_as("an awaited chain that timed out").is_false()
+        assertpy2.assert_that(read["outcome"].message).described_as("the verdict's message").contains(
+            "condition not met"
+        )
+        assertpy2.assert_that(read["refusal"]).described_as("why .val refuses").contains("condition not met")
 
     def test_a_timed_out_warn_chain_asserts_nothing_more(self):
         capture = StringIO()
