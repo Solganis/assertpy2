@@ -20,6 +20,8 @@ import pytest
 
 from assertpy2 import assert_that, match
 
+_NAN = float("nan")
+
 # (name, build the matcher, call the fluent assertion, values that make it both hold and fail)
 PAIRS = [
     ("is_equal_to", lambda: match.equal_to(5), lambda builder: builder.is_equal_to(5), [5, 5.0, True, 4, "5"]),
@@ -70,6 +72,8 @@ PAIRS = [
     ("is_type_of", lambda: match.is_type_of(int), lambda builder: builder.is_type_of(int), [5, True, 5.0]),
     ("is_callable", lambda: match.is_callable(), lambda builder: builder.is_callable(), [len, 5, str, "x"]),
     ("is_in", lambda: match.is_in(1, 2, 3), lambda builder: builder.is_in(1, 2, 3), [1, 4, True, 1.0]),
+    # the same NaN is in a tuple holding it, a fresh one is not: `in` asks identity before `==`
+    ("is_in-nan", lambda: match.is_in(_NAN, 2), lambda builder: builder.is_in(_NAN, 2), [_NAN, float("nan"), 2]),
     (
         "matches",
         lambda: match.matches_regex("a.c"),

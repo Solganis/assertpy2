@@ -713,7 +713,8 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         else:
             for item in items:
-                if self.val == item:
+                # identity first, as `in` asks: the very NaN a tuple holds is in it, and `==` alone said no
+                if self.val is item or self.val == item:
                     return self
         return self.error(
             f"Expected <{_safe_str(self.val)}> to be in {self._fmt_items(items)}, but was not.", expected=items
@@ -741,7 +742,7 @@ class ContainsMixin(_MixinBase):
             raise ValueError("one or more args must be given")
         else:
             for item in items:
-                if self.val == item:
+                if self.val is item or self.val == item:
                     return self.error(
                         f"Expected <{_safe_str(self.val)}> to not be in {self._fmt_items(items)}, but was."
                     )
