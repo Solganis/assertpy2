@@ -26,12 +26,21 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, model_field_values
+from ._introspection import (
+    KeyedValue,
+    as_held,
+    eq_keyed,
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    kind_of,
+    model_field_values,
+)
 from ._ordering import nan_operand
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
 
 _EQ_ATOMIC = frozenset(
@@ -164,33 +173,56 @@ def _find_ambiguous_operand(actual, expected, _seen=None):
     operand = _ambiguous_array_operand(actual, expected)
     if operand is not None:
         return operand
+    for left, right in _members_compared(actual, expected):
+        found = _find_ambiguous_operand(left, right, _seen)
+        if found is not None:
+            return found
+    return None
+
+
+def _members_compared(actual: Any, expected: Any) -> Iterable[tuple[Any, Any]]:
+    """The pairs ``==`` walks into for two values of one container kind, and none for any other pair."""
     if is_mapping_like(actual) and is_mapping_like(expected):
         expected_keys = set(expected)
-        for key in actual:
-            if key in expected_keys:
-                found = _find_ambiguous_operand(actual[key], expected[key], _seen)
-                if found is not None:
-                    return found
-        return None
+        return ((actual[key], expected[key]) for key in actual if key in expected_keys)
     if (
         dataclasses.is_dataclass(actual)
         and not isinstance(actual, type)
         and dataclasses.is_dataclass(expected)
         and not isinstance(expected, type)
     ):
-        for field in dataclasses.fields(actual):
-            found = _find_ambiguous_operand(getattr(actual, field.name), getattr(expected, field.name, None), _seen)
-            if found is not None:
-                return found
-        return None
+        return (
+            (getattr(actual, one.name), getattr(expected, one.name, None))
+            for one in dataclasses.fields(actual)
+            if one.compare
+        )
+    if is_attrs_instance(actual) and is_attrs_instance(expected):
+        return _keyed_members(actual, expected)
     if is_model_dump_object(actual) and is_model_dump_object(expected):
-        return _find_ambiguous_operand(model_field_values(actual), model_field_values(expected), _seen)
+        return ((model_field_values(actual), model_field_values(expected)),)
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
-        for actual_item, expected_item in zip(actual, expected, strict=False):
-            found = _find_ambiguous_operand(actual_item, expected_item, _seen)
-            if found is not None:
-                return found
-    return None
+        return zip(actual, expected, strict=False)
+    return ()
+
+
+def _keyed_members(actual: Any, expected: Any) -> tuple[tuple[Any, Any], ...]:
+    """The attrs fields ``==`` compares, each read through its key as ``==`` reads it, or none.
+
+    Only what ``==`` compares can have broken it.  attrs reads every key before it compares a field, so a key
+    that raises is the error being explained and no array is to blame: read again here, it raised a second
+    error while the first was handled, and skipped, it let a later array take the blame.
+    """
+    try:
+        return tuple(
+            (
+                eq_keyed(one, getattr(actual, one.name)),
+                eq_keyed(one, getattr(expected, one.name)) if hasattr(expected, one.name) else None,
+            )
+            for one in actual.__attrs_attrs__
+            if one.eq is not False
+        )
+    except (TypeError, ValueError):  # the two errors `_guarded_not_equal` hands to this search
+        return ()
 
 
 def _guarded_not_equal(actual, expected, *, method="is_equal_to") -> bool:
@@ -306,6 +338,7 @@ def _resolve_comparator(actual, config: _CompareConfig, *, field):
     comparators = config.comparators
     if comparators is None:
         return None
+    actual = as_held(actual)
     if field is not None and not isinstance(field, type) and field in comparators:
         return comparators[field]
     if type(actual) in comparators:
@@ -326,7 +359,7 @@ def _types_differ(actual, expected) -> bool:
     ``_is_matcher`` is imported here rather than at module scope because ``_matcher_impls`` imports
     ``_guarded_not_equal`` from this module, so the module-level import would be a cycle.
     """
-    if type(actual) is type(expected):
+    if kind_of(actual) is kind_of(expected):
         return False
     from .._matcher_impls import _is_matcher
 
@@ -412,11 +445,12 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
     `assertpy2._engine._diff._child_entries()` is the single place to know.
     """
     if config is not None:
-        if config.ignore_null and field is not None and expected is None:
+        if config.ignore_null and field is not None and as_held(expected) is None:
             return "equal"  # a named field the expected side leaves None is not compared
         comparator = _resolve_comparator(actual, config, field=field)
         if comparator is not None:
-            return "equal" if verdict(comparator(actual, expected), subject="the comparator") else "leaf"
+            agreed = verdict(comparator(as_held(actual), as_held(expected)), subject="the comparator")
+            return "equal" if agreed else "leaf"
         if config.strict_types:
             if actual is expected and not at_root:
                 # identity, free from `PyObject_RichCompareBool`.  Not at the root, where it made `strict_types` weaker
@@ -430,8 +464,10 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
-        if config.tolerance is not None and _is_real_number(actual) and _is_real_number(expected):
-            return "equal" if _within_tolerance(actual, expected, config.tolerance) else "leaf"
+        if config.tolerance is not None and _is_real_number(as_held(actual)) and _is_real_number(as_held(expected)):
+            # a keyed field's key still holds equal what the tolerance would not: it only ever loosens `==`
+            within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
+            return "equal" if within or (type(actual) is KeyedValue and actual == expected) else "leaf"
     return _plain_decision(actual, expected, config, at_root=at_root)
 
 

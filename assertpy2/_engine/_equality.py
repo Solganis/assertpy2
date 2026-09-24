@@ -32,9 +32,17 @@ from ._compare import (
     _kinds_never_equal,
     _node_decision,
     _spec_matches,
+    _types_differ,
 )
 from ._diff import _sub_diff_entries
-from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple, model_field_values
+from ._introspection import (
+    TakenApart,
+    field_pair,
+    is_attrs_instance,
+    is_model_dump_object,
+    is_namedtuple,
+    model_field_values,
+)
 from ._path import _ROOT
 from ._require import refuse
 
@@ -74,22 +82,21 @@ def comparable_fields(obj: object) -> dict | None:
 
     Dataclasses are converted by reference rather than through `dataclasses.asdict`, which deep-copies and
     crashes on a field that cannot be copied, and a field declared ``compare=False`` is left out, as the
-    dataclass's own ``==`` leaves it out.  An attrs field declared ``eq=False`` is left out the same way.
+    dataclass's own ``==`` leaves it out.  An attrs field declared ``eq=False`` is left out the same way, and
+    one declared with a key, ``eq=str.lower``, is read through it: `attrs.asdict` read the raw value, and
+    ``ignore=`` failed on two instances ``==`` holds equal.
 
     A value of a builtin kind is not a bag of fields even when it carries a ``__dict__``: a subclass of
     `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.
     """
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return cast("dict", _shallow_fields(obj))
+        return cast("dict", _flattened(obj, frozenset({"dataclass"})))
     if is_namedtuple(obj):
-        return dict(obj._asdict())
+        return TakenApart(type(obj), obj._asdict())
     if is_model_dump_object(obj):
-        return model_field_values(obj)
+        return cast("dict", _flattened(obj, frozenset({"model", "dataclass"})))
     if is_attrs_instance(obj):
-        # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import wherever attrs is installed
-        import attrs
-
-        return attrs.asdict(obj, filter=lambda attribute, _value: attribute.eq is not False)
+        return cast("dict", _flattened(obj, frozenset({"attrs"})))
     builtin_kinds = (
         type,
         numbers.Number,
@@ -104,25 +111,56 @@ def comparable_fields(obj: object) -> dict | None:
         pathlib.PurePath,
     )
     if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds):
-        return dict(vars(obj))
+        return TakenApart(type(obj), vars(obj))
     return None
 
 
-def _shallow_fields(node: Any) -> Any:
-    """`dataclasses.asdict` by reference, without the copy, and without the fields ``==`` leaves out."""
-    if dataclasses.is_dataclass(node) and not isinstance(node, type):
-        return {
-            field.name: _shallow_fields(getattr(node, field.name))
-            for field in dataclasses.fields(node)
-            if field.compare
-        }
+def _flattened(node: Any, through: frozenset[str]) -> Any:
+    """Fields by reference, as each value's ``==`` reads them, taken apart through the kinds *through* names.
+
+    A nested value is taken apart where the conversion each kind used to go through took it apart, so a
+    nested value is judged as it was: `dataclasses.asdict` went through dataclasses, `attrs.asdict` through
+    attrs instances, and `model_dump()` through models and the dataclasses inside them.  What is read is
+    what is held, though, not what a serialiser or a copy makes of it.
+    """
+    if "dataclass" in through and dataclasses.is_dataclass(node) and not isinstance(node, type):
+        return TakenApart(
+            type(node),
+            {
+                field.name: _flattened(getattr(node, field.name), through)
+                for field in dataclasses.fields(node)
+                if field.compare
+            },
+        )
+    if "attrs" in through and is_attrs_instance(node):
+        compared = [attribute for attribute in node.__attrs_attrs__ if attribute.eq is not False]
+        keys = {attribute.name: _key_of(attribute) for attribute in compared}
+        return TakenApart(
+            type(node),
+            {
+                attribute.name: getattr(node, attribute.name)
+                if keys[attribute.name]
+                else _flattened(getattr(node, attribute.name), through)
+                for attribute in compared
+            },
+            {name: key for name, key in keys.items() if key is not None},
+        )
+    if "model" in through and is_model_dump_object(node):
+        return TakenApart(
+            type(node), {name: _flattened(value, through) for name, value in model_field_values(node).items()}
+        )
     if isinstance(node, tuple) and hasattr(node, "_fields"):
-        return type(node)(*[_shallow_fields(item) for item in node])
+        return type(node)(*[_flattened(item, through) for item in node])
     if isinstance(node, (list, tuple)):
-        return type(node)(_shallow_fields(item) for item in node)
+        return type(node)(_flattened(item, through) for item in node)
     if isinstance(node, dict):
-        return {_shallow_fields(key): _shallow_fields(value) for key, value in node.items()}
+        return {_flattened(key, through): _flattened(value, through) for key, value in node.items()}
     return node
+
+
+def _key_of(attribute: Any) -> Any:
+    """The key an attrs field is compared through, given as ``eq=``, or ``None``: its value is then held raw."""
+    return getattr(attribute, "eq_key", None)
 
 
 def _as_fields(value: object) -> dict | None:
@@ -356,15 +394,19 @@ def mapping_differs(
     if (
         config is not None
         and config.strict_types
-        and _keyed_types_differ(
-            dict.fromkeys(key for key in left if key in keys_in_actual),
-            dict.fromkeys(key for key in right if key in keys_in_expected),
+        and (
+            # two elements taken apart reach here with no parent walk to have compared their classes
+            _types_differ(actual, expected)
+            or _keyed_types_differ(
+                dict.fromkeys(key for key in left if key in keys_in_actual),
+                dict.fromkeys(key for key in right if key in keys_in_expected),
+            )
         )
     ):
         # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; only the keys still compared
         return True
     for key in keys_in_actual:
-        nested_left, nested_right = left[key], right[key]
+        nested_left, nested_right = field_pair(left, right, key)
         if config is not None:
             decision = _node_decision(nested_left, nested_right, config, field=key)
             if decision == "equal":

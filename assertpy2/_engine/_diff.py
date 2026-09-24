@@ -35,6 +35,8 @@ from typing import TYPE_CHECKING, TypeVar
 from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _guarded_not_equal, _node_decision
 from ._introspection import (
+    TakenApart,
+    field_pair,
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
@@ -53,10 +55,20 @@ __tracebackhide__ = True
 
 
 def _field_dict(obj, is_model):
-    """Field mapping of a pydantic-style model or an attrs instance (shallow), as the values its fields hold."""
+    """Field mapping of a pydantic-style model or an attrs instance (shallow), as the values its fields hold.
+
+    An attrs instance's carries the keys its fields are compared through, so the walk decides a field by the
+    key both sides declare and still shows the values held: ``str.lower`` would otherwise print a value
+    neither side has, and listed a field ``==`` holds equal.
+    """
     if is_model:
         return model_field_values(obj)
-    return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__ if field.eq is not False}
+    compared = [field for field in obj.__attrs_attrs__ if field.eq is not False]
+    return TakenApart(
+        type(obj),
+        {field.name: getattr(obj, field.name) for field in compared},
+        {field.name: field.eq_key for field in compared if getattr(field, "eq_key", None) is not None},
+    )
 
 
 def _child_entries(actual, expected, path: _Path, *, descended_for, _seen=None, config=None) -> list[DiffEntry]:
@@ -429,8 +441,7 @@ def _build_equality_diff(
     both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
     both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
     if both_model or both_attrs:
-        actual_dict = _field_dict(actual, both_model)
-        expected_dict = _field_dict(expected, both_model)
+        actual_dict, expected_dict = _field_dict(actual, both_model), _field_dict(expected, both_model)
         entries = []
         for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
@@ -438,7 +449,7 @@ def _build_equality_diff(
             elif key not in actual_dict:
                 entries.append(_prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
-                decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                decision = _node_decision(*field_pair(actual_dict, expected_dict, key), config, field=key)
                 if decision == "leaf":
                     entries.append(_prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":
@@ -515,7 +526,7 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
         elif key not in actual_keys:
             entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=kept_expected[key]))
         else:
-            decision = _node_decision(kept[key], kept_expected[key], config, field=key)
+            decision = _node_decision(*field_pair(kept, kept_expected, key), config, field=key)
             if decision == "leaf":
                 entries.append(prefix.key(key).entry(actual=kept[key], expected=kept_expected[key]))
             elif decision != "equal":
@@ -603,8 +614,7 @@ def _sub_diff_entries(
     both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
     if both_model or both_attrs:
         child_seen = _seen | {id(actual), id(expected)}
-        actual_dict = _field_dict(actual, both_model)
-        expected_dict = _field_dict(expected, both_model)
+        actual_dict, expected_dict = _field_dict(actual, both_model), _field_dict(expected, both_model)
         entries = []
         for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
@@ -612,7 +622,7 @@ def _sub_diff_entries(
             elif key not in actual_dict:
                 entries.append(prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
-                decision = _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                decision = _node_decision(*field_pair(actual_dict, expected_dict, key), config, field=key)
                 if decision == "leaf":
                     entries.append(prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":

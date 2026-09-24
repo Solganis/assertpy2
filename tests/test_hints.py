@@ -25,6 +25,17 @@ class _User:
     city: str
 
 
+@dataclasses.dataclass
+class _Cached:
+    name: str
+    cache: int = dataclasses.field(default=0, compare=False)
+
+
+@dataclasses.dataclass
+class _Holder:
+    user: _User
+
+
 class _State(enum.Enum):
     CLOSED = "closed"
 
@@ -93,6 +104,15 @@ class TestTheShapeRatherThanTheValues:
     def test_a_field_that_actually_differs_stays_silent(self):
         message = _message({"name": "a", "city": "X"}, _User("a", "b"))
         assert_that(message).does_not_contain("the contents match")
+
+    def test_a_field_equality_leaves_out_does_not_keep_the_hint_away(self):
+        """Read field by field, the cache the payload never carried read as a difference."""
+        assert_that(_message(_Cached("a", cache=5), {"name": "a"})).contains("the contents match field for field")
+
+    def test_a_nested_object_is_read_against_the_nested_mapping(self):
+        assert_that(_message(_Holder(_User("a", "b")), {"user": {"name": "a", "city": "b"}})).contains(
+            "the contents match field for field"
+        )
 
 
 class TestNormalisationsAddedInTheSecondSlice:

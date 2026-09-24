@@ -16,7 +16,7 @@ import types
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, cast, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
     from types import CellType
 
 _T = TypeVar("_T")
@@ -97,6 +97,101 @@ def is_model_dump_object(obj: object) -> TypeGuard[SupportsModelDump]:
     return hasattr(type(obj), "model_dump") and callable(getattr(obj, "model_dump", None))
 
 
+def is_pydantic_model(obj: object) -> TypeGuard[SupportsModelDump]:
+    """Whether *obj* is an instance of pydantic's ``BaseModel``, asked without importing pydantic.
+
+    No model exists unless pydantic is loaded already, so an absent module answers no.
+    """
+    pydantic = sys.modules.get("pydantic")
+    return pydantic is not None and isinstance(obj, pydantic.BaseModel)
+
+
+def is_pydantic_model_class(candidate: object) -> bool:
+    """Whether *candidate* is a subclass of pydantic's ``BaseModel``, asked without importing pydantic."""
+    pydantic = sys.modules.get("pydantic")
+    return pydantic is not None and isinstance(candidate, type) and issubclass(candidate, pydantic.BaseModel)
+
+
+class TakenApart(dict):
+    """The fields of one value as it holds them, with its class and the keys attrs compares fields through.
+
+    Read as a plain mapping, a nested value of another class with the same fields passed a comparison
+    under ``strict_types`` and ``ignore`` together, which the rule says holds at every depth.  A field
+    declared with an ``eq=`` key is compared through it against the same field of another instance, as
+    attrs' own ``==`` does, and as held against anything else, a payload's value included.
+    """
+
+    __slots__ = ("compared_by", "kind")
+
+    def __init__(
+        self,
+        kind: type,
+        fields: collections.abc.Mapping,
+        compared_by: collections.abc.Mapping[object, Callable[[object], object]] | None = None,
+    ) -> None:
+        super().__init__(fields)
+        self.kind = kind
+        self.compared_by = compared_by or {}
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, dict):
+            return NotImplemented
+        if not self.compared_by and not (isinstance(other, TakenApart) and other.compared_by):
+            return dict.__eq__(self, other)
+        pairs = (field_pair(self, other, name) for name in self)
+        return self.keys() == other.keys() and all(left is right or bool(left == right) for left, right in pairs)
+
+    def __ne__(self, other: object) -> bool:
+        equal = self.__eq__(other)
+        return equal if equal is NotImplemented else not equal
+
+
+class KeyedValue:
+    """One of two fields declared with an ``eq=`` key, for the one comparison of them: equal when the keys are.
+
+    Built for the comparison and never kept, so what a failure hands out and prints is the value held.
+    """
+
+    __slots__ = ("held", "key")
+
+    def __init__(self, held: object, key: Callable[[object], object]) -> None:
+        self.held = held
+        self.key = key
+
+    def __eq__(self, other: object) -> bool:
+        # read at the comparison: `ignore_null` looks at what is held first, and `str.lower(None)` raises
+        return self.key(self.held) == other.key(other.held) if isinstance(other, KeyedValue) else NotImplemented
+
+
+def field_pair(fields: object, counterpart: object, name: object) -> tuple[object, object]:
+    """Field *name* of two sides as they are compared: through each side's key when both declare one."""
+    left, right = cast("MappingLike", fields)[name], cast("MappingLike", counterpart)[name]
+    if type(fields) is not TakenApart or type(counterpart) is not TakenApart:
+        return left, right
+    left_key, right_key = fields.compared_by.get(name), counterpart.compared_by.get(name)
+    if left_key is None or right_key is None:
+        return left, right
+    return KeyedValue(left, left_key), KeyedValue(right, right_key)
+
+
+def kind_of(value: object) -> type:
+    """The class *value* was read from: its own, the one a `TakenApart` holds the fields of, or a keyed field's."""
+    if type(value) is KeyedValue:
+        return type(value.held)
+    return value.kind if isinstance(value, TakenApart) else type(value)
+
+
+def eq_keyed(attribute: Any, value: object) -> object:
+    """An attrs field's value as its ``==`` compares it: through the key given as ``eq=``, when there is one."""
+    key = getattr(attribute, "eq_key", None)
+    return value if key is None else key(value)
+
+
+def as_held(value: object) -> object:
+    """*value* as the instance held it, past the `KeyedValue` one comparison reads it through."""
+    return value.held if type(value) is KeyedValue else value
+
+
 def model_field_values(model: SupportsModelDump) -> dict[Any, Any]:
     """A model's declared fields and extras as the values they hold, not what serialising makes of them.
 
@@ -117,9 +212,7 @@ def model_field_values(model: SupportsModelDump) -> dict[Any, Any]:
     holds two values under one name, which no reading field by field can show: `model_dump()` keeps the
     extra's, ``==`` compares both.
     """
-    # loaded already wherever a model exists, so asking imports nothing
-    pydantic = sys.modules.get("pydantic")
-    if pydantic is None or not isinstance(model, pydantic.BaseModel):
+    if not is_pydantic_model(model):
         return model.model_dump()
     # `Any` because pydantic comes off `sys.modules`, and `model_fields` because `__pydantic_fields__` is 2.10+
     model_class: Any = type(model)
@@ -189,10 +282,11 @@ def keyed_snapshot(candidate: object) -> MappingLike | None:
     readings of the same value: an iterator that yields `0` on the first pass and `"bad"` on the second
     passes the probe and raises in the walk.  Reading once and rendering from what was read closes that.
 
-    Only a `dict` is handed back as it is.  Registering as a `Mapping` promises an interface and not
-    stability between reads, so a custom one is snapshotted like anything else.
+    Only a `dict` is handed back as it is, and a `TakenApart`, read once already and carrying the class
+    ``strict_types`` compares.  Registering as a `Mapping` promises an interface and not stability between
+    reads, so a custom one is snapshotted like anything else.
     """
-    if type(candidate) is dict:
+    if type(candidate) is dict or type(candidate) is TakenApart:
         return cast("MappingLike", candidate)
     keyed = cast("MappingLike", candidate)
     try:

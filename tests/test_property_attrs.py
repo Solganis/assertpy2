@@ -7,12 +7,14 @@ when attrs is not installed.
 """
 
 import copy
+import json
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import assert_that, match
+from assertpy2._snapshot_codec import _Decoder, _Encoder
 from assertpy2.errors import AssertionFailure
 from assertpy2.pytest_plugin import _format_diff
 
@@ -30,6 +32,18 @@ class _AttrsOuter:
     inner: _AttrsInner
     items: list[int]
     name: str
+
+
+@attrs.define
+class _KeyedName:
+    name: str = attrs.field(eq=str.lower)
+    other: int = 0
+
+
+@attrs.frozen
+class _FrozenPair:
+    left: int
+    right: str
 
 
 _attrs_inners = st.builds(_AttrsInner, a=st.integers(), b=st.text(max_size=5))
@@ -79,3 +93,31 @@ def test_attrs_matches_structure_normalizes_instance(value):
     assert_that(value).matches_structure(
         {"name": match.is_instance_of(str), "items": match.is_instance_of(list), "inner": match.is_not_none()}
     )
+
+
+# a few letters in both cases, so two names a key folds together are drawn often
+_cased = st.text(alphabet="aAbB", min_size=1, max_size=3)
+
+
+@settings(deadline=None)
+@example(left="A", right="a")
+@given(left=_cased, right=_cased)
+def test_a_configured_comparison_reads_a_keyed_field_as_equality_does(left, right):
+    """Ignoring a field both sides hold equal changes no verdict, whatever the key folds together, and a
+    difference is shown as the values held."""
+    actual, expected = _KeyedName(left), _KeyedName(right)
+    if actual == expected:
+        assert_that(actual).is_equal_to(expected, ignore="other")
+        assert_that(actual).is_equal_to({"name": left, "other": 0}, ignore="other")
+    else:
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(actual).is_equal_to(expected, ignore="other")
+        assert_that([(entry.actual, entry.expected) for entry in caught.value.diff.entries]).is_equal_to(
+            [(left, right)]
+        )
+
+
+@settings(deadline=None)
+@given(value=st.one_of(_attrs_outers, st.builds(_FrozenPair, left=st.integers(), right=st.text(max_size=5))))
+def test_an_attrs_instance_round_trips_through_the_snapshot_codec(value):
+    assert_that(json.loads(json.dumps({"v": value}, cls=_Encoder), cls=_Decoder)["v"]).is_equal_to(value)

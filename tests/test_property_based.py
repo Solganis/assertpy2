@@ -353,6 +353,18 @@ class _Outer:
     name: str
 
 
+@dataclass
+class _InnerTwin:
+    a: int
+    b: str
+
+
+@dataclass
+class _Holding:
+    held: object
+    other: int = 0
+
+
 _Pair = namedtuple("_Pair", ["first", "second"])
 
 _inners = st.builds(_Inner, a=st.integers(), b=st.text(max_size=5))
@@ -1554,6 +1566,23 @@ def test_the_flag_and_the_matcher_agree(left, right):
 def test_strictness_only_ever_refines_equality(left, right):
     if _passes(lambda: assert_that(left).is_equal_to(right, strict_types=True)):
         assert_that(left).is_equal_to(right)
+
+
+_held_values = st.integers(0, 1).flatmap(
+    lambda a: st.sampled_from([_Inner(a, ""), _InnerTwin(a, ""), {"a": a, "b": ""}, _Pair(a, "")])
+)
+
+
+@settings(deadline=None)
+@example(left=_Inner(1, ""), right=_InnerTwin(1, ""))
+@given(left=_held_values, right=_held_values)
+def test_ignoring_a_field_both_sides_hold_equal_changes_no_strict_verdict(left, right):
+    """Taken apart for `ignore`, a nested value lost its class, and `strict_types` passed another class."""
+    plain = _passes(lambda: assert_that(_Holding(left)).is_equal_to(_Holding(right), strict_types=True))
+    ignoring = _passes(
+        lambda: assert_that(_Holding(left)).is_equal_to(_Holding(right), strict_types=True, ignore="other")
+    )
+    assert_that(ignoring).is_equal_to(plain)
 
 
 def _pinning_every_undecomposable(test):

@@ -2,13 +2,16 @@ import pytest
 
 pytest.importorskip("pydantic", reason="pydantic not installed")
 
+import dataclasses
+import json
 from typing import Any, ClassVar
 
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, computed_field, field_serializer
 
 from assertpy2 import AssertionFailure, assert_that
+from assertpy2._snapshot_codec import _Decoder, _Encoder
 
 
 class UserDto(BaseModel):
@@ -166,6 +169,59 @@ class _Impersonating:
     __hash__ = None
 
 
+class _Nested(BaseModel):
+    """A model holding a model, a private attribute and an alias, which a snapshot has to carry back."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    inner: _Stringified
+    label: str = Field(default="", alias="Label")
+    _secret: int = PrivateAttr(default=0)
+
+
+class _NestedTwin(BaseModel):
+    """The same fields as `_Stringified`, under another class."""
+
+    f: Any
+    g: int = 0
+
+
+@dataclasses.dataclass
+class _Point:
+    x: int
+    y: int
+
+
+class _Container(BaseModel):
+    item: Any
+    label: str = ""
+
+
+class _Counted(BaseModel):
+    """A model whose `model_post_init` leaves a trace, which reading a snapshot must not add to."""
+
+    runs: ClassVar[list[int]] = []
+    n: int = 0
+
+    def model_post_init(self, context: Any, /) -> None:
+        _Counted.runs.append(self.n)
+
+
+class _Hooked(BaseModel):
+    """A model overriding the hooks pickle calls, which reading a snapshot must not call either."""
+
+    calls: ClassVar[list[str]] = []
+    n: int = 0
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> "_Hooked":
+        _Hooked.calls.append("__new__")
+        return super().__new__(cls)
+
+    def __setstate__(self, state: dict[Any, Any]) -> None:
+        _Hooked.calls.append("__setstate__")
+        super().__setstate__(state)
+
+
 class _WithExtras(BaseModel):
     model_config = ConfigDict(extra="allow")
 
@@ -284,6 +340,14 @@ class TestAModelIsReadByTheValuesItHolds:
         with pytest.raises(AssertionFailure):
             assert_that(duck(1)).is_equal_to(duck(2), ignore="zzz")
 
+    def test_a_dataclass_in_a_model_is_taken_apart_as_before(self):
+        """`model_dump()` took a dataclass inside a model apart too, so it compared against a mapping."""
+        assert_that(_Container(item=_Point(1, 2))).is_equal_to(_Container(item={"x": 1, "y": 2}), ignore="label")
+
+    def test_a_nested_model_of_another_class_is_compared_by_contents_as_before(self):
+        """`model_dump()` took nested models apart, so a configured comparison read their contents; kept."""
+        assert_that(_Container(item=_Stringified(f=1))).is_equal_to(_Container(item=_NestedTwin(f=1)), ignore="label")
+
     def test_structure_matching_keeps_the_serialised_form_it_documents(self):
         """`matches_structure` is documented against `model_dump()`, serialisers applied, and stays so."""
         assert_that(_Stringified(f=1)).matches_structure({"f": "1"})
@@ -316,3 +380,87 @@ class TestAModelComparisonAgreesWithEquality:
         if left == right:
             return
         assert_that(_entries(lambda: assert_that(left).is_equal_to(right))).is_equal_to([(".f", f_left, f_right)])
+
+
+def _round_trip(value: object) -> object:
+    return json.loads(json.dumps({"v": value}, cls=_Encoder), cls=_Decoder)["v"]
+
+
+class TestAModelRoundTripsThroughASnapshot:
+    """Written through its `__dict__` and read back by assigning one, a model had none of the slots its `==`
+    reads, so every snapshot of a model failed on the run after it was written."""
+
+    @pytest.mark.parametrize(
+        "value",
+        [_Stringified(f=1, g=2), _WithExtras(f=1, z=2), _Nested(inner=_Stringified(f="x"), Label="l")],
+        ids=["plain", "extras", "nested"],
+    )
+    def test_what_is_written_is_what_is_read(self, value):
+        assert_that(_round_trip(value)).is_equal_to(value)
+
+    def test_reading_one_runs_none_of_the_model_s_code(self):
+        """`model_construct` runs `model_post_init`, the caller's code, on every read of the snapshot."""
+        value = _Counted(n=3)
+        runs = list(_Counted.runs)
+        assert_that(_round_trip(value)).is_equal_to(value)
+        assert_that(_Counted.runs).is_equal_to(runs)
+
+    def test_reading_one_calls_no_hook_the_model_overrides(self):
+        value = _Hooked(n=2)
+        _Hooked.calls.clear()
+        assert_that(_round_trip(value)).is_equal_to(value)
+        assert_that(_Hooked.calls).is_empty()
+
+    def test_a_snapshot_written_before_runs_none_of_the_model_s_code_either(self):
+        expected = _Counted(n=4)
+        runs = list(_Counted.runs)
+        written = json.dumps(
+            {"v": {"__type__": "instance", "__class__": "_Counted", "__module__": __name__, "__data__": {"n": 4}}}
+        )
+        assert_that(json.loads(written, cls=_Decoder)["v"]).is_equal_to(expected)
+        assert_that(_Counted.runs).is_equal_to(runs)
+
+    def test_the_private_state_and_the_fields_set_come_back(self):
+        """`model_construct` alone reset the private state `==` compares and marked every field as set."""
+        value = _Nested(inner=_Stringified(f=1))
+        value._secret = 7
+        back = _round_trip(value)
+        assert_that(back).is_equal_to(value)
+        assert_that(back.model_dump(exclude_unset=True)).is_equal_to(value.model_dump(exclude_unset=True))
+
+    def test_a_nested_model_of_another_class_fails_under_strict_types(self):
+        with pytest.raises(AssertionFailure):
+            assert_that(_Container(item=_Stringified(f=1))).is_equal_to(
+                _Container(item=_NestedTwin(f=1)), ignore="unrelated", strict_types=True
+            )
+
+    def test_a_snapshot_written_before_is_read_back(self):
+        """The form the codec wrote until now, the model's `__dict__` alone, still reads as the model."""
+        written = json.dumps(
+            {
+                "v": {
+                    "__type__": "instance",
+                    "__class__": "_Stringified",
+                    "__module__": __name__,
+                    "__data__": {"f": 1, "g": 2},
+                }
+            }
+        )
+        back = json.loads(written, cls=_Decoder)["v"]
+        assert_that(back).is_equal_to(_Stringified(f=1, g=2))
+        assert_that(back.model_fields_set).is_equal_to({"f", "g"})
+
+
+@settings(deadline=None)
+@given(
+    f=st.one_of(st.integers(), st.text(max_size=4), st.lists(st.integers(), max_size=3)),
+    g=st.integers(),
+    secret=st.integers(),
+    label=st.none() | st.text(max_size=3),
+)
+def test_a_model_round_trips_through_the_snapshot_codec(f, g, secret, label):
+    value = _Nested(inner=_Stringified(f=f, g=g)) if label is None else _Nested(inner=_Stringified(f=f), Label=label)
+    value._secret = secret
+    back = _round_trip(value)
+    assert_that(back).is_equal_to(value)
+    assert_that(back.model_fields_set).is_equal_to(value.model_fields_set)

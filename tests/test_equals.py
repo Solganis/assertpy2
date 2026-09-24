@@ -263,6 +263,12 @@ class _EmptyDataclass:
     pass
 
 
+@dataclasses.dataclass
+class _CachedArray:
+    cache: object = dataclasses.field(compare=False)
+    payload: object = None
+
+
 class _ArrayModel:
     """Duck pydantic model: ``__eq__`` compares dumps, so an array field breaks it like real pydantic."""
 
@@ -383,6 +389,12 @@ class TestFindAmbiguousOperand:
         with pytest.raises(TypeError) as exc_info:
             assert_that(_ArrayField(1)).is_equal_to(_ArrayField(_FakeArray()))
         assert_that(str(exc_info.value)).contains("_FakeArray").contains("element-wise")
+
+    def test_a_field_equality_leaves_out_is_not_searched(self):
+        """Only a compared field can have broken `==`, so the array in the cache ahead of it is not the culprit."""
+        payload = _FakeArray()
+        found = _find_ambiguous_operand(_CachedArray(_FakeArray(), payload), _CachedArray(_FakeArray(), _FakeArray()))
+        assert_that(found).is_same_as(payload)
 
     def test_dataclass_without_array_returns_none(self):
         assert_that(_find_ambiguous_operand(_ArrayField(1), _ArrayField(2))).is_none()

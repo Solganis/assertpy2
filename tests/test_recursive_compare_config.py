@@ -43,6 +43,16 @@ class Bag:
     tag: str
 
 
+@dataclass
+class PointTwin:
+    x: float
+    y: float
+
+
+_PointPair = namedtuple("_PointPair", ["x", "y"])
+_PointPairTwin = namedtuple("_PointPairTwin", ["x", "y"])
+
+
 class TestToleranceScalar:
     def test_a_scalar_beyond_tolerance_reports_both_sides(self):
         with pytest.raises(AssertionFailure) as exc_info:
@@ -816,6 +826,31 @@ class TestStrictTypes:
         assert_that(match.greater_than(0)).is_equal_to(5, strict_types=True)
         assert_that({"id": match.greater_than(0)}).is_equal_to({"id": 7}, strict_types=True)
         assert_that([match.greater_than(4)]).is_equal_to([5], strict_types=True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            ([Point(1, 2)], [PointTwin(1, 2)]),
+            ([_PointPair(1, 2)], [_PointPairTwin(1, 2)]),
+            ([Point(1, 2)], [{"x": 1, "y": 2}]),
+        ],
+        ids=["dataclasses", "namedtuples", "object-against-dict"],
+    )
+    def test_elements_of_another_class_fail_under_ignore(self, actual, expected):
+        """Each element was taken apart with no parent walk to compare the two classes, and the pair passed."""
+        assert_that(actual).is_equal_to(expected, ignore="z")
+        with pytest.raises(AssertionFailure):
+            assert_that(actual).is_equal_to(expected, ignore="z", strict_types=True)
+        assert_that(match.equal_to(expected, ignore="z", strict_types=True).matches(actual)).is_false()
+
+    def test_a_nested_path_into_another_class_still_shows_why_it_failed(self):
+        """Filtering the nested fields copied them into a plain mapping, and the diff lost the class it failed on."""
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(Row({"p": Point(1, 2)}, "a")).is_equal_to(
+                Row({"p": PointTwin(1, 3)}, "a"), ignore=("box", "p", "y"), strict_types=True
+            )
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["box.p"])
+        assert_that(str(caught.value)).contains("only their types differ")
 
     def test_the_keyed_type_check_needs_both_sides_to_be_that_container(self):
         """An exempt matcher reaches the key comparison as the counterpart of a real container, and

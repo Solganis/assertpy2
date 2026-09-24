@@ -25,13 +25,8 @@ import json
 from collections import Counter
 from typing import TYPE_CHECKING, Final
 
-from ._engine._introspection import (
-    definition_of,
-    is_attrs_instance,
-    is_mapping_like,
-    is_model_dump_object,
-    model_field_values,
-)
+from ._engine._equality import comparable_fields
+from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object, kind_of
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -155,7 +150,7 @@ def _typed(pairs: Sequence[tuple[object, object]], kind: str) -> str | None:
     a line under it restating that in general terms is worse than nothing.
     """
     try:
-        if not all(type(left) is not type(right) for left, right in pairs):
+        if not all(kind_of(left) is not kind_of(right) for left, right in pairs):
             return None
         if kind == "scalar" and all(str(left) == str(right) for left, right in pairs):
             return None
@@ -260,13 +255,17 @@ def diagnose(
 
 
 def _fields_of(value: object) -> dict | None:
-    """A dataclass, attrs instance or pydantic-style model as its field mapping, else ``None``."""
-    if is_model_dump_object(value):
-        return model_field_values(value)
-    if is_attrs_instance(value):
-        return {field.name: getattr(value, field.name) for field in value.__attrs_attrs__}
-    if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {field.name: getattr(value, field.name) for field in dataclasses.fields(value)}
+    """A dataclass, attrs instance or pydantic-style model as its fields, read as its ``==`` reads them.
+
+    Read field by field, a field ``==`` leaves out kept the hint away from a payload that matched, and so
+    did a nested object against the nested mapping it was built from.
+    """
+    if (
+        is_model_dump_object(value)
+        or is_attrs_instance(value)
+        or (dataclasses.is_dataclass(value) and not isinstance(value, type))
+    ):
+        return comparable_fields(value)
     return None
 
 

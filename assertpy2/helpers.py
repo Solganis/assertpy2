@@ -26,7 +26,7 @@ from ._engine._equality import (
     normalize_key_specs,
     supports_subscript,
 )
-from ._engine._introspection import MappingLike, is_namedtuple, keyed_snapshot
+from ._engine._introspection import MappingLike, TakenApart, field_pair, is_namedtuple, keyed_snapshot
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type
@@ -358,8 +358,11 @@ class HelpersMixin(_MixinBase):
             return mapping
         ignores = self._dict_ignore(ignore) if ignoring else []
         includes = self._dict_include(include) if including else []
-        # an OrderedDict keeps its type, since its order is part of what was compared
-        kept: dict = collections.OrderedDict() if isinstance(mapping, collections.OrderedDict) else {}
+        # an OrderedDict keeps its type and a TakenApart its class, both part of what was compared
+        if isinstance(mapping, TakenApart):
+            kept: dict = TakenApart(mapping.kind, {}, mapping.compared_by)
+        else:
+            kept = collections.OrderedDict() if isinstance(mapping, collections.OrderedDict) else {}
         for key in mapping:  # ty: ignore[not-iterable]  # only ever called on the dict-like branch
             value = mapping[key]  # ty: ignore[not-subscriptable]  # same
             if ignoring and _spec_matches(key, value, ignores):
@@ -420,7 +423,7 @@ class HelpersMixin(_MixinBase):
                 if key not in counterpart:
                     part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                 else:
-                    decision = _node_decision(value, counterpart[key], config, field=key)
+                    decision = _node_decision(*field_pair(mapping, counterpart, key), config, field=key)
                     if decision == "equal":
                         pending = True
                         continue

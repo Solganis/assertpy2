@@ -1,7 +1,7 @@
 """A complexity ratchet, so the measure cannot grow where nobody looks.
 
-Thirty-one functions in the package sit above mccabe's default of 10, the worst four being `extracting`
-at 32, `_build_equality_diff` at 30, `_dict_err` at 23 and `_object_hook` at 19.
+Twenty-eight functions in the package sit above mccabe's default of 10, the worst four being `extracting`
+at 32, `_build_equality_diff` at 30, `_dict_err` at 23 and `_object_hook` at 22.
 
 Getting them under 10 is deliberately NOT the goal. It fixes no defect, and rewriting
 `_build_equality_diff` for the sake of a number would risk code the suite and mutation testing hold.
@@ -36,7 +36,6 @@ RECORDED: dict[str, int] = {
     "assertpy2/_snapshot_codec.py::_object_hook": 22,
     "assertpy2/_engine/_diff.py::_sub_diff_entries": 17,
     "assertpy2/_hints.py::diagnose": 17,
-    "assertpy2/_engine/_compare.py::_find_ambiguous_operand": 15,
     "assertpy2/_engine/_diff.py::_walk_leaves": 15,
     "assertpy2/_matcher_impls.py::_walk": 14,
     "assertpy2/_snapshot_codec.py::default": 14,

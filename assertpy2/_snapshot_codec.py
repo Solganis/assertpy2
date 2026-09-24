@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import base64
+import dataclasses
 import datetime
 import decimal
 import enum
 import json
 import os
 import sys
+import types
 import uuid
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+from ._engine._introspection import (
+    is_attrs_instance,
+    is_pydantic_model,
+    is_pydantic_model_class,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -101,13 +109,14 @@ class _Encoder(json.JSONEncoder):
                 "__module__": o.__class__.__module__,
                 "__data__": o.value,
             }
-        elif "__dict__" in dir(o) and type(o) is not type:
+        elif _slot_aware(o) or is_pydantic_model(o) or ("__dict__" in dir(o) and type(o) is not type):
             return {
                 "__type__": "instance",
                 "__class__": o.__class__.__name__,
                 "__module__": o.__class__.__module__,
                 # prepared like any other mapping: a non-string key inside an attribute came back a string
-                "__data__": _prepare(o.__dict__),
+                "__data__": _prepare(_held(o)),
+                **_model_state(o),
             }
         return json.JSONEncoder.default(self, o)
 
@@ -164,10 +173,95 @@ class _Decoder(json.JSONDecoder):
                 target_class = _resolve_class(decoded["__module__"], decoded["__class__"])
                 if target_class is None:
                     return decoded
-                instance = target_class.__new__(target_class)
-                instance.__dict__ = decoded["__data__"]
-                return instance
+                return _rebuilt(target_class, decoded)
         return decoded
+
+
+def _slot_aware(value: object) -> bool:
+    """An attrs instance or a dataclass, the two kinds this reads through slots as well as a ``__dict__``.
+
+    Slotted by default in attrs and on request in dataclasses, and without a ``__dict__`` either raised
+    `Object of type ... is not JSON serializable`.  Other slotted objects stay refused: a slot of the
+    standard library's is state nobody vouched for rebuilding.
+    """
+    return is_attrs_instance(value) or (dataclasses.is_dataclass(value) and not isinstance(value, type))
+
+
+def _slot_names(target_class: type) -> set[str]:
+    """Every slot the class and its bases declare, under the name it is stored by, mangled or not."""
+    return {
+        name
+        for klass in target_class.__mro__
+        for name, member in vars(klass).items()
+        if isinstance(member, types.MemberDescriptorType)
+    }
+
+
+def _held(value: object) -> dict:
+    """What an instance holds: its ``__dict__`` and any slot set on it.
+
+    A slot is read past ``__getattr__``, so one never set stays unwritten: attrs computes a
+    ``cached_property`` of a slotted class there, and writing a snapshot would have run it.
+    """
+    held = dict(vars(value)) if hasattr(value, "__dict__") else {}
+    for name in _slot_names(type(value)) if _slot_aware(value) else ():
+        try:
+            held[name] = object.__getattribute__(value, name)
+        except AttributeError:  # noqa: PERF203  # a slot never set holds nothing to write
+            continue
+    return held
+
+
+def _model_state(value: object) -> dict:
+    """What a pydantic model holds beside its ``__dict__``: the extras and the private state its ``==``
+    compares, and the fields set, which ``model_dump(exclude_unset=True)`` reads.  Nothing for any other value."""
+    if not is_pydantic_model(value):
+        return {}
+    extra, private = getattr(value, "__pydantic_extra__", None), getattr(value, "__pydantic_private__", None)
+    return {
+        "__extra__": None if extra is None else _prepare(dict(extra)),
+        "__private__": None if private is None else _prepare(dict(private)),
+        "__fields_set__": sorted(getattr(value, "model_fields_set", ())),
+    }
+
+
+def _rebuilt(target_class: Any, written: dict) -> object:
+    """An instance of *target_class* holding what was written, built without running its ``__init__``.
+
+    A slot is set attribute by attribute, since a ``__dict__`` cannot hold it.
+    """
+    if is_pydantic_model_class(target_class):
+        return _rebuilt_model(target_class, written)
+    held = written["__data__"]
+    instance = target_class.__new__(target_class)
+    slots = _slot_names(target_class)
+    if hasattr(instance, "__dict__"):
+        instance.__dict__ = {name: value for name, value in held.items() if name not in slots}
+    for name in slots & held.keys():
+        object.__setattr__(instance, name, held[name])
+    return instance
+
+
+def _rebuilt_model(target_class: Any, written: dict) -> object:
+    """A pydantic model in the state it was written in, through pydantic's own ``__setstate__``.
+
+    Assigned a ``__dict__`` alone it had none of the state its ``==`` reads, and every snapshot of a model
+    failed on the run after it was written.  `model_construct` runs `model_post_init`, and a subclass may
+    override ``__new__`` or ``__setstate__``: reading a snapshot runs none of the caller's code.  A file
+    written before the rest of the state was stored holds the fields alone, and reads as a model holding
+    them and nothing else.
+    """
+    model = object.__new__(target_class)
+    sys.modules["pydantic"].BaseModel.__setstate__(
+        model,
+        {
+            "__dict__": written["__data__"],
+            "__pydantic_extra__": written.get("__extra__"),
+            "__pydantic_fields_set__": set(written.get("__fields_set__", written["__data__"])),
+            "__pydantic_private__": written.get("__private__"),
+        },
+    )
+    return model
 
 
 def _resolve_class(module_name, class_name):
