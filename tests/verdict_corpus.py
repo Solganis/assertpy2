@@ -25,6 +25,7 @@ import datetime
 import decimal
 import fractions
 import logging
+import numbers
 import re
 import warnings
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -112,6 +113,19 @@ class LyingDecimal(decimal.Decimal):
         return True
 
 
+class NumberWithNoOrder:
+    """Registered as a real and converting, and ordered against nothing."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+    def __repr__(self) -> str:
+        return "NumberWithNoOrder()"
+
+
+numbers.Real.register(NumberWithNoOrder)
+
+
 def _boom() -> int:
     raise ValueError("bad thing")
 
@@ -176,6 +190,10 @@ def _numbers() -> dict[str, Case]:
         "complex ordered": Case(lambda: assert_that(complex(1, 2)).is_greater_than(0)),
         "is_nan on a decimal": Case(lambda: assert_that(_DECIMAL_NAN).is_nan()),
         "even on a float": Case(lambda: assert_that(2.0).is_even()),
+        "a number with no order between": Case(lambda: assert_that(NumberWithNoOrder()).is_between(0, 9)),
+        "a number with no order not between": Case(lambda: assert_that(NumberWithNoOrder()).is_not_between(0, 9)),
+        "a number with no order close to": Case(lambda: assert_that(NumberWithNoOrder()).is_close_to(0, 1)),
+        "a number with no order not close to": Case(lambda: assert_that(NumberWithNoOrder()).is_not_close_to(0, 1)),
     }
 
 

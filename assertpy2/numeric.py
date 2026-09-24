@@ -4,7 +4,7 @@ import datetime
 import decimal
 import math
 import numbers
-from typing import TYPE_CHECKING, Any, SupportsFloat, SupportsIndex
+from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
 from ._engine._compare import tolerance_window
 from ._engine._mixin_base import _MixinBase
@@ -60,11 +60,6 @@ def _is_inf(value) -> bool:
         return False
 
 
-def _within(value: Any, low: Any, high: Any) -> bool:
-    """Whether ``low <= value <= high``, asked through the ordering engine so a NaN answers rather than signals."""
-    return holds(value, low, "ge") and holds(value, high, "le")
-
-
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
     """Format a timedelta tolerance as ``h:mm:ss``."""
     tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
@@ -89,18 +84,42 @@ class NumericMixin(_MixinBase):
         try:
             compare(self.val, other)
         except UnorderableError as unordered:
-            if unordered.kind == "value":
-                refuse(self.val, "a value with an ordering (complex numbers have none)")
-            kind_bound = unordered.wanted
-            if unordered.kind == "kind":
-                wanted = (
-                    "a number"
-                    if kind_bound is numbers.Number or kind_bound is None
-                    else f"a {kind_bound.__name__}, to match val"
-                )
-                refuse(other, wanted, subject=argument("other"))
-            # the pair cannot be ordered, not the value: two strings compare fine, so that was untrue of `"10" > 5`
-            refuse(other, f"comparable with val {_shown(self.val)}", subject=argument("other"))
+            self._refuse_unordered(unordered, other, "other")
+
+    def _refuse_unordered(self, unordered, other, name):
+        """The refusal for a pair the ordering engine could not order, naming the argument it came from."""
+        if unordered.kind == "value":
+            refuse(self.val, "a value with an ordering (complex numbers have none)")
+        kind_bound = unordered.wanted
+        if unordered.kind == "kind":
+            wanted = (
+                "a number"
+                if kind_bound is numbers.Number or kind_bound is None
+                else f"a {kind_bound.__name__}, to match val"
+            )
+            refuse(other, wanted, subject=argument(name))
+        # the pair cannot be ordered, not the value: two strings compare fine, so that was untrue of `"10" > 5`
+        refuse(other, f"comparable with val {_shown(self.val)}", subject=argument(name))
+
+    def _within(self, low, high, *, named=None):
+        """Whether ``low <= val <= high``, asked through the ordering engine so a NaN answers rather than signals.
+
+        A pair the engine cannot order is refused where it is met, in the words the single relations use,
+        and only there: below the low bound the answer is known, and the high one is never asked.  Asked
+        up front instead, a high bound the value could not be ordered against turned a passing
+        `is_not_between` into a refusal.
+
+        *named* is what a refusal names, as ``(argument, its name)``: a window's bounds are worked out from
+        `other`, and `other` is what the caller wrote.
+        """
+        return self._holds(low, "ge", named or (low, "low")) and self._holds(high, "le", named or (high, "high"))
+
+    def _holds(self, bound, relation, named):
+        """`holds` against one bound, with a pair the engine cannot order refused under *named*."""
+        try:
+            return holds(self.val, bound, relation)
+        except UnorderableError as unordered:
+            self._refuse_unordered(unordered, *named)
 
     def _validate_number(self):
         """Raise TypeError if val is not numeric."""
@@ -465,7 +484,7 @@ class NumericMixin(_MixinBase):
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if not _within(self.val, low, high):  # positive form so NaN (unordered) fails instead of passing
+        if not self._within(low, high):  # positive form so NaN (unordered) fails instead of passing
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to be between"
                 f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not.",
@@ -495,7 +514,7 @@ class NumericMixin(_MixinBase):
         val_type = type(self.val)
         self._validate_between_args(val_type, low, high)
 
-        if _within(self.val, low, high):
+        if self._within(low, high):
             return self.error(
                 f"Expected <{_fmt_operand(self.val)}> to not be between"
                 f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was."
@@ -618,7 +637,7 @@ class NumericMixin(_MixinBase):
                 expected=(other, tolerance),
             )
         low, high = tolerance_window(other, tolerance)
-        if not _within(self.val, low, high):
+        if not self._within(low, high, named=(other, "other")):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
@@ -660,7 +679,7 @@ class NumericMixin(_MixinBase):
         self._validate_close_to_args(self.val, other, tolerance)
 
         low, high = tolerance_window(other, tolerance)
-        if _within(self.val, low, high):
+        if self._within(low, high, named=(other, "other")):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"

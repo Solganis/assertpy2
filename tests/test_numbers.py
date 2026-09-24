@@ -619,6 +619,89 @@ def test_comparable_no_ordering_failure():
     assert_that(message).ends_with("(NoOrder)")
 
 
+class _NumberWithNoOrder:
+    """Registered as a real and converting to a float, and ordered against nothing."""
+
+    def __float__(self) -> float:
+        return 0.0
+
+    def __repr__(self) -> str:
+        return "<NumberWithNoOrder>"
+
+
+numbers.Real.register(_NumberWithNoOrder)
+
+
+@pytest.mark.parametrize(
+    ("question", "arguments", "operand"),
+    [
+        ("is_between", (0, 9), "low"),
+        ("is_not_between", (0, 9), "low"),
+        ("is_close_to", (0, 1), "other"),
+        ("is_not_close_to", (0, 1), "other"),
+    ],
+)
+def test_a_range_over_a_pair_with_no_order_refuses_as_one_relation_does(question, arguments, operand):
+    """The ordering engine's private `UnorderableError` reached the caller from these four, reading "pair".
+
+    Not a `TypeError`, so `except TypeError` let it through, where 2.26.0 raised one.  The single relations
+    refuse the same pair with this sentence, because they ask whether it orders before comparing.
+    """
+    with pytest.raises(TypeError) as caught:
+        getattr(assert_that(_NumberWithNoOrder()), question)(*arguments)
+    assert_that(str(caught.value)).is_equal_to(
+        f"given {operand} arg must be comparable with val <<NumberWithNoOrder>> (_NumberWithNoOrder), but was <0> (int)"
+    )
+
+
+class _OrderedAgainstIntsOnly:
+    """A registered real standing for five, ordered against an `int` and against nothing else."""
+
+    def __float__(self) -> float:
+        return 5.0
+
+    def __lt__(self, other: object) -> bool:
+        return 5 < other if type(other) is int else NotImplemented
+
+    def __gt__(self, other: object) -> bool:
+        return 5 > other if type(other) is int else NotImplemented
+
+    def __repr__(self) -> str:
+        return "<OrderedAgainstIntsOnly>"
+
+
+numbers.Real.register(_OrderedAgainstIntsOnly)
+
+
+def test_the_bound_a_range_never_reaches_is_never_asked():
+    """Below the low bound the answer is known, so a high bound the value cannot be ordered against is not asked.
+
+    Refused up front, it turned this passing `is_not_between` into a `TypeError`, where 2.26.0's chained
+    comparison answered.
+    """
+    assert_that(_OrderedAgainstIntsOnly()).is_not_between(10, 20.5)
+    with pytest.raises(AssertionError) as caught:
+        assert_that(_OrderedAgainstIntsOnly()).is_between(10, 20.5)
+    assert_that(str(caught.value)).is_equal_to(
+        "Expected <<OrderedAgainstIntsOnly>> to be between <10> and <20.5>, but was not."
+    )
+
+
+@pytest.mark.parametrize("question", ["is_close_to", "is_not_close_to"])
+def test_a_window_bound_the_value_cannot_be_ordered_against_is_refused_under_other(question):
+    """The window is `other` plus and minus the tolerance, and it is those the value is ordered against.
+
+    Checking `other` alone passed here, `10` being an `int`, and the float bounds let the engine's own
+    error out.
+    """
+    with pytest.raises(TypeError) as caught:
+        getattr(assert_that(_OrderedAgainstIntsOnly()), question)(10, 0.5)
+    assert_that(str(caught.value)).is_equal_to(
+        "given other arg must be comparable with val <<OrderedAgainstIntsOnly>> (_OrderedAgainstIntsOnly),"
+        " but was <10> (int)"
+    )
+
+
 @pytest.mark.parametrize("value", ["a", b"a", [1], (1,), {"a": 1}], ids=["str", "bytes", "list", "tuple", "dict"])
 def test_a_nan_on_the_right_does_not_make_an_unorderable_pair_a_verdict(value):
     """Answered before the pair was tried, a NaN turned "these cannot be compared" into "it was not".

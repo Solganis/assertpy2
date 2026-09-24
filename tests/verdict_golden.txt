@@ -65,6 +65,10 @@ modes/value after a timeout	TypeError | cannot extract .val: the underlying asse
 modes/verdict after a failed warn	passed -> False
 modes/verdict after a timeout	passed -> 'Expected condition not met after N seconds (value unchanged across N 
 modes/warns then returned	passed
+numbers/a number with no order between	TypeError | given low arg must be comparable with val <NumberWithNoOrder()> (NumberWithNoOrder), but was <0> (int)
+numbers/a number with no order close to	TypeError | given other arg must be comparable with val <NumberWithNoOrder()> (NumberWithNoOrder), but was <0> (int)
+numbers/a number with no order not between	TypeError | given low arg must be comparable with val <NumberWithNoOrder()> (NumberWithNoOrder), but was <0> (int)
+numbers/a number with no order not close to	TypeError | given other arg must be comparable with val <NumberWithNoOrder()> (NumberWithNoOrder), but was <0> (int)
 numbers/bool equals one	passed
 numbers/bytes less than nan	TypeError | given other arg must be comparable with val <b'a'> (bytes), but was <nan> (float)
 numbers/complex equals complex	passed
