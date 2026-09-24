@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import nullcontext
 from io import StringIO
 
 import pytest
@@ -208,6 +209,14 @@ class TestEventuallySyncTrace:
         assert_that(trace.samples[1].value).is_equal_to({"s": "PENDING"})
         assert_that(trace.total_polls).is_greater_than_or_equal_to(2)
         assert_that(str(exc_info.value)).contains("(probe recovered after 1 raising poll;")
+
+    @pytest.mark.parametrize("mode", ["hard", "soft"])
+    def test_a_timeout_records_the_value_the_assertion_saw_in_either_mode(self, mode):
+        """Collected by a soft block, the timeout was recorded over `None`, where the raised one kept `-1`."""
+        with pytest.raises(AssertionFailure) as exc_info, soft_assertions() if mode == "soft" else nullcontext():
+            assert_that(lambda: -1).eventually_sync(timeout=0, interval=0).is_positive()
+        record = exc_info.value.failures[0] if mode == "soft" else exc_info.value._outcome
+        assert_that(record.actual).is_equal_to(-1)
 
     def test_a_timeout_collected_by_a_soft_block_keeps_its_trace(self):
         # a collected timeout dropped the telemetry: `error()` had nowhere to put a trace, only the raising path did

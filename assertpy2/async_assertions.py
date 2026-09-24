@@ -389,7 +389,8 @@ def _out_of_time(
     message, trace = _timeout_failure(recorder, chain._timeout, elapsed, failure)
     if chain._kind in ("soft", "warn"):
         # empty description: the inner failure already carries it, and two would read as a double prefix
-        chain._builder_func(None, "", chain._kind, None, chain._logger).error(
+        # over the value the failing assertion saw, as the raised timeout records it: over `None` it recorded `None`
+        chain._builder_func(getattr(last_error, "actual", None), "", chain._kind, None, chain._logger).error(
             message, **_structured_of(last_error), trace=trace
         )
         # the poll never reached a value, so anything after it asserted about `None` and failed again.
