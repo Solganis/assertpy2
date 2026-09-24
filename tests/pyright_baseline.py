@@ -84,9 +84,8 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_poll_typing.py", "is_less_than_or_equal_to"): 4,
     ("assertpy2/_engine/_poll_typing.py", "is_not_between"): 4,
     ("assertpy2/_engine/_poll_typing.py", "matches_structure"): 4,
-    # 34 rather than 60: on a negated chain the ladder hands back the chain it already had, so its rungs
-    # differ only in what they accept and the pairs pyright called redundant there are gone
-    ("assertpy2/_engine/_poll_typing.py", "is_not_none"): 34,
+    # only the negated chain's ladder is left: the positive chain strips `None` in one rung
+    ("assertpy2/_engine/_poll_typing.py", "is_not_none"): 4,
     ("assertpy2/_engine/_typing.py", "is_instance_of"): 5,
     ("assertpy2/_engine/_typing.py", "is_not_none"): 15,
     ("assertpy2/_engine/_typing.py", "satisfies"): 9,
@@ -97,7 +96,7 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
 Not a debt and not a list of decisions. A ladder puts the narrower rung first so the narrower type
 wins, and pyright reads the pair as an overlap wherever the wider rung still accepts what the narrower
 one took: `bool` before `int` on the comparisons, `datetime` before `date`, a named rung before the
-trailing umbrella one on the polling twins. `is_not_none` is nearly half of it on its own, because a
+trailing umbrella one on the polling twins. `is_not_none` is a fifth of it on its own, because a
 chain over `None` matches every rung there is.
 
 Keyed by method rather than counted per file, which the rule was before. A per-file count of 48 stayed

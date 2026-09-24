@@ -51,10 +51,13 @@ _SENTINEL = object()
 # and one such base widened `contains` until `"abc".contains(123)` type-checked.
 _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # one spelling, three questions: keys, bytes, elements. A shared base would have to be untyped to fit
+        # one spelling, three questions: keys, bytes, elements, and so its negation. A shared base would be untyped
         ("contains", "_BytesAssertion", "_DictAssertion"),
         ("contains", "_BytesAssertion", "_CollectionShapedAssertion"),
         ("contains", "_CollectionShapedAssertion", "_DictAssertion"),
+        ("does_not_contain", "_BytesAssertion", "_DictAssertion"),
+        ("does_not_contain", "_BytesAssertion", "_CollectionShapedAssertion"),
+        ("does_not_contain", "_CollectionShapedAssertion", "_DictAssertion"),
         # narrowing `satisfies` redeclares the whole pair, whose first half is the core's `TypeIs` form
         # everywhere. Only the second half narrows, to `Matcher[str]` and `Matcher[_N]`
         ("satisfies", "_NumericAssertion", "_TextAssertion"),

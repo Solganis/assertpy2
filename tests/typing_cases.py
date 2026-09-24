@@ -328,6 +328,8 @@ def _methods_that_do_not_fit_the_value() -> None:
     # is restricted rather than left open, so the refusal is the overload resolution itself
     assert_that(_a_number).eventually_sync().eventually_sync()  # case: poll-on-a-sync-poll
     assert_that(_a_number).eventually().eventually()  # case: poll-on-an-async-poll
+    # mypy and ty let this through while the pivot's element was `Never` and `Unknown` to them
+    assert_that(_some_rows).eventually_sync().first().starts_with(1)  # case: wrong-element-after-a-polled-pivot
     # the rung the chain reaches now carries `str` operands, so mypy and pyright refuse this.  ty and
     # pyrefly still bind the element off the argument, which is what keeps the case here
     assert_that(_some_text).eventually_sync().contains_in_order(1)  # case: element-of-another-type-on-a-polled-string
@@ -414,6 +416,19 @@ def _some_rows() -> list[str]:
 
 def _loose_rows() -> list[Any]:
     return [1]
+
+
+async def _a_number_later() -> int:
+    return 1
+
+
+async def _polls_over_an_async_probe() -> None:
+    """The probe is awaited on every poll, so the chain is over what it returns rather than a coroutine.
+
+    ty answers `Unknown` for the chain, so it refuses neither line.
+    """
+    await assert_that(_a_number_later).eventually().is_positive()  # case: valid-poll-over-an-async-probe
+    await assert_that(_a_number_later).eventually().starts_with("x")  # case: text-assertion-on-an-async-probe
 
 
 def _shapes_other_people_write(

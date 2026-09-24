@@ -219,6 +219,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "nan-assertion-on-a-polled-capable-value": _NOT_THE_CHAINS_VALUE,
     # a polling chain: the declaration wins over `__getattr__`, which is what makes a typed chain worth having
     "text-assertion-on-a-polled-number": _NOT_THE_CHAINS_VALUE,
+    # ty reads a chain over an `async def` probe as `Unknown`, measured, and so refuses nothing on it
+    "text-assertion-on-an-async-probe": {**_NOT_THE_CHAINS_VALUE, "ty": frozenset()},
     # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
     "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
     # the view binds the predicate to its own value, so a lambda reading a missing name is refused. ty
@@ -233,6 +235,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # narrowing `is_close_to` on `self` moved this from a bad argument to no rung matching: an `int` fits
     # both rungs and `"x"` fits neither, where the wide rung used to take the receiver and refuse the operand
     "bad-operand-on-a-polled-number": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"call-overload"}),
+        "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
+        "pyrefly": frozenset({"no-matching-overload"}),
+    },
+    "wrong-element-after-a-polled-pivot": {
         "ty": frozenset({"no-matching-overload"}),
         "mypy": frozenset({"call-overload"}),
         "pyright": frozenset({"reportArgumentType", "reportCallIssue"}),
@@ -308,15 +316,18 @@ SPLIT: frozenset[str] = frozenset(
         "called-with-on-an-async-chain",
         "text-verdict-on-a-pivoted-number",
         "element-of-another-type-on-a-polled-string",
+        "text-assertion-on-an-async-probe",
     }
 )
 """The cases the four do not agree on, named so a new one has to be decided about.
 
-Four relations, and ty is silent in all of them.  The first two are a lambda over the subject reading a
+Seven relations.  ty is silent in five.  The two predicates are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
-The third is a verdict asked of a value the builder holds, refused through the ``self`` annotation of a
-rung on its twin, which ty does not read.  The fourth is an element of another type handed to a polled
-string, where the rung that matches carries `str` operands and only mypy and pyright say so.
+The pivoted number is a verdict asked of a value the builder holds, refused through the ``self``
+annotation of a rung on its twin, which ty does not read.  The polled string is handed an element of
+another type, where the rung that matches carries `str` operands and only mypy and pyright say so.  The
+async probe is a chain ty reads as `Unknown`.  In the two `when_called_with()` calls made before any
+expectation, mypy is the silent one.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as the dialects agreeing.
@@ -333,6 +344,7 @@ VALID: frozenset[str] = frozenset(
         "valid-numeric-predicate-over-the-subject",
         "valid-polled-refinement",
         "valid-polled-pivot",
+        "valid-poll-over-an-async-probe",
         "valid-polled-dynamic-then-typed",
         "valid-polled-dynamic-on-an-object",
         "valid-polled-capable-callable",

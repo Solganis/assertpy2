@@ -60,7 +60,7 @@ import pathlib
 import re
 import subprocess
 import sys
-from typing import Final, NamedTuple
+from typing import Final, NamedTuple, cast
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VIEWS = ROOT / "assertpy2" / "_engine" / "_typing.py"
@@ -352,6 +352,33 @@ def _polled(annotation: str, flavour: str) -> str:
     return " | ".join(f"{flavour}[{one.strip()}]" for one in annotation.split("|"))
 
 
+_PER_CALL: Final = frozenset(re.findall(r"^ *(_\w+) = TypeVar\(", _IMPORTS, re.MULTILINE))
+"""The type variables a rung solves per call, as against `_P_co`, which the chain already carries."""
+
+
+def _one_per_member(rung: ast.FunctionDef, restriction: str | None) -> list[ast.FunctionDef]:
+    """*rung* once per chain its ``self`` is restricted to, where that binds a variable and the return is solved.
+
+    Written as one union, ``list[_E] | tuple[_E, ...] | set[_E] | frozenset[_E]``, mypy solved `_E` to
+    `Never`, so a polled `first()` over ints answered `Never`.  Split, mypy answers `int`.  The return
+    need not name the bound variable itself: `flat_mapped()` returns `_R`, solved through a parameter
+    typed with `_E`, and split only where `_E` was returned, `flat_mapped(identity)` read `Never` again.
+    """
+    own = (rung.args.posonlyargs or rung.args.args)[0]
+    if restriction is None or " | " not in restriction or own.annotation is None:
+        return [rung]
+    returned = set(re.findall(r"\b_\w+\b", ast.unparse(rung.returns) if rung.returns else ""))
+    solved = set(re.findall(r"\b_\w+\b", restriction)) & _PER_CALL
+    if ast.unparse(own.annotation) != restriction or not solved or not returned & _PER_CALL:
+        return [rung]
+    pieces = []
+    for member in restriction.split(" | "):
+        piece = cast("ast.FunctionDef", ast.parse(ast.unparse(rung)).body[0])
+        (piece.args.posonlyargs or piece.args.args)[0].annotation = ast.Name(id=member)
+        pieces.append(piece)
+    return pieces
+
+
 def _handed_back(
     node: ast.FunctionDef,
     known: dict[str, ast.ClassDef],
@@ -588,13 +615,16 @@ def _rungs(
     for protocol, restriction, methods, holders, declared in _protocols(known, flavour):
         for method, written_as in zip(methods, declared, strict=True):
             rendered = _rewritten(method, restriction, flavour, known, holder=protocol, returns_as=returns_as)
-            written = ast.unparse(rendered)
-            if written in seen:
+            # narrowed only to bind what the chain then hands back as `Any`: the rung under it says the same
+            if _narrows_itself(method) and rendered.returns and ast.unparse(rendered.returns) == f"{flavour}[Any]":
                 continue
-            seen.add(written)
+            pieces = [one for one in _one_per_member(rendered, restriction) if ast.unparse(one) not in seen]
+            if not pieces:
+                continue
+            seen.update(ast.unparse(one) for one in pieces)
             # a rung open to any chain would make every later one unreachable, so it goes to the end
             narrowed = restriction is not None or _narrows_itself(method)
-            (found if narrowed else open_to_any).setdefault(method.name, []).append(rendered)
+            (found if narrowed else open_to_any).setdefault(method.name, []).extend(pieces)
             # the umbrella rung reads the declaration as written, since it is not the one a binding narrowed
             if narrowed and holders > widest.get(method.name, (0, written_as, protocol))[0]:
                 widest[method.name] = (holders, written_as, protocol)
@@ -615,9 +645,23 @@ def _rungs(
     return found
 
 
+def _none_stripped(flavour: str) -> ast.FunctionDef:
+    """`is_not_none()` on a poll chain, as one rung taking `None` off whatever the probe returns.
+
+    Rendered from the view's ladder, a list came back as `list | tuple | set | frozenset` of its items,
+    the union the iterable view covers, and a pivot after it typed as `Any` under mypy and pyright, where
+    the next ladder's first rung answered `list[str]` for a probe returning ints.
+    """
+    rung = ast.parse(f"def is_not_none(self: {flavour}[_T | None]) -> {flavour}[_T]: ...").body[0]
+    return cast("ast.FunctionDef", rung)
+
+
 def _body(known: dict[str, ast.ClassDef], flavour: str, returns_as: str | None = None) -> str:
     lines: list[str] = []
-    for rungs in _rungs(known, flavour, returns_as).values():
+    by_name = _rungs(known, flavour, returns_as)
+    if flavour in ("_SyncPoll", "_AsyncPoll"):
+        by_name["is_not_none"] = [_none_stripped(flavour)]
+    for rungs in by_name.values():
         lines.append("")
         for rendered in rungs:
             if len(rungs) > 1 and not any(ast.unparse(one) == "overload" for one in rendered.decorator_list):

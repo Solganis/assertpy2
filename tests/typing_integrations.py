@@ -46,11 +46,13 @@ def calls_that_must_keep_working(frame: pandas.DataFrame, array: numpy.ndarray[A
     """Every family the runtime accepts for these values, which the narrowed view has to carry."""
     assert_that(frame).is_not_empty()  # case: frame-sized
     assert_that(frame).contains(1)  # case: frame-membership
+    assert_that(frame).does_not_contain(1)  # case: frame-non-membership
     assert_that(frame).each(lambda item: True)  # case: frame-walk
     assert_that(frame).is_frame_equal(frame)  # case: frame-own
     assert_that(frame).is_array_equal(frame)  # case: frame-array
     assert_type(assert_that(frame).value.columns, pandas.Index[str])  # case: frame-value
     assert_that(array).is_not_empty()  # case: array-sized
+    assert_that(array).does_not_contain(1)  # case: array-non-membership
     assert_that(array).is_array_close_to(array)  # case: array-own
     # `dtype` reads as `Any`, which is numpy's typing; this case holds that the chain reaches its members at all
     assert_type(assert_that(array).value.size, int)  # case: array-value

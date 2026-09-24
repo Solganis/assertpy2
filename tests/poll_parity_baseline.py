@@ -524,7 +524,6 @@ RECORDED: dict[str, frozenset[str]] = {
     "datetime.datetime": frozenset(
         {
             "is_negative",
-            "is_not_between",
             "is_positive",
             "matches_structure",
         }
@@ -532,7 +531,6 @@ RECORDED: dict[str, frozenset[str]] = {
     "datetime.date": frozenset(
         {
             "is_negative",
-            "is_not_between",
             "is_positive",
             "matches_structure",
         }
@@ -566,7 +564,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_only",
             "contains_only_once",
             "contains_sequence",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_have_json_path",
             "each",
@@ -608,7 +605,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_only",
             "contains_only_once",
             "contains_sequence",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_have_json_path",
             "each",
@@ -659,7 +655,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_none_of",
             "contains_only_once",
             "contains_sequence",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_have_json_path",
             "element",
@@ -709,7 +704,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_only_once",
             "contains_sequence",
             "contains_value",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_contain_entry",
             "does_not_contain_key",
@@ -793,7 +787,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_none_of",
             "contains_only_once",
             "contains_sequence",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_have_json_path",
             "element",
@@ -844,7 +837,6 @@ RECORDED: dict[str, frozenset[str]] = {
             "contains_only_once",
             "contains_sequence",
             "contains_value",
-            "does_not_contain",
             "does_not_contain_duplicates",
             "does_not_contain_entry",
             "does_not_contain_key",

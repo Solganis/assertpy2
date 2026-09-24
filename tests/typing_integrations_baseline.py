@@ -53,11 +53,13 @@ SILENT = frozenset(
         "pandas-index",
         "frame-sized",
         "frame-membership",
+        "frame-non-membership",
         "frame-walk",
         "frame-own",
         "frame-array",
         "frame-value",
         "array-sized",
+        "array-non-membership",
         "array-own",
         "array-value",
     }

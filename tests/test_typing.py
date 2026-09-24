@@ -107,6 +107,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(b"raw").starts_with(b"r"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").ends_with(b"w"), _BytesAssertion[bytes])
     assert_type(assert_that(b"raw").starts_with_bytes(b"r"), _BytesAssertion[bytes])
+    assert_type(assert_that(b"raw").does_not_contain(b"x", 120), _BytesAssertion[bytes])
     assert_type(assert_that({"a": 1}).each(lambda key: True), _DictAssertion[str, int])
     # a text walks character by character, so the element is a `str`: the runtime took them, no view offered one
     assert_type(assert_that("ab").each(lambda character: character.isalpha()), _StringAssertion)
@@ -211,6 +212,16 @@ if TYPE_CHECKING:
         assert_that(datetime.date(2026, 1, 2)).is_between(datetime.date(2026, 1, 1), datetime.date(2026, 1, 3)),
         _DateAssertion,
     )
+    assert_type(
+        assert_that(datetime.date(2026, 1, 5)).is_not_between(datetime.date(2026, 1, 1), datetime.date(2026, 1, 3)),
+        _DateAssertion,
+    )
+    assert_type(
+        assert_that(datetime.datetime(2026, 1, 5)).is_not_between(
+            datetime.datetime(2026, 1, 1), datetime.datetime(2026, 1, 3)
+        ),
+        _DateTimeAssertion,
+    )
 
     assert_type(assert_that([3, 1, 2]).contains_exactly_in_any_order(1, 2, 3), _IterableAssertion[int])
     assert_type(assert_that("cba").contains_exactly_in_any_order("a", "b", "c"), _StringAssertion)
@@ -255,6 +266,31 @@ if TYPE_CHECKING:
     assert_type(
         assert_that(_defaulted).eventually().contains_entry({"a": 0}), _AsyncPoll[collections.defaultdict[str, int]]
     )
+
+    def _counts() -> list[int]: ...
+    def _grid() -> tuple[list[int], ...]: ...
+    def _tags() -> frozenset[str]: ...
+    def _row(row: list[int]) -> list[int]: ...
+
+    # one rung over `list | tuple | set | frozenset` made mypy answer `Never` for the element
+    assert_type(assert_that(_counts).eventually_sync().first().val, int)
+    assert_type(assert_that(_grid).eventually_sync().last().first().val, int)
+    assert_type(assert_that(_tags).eventually_sync().single().val, str)
+    assert_type(assert_that(_counts).eventually_sync().filtered_on(bool).val, list[int])
+    assert_type(assert_that(_counts).eventually_sync().mapped(str).val, list[str])
+    assert_type(assert_that(_grid).eventually_sync().flat_mapped(_row).val, list[int])
+    assert_type(assert_that(_counts).eventually().element(0), _AsyncPoll[int])
+
+    async def _settled() -> None:
+        assert_type((await assert_that(_counts).eventually().first()).value, int)
+
+    def _maybe_counts() -> list[int] | None: ...
+    def _maybe_grid() -> list[list[int]] | None: ...
+
+    # `is_not_none()` read off the view's ladder answered a union of containers, and the pivot after it `list[str]`
+    assert_type(assert_that(_maybe_counts).eventually_sync().is_not_none(), _SyncPoll[list[int]])
+    assert_type(assert_that(_maybe_grid).eventually_sync().is_not_none().first().val, list[int])
+    assert_type(assert_that(_maybe_counts).eventually().is_not_none(), _AsyncPoll[list[int]])
 
     # the four ways to set an expectation, each landing the call somewhere different: an exception
     # message, a warning message, or the callable itself with the return value reachable
@@ -459,6 +495,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(frame).is_frame_equal(frame), _FrameAssertion[_FakeFrame])
     assert_type(assert_that(array).is_array_equal(array), _ArrayAssertion[_FakeArray])
     assert_type(assert_that(array).is_array_close_to(array, rtol=0.1), _ArrayAssertion[_FakeArray])
+    assert_type(assert_that(frame).does_not_contain(9), _FrameAssertion[_FakeFrame])
+    assert_type(assert_that(array).does_not_contain(9), _ArrayAssertion[_FakeArray])
 
     assert_type(match.is_instance_of(int), IsInstanceOfMatcher)
     assert_type(match.is_instance_of(int | str), IsInstanceOfMatcher)
