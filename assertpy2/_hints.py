@@ -25,7 +25,13 @@ import json
 from collections import Counter
 from typing import TYPE_CHECKING, Final
 
-from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._engine._introspection import (
+    definition_of,
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    model_field_values,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -256,7 +262,7 @@ def diagnose(
 def _fields_of(value: object) -> dict | None:
     """A dataclass, attrs instance or pydantic-style model as its field mapping, else ``None``."""
     if is_model_dump_object(value):
-        return value.model_dump()
+        return model_field_values(value)
     if is_attrs_instance(value):
         return {field.name: getattr(value, field.name) for field in value.__attrs_attrs__}
     if dataclasses.is_dataclass(value) and not isinstance(value, type):

@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object
+from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, model_field_values
 from ._ordering import nan_operand
 from ._require import raised_inside, verdict
 
@@ -184,7 +184,7 @@ def _find_ambiguous_operand(actual, expected, _seen=None):
                 return found
         return None
     if is_model_dump_object(actual) and is_model_dump_object(expected):
-        return _find_ambiguous_operand(actual.model_dump(), expected.model_dump(), _seen)
+        return _find_ambiguous_operand(model_field_values(actual), model_field_values(expected), _seen)
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
         for actual_item, expected_item in zip(actual, expected, strict=False):
             found = _find_ambiguous_operand(actual_item, expected_item, _seen)

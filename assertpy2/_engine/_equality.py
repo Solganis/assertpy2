@@ -34,7 +34,7 @@ from ._compare import (
     _spec_matches,
 )
 from ._diff import _sub_diff_entries
-from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple
+from ._introspection import is_attrs_instance, is_model_dump_object, is_namedtuple, model_field_values
 from ._path import _ROOT
 from ._require import refuse
 
@@ -84,7 +84,7 @@ def comparable_fields(obj: object) -> dict | None:
     if is_namedtuple(obj):
         return dict(obj._asdict())
     if is_model_dump_object(obj):
-        return obj.model_dump()
+        return model_field_values(obj)
     if is_attrs_instance(obj):
         # deferred: at module level it cost 8.5 ms and 22 modules of a 39.8 ms import wherever attrs is installed
         import attrs

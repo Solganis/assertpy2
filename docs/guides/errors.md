@@ -167,7 +167,7 @@ rendered by the plugin as diff sections on the failure.
 | `dict` | `dict` | Key-by-key, recursive into nested dicts, lists, dataclasses, namedtuples, attrs classes, and models |
 | `dataclass` | `dataclass` | Field-by-field, handles differing types with overlapping fields |
 | `namedtuple` | `namedtuple` | Field-by-field comparison |
-| Pydantic model | `model` | Field-by-field via `model_dump()`, recursive into nested models |
+| Pydantic model | `model` | Field-by-field on the values the fields and extras hold, not `model_dump()`, recursive into nested models |
 | attrs class | `attrs` | Field-by-field, recursive into nested fields |
 | other | `scalar` | Single actual-vs-expected entry |
 | `contains` family | `contains` | Missing and extra items, plus the repeat counts for a duplicate failure |

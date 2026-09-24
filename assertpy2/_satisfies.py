@@ -101,7 +101,9 @@ class SatisfiesMixin(_MixinBase):
 
         Walks val recursively (mappings, dataclasses, namedtuples, Pydantic models, lists, tuples) and
         applies the matcher to each leaf value, reporting the path of every leaf that does not satisfy it.
-        Scalars, strings, sets and opaque objects are treated as single leaves.
+        Scalars, strings, sets and opaque objects are treated as single leaves.  A Pydantic model is
+        walked through the values its fields hold, not its ``model_dump()``: a field excluded from the
+        dump is walked, a computed field is not, and a field serializer does not apply.
 
         Args:
             matcher: a `Matcher` or callable predicate applied to every leaf
@@ -153,7 +155,7 @@ class SatisfiesMixin(_MixinBase):
         """Asserts that no scalar leaf in val's object graph is ``None``.
 
         Convenience wrapper over `all_fields_satisfy()` with a not-``None`` matcher; reports the path
-        of every ``None`` leaf found anywhere in the graph.
+        of every ``None`` leaf found anywhere in the graph, reading a Pydantic model as that does.
 
         Examples:
             Usage:

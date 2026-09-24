@@ -9,8 +9,9 @@ models (``model_dump``), ``attrs`` classes (``__attrs_attrs__``) and namedtuples
 
 from __future__ import annotations
 
-import collections
+import collections.abc
 import itertools
+import sys
 import types
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, cast, runtime_checkable
 
@@ -94,6 +95,47 @@ def is_model_dump_object(obj: object) -> TypeGuard[SupportsModelDump]:
     # on the type first, which a `unittest.mock` object's fabricated attribute never reaches; then on the
     # value, because an ordinary method is a non-data descriptor and `obj.model_dump = None` shadows it
     return hasattr(type(obj), "model_dump") and callable(getattr(obj, "model_dump", None))
+
+
+def model_field_values(model: SupportsModelDump) -> dict[Any, Any]:
+    """A model's declared fields and extras as the values they hold, not what serialising makes of them.
+
+    `model_dump()` runs every `field_serializer`, leaves out a field declared ``exclude=True`` and adds the
+    computed ones, and pydantic's ``==`` does none of that.  Read through it, `M(f=1)` and `M(f="1")`
+    compared equal under ``ignore=``, ``include=``, ``strict_types=`` and ``tolerance=`` while ``==`` told
+    them apart, and the structured diff showed serialised values beside a message showing the held ones.
+
+    Only a pydantic ``BaseModel`` is read this way.  A duck type may carry a ``model_fields`` of its own
+    meaning, pydantic's own attribute names, or no ``__dict__`` at all, and is read through `model_dump()`,
+    which is all the duck type promises.
+
+    What pydantic's ``==`` compares beyond these is not read: the model's class, which a configured
+    comparison leaves to ``strict_types``, and private attributes, so a pair differing only there fails
+    plainly and passes a configured comparison, as it did through the dump.
+
+    An extra named like a declared field is refused.  Validation never produces one, and the model then
+    holds two values under one name, which no reading field by field can show: `model_dump()` keeps the
+    extra's, ``==`` compares both.
+    """
+    # loaded already wherever a model exists, so asking imports nothing
+    pydantic = sys.modules.get("pydantic")
+    if pydantic is None or not isinstance(model, pydantic.BaseModel):
+        return model.model_dump()
+    # `Any` because pydantic comes off `sys.modules`, and `model_fields` because `__pydantic_fields__` is 2.10+
+    model_class: Any = type(model)
+    declared = model_class.model_fields
+    held = vars(model)
+    values = {name: held[name] for name in declared if name in held}
+    extra = getattr(model, "__pydantic_extra__", None)
+    if isinstance(extra, collections.abc.Mapping):
+        shadowing = next((name for name in extra if name in declared), None)
+        if shadowing is not None:
+            raise TypeError(
+                f"{type(model).__name__} holds an extra named {shadowing!r} beside the field of that name,"
+                " which validation never produces, so its fields cannot be read one by one"
+            )
+        values.update(extra)
+    return values
 
 
 def is_namedtuple(obj: object) -> TypeGuard[NamedTupleLike]:

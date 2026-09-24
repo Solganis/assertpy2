@@ -691,13 +691,16 @@ class TestFormatDiff:
         assert_that(body).contains("missing:")
         assert_that(body).does_not_contain("extra")
 
-    def test_empty_diff_returns_str_repr(self):
-        diff = DiffResult(kind="scalar", entries=[])
-        exc = AssertionFailure("fail", diff=diff)
+    def test_a_diff_with_nothing_in_it_hangs_no_section(self):
+        """An empty section read as a diff that found the two sides equal, under a message saying they differ.
+
+        Issue 46 showed one: a model whose serialiser folded the two values into one text.  The JSON
+        attachment already answered `None` for the same diff.
+        """
+        exc = AssertionFailure("fail", diff=DiffResult(kind="scalar", entries=[]))
         report = _make_report()
         _run_hook(report, _make_call(exc=exc))
-        body = dict(_sections(report))["Structured Diff"]
-        assert_that(body).is_empty()
+        assert_that([title for title, _ in _sections(report)]).does_not_contain("Structured Diff")
 
 
 class TestDiffToJson:

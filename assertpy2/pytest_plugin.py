@@ -997,8 +997,11 @@ def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
         max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
         title = f"Structured Diff{suffix}"
-        _add_section(report, title, _format_diff(diff, max_entries=max_entries))
-        vars(report).setdefault(_COLORED, {})[title] = _format_diff(diff, color=True, max_entries=max_entries)
+        rendered = _format_diff(diff, max_entries=max_entries)
+        # a diff with no entries renders as nothing, and the section around it read as a diff that found nothing
+        if rendered:
+            _add_section(report, title, rendered)
+            vars(report).setdefault(_COLORED, {})[title] = _format_diff(diff, color=True, max_entries=max_entries)
 
     if trace is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
         _add_section(report, f"Polling Trace{suffix}", _format_trace(trace))

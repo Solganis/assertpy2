@@ -785,7 +785,9 @@ assert_that({"a": 1, "b": {"c": -2}}).all_fields_satisfy(match.is_positive())  #
 ```
 
 Scalars, strings and sets are treated as single leaves (use `each` / `all_satisfy` for element-wise set
-checks), and circular references are reported once rather than recursed into.
+checks), and circular references are reported once rather than recursed into. A Pydantic model is walked
+through the values its fields hold, the way the diff reads it: a field declared `exclude=True` is walked, a
+`@computed_field` is not, and a `@field_serializer` does not apply.
 
 ### Extracting attributes from objects
 

@@ -34,7 +34,14 @@ from typing import TYPE_CHECKING, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _guarded_not_equal, _node_decision
-from ._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, is_namedtuple, keyed_snapshot
+from ._introspection import (
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    is_namedtuple,
+    keyed_snapshot,
+    model_field_values,
+)
 from ._path import _ROOT, _Path
 
 if TYPE_CHECKING:
@@ -46,9 +53,9 @@ __tracebackhide__ = True
 
 
 def _field_dict(obj, is_model):
-    """Field mapping of a pydantic-style model (``model_dump()``) or an attrs instance (shallow)."""
+    """Field mapping of a pydantic-style model or an attrs instance (shallow), as the values its fields hold."""
     if is_model:
-        return obj.model_dump()
+        return model_field_values(obj)
     return {field.name: getattr(obj, field.name) for field in obj.__attrs_attrs__ if field.eq is not False}
 
 
@@ -661,9 +668,9 @@ def _walk_leaves(value, prefix: _Path = _ROOT, _seen=None):
         return
     if is_model_dump_object(value):
         child_seen = _seen | {id(value)}
-        dumped = value.model_dump()
-        for key in dumped:
-            yield from _walk_leaves(dumped[key], prefix.attr(str(key), dotted_at_root=False), child_seen)
+        held = model_field_values(value)
+        for key in held:
+            yield from _walk_leaves(held[key], prefix.attr(str(key), dotted_at_root=False), child_seen)
         return
     if is_attrs_instance(value):
         child_seen = _seen | {id(value)}
