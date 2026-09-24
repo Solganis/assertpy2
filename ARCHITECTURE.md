@@ -117,6 +117,7 @@ import lines are templates inside the generators.
 | `test_negated_protocols.py` | does every reachable view have a negation twin that hands the view back, and is the file what the generator produces |
 | `test_architecture_doc.py` | does this document still describe the tree, counts included |
 | `test_typing_negative.py` | do the checkers still refuse what they should |
+| `test_typing_chain_corpus.py` | do the chains the chain model takes, to two pivots, still type the way they were recorded |
 | `test_typing_from_a_wheel.py` | does the typed surface survive packaging |
 | `test_typing_integrations.py`, `test_typing_http.py` | do real pandas, polars, numpy and HTTP values still resolve |
 | `test_overload_order.py` | is the frame overload still above every other shape-keyed one |
@@ -136,7 +137,8 @@ Which one goes red tells you what you did:
 - a public name added or moved: `test_api_compatibility.py`, which is a snapshot rather than a rule
 
 The four checkers are ty, mypy `--strict`, Pyright and Pyrefly. Where they disagree it is recorded, in
-`tests/typing_negative_baseline.py` and `tests/typing_integrations_baseline.py`.
+`tests/typing_negative_baseline.py`, `tests/typing_integrations_baseline.py` and
+`tests/typing_chain_corpus_baseline.json`.
 
 Pyright's engine is pinned in `tests/typing_harness.py`. The PyPI distribution is a launcher for a node package
 and the two move at different speeds.

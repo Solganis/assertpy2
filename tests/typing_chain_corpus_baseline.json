@@ -1,0 +1,6742 @@
+{
+ "c0169-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0169-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0169-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0320-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0320-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0389-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0389-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0458-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0458-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0513-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0513-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0570-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0570-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0615-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0615-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0717-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0717-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0718-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0718-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0719-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0719-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0720-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0720-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0721-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0721-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0722-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0722-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0723-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0723-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0724-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0724-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0725-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0725-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0727-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0727-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0728-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0728-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0729-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0729-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0730-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0730-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0731-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0731-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0732-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0732-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0733-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0733-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0734-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0734-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0735-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0735-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0736-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0736-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0737-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0737-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0738-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0738-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0739-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0739-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0740-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0740-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0741-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0741-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0742-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0742-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0743-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0743-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0744-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0744-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0745-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0745-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0746-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0746-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0747-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0747-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0748-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0748-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0749-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0749-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0750-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0750-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0751-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0751-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0752-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0752-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0753-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0753-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0754-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0754-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0755-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0755-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0756-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0756-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0757-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0757-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0758-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0758-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0759-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0759-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0760-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0760-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0761-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0761-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0762-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0762-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0763-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0763-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0764-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0764-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0765-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0765-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0766-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0766-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0767-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0767-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0768-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0768-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0769-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0769-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0770-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0770-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0771-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0771-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0772-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0772-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0773-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0773-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0774-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0774-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0775-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0775-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0776-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0776-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0777-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0777-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0778-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0778-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0779-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0779-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0780-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0780-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0781-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0781-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0782-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0782-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0782-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0783-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0783-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0783-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0784-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0784-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0784-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0785-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0785-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0785-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0786-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0786-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0786-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0787-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0787-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0787-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0788-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0788-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0788-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0789-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0789-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0789-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0790-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0790-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0790-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0791-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0791-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0791-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0792-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0792-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0792-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0793-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0793-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0793-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0794-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0794-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0794-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0795-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0795-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0795-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0796-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0796-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0796-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0797-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0797-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0797-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0798-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0798-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0798-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0799-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0799-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0799-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0800-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0800-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0800-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0801-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0801-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0801-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0802-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0802-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0802-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0803-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0803-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0803-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0804-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0804-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0804-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0805-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0805-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0805-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0806-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0806-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0806-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0807-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0807-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0807-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0808-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0808-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0808-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0809-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0809-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0809-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0810-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0810-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0810-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0811-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0811-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0811-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0812-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0812-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0812-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0813-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0813-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0813-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0814-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0814-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0814-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0815-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0815-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0815-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0816-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0816-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0816-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0817-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0817-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0817-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0818-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0818-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0818-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0819-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0819-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0819-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0820-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0821-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0821-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0821-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0822-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0822-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0822-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0823-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0823-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0823-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0824-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0824-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0824-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0825-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0825-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0825-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0826-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0826-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0826-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0827-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0827-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0827-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0828-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0828-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0828-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0829-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0829-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0829-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0830-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0830-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0830-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0831-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0831-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0831-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0832-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0832-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0832-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0833-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0833-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0833-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0834-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0834-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0834-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0835-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0835-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0835-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0836-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0836-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0836-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0837-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0837-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0837-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0838-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0838-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0838-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0839-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0839-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0839-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0840-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0840-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0840-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0840-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0841-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0841-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0841-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0841-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0842-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0842-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0842-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0842-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0843-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0843-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0843-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0843-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0844-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0844-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0844-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0844-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0845-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0845-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0845-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0845-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0846-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0846-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0846-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0846-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0847-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0847-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0847-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0847-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0848-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0848-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0848-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0848-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0849-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0849-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0849-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0849-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0850-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0850-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0850-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0850-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0851-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0851-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0851-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0851-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0852-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0852-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0852-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0852-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0853-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0853-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0853-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0853-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0854-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0854-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0854-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0854-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0855-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0855-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0855-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0855-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0856-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0856-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0856-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0856-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0857-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0857-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0857-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0857-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0858-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0858-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0858-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0858-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0859-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0859-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0859-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0859-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0860-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0860-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0860-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0860-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0861-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0861-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0861-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0861-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0862-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0862-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0862-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0862-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0863-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0863-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0863-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0863-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0864-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0864-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0864-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0864-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0865-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0865-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0865-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0865-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0866-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0866-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0866-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0866-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0867-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0867-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0867-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0867-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0868-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0868-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0868-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0868-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0869-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0869-check": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0869-direct": {
+  "mypy": [
+   "assert-type",
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "assert-type",
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure",
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "type-assertion-failure",
+   "unresolved-attribute"
+  ]
+ },
+ "c0869-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0870-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0870-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0870-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0871-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0871-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0871-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0872-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0872-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0872-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0873-await": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0873-direct": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0873-poll": {
+  "mypy": [
+   "assert-type"
+  ],
+  "pyrefly": [
+   "assert-type"
+  ],
+  "pyright": [
+   "reportAssertTypeFailure"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0886-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0886-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0887-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0887-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0888-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0888-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0889-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0889-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0890-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0890-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0891-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0891-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0892-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0892-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0893-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0893-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0894-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0894-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0895-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0895-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0896-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0896-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0897-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0897-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0976-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0976-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0977-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0977-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0978-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c0978-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1258-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1258-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1259-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1259-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1260-await": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1260-poll": {
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1261-await": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1261-poll": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1262-await": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1262-poll": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1263-await": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "c1263-poll": {
+  "pyrefly": [
+   "assert-type"
+  ],
+  "ty": [
+   "type-assertion-failure"
+  ]
+ },
+ "witness": {
+  "mypy": [
+   "attr-defined"
+  ],
+  "pyrefly": [
+   "missing-attribute"
+  ],
+  "pyright": [
+   "reportAttributeAccessIssue"
+  ],
+  "ty": [
+   "unresolved-attribute"
+  ]
+ }
+}

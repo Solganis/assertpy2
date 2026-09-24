@@ -7,7 +7,9 @@ does: every pair is run over values chosen to make it hold *and* fail, and the v
 The invariant is not "identical". It is narrower and it is the honest one:
 
 * Where both sides answer, they answer the same.
-* Where they differ, it is always the assertion refusing a value the matcher merely does not match.
+* Where they differ, it is always the assertion refusing a call the matcher answers anyway. The answer
+  is a non-match, except on an empty subject, where it is the vacuous one: `match.is_subset_of(0)`
+  matches `{}`, while `assert_that({}).is_subset_of(0)` refuses the `0`.
 
 Those are two contracts, not one bug. An assertion says "you handed me the wrong kind of thing, fix
 your test"; a matcher is asked about every leaf of a structure and must be total, because
@@ -131,6 +133,13 @@ class TestARelationAnswersTheSameWhicheverWayItIsCalled:
             assert_that(_matcher_verdict(build_matcher(), value)).described_as(f"{name} on {value!r}").is_not_equal_to(
                 "refused"
             )
+
+
+class TestAnEmptySubjectAgainstARefusedArgument:
+    def test_the_matcher_holds_vacuously_where_the_assertion_refuses_the_argument(self):
+        assert_that(match.is_subset_of(0).matches({})).is_true()
+        with pytest.raises(TypeError, match="must be dict-like"):
+            assert_that({}).is_subset_of(0)
 
 
 class TestTheThreeMatchersThatAreNarrowerThanTheirNamesake:

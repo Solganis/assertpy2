@@ -409,6 +409,10 @@ jobs:
       - name: Type check (rejections, all three checkers)
         run: uv run pytest tests/test_typing_negative.py -q
 
+      # the chain model's chains to two pivots, as typed calls: any change in what a checker says fails
+      - name: Type check (the chain model's corpus, all four checkers)
+        run: uv run pytest tests/test_typing_chain_corpus.py -q
+
       # the stand-in classes in `test_typing.py` prove the overloads are written correctly and cannot
       # prove the real libraries still match them. This runs the same question against real pandas,
       # polars and numpy values, with each checker given its interpreter and target explicitly
