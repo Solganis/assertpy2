@@ -4,7 +4,7 @@ import numbers
 
 import pytest
 
-from assertpy2 import assert_that
+from assertpy2 import assert_that, match
 
 
 def test_is_zero():
@@ -685,6 +685,14 @@ def test_the_bound_a_range_never_reaches_is_never_asked():
     assert_that(str(caught.value)).is_equal_to(
         "Expected <<OrderedAgainstIntsOnly>> to be between <10> and <20.5>, but was not."
     )
+
+
+@pytest.mark.parametrize(("value", "other"), [(-1.1, -0.9), (-0.9, -1.1)], ids=["value-below", "value-above"])
+def test_a_distance_the_floats_round_past_the_tolerance_is_within_it_every_way_it_is_asked(value, other):
+    """The two differ by `0.20000000000000007` as floats, and `is_close_to` held this pair before it was one rule."""
+    assert_that(value).is_close_to(other, 0.2)
+    assert_that(match.close_to(other, 0.2).matches(value)).is_true()
+    assert_that(value).is_equal_to(other, tolerance=0.2)
 
 
 @pytest.mark.parametrize("question", ["is_close_to", "is_not_close_to"])

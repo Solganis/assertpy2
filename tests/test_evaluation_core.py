@@ -1987,6 +1987,18 @@ class TestAToleranceRefusalIsNotABug:
         with pytest.raises(TypeError, match="my own refusal"):
             assert_that({"a": Angry(1.0)}).is_equal_to({"a": 2.0}, tolerance=0.5)
 
+    def test_a_window_whose_own_subtraction_raises_is_handed_on(self):
+        """The difference is taken first, so only a value that refuses the tolerance alone reaches the window."""
+
+        class AngryAtTolerances(float):
+            def __sub__(self, other):
+                if other == 0.5:
+                    raise TypeError("my own refusal")
+                return float(self) - other
+
+        with pytest.raises(TypeError, match="my own refusal"):
+            match.close_to(AngryAtTolerances(1.0), 0.5).matches(3.0)
+
     def test_a_mixed_pair_is_still_repaired(self):
         """A `Decimal` against a `float` refuses to subtract, which is the pair the retry is there for."""
         assert_that({"a": decimal.Decimal("1.0")}).is_equal_to({"a": 1.05}, tolerance=0.1)
@@ -2177,6 +2189,23 @@ class TestAToleranceIsAnOrderedDistance:
     @pytest.mark.parametrize("tolerance", [1j, complex(1, 0)], ids=["imaginary", "complex-with-no-imaginary-part"])
     def test_a_complex_tolerance_has_no_window(self, tolerance):
         assert_that(match.close_to(float("inf"), tolerance).matches(float("inf"))).is_false()
+
+    @pytest.mark.parametrize(
+        ("expected", "tolerance"),
+        [("x", 1), ([1], 1), (5, datetime.timedelta(days=1)), (1j, 1)],
+        ids=["text", "a-list", "a-duration-between-numbers", "a-complex-value"],
+    )
+    def test_a_value_with_no_distance_is_not_close_even_to_itself(self, expected, tolerance):
+        assert_that(match.close_to(expected, tolerance).matches(expected)).is_false()
+
+    def test_an_expected_value_with_no_distance_is_not_close_to_a_number(self):
+        assert_that(match.close_to("x", 1).matches(5)).is_false()
+
+    def test_a_bool_is_no_distance_and_is_measured_by_none(self):
+        """`True` and `False` are one apart as ints, and a tolerance of one still tells them apart."""
+        with pytest.raises(AssertionError):
+            assert_that({"flag": True}).is_equal_to({"flag": False}, tolerance=1)
+        assert_that(match.close_to(1, True).matches(1.5)).is_false()
 
     def test_a_decimal_tolerance_is_a_real_one(self):
         assert_that(tolerance_window(decimal.Decimal(1), decimal.Decimal("0.5"))).is_equal_to(

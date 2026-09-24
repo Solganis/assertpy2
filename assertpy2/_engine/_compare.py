@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import nan_operand
+from ._ordering import holds, nan_operand
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -252,25 +252,44 @@ def _is_real_number(value) -> bool:
     """Return whether ``value`` is a real number eligible for tolerance (excludes ``bool`` and ``complex``).
 
     Array/frame-likes are not `numbers.Number`, so they are excluded too - tolerance never triggers
-    their element-wise ``==`` that has no single truth value.
+    their element-wise ``==`` that has no single truth value.  An exact `int` or `float` answers before
+    the ABC check, which cost a hundred nanoseconds on every leaf a tolerance is asked about.
     """
-    return isinstance(value, numbers.Number) and not isinstance(value, (bool, complex))
+    return type(value) in (int, float) or (isinstance(value, numbers.Number) and not isinstance(value, (bool, complex)))
 
 
 def _within_tolerance(actual, expected, tolerance) -> bool:
-    """Return whether two real numbers are within ``tolerance`` (absolute); ``NaN`` is never within.
+    """Whether two values lie within ``tolerance`` of each other, the same answer whichever comes first.
 
-    Checked by type rather than through `math.isnan`, which overflows on an arbitrary-precision ``int``
-    and signals on a `Decimal` NaN.
+    One distance, measured three ways that a float rounds differently at the boundary: the difference,
+    and the window around each side.  Any of them holding is enough.  Measured one way each, the three
+    spellings disagreed: ``-1.1`` was close to ``-0.9`` within ``0.2`` for `is_close_to`, which windows
+    around the other operand, and not for `match.close_to`, which windows around the value, nor for
+    ``is_equal_to(tolerance=)``, which takes the difference.  Taking any of the three, no spelling now
+    fails a pair it passed before.
 
-    The subtraction is tried as written, so two floats keep the arithmetic they always had.  A `Decimal`
-    against a ``float`` refuses to subtract at all and a bignum ``int`` overflows one, and those two pairs
-    are measured exactly instead, through `fractions.Fraction`.
+    ``NaN`` is never within, checked by type rather than through `math.isnan`, which overflows on an
+    arbitrary-precision ``int`` and signals on a `Decimal` NaN.  A pair the ordering engine cannot order
+    raises `UnorderableError` out of the windows, for the caller to refuse or to read as no match.
     """
     if nan_operand(actual) or nan_operand(expected):
         return False
     if actual == expected:  # equal values (including inf == inf) are within any tolerance
         return True
+    return (
+        bool(_difference_within(actual, expected, tolerance))
+        or _window_holds(expected, actual, tolerance)
+        or _window_holds(actual, expected, tolerance)
+    )
+
+
+def _difference_within(actual, expected, tolerance) -> bool | None:
+    """``abs(actual - expected) <= tolerance``, or ``None`` for two values that cannot be subtracted.
+
+    Tried as written, so two floats keep the arithmetic they always had.  A `Decimal` against a ``float``
+    refuses to subtract at all and a bignum ``int`` overflows one, and those two pairs are measured
+    exactly instead, through `fractions.Fraction`.
+    """
     if _is_infinite(actual) or _is_infinite(expected):
         return False  # unequal, and no distance from an infinity is within a finite tolerance
     try:
@@ -278,7 +297,21 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     except (TypeError, OverflowError) as error:
         if raised_inside(error):  # their own `__sub__` or `__abs__` raised: a bug in the value, not a refusal
             raise
-        return abs(fractions.Fraction(actual) - fractions.Fraction(expected)) <= fractions.Fraction(tolerance)
+        try:
+            return abs(fractions.Fraction(actual) - fractions.Fraction(expected)) <= fractions.Fraction(tolerance)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+
+def _window_holds(middle, value, tolerance) -> bool:
+    """Whether *value* lies in the closed window *tolerance* either side of *middle*."""
+    try:
+        low, high = tolerance_window(middle, tolerance)
+    except WindowRefusedError:
+        return False
+    if type(value) is type(low) is type(high) is float:
+        return low <= value <= high
+    return holds(value, low, "ge") and holds(value, high, "le")
 
 
 def _is_infinite(value) -> bool:
@@ -315,13 +348,13 @@ def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
         return middle, middle
     try:
         return middle - tolerance, middle + tolerance
-    except TypeError as refusal:
+    except (TypeError, OverflowError) as refusal:
         if raised_inside(refusal):  # their own `__sub__` raised: that is a bug in the value
             raise
         if not all(isinstance(operand, numbers.Number) for operand in (middle, tolerance)):
             raise WindowRefusedError(str(refusal)) from None
-        # a `Decimal` refuses arithmetic with a `float` or a `Fraction`, which both convert exactly, while
-        # an infinite or NaN one does not convert at all
+        # a `Decimal` refuses a `float` or a `Fraction` and a bignum overflows a `float`, all converting
+        # exactly, while an infinite or NaN one does not convert at all
         try:
             exact, span = fractions.Fraction(middle), fractions.Fraction(tolerance)
         except (TypeError, ValueError, OverflowError) as failed:

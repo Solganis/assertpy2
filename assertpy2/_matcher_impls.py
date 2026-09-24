@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
@@ -27,7 +26,9 @@ from ._engine._compare import (
     _build_compare_config,
     _config_note,
     _guarded_not_equal,
+    _is_real_number,
     _keyed_types_differ,
+    _within_tolerance,
     tolerance_window,
 )
 from ._engine._equality import (
@@ -54,7 +55,7 @@ from ._engine._membership import (
     searchable,
     subset_faults,
 )
-from ._engine._ordering import UnorderableError, first_out_of_order, holds
+from ._engine._ordering import UnorderableError, first_out_of_order, holds, nan_operand
 from ._engine._path import _ROOT, _Path
 from ._engine._require import (
     NON_MATCHER_TYPES,
@@ -611,14 +612,6 @@ class BetweenMatcher(BaseMatcher):
         return f"a value between <{self.low}> and <{self.high}>"
 
 
-def _is_nan(value: Any) -> bool:
-    """Whether value is a NaN float/Decimal; False for operands math.isnan rejects (datetime, str)."""
-    try:
-        return math.isnan(value)
-    except (TypeError, ValueError):
-        return False
-
-
 class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
         zero = timedelta(0) if isinstance(tolerance, timedelta) else 0
@@ -626,16 +619,18 @@ class CloseToMatcher(BaseMatcher):
             raise ValueError("given tolerance arg must be positive")
         self.expected = expected
         self.tolerance = tolerance
+        # a tolerance that is no ordered distance has nothing within it, not even the value itself
+        self._measures = (_is_real_number(tolerance) or isinstance(tolerance, timedelta)) and not nan_operand(tolerance)
 
     def matches(self, value: Any) -> bool:
-        # NaN is never close, and the band is anchored on `value`, so inf against inf never forms `inf - inf`
-        if _is_nan(value) or _is_nan(self.expected) or _is_nan(self.tolerance):
+        if not self._measures:
             return False
         try:
+            # no ordered window around the value is no distance, or an equal pair from any domain would be close
             low, high = tolerance_window(value, self.tolerance)
-            return holds(self.expected, low, "ge") and holds(self.expected, high, "le")
+            return holds(low, high, "le") and _within_tolerance(value, self.expected, self.tolerance)
         except (WindowRefusedError, UnorderableError):
-            return False  # operands that form no window are a non-match, as an unorderable pair is
+            return False
 
     def describe(self) -> str:
         return f"a value within <{self.tolerance}> of <{self.expected}>"

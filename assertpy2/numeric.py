@@ -6,7 +6,7 @@ import math
 import numbers
 from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
-from ._engine._compare import tolerance_window
+from ._engine._compare import _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
@@ -113,6 +113,16 @@ class NumericMixin(_MixinBase):
         `other`, and `other` is what the caller wrote.
         """
         return self._holds(low, "ge", named or (low, "low")) and self._holds(high, "le", named or (high, "high"))
+
+    def _close(self, other, tolerance):
+        """Whether val is within *tolerance* of *other*, the same answer whichever of the two is val.
+
+        A pair the ordering engine cannot order is refused, in the words the single relations use.
+        """
+        try:
+            return _within_tolerance(self.val, other, tolerance)
+        except UnorderableError as unordered:
+            self._refuse_unordered(unordered, other, "other")
 
     def _holds(self, bound, relation, named):
         """`holds` against one bound, with a pair the engine cannot order refused under *named*."""
@@ -630,14 +640,9 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        if not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other)):
-            return self.error(
-                f"Expected <{_safe_str(self.val)}> to be close to <{other}> within tolerance "
-                f"<{tolerance}>, but was not.",
-                expected=(other, tolerance),
-            )
-        low, high = tolerance_window(other, tolerance)
-        if not self._within(low, high, named=(other, "other")):
+        # read through `math.isnan`, which converts the value: the gate the capable facade keys this on
+        nan = not isinstance(self.val, datetime.datetime) and (_is_nan(self.val) or _is_nan(other))
+        if nan or not self._close(other, tolerance):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to be close to"
@@ -678,8 +683,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
-        low, high = tolerance_window(other, tolerance)
-        if self._within(low, high, named=(other, "other")):
+        if self._close(other, tolerance):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
                     f"Expected <{_fmt_operand(self.val)}> to not be close to"

@@ -2714,3 +2714,55 @@ class TestSummaryValuesStayWithinTheirBudget:
     def test_a_long_value_says_how_much_was_cut(self, value):
         shown = _shown(value)
         assert_that(shown).starts_with(stable_repr(value)[:_VALUE_LIMIT]).ends_with("more chars)")
+
+
+_TENTHS = st.integers(-20, 20).map(lambda tenths: tenths / 10)
+_TOLERANCES = st.sampled_from([0.1, 0.2, 0.3, 0.5, 1.0])
+
+
+@settings(deadline=None)
+@example(value=-1.1, other=-0.9, tolerance=0.2)
+@example(value=float("inf"), other=float("inf"), tolerance=1.0)
+@example(value=float("nan"), other=float("nan"), tolerance=1.0)
+@given(value=_TENTHS, other=_TENTHS, tolerance=_TOLERANCES)
+def test_closeness_is_one_answer_however_it_is_asked(value, other, tolerance):
+    """The builder windowed around `other`, the matcher around the value and `tolerance=` took the difference,
+    and a float rounds each differently at the boundary: `-1.1` was close to `-0.9` and not the reverse."""
+    answers = {
+        "is_close_to": _passes(lambda: assert_that(value).is_close_to(other, tolerance)),
+        "swapped": _passes(lambda: assert_that(other).is_close_to(value, tolerance)),
+        "matcher": match.close_to(other, tolerance).matches(value),
+        "tolerance": _passes(lambda: assert_that(value).is_equal_to(other, tolerance=tolerance)),
+        "negated": not _passes(lambda: assert_that(value).is_not_close_to(other, tolerance)),
+    }
+    assert_that(set(answers.values())).described_as(str(answers)).is_length(1)
+
+
+_MOMENT = datetime.datetime(2026, 9, 24, 12, 0, 0)
+_CLOSE_PAIRS = st.one_of(
+    st.tuples(
+        st.integers(-20, 20).map(lambda tenths: decimal.Decimal(tenths) / 10),
+        _TENTHS,
+        _TOLERANCES,
+    ),
+    st.tuples(
+        st.integers(-20, 20).map(lambda tenths: fractions.Fraction(tenths, 10)),
+        _TENTHS,
+        _TOLERANCES,
+    ),
+    st.tuples(
+        st.integers(-20, 20).map(lambda seconds: _MOMENT + datetime.timedelta(seconds=seconds)),
+        st.integers(-20, 20).map(lambda seconds: _MOMENT + datetime.timedelta(seconds=seconds)),
+        st.integers(0, 10).map(lambda seconds: datetime.timedelta(seconds=seconds)),
+    ),
+)
+
+
+@settings(deadline=None)
+@given(pair=_CLOSE_PAIRS)
+def test_closeness_is_symmetric_in_every_domain_it_accepts(pair):
+    """`Decimal` against a float, a `Fraction`, and a datetime within a `timedelta`: the same answer both ways."""
+    value, other, tolerance = pair
+    forward = _passes(lambda: assert_that(value).is_close_to(other, tolerance))
+    assert_that(_passes(lambda: assert_that(other).is_close_to(value, tolerance))).is_equal_to(forward)
+    assert_that(match.close_to(other, tolerance).matches(value)).is_equal_to(forward)
