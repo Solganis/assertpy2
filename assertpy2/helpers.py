@@ -26,7 +26,14 @@ from ._engine._equality import (
     normalize_key_specs,
     supports_subscript,
 )
-from ._engine._introspection import MappingLike, TakenApart, field_pair, is_namedtuple, keyed_snapshot
+from ._engine._introspection import (
+    MappingLike,
+    TakenApart,
+    is_namedtuple,
+    keyed_names,
+    keyed_pair,
+    keyed_snapshot,
+)
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type
@@ -416,6 +423,7 @@ class HelpersMixin(_MixinBase):
             if id(mapping) in _seen:
                 return "{<circular ref>}"
             _seen = _seen | {id(mapping)}
+            keyed_fields = keyed_names(mapping, counterpart)
             parts: list[_Part] = []
             pending = False
             # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
@@ -423,7 +431,11 @@ class HelpersMixin(_MixinBase):
                 if key not in counterpart:
                     part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                 else:
-                    decision = _node_decision(*field_pair(mapping, counterpart, key), config, field=key)
+                    decision = (
+                        _node_decision(*keyed_pair(mapping, counterpart, key), config, field=key)
+                        if key in keyed_fields
+                        else _node_decision(value, counterpart[key], config, field=key)
+                    )
                     if decision == "equal":
                         pending = True
                         continue

@@ -37,10 +37,11 @@ from ._compare import (
 from ._diff import _sub_diff_entries
 from ._introspection import (
     TakenApart,
-    field_pair,
     is_attrs_instance,
     is_model_dump_object,
     is_namedtuple,
+    keyed_names,
+    keyed_pair,
     model_field_values,
 )
 from ._path import _ROOT
@@ -405,8 +406,9 @@ def mapping_differs(
     ):
         # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; only the keys still compared
         return True
+    keyed = keyed_names(actual, expected)
     for key in keys_in_actual:
-        nested_left, nested_right = field_pair(left, right, key)
+        nested_left, nested_right = keyed_pair(left, right, key) if key in keyed else (left[key], right[key])
         if config is not None:
             decision = _node_decision(nested_left, nested_right, config, field=key)
             if decision == "equal":

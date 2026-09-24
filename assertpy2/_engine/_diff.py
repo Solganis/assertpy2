@@ -36,11 +36,12 @@ from ..errors import DiffEntry, DiffResult, _safe_repr
 from ._compare import _guarded_not_equal, _node_decision
 from ._introspection import (
     TakenApart,
-    field_pair,
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
     is_namedtuple,
+    keyed_names,
+    keyed_pair,
     keyed_snapshot,
     model_field_values,
 )
@@ -442,6 +443,7 @@ def _build_equality_diff(
     both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
     if both_model or both_attrs:
         actual_dict, expected_dict = _field_dict(actual, both_model), _field_dict(expected, both_model)
+        keyed = keyed_names(actual_dict, expected_dict)
         entries = []
         for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
@@ -449,7 +451,11 @@ def _build_equality_diff(
             elif key not in actual_dict:
                 entries.append(_prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
-                decision = _node_decision(*field_pair(actual_dict, expected_dict, key), config, field=key)
+                decision = (
+                    _node_decision(*keyed_pair(actual_dict, expected_dict, key), config, field=key)
+                    if key in keyed
+                    else _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                )
                 if decision == "leaf":
                     entries.append(_prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":
@@ -513,6 +519,7 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
     actual_keys = set(kept)
     expected_keys = set(kept_expected)
     entries.extend(_order_entries(actual, expected, kept, kept_expected, prefix))
+    keyed = keyed_names(kept, kept_expected)
     if config is not None and config.strict_types:
         # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
         stored = {key: key for key in kept_expected}
@@ -526,7 +533,11 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
         elif key not in actual_keys:
             entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=kept_expected[key]))
         else:
-            decision = _node_decision(*field_pair(kept, kept_expected, key), config, field=key)
+            decision = (
+                _node_decision(*keyed_pair(kept, kept_expected, key), config, field=key)
+                if key in keyed
+                else _node_decision(kept[key], kept_expected[key], config, field=key)
+            )
             if decision == "leaf":
                 entries.append(prefix.key(key).entry(actual=kept[key], expected=kept_expected[key]))
             elif decision != "equal":
@@ -615,6 +626,7 @@ def _sub_diff_entries(
     if both_model or both_attrs:
         child_seen = _seen | {id(actual), id(expected)}
         actual_dict, expected_dict = _field_dict(actual, both_model), _field_dict(expected, both_model)
+        keyed = keyed_names(actual_dict, expected_dict)
         entries = []
         for key in _ordered_keys(actual_dict, expected_dict):
             if key not in expected_dict:
@@ -622,7 +634,11 @@ def _sub_diff_entries(
             elif key not in actual_dict:
                 entries.append(prefix.attr(key).entry(actual=None, absent="actual", expected=expected_dict[key]))
             else:
-                decision = _node_decision(*field_pair(actual_dict, expected_dict, key), config, field=key)
+                decision = (
+                    _node_decision(*keyed_pair(actual_dict, expected_dict, key), config, field=key)
+                    if key in keyed
+                    else _node_decision(actual_dict[key], expected_dict[key], config, field=key)
+                )
                 if decision == "leaf":
                     entries.append(prefix.attr(key).entry(actual=actual_dict[key], expected=expected_dict[key]))
                 elif decision != "equal":
