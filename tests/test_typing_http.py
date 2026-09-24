@@ -20,8 +20,14 @@ pytest.importorskip("starlette")
 pytest.importorskip("flask")
 pytest.importorskip("django")
 
+import django.http
+import flask
+import httpx
+import requests
+import starlette.responses
+
 from assertpy2 import assert_that
-from tests import typing_harness
+from tests import typing_harness, typing_http
 
 _CASES = typing_harness.ROOT / "tests" / "typing_http.py"
 _INTERPRETER = sys.executable
@@ -76,3 +82,17 @@ def test_no_checker_refuses_a_response_its_own_assertions(reported) -> None:
     assert_that({checker: lines for checker, lines in refused.items() if lines}).described_as(
         "lines a checker refused, each a call the runtime answers"
     ).is_equal_to({})
+
+
+def test_every_line_the_checkers_accept_is_one_the_runtime_answers() -> None:
+    """Run as well as read: two lines here once type-checked through the dynamic hook and failed when called."""
+    from_requests = requests.Response()
+    from_requests.status_code, from_requests.reason = 200, "OK"
+    responses = (
+        from_requests,
+        httpx.Response(200),
+        starlette.responses.Response(status_code=200),
+        flask.Response('{"ok": true}', mimetype="application/json"),
+        django.http.HttpResponse(status=200, content_type="text/plain", charset="utf-8"),
+    )
+    typing_http.responses_keep_their_own_assertions(*responses)

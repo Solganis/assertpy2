@@ -50,7 +50,11 @@ class Flasked:
 
 
 class Django:
-    """The Django shape: ``content`` as bytes, no parser, and the request as a WSGI environ."""
+    """The Django shape: ``content`` as bytes, no parser, and the request as a WSGI environ.
+
+    It also reads its headers by key and iterates its body, as the real one does, which is what makes it
+    look like a mapping to anything asking only for ``__getitem__`` and ``__iter__``.
+    """
 
     def __init__(self, status_code=200, body=b'{"id": 7}', environ=None):
         self.status_code = status_code
@@ -58,6 +62,12 @@ class Django:
         self.headers = {"Content-Type": "application/json"}
         if environ is not None:
             self.request = environ
+
+    def __getitem__(self, header):
+        return self.headers[header]
+
+    def __iter__(self):
+        return iter([self.content])
 
 
 class Redirected(Django):
@@ -271,6 +281,13 @@ class TestWhatCountsAsAResponse:
         with pytest.raises(AssertionFailure) as failure:
             assert_that(Hostile()).is_equal_to(1)
         assert_that(str(failure.value)).contains("to be equal to")
+
+    def test_a_response_that_reads_its_headers_by_key_answers_its_status_by_attribute(self):
+        response = Django(status_code=404)
+        assert_that(response).has_status_code(404)
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(response).has_status_code(200)
+        assert_that(str(failure.value)).starts_with("Expected <404> to be equal to <200> on attribute <status_code>")
 
 
 class TestTheStepIntoTheBody:
@@ -551,6 +568,7 @@ class TestTheClientsThemselves:
         from django.http import JsonResponse
 
         response = JsonResponse({"error": "locked"}, status=502)
+        assert_that(response).has_status_code(502)
         with pytest.raises(AssertionFailure) as failure:
             assert_that(response).decoded_as_json().is_equal_to({"error": "open"})
         assert_that(str(failure.value)).contains("from a response with status 502")

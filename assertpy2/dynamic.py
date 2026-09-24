@@ -6,6 +6,7 @@ from typing import Any
 
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
+from .http_mixin import response_of
 from .outcome import Requirement
 
 __tracebackhide__ = True
@@ -78,7 +79,12 @@ class DynamicMixin(_MixinBase):
         attr_name = attr[4:]
         err_msg: str | None = None
         val_is_namedtuple = is_namedtuple(self.val)
-        is_dict = isinstance(self.val, collections.abc.Iterable) and hasattr(self.val, "__getitem__")
+        # a django response reads its headers by key, yet `has_status_code()` means the attribute, as on every client
+        is_dict = (
+            isinstance(self.val, collections.abc.Iterable)
+            and hasattr(self.val, "__getitem__")
+            and response_of(self.val) is None
+        )
 
         if is_dict and not val_is_namedtuple:
             # dict-likes are read by key below, so a real method absent as a key would skip this gate and raise KeyError
