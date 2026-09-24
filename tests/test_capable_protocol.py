@@ -857,11 +857,12 @@ def _resolved(arguments: tuple[object, ...], value: object) -> tuple[object, ...
     return tuple(one.read(value) if isinstance(one, _Relative) else one for one in arguments)
 
 
-_REFUSALS = (AssertionFailure, TypeError, ValueError, LookupError, OSError)
+_REFUSALS = (AssertionFailure, TypeError, ValueError, LookupError, OSError, ImportError)
 """What asking answers with instead of a builder: a failed verdict, a refusal, a lookup the value's own
-`__getitem__` stops, and a path that is not there.  Anything else fails, which is how `UnorderableError`
-surfaced.  Judged by type and not by where it was raised, so a bug raising one of these reads as a refusal:
-the claim here is what a builder hands back, not that nothing crashes."""
+`__getitem__` stops, a path that is not there, and an optional library this cell does not install.
+Anything else fails, which is how `UnorderableError` surfaced.  Judged by type and not by where it was
+raised, so a bug raising one of these reads as a refusal: the claim here is what a builder hands back, not
+that nothing crashes."""
 
 _EXPECTATION_VIEWS = frozenset({"_ExpectedRaiseAssertion", "_ExpectedWarningAssertion", "_ExpectedCompletionAssertion"})
 """Views over the callable itself, `value` being the callable on `_CallableAssertion`."""
@@ -995,18 +996,26 @@ def test_the_floor_reaches_every_name_the_property_holds() -> None:
     """The floor counts answers, not attempts, so a name nothing on it answers is not held rather than held vacuously.
 
     Checked in both directions: a name the floor starts to reach has to move into the property, and one it
-    stops reaching has to be excused here by name.
+    stops reaching has to be excused here by name.  A name needing a library this cell lacks is left out of
+    both sides, so the record reads the same wherever it runs: the array pair has no numpy on 3.15.
     """
-    reached = {
-        name
-        for subject in _FLOOR
-        for name in _PROMISED
-        for arguments in _ASKED_WITH
-        if _asked(name, subject, arguments) is not _REFUSED
-    }
-    assert_that(sorted(set(_PROMISED) - reached)).described_as("promised and never answered on the floor").is_equal_to(
-        sorted(_NOT_HELD)
-    )
+    reached: set[str] = set()
+    unavailable: set[str] = set()
+    for subject in _FLOOR:
+        for name in _PROMISED:
+            for arguments in _ASKED_WITH:
+                try:
+                    getattr(assert_that(subject), name)(*_resolved(arguments, subject))
+                # a refusal per question, and the next question may still be answered
+                except ImportError:  # noqa: PERF203
+                    unavailable.add(name)
+                except _REFUSALS:
+                    continue
+                else:
+                    reached.add(name)
+    assert_that(sorted(set(_PROMISED) - reached - unavailable)).described_as(
+        "promised and never answered on the floor"
+    ).is_equal_to(sorted(_NOT_HELD - unavailable))
 
 
 def test_the_claims_are_the_shapes_the_umbrella_is_bound_to() -> None:
