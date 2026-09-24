@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+import types
 from collections import Counter
 from typing import TYPE_CHECKING, Any, Final, cast
 
@@ -207,6 +209,36 @@ def _effective_cause(exc: BaseException) -> BaseException | None:
     return None
 
 
+def _require_synchronous_result(result: object, func: object) -> None:
+    """Refuse a call that handed back something whose outcome comes later: an awaitable or an async generator.
+
+    Judged as it stood, `does_not_raise()` passed on an `async def` that raises when awaited, and `raises()`
+    failed on it.  Awaitable means what `await` accepts, a type with `__await__` or a generator-based
+    coroutine, not a class registered with the ABC and lacking one.  A plain generator is not refused: the
+    call does not run its body either, but it can be consumed synchronously, which assertpy always allowed.
+
+    A coroutine the call created, from a coroutine function, is closed so it does not warn that it was
+    never awaited.  One handed back from elsewhere, and a future or a task, is left alone: closing or
+    cancelling it would be a side effect on somebody else's work.
+    """
+    # the type is asked first: `inspect.isawaitable` on a plain value cost 157 ns, this 38
+    if not (hasattr(type(result), "__await__") or isinstance(result, (types.GeneratorType, types.AsyncGeneratorType))):
+        return
+    if inspect.isasyncgen(result):
+        remedy = "iterate it with `async for` to assert on what it does"
+    elif inspect.isawaitable(result):
+        remedy = "await the call yourself to assert on its result, exception or warning"
+        created = inspect.iscoroutinefunction(func) or inspect.iscoroutinefunction(type(func).__call__)
+        if created and inspect.iscoroutine(result):
+            result.close()
+    else:
+        return
+    raise TypeError(
+        f"<{_callable_name(func)}> returned {type(result).__name__}, whose outcome when_called_with() cannot see;"
+        f" {remedy}, and use eventually() only to poll an async value"
+    )
+
+
 class _InertBuilder:
     """No-op builder returned after a failed raises/when_called_with in soft mode.
 
@@ -312,6 +344,10 @@ class ExceptionMixin(_MixinBase):
         [`warns()`][assertpy2.warning.WarningMixin.warns] or
         [`does_not_warn()`][assertpy2.warning.WarningMixin.does_not_warn] (expected warning).
 
+        Only what happens before the call returns is judged.  A call that hands back an awaitable or an
+        async generator is refused with ``TypeError``, since what it does when awaited or iterated comes
+        later.  A plain generator is judged as returned: its body runs only when it is consumed.
+
         Args:
             *some_args: the args to call ``val()``
             **some_kwargs: the kwargs to call ``val()``
@@ -344,7 +380,7 @@ class ExceptionMixin(_MixinBase):
             return self._when_called_with_not_expected(*some_args, **some_kwargs)
 
         try:
-            self.val(*some_args, **some_kwargs)
+            result = self.val(*some_args, **some_kwargs)
         except BaseException as e:
             if issubclass(type(e), self.expected):
                 captured = self.builder(_safe_str(e), self.description, self.kind, logger=self.logger)
@@ -361,6 +397,7 @@ class ExceptionMixin(_MixinBase):
                 )
                 return cast("Self", _InertBuilder(self._value_taint_reason))
 
+        _require_synchronous_result(result, self.val)
         self.error(
             f"Expected <{_callable_name(self.val)}> to raise <{self.expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
@@ -694,6 +731,7 @@ class ExceptionMixin(_MixinBase):
             if _escaped(e):
                 raise
             return self
+        _require_synchronous_result(result, self.val)
         self._return_value = result
         return self
 

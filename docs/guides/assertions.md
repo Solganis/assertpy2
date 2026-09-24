@@ -232,6 +232,12 @@ custom matcher's `matches()`, or from a `comparators=` entry, and whether it is 
 through a composed matcher. `eventually()` is the other half of the story and a different one: it polls
 an async probe for you, so an async callable belongs there as the thing being polled.
 
+The call assertions refuse one for the same reason. `raises()`, `does_not_raise()`, `warns()` and
+`does_not_warn()` judge what happens before the call returns, and an `async def` has not run its body by
+then, so `when_called_with()` raises `TypeError` rather than pass or fail on a body it never saw. Await
+the call inside `pytest.raises` or `pytest.warns` instead. An async generator is refused the same way,
+and a plain generator is not: its body runs only when you consume it, so assert on that.
+
 Ruff already covers part of it, and this check does not repeat what it does:
 
 - the second line is ruff's [`B018`](https://docs.astral.sh/ruff/rules/useless-expression/)

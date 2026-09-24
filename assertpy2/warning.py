@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, refuse
 from .errors import _callable_name
-from .exception import _InertBuilder
+from .exception import _InertBuilder, _require_synchronous_result
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -95,6 +95,7 @@ class WarningMixin(_MixinBase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
+        _require_synchronous_result(result, self.val)
         matched = [warning for warning in caught if issubclass(warning.category, expected)]
         if matched:
             captured = self.builder(str(matched[0].message), self.description, self.kind, logger=self.logger)
@@ -120,6 +121,7 @@ class WarningMixin(_MixinBase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")  # bypass __warningregistry__ "show once" dedup and filterwarnings=error
             result = self.val(*some_args, **some_kwargs)
+        _require_synchronous_result(result, self.val)
         matched = [warning for warning in caught if issubclass(warning.category, expected)]
         if matched:
             seen = ", ".join(sorted({warning.category.__name__ for warning in matched}))
