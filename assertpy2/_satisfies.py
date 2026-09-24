@@ -72,7 +72,27 @@ property-based test generates empty collections as a matter of course.  Turn it 
 """
 
 
-def _warn_vacuous(name: str, allow_empty: bool, *, depth: int = 3) -> None:
+def _guarding(builder: _MixinBase) -> bool:
+    """Whether an assertion on *builder* that checked nothing should say so now.
+
+    Not when another assertion runs it for its own answer.  Under `not_` its pass is the failure the
+    caller gets, and the warning beside it pointed into the library.  Under a snapshot the keys it
+    ignores include the placeholders the snapshot checks with matchers of their own.  Kept on the
+    builder, so an assertion a callback of the caller's runs on a builder of its own still speaks.
+    """
+    return _VACUOUS_GUARD and not builder._answering_another
+
+
+def _warn_nothing_compared(*, depth: int = 3) -> None:
+    """Say that `is_equal_to()` passed with ``ignore`` and ``include`` leaving no key to compare."""
+    warnings.warn(
+        "is_equal_to() passed with ignore and include leaving no key to compare, so nothing was checked.",
+        VacuousAssertionWarning,
+        stacklevel=depth,
+    )
+
+
+def _warn_vacuous(builder: _MixinBase, name: str, allow_empty: bool, *, depth: int = 3) -> None:
     """Say that *name* passed over nothing, pointing at the line that called the assertion.
 
     Called by the assertion itself once its walk is over, never before it.  Asking the subject first
@@ -84,7 +104,7 @@ def _warn_vacuous(name: str, allow_empty: bool, *, depth: int = 3) -> None:
     *depth* counts the frames to the line that called the assertion: three from a method that walks in
     its own body, four when the walk it shares with its sibling is a method of its own.
     """
-    if allow_empty or not _VACUOUS_GUARD:
+    if allow_empty or not _guarding(builder):
         return
     warnings.warn(
         f"{name}() passed over an empty value, so nothing was checked. Pass allow_empty=True if that is intended.",
@@ -148,7 +168,7 @@ class SatisfiesMixin(_MixinBase):
                 diff=DiffResult(kind="match", entries=failures),
             )
         if not walked:
-            _warn_vacuous(name, allow_empty, depth=4)
+            _warn_vacuous(self, name, allow_empty, depth=4)
         return self
 
     def has_no_none_fields(self, *, allow_empty: bool = False) -> Self:
@@ -294,7 +314,7 @@ class SatisfiesMixin(_MixinBase):
                         expected=_describe_matcher(matcher),
                     )
         if not walked:
-            _warn_vacuous(name, allow_empty, depth=4)
+            _warn_vacuous(self, name, allow_empty, depth=4)
         return self
 
     def matches_structure(self, spec: dict[Any, Any]) -> Self:
@@ -689,7 +709,7 @@ class SatisfiesMixin(_MixinBase):
             )
         # warned here: a length mismatch is the verdict, and warning first said the call passed over nothing
         if not val_items:
-            _warn_vacuous("zip_satisfies", allow_empty)
+            _warn_vacuous(self, "zip_satisfies", allow_empty)
         entries = [
             _ROOT.index(index).entry(actual=val_item, expected=other_item)
             for index, (val_item, other_item) in enumerate(zip(val_items, other_items, strict=True))

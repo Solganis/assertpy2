@@ -124,7 +124,7 @@ class CollectionMixin(_MixinBase):
                     expected=searched_in,
                 )
             if not entries:
-                _warn_vacuous("is_subset_of", allow_empty)
+                _warn_vacuous(self, "is_subset_of", allow_empty)
         else:
             walked = list(materialized(self.val))
             # flattened once: a one-shot superset is drained by the first pass and reads empty to a second
@@ -143,7 +143,7 @@ class CollectionMixin(_MixinBase):
                     expected=superset_values,
                 )
             if not walked:
-                _warn_vacuous("is_subset_of", allow_empty)
+                _warn_vacuous(self, "is_subset_of", allow_empty)
 
         return self
 
@@ -213,7 +213,7 @@ class CollectionMixin(_MixinBase):
                 f"but subset {self._fmt_items([earlier, later])} at index {index} is not."
             )
         if not walked:
-            _warn_vacuous("is_sorted", allow_empty)
+            _warn_vacuous(self, "is_sorted", allow_empty)
         return self
 
     def has_same_size_as(self, other: Sized) -> Self:

@@ -171,6 +171,9 @@ class VacuousAssertionWarning(UserWarning):
     returned no rows makes the assertion pass without examining anything.  That is the most common
     silent false pass in a test suite, and the one a green run never reveals.  Raise it to a failure
     with ``-W error::assertpy2.VacuousAssertionWarning`` or silence it per call with ``allow_empty``.
+
+    ``is_equal_to`` under ``ignore`` or ``include`` emits it too, when the filter left no key of the
+    compared dict or object to compare.
     """
 
 

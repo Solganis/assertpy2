@@ -1263,14 +1263,15 @@ class NegatedBuilder(Generic[_S]):
         the other three modes now do the same.
         """
         builder = self._builder
-        kind, sink = builder.kind, builder._check_sink
+        kind, sink, answering = builder.kind, builder._check_sink, builder._answering_another
         builder.kind = "check"
         builder._check_sink = None
+        builder._answering_another = True
         try:
             attr(*args, **kwargs)
             return builder._check_sink
         finally:
-            builder.kind, builder._check_sink = kind, sink
+            builder.kind, builder._check_sink, builder._answering_another = kind, sink, answering
 
     def _negated_strict(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object

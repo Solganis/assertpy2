@@ -511,11 +511,24 @@ class SnapshotMixin(_MixinBase):
                     f"Expected snapshot placeholder <{key}> to satisfy {_describe_matcher(matcher)}, but was {actual}."
                 )
 
+    def _compared_to_stored(self, stored: object, **options: object) -> Self:
+        """`is_equal_to()` against what a snapshot stored, as an answer to the snapshot rather than the caller.
+
+        The keys a snapshot ignores include the placeholders it checks with matchers of their own, so a
+        comparison left with nothing to compare still checked them, and no word on it is due.
+        """
+        answering = self._answering_another
+        self._answering_another = True
+        try:
+            return self.is_equal_to(stored, **options)
+        finally:
+            self._answering_another = answering
+
     def _snapshot_stale(self, snapshot_value, *, ignore, include, tolerance, comparators) -> bool:
         """Whether the stored snapshot no longer matches val, decided via a strict throwaway builder
         (under soft/warn kinds ``self.is_equal_to`` would not raise)."""
         try:
-            self.builder(self.val, "").is_equal_to(
+            self.builder(self.val, "")._compared_to_stored(
                 snapshot_value, ignore=ignore, include=include, tolerance=tolerance, comparators=comparators
             )
         except AssertionError:
@@ -697,7 +710,7 @@ class SnapshotMixin(_MixinBase):
             if placeholders:
                 self._check_placeholders(placeholders)
             try:
-                return self.is_equal_to(
+                return self._compared_to_stored(
                     snapshot_value,
                     ignore=effective_ignore,
                     include=include,
@@ -804,7 +817,7 @@ class SnapshotMixin(_MixinBase):
         if placeholders:
             self._check_placeholders(placeholders)
         try:
-            return self.is_equal_to(
+            return self._compared_to_stored(
                 expected, ignore=effective_ignore, include=include, tolerance=tolerance, comparators=comparators
             )
         except AssertionFailure as mismatch:

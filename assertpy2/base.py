@@ -14,12 +14,12 @@ from ._engine._compare import (
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
-from ._engine._equality import key_specs_given, mapping_shaped
+from ._engine._equality import filtered_to_nothing, key_specs_given, mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
-from ._satisfies import SatisfiesMixin
+from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
 from .errors import _disambiguated, _safe_str, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
@@ -226,9 +226,13 @@ class BaseMixin(SatisfiesMixin):
 
         # cleared however this leaves, since a soft block goes on using the builder after a failure it collected
         try:
-            return self._compare_to(other, ignore=ignore, include=include, config=config)
+            compared = self._compare_to(other, ignore=ignore, include=include, config=config)
         finally:
             self._equality_comparison = False
+        if self._compared_nothing:
+            self._compared_nothing = False
+            _warn_nothing_compared()
+        return compared
 
     def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
         """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
@@ -245,6 +249,8 @@ class BaseMixin(SatisfiesMixin):
         if mapping_shaped(self.val, check_values=False) and mapping_shaped(other, check_values=False):
             if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
                 self._dict_err(self.val, other, ignore=ignore, include=include, config=config)
+            else:
+                self._note_if_nothing_compared(self.val, other, ignore=ignore, include=include)
         elif key_specs_given(ignore) or key_specs_given(include):
             val_is_namedtuple = is_namedtuple(self.val)
             other_is_namedtuple = is_namedtuple(other)
@@ -297,6 +303,17 @@ class BaseMixin(SatisfiesMixin):
             )
         if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
             self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
+        else:
+            self._note_if_nothing_compared(actual_dict, expected_dict, ignore=ignore, include=include)
+
+    def _note_if_nothing_compared(self, actual: object, expected: object, *, ignore: object, include: object) -> None:
+        """Keep, for `is_equal_to` to warn about, a pass whose key filter left nothing to compare."""
+        if (
+            (ignore is not None or include is not None)
+            and _guarding(self)
+            and filtered_to_nothing(actual, expected, ignore=ignore, include=include)
+        ):
+            self._compared_nothing = True
 
     def _seq_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two sequences pairwise, converting elements to dicts for ignore/include."""

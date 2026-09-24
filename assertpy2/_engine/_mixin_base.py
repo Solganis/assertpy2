@@ -27,6 +27,21 @@ class _MixinBase:
     where they sit, and a comparator of the caller's own owns its leaves outright.
     """
 
+    _answering_another = False
+    """Whether the assertion running on this builder answers another assertion rather than the caller.
+
+    Set by `not_` around the assertion it inverts, and by a snapshot around its own comparison, so the
+    vacuity guard leaves both alone.  On the builder rather than in a context variable: an assertion that
+    a comparator or predicate of the caller's runs is on a builder of its own, and is the caller's own.
+    """
+
+    _compared_nothing = False
+    """Whether a comparison under ``ignore``/``include`` passed with no key left to compare.
+
+    Set by the comparison on the pass it decided, never on a failure, and read and cleared by
+    `is_equal_to()` as soon as that comparison returns.
+    """
+
     if TYPE_CHECKING:
         val: Any
         description: str

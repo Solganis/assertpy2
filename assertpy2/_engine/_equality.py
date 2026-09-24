@@ -346,6 +346,21 @@ class IncludeKeysMissingError(LookupError):
         self.missing = missing
 
 
+def filtered_to_nothing(actual: object, expected: object, *, ignore: object, include: object) -> bool:
+    """Whether ``ignore`` and ``include`` left none of the keys two mappings had to compare.
+
+    Asked once a comparison under a key filter has passed, so both sides kept the same keys and reading
+    one is enough.  Two empty mappings still checked that both are empty, and an include naming a key the
+    actual side lacks is a failure of its own, so neither counts.  Only `dict` values are read a second
+    time: another mapping may answer differently.
+    """
+    if not isinstance(actual, dict) or not isinstance(expected, dict) or not (actual or expected):
+        return False
+    ignores = ignore_specs(ignore) if key_specs_given(ignore) else []
+    includes = include_specs(include) if key_specs_given(include) else []
+    return not _kept_keys(actual, ignores, includes) and not missing_include_keys(actual, includes)
+
+
 def missing_include_keys(mapping: MappingLike, includes: list) -> list:
     """Include-keys naming something the mapping does not have."""
     return [key for key in includes if not isinstance(key, (re.Pattern, type)) and key not in mapping]

@@ -548,7 +548,7 @@ command-line flags, each documented where it is used:
 
 | Flag | What it does |
 |---|---|
-| [`--assertpy2-vacuous`](assertions.md#assertions-that-checked-nothing) | Warn when a universal assertion passes over an empty value |
+| [`--assertpy2-vacuous`](assertions.md#assertions-that-checked-nothing) | Warn when a universal assertion passes over an empty value, or `is_equal_to` compares nothing |
 | [`--assertpy2-dangling`](assertions.md#assertions-that-never-ran) | Warn when `assert_that()` is written as a statement that asserts nothing |
 | [`--assertpy2-snapshot-update`](testing.md#snapshot-testing) | Overwrite failing snapshots with the current values |
 | [`--assertpy2-snapshot-ci`](testing.md#snapshot-testing) | Fail instead of creating a missing snapshot (auto-enabled on CI) |

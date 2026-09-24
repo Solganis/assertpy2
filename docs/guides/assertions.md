@@ -169,6 +169,22 @@ assert_that(archived_orders).all_satisfy(lambda o: o["closed"], allow_empty=True
 - `each`, `all_satisfy`, `all_fields_satisfy`, `has_no_none_fields`
 - `zip_satisfies`, `is_sorted`, `is_subset_of`
 
+The same guard watches `is_equal_to` under `ignore` or `include`. A filter that removed every key of
+the compared dict or object leaves it nothing to check:
+
+```python
+assert_that({"id": 7}).is_equal_to({"id": 8}, ignore="id")  # passes, and compared nothing
+```
+
+```text
+VacuousAssertionWarning: is_equal_to() passed with ignore and include leaving no
+key to compare, so nothing was checked.
+```
+
+Two empty dicts under a filter stay quiet, since the comparison checked that both are empty. A
+snapshot is not watched this way: the keys it ignores include its placeholders, which it checks with
+matchers of their own.
+
 The negative ones never warn. For `none_satisfy`, `does_not_contain` and
 `does_not_contain_duplicates` an empty subject is the expected pass, since "no errors were logged" is
 exactly what such a test wanted to hear.

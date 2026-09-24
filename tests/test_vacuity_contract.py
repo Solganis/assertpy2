@@ -9,13 +9,15 @@ than left as an accident that a rewrite could flip in silence.
 
 import dataclasses
 import inspect
+import types
 import warnings
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import AssertionFailure, VacuousAssertionWarning, _satisfies, assert_that, match
+from assertpy2 import AssertionFailure, VacuousAssertionWarning, _satisfies, assert_that, match, soft_assertions
+from assertpy2.snapshot import SnapshotCreatedWarning
 
 
 def _vararg_assertions() -> list[str]:
@@ -269,8 +271,22 @@ class TestVacuousGuard:
             lambda: assert_that([2, 1]).is_sorted(),
             lambda: assert_that({"a": 1}).is_subset_of({"b": 2}),
             lambda: assert_that([1]).zip_satisfies([2], lambda left, right: left == right),
+            lambda: assert_that({"a": 1}).is_equal_to({"a": 2}, ignore="a"),
+            lambda: assert_that({"a": 1}).is_equal_to({"a": 2, "b": 3}, ignore="a"),
+            lambda: assert_that({"a": 1}).is_equal_to({"a": 1}, include="z"),
         ],
-        ids=["each", "all_satisfy", "one-shot", "fields", "sorted", "subset", "zip"],
+        ids=[
+            "each",
+            "all_satisfy",
+            "one-shot",
+            "fields",
+            "sorted",
+            "subset",
+            "zip",
+            "filtered",
+            "filtered-fail",
+            "include",
+        ],
     )
     def test_turning_the_guard_on_never_changes_a_verdict(self, call):
         """The property every defect in this guard broke, asked of one call at a time.
@@ -461,3 +477,168 @@ class TestVacuousGuard:
     def test_the_guard_is_off_by_default(self):
         warnings.simplefilter("error", VacuousAssertionWarning)
         assert_that([]).all_satisfy(lambda item: item > 0)
+
+
+@dataclasses.dataclass
+class _Record:
+    left: int
+    right: int = 0
+
+
+class TestAKeyFilterThatLeftNothing:
+    """`is_equal_to` under `ignore` or `include` that removed every key compared nothing, and passed."""
+
+    @pytest.fixture
+    def guarded(self, monkeypatch):
+        monkeypatch.setattr(_satisfies, "_VACUOUS_GUARD", True)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "options"),
+        [
+            ({"a": 1}, {"a": 2}, {"ignore": "a"}),
+            (_Record(1), _Record(2, 3), {"ignore": ["left", "right"]}),
+            ({"a": 1}, {"a": 2}, {"include": "a", "ignore": "a"}),
+            ({}, {"a": 1}, {"ignore": "a"}),
+        ],
+        ids=["mapping", "object", "include-then-ignore", "only-expected-had-keys"],
+    )
+    def test_it_says_so_at_the_caller(self, guarded, actual, expected, options):
+        with pytest.warns(VacuousAssertionWarning, match="is_equal_to") as caught:
+            assert_that(actual).is_equal_to(expected, **options)
+        assert_that(caught[0].filename).ends_with("test_vacuity_contract.py")
+
+    def test_a_check_says_so_too(self, guarded):
+        with pytest.warns(VacuousAssertionWarning, match="is_equal_to"):
+            assert_that(assert_that({"a": 1}).check().is_equal_to({"a": 2}, ignore="a")).is_true()
+
+    def test_a_key_left_to_compare_stays_quiet(self, guarded):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 2}, ignore="a")
+        assert_that({}).is_equal_to({}, ignore="a")
+
+    def test_a_failure_is_all_that_is_said(self, guarded):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        with pytest.raises(AssertionFailure):
+            assert_that({"a": 1}).is_equal_to({"a": 2, "b": 3}, ignore="a")
+        with pytest.raises(AssertionFailure, match="include"):
+            assert_that({"a": 1}).is_equal_to({"a": 1}, include="z")
+
+    def test_a_failure_a_soft_block_collected_is_all_that_is_said(self, guarded):
+        """A soft failure returns instead of raising, and the missing include reads as no difference."""
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        with pytest.raises(AssertionError, match="include"), soft_assertions():
+            assert_that({"a": 1}).is_equal_to({"a": 1}, include="z")
+
+    def test_a_mapping_other_than_a_dict_is_not_read_twice(self, guarded):
+        """Another mapping may answer differently a second time, so the guard reads only a dict again."""
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that(types.MappingProxyType({"a": 1})).is_equal_to({"a": 2}, ignore="a")
+
+    def test_one_comparison_is_said_once(self, guarded):
+        """What the first comparison left behind is not said again by the next one on the same builder."""
+        with pytest.warns(VacuousAssertionWarning) as caught, pytest.raises(AssertionError), soft_assertions():
+            builder = assert_that({"a": 1})
+            builder.is_equal_to({"a": 2}, ignore="a")
+            builder.is_equal_to([1])
+        assert_that([one for one in caught if issubclass(one.category, VacuousAssertionWarning)]).is_length(1)
+
+    def test_a_sequence_of_records_is_left_alone(self, guarded):
+        """Its length was compared, which is a check."""
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that([{"a": 1}]).is_equal_to([{"a": 2}], ignore="a")
+
+    def test_a_snapshot_whose_every_field_is_a_placeholder_stays_quiet(self, guarded, tmp_path):
+        """The placeholders are ignored by the comparison and checked by their matchers."""
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        warnings.simplefilter("ignore", SnapshotCreatedWarning)
+        for _ in range(2):
+            assert_that({"id": 7}).snapshot(
+                id="placeholders", path=str(tmp_path), placeholders={"id": match.is_positive()}
+            )
+
+    def test_what_a_snapshot_compared_is_not_read_by_the_next_assertion(self, guarded, tmp_path):
+        """The snapshot left nothing to compare, and a soft failure after it on the same builder said so too."""
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        warnings.simplefilter("ignore", SnapshotCreatedWarning)
+        placeholders = {"id": match.is_positive()}
+        assert_that({"id": 7}).snapshot(id="chained", path=str(tmp_path), placeholders=placeholders)
+        with pytest.raises(AssertionError, match="to be equal to"), soft_assertions():
+            chained = assert_that({"id": 7}).snapshot(id="chained", path=str(tmp_path), placeholders=placeholders)
+            chained.is_equal_to([7])
+
+    def test_the_guard_is_off_by_default(self):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        assert_that({"a": 1}).is_equal_to({"a": 2}, ignore="a")
+
+
+class TestANegationSaysNothingBesideItsFailure:
+    """The assertion `not_` inverts passing is the failure reported, and the warning pointed into the library."""
+
+    @pytest.fixture
+    def guarded(self, monkeypatch):
+        monkeypatch.setattr(_satisfies, "_VACUOUS_GUARD", True)
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda: assert_that({"a": 1}).not_.is_equal_to({"a": 2}, ignore="a"),
+            lambda: assert_that([]).not_.all_satisfy(lambda item: True),
+        ],
+        ids=["filtered", "quantifier"],
+    )
+    def test_it_fails_and_warns_nothing(self, guarded, call):
+        warnings.simplefilter("error", VacuousAssertionWarning)
+        with pytest.raises(AssertionFailure, match="NOT"):
+            call()
+
+    def test_an_assertion_a_callback_runs_is_the_caller_s_own(self, guarded):
+        """Quieted for the whole context, a comparator's own empty `all_satisfy` said nothing either."""
+
+        def comparator(actual, expected):
+            assert_that([]).all_satisfy(lambda item: True)
+            return actual == expected
+
+        with pytest.warns(VacuousAssertionWarning), pytest.raises(AssertionFailure):
+            assert_that({"a": 1}).not_.is_equal_to({"a": 1}, comparators={"a": comparator})
+
+    def test_the_guard_speaks_again_once_the_negation_is_over(self, guarded):
+        with pytest.raises(AssertionFailure):
+            assert_that([]).not_.all_satisfy(lambda item: True)
+        with pytest.warns(VacuousAssertionWarning):
+            assert_that([]).all_satisfy(lambda item: True)
+
+
+_RECORDS = st.dictionaries(st.sampled_from("abc"), st.integers(0, 1), max_size=3)
+_KEY_FILTERS = st.lists(st.sampled_from("abc"), max_size=3, unique=True)
+
+
+@settings(deadline=None)
+@example(actual={"a": 0}, expected={"a": 1}, ignore=["a"], include=[])
+@example(actual={"a": 0}, expected={"a": 0}, ignore=["a"], include=["a"])
+@example(actual={"a": 0}, expected={"a": 0}, ignore=[], include=["b"])
+@given(actual=_RECORDS, expected=_RECORDS, ignore=_KEY_FILTERS, include=_KEY_FILTERS)
+def test_the_key_filter_guard_warns_exactly_on_a_pass_that_compared_nothing(actual, expected, ignore, include):
+    """The guard never changes a verdict, and speaks on a pass whose filter left none of the keys either side had."""
+
+    def verdict():
+        try:
+            assert_that(actual).is_equal_to(expected, ignore=ignore, include=include)
+        except AssertionFailure:
+            return "failed"
+        return "passed"
+
+    previous = _satisfies._VACUOUS_GUARD
+    try:
+        _satisfies._VACUOUS_GUARD = False
+        unguarded = verdict()
+        _satisfies._VACUOUS_GUARD = True
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", VacuousAssertionWarning)
+            guarded = verdict()
+    finally:
+        _satisfies._VACUOUS_GUARD = previous
+    kept = [key for key in actual if key not in ignore and (not include or key in include)]
+    assert_that(guarded).is_equal_to(unguarded)
+    assert_that(any(issubclass(one.category, VacuousAssertionWarning) for one in caught)).is_equal_to(
+        guarded == "passed" and bool(actual or expected) and not kept
+    )
