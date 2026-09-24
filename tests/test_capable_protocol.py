@@ -14,7 +14,10 @@ whole reason the façade exists.
 from __future__ import annotations
 
 import ast
+import builtins
 import collections
+import datetime
+import functools
 import numbers
 import pathlib
 import subprocess
@@ -22,13 +25,17 @@ import sys
 from typing import TYPE_CHECKING, ClassVar
 
 import pytest
+from hypothesis import example, given, settings
+from hypothesis import strategies as st
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
     from types import ModuleType
 
 import assertpy2.assertpy
 from assertpy2 import AssertionFailure, assert_that
 from assertpy2._engine import _capable_typing
+from assertpy2._engine._operations import ALSO_ASSERTS, CONFIGURES, TRANSFORMS, WITHOUT_A_VERDICT
 from assertpy2.assertpy import AssertionBuilder
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -654,3 +661,400 @@ class TestTheLaddersTheBuilderDeclares:
         assert_that([ast.unparse(node.returns) for node in checks if node.returns]).is_equal_to(
             ["_CheckAnyValue[_CapableT_co]"]
         )
+
+
+_KEEPS_THE_SUBJECT = frozenset({"Self", "_CapableAssertion[_CapableT_co]"})
+"""Both ways the façade says the subject comes back: `Self`, or its own name where a restricted `self` rules it out."""
+
+_PIVOTS = {name for name, kind in WITHOUT_A_VERDICT.items() if kind == TRANSFORMS} | ALSO_ASSERTS
+"""Every operation handing back another value, as `test_operation_contract.py` derives it from the source."""
+
+_VIEWS = _ROOT / "assertpy2" / "_engine" / "_typing.py"
+
+
+def _written(path: pathlib.Path, protocol: str) -> ast.ClassDef:
+    return next(
+        node
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.ClassDef) and node.name == protocol
+    )
+
+
+def _after_self(node: ast.FunctionDef) -> str:
+    """A rung's parameters after `self`, and what it hands back, as text."""
+    rendered = ast.parse(ast.unparse(node)).body[0]
+    if not isinstance(rendered, ast.FunctionDef):  # pragma: no cover - every rung here is a function
+        raise TypeError(node.name)
+    rendered.args.args = rendered.args.args[1:]
+    rendered.body = [ast.Expr(value=ast.Constant(value=...))]
+    rendered.decorator_list = []
+    return ast.unparse(rendered)
+
+
+class TestWhatEachAssertionHandsBack:
+    """The return side, which every gate above leaves alone: they measure what a rung accepts.
+
+    Flattened from the runtime, every pivot but `decoded_as_json()` said the subject came back, because the
+    mixins write them `-> Self`.  `raises().when_called_with().matches()` was refused on an enum class that
+    runs it, and `extracting()` kept a container's type over the list it hands back.
+    """
+
+    def test_every_pivot_is_declared_rather_than_left_to_the_hook(self) -> None:
+        """`__getattr__` answers a name the façade lacks with `Self`, the very claim this class refuses."""
+        missing = sorted(_PIVOTS - set(_declarations()) - _attributes())
+        assert_that(missing).described_as("a pivot the hook would answer as handing the subject back").is_empty()
+
+    def test_no_pivot_says_it_hands_the_subject_back(self) -> None:
+        """Every rung of every pivot, except in a ladder the builder itself declares.
+
+        There the rung saying `Self` is the one a value the pivot refuses reaches, and
+        `TestTheLaddersTheBuilderDeclares` holds it rung for rung.  Anywhere else it is a flattened `-> Self`.
+        """
+        ladders = set(_builder_ladders())
+        claiming = sorted(
+            f"{name} -> {ast.unparse(node.returns)}"
+            for name, nodes in _declarations().items()
+            if name in _PIVOTS and name not in ladders
+            for node in nodes
+            if ast.unparse(node.returns) in _KEEPS_THE_SUBJECT
+        )
+        assert_that(claiming).described_as("a pivot the façade says hands the subject back").is_empty()
+
+    def test_the_call_family_lands_where_the_callable_view_lands(self) -> None:
+        """Held against the view written by hand, rung for rung, with only its return type opened to `Any`.
+
+        `_Callable` names no return, so `_P_co` has nothing to bind to on the façade, and the receiver is
+        restricted there where the view needs no restriction: those two differences and no others.
+        """
+        view = _written(_VIEWS, "_CallableAssertion")
+        setters = sorted(name for name, kind in WITHOUT_A_VERDICT.items() if kind == CONFIGURES)
+        on_the_view = {
+            name: [
+                _after_self(item).replace("_P_co", "Any")
+                for item in view.body
+                if isinstance(item, ast.FunctionDef) and item.name == name
+            ]
+            for name in setters
+        }
+        on_the_facade = {name: [_after_self(node) for node in _declarations().get(name, [])] for name in setters}
+        assert_that(on_the_facade).described_as("an expectation set on a capable callable").is_equal_to(on_the_view)
+        receivers = {ast.unparse(node.args.args[0].annotation) for name in setters for node in _declarations()[name]}
+        assert_that(receivers).is_equal_to({"_CapableAssertion[_Callable]"})
+
+    def test_a_call_with_no_expectation_is_refused_where_it_is_written(self) -> None:
+        """Left out, `__getattr__` would answer it, and the run time refuses it until an expectation is set."""
+        declared = {
+            item.target.id: ast.unparse(item.annotation)
+            for item in _written(pathlib.Path(_capable_typing.__file__), "_CapableAssertion").body
+            if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+        }
+        assert_that(declared).contains_entry({"when_called_with": "_NoExpectationOnAChain"})
+
+
+def _umbrella() -> dict[str, set[str]]:
+    """`{shape: its members}` for every shape `_CapableT` is bound to, which is what the umbrella claims a value by."""
+    tree = ast.parse(_VIEWS.read_text(encoding="utf-8"))
+    bound = next(
+        keyword.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and node.args and ast.unparse(node.args[0]) == "'_CapableT'"
+        for keyword in node.keywords
+        if keyword.arg == "bound"
+    )
+    shapes = {name.id for name in ast.walk(bound) if isinstance(name, ast.Name)}
+    return {
+        node.name: {
+            item.name if isinstance(item, ast.FunctionDef) else ast.unparse(item.target)
+            for item in node.body
+            if isinstance(item, (ast.FunctionDef, ast.AnnAssign))
+        }
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name in shapes
+    }
+
+
+def _looked_up(self: object, key: object) -> object:
+    """A key and the older sequence protocol at once, ending in `IndexError` so a walk through it stops."""
+    if key == 0:
+        return {"id": 1}
+    if key == "id":
+        return 1
+    raise IndexError(key)
+
+
+def _returning(self: object, *args: object, **kwargs: object) -> object:
+    return 42
+
+
+_CLAIMS: dict[str, dict[str, object]] = {
+    # the elements are records, so `extracting()` has a field to hand back and not only a refusal
+    "_CollectionShape": {"__iter__": lambda self: iter(({"id": 1},))},
+    "_HttpResponseShape": {
+        "status_code": 200,
+        "headers": {"content-type": "application/json"},
+        "json": lambda self: {"id": 1},
+    },
+    "_ModelShape": {"model_dump": lambda self, *args, **kwargs: {"id": 1}},
+    "_DataclassShape": {"__dataclass_fields__": {}},
+    "_MappingLikeShape": {"keys": lambda self: ("id",), "__getitem__": _looked_up},
+}
+"""One stand-in per shape the umbrella is bound to, keyed by that shape, so a drawn value is always one it claims."""
+
+_EXTRAS: dict[str, dict[str, object]] = {
+    "sized": {"__len__": lambda self: 1},
+    "searched": {"__contains__": lambda self, item: True},
+    "valued": {"values": lambda self: (1,)},
+    # ordered as the number one, so a relation can pass and not only fail
+    "ordered": {
+        "__lt__": lambda self, other: 1 < other,
+        "__gt__": lambda self, other: 1 > other,
+        "__le__": lambda self, other: 1 <= other,
+        "__ge__": lambda self, other: 1 >= other,
+    },
+    "converts": {"__float__": lambda self: 1.0},
+    "indexes": {"__index__": lambda self: 1},
+    "a path": {"__fspath__": lambda self: "."},
+}
+"""What the restricted assertions read on top of a claim, carried in any combination."""
+
+
+@functools.cache
+def _shape(carried: frozenset[str], call: Callable[..., object] | None, registered: bool) -> type:
+    """One class per combination, so a shape drawn again is neither rebuilt nor registered again."""
+    members: dict[str, object] = {}
+    for capability in sorted(carried):
+        members.update(_CLAIMS.get(capability) or _EXTRAS[capability])
+    if call is not None:
+        members["__call__"] = call
+    drawn = type("_Drawn", (), members)
+    if registered:
+        numbers.Real.register(drawn)
+    return drawn
+
+
+class _Relative:
+    """An argument read off the value asked, since most verdicts pass only when asked about the value itself."""
+
+    def __init__(self, shown: str, read: Callable[[object], object]) -> None:
+        self.shown = shown
+        self.read = read
+
+    def __repr__(self) -> str:
+        return self.shown
+
+
+_ASKED_WITH = [
+    *_ARGUMENTS,
+    (1,),
+    (2,),
+    (lambda item: False,),
+    (_Relative("<the value>", lambda value: value),),
+    (_Relative("<its type>", type),),
+]
+
+
+def _resolved(arguments: tuple[object, ...], value: object) -> tuple[object, ...]:
+    return tuple(one.read(value) if isinstance(one, _Relative) else one for one in arguments)
+
+
+_REFUSALS = (AssertionFailure, TypeError, ValueError, LookupError, OSError)
+"""What asking answers with instead of a builder: a failed verdict, a refusal, a lookup the value's own
+`__getitem__` stops, and a path that is not there.  Anything else fails, which is how `UnorderableError`
+surfaced.  Judged by type and not by where it was raised, so a bug raising one of these reads as a refusal:
+the claim here is what a builder hands back, not that nothing crashes."""
+
+_EXPECTATION_VIEWS = frozenset({"_ExpectedRaiseAssertion", "_ExpectedWarningAssertion", "_ExpectedCompletionAssertion"})
+"""Views over the callable itself, `value` being the callable on `_CallableAssertion`."""
+
+
+def _promise(returns: str) -> Callable[[object, object], bool] | None:
+    """What a rung's return says about the value handed back, or `None` where it says nothing checkable."""
+    if returns in _KEEPS_THE_SUBJECT or returns.split("[", 1)[0] in _EXPECTATION_VIEWS:
+        return lambda handed, subject: handed is subject
+    if returns.startswith("_ListAssertion["):
+        return lambda handed, subject: isinstance(handed, list)
+    return None
+
+
+def _a_class(written: str) -> bool:
+    """Whether *written* names a class at run time, which a shape protocol declared for checkers does not."""
+    module, _, name = written.strip().rpartition(".")
+    found = vars(datetime).get(name) if module == "datetime" else vars(builtins).get(written.strip())
+    return isinstance(found, type)
+
+
+def _asks_a_type(node: ast.FunctionDef) -> bool:
+    """Whether a rung is keyed on a class, which no value reaching the umbrella is: each has an overload above it."""
+    receiver = node.args.args[0].annotation if node.args.args else None
+    if not isinstance(receiver, ast.Subscript):
+        return False
+    return all(_a_class(part) for part in ast.unparse(receiver.slice).split("|"))
+
+
+_WRITES = frozenset({"snapshot", "matches_inline", "matches_contract_snapshot"})
+"""Asked with a generic argument these record a snapshot or rewrite the calling source."""
+
+
+def _promised() -> dict[str, Callable[[object, object], bool]]:
+    """Every name whose rungs all make one checkable promise, the writers and the type-keyed left out."""
+    promised: dict[str, Callable[[object, object], bool]] = {}
+    for name, nodes in _declarations().items():
+        if name.startswith("_") or name in _WRITES or any(_asks_a_type(node) for node in nodes):
+            continue
+        returns = {ast.unparse(node.returns) for node in nodes}
+        if len(returns) == 1 and (promise := _promise(returns.pop())) is not None:
+            promised[name] = promise
+    return promised
+
+
+_PROMISED = _promised()
+
+
+class _Emptied:
+    """A claimed value holding nothing, keys included, which is what a verdict about absence passes on."""
+
+    def __iter__(self) -> Iterator[object]:
+        return iter(())
+
+    def __len__(self) -> int:
+        return 0
+
+    def keys(self) -> tuple[()]:
+        return ()
+
+    def values(self) -> tuple[()]:
+        return ()
+
+    def __getitem__(self, key: object) -> object:
+        raise KeyError(key)
+
+
+_FLOOR = [
+    _shape(frozenset(_CLAIMS) | frozenset(_EXTRAS), _returning, True)(),
+    *(_shape(frozenset({claim}), None, False)() for claim in sorted(_CLAIMS)),
+    _Emptied(),
+]
+"""A value carrying everything, each claim alone, and one holding nothing: a verdict may need a capability absent."""
+
+_REFUSED = object()
+
+
+def _asked(name: str, subject: object, arguments: tuple[object, ...]) -> object:
+    """What asking hands back, or `_REFUSED` for an answer that is not a builder."""
+    try:
+        return getattr(assert_that(subject), name)(*_resolved(arguments, subject))
+    except _REFUSALS:
+        return _REFUSED
+
+
+_NOT_HELD = frozenset(
+    {
+        # a value that is none, zero, a NaN, infinite or negative, which no claimed value built here is
+        "is_none",
+        "is_zero",
+        "is_nan",
+        "is_inf",
+        "is_negative",
+        # an operand the value does not hold or sits far from, where `__contains__` answers yes to everything
+        "contains_none_of",
+        "contains_any_of",
+        "contains_sequence",
+        "contains_duplicates",
+        "is_not_close_to",
+        # a document, a schema, a spec or a frame to compare against
+        "has_json_path",
+        "does_not_have_json_path",
+        "matches_json_schema_from_file",
+        "conforms_to_openapi",
+        "is_frame_equal",
+        # a path that is absent, a directory, or named something
+        "does_not_exist",
+        "is_directory",
+        "is_named",
+        # a caught exception group
+        "contains_error",
+        "does_not_contain_error",
+        "matches_error_tree",
+        # text, or a class, as the value itself
+        "is_unicode",
+        "contains_ignoring_case",
+        "is_subclass_of",
+        # two operands of different kinds, an iterable and a predicate over pairs
+        "zip_satisfies",
+        # the failure entry point, which raises whatever it is asked
+        "error",
+    }
+)
+"""Promising names the property does not hold, because nothing on the floor answers them, with what each would need."""
+
+_HELD = {name: promise for name, promise in _PROMISED.items() if name not in _NOT_HELD}
+"""What the property holds: a promise it watches kept at least once on the floor, and never one it cannot."""
+
+
+def test_the_floor_reaches_every_name_the_property_holds() -> None:
+    """The floor counts answers, not attempts, so a name nothing on it answers is not held rather than held vacuously.
+
+    Checked in both directions: a name the floor starts to reach has to move into the property, and one it
+    stops reaching has to be excused here by name.
+    """
+    reached = {
+        name
+        for subject in _FLOOR
+        for name in _PROMISED
+        for arguments in _ASKED_WITH
+        if _asked(name, subject, arguments) is not _REFUSED
+    }
+    assert_that(sorted(set(_PROMISED) - reached)).described_as("promised and never answered on the floor").is_equal_to(
+        sorted(_NOT_HELD)
+    )
+
+
+def test_the_claims_are_the_shapes_the_umbrella_is_bound_to() -> None:
+    """A drawn value is one the umbrella claims while every claim carries a whole shape and every shape has one."""
+    shapes = _umbrella()
+    assert_that(sorted(_CLAIMS)).is_equal_to(sorted(shapes))
+    short = {
+        shape: sorted(members - set(_CLAIMS[shape]))
+        for shape, members in shapes.items()
+        if members - set(_CLAIMS[shape])
+    }
+    assert_that(short).described_as("a claim missing a member of its shape").is_empty()
+
+
+_subjects = st.builds(
+    lambda claims, extras, call, registered: _shape(claims | extras, call, registered)(),
+    st.frozensets(st.sampled_from(sorted(_CLAIMS)), min_size=1),
+    st.frozensets(st.sampled_from(sorted(_EXTRAS))),
+    st.sampled_from([None, _returning]),
+    st.booleans(),
+)
+
+
+def _pinning_the_floor(test: Callable[..., None]) -> Callable[..., None]:
+    """Every name held, with every question, on every value of the floor, whatever the search draws."""
+    for subject in _FLOOR:
+        for name in _HELD:
+            for arguments in _ASKED_WITH:
+                test = example(name=name, subject=subject, arguments=arguments)(test)
+    return test
+
+
+@settings(deadline=None)
+@_pinning_the_floor
+@given(name=st.sampled_from(sorted(_HELD)), subject=_subjects, arguments=st.sampled_from(_ASKED_WITH))
+def test_what_the_facade_promises_is_what_comes_back(name: str, subject: object, arguments: tuple[object, ...]) -> None:
+    """A rung's promise about the value, held against the runtime on any value the umbrella claims.
+
+    The subject itself where the rung says `Self` or lands on an expectation view, a list where it lands on
+    the list view.  The runtime half of the static gates above: those trust the operation register, which
+    is derived from `self.builder(...)` calls, and a pivot written any other way would slip past them.
+    Found on its first run what the report did not name, `extracting()`, `filtered_on()` and
+    `flat_mapped()`.  A crash is not a refusal: counting what it swallowed found `UnorderableError`
+    escaping the four range assertions, which is why only `_REFUSALS` count as one.
+    """
+    handed_back = _asked(name, subject, arguments)
+    if handed_back is _REFUSED:
+        return
+    assert_that(_HELD[name](handed_back.val, subject)).described_as(
+        f"{name}{arguments!r} handed back {handed_back.val!r}"
+    ).is_true()

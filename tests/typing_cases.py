@@ -357,6 +357,7 @@ def _methods_that_do_not_fit_the_value() -> None:
     # these raises: no expectation set, no return value captured, no exception captured, or the value
     # under test is the callable and not a message
     assert_that(_adder).when_called_with(1, 2)  # case: called-with-no-expectation
+    assert_that(_Colour).when_called_with("red")  # case: called-with-no-expectation-on-a-capable-callable
     assert_that(_boom).raises(ValueError).when_called_with().returned()  # case: returned-after-raises
     assert_that(_adder).does_not_raise(ValueError).when_called_with(1, 2).raised()  # case: raised-after-no-raise
     assert_that(_noisy).warns(DeprecationWarning).when_called_with().raised()  # case: raised-after-warns

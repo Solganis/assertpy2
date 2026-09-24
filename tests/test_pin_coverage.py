@@ -62,6 +62,10 @@ _UNPINNABLE = {
     # no expression produces its receiver: a nullable capable value resolves to the object fallback,
     # measured, so `_CapableAssertion[_U | None]` is a `self` nothing hands back
     ("_CapableAssertion", "is_not_none", "_CapableAssertion", "*|None"),
+    # keyed on text or bytes, which have overloads above the umbrella, so no value it claims reaches them
+    ("_CapableAssertion", "decoded_as", "AssertionBuilder", ""),
+    ("_CapableAssertion", "extracting_group", "AssertionBuilder", ""),
+    ("_CapableAssertion", "matches_with_groups", "AssertionBuilder", ""),
     # `not_` on every view, held by `test_negated_protocols.py` instead: it derives the pairs from the
     # reachable closure, so a view added later is covered without a pin being remembered for it
     ("_ArrayAssertion", "not_", "_NegatedArrayAssertion", "<the subject's own type>"),

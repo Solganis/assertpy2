@@ -258,10 +258,17 @@ if TYPE_CHECKING:
 
     # the four ways to set an expectation, each landing the call somewhere different: an exception
     # message, a warning message, or the callable itself with the return value reachable
-    assert_type(assert_that(len).raises(ValueError), _ExpectedRaiseAssertion[int])
-    assert_type(assert_that(len).warns(), _ExpectedWarningAssertion[int])
-    assert_type(assert_that(len).does_not_raise(ValueError), _ExpectedCompletionAssertion[int])
-    assert_type(assert_that(len).does_not_warn(), _ExpectedCompletionAssertion[int])
+    assert_type(assert_that(lambda: int("1")).raises(ValueError), _ExpectedRaiseAssertion[int])
+    assert_type(assert_that(lambda: int("1")).warns(), _ExpectedWarningAssertion[int])
+    assert_type(assert_that(lambda: int("1")).does_not_raise(ValueError), _ExpectedCompletionAssertion[int])
+    assert_type(assert_that(lambda: int("1")).does_not_warn(), _ExpectedCompletionAssertion[int])
+    # the same four on a callable the umbrella claims, over `Any` since `_Callable` names no return
+    assert_type(assert_that(_CallableResponse()).raises(ValueError), _ExpectedRaiseAssertion[Any])
+    assert_type(assert_that(_CallableResponse()).warns(), _ExpectedWarningAssertion[Any])
+    assert_type(assert_that(_CallableResponse()).does_not_raise(ValueError), _ExpectedCompletionAssertion[Any])
+    assert_type(assert_that(_CallableResponse()).does_not_warn(), _ExpectedCompletionAssertion[Any])
+    assert_type(assert_that(_Shade).raises(ValueError).when_called_with("x"), _InvokedAssertion)
+    assert_type(assert_that(_CallableResponse()).warns().when_called_with(), _WarnedAssertion)
     assert_type(assert_that(len).warns().when_called_with(), _WarnedAssertion)
     assert_type(assert_that(len).does_not_raise(ValueError).when_called_with(), _CompletedAssertion[int])
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
@@ -669,6 +676,17 @@ if TYPE_CHECKING:
     assert_type(assert_that(_Countable()).satisfies(_is_anything), AssertionBuilder[_Order])
     assert_type(assert_that(_Countable()).is_instance_of(str), AssertionBuilder[str])
     assert_type(assert_that(_Countable()).is_instance_of_any(str, int), AssertionBuilder[str | int])
+    # pivots the runtime writes `-> Self`: a list from the three a claimed value answers, an open builder otherwise
+    assert_type(assert_that(_Countable()).extracting("id"), _ListAssertion[Any])
+    assert_type(assert_that(_Countable()).filtered_on(lambda item: True), _ListAssertion[Any])
+    assert_type(assert_that(_Countable()).flat_mapped(lambda item: [item]), _ListAssertion[Any])
+    assert_type(assert_that(_Countable()).at_json_path("$.id"), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).returned(), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).raised(), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).errors(), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).error_of(KeyError), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).caused_by(KeyError), AssertionBuilder[Any])
+    assert_type(assert_that(_Countable()).has_root_cause(KeyError), AssertionBuilder[Any])
 
     # the element pivot on a capable value that is a mapping, which is the rung it keys on
     assert_type(assert_that(_Rowish()).first(), AssertionBuilder[str])

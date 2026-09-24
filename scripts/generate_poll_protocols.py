@@ -71,7 +71,12 @@ TARGET_CAPABLE = ROOT / "assertpy2" / "_engine" / "_capable_typing.py"
 TARGET_NEGATED = ROOT / "assertpy2" / "_engine" / "_negated_typing.py"
 
 sys.path.insert(0, str(ROOT))
-from assertpy2._engine._operations import NOT_AN_OPERATION, WITHOUT_A_VERDICT  # noqa: E402 - needs the path
+from assertpy2._engine._operations import (  # noqa: E402 - needs the path
+    ALSO_ASSERTS,
+    NOT_AN_OPERATION,
+    TRANSFORMS,
+    WITHOUT_A_VERDICT,
+)
 
 # `not_` stays a property: the rewrite into a chain over the same value would have made it a call.  The
 # two polls are rungs like any other, restricted to a chain over a callable, which is what a second poll
@@ -851,12 +856,36 @@ _BY_HAND: Final = frozenset(
         "builder",
         "error",
         "check",
+        "raises",
+        "does_not_raise",
+        "warns",
+        "does_not_warn",
+        "when_called_with",
     }
 )
 """Declared in the header instead, because the builder declares each of them as a ladder for checkers.
 
 Flattened to the mixin's own signature they would lose what the ladder buys: the narrowing out of
-, the narrowing to a checked class, and the key type a pivot lands on.
+`None`, the narrowing to a checked class, and the key type a pivot lands on.
+
+The call family is here for the other reason a signature misleads: each is written `-> Self`, and the call
+it waits for hands back the message or the result.  Flattened, `raises().when_called_with().matches()` was
+refused on an enum class that runs it.
+"""
+
+_PIVOTS: Final = {name for name, kind in WITHOUT_A_VERDICT.items() if kind == TRANSFORMS} | ALSO_ASSERTS
+"""Every operation handing back a value other than the subject, as `tests/test_operation_contract.py` derives it.
+
+Most are written `-> Self` in the runtime, which says the subject comes back.  A flattened one says what
+it hands back as `AssertionBuilder[Any]` instead: honest where the runtime names nothing better, and a
+runtime that does, like `decoded_as_json()`, is kept as written.
+"""
+
+_LANDS_ON_A_LIST: Final = frozenset({"extracting", "filtered_on", "flat_mapped"})
+"""The pivots a value the umbrella claims can answer, each handing back a list, as the collection views say.
+
+On the open builder, `extracting().decoded_as()` type-checked and the list refused it.  Every other pivot
+refuses such a value before handing anything back, so where it would land decides nothing.
 """
 
 
@@ -893,11 +922,16 @@ def _capable_declaration(node: ast.FunctionDef) -> str:
     elided = [ast.Constant(value=...) for _ in rendered.args.defaults]
     rendered.args.defaults = elided
     rendered.args.kw_defaults = [None if one is None else ast.Constant(value=...) for one in rendered.args.kw_defaults]
+    claims_the_subject = rendered.returns is not None and ast.unparse(rendered.returns) == "Self"
     if node.name in _RESTRICTED:
         asked = _RESTRICTED[node.name]
         rendered.args.args[0].annotation = ast.parse(f"{_CAPABLE}[{asked}]", mode="eval").body
         # `Self` needs an unannotated receiver, so a restricted rung has to name what it hands back
-        rendered.returns = ast.parse(f"{_CAPABLE}[_CapableT_co]", mode="eval").body
+        if claims_the_subject:
+            rendered.returns = ast.parse(f"{_CAPABLE}[_CapableT_co]", mode="eval").body
+    if node.name in _PIVOTS and claims_the_subject:
+        landing = "_ListAssertion[Any]" if node.name in _LANDS_ON_A_LIST else "AssertionBuilder[Any]"
+        rendered.returns = ast.parse(landing, mode="eval").body
     return ast.unparse(rendered)
 
 
@@ -946,8 +980,18 @@ if TYPE_CHECKING:
     from ..matchers import Matcher
     from ._builder_check_typing import _CheckAnyValue
     from ._compat import Self
-    from ._poll_typing import _AsyncPoll, _SyncPoll
-    from ._typing import _E, _K, _R, _U, _V
+    from ._poll_typing import _AsyncPoll, _NoExpectationOnAChain, _SyncPoll
+    from ._typing import (
+        _E,
+        _K,
+        _R,
+        _U,
+        _V,
+        _ExpectedCompletionAssertion,
+        _ExpectedRaiseAssertion,
+        _ExpectedWarningAssertion,
+        _ListAssertion,
+    )
 
     # covariant: the façade only ever hands the subject back, through `value`
     _CapableT_co = TypeVar("_CapableT_co", covariant=True)
@@ -1105,6 +1149,16 @@ if TYPE_CHECKING:
             ignoring: type[Exception] | tuple[type[Exception], ...] = ...,
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
+        # where the callable view lands: flattened, the runtime's `-> Self` kept a caught message typed as the callable
+        def raises(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedRaiseAssertion[Any]: ...
+        def does_not_raise(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedCompletionAssertion[Any]: ...
+        def warns(
+            self: _CapableAssertion[_Callable], warning: type[Warning] = ...
+        ) -> _ExpectedWarningAssertion[Any]: ...
+        def does_not_warn(
+            self: _CapableAssertion[_Callable], warning: type[Warning] = ...
+        ) -> _ExpectedCompletionAssertion[Any]: ...
+        when_called_with: _NoExpectationOnAChain
         # the builder's own helpers: left to `__getattr__`, `builder()` read as this facade over the value already here
         def builder(
             self,

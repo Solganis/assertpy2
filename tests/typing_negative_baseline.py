@@ -277,6 +277,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     # the call ladder: the expectation views carry `when_called_with()`, and each landing carries what
     # the run time lets it be asked.  All four checkers read a missing declaration the same way
     "called-with-no-expectation": _MISSING,
+    # the facade answers a name it lacks through `__getattr__`, so the refusal is declared instead
+    "called-with-no-expectation-on-a-capable-callable": _NOT_CALLABLE,
     "returned-after-raises": _MISSING,
     "raised-after-no-raise": _MISSING,
     "raised-after-warns": _MISSING,

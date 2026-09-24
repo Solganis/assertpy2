@@ -21,7 +21,7 @@ Most of it is not yours to edit:
 | `_engine/_typing.py` | 43 | 402 |
 | `_engine/_check_typing.py` | 35 | 319 |
 | `_engine/_builder_check_typing.py` | 1 | 313 |
-| `_engine/_capable_typing.py` | 10 | 324 |
+| `_engine/_capable_typing.py` | 10 | 322 |
 | `_engine/_poll_typing.py` | 10 | 1389 |
 | `_engine/_negated_typing.py` | 23 | 1043 |
 
@@ -36,7 +36,7 @@ move on every edit to a generated file.
 | `assertpy.py` overload ladder | hand | which protocol each subject resolves to |
 | `_engine/_poll_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py`, `assertpy.py`, `_engine/_operations.py` |
 | `_engine/_builder_check_typing.py` | `scripts/generate_poll_protocols.py` | the same three |
-| `_engine/_capable_typing.py` | `scripts/generate_poll_protocols.py` | the **runtime mixins** under `assertpy2/*.py` |
+| `_engine/_capable_typing.py` | `scripts/generate_poll_protocols.py` | the **runtime mixins** under `assertpy2/*.py`, `_engine/_operations.py` |
 | `_engine/_negated_typing.py` | `scripts/generate_poll_protocols.py` | `_typing.py` and `_engine/_operations.py` |
 | `_engine/_check_typing.py` | `scripts/generate_check_protocols.py` | `_typing.py`, `_engine/_operations.py` |
 
@@ -45,7 +45,8 @@ One script writes four of them. That is the part people miss.
 - **polling twins** answer `eventually()` and `eventually_sync()`, so every assertion hands back the chain.
 - **verdict twins** answer `check()`, returning an `AssertionOutcome` instead of `Self`.
 - **the capability façade** stands in for the builder itself, so it reads the mixins rather than the views:
-  reading the views would narrow it to what one value type answers. It skips its own hand-written list.
+  reading the views would narrow it to what one value type answers. It skips its own hand-written list, and
+  takes which mixin methods pivot from `_engine/_operations.py`, since the mixins write those `-> Self` too.
 - **negation twins** answer `.not_`, where one assertion hands back the view the chain had before it.
 
 `_engine/_operations.py` decides what the first two leave out: `NOT_AN_OPERATION`, `WITHOUT_A_VERDICT`.

@@ -12,6 +12,9 @@ The `assert_type` is the promise and the return annotation is the same promise, 
 from __future__ import annotations
 
 import datetime
+import enum
+import warnings
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from assertpy2 import assert_that
@@ -53,6 +56,23 @@ class _Counted:
 
 
 _ONE_ITERABLE = _OnlyIterable()
+
+
+class _Palette(enum.Enum):
+    """An enum class, callable and iterable, so the umbrella claims it before the callable overload can."""
+
+    RED = "red"
+
+
+class _Deprecated:
+    """A callable instance that is also iterable, the other shape the umbrella takes from the callable view."""
+
+    def __iter__(self) -> Iterator[int]:
+        return iter((1,))
+
+    def __call__(self) -> int:
+        warnings.warn("deprecated", DeprecationWarning, stacklevel=2)
+        return 42
 
 
 def _maybe_text() -> str | None:
@@ -230,6 +250,21 @@ def an_ordinary_negated_assertion_also_hands_the_view_back(value: object = b"x")
     still leaves the negated view: the positive `is_instance_of` after it narrows.
     """
     return assert_type(assert_that(value).not_.is_none().is_instance_of(bytes).value, bytes)
+
+
+def a_caught_error_on_a_capable_callable_is_the_message() -> str:
+    """`int` above takes the callable overload, so it never reached the façade, where this kept the enum class."""
+    return assert_type(assert_that(_Palette).raises(ValueError).when_called_with("blue").value, str)
+
+
+def a_warning_from_a_capable_callable_is_the_message() -> str:
+    return assert_type(assert_that(_Deprecated()).warns(DeprecationWarning).when_called_with().value, str)
+
+
+def a_completed_call_on_a_capable_callable_keeps_the_callable() -> Callable[..., Any]:
+    return assert_type(
+        assert_that(_Deprecated()).does_not_raise(ValueError).when_called_with().value, Callable[..., Any]
+    )
 
 
 def a_negated_predicate_on_a_caught_error_keeps_the_message() -> str:
