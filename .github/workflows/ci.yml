@@ -84,7 +84,7 @@ jobs:
         # the token rather than who opened the pull request: dependabot pushes its branches into this
         # repository, so a fork test reads false for it and it still runs without secrets.
         if: matrix.full-deps && env.CODECOV_TOKEN != ''
-        uses: codecov/codecov-action@0b35c9ecc4f0529d0eb674914510c22f85b196b4 # v7.1.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
