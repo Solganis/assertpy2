@@ -668,20 +668,33 @@ _UNION_ORIGINS: Final = (Union, UnionType)
 """What `get_origin` answers for a union, which is one class on 3.14+ and two below it."""
 
 
-def _require_class_info(expected: object, *, name: str, expectation: str = "a class", probe: object = None) -> None:
-    """Refuse what `isinstance` cannot take, member by member, since `isinstance` stops at the first match.
+def _require_class_info(
+    expected: object,
+    *,
+    name: str,
+    expectation: str = "a class",
+    probe: object = None,
+    check: Callable[[Any, Any], bool] = isinstance,
+) -> None:
+    """Refuse what *check* cannot take, member by member, since it stops at the first match.
 
     A union or a tuple holding `list[str]` is otherwise answered by whichever member comes first: taken
     when an earlier one matches, a `TypeError` when none does, and on 3.10 a union refused either way.
+    *check* is `isinstance`, or `issubclass`, which refuses more: a runtime protocol with data members
+    answers `isinstance` and not `issubclass`.
 
-    Every member is asked `isinstance(probe, member)`, left to right as `isinstance` reads them, so each
-    one meets only a value it would have met had the members before it not matched.  An assertion
-    passes the value it holds.  A matcher has none yet and passes `None`.
+    Every member is asked `check(probe, member)`, left to right as *check* reads them, so each one meets
+    only a value it would have met had the members before it not matched.  An assertion passes the value
+    it holds.  A matcher has none yet and passes `None`.  Asking every member is the point, so a member
+    after one that matched is asked too, and a member that is not a plain class is asked again by the
+    check that follows.  Answering from these probes instead would change the answer: below 3.14
+    `isinstance(x, Optional[int])` reads `issubclass(type(x), int)`, which a `Mock(spec=int)` fails and
+    `int | None` passes.
 
     Unions and tuples are flattened to any depth, both union spellings included: below 3.14
     `typing.Union[A, B]` is not a `types.UnionType`, so `get_origin` reads it.  A tuple is read from its
-    storage, as `isinstance` reads it, never through an `__iter__` a subclass overrides.  A class whose
-    metaclass is `type` itself is not asked, since nothing in it can override `__instancecheck__`.  The
+    storage, as *check* reads it, never through an `__iter__` a subclass overrides.  A class whose
+    metaclass is `type` itself is not asked, since nothing in it can override either hook.  The
     walk keeps its own stack so that every probe runs in this frame, which is the frame `raised_inside`
     reads.  A recursive flatten probing every member took `is_instance_of((int, str))` from 0.19 to
     0.72 us, and this walk takes it to 0.48.
@@ -697,7 +710,7 @@ def _require_class_info(expected: object, *, name: str, expectation: str = "a cl
             elif isinstance(member, UnionType) or get_origin(member) in _UNION_ORIGINS:
                 pending.extend(member.__args__[::-1])
             else:
-                isinstance(probe, member)
+                check(probe, member)
     except TypeError as exc:
         if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
             raise

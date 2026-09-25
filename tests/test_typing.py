@@ -243,6 +243,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(1).is_instance_of_any(str, int | float), _NumericAssertion[int])
     assert_type(assert_that(1).is_instance_of_any(str, (int, float)), _NumericAssertion[int])
     assert_type(assert_that("s").is_subclass_of(object), _StringAssertion)
+    assert_type(assert_that("s").is_subclass_of((str, bytes)), _StringAssertion)
+    assert_type(assert_that("s").is_subclass_of(str | bytes), _StringAssertion)
     # a caught message is text without being a `str` view, and its pivots are the only way to `_TextAssertion`
     assert_type(assert_that(len).raises(ValueError).when_called_with().first(), _TextAssertion)
 

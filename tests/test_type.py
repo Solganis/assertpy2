@@ -71,7 +71,7 @@ def test_is_instance_of_bad_arg_failure():
     assert_that(str(exc_info.value)).is_equal_to("given class arg must be a class, but was <'bad'> (str)")
 
 
-@pytest.mark.parametrize(
+_A_BAD_MEMBER_WHEREVER_IT_STANDS = pytest.mark.parametrize(
     "expected",
     [
         int | list[str],
@@ -92,6 +92,9 @@ def test_is_instance_of_bad_arg_failure():
         "legacy-union",
     ],
 )
+
+
+@_A_BAD_MEMBER_WHEREVER_IT_STANDS
 def test_is_instance_of_refuses_a_bad_member_whichever_comes_first(expected):
     with pytest.raises(TypeError, match="given class arg must be a class"):
         assert_that(1).is_instance_of(expected)
@@ -146,6 +149,7 @@ def test_is_instance_of_reads_a_tuple_from_its_storage_as_isinstance_does():
 
     assert_that(1).is_instance_of(Shadowed((int,)))
     assert_that(1).is_instance_of_any(Shadowed((int,)))
+    assert_that(bool).is_subclass_of(Shadowed((int,)))
 
 
 def test_is_instance_of_any():
@@ -220,3 +224,52 @@ def test_is_subclass_of_bad_arg_failure():
     with pytest.raises(TypeError) as exc_info:
         assert_that(Foo).is_subclass_of("bad")
     assert_that(str(exc_info.value)).is_equal_to("given class arg must be a class, but was <'bad'> (str)")
+
+
+@typing.runtime_checkable
+class _RuntimeNamed(typing.Protocol):
+    name: str
+
+
+class _AsksOnlyForClasses(type):
+    def __subclasscheck__(cls, subclass):
+        return object in subclass.__mro__
+
+
+class _AnyClass(metaclass=_AsksOnlyForClasses):
+    pass
+
+
+@_A_BAD_MEMBER_WHEREVER_IT_STANDS
+def test_is_subclass_of_refuses_a_bad_member_whichever_comes_first(expected):
+    with pytest.raises(TypeError, match="given class arg must be a class"):
+        assert_that(bool).is_subclass_of(expected)
+
+
+def test_is_subclass_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10():
+    with pytest.raises(TypeError, match="given class arg must be a class"):
+        assert_that(list).is_subclass_of(list[int])
+
+
+def test_is_subclass_of_refuses_a_bad_member_before_the_negation_reads_a_pass():
+    with pytest.raises(TypeError, match="given class arg must be a class"):
+        assert_that(bool).not_.is_subclass_of((int, list[str]))
+
+
+# a runtime protocol with data members answers `isinstance` and refuses `issubclass`, so an `isinstance` probe passes it
+@pytest.mark.parametrize("expected", [_RuntimeNamed, (int, _RuntimeNamed)], ids=["alone", "behind-a-matching-class"])
+def test_is_subclass_of_reports_a_protocol_issubclass_cannot_use_the_same_way_wherever_it_stands(expected):
+    with pytest.raises(TypeError, match="non-method members"):
+        assert_that(bool).is_subclass_of(expected)
+
+
+def test_is_subclass_of_reads_the_members_left_to_right_as_issubclass_does():
+    with pytest.raises(TypeError, match="given class arg must be a class"):
+        assert_that(bool).is_subclass_of((list[str], _RuntimeNamed))
+    with pytest.raises(TypeError, match="non-method members"):
+        assert_that(bool).is_subclass_of((_RuntimeNamed, list[str]))
+
+
+def test_is_subclass_of_asks_a_member_only_about_the_class_under_assertion():
+    # its `__subclasscheck__` reads `__mro__`, which `None` has not got: a stand-in value would break it
+    assert_that(bool).is_subclass_of((int, _AnyClass))

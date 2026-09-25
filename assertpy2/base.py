@@ -684,14 +684,14 @@ class BaseMixin(SatisfiesMixin):
             )
         return self
 
-    def is_subclass_of(self, some_class: type) -> Self:
+    def is_subclass_of(self, some_class: ClassInfo) -> Self:
         """Asserts that val is a class and is a subclass of the given class.
 
         Checks the class hierarchy using the ``issubclass()`` built-in, so a class counts as a
         subclass of itself.
 
         Args:
-            some_class: the expected ancestor class
+            some_class: the expected ancestor class, a union of them, or a tuple nested to any depth
 
         Examples:
             Usage:
@@ -710,18 +710,18 @@ class BaseMixin(SatisfiesMixin):
 
         Raises:
             AssertionError: if val is **not** a subclass of the given class
-            TypeError: if val or the given arg is not a class
+            TypeError: if val or the given arg, or any member of a union or tuple, is not a class
         """
         require_type(self.val, type, "a class")
-        try:
-            if not issubclass(self.val, some_class):
-                expected_name = _type_expression_name(some_class)
-                return self.error(
-                    f"Expected <{self.val.__name__}> to be subclass of <{expected_name}>, but was not.",
-                    expected=some_class,
-                )
-        except TypeError:
-            refuse(some_class, "a class", subject=argument("class"))
+        # as in `is_instance_of`, with `issubclass` asking each member
+        if not isinstance(some_class, type) or type(some_class) is GenericAlias:
+            _require_class_info(some_class, name="class", probe=self.val, check=issubclass)
+        if not issubclass(self.val, some_class):
+            expected_name = _type_expression_name(some_class)
+            return self.error(
+                f"Expected <{self.val.__name__}> to be subclass of <{expected_name}>, but was not.",
+                expected=some_class,
+            )
         return self
 
     def is_length(self, length: int) -> Self:
