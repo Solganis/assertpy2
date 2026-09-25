@@ -325,6 +325,52 @@ class TestRaisedPivot:
             assert_that(_raise_config).raised()
         assert_that(str(exc_info.value)).contains("no exception captured")
 
+    @pytest.mark.parametrize(
+        ("chain", "typed_as", "caught"),
+        [
+            (lambda: assert_that(_raise_config).raises(Exception).when_called_with(), Exception, _ConfigError),
+            (lambda: assert_that(_raise_wrapped_from).raises(ValueError).when_called_with(), ValueError, ValueError),
+            (
+                lambda: assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().caused_by(LookupError),
+                LookupError,
+                KeyError,
+            ),
+            (
+                lambda: assert_that(_raise_deep_chain).raises(ValueError).when_called_with().has_root_cause(KeyError),
+                KeyError,
+                KeyError,
+            ),
+            (
+                lambda: assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().not_.caused_by(OSError),
+                ValueError,
+                ValueError,
+            ),
+            (
+                lambda: assert_that(_raise_deep_chain).raises(ValueError).when_called_with().contains("top"),
+                ValueError,
+                ValueError,
+            ),
+        ],
+        ids=["a-subclass", "as-named", "a-cause", "the-root", "a-negated-pivot", "after-text"],
+    )
+    def test_what_it_hands_back_is_what_the_type_names(self, chain, typed_as, caught):
+        """The declaration types `raised()` by the class `raises()` or the last pivot named."""
+        assert_that(type(chain().raised().value)).is_same_as(caught).is_subclass_of(typed_as)
+
+    @pytest.mark.parametrize("pivot", ["caused_by", "has_root_cause", "error_of"])
+    def test_a_pivot_that_failed_softly_hands_back_no_exception(self, pivot):
+        """The chain goes inert, and its `.value` refuses rather than hand back what the type does not name."""
+        with pytest.raises(AssertionError), soft_assertions():
+            chain = getattr(assert_that(_raise_wrapped_from).raises(ValueError).when_called_with(), pivot)(OSError)
+            with pytest.raises(TypeError, match=r"cannot extract .value"):
+                _ = chain.raised().value
+
+    @needs_groups
+    def test_a_member_of_a_group_is_what_the_type_names(self):
+        chain = assert_that(_raise_nested_group).raises(_ExceptionGroup).when_called_with()
+        assert_that(chain.error_of(TypeError).raised().value).is_instance_of(TypeError)
+        assert_that(chain.not_.error_of(OSError).raised().value).is_instance_of(_ExceptionGroup)
+
 
 class TestCausedBy:
     def test_explicit_cause(self):

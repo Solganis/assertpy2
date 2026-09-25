@@ -32,6 +32,7 @@ if TYPE_CHECKING:
         _ArrayT_co,
         _CapableT,
         _FrameT_co,
+        _Landed,
         _ObjectAssertion,
         _Other,
         _P_co,
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     _KeySpecs = Hashable | list[Hashable] | set[Hashable] | frozenset[Hashable]
 
     _E = TypeVar("_E")
+    # a verdict reads no exception back, so the twin's is covariant where the view's is not
+    _Exc_co = TypeVar("_Exc_co", bound=BaseException, covariant=True)
     _N = TypeVar("_N", int, float)
     _K = TypeVar("_K")
     _V = TypeVar("_V")
@@ -671,12 +674,21 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
-    class _CheckInvokedAssertion(_CheckTextAssertion, Protocol):
+    class _CheckInvokedAssertion(_CheckTextAssertion, Protocol[_Exc_co]):
         """The verdict twin of `_InvokedAssertion`."""
 
+        @overload
+        def caused_by(self, ex: type[_Landed]) -> AssertionOutcome: ...
+        @overload
         def caused_by(self, ex: type) -> AssertionOutcome: ...
+        @overload
+        def error_of(self, ex: type[_Landed]) -> AssertionOutcome: ...
+        @overload
         def error_of(self, ex: type) -> AssertionOutcome: ...
         def does_not_contain_error(self, *ex_types: type) -> AssertionOutcome: ...
+        @overload
+        def has_root_cause(self, ex: type[_Landed]) -> AssertionOutcome: ...
+        @overload
         def has_root_cause(self, ex: type) -> AssertionOutcome: ...
         def contains_error(self, *ex_types: type) -> AssertionOutcome: ...
         def matches_error_tree(self, *expected: type | list[Any]) -> AssertionOutcome: ...
@@ -701,7 +713,7 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
-    class _CheckExpectedRaiseAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co]):
+    class _CheckExpectedRaiseAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co, _Exc_co]):
         """The verdict twin of `_ExpectedRaiseAssertion`."""
 
         def when_called_with(self, *some_args: object, **some_kwargs: object) -> AssertionOutcome: ...

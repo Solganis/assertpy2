@@ -34,7 +34,7 @@ def _generator() -> ModuleType:
 
     Inline rather than at the top on purpose: `scripts/` is not copied into mutmut's mutants tree, and
     a module-level import of it fails at collection, which takes the whole mutation baseline with it.
-    Reached from two tests, so the run can deselect those two instead of losing the file.
+    Reached from three tests, so the run can deselect those three instead of losing the file.
     """
     sys.path.insert(0, str(_ROOT / "scripts"))
     import generate_poll_protocols
@@ -72,6 +72,23 @@ def test_the_generated_twins_match_the_views_they_mirror() -> None:
     assert_that(produced).described_as(
         "the polling twins are out of step; run python scripts/generate_poll_protocols.py"
     ).is_equal_to(_formatted(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")))
+
+
+def test_only_the_exception_an_expectation_names_is_left_uncompared() -> None:
+    """A landing view's other parameters are state a chain could mean, so a differing one is a pivot."""
+    generator = _generator()
+    known = generator._classes(
+        ast.parse(
+            "class _Held(Protocol[_P_co]):\n"
+            "    @property\n"
+            "    def value(self) -> _P_co: ...\n"
+            "class _Waiting(_Held[_P_co], Protocol[_P_co, _Exc]): ...\n"
+            "class _Tagged(_Held[_P_co], Protocol[_P_co, _Tag]): ...\n"
+        )
+    )
+    assert_that(generator._keeps_its_value("_Waiting", ["_P_co", "_Landed"], "_Held", known)).is_true()
+    assert_that(generator._keeps_its_value("_Tagged", ["_P_co", "_Tag"], "_Held", known)).is_true()
+    assert_that(generator._keeps_its_value("_Tagged", ["_P_co", "_Other"], "_Held", known)).is_false()
 
 
 def test_the_generated_verdict_twin_matches_the_views_it_mirrors() -> None:

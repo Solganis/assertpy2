@@ -45,6 +45,7 @@ if TYPE_CHECKING:
         _ExpectedCompletionAssertion,
         _ExpectedRaiseAssertion,
         _ExpectedWarningAssertion,
+        _Landed,
         _ListAssertion,
     )
 
@@ -205,7 +206,10 @@ if TYPE_CHECKING:
             trace: bool = ...,
         ) -> _SyncPoll[Any]: ...
         # where the callable view lands: flattened, the runtime's `-> Self` kept a caught message typed as the callable
-        def raises(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedRaiseAssertion[Any]: ...
+        @overload
+        def raises(self: _CapableAssertion[_Callable], ex: type[_Landed]) -> _ExpectedRaiseAssertion[Any, _Landed]: ...
+        @overload
+        def raises(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedRaiseAssertion[Any, BaseException]: ...
         def does_not_raise(self: _CapableAssertion[_Callable], ex: type) -> _ExpectedCompletionAssertion[Any]: ...
         def warns(
             self: _CapableAssertion[_Callable], warning: type[Warning] = ...

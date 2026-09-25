@@ -659,6 +659,9 @@ err = assert_that(load).raises(ConfigError).when_called_with("bad.toml").raised(
 assert_that(err.code).is_equal_to(42)
 ```
 
+A type checker reads `err` as the `ConfigError` that `raises()` named. After `caused_by()`, `has_root_cause()`
+or `error_of()` it reads the type that step asked for, since that is the exception the chain moved to.
+
 **The cause chain.** `caused_by()` asserts the exception was chained from a given cause, either an
 explicit `raise ... from` or one raised during handling.
 

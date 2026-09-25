@@ -90,6 +90,19 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_typing.py", "is_not_none"): 15,
     ("assertpy2/_engine/_typing.py", "satisfies"): 9,
     ("assertpy2/assertpy.py", "assert_that"): 5,
+    # a bare `type` falls back to `BaseException` under the rung carrying the exception class it was given
+    ("assertpy2/_engine/_typing.py", "raises"): 2,
+    ("assertpy2/_engine/_typing.py", "caused_by"): 2,
+    ("assertpy2/_engine/_typing.py", "error_of"): 2,
+    ("assertpy2/_engine/_typing.py", "has_root_cause"): 2,
+    ("assertpy2/_engine/_capable_typing.py", "raises"): 2,
+    ("assertpy2/_engine/_check_typing.py", "caused_by"): 1,
+    ("assertpy2/_engine/_check_typing.py", "error_of"): 1,
+    ("assertpy2/_engine/_check_typing.py", "has_root_cause"): 1,
+    ("assertpy2/_engine/_negated_typing.py", "caused_by"): 1,
+    ("assertpy2/_engine/_negated_typing.py", "error_of"): 1,
+    ("assertpy2/_engine/_negated_typing.py", "has_root_cause"): 1,
+    ("assertpy2/_engine/_poll_typing.py", "raises"): 4,
 }
 """Where a refinement ladder makes pyright call a later rung redundant, by the method it is on.
 

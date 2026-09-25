@@ -2015,20 +2015,6 @@
    "type-assertion-failure"
   ]
  },
- "c0782-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0782-poll": {
   "mypy": [
    "assert-type"
@@ -2044,20 +2030,6 @@
   ]
  },
  "c0783-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0783-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2099,20 +2071,6 @@
    "type-assertion-failure"
   ]
  },
- "c0784-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0784-poll": {
   "mypy": [
    "assert-type"
@@ -2128,20 +2086,6 @@
   ]
  },
  "c0785-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0785-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2183,20 +2127,6 @@
    "type-assertion-failure"
   ]
  },
- "c0786-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0786-poll": {
   "mypy": [
    "assert-type"
@@ -2212,20 +2142,6 @@
   ]
  },
  "c0787-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0787-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2267,20 +2183,6 @@
    "type-assertion-failure"
   ]
  },
- "c0788-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0788-poll": {
   "mypy": [
    "assert-type"
@@ -2296,20 +2198,6 @@
   ]
  },
  "c0789-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0789-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2351,20 +2239,6 @@
    "type-assertion-failure"
   ]
  },
- "c0790-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0790-poll": {
   "mypy": [
    "assert-type"
@@ -2380,20 +2254,6 @@
   ]
  },
  "c0791-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0791-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2435,20 +2295,6 @@
    "type-assertion-failure"
   ]
  },
- "c0792-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0792-poll": {
   "mypy": [
    "assert-type"
@@ -2464,20 +2310,6 @@
   ]
  },
  "c0793-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0793-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2519,20 +2351,6 @@
    "type-assertion-failure"
   ]
  },
- "c0794-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0794-poll": {
   "mypy": [
    "assert-type"
@@ -2548,20 +2366,6 @@
   ]
  },
  "c0795-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0795-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2603,20 +2407,6 @@
    "type-assertion-failure"
   ]
  },
- "c0796-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0796-poll": {
   "mypy": [
    "assert-type"
@@ -2632,20 +2422,6 @@
   ]
  },
  "c0797-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0797-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2687,20 +2463,6 @@
    "type-assertion-failure"
   ]
  },
- "c0798-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0798-poll": {
   "mypy": [
    "assert-type"
@@ -2716,20 +2478,6 @@
   ]
  },
  "c0799-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0799-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2771,20 +2519,6 @@
    "type-assertion-failure"
   ]
  },
- "c0800-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0800-poll": {
   "mypy": [
    "assert-type"
@@ -2800,20 +2534,6 @@
   ]
  },
  "c0801-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0801-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2855,20 +2575,6 @@
    "type-assertion-failure"
   ]
  },
- "c0802-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0802-poll": {
   "mypy": [
    "assert-type"
@@ -2884,20 +2590,6 @@
   ]
  },
  "c0803-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0803-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -2939,20 +2631,6 @@
    "type-assertion-failure"
   ]
  },
- "c0804-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0804-poll": {
   "mypy": [
    "assert-type"
@@ -2968,20 +2646,6 @@
   ]
  },
  "c0805-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0805-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3023,20 +2687,6 @@
    "type-assertion-failure"
   ]
  },
- "c0806-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0806-poll": {
   "mypy": [
    "assert-type"
@@ -3052,20 +2702,6 @@
   ]
  },
  "c0807-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0807-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3107,20 +2743,6 @@
    "type-assertion-failure"
   ]
  },
- "c0808-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0808-poll": {
   "mypy": [
    "assert-type"
@@ -3149,20 +2771,6 @@
    "type-assertion-failure"
   ]
  },
- "c0809-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0809-poll": {
   "mypy": [
    "assert-type"
@@ -3178,20 +2786,6 @@
   ]
  },
  "c0810-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0810-direct": {
   "mypy": [
    "assert-type"
   ],

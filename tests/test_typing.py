@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import builtins
     import collections
     import datetime
     import decimal
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     import fractions
     import logging
     import pathlib
+    import sys
     from collections.abc import Callable, Iterator, Mapping, Sequence
     from typing import Any, cast
 
@@ -294,31 +296,59 @@ if TYPE_CHECKING:
 
     # the four ways to set an expectation, each landing the call somewhere different: an exception
     # message, a warning message, or the callable itself with the return value reachable
-    assert_type(assert_that(lambda: int("1")).raises(ValueError), _ExpectedRaiseAssertion[int])
+    assert_type(assert_that(lambda: int("1")).raises(ValueError), _ExpectedRaiseAssertion[int, ValueError])
     assert_type(assert_that(lambda: int("1")).warns(), _ExpectedWarningAssertion[int])
     assert_type(assert_that(lambda: int("1")).does_not_raise(ValueError), _ExpectedCompletionAssertion[int])
     assert_type(assert_that(lambda: int("1")).does_not_warn(), _ExpectedCompletionAssertion[int])
     # the same four on a callable the umbrella claims, over `Any` since `_Callable` names no return
-    assert_type(assert_that(_CallableResponse()).raises(ValueError), _ExpectedRaiseAssertion[Any])
+    assert_type(assert_that(_CallableResponse()).raises(ValueError), _ExpectedRaiseAssertion[Any, ValueError])
     assert_type(assert_that(_CallableResponse()).warns(), _ExpectedWarningAssertion[Any])
     assert_type(assert_that(_CallableResponse()).does_not_raise(ValueError), _ExpectedCompletionAssertion[Any])
     assert_type(assert_that(_CallableResponse()).does_not_warn(), _ExpectedCompletionAssertion[Any])
-    assert_type(assert_that(_Shade).raises(ValueError).when_called_with("x"), _InvokedAssertion)
+    assert_type(assert_that(_Shade).raises(ValueError).when_called_with("x"), _InvokedAssertion[ValueError])
     assert_type(assert_that(_CallableResponse()).warns().when_called_with(), _WarnedAssertion[Any])
     assert_type(assert_that(len).warns().when_called_with(), _WarnedAssertion[int])
     assert_type(assert_that(len).does_not_raise(ValueError).when_called_with(), _CompletedAssertion[int])
-    assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
-    assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)
-    assert_type(assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion)
-    assert_type(assert_that(len).raises(ValueError).when_called_with().contains_error(KeyError), _InvokedAssertion)
-    assert_type(assert_that(len).raises(ValueError).when_called_with().raised(), _CoreAssertion)
+    assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion[ValueError])
+    assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion[KeyError])
+    assert_type(
+        assert_that(len).raises(ValueError).when_called_with().has_root_cause(KeyError), _InvokedAssertion[KeyError]
+    )
+    assert_type(
+        assert_that(len).raises(ValueError).when_called_with().contains_error(KeyError), _InvokedAssertion[ValueError]
+    )
+    assert_type(
+        assert_that(lambda: int("1")).raises(ValueError).when_called_with().raised(), AssertionBuilder[ValueError]
+    )
     invoked = assert_that(len).raises(ValueError).when_called_with()
-    assert_type(invoked.does_not_contain_error(KeyError), _InvokedAssertion)
+    assert_type(invoked.does_not_contain_error(KeyError), _InvokedAssertion[ValueError])
     assert_type(invoked.errors(), _ListAssertion[BaseException])
     assert_type(invoked.errors().value, list[BaseException])
-    assert_type(invoked.error_of(KeyError), _InvokedAssertion)
+    assert_type(invoked.error_of(KeyError), _InvokedAssertion[KeyError])
     assert_type(invoked.error_of(KeyError).value, str)
-    assert_type(invoked.error_of(KeyError).raised(), _CoreAssertion)
+    assert_type(invoked.error_of(KeyError).raised(), AssertionBuilder[KeyError])
+
+    # `raised()` hands back the exception `raises()` named, and after a pivot the one it found
+    class _AppError(ValueError): ...
+
+    assert_type(assert_that(len).raises(Exception).when_called_with().raised().value, Exception)
+    assert_type(assert_that(len).raises(BaseException).when_called_with().raised().value, BaseException)
+    assert_type(assert_that(len).raises(_AppError).when_called_with().raised().value, _AppError)
+    assert_type(assert_that(len).raises(cast("Any", ValueError)).when_called_with().raised().value, Any)
+    assert_type(invoked.caused_by(KeyError).raised().value, KeyError)
+    assert_type(invoked.has_root_cause(OSError).raised().value, OSError)
+    assert_type(invoked.contains("x").raised().value, ValueError)
+    # a negated pivot asserts the cause is not there, so the chain keeps the exception it was on
+    assert_type(invoked.not_.caused_by(KeyError).raised().value, ValueError)
+
+    def _expecting(expected: type[LookupError]) -> None:
+        assert_type(assert_that(len).raises(expected).when_called_with().raised().value, LookupError)
+
+    # ty reads the floor from `requires-python` and skips this; the other three check it
+    if sys.version_info >= (3, 11):
+        grouped = assert_that(len).raises(builtins.ExceptionGroup).when_called_with()
+        assert_type(grouped.error_of(TypeError).raised().value, TypeError)
+        caught_group: builtins.ExceptionGroup[Exception] = grouped.raised().value
 
     class _Alpha: ...
 
@@ -573,8 +603,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(cast("_ArrayShape", object())).check(), _CheckArrayAssertion[_ArrayShape])
     assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a").check(), _CheckCoreAssertion)
     assert_type(assert_that([{"id": 1}]).extracting("id").check(), _CheckListAssertion[Any])
-    assert_type(assert_that(len).raises(ValueError).when_called_with().check(), _CheckInvokedAssertion)
-    assert_type(assert_that(len).raises(ValueError).check(), _CheckExpectedRaiseAssertion[int])
+    assert_type(assert_that(len).raises(ValueError).when_called_with().check(), _CheckInvokedAssertion[ValueError])
+    assert_type(assert_that(len).raises(ValueError).check(), _CheckExpectedRaiseAssertion[int, ValueError])
     assert_type(assert_that(len).warns().check(), _CheckExpectedWarningAssertion[int])
     assert_type(assert_that(len).does_not_raise(ValueError).check(), _CheckExpectedCompletionAssertion[int])
     assert_type(assert_that(len).warns().when_called_with().check(), _CheckWarnedAssertion[int])

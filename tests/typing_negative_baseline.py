@@ -224,6 +224,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "completed-return-read-as-text": _ARGUMENT,
     # ty reads the builder after `warns()` over `Unknown`: the view passes its parameter only on to its twins
     "warned-return-read-as-text": {**_ARGUMENT, "ty": frozenset()},
+    "raised-exception-read-as-text": _ARGUMENT,
+    "raised-cause-read-as-text": _ARGUMENT,
     # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
     "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
     # the view binds the predicate to its own value, so a lambda reading a missing name is refused. ty

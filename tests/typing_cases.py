@@ -372,6 +372,11 @@ def _methods_that_do_not_fit_the_value() -> None:
     _read_as_text(completed.value)  # case: completed-return-read-as-text
     warned = assert_that(_noisy).warns(DeprecationWarning).when_called_with().returned()
     _read_as_text(warned.value)  # case: warned-return-read-as-text
+    # what was caught is typed as what `raises()` named, and after a pivot as what it found
+    caught = assert_that(_boom).raises(ValueError).when_called_with().raised()
+    _read_as_text(caught.value)  # case: raised-exception-read-as-text
+    cause = assert_that(_boom).raises(ValueError).when_called_with().caused_by(KeyError).raised()
+    _read_as_text(cause.value)  # case: raised-cause-read-as-text
 
 
 def _a_number() -> int:

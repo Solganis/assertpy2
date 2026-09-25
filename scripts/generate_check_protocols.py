@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         _ArrayT_co,
         _CapableT,
         _FrameT_co,
+        _Landed,
         _NegatedObjectAssertion,
         _ObjectAssertion,
         _Other,
@@ -75,6 +77,8 @@ if TYPE_CHECKING:
     _KeySpecs = Hashable | list[Hashable] | set[Hashable] | frozenset[Hashable]
 
     _E = TypeVar("_E")
+    # a verdict reads no exception back, so the twin's is covariant where the view's is not
+    _Exc_co = TypeVar("_Exc_co", bound=BaseException, covariant=True)
     _N = TypeVar("_N", int, float)
     _K = TypeVar("_K")
     _V = TypeVar("_V")
@@ -118,6 +122,7 @@ def generate() -> str:
                 bases.append(ast.unparse(base).replace(target.id, _twin(target.id)))
             else:
                 bases.append(ast.unparse(base))
+        bases = [re.sub(r"\b_Exc\b", "_Exc_co", one) for one in bases]
         methods = [
             item
             for item in node.body

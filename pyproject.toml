@@ -214,12 +214,13 @@ pytest_add_cli_args = [
     # above, since that matches by substring and a future test of the same name would drop out of
     # the run without anybody noticing.
     #
-    # The first seven import their generator from `scripts/`, which is not in the mutants tree.
+    # The first eight import their generator from `scripts/`, which is not in the mutants tree.
     # The rest re-derive a claim by parsing the package's own source, and mutmut copies `tests/`
     # in, so what they parse is the trampoline's rewrite rather than what anybody ships.
     "--deselect=tests/test_check_protocols.py::test_the_generated_twins_match_the_protocols_they_mirror",
     "--deselect=tests/test_poll_protocols.py::test_the_generated_twins_match_the_views_they_mirror",
     "--deselect=tests/test_poll_protocols.py::test_the_generated_verdict_twin_matches_the_views_it_mirrors",
+    "--deselect=tests/test_poll_protocols.py::test_only_the_exception_an_expectation_names_is_left_uncompared",
     "--deselect=tests/test_capable_protocol.py::test_the_facade_matches_what_the_generator_produces",
     "--deselect=tests/test_capable_protocol.py::TestWhatEachRestrictedAssertionAsksFor",
     "--deselect=tests/test_capable_protocol.py::TestWhatIsAskedOfATypeInstead",

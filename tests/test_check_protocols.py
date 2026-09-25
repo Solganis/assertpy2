@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import pathlib
+import re
 import subprocess
 import sys
 from typing import TYPE_CHECKING
@@ -124,8 +125,9 @@ def test_every_twin_declaration_mirrors_the_one_it_was_generated_from() -> None:
 
     Whole declarations, not name sets.  Comparing names caught an invented or dropped assertion and
     would have waved through a lost parameter, a changed default or a missing `@overload`, all of
-    which the file comparison agrees with once the file is regenerated.  The single transformation the
-    generator is allowed to make is the return type, so that is the only thing normalised away here.
+    which the file comparison agrees with once the file is regenerated.  The generator is allowed two
+    transformations, so those two are normalised away here: the return type, and the caught exception's
+    parameter made covariant, since a verdict reads no exception back.
     """
     originals = _declared(pathlib.Path(_typing.__file__).read_text(encoding="utf-8"))
     twins = _declared(pathlib.Path(_check_typing.__file__).read_text(encoding="utf-8"))
@@ -165,7 +167,8 @@ def _twin_name(name: str) -> str:
 
 
 def _twinned_base(base: str) -> str:
-    """A base as the twin should spell it: the assertion's name becomes its twin, nothing else moves."""
+    """A base as the twin should spell it: the assertion's name becomes its twin, and `_Exc` covariant."""
+    base = re.sub(r"\b_Exc\b", "_Exc_co", base)
     head, _, rest = base.partition("[")
     if not head.endswith("Assertion"):
         return base

@@ -68,6 +68,11 @@ _UNPINNABLE = {
     ("_CapableAssertion", "matches_with_groups", "AssertionBuilder", ""),
     # after `warns()` ty reads the builder over `Unknown`: the view only passes its parameter on to its twins
     ("_WarnedAssertion", "returned", "AssertionBuilder", ""),
+    # the fallback for a bare `type` is ty's alone: mypy takes the first rung as `Never`, the others as `Unknown`
+    ("_CapableAssertion", "raises", "_ExpectedRaiseAssertion[Any, BaseException]", ""),
+    ("_InvokedAssertion", "caused_by", "_InvokedAssertion[BaseException]", ""),
+    ("_InvokedAssertion", "error_of", "_InvokedAssertion[BaseException]", ""),
+    ("_InvokedAssertion", "has_root_cause", "_InvokedAssertion[BaseException]", ""),
     # `not_` on every view, held by `test_negated_protocols.py` instead: it derives the pairs from the
     # reachable closure, so a view added later is covered without a pin being remembered for it
     ("_ArrayAssertion", "not_", "_NegatedArrayAssertion", "<the subject's own type>"),
@@ -387,13 +392,13 @@ def _receiver_view(expression: ast.expr, protocols: dict[str, ast.ClassDef]) -> 
 def _pin_narrowing(expression: ast.expr, member: str, predicates: dict[str, str]) -> str:
     """What this pin narrows on, taken from wherever the member keeps it.
 
-    `satisfies` from the helper it is given, `is_instance_of` from the class, `is_not_none` from the
-    `cast` the subject was written as. Anything else has none, which every rung answers.
+    `satisfies` from the helper it is given, `is_instance_of` and the exception family from the class,
+    `is_not_none` from the `cast` the subject was written as. Anything else has none, which every rung answers.
     """
     if member == "satisfies":
         given = expression.args[0] if isinstance(expression, ast.Call) and expression.args else None
         return predicates.get(getattr(given, "id", ""), "")
-    if member == "is_instance_of":
+    if member in ("is_instance_of", "raises", "caused_by", "has_root_cause", "error_of"):
         given = expression.args[0] if isinstance(expression, ast.Call) and expression.args else None
         if isinstance(given, ast.Call) and getattr(given.func, "id", None) == "cast":
             return _flattened(_inside(ast.literal_eval(given.args[0]), "type["))
