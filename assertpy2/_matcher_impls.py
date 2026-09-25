@@ -172,6 +172,13 @@ def _require_matcher(operand: object, operator: str) -> None:
         raise TypeError(f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'")
 
 
+def _require_matcher_argument(value: object) -> Matcher[Any]:
+    """The matcher a factory was handed, refused where the factory is called, for the reason above."""
+    if not _is_matcher(value):
+        refuse(value, "a Matcher", subject=argument("matcher"))
+    return value
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class MatchResult:
     """What a matcher decided about one value, in one object instead of three calls.
@@ -323,7 +330,9 @@ class AllOfMatcher(BaseMatcher):
     """Matches when all sub-matchers match (``&`` operator)."""
 
     def __init__(self, *matchers: Matcher[Any]):
-        self.matchers = matchers
+        for one in matchers:
+            _require_matcher_argument(one)
+        self.matchers: tuple[Matcher[Any], ...] = matchers
         self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
         self.walks_its_value: bool = any(self._walkers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
@@ -369,7 +378,9 @@ class AnyOfMatcher(BaseMatcher):
     """Matches when at least one sub-matcher matches (``|`` operator)."""
 
     def __init__(self, *matchers: Matcher[Any]):
-        self.matchers = matchers
+        for one in matchers:
+            _require_matcher_argument(one)
+        self.matchers: tuple[Matcher[Any], ...] = matchers
         self._walkers: tuple[bool, ...] = tuple(_has_own_evaluate(one) for one in matchers)
         self.walks_its_value: bool = any(self._walkers)
         """Whether anything under here has to be asked once, which is what `_has_own_evaluate` reads."""
@@ -412,7 +423,7 @@ class NotMatcher(BaseMatcher):
     """Matches when the wrapped matcher does not match (``~`` operator)."""
 
     def __init__(self, matcher: Matcher[Any]):
-        self.matcher = matcher
+        self.matcher: Matcher[Any] = _require_matcher_argument(matcher)
         self.walks_its_value: bool = _has_own_evaluate(matcher)
         """Whether the wrapped matcher has to be asked once, which is what `_has_own_evaluate` reads."""
 
@@ -913,7 +924,7 @@ class IsInMatcher(BaseMatcher):
 class HasPropertyMatcher(BaseMatcher):
     def __init__(self, name: str, matcher: Matcher[Any] | None = None):
         self.name = name
-        self.matcher = matcher
+        self.matcher: Matcher[Any] | None = None if matcher is None else _require_matcher_argument(matcher)
 
     def matches(self, value: Any) -> bool:
         try:
@@ -1271,7 +1282,7 @@ class EachMatcher(BaseMatcher):
     """Matches when every item in an iterable satisfies the wrapped matcher."""
 
     def __init__(self, matcher: Matcher[Any]):
-        self.matcher = matcher
+        self.matcher: Matcher[Any] = _require_matcher_argument(matcher)
 
     def matches(self, value: Any) -> bool:
         try:

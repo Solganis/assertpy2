@@ -6,7 +6,7 @@ from math import inf, nan
 import pytest
 
 from assertpy2 import AssertionFailure, Matcher, assert_that, match
-from assertpy2.matchers import BaseMatcher
+from assertpy2.matchers import AllOfMatcher, AnyOfMatcher, BaseMatcher, EachMatcher, HasPropertyMatcher, NotMatcher
 
 
 class TestTemporalMatchers:
@@ -1101,6 +1101,67 @@ class TestCombinatorOperands:
     def test_matcher_operands_still_combine(self):
         assert_that(5).satisfies(match.is_positive() & match.less_than(10))
         assert_that(5).satisfies(match.is_positive() | match.greater_than(99))
+
+
+class TestNestedMatcherArguments:
+    """A factory taking a matcher refuses anything else where it is called, as `&` and `|` do.
+
+    Taken as it came, a plain value or a predicate raised `AttributeError: 'str' object has no attribute
+    'matches'` at the assertion, and even printing the matcher it had built raised.
+    """
+
+    @pytest.mark.parametrize(
+        "build",
+        [
+            lambda bad: match.has_property("name", bad),
+            match.each_item,
+            match.not_,
+            match.all_of,
+            match.any_of,
+            lambda bad: match.all_of(match.is_positive(), bad),
+            lambda bad: match.any_of(match.is_positive(), bad),
+        ],
+        ids=["has_property", "each_item", "not_", "all_of", "any_of", "all_of-second", "any_of-second"],
+    )
+    @pytest.mark.parametrize("bad", ["Ada", 5, lambda value: value > 0], ids=["text", "number", "predicate"])
+    def test_a_non_matcher_is_refused_where_the_factory_is_called(self, build, bad):
+        with pytest.raises(
+            TypeError, match=r"^given matcher arg must be a Matcher, but was <.+> \((str|int|function)\)$"
+        ):
+            build(bad)
+
+    def test_a_duck_typed_matcher_is_taken_by_every_factory(self):
+        class Positive:
+            def matches(self, value):
+                return value > 0
+
+            def describe(self):
+                return "a positive number"
+
+            def describe_mismatch(self, value):
+                return f"was <{value}>"
+
+        class Box:
+            size = 4
+
+        duck = Positive()
+        assert_that(Box()).satisfies(match.has_property("size", duck))
+        assert_that([1, 2]).satisfies(match.each_item(duck))
+        assert_that(-1).satisfies(match.not_(duck))
+        assert_that(3).satisfies(match.all_of(duck, match.less_than(5)))
+        assert_that(-3).satisfies(match.any_of(duck, match.less_than(0)))
+
+    @pytest.mark.parametrize(
+        "build",
+        [AllOfMatcher, AnyOfMatcher, NotMatcher, EachMatcher, lambda bad: HasPropertyMatcher("name", bad)],
+        ids=["AllOfMatcher", "AnyOfMatcher", "NotMatcher", "EachMatcher", "HasPropertyMatcher"],
+    )
+    def test_a_matcher_built_directly_refuses_the_same(self, build):
+        with pytest.raises(TypeError, match=r"^given matcher arg must be a Matcher, but was <5> \(int\)$"):
+            build(5)
+
+    def test_has_property_without_a_matcher_asks_only_for_the_name(self):
+        assert_that("text").satisfies(match.has_property("upper", None))
 
 
 class TestIsTypeOfMatcher:
