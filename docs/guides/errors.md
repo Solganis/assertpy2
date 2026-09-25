@@ -503,7 +503,9 @@ so there is no green run for it to change. Write `assertpy2_failure_clusters = "
 
 ### Seeing them, and being stopped by them
 
-`safe` warns. A run full of findings still exits zero, which is a fair first look and a poor gate.
+`safe` warns. A run full of findings still exits zero, which is a fair first look and a poor gate. The
+exception is a suite that escalates warnings: under `filterwarnings = ["error"]` each finding turns its
+test red, as `strict` would.
 
 `strict` turns on the same two guards and fails the tests they find:
 
