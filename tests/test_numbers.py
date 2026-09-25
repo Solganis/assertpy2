@@ -489,6 +489,17 @@ def test_is_close_to_bad_tolerance_arg_type_failure():
     assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be a number, but was <'foo'> (str)")
 
 
+@pytest.mark.parametrize("assertion", ["is_close_to", "is_not_close_to"])
+@pytest.mark.parametrize("flag", [True, False])
+def test_a_bool_tolerance_is_refused_as_tolerance_refuses_it(assertion, flag):
+    # a flag passed where the distance goes used to read as 1 or 0, while `tolerance=` and the matcher refused it
+    with pytest.raises(TypeError) as exc_info:
+        getattr(assert_that(1.0), assertion)(5.0, flag)
+    assert_that(str(exc_info.value)).is_equal_to(
+        f"given tolerance arg must be a number other than a bool, but was <{flag}> (bool)"
+    )
+
+
 def test_is_close_to_negative_tolerance_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_close_to(123, -1)

@@ -272,6 +272,8 @@ class HelpersMixin(_MixinBase):
             require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
         else:
             require_type(other, numbers.Number, "a number", subject=argument("other"))
+            if isinstance(tolerance, bool):
+                refuse(tolerance, "a number other than a bool", subject=argument("tolerance"))
             require_type(tolerance, numbers.Number, "a number", subject=argument("tolerance"))
             if _is_nan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
