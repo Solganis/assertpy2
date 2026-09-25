@@ -109,13 +109,13 @@ class WarningMixin(_MixinBase):
                 f" but warned <{seen}>.",
                 expected=expected,
             )
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         self.error(
             f"Expected <{_callable_name(self.val)}> to warn <{expected.__name__}>"
             f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}).",
             expected=expected,
         )
-        return cast("Self", _InertBuilder())
+        return cast("Self", _InertBuilder(self._value_taint_reason))
 
     def _when_called_with_not_warning(self, expected: type[Warning], *some_args, **some_kwargs) -> Self:
         with warnings.catch_warnings(record=True) as caught:
@@ -130,6 +130,6 @@ class WarningMixin(_MixinBase):
                 f" when called with ({self._fmt_args_kwargs(*some_args, **some_kwargs)}),"
                 f" but did warn <{seen}>."
             )
-            return cast("Self", _InertBuilder())
+            return cast("Self", _InertBuilder(self._value_taint_reason))
         self._return_value = result
         return self

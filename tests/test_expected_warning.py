@@ -194,6 +194,23 @@ def test_does_not_warn_returned_pivots_to_return_value():
     assert_that(quiet_return_ok).does_not_warn(DeprecationWarning).when_called_with().returned().is_equal_to("ok")
 
 
+@pytest.mark.parametrize(
+    ("call", "reason"),
+    [
+        (lambda: assert_that(no_warn).warns(UserWarning).when_called_with(), "to warn <UserWarning>"),
+        (lambda: assert_that(warn_user).warns(DeprecationWarning).when_called_with(), "but warned <UserWarning>"),
+        (lambda: assert_that(warn_user).does_not_warn(UserWarning).when_called_with(), "but did warn <UserWarning>"),
+    ],
+    ids=["warned-nothing", "warned-another-category", "warned-what-it-must-not"],
+)
+def test_a_soft_warning_failure_leaves_a_chain_that_names_it(call, reason):
+    """The chain after it went on without the reason, so a `check()` there failed with an empty message."""
+    with pytest.raises(AssertionError), soft_assertions():
+        verdict = call().check().is_equal_to("anything")
+    assert_that(verdict.passed).is_false()
+    assert_that(verdict.message).contains(reason)
+
+
 def test_warns_partial_without_name_fails_cleanly():
     # a callable lacking __name__ (functools.partial) must fail cleanly, not raise AttributeError
     def emit(level):
