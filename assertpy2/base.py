@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import GenericAlias
 from typing import TYPE_CHECKING
 
 from ._engine._compare import (
@@ -19,6 +20,7 @@ from ._engine._introspection import is_namedtuple
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
+from ._matcher_impls import _require_class_info
 from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
 from .errors import _disambiguated, _safe_str, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
@@ -633,18 +635,19 @@ class BaseMixin(SatisfiesMixin):
 
         Raises:
             AssertionError: if val is **not** an instance of the given class
+            TypeError: if the given arg, or any member of a union or tuple, is not a class
         """
-        try:
-            if not isinstance(self.val, some_class):
-                type_name = self._type(self.val)
-                some_class_name = _type_expression_name(some_class)
-                return self.error(
-                    f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of class "
-                    f"<{some_class_name}>, but was not.",
-                    expected=some_class,
-                )
-        except TypeError:
-            refuse(some_class, "a class", subject=argument("class"))
+        # a class answers `isinstance` itself, raising what it raises, though `list[int]` passes for one on 3.10
+        if not isinstance(some_class, type) or type(some_class) is GenericAlias:
+            _require_class_info(some_class, name="class", probe=self.val)
+        if not isinstance(self.val, some_class):
+            type_name = self._type(self.val)
+            some_class_name = _type_expression_name(some_class)
+            return self.error(
+                f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of class "
+                f"<{some_class_name}>, but was not.",
+                expected=some_class,
+            )
         return self
 
     def is_instance_of_any(self, *some_classes: ClassInfo) -> Self:
@@ -671,17 +674,14 @@ class BaseMixin(SatisfiesMixin):
         """
         if len(some_classes) == 0:
             raise ValueError("one or more args must be given")
-        try:
-            if not isinstance(self.val, some_classes):
-                type_name = self._type(self.val)
-                class_names = ", ".join(_type_expression_name(some_class) for some_class in some_classes)
-                return self.error(
-                    f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of any of "
-                    f"<{class_names}>, but was not.",
-                    expected=some_classes,
-                )
-        except TypeError:
-            refuse(some_classes, "classes", subject=argument("class"))
+        _require_class_info(some_classes, name="class", expectation="classes", probe=self.val)
+        if not isinstance(self.val, some_classes):
+            type_name = self._type(self.val)
+            class_names = ", ".join(_type_expression_name(some_class) for some_class in some_classes)
+            return self.error(
+                f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of any of <{class_names}>, but was not.",
+                expected=some_classes,
+            )
         return self
 
     def is_subclass_of(self, some_class: type) -> Self:

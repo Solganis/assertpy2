@@ -473,9 +473,9 @@ class ExceptionMixin(_MixinBase):
         Raises:
             TypeError: if ``ex`` holds anything `isinstance` cannot take, checked member by member
         """
-        _require_class_info(ex, subject=argument("exception"))
         exc = self._require_raised("caused_by")
         cause = _effective_cause(exc)
+        _require_class_info(ex, name="exception", probe=cause)
         if cause is None or not isinstance(cause, ex):
             found = "no cause" if cause is None else f"<{type(cause).__name__}>"
             expected_name = _type_expression_name(ex)
@@ -501,13 +501,13 @@ class ExceptionMixin(_MixinBase):
         Raises:
             TypeError: if ``ex`` holds anything `isinstance` cannot take, checked member by member
         """
-        _require_class_info(ex, subject=argument("exception"))
         exc = self._require_raised("has_root_cause")
         root = exc
         seen = {id(root)}
         while (nxt := _effective_cause(root)) is not None and id(nxt) not in seen:
             root = nxt
             seen.add(id(root))
+        _require_class_info(ex, name="exception", probe=root)
         if not isinstance(root, ex):
             self.error(
                 f"Expected <{type(exc).__name__}> to have root cause <{_type_expression_name(ex)}>,"

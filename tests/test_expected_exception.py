@@ -471,6 +471,18 @@ class TestACauseMayBeOneOfSeveral:
         with pytest.raises(TypeError, match="given exception arg must be a class"):
             getattr(chain, pivot)(expected)
 
+    @pytest.mark.parametrize("pivot", ["caused_by", "has_root_cause"])
+    def test_a_member_is_asked_only_about_the_cause_itself(self, pivot):
+        class AsksOnlyForExceptions(type):
+            def __instancecheck__(cls, instance):
+                return bool(instance.args)
+
+        class WithArguments(metaclass=AsksOnlyForExceptions):
+            pass
+
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()
+        assert_that(getattr(chain, pivot)((TypeError, WithArguments)).raised().value).is_instance_of(KeyError)
+
     def test_a_group_member_is_still_asked_for_by_one_class(self):
         with pytest.raises(TypeError, match="must be an exception type"):
             assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(KeyError | OSError)

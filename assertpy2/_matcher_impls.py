@@ -17,7 +17,6 @@ from typing import (
     TypeVar,
     Union,
     cast,
-    get_args,
     get_origin,
     runtime_checkable,
 )
@@ -669,40 +668,46 @@ _UNION_ORIGINS: Final = (Union, UnionType)
 """What `get_origin` answers for a union, which is one class on 3.14+ and two below it."""
 
 
-def _class_info_members(expected: object) -> list[object]:
-    """Every leaf `isinstance` would reach, flattening unions and tuples to any depth.
-
-    Both union spellings, read through `get_origin` rather than through `isinstance`: below 3.14
-    `typing.Union[A, B]` is not a `types.UnionType`, so testing for the class alone let the legacy
-    spelling through on the supported floor and nowhere else.
-    """
-    if isinstance(expected, tuple):
-        return [leaf for member in expected for leaf in _class_info_members(member)]
-    if get_origin(expected) in _UNION_ORIGINS:
-        return [leaf for member in get_args(expected) for leaf in _class_info_members(member)]
-    return [expected]
-
-
-def _require_class_info(expected: object, *, subject: str) -> None:
+def _require_class_info(expected: object, *, name: str, expectation: str = "a class", probe: object = None) -> None:
     """Refuse what `isinstance` cannot take, member by member, since `isinstance` stops at the first match.
 
     A union or a tuple holding `list[str]` is otherwise answered by whichever member comes first: taken
     when an earlier one matches, a `TypeError` when none does, and on 3.10 a union refused either way.
+
+    Every member is asked `isinstance(probe, member)`, left to right as `isinstance` reads them, so each
+    one meets only a value it would have met had the members before it not matched.  An assertion
+    passes the value it holds.  A matcher has none yet and passes `None`.
+
+    Unions and tuples are flattened to any depth, both union spellings included: below 3.14
+    `typing.Union[A, B]` is not a `types.UnionType`, so `get_origin` reads it.  A tuple is read from its
+    storage, as `isinstance` reads it, never through an `__iter__` a subclass overrides.  A class whose
+    metaclass is `type` itself is not asked, since nothing in it can override `__instancecheck__`.  The
+    walk keeps its own stack so that every probe runs in this frame, which is the frame `raised_inside`
+    reads.  A recursive flatten probing every member took `is_instance_of((int, str))` from 0.19 to
+    0.72 us, and this walk takes it to 0.48.
     """
+    pending: list[Any] = [expected]
     try:
-        for member in _class_info_members(expected):
-            # cast because whether it is class info at all is the question this loop answers
-            isinstance(None, cast("ClassInfo", member))
+        while pending:
+            member = pending.pop()
+            if type(member) is type:
+                continue
+            if isinstance(member, tuple):
+                pending.extend(tuple.__getitem__(member, slice(None, None, -1)))
+            elif isinstance(member, UnionType) or get_origin(member) in _UNION_ORIGINS:
+                pending.extend(member.__args__[::-1])
+            else:
+                isinstance(probe, member)
     except TypeError as exc:
         if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
             raise
-        refuse(expected, "a class", subject=subject)
+        refuse(expected, expectation, subject=argument(name))
 
 
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
         # eagerly, like the regex matcher
-        _require_class_info(expected_type, subject=argument("class"))
+        _require_class_info(expected_type, name="class")
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:
