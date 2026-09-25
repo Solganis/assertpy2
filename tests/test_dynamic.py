@@ -144,6 +144,16 @@ class TestTheOperandMayBeWrittenByName:
         assert_that({"name": "x"}).has_name(other="x")
         assert_that(assert_that({"name": "x"}).check().has_name(other="y").passed).is_false()
 
+    def test_the_requirement_names_the_operand_however_it_was_written(self):
+        assert_that(assert_that({"a": 1}).check().has_a(other=2).requirement.parameters).is_equal_to({"other": 2})
+        with pytest.raises(AssertionError) as failure:
+            assert_that({"a": 1}).not_.has_a(1)
+        assert_that(failure.value.requirement.parameters).is_equal_to({"other": 1})
+
+    def test_a_missing_key_keeps_the_call_it_could_not_bind(self):
+        asked = assert_that({"a": 1}).check().has_b(1, 2).requirement
+        assert_that(asked.parameters).is_equal_to({"args": (1, 2), "kwargs": {}})
+
     def test_an_attribute_takes_it_too(self):
         class Holder:
             name = "x"

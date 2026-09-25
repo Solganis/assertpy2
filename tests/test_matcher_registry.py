@@ -137,6 +137,21 @@ class TestRegisterMatcher:
             register_matcher("custom")(cached(two))
         assert_that(1).satisfies(match.custom())
 
+    def test_one_decorator_over_a_factory_and_over_a_value_is_a_clash(self):
+        def cached(held):
+            def wrapper():
+                return held() if callable(held) else match.equal_to(held)
+
+            return wrapper
+
+        def one():
+            return match.equal_to(1)
+
+        register_matcher("custom")(cached(one))
+        with pytest.raises(ValueError, match="already registered"):
+            register_matcher("custom")(cached(2))
+        assert_that(1).satisfies(match.custom())
+
     def test_replacing_deliberately_is_allowed(self):
         @register_matcher("custom")
         def custom_v1():

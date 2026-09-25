@@ -185,6 +185,7 @@ pytest_add_cli_args = [
     and not test_starts_with_bad_prefix_failure \
     and not test_ends_with_bad_prefix_failure \
     and not test_the_warning_points_at_the_caller \
+    and not test_each_failure_is_located_where_it_was_written \
     and not test_the_created_warning_points_at_the_calling_test \
     and not test_the_updated_warning_points_at_the_calling_test \
     and not test_the_created_contract_warning_points_at_the_calling_test \
@@ -230,6 +231,9 @@ pytest_add_cli_args = [
     "--deselect=tests/test_operation_contract.py::TestTheRegisterDescribesTheSurface::test_every_operation_that_pivots_has_been_decided_about",
     # the builder's public members, which the trampoline's renamed functions join
     "--deselect=tests/test_capable_protocol.py::TestNothingTheBuilderOffersIsMissing::test_every_public_member_of_the_builder_is_declared",
+    "--deselect=tests/test_refusals.py::test_the_sweep_covers_every_public_assertion",
+    # mutmut runs it from more than one executor, which hypothesis refuses as `differing_executors`
+    "--deselect=tests/test_errors.py::TestFindingTheFirstDifference::test_it_agrees_with_the_character_walk",
     # a failure's `requirement` is found on the stack by function name, which the trampoline renames
     "--deselect=tests/test_openapi_contract.py::TestTheRequirementNamesTheCallersSpec",
     "--deselect=tests/test_public_surface.py::TestWhatAFailureLetsYouRead::test_a_plain_failure_names_what_was_asked",
@@ -237,6 +241,7 @@ pytest_add_cli_args = [
     "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_with_no_diff_at_all_still_attaches_its_expected",
     "--deselect=tests/test_pytest_plugin.py::TestAllureFullMode::test_a_failure_that_named_only_an_expected_still_attaches_it",
     "--deselect=tests/test_snapshots.py::TestSharedKeyHint::test_a_mismatch_still_says_what_was_asked",
+    "--deselect=tests/test_chain_machine.py::TestChains::runTest",
     # a child pytest starts from the mutants tree
     "--deselect=tests/test_skip_guard.py::test_a_skip_that_says_why_is_left_alone",
     "--ignore=tests/test_requirement.py",

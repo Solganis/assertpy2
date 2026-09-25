@@ -9,6 +9,9 @@ than left as an accident that a rewrite could flip in silence.
 
 import dataclasses
 import inspect
+import operator
+import pathlib
+import re
 import types
 import warnings
 
@@ -168,6 +171,15 @@ class TestVacuousGuard:
         with pytest.warns(VacuousAssertionWarning) as caught:
             assert_that([]).all_satisfy(lambda item: item > 0)
         assert_that(caught[0].filename).ends_with("test_vacuity_contract.py")
+
+    def test_the_warning_points_at_the_caller_from_a_walk_of_its_own(self, guarded):
+        """These three walk in their own body rather than through the shared quantifier, one frame shallower."""
+        with pytest.warns(VacuousAssertionWarning) as caught:
+            assert_that([]).is_sorted()
+            assert_that([]).is_subset_of([1])
+            assert_that([]).zip_satisfies([], operator.eq)
+        where = [pathlib.Path(one.filename).name for one in caught if one.category is VacuousAssertionWarning]
+        assert_that(where).is_equal_to(["test_vacuity_contract.py"] * 3)
 
     def test_allow_empty_is_honoured(self, guarded):
         warnings.simplefilter("error", VacuousAssertionWarning)
@@ -499,12 +511,17 @@ class TestAKeyFilterThatLeftNothing:
             (_Record(1), _Record(2, 3), {"ignore": ["left", "right"]}),
             ({"a": 1}, {"a": 2}, {"include": "a", "ignore": "a"}),
             ({}, {"a": 1}, {"ignore": "a"}),
+            ({"a": 1}, {"a": 2}, {"include": re.compile("^z")}),
         ],
-        ids=["mapping", "object", "include-then-ignore", "only-expected-had-keys"],
+        ids=["mapping", "object", "include-then-ignore", "only-expected-had-keys", "a-pattern-that-matched-nothing"],
     )
-    def test_it_says_so_at_the_caller(self, guarded, actual, expected, options):
-        with pytest.warns(VacuousAssertionWarning, match="is_equal_to") as caught:
+    def test_it_says_so(self, guarded, actual, expected, options):
+        with pytest.warns(VacuousAssertionWarning, match="is_equal_to"):
             assert_that(actual).is_equal_to(expected, **options)
+
+    def test_the_warning_points_at_the_caller(self, guarded):
+        with pytest.warns(VacuousAssertionWarning) as caught:
+            assert_that({"a": 1}).is_equal_to({"a": 2}, ignore="a")
         assert_that(caught[0].filename).ends_with("test_vacuity_contract.py")
 
     def test_a_check_says_so_too(self, guarded):
@@ -515,6 +532,7 @@ class TestAKeyFilterThatLeftNothing:
         warnings.simplefilter("error", VacuousAssertionWarning)
         assert_that({"a": 1, "b": 2}).is_equal_to({"a": 9, "b": 2}, ignore="a")
         assert_that({}).is_equal_to({}, ignore="a")
+        assert_that({None: 1, "a": 1}).is_equal_to({None: 1, "a": 2}, include=[None])
 
     def test_a_failure_is_all_that_is_said(self, guarded):
         warnings.simplefilter("error", VacuousAssertionWarning)

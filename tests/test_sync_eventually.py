@@ -15,6 +15,10 @@ from assertpy2 import (
 from assertpy2.async_assertions import SyncAssertionBuilder
 
 
+def _unreachable():
+    raise ConnectionError("down")
+
+
 class TestEventuallySyncBasic:
     def test_value_converges(self):
         counter = {"n": 0}
@@ -217,6 +221,12 @@ class TestEventuallySyncTrace:
             assert_that(lambda: -1).eventually_sync(timeout=0, interval=0).is_positive()
         record = exc_info.value.failures[0] if mode == "soft" else exc_info.value._outcome
         assert_that(record.actual).is_equal_to(-1)
+
+    def test_a_soft_timeout_whose_last_poll_raised_an_ignored_error_is_still_collected(self):
+        """That last failure carries no value at all, and the collected timeout records none."""
+        with pytest.raises(AssertionFailure) as exc_info, soft_assertions():
+            assert_that(_unreachable).eventually_sync(timeout=0, interval=0, ignoring=ConnectionError).is_positive()
+        assert_that(exc_info.value.failures[0].actual).is_none()
 
     def test_a_timeout_collected_by_a_soft_block_keeps_its_trace(self):
         # a collected timeout dropped the telemetry: `error()` had nowhere to put a trace, only the raising path did

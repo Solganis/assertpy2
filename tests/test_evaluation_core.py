@@ -2193,9 +2193,22 @@ class TestTheProbeCallsWhatTheOperatorCalls:
 class TestAToleranceIsAnOrderedDistance:
     """A window needs a real tolerance: a complex one has no order, and an infinity matched everything."""
 
-    @pytest.mark.parametrize("tolerance", [1j, complex(1, 0)], ids=["imaginary", "complex-with-no-imaginary-part"])
-    def test_a_complex_tolerance_has_no_window(self, tolerance):
+    @pytest.mark.parametrize(
+        "tolerance",
+        [1j, complex(1, 0), math.nan, decimal.Decimal("NaN")],
+        ids=["imaginary", "complex-with-no-imaginary-part", "nan", "decimal-nan"],
+    )
+    def test_a_tolerance_with_no_order_has_no_window(self, tolerance):
         assert_that(match.close_to(float("inf"), tolerance).matches(float("inf"))).is_false()
+
+    def test_a_tolerance_of_its_own_type_is_not_compared_when_the_matcher_is_built(self):
+        class Loud(float):
+            def __lt__(self, other):
+                raise RuntimeError("compared at construction")
+
+            __gt__ = __lt__
+
+        assert_that(match.close_to(1.0, Loud(0.5)).describe()).contains("within")
 
     @pytest.mark.parametrize(
         ("expected", "tolerance"),
@@ -2257,6 +2270,11 @@ class TestTheMatcherMeasuresWhatTheAssertionMeasures:
         with pytest.raises(TypeError):
             assert_that(value).is_close_to(expected, tolerance)
         assert_that(match.close_to(expected, tolerance).matches(value)).is_false()
+
+    def test_a_naive_moment_is_no_match_for_an_aware_one_rather_than_an_error(self):
+        aware = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+        matcher = match.close_to(aware, datetime.timedelta(hours=1))
+        assert_that(matcher.matches(datetime.datetime(2026, 1, 1))).is_false()
 
 
 class TestTheShortcutAndTheWalkAgree:

@@ -194,6 +194,12 @@ def test_does_not_warn_returned_pivots_to_return_value():
     assert_that(quiet_return_ok).does_not_warn(DeprecationWarning).when_called_with().returned().is_equal_to("ok")
 
 
+def test_does_not_warn_hands_the_call_its_arguments():
+    assert_that(lambda first, *, second: first + second).does_not_warn(UserWarning).when_called_with(
+        1, second=2
+    ).returned().is_equal_to(3)
+
+
 @pytest.mark.parametrize(
     ("call", "reason"),
     [
@@ -209,6 +215,17 @@ def test_a_soft_warning_failure_leaves_a_chain_that_names_it(call, reason):
         verdict = call().check().is_equal_to("anything")
     assert_that(verdict.passed).is_false()
     assert_that(verdict.message).contains(reason)
+
+
+def test_the_warning_message_keeps_what_the_chain_was_given():
+    capture = StringIO()
+    logger = logging.getLogger("capture_warning_message")
+    logger.addHandler(logging.StreamHandler(capture))
+    adapted = WarningLoggingAdapter(logger, None)
+
+    assert_warn(warn_user, "noisy", logger=adapted).warns(UserWarning).when_called_with().is_equal_to("other")
+
+    assert_that(capture.getvalue()).contains("[noisy] Expected <user warning> to be equal to <other>")
 
 
 def test_warns_partial_without_name_fails_cleanly():

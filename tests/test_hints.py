@@ -40,6 +40,15 @@ class _State(enum.Enum):
     CLOSED = "closed"
 
 
+class _Code(enum.Enum):
+    OK = 1
+
+
+class _Plain:
+    def __init__(self, name):
+        self.name = name
+
+
 class _UserId(int):
     """A domain wrapper over a value it compares equal to, so only `strict_types` calls it a difference."""
 
@@ -80,6 +89,22 @@ class TestTheHintNamesTheWholeDifference:
         message = _message({"a": "x ", "b": "one"}, {"a": "x", "b": "two"})
         assert_that(message).does_not_contain("every difference here")
 
+    @pytest.mark.parametrize(
+        ("actual", "expected", "hint"),
+        [
+            ({"c": _Code.OK, "t": "a\r\n"}, {"c": 1, "t": "a\n"}, "enum members against their values and line endings"),
+            (
+                {"c": _Code.OK, "t": "a "},
+                {"c": 1, "t": "a"},
+                "enum members against their values and surrounding whitespace",
+            ),
+            ({"j": '{"a": 1}', "s": "x "}, {"j": {"a": 1}, "s": "x"}, "unparsed JSON text and surrounding whitespace"),
+        ],
+        ids=["enum-then-line-endings", "enum-then-whitespace", "json-then-whitespace"],
+    )
+    def test_a_step_that_leaves_a_value_other_than_text_still_pairs_with_the_next(self, actual, expected, hint):
+        assert_that(_message(actual, expected)).contains(f"every difference here is one of {hint}")
+
 
 class TestKeysTheExpectedSideDoesNotHave:
     def test_extra_keys_and_nothing_else(self):
@@ -104,6 +129,9 @@ class TestTheShapeRatherThanTheValues:
     def test_a_field_that_actually_differs_stays_silent(self):
         message = _message({"name": "a", "city": "X"}, _User("a", "b"))
         assert_that(message).does_not_contain("the contents match")
+
+    def test_a_plain_object_is_not_read_as_a_bag_of_fields(self):
+        assert_that(_message(_Plain("a"), {"name": "a"})).does_not_contain("field for field")
 
     def test_a_field_equality_leaves_out_does_not_keep_the_hint_away(self):
         """Read field by field, the cache the payload never carried read as a difference."""

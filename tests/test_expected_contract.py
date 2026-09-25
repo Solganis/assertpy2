@@ -17,6 +17,7 @@ import ast
 import collections
 import datetime
 import pathlib
+import warnings
 
 import pytest
 
@@ -25,6 +26,15 @@ from assertpy2.errors import AssertionFailure
 
 _STAMP = datetime.datetime(2026, 2, 1)
 _EARLIER = datetime.datetime(2026, 1, 1)
+
+
+def _raise_key_error() -> None:
+    raise KeyError("key")
+
+
+def _warn_user() -> None:
+    warnings.warn("user warning", UserWarning, stacklevel=2)
+
 
 _PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "assertpy2"
 
@@ -153,7 +163,16 @@ def test_no_excused_name_stands_for_two_different_assertions() -> None:
         (lambda: assert_that(1).is_instance_of(str), str),
         (lambda: assert_that([1]).contains(9), (9,)),
         (lambda: assert_that(5).is_between(1, 2), (1, 2)),
+        (lambda: assert_that(5).is_in(1, 2), (1, 2)),
         (lambda: assert_that(5).is_close_to(1, 0.5), (1, 0.5)),
+        (
+            lambda: assert_that(_STAMP).is_close_to(_EARLIER, datetime.timedelta(hours=1)),
+            (_EARLIER, datetime.timedelta(hours=1)),
+        ),
+        (lambda: assert_that(_raise_key_error).raises(ValueError).when_called_with(), ValueError),
+        (lambda: assert_that(lambda: None).raises(ValueError).when_called_with(), ValueError),
+        (lambda: assert_that(_warn_user).warns(DeprecationWarning).when_called_with(), DeprecationWarning),
+        (lambda: assert_that(lambda: None).warns(DeprecationWarning).when_called_with(), DeprecationWarning),
         (lambda: assert_that("abc").matches("z"), "z"),
         (lambda: assert_that(_STAMP).is_before(_EARLIER), _EARLIER),
         # a payload the assertion normalised before measuring against it, and a value it derived

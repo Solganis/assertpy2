@@ -185,6 +185,27 @@ def test_does_not_raise_returned_pivots_to_return_value():
     assert_that(safe_add).does_not_raise(ValueError).when_called_with(41).returned().is_equal_to(42)
 
 
+def test_does_not_raise_hands_the_call_its_keywords():
+    assert_that(lambda first, *, second: first + second).does_not_raise(ValueError).when_called_with(
+        1, second=2
+    ).returned().is_equal_to(3)
+
+
+@pytest.mark.parametrize(
+    ("call", "reason"),
+    [
+        (lambda: assert_that(func_noop).raises(ValueError).when_called_with(), "to raise <ValueError>"),
+        (lambda: assert_that(func_no_arg).does_not_raise(RuntimeError).when_called_with(), "but did raise"),
+    ],
+    ids=["raised-nothing", "raised-what-it-must-not"],
+)
+def test_a_soft_call_failure_leaves_a_chain_that_names_it(call, reason):
+    with pytest.raises(AssertionError), soft_assertions():
+        verdict = call().check().is_equal_to("anything")
+    assert_that(verdict.passed).is_false()
+    assert_that(verdict.message).contains(reason)
+
+
 def test_returned_without_return_value_fails():
     with pytest.raises(TypeError) as exc_info:
         assert_that(func_no_arg).raises(RuntimeError).when_called_with().returned()

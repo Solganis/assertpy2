@@ -692,12 +692,61 @@ def test_the_bound_a_range_never_reaches_is_never_asked():
     )
 
 
-@pytest.mark.parametrize(("value", "other"), [(-1.1, -0.9), (-0.9, -1.1)], ids=["value-below", "value-above"])
-def test_a_distance_the_floats_round_past_the_tolerance_is_within_it_every_way_it_is_asked(value, other):
-    """The two differ by `0.20000000000000007` as floats, and `is_close_to` held this pair before it was one rule."""
-    assert_that(value).is_close_to(other, 0.2)
-    assert_that(match.close_to(other, 0.2).matches(value)).is_true()
-    assert_that(value).is_equal_to(other, tolerance=0.2)
+_FINER_THAN_ITS_CONTEXT = decimal.Decimal("8.6999999999999999555910790149937383830547332763671875")
+
+
+@pytest.mark.parametrize(
+    ("value", "other", "tolerance"),
+    [
+        (-1.1, -0.9, 0.2),
+        (-0.9, -1.1, 0.2),
+        (1, -0.4, 1.4),
+        (-0.4, 1, 1.4),
+        (0.7, _FINER_THAN_ITS_CONTEXT, 8),
+        (_FINER_THAN_ITS_CONTEXT, 0.7, 8),
+    ],
+    ids=["value-below", "value-above", "only-the-difference", "only-the-difference-swapped", "exact", "exact-swapped"],
+)
+def test_a_distance_the_floats_round_past_the_tolerance_is_within_it_every_way_it_is_asked(value, other, tolerance):
+    """Each pair is within its tolerance by one measure alone.
+
+    `-1.1` and `-0.9` differ by `0.20000000000000007` as floats. `1 - -0.4` rounds to exactly `1.4`, while both
+    windows round the other operand out by one ulp. The `Decimal` is exactly `Decimal(0.7) + 8`, and its window
+    rounds to 28 digits and the float's to 53 bits, both past `0.7`, so only the exact difference holds.
+    """
+    assert_that(value).is_close_to(other, tolerance)
+    assert_that(match.close_to(other, tolerance).matches(value)).is_true()
+    assert_that(value).is_equal_to(other, tolerance=tolerance)
+
+
+@pytest.mark.parametrize(
+    ("value", "other", "tolerance"),
+    [(1, -1, 1), (decimal.Decimal(-1), 1.0, 0.5)],
+    ids=["ints", "a-decimal-against-a-float"],
+)
+def test_a_value_is_not_close_to_its_own_negation(value, other, tolerance):
+    assert_that(value).is_not_close_to(other, tolerance)
+    assert_that(match.close_to(other, tolerance).matches(value)).is_false()
+
+
+class _FloatsToNan:
+    """A registered number whose float is NaN while its own equality calls it one."""
+
+    def __float__(self):
+        return math.nan
+
+    def __eq__(self, other):
+        return other == 1
+
+    __hash__ = None
+
+
+numbers.Number.register(_FloatsToNan)
+
+
+def test_a_value_that_converts_to_nan_is_close_to_nothing_whatever_its_equality_says():
+    with pytest.raises(AssertionError):
+        assert_that(_FloatsToNan()).is_close_to(1, 0.5)
 
 
 @pytest.mark.parametrize(
