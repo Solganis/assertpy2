@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
@@ -22,14 +23,12 @@ from typing import (
 )
 
 from ._engine._compare import (
-    WindowRefusedError,
     _build_compare_config,
     _config_note,
     _guarded_not_equal,
     _is_real_number,
     _keyed_types_differ,
     _within_tolerance,
-    tolerance_window,
 )
 from ._engine._equality import (
     IncludeKeysMissingError,
@@ -612,6 +611,17 @@ class BetweenMatcher(BaseMatcher):
         return f"a value between <{self.low}> and <{self.high}>"
 
 
+def _measured_under(operand: object, tolerance: object) -> bool:
+    """Whether `is_close_to` measures *operand* under *tolerance*: a datetime under a duration, else a number.
+
+    Any number but a complex one, `bool` included, as `is_close_to` reads it. Outside that domain an equal pair
+    would count as close, since equality answers before any distance does.
+    """
+    if isinstance(tolerance, timedelta):
+        return isinstance(operand, datetime)
+    return type(operand) in (int, float) or (isinstance(operand, numbers.Number) and not isinstance(operand, complex))
+
+
 class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
         zero = timedelta(0) if isinstance(tolerance, timedelta) else 0
@@ -620,16 +630,18 @@ class CloseToMatcher(BaseMatcher):
         self.expected = expected
         self.tolerance = tolerance
         # a tolerance that is no ordered distance has nothing within it, not even the value itself
-        self._measures = (_is_real_number(tolerance) or isinstance(tolerance, timedelta)) and not nan_operand(tolerance)
+        self._measures = (
+            (_is_real_number(tolerance) or isinstance(tolerance, timedelta))
+            and not nan_operand(tolerance)
+            and _measured_under(expected, tolerance)
+        )
 
     def matches(self, value: Any) -> bool:
-        if not self._measures:
+        if not self._measures or not _measured_under(value, self.tolerance):
             return False
         try:
-            # no ordered window around the value is no distance, or an equal pair from any domain would be close
-            low, high = tolerance_window(value, self.tolerance)
-            return holds(low, high, "le") and _within_tolerance(value, self.expected, self.tolerance)
-        except (WindowRefusedError, UnorderableError):
+            return _within_tolerance(value, self.expected, self.tolerance)
+        except UnorderableError:
             return False
 
     def describe(self) -> str:

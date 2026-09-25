@@ -654,6 +654,11 @@ def test_a_range_over_a_pair_with_no_order_refuses_as_one_relation_does(question
     )
 
 
+def test_a_registered_number_with_no_arithmetic_is_close_to_nothing():
+    """Inside the matcher's domain, and neither subtracted nor converted exactly, so no window forms around it."""
+    assert_that(match.close_to(_NumberWithNoOrder(), 1).matches(1)).is_false()
+
+
 class _OrderedAgainstIntsOnly:
     """A registered real standing for five, ordered against an `int` and against nothing else."""
 

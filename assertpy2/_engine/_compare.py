@@ -359,9 +359,10 @@ def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
 
     Typed as `Any` because the pairing is a run-time fact: the assertion has refused every combination
     but two before it asks, a number against a number and a datetime against a timedelta, and a checker
-    reading the public signature alone is right to refuse the arithmetic.  The matcher asks without
-    refusing anything first, which is what `WindowRefusedError` is for: it hands back the operands' own
-    refusal as something a matcher may answer "no match" to.
+    reading the public signature alone is right to refuse the arithmetic.  A pair inside that domain can
+    still refuse, since a class registered as a `numbers.Number` need not subtract, which is what
+    `WindowRefusedError` is for: it hands back the operands' own refusal as something a matcher may answer
+    "no match" to.
     """
     if _is_infinite(middle) and _is_real_number(tolerance):
         # its own window, the way a float infinity already gets one: no distance from it is finite.  The

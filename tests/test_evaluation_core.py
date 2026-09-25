@@ -91,6 +91,13 @@ class _NoHash:
     __hash__ = None
 
 
+class _EqualToAnything:
+    def __eq__(self, other):
+        return True
+
+    __hash__ = None
+
+
 class _Counted(int):
     """A subclass that changes neither operation, so it answers exactly as `int` does."""
 
@@ -2054,7 +2061,7 @@ class TestNobodysCodeDecidesAVerdict:
 
 
 class TestAWindowThatCannotBeBuiltIsNotACrash:
-    """A matcher asks for the interval without refusing anything first, so a pair without one answers no."""
+    """A pair with no interval answers no match rather than raising out of the matcher."""
 
     @pytest.mark.parametrize(
         "middle",
@@ -2214,6 +2221,42 @@ class TestAToleranceIsAnOrderedDistance:
         assert_that(
             match.close_to(decimal.Decimal("Infinity"), decimal.Decimal("0.5")).matches(decimal.Decimal("Infinity"))
         ).is_true()
+
+
+class TestTheMatcherMeasuresWhatTheAssertionMeasures:
+    """The matcher refused a pair it could build no window around, where the assertion measured the same pair."""
+
+    @pytest.mark.parametrize(
+        ("value", "expected", "tolerance"),
+        [
+            pytest.param(
+                datetime.datetime(2026, 1, 1),
+                datetime.datetime(2026, 1, 1, 1),
+                datetime.timedelta.max,
+                id="a-window-past-the-calendar",
+            ),
+            pytest.param(decimal.Decimal("0.1"), 1, math.inf, id="an-infinite-float-tolerance-around-a-decimal"),
+            pytest.param(0.7, 1, decimal.Decimal("Infinity"), id="an-infinite-decimal-tolerance-around-a-float"),
+            pytest.param(True, 2, 1, id="a-bool-read-as-its-int"),
+        ],
+    )
+    def test_both_spellings_hold_the_pair(self, value, expected, tolerance):
+        assert_that(value).is_close_to(expected, tolerance)
+        assert_that(match.close_to(expected, tolerance).matches(value)).is_true()
+
+    @pytest.mark.parametrize(
+        ("expected", "tolerance", "value"),
+        [
+            pytest.param(_EqualToAnything(), 1, 5, id="equal-to-anything"),
+            pytest.param(5, datetime.timedelta(hours=1), datetime.datetime(2026, 1, 1), id="a-number-under-a-duration"),
+            pytest.param(datetime.datetime(2026, 1, 1), 1, 5, id="a-moment-under-a-number"),
+        ],
+    )
+    def test_an_expected_value_the_assertion_refuses_is_close_to_nothing(self, expected, tolerance, value):
+        """Equality answers before any distance, so an expected value equal to everything matched everything."""
+        with pytest.raises(TypeError):
+            assert_that(value).is_close_to(expected, tolerance)
+        assert_that(match.close_to(expected, tolerance).matches(value)).is_false()
 
 
 class TestTheShortcutAndTheWalkAgree:
