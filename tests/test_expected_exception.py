@@ -362,8 +362,10 @@ class TestRaisedPivot:
         """The chain goes inert, and its `.value` refuses rather than hand back what the type does not name."""
         with pytest.raises(AssertionError), soft_assertions():
             chain = getattr(assert_that(_raise_wrapped_from).raises(ValueError).when_called_with(), pivot)(OSError)
-            with pytest.raises(TypeError, match=r"cannot extract .value"):
+            with pytest.raises(TypeError) as refusal:
                 _ = chain.raised().value
+        # read outside the block: a `match=` failing inside it is an AssertionError the outer `raises` swallows
+        assert_that(str(refusal.value)).contains("cannot extract .value")
 
     @needs_groups
     def test_a_member_of_a_group_is_what_the_type_names(self):
@@ -486,6 +488,68 @@ class TestACauseMayBeOneOfSeveral:
     def test_a_group_member_is_still_asked_for_by_one_class(self):
         with pytest.raises(TypeError, match="must be an exception type"):
             assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(KeyError | OSError)
+
+
+_PIVOTS = {
+    "caused_by": lambda chain: chain.caused_by(KeyError),
+    "has_root_cause": lambda chain: chain.has_root_cause(KeyError),
+    "raised": lambda chain: chain.raised(),
+}
+
+
+class TestWhatAPivotCarries:
+    """A pivot hands on the chain's description and mode, and a failed one says what it was asked."""
+
+    @pytest.mark.parametrize("pivot", list(_PIVOTS))
+    def test_what_it_hands_on_keeps_the_description(self, pivot):
+        chain = assert_that(_raise_wrapped_from, "saving a row").raises(ValueError).when_called_with()
+        with pytest.raises(AssertionError) as exc_info:
+            _PIVOTS[pivot](chain).is_equal_to("other")
+        assert_that(str(exc_info.value)).starts_with("[saving a row] Expected <").contains("to be equal to <other>")
+
+    @pytest.mark.parametrize("pivot", list(_PIVOTS))
+    def test_what_it_hands_on_is_still_collected_under_soft_assertions(self, pivot):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions():
+            _PIVOTS[pivot](assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()).is_equal_to("other")
+            assert_that(1).is_equal_to(2)
+        assert_that(str(exc_info.value)).contains("to be equal to <other>").contains("Expected <1> to be equal to <2>")
+
+    @pytest.mark.parametrize("pivot", list(_PIVOTS))
+    def test_what_it_hands_on_warns_to_the_same_logger(self, pivot):
+        capture = StringIO()
+        logger = logging.getLogger(f"what_a_pivot_carries_{pivot}")
+        handler = logging.StreamHandler(capture)
+        logger.addHandler(handler)
+        try:
+            chain = assert_warn(_raise_wrapped_from, logger=WarningLoggingAdapter(logger, None))
+            _PIVOTS[pivot](chain.raises(ValueError).when_called_with()).is_equal_to("other")
+        finally:
+            logger.removeHandler(handler)
+        assert_that(capture.getvalue()).contains("to be equal to <other>")
+
+    @pytest.mark.parametrize(
+        ("pivot", "words"), [("caused_by", "to be caused by"), ("has_root_cause", "to have root cause")]
+    )
+    def test_a_failure_names_the_caught_exception(self, pivot, words):
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()
+        with pytest.raises(AssertionError) as exc_info:
+            getattr(chain, pivot)(TypeError | OSError)
+        assert_that(str(exc_info.value)).starts_with(f"Expected <ValueError> {words} <TypeError | OSError>")
+
+    @pytest.mark.parametrize("pivot", ["caused_by", "has_root_cause"])
+    def test_without_a_capture_the_refusal_names_the_pivot(self, pivot):
+        with pytest.raises(TypeError, match=rf"no exception captured; {pivot}\(\) is only valid after"):
+            getattr(assert_that(_raise_wrapped_from), pivot)(KeyError)
+
+    @pytest.mark.parametrize(
+        ("pivot", "words"), [("caused_by", "to be caused by"), ("has_root_cause", "to have root cause")]
+    )
+    def test_a_pivot_that_failed_softly_says_why_it_holds_no_value(self, pivot, words):
+        with pytest.raises(AssertionError), soft_assertions():
+            chain = getattr(assert_that(_raise_wrapped_from).raises(ValueError).when_called_with(), pivot)(OSError)
+            with pytest.raises(TypeError) as refusal:
+                _ = chain.value
+        assert_that(str(refusal.value)).contains(f"soft or warn mode - Expected <ValueError> {words} <OSError>")
 
 
 class TestHasRootCause:

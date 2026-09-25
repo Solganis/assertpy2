@@ -145,11 +145,30 @@ def test_is_instance_of_reports_a_protocol_isinstance_cannot_use_the_same_way_wh
         assert_that(1).is_instance_of(expected)
 
 
-def test_is_instance_of_reads_the_members_left_to_right_as_isinstance_does():
+@pytest.mark.parametrize(
+    ("bad_first", "protocol_first"),
+    [((list[str], _Named), (_Named, list[str])), (list[str] | _Named, _Named | list[str])],
+    ids=["tuple", "union"],
+)
+def test_is_instance_of_reads_the_members_left_to_right_as_isinstance_does(bad_first, protocol_first):
     with pytest.raises(TypeError, match="given class arg must be a class"):
-        assert_that(1).is_instance_of((list[str], _Named))
+        assert_that(1).is_instance_of(bad_first)
     with pytest.raises(TypeError, match="runtime_checkable"):
-        assert_that(1).is_instance_of((_Named, list[str]))
+        assert_that(1).is_instance_of(protocol_first)
+
+
+class _Unloadable:
+    """A proxy whose class cannot be read, as a lazy object whose setup failed."""
+
+    @property
+    def __class__(self):
+        raise TypeError("the proxy could not load")
+
+
+def test_is_instance_of_refuses_a_bad_member_without_asking_a_plain_class_about_the_value():
+    # a class of `type` itself is not asked, since asking reads `__class__`, which a proxy may not answer
+    with pytest.raises(TypeError, match="given class arg must be a class"):
+        assert_that(_Unloadable()).is_instance_of((int, list[str]))
 
 
 def test_is_instance_of_asks_a_member_only_about_the_value_under_assertion():
