@@ -28,6 +28,7 @@ from ._engine._compare import (
     _guarded_not_equal,
     _is_real_number,
     _keyed_types_differ,
+    _non_finite,
     _within_tolerance,
 )
 from ._engine._equality import (
@@ -54,7 +55,7 @@ from ._engine._membership import (
     searchable,
     subset_faults,
 )
-from ._engine._ordering import UnorderableError, first_out_of_order, holds, nan_operand
+from ._engine._ordering import UnorderableError, first_out_of_order, holds
 from ._engine._path import _ROOT, _Path
 from ._engine._require import (
     NON_MATCHER_TYPES,
@@ -632,7 +633,7 @@ class CloseToMatcher(BaseMatcher):
         # a tolerance that is no ordered distance has nothing within it, not even the value itself
         self._measures = (
             (_is_real_number(tolerance) or isinstance(tolerance, timedelta))
-            and not nan_operand(tolerance)
+            and _non_finite(tolerance) != "nan"
             and _measured_under(expected, tolerance)
         )
 

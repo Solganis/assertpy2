@@ -655,6 +655,112 @@ def test_a_range_over_a_pair_with_no_order_refuses_as_one_relation_does(question
     )
 
 
+class _RealWithNoFloat:
+    """Registered as a real number and offering no conversion to one."""
+
+
+numbers.Real.register(_RealWithNoFloat)
+
+
+def test_a_real_number_that_cannot_be_converted_is_no_infinity_and_no_match():
+    assert_that(match.close_to(_RealWithNoFloat(), 1).matches(1)).is_false()
+
+
+def test_a_float_conversion_of_their_own_that_raises_is_handed_on_by_a_match():
+    with pytest.raises(OverflowError, match="my __float__ is broken"):
+        match.close_to(_BrokenFloat(), 1).matches(1)
+
+
+_HUGE = 10**400
+
+
+@pytest.mark.parametrize(
+    ("value", "other", "tolerance", "close"),
+    [
+        (math.inf, math.inf, 0, True),
+        (-math.inf, -math.inf, 0, True),
+        (decimal.Decimal("Infinity"), math.inf, 0, True),
+        (math.inf, -math.inf, math.inf, False),
+        (1, math.inf, math.inf, False),
+        (_HUGE, decimal.Decimal("Infinity"), math.inf, False),
+        (_HUGE, _HUGE * 10, math.inf, True),
+        (1, 2, decimal.Decimal("Infinity"), True),
+        (math.nan, 1, math.inf, False),
+    ],
+    ids=[
+        "infinity-to-itself",
+        "negative-infinity-to-itself",
+        "a-decimal-infinity-to-a-float-one",
+        "opposite-infinities",
+        "a-finite-value-to-an-infinity",
+        "a-bignum-to-an-infinity",
+        "two-bignums",
+        "a-finite-pair-under-a-decimal-infinity",
+        "nan",
+    ],
+)
+def test_an_infinity_is_close_only_to_itself_however_it_is_asked(value, other, tolerance, close):
+    """An infinite tolerance covers every finite pair and no infinity: `1` was close to `inf` within `inf`."""
+    for first, second in ((value, other), (other, value)):
+        answers = {
+            "is_close_to": assert_that(first).check().is_close_to(second, tolerance).passed,
+            "is_not_close_to": not assert_that(first).check().is_not_close_to(second, tolerance).passed,
+            "negated": not assert_that(first).check().not_.is_close_to(second, tolerance).passed,
+            "matcher": match.close_to(second, tolerance).matches(first),
+            "tolerance": assert_that(first).check().is_equal_to(second, tolerance=tolerance).passed,
+        }
+        assert_that(answers).described_as(f"{first!r} against {second!r}").is_equal_to(dict.fromkeys(answers, close))
+
+
+def test_the_special_values_numpy_holds_are_read_as_themselves():
+    """A `numpy.float32` is neither a `float` nor a `Decimal`: its infinity matched every finite value."""
+    numpy = pytest.importorskip("numpy")
+    infinity = numpy.float32("inf")
+    assert_that(1).is_not_close_to(infinity, math.inf)
+    assert_that(match.close_to(infinity, math.inf).matches(1)).is_false()
+    assert_that(infinity).is_close_to(math.inf, 0)
+    assert_that(match.close_to(1, numpy.float32("nan")).matches(1)).is_false()
+    with pytest.raises(ValueError, match="NaN"):
+        assert_that(1).is_close_to(1, numpy.float32("nan"))
+    with pytest.raises(ValueError, match="NaN"):
+        assert_that(1).is_equal_to(1, tolerance=numpy.float32("nan"))
+
+
+class _EqualToEverything(float):
+    """A finite float whose own equality calls it equal to anything, an infinity included."""
+
+    def __eq__(self, other):
+        return True
+
+    __hash__ = float.__hash__
+
+
+def test_an_infinity_is_classified_before_equality_is_asked():
+    assert_that(_EqualToEverything(1.0)).is_not_close_to(math.inf, 1)
+    assert_that(match.close_to(math.inf, 1).matches(_EqualToEverything(1.0))).is_false()
+
+
+class _PastTheFloatRange:
+    """A finite value past the float range: its conversion says infinity, and its own comparison does not."""
+
+    def __float__(self):
+        return math.inf
+
+    def __eq__(self, other):
+        return other is self
+
+    __hash__ = object.__hash__
+
+
+numbers.Real.register(_PastTheFloatRange)
+
+
+def test_a_finite_value_the_conversion_overflows_is_no_infinity():
+    assert_that(_PastTheFloatRange()).is_not_inf()
+    held = _PastTheFloatRange()
+    assert_that(match.close_to(held, 1).matches(held)).is_true()
+
+
 def test_a_registered_number_with_no_arithmetic_is_close_to_nothing():
     """Inside the matcher's domain, and neither subtracted nor converted exactly, so no window forms around it."""
     assert_that(match.close_to(_NumberWithNoOrder(), 1).matches(1)).is_false()
@@ -746,8 +852,11 @@ numbers.Number.register(_FloatsToNan)
 
 
 def test_a_value_that_converts_to_nan_is_close_to_nothing_whatever_its_equality_says():
+    """The assertion converted it to find the NaN, and the matcher and `tolerance=` asked its equality."""
     with pytest.raises(AssertionError):
         assert_that(_FloatsToNan()).is_close_to(1, 0.5)
+    assert_that(match.close_to(1, 0.5).matches(_FloatsToNan())).is_false()
+    assert_that(assert_that(_FloatsToNan()).check().is_equal_to(1, tolerance=0.5).passed).is_false()
 
 
 @pytest.mark.parametrize(

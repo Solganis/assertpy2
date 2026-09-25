@@ -83,7 +83,7 @@ numbers/decimal snan relation	FAILED | Expected <sNaN> to be less than <0>, but 
 numbers/even on a float	TypeError | val must be an integer, but was <2.0> (float)
 numbers/fraction close to float	passed
 numbers/fraction equals float	passed
-numbers/infinite tolerance	passed
+numbers/infinite tolerance	FAILED | Expected <inf> to be close to <1> within tolerance <inf>, but was not.
 numbers/infinity between	passed
 numbers/infinity close to itself	passed
 numbers/int subclass equals int	passed

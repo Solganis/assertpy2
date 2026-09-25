@@ -2766,3 +2766,31 @@ def test_closeness_is_symmetric_in_every_domain_it_accepts(pair):
     forward = _passes(lambda: assert_that(value).is_close_to(other, tolerance))
     assert_that(_passes(lambda: assert_that(other).is_close_to(value, tolerance))).is_equal_to(forward)
     assert_that(match.close_to(other, tolerance).matches(value)).is_equal_to(forward)
+
+
+_FINITE = st.one_of(
+    _TENTHS,
+    st.integers(-(10**400), 10**400),
+    st.integers(-20, 20).map(lambda tenths: decimal.Decimal(tenths) / 10),
+    st.fractions(max_denominator=10),
+)
+
+
+@settings(deadline=None)
+@example(value=1, sign=1, tolerance=float("inf"))
+@given(
+    value=_FINITE,
+    sign=st.sampled_from([1, -1]),
+    tolerance=st.one_of(_TOLERANCES, st.just(float("inf")), st.just(decimal.Decimal("Infinity"))),
+)
+def test_an_infinity_is_close_to_no_finite_value(value, sign, tolerance):
+    """Whichever side it is on and however large the tolerance: an infinite one was a wildcard."""
+    infinity = sign * float("inf")
+    for first, second in ((value, infinity), (infinity, value)):
+        answers = {
+            "is_close_to": assert_that(first).check().is_close_to(second, tolerance).passed,
+            "negated": not assert_that(first).check().is_not_close_to(second, tolerance).passed,
+            "matcher": match.close_to(second, tolerance).matches(first),
+            "tolerance": assert_that(first).check().is_equal_to(second, tolerance=tolerance).passed,
+        }
+        assert_that(answers).described_as(f"{first!r} against {second!r}").is_equal_to(dict.fromkeys(answers, False))

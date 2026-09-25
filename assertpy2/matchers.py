@@ -319,6 +319,8 @@ class _MatchNamespace:
     def close_to(expected: object, tolerance: object) -> CloseToMatcher:
         """Matcher for a value within ``tolerance`` of ``expected`` (``abs(value - expected) <= tolerance``).
 
+        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.
+
         Args:
             expected: the target value
             tolerance: the maximum allowed absolute difference from ``expected``

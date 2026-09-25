@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import datetime
-import math
 import numbers
 from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
-from ._engine._compare import _is_nan, _within_tolerance
+from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds
 from ._engine._require import _shown, argument, refuse, require_type
@@ -22,19 +21,6 @@ def _fmt_operand(value: object) -> object:
     if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
     return value
-
-
-def _is_inf(value) -> bool:
-    """`math.isinf`, without converting what never is infinite.
-
-    An `int` or any other rational is never infinite and is not converted: past the float range the
-    conversion overflows, and for a `Fraction` it overflows inside Python code, which read as a bug in the
-    value.  An error from a conversion of the value's own is handed on: swallowed, `is_not_inf()` held on
-    a value nothing could read.
-    """
-    if isinstance(value, (int, numbers.Rational)):
-        return False
-    return math.isinf(value)
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
@@ -211,7 +197,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if not _is_inf(self.val):
+        if not _is_infinite(self.val):
             return self.error(f"Expected <{_safe_str(self.val)}> to be <Inf>, but was not.")
         return self
 
@@ -233,7 +219,7 @@ class NumericMixin(_MixinBase):
         """
         self._validate_number()
         self._validate_real()
-        if _is_inf(self.val):
+        if _is_infinite(self.val):
             return self.error("Expected not <Inf>, but was.")
         return self
 
@@ -589,6 +575,8 @@ class NumericMixin(_MixinBase):
         tolerance: SupportsFloat | SupportsIndex | datetime.timedelta,
     ) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
+
+        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.
 
         Args:
             other (object): the other value, expected to be close to val within tolerance

@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import holds, nan_operand
+from ._ordering import holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -268,13 +268,20 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     ``is_equal_to(tolerance=)``, which takes the difference.  Taking any of the three, no spelling now
     fails a pair it passed before.
 
-    ``NaN`` is never within, checked by type rather than through `math.isnan`, which overflows on an
-    arbitrary-precision ``int`` and signals on a `Decimal` NaN.  A pair the ordering engine cannot order
-    raises `UnorderableError` out of the windows, for the caller to refuse or to read as no match.
+    A pair the ordering engine cannot order raises `UnorderableError` out of the windows, for the caller
+    to refuse or to read as no match.
+
+    ``NaN`` is never within, and an infinity is within only of itself, whatever the tolerance, the rule
+    `math.isclose` keeps.  The operands are classified before equality is asked, since a value's own
+    `__eq__` could otherwise call a NaN or a finite number equal to what it is not, and the distance is
+    never classified: two finite values far enough apart overflow their difference to an infinity and are
+    still measured.  An infinite tolerance was a wildcard before this, `1` was close to `inf` within `inf`
+    through the window around `1`, and it now covers every finite pair and no more.
     """
-    if nan_operand(actual) or nan_operand(expected):
-        return False
-    if actual == expected:  # equal values (including inf == inf) are within any tolerance
+    actual_kind, expected_kind = _non_finite(actual), _non_finite(expected)
+    if actual_kind or expected_kind:
+        return actual_kind == expected_kind == "inf" and bool(actual == expected)
+    if actual == expected:
         return True
     return (
         bool(_difference_within(actual, expected, tolerance))
@@ -290,8 +297,6 @@ def _difference_within(actual, expected, tolerance) -> bool | None:
     refuses to subtract at all and a bignum ``int`` overflows one, and those two pairs are measured
     exactly instead, through `fractions.Fraction`.
     """
-    if _is_infinite(actual) or _is_infinite(expected):
-        return False  # unequal, and no distance from an infinity is within a finite tolerance
     try:
         return abs(actual - expected) <= tolerance
     except (TypeError, OverflowError) as error:
@@ -337,14 +342,45 @@ def _is_nan(value) -> bool:
 
 
 def _is_infinite(value) -> bool:
-    """A `float` or `Decimal` infinity, asked by type so nothing else is converted to a float to answer.
+    """Whether a real number other than a `Decimal` is itself an infinity.
 
-    Through `Decimal`'s own method rather than the value's: a subclass overriding `is_infinite` would
-    otherwise decide this, and run its code before the arithmetic it is being asked about.
+    A `float` directly.  Any other value is asked through `math.isinf`, since a `numpy.float32` infinity is
+    not a `float` and was read as finite, and one with no conversion is refused there, as the assertions
+    always refused it.  A rational never is one, and an `int` or a `Fraction` past the float range would
+    overflow the conversion.  `_non_finite` reads a `Decimal` through its base type's own method, and the
+    assertions asking this refuse one.
+
+    The conversion alone would call a finite value past the float range infinite, a `numpy.longdouble` or
+    an arbitrary-precision float, so the value's own comparison has to agree.  A conversion of their own
+    that raises is a bug in the value and is handed on, as `_is_nan` does.
     """
     if isinstance(value, float):
         return math.isinf(value)
-    return isinstance(value, decimal.Decimal) and decimal.Decimal.is_infinite(value)
+    if isinstance(value, (int, numbers.Rational)):
+        return False
+    return math.isinf(value) and bool(value == math.inf or value == -math.inf)
+
+
+def _non_finite(value) -> str:
+    """``"nan"`` or ``"inf"`` for a value closeness answers by rule, ``""`` for one it measures.
+
+    One pass per operand: a float, a `Decimal` and a type with no conversion answer before either question.
+    The conversion is read off the type rather than the `numbers` ABCs, which cost a datetime pair a quarter
+    of its `is_close_to`, measured, and a datetime is measured rather than refused.
+    """
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return ""
+        return "nan" if math.isnan(value) else "inf"
+    if isinstance(value, decimal.Decimal):
+        if decimal.Decimal.is_finite(value):
+            return ""
+        return "nan" if decimal.Decimal.is_nan(value) else "inf"
+    if isinstance(value, int) or not hasattr(type(value), "__float__"):
+        return ""
+    if _is_nan(value):
+        return "nan"
+    return "inf" if _is_infinite(value) else ""
 
 
 class WindowRefusedError(TypeError):
@@ -365,10 +401,6 @@ def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
     `WindowRefusedError` is for: it hands back the operands' own refusal as something a matcher may answer
     "no match" to.
     """
-    if _is_infinite(middle) and _is_real_number(tolerance):
-        # its own window, the way a float infinity already gets one: no distance from it is finite.  The
-        # tolerance is still read, or an infinity paired with anything at all would answer "close enough"
-        return middle, middle
     try:
         return middle - tolerance, middle + tolerance
     except (TypeError, OverflowError) as refusal:
