@@ -43,6 +43,7 @@ from ._engine._introspection import (
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
+    is_own_iterator,
     materialized,
 )
 from ._engine._membership import (
@@ -118,6 +119,18 @@ def _refused(matcher: Matcher[Any], value: object) -> MatchResult:
     refused value into a passing assertion.
     """
     return MatchResult(matched=False, description=matcher.describe(), mismatch=matcher.describe_mismatch(value))
+
+
+def _stated_reason(matcher: Matcher[Any], value: object) -> str:
+    """What *matcher* says about a value it has already refused, without asking for its verdict again.
+
+    A value that is its own iterator was spent on the verdict, so it gets the requirement alone: read
+    again, its remainder was described as the value, and an endless one was read forever.
+    """
+    if is_own_iterator(value):
+        return matcher.describe()
+    refused = _refused(matcher, value)
+    return f"{refused.description} ({refused.mismatch})"
 
 
 def _has_own_evaluate(matcher: object) -> bool:
@@ -947,7 +960,7 @@ class HasPropertyMatcher(BaseMatcher):
         except AttributeError:
             return f"<{_safe_repr(value)}> has no property <{self.name}>"
         if self.matcher is not None:
-            return f"property <{self.name}> was <{_safe_repr(held)}>, {self.matcher.describe_mismatch(held)}"
+            return f"property <{self.name}> <{_safe_repr(held)}> did not match {_stated_reason(self.matcher, held)}"
         return f"was <{_safe_repr(value)}>"
 
 
@@ -1302,6 +1315,8 @@ class EachMatcher(BaseMatcher):
         """One walk: deciding drained a one-shot value, and describing afterwards named its remainder.
 
         The walk stops at the first item that fails, so an endless value is answered rather than read.
+        The reason is what the item's matcher says about the item that failed, asked without asking for
+        its verdict again.  Asking every item for its reason cost 2.2x on a passing walk of ten thousand.
         """
         try:
             for index, item in enumerate(value):
@@ -1309,7 +1324,10 @@ class EachMatcher(BaseMatcher):
                     return MatchResult(
                         matched=False,
                         description=self.describe(),
-                        mismatch=f"item at index {index} <{_safe_str(item)}> did not match {self.matcher.describe()}",
+                        mismatch=(
+                            f"item at index {index} <{_safe_str(item)}> did not match "
+                            f"{_stated_reason(self.matcher, item)}"
+                        ),
                     )
         except TypeError as exc:
             if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match

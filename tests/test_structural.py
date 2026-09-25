@@ -1,4 +1,6 @@
 import collections.abc
+import io
+import itertools
 import types
 import typing
 
@@ -118,6 +120,51 @@ class TestEachMatcher:
     def test_describe_mismatch_all_match(self):
         matcher = match.each_item(match.is_positive())
         assert_that(matcher.describe_mismatch([1, 2, 3])).is_equal_to("was <[1, 2, 3]>")
+
+    def test_describe_mismatch_carries_what_the_item_matcher_found(self):
+        """Only the requirement was named, so the field a record failed on was left for the reader to find."""
+        matcher = match.each_item(match.structure({"city": "Paris"}))
+        assert_that(matcher.describe_mismatch([{"city": "Paris"}, {"city": "Oslo"}])).is_equal_to(
+            "item at index 1 <{'city': 'Oslo'}> did not match a mapping matching structure {city: <Paris>} "
+            "(at <city>: expected <Paris>, but was <Oslo>)"
+        )
+
+    def test_each_item_is_asked_once_for_its_verdict_and_its_reason(self):
+        class RefusesOnce:
+            def __init__(self):
+                self.asked = 0
+
+            def matches(self, value):
+                self.asked += 1
+                return self.asked > 1
+
+            def describe(self):
+                return "asked twice"
+
+            def describe_mismatch(self, value):
+                return f"was asked {self.asked} time"
+
+        outcome = match.each_item(RefusesOnce()).evaluate([7])
+        assert_that(outcome.matched).is_false()
+        assert_that(outcome.mismatch).is_equal_to("item at index 0 <7> did not match asked twice (was asked 1 time)")
+
+    def test_an_item_that_is_its_own_iterator_is_not_read_again_for_a_reason(self):
+        """Read again, the remainder was described as the item: `<-3>` at index 0, where `-2` had failed."""
+        outcome = match.each_item(match.each_item(match.greater_than(0))).evaluate([iter([1, -2, -3])])
+        assert_that(outcome.mismatch).ends_with("did not match each item matching a value greater than <0>")
+
+    def test_an_item_that_refuses_to_be_iterated_still_gets_its_failure_described(self):
+        """A closed file answers `iter()` with `ValueError`, which replaced the failure it was asked about."""
+        closed = io.StringIO()
+        closed.close()
+        outcome = match.each_item(match.is_none()).evaluate([closed])
+        assert_that(outcome.matched).is_false()
+        assert_that(outcome.mismatch).starts_with("item at index 0 <")
+
+    def test_an_endless_item_is_answered_rather_than_read_for_a_reason(self):
+        endless = itertools.chain([5], itertools.repeat(0))
+        outcome = match.each_item(match.each_item(match.less_than(3))).evaluate([endless])
+        assert_that(outcome.matched).is_false()
 
 
 class TestStructureMatcher:

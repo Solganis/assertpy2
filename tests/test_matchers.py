@@ -1,3 +1,4 @@
+import io
 import re
 import typing
 from datetime import date, datetime, timedelta, timezone
@@ -1061,7 +1062,35 @@ class TestHasPropertyMatcher:
             count = -1
 
         result = match.has_property("count", match.is_positive()).describe_mismatch(Obj())
-        assert_that(result).contains("count").contains("-1")
+        assert_that(result).is_equal_to("property <count> <-1> did not match a positive value (was <-1>)")
+
+    def test_describe_mismatch_carries_what_the_nested_matcher_found(self):
+        class Home:
+            def __init__(self):
+                self.address = {"city": "Paris"}
+
+        result = match.has_property("address", match.structure({"city": "Rome"})).describe_mismatch(Home())
+        assert_that(result).is_equal_to(
+            "property <address> <{'city': 'Paris'}> did not match a mapping matching structure {city: <Rome>} "
+            "(at <city>: expected <Rome>, but was <Paris>)"
+        )
+
+    def test_a_held_value_that_refuses_to_be_iterated_still_gets_its_failure_described(self):
+        class Process:
+            def __init__(self):
+                self.stdout = io.StringIO()
+                self.stdout.close()
+
+        result = match.has_property("stdout", match.is_none()).describe_mismatch(Process())
+        assert_that(result).starts_with("property <stdout> <")
+
+    def test_a_held_value_that_is_its_own_iterator_is_not_read_again_for_a_reason(self):
+        class Feed:
+            def __init__(self):
+                self.items = iter([1, -2, -3])
+
+        result = match.has_property("items", match.each_item(match.greater_than(0))).describe_mismatch(Feed())
+        assert_that(result).ends_with("did not match each item matching a value greater than <0>")
 
     def test_describe_mismatch_has_attr_no_matcher(self):
         result = match.has_property("upper").describe_mismatch("foo")

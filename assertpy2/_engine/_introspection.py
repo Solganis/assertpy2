@@ -369,6 +369,15 @@ def _cell_contents(cell: CellType) -> object:
         return None
 
 
+def is_own_iterator(value: object) -> bool:
+    """Whether *value* is an iterator, so the first pass over it is the only one there is.
+
+    Asked of its type rather than through `iter()`: this is asked while a failure is being described,
+    and a closed file answers `iter()` with `ValueError`.
+    """
+    return issubclass(type(value), collections.abc.Iterator)
+
+
 def materialized(value: Iterable[_T]) -> Iterable[_T]:
     """``value``, drained into a list when it is a one-shot iterator, handed back untouched otherwise.
 
