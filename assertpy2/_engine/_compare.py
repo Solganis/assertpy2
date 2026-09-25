@@ -113,7 +113,7 @@ def _build_compare_config(tolerance, comparators, ignore_null=False, strict_type
     if tolerance is not None:
         if isinstance(tolerance, bool) or not isinstance(tolerance, numbers.Number) or isinstance(tolerance, complex):
             raise TypeError("given tolerance arg must be a real number")
-        if math.isnan(tolerance):
+        if _is_nan(tolerance):
             raise ValueError("given tolerance arg must not be NaN")
         if tolerance < 0:
             raise ValueError("given tolerance arg must not be negative")
@@ -312,6 +312,27 @@ def _window_holds(middle, value, tolerance) -> bool:
     if type(value) is type(low) is type(high) is float:
         return low <= value <= high
     return holds(value, low, "ge") and holds(value, high, "le")
+
+
+def _is_nan(value) -> bool:
+    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
+
+    A `Decimal` is asked through its base type: a signalling NaN refuses to become a float, and reading
+    it as "not a NaN" is the one answer it certainly is not.  Not through the value's own `is_nan`,
+    which a subclass owns: measured, one saying it was a NaN turned a passing `is_close_to` into a
+    failure.  `_is_infinite` reads the same question the same way.
+
+    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
+    `is_not_nan()` held on a value nothing could read.
+    """
+    if isinstance(value, decimal.Decimal):
+        return decimal.Decimal.is_nan(value)
+    try:
+        return math.isnan(value)
+    except OverflowError as exc:
+        if raised_inside(exc):
+            raise
+        return False
 
 
 def _is_infinite(value) -> bool:

@@ -1,7 +1,6 @@
 import collections
 import collections.abc
 import datetime
-import math
 import numbers
 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
@@ -10,6 +9,7 @@ from ._engine._compare import (
     _CompareConfig,
     _config_note,
     _guarded_not_equal,
+    _is_nan,
     _node_decision,
     _spec_matches,
 )
@@ -273,7 +273,7 @@ class HelpersMixin(_MixinBase):
         else:
             require_type(other, numbers.Number, "a number", subject=argument("other"))
             require_type(tolerance, numbers.Number, "a number", subject=argument("tolerance"))
-            if math.isnan(tolerance):
+            if _is_nan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
             if tolerance < 0:
                 raise ValueError("given tolerance arg must be positive")

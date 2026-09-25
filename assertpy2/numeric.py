@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import datetime
-import decimal
 import math
 import numbers
 from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
-from ._engine._compare import _within_tolerance
+from ._engine._compare import _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
@@ -23,27 +22,6 @@ def _fmt_operand(value: object) -> object:
     if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
     return value
-
-
-def _is_nan(value) -> bool:
-    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
-
-    A `Decimal` is asked through its base type: a signalling NaN refuses to become a float, and reading
-    it as "not a NaN" is the one answer it certainly is not.  Not through the value's own `is_nan`,
-    which a subclass owns: measured, one saying it was a NaN turned a passing `is_close_to` into a
-    failure.  `_is_infinite` reads the same question the same way.
-
-    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
-    `is_not_nan()` held on a value nothing could read.
-    """
-    if isinstance(value, decimal.Decimal):
-        return decimal.Decimal.is_nan(value)
-    try:
-        return math.isnan(value)
-    except OverflowError as exc:
-        if raised_inside(exc):
-            raise
-        return False
 
 
 def _is_inf(value) -> bool:

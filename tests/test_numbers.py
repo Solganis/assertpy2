@@ -695,6 +695,16 @@ def test_a_distance_the_floats_round_past_the_tolerance_is_within_it_every_way_i
     assert_that(value).is_equal_to(other, tolerance=0.2)
 
 
+@pytest.mark.parametrize(
+    "call",
+    [lambda: assert_that(0).is_close_to(10**400, 10**400), lambda: assert_that(0).is_equal_to(1, tolerance=10**400)],
+    ids=["is_close_to", "tolerance"],
+)
+def test_a_tolerance_past_the_float_range_is_a_tolerance(call):
+    """Asked whether it was a NaN as a float, it raised `OverflowError` instead of measuring."""
+    call()
+
+
 @pytest.mark.parametrize("question", ["is_close_to", "is_not_close_to"])
 def test_a_window_bound_the_value_cannot_be_ordered_against_is_refused_under_other(question):
     """The window is `other` plus and minus the tolerance, and it is those the value is ordered against.
