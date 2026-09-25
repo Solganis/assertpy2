@@ -1,4 +1,5 @@
 import typing
+from unittest.mock import Mock
 
 import pytest
 
@@ -98,6 +99,18 @@ _A_BAD_MEMBER_WHEREVER_IT_STANDS = pytest.mark.parametrize(
 def test_is_instance_of_refuses_a_bad_member_whichever_comes_first(expected):
     with pytest.raises(TypeError, match="given class arg must be a class"):
         assert_that(1).is_instance_of(expected)
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [typing.Optional[int], int | None, (int, type(None))],  # noqa: UP045  # the legacy spelling is the subject
+    ids=["legacy-union", "union", "tuple"],
+)
+def test_is_instance_of_answers_what_isinstance_answers_for_a_value_that_passes_for_an_int(expected):
+    # below 3.14 the legacy union reads `issubclass(type(x), int)`, which a `Mock(spec=int)` fails and
+    # `isinstance(x, int)` passes, so an answer taken from the up-front probes would flip it on 3.10
+    value = Mock(spec=int)
+    assert_that(assert_that(value).check().is_instance_of(expected).passed).is_equal_to(isinstance(value, expected))
 
 
 def test_is_instance_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10():

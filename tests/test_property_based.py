@@ -11,15 +11,19 @@ import copy
 import datetime
 import decimal
 import fractions
+import functools
 import itertools
 import json
+import operator
 import pathlib
 import re
+import sys
+import typing
 from collections import Counter, namedtuple
-from collections.abc import Mapping
+from collections.abc import Hashable, Iterable, Mapping, Sized
 from dataclasses import dataclass, replace
 from itertools import pairwise
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace, UnionType
 
 import pytest
 from hypothesis import assume, example, given, settings
@@ -2794,3 +2798,211 @@ def test_an_infinity_is_close_to_no_finite_value(value, sign, tolerance):
             "tolerance": assert_that(first).check().is_equal_to(second, tolerance=tolerance).passed,
         }
         assert_that(answers).described_as(f"{first!r} against {second!r}").is_equal_to(dict.fromkeys(answers, False))
+
+
+_CLASS_LEAVES = st.sampled_from([int, bool, str, bytes, float, list, dict, KeyError, OSError, LookupError, object])
+_CLASS_LEAVES |= st.sampled_from([Exception, Hashable, Iterable, Sized, typing.SupportsInt])
+
+
+@typing.runtime_checkable
+class _NamedAtRunTime(typing.Protocol):
+    name: str
+
+
+# its own class, since on 3.10 and 3.11 an `isinstance` against a data protocol fills the ABC negative
+# cache, after which `issubclass` answers False from it instead of refusing
+@typing.runtime_checkable
+class _NamedForIssubclass(typing.Protocol):
+    name: str
+
+
+class _Shadowed(tuple):
+    """A tuple whose own iteration shows nothing, where `isinstance` reads the storage."""
+
+    def __iter__(self):
+        return iter(())
+
+
+def _union(members, legacy):
+    # the legacy spelling is part of the space
+    union = typing.Union[tuple(members)] if legacy else functools.reduce(operator.or_, members)  # noqa: UP007
+    # below 3.14 a legacy union, even one `|` made, asks `issubclass(type(x), member)`, which a data protocol refuses
+    if sys.version_info < (3, 14) and not isinstance(union, UnionType) and _NamedAtRunTime in typing.get_args(union):
+        return functools.reduce(operator.or_, typing.get_args(union))
+    return union
+
+
+def _tuple(members, shadowed):
+    return _Shadowed(members) if shadowed else tuple(members)
+
+
+def _placed_among(one, others):
+    return st.builds(
+        lambda before, it, after: [*before, it, *after], st.lists(others, max_size=2), one, st.lists(others, max_size=2)
+    )
+
+
+def _unions_of(leaves):
+    """Classes and unions of them in both spellings.  A union holds no tuple and flattens what it holds."""
+    return st.recursive(
+        leaves, lambda inner: st.builds(_union, st.lists(inner, min_size=2, max_size=3), st.booleans()), max_leaves=6
+    )
+
+
+def _class_info(leaves):
+    """What `isinstance` takes: unions, and tuples of anything nested to any depth, empty ones included."""
+    return st.recursive(
+        _unions_of(leaves), lambda inner: st.builds(_tuple, st.lists(inner, max_size=4), st.booleans()), max_leaves=10
+    )
+
+
+def _with_one_bad_member(leaves, bad_in_a_union, bad_in_a_tuple):
+    """Class info with exactly one member the check cannot take, at any tuple depth and position.
+
+    Inside a union it is always one level down, since a union flattens whatever it holds.
+    """
+    in_a_union = st.one_of(
+        bad_in_a_union, st.builds(_union, _placed_among(bad_in_a_union, _unions_of(leaves)), st.booleans())
+    )
+    return st.recursive(
+        st.one_of(in_a_union, bad_in_a_tuple),
+        lambda inner: st.builds(_tuple, _placed_among(inner, _class_info(leaves)), st.booleans()),
+        max_leaves=4,
+    )
+
+
+_GENERICS = st.sampled_from([list[str], dict[str, int]])
+_NOT_CLASSES = st.sampled_from(["int", 3])
+# a runtime protocol with data members answers `isinstance` and refuses `issubclass`, reliably from 3.12
+_ISINSTANCE_LEAVES = _CLASS_LEAVES | st.just(_NamedAtRunTime)
+_FOR_ISINSTANCE = _class_info(_ISINSTANCE_LEAVES)
+_FOR_ISSUBCLASS = _class_info(_CLASS_LEAVES)
+_BAD_FOR_ISINSTANCE = _with_one_bad_member(_ISINSTANCE_LEAVES, _GENERICS, _NOT_CLASSES)
+_BAD_FOR_ISSUBCLASS = _with_one_bad_member(
+    _CLASS_LEAVES, _GENERICS | st.just(_NamedForIssubclass) if sys.version_info >= (3, 12) else _GENERICS, _NOT_CLASSES
+)
+_INSTANCES = st.sampled_from(
+    [1, True, "s", b"b", 1.5, [1], {"a": 1}, KeyError("k"), OSError("o"), object(), None, SimpleNamespace(name="n")]
+)
+_CLASSES = st.sampled_from([int, bool, str, bytes, list, dict, KeyError, OSError, ValueError, object, type(None)])
+_EXCEPTIONS = st.sampled_from([KeyError, OSError, ValueError, TypeError, LookupError])
+
+
+def _caught_with(cause_class, root_class):
+    def raising():
+        cause = cause_class("cause")
+        cause.__cause__ = root_class("root")
+        raise ValueError("wrapped") from cause
+
+    return assert_that(raising).raises(ValueError).when_called_with()
+
+
+def _refused(call, message):
+    try:
+        call()
+    except TypeError as error:
+        return re.search(message, str(error)) is not None
+    except AssertionError:
+        return False
+    return False
+
+
+@settings(deadline=None)
+@given(
+    value=_INSTANCES,
+    expected=_FOR_ISINSTANCE,
+    before=st.lists(_FOR_ISINSTANCE, max_size=2),
+    after=st.lists(_FOR_ISINSTANCE, max_size=2),
+)
+def test_class_info_is_answered_as_isinstance_answers_it(value, expected, before, after):
+    """Reading every member up front leaves the answer to `isinstance`, on every surface that takes class info."""
+    answers = {
+        "is_instance_of": assert_that(value).check().is_instance_of(expected).passed,
+        "negated": not _passes(lambda: assert_that(value).not_.is_instance_of(expected)),
+        "matcher": match.is_instance_of(expected).matches(value),
+        "is_instance_of_any": assert_that(value).check().is_instance_of_any(*before, expected, *after).passed,
+    }
+    holds = isinstance(value, expected)
+    wanted = {**dict.fromkeys(answers, holds), "is_instance_of_any": isinstance(value, (*before, expected, *after))}
+    assert_that(answers).described_as(repr(expected)).is_equal_to(wanted)
+
+
+@settings(deadline=None)
+@given(value=_CLASSES, expected=_FOR_ISSUBCLASS)
+def test_class_info_is_answered_as_issubclass_answers_it(value, expected):
+    answers = {
+        "is_subclass_of": assert_that(value).check().is_subclass_of(expected).passed,
+        "negated": not _passes(lambda: assert_that(value).not_.is_subclass_of(expected)),
+    }
+    holds = issubclass(value, expected)
+    assert_that(answers).described_as(repr(expected)).is_equal_to(dict.fromkeys(answers, holds))
+
+
+@settings(deadline=None)
+@given(cause_class=_EXCEPTIONS, root_class=_EXCEPTIONS, expected=_FOR_ISINSTANCE)
+def test_a_cause_is_answered_as_isinstance_answers_it(cause_class, root_class, expected):
+    answers = {
+        "caused_by": _caught_with(cause_class, root_class).check().caused_by(expected).passed,
+        "has_root_cause": _caught_with(cause_class, root_class).check().has_root_cause(expected).passed,
+    }
+    wanted = {
+        "caused_by": isinstance(cause_class("cause"), expected),
+        "has_root_cause": isinstance(root_class("root"), expected),
+    }
+    assert_that(answers).described_as(repr(expected)).is_equal_to(wanted)
+
+
+@settings(deadline=None)
+@example(value=1, expected=(list[str], int, str), before=[], after=[])
+@example(value=1, expected=(int, list[str], str), before=[], after=[])
+@example(value=1, expected=(int, str, list[str]), before=[], after=[])
+@example(value=1, expected=int | list[str], before=[object], after=[])
+@example(value=1, expected=typing.Union[int, list[str]], before=[], after=[str])  # noqa: UP007  # the legacy spelling is the subject
+@given(
+    value=_INSTANCES,
+    expected=_BAD_FOR_ISINSTANCE,
+    before=st.lists(_FOR_ISINSTANCE, max_size=2),
+    after=st.lists(_FOR_ISINSTANCE, max_size=2),
+)
+def test_a_member_isinstance_cannot_take_is_refused_wherever_it_stands(value, expected, before, after):
+    """`isinstance` stops at the first member that matches, so a bad one behind it used to decide nothing."""
+    refused = {
+        "is_instance_of": _refused(lambda: assert_that(value).is_instance_of(expected), "must be a class"),
+        "checked": _refused(lambda: assert_that(value).check().is_instance_of(expected), "must be a class"),
+        "negated": _refused(lambda: assert_that(value).not_.is_instance_of(expected), "must be a class"),
+        "matcher": _refused(lambda: match.is_instance_of(expected), "must be a class"),
+        "is_instance_of_any": _refused(
+            lambda: assert_that(value).is_instance_of_any(*before, expected, *after), "must be classes"
+        ),
+    }
+    assert_that(refused).described_as(repr(expected)).is_equal_to(dict.fromkeys(refused, True))
+
+
+@settings(deadline=None)
+@example(value=bool, expected=int | list[str])
+@example(value=bool, expected=(int, (str, list[str])))
+@given(value=_CLASSES, expected=_BAD_FOR_ISSUBCLASS)
+def test_a_member_issubclass_cannot_take_is_refused_wherever_it_stands(value, expected):
+    refusal = "must be a class|non-method members"
+    refused = {
+        "is_subclass_of": _refused(lambda: assert_that(value).is_subclass_of(expected), refusal),
+        "checked": _refused(lambda: assert_that(value).check().is_subclass_of(expected), refusal),
+        "negated": _refused(lambda: assert_that(value).not_.is_subclass_of(expected), refusal),
+    }
+    assert_that(refused).described_as(repr(expected)).is_equal_to(dict.fromkeys(refused, True))
+
+
+@settings(deadline=None)
+@given(cause_class=_EXCEPTIONS, root_class=_EXCEPTIONS, expected=_BAD_FOR_ISINSTANCE)
+def test_a_cause_member_isinstance_cannot_take_is_refused_wherever_it_stands(cause_class, root_class, expected):
+    refused = {
+        f"{pivot}{mode}": _refused(
+            lambda pivot=pivot, mode=mode: getattr(
+                _caught_with(cause_class, root_class).check() if mode else _caught_with(cause_class, root_class), pivot
+            )(expected),
+            "must be a class",
+        )
+        for pivot in ("caused_by", "has_root_cause")
+        for mode in ("", " checked")
+    }
+    assert_that(refused).described_as(repr(expected)).is_equal_to(dict.fromkeys(refused, True))
