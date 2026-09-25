@@ -315,24 +315,25 @@ def _window_holds(middle, value, tolerance) -> bool:
 
 
 def _is_nan(value) -> bool:
-    """`math.isnan` guarded so a bignum int/Decimal that overflows float reports False (never NaN).
+    """Whether the value is a NaN, without converting what never is one.
 
     A `Decimal` is asked through its base type: a signalling NaN refuses to become a float, and reading
     it as "not a NaN" is the one answer it certainly is not.  Not through the value's own `is_nan`,
     which a subclass owns: measured, one saying it was a NaN turned a passing `is_close_to` into a
     failure.  `_is_infinite` reads the same question the same way.
 
-    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
-    `is_not_nan()` held on a value nothing could read.
+    An `int` or any other rational is never a NaN and is not converted: past the float range the
+    conversion overflows, and for a `Fraction` it overflows inside Python code, which read as a bug in the
+    value.  Any other value is converted, and an error from a conversion of its own is handed on:
+    swallowed, `is_not_nan()` held on a value nothing could read.
     """
+    if isinstance(value, float):
+        return math.isnan(value)
     if isinstance(value, decimal.Decimal):
         return decimal.Decimal.is_nan(value)
-    try:
-        return math.isnan(value)
-    except OverflowError as exc:
-        if raised_inside(exc):
-            raise
+    if isinstance(value, (int, numbers.Rational)):
         return False
+    return math.isnan(value)
 
 
 def _is_infinite(value) -> bool:

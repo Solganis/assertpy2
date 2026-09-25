@@ -1,4 +1,5 @@
 import decimal
+import fractions
 import math
 import numbers
 
@@ -73,9 +74,9 @@ def test_a_float_conversion_of_their_own_that_raises_is_not_an_answer(question):
         getattr(assert_that(_BrokenFloat()), question)()
 
 
-def test_bignum_int_does_not_overflow_nan_inf_guards():
-    # math.isnan/isinf raise OverflowError on an int too large for float; the guards must tolerate it
-    big = math.factorial(200)
+@pytest.mark.parametrize("big", [math.factorial(200), fractions.Fraction(10**400, 3)], ids=["an-int", "a-fraction"])
+def test_bignum_does_not_overflow_nan_inf_guards(big):
+    """A rational is asked by its type: the `__float__` of a `Fraction` is Python, so its overflow was re-raised."""
     assert_that(big).is_close_to(big, 1)
     assert_that(big).is_not_nan()
     assert_that(big).is_not_inf()

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 from ._engine._compare import _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds
-from ._engine._require import _shown, argument, raised_inside, refuse, require_type
+from ._engine._require import _shown, argument, refuse, require_type
 from .errors import _safe_str
 
 if TYPE_CHECKING:
@@ -25,17 +25,16 @@ def _fmt_operand(value: object) -> object:
 
 
 def _is_inf(value) -> bool:
-    """`math.isinf` guarded so a bignum int/Decimal that overflows float reports False (never infinite).
+    """`math.isinf`, without converting what never is infinite.
 
-    A `__float__` of their own raising `OverflowError` is a bug in the value, not an answer: swallowed,
-    `is_not_inf()` held on a value nothing could read.
+    An `int` or any other rational is never infinite and is not converted: past the float range the
+    conversion overflows, and for a `Fraction` it overflows inside Python code, which read as a bug in the
+    value.  An error from a conversion of the value's own is handed on: swallowed, `is_not_inf()` held on
+    a value nothing could read.
     """
-    try:
-        return math.isinf(value)
-    except OverflowError as exc:
-        if raised_inside(exc):
-            raise
+    if isinstance(value, (int, numbers.Rational)):
         return False
+    return math.isinf(value)
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
