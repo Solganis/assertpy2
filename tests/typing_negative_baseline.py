@@ -325,6 +325,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "ordering-matcher-judges-any-subject": {},
     "convertible-but-not-a-number": {},
     "array-as-a-scalar-operand": {},
+    "bool-as-a-closeness-tolerance": {},
+    "bool-as-a-closeness-operand": {},
 }
 
 SPLIT: frozenset[str] = frozenset(

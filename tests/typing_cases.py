@@ -251,15 +251,18 @@ def _where_the_numeric_bound_is_wider_than_the_runtime() -> None:
 
     The runtime asks `isinstance(other, numbers.Number)`, and a numeric tower built on registration is
     invisible to a checker: `numpy.int64` is a `numbers.Number` at runtime and inherits nothing static.
-    So the type says "anything that can produce a float", which lets two shapes through that the
-    runtime then refuses by name.
+    So the type says "anything that can produce a float", which lets through shapes the runtime then
+    refuses by name.  A `bool` on either side of closeness is one: it is an `int` to a checker, and no
+    annotation takes an `int` and leaves a `bool` out.
 
-    Both are recorded rather than fixed, because the error runs the other way from the one that hurt:
+    They are recorded rather than fixed, because the error runs the other way from the one that hurt:
     letting through a value the runtime rejects with `given arg must be a number, but was <ndarray>` is
     a worse message, while rejecting `numpy.int64` outright was a broken test suite.
     """
     assert_that(1).is_greater_than(_OnlyFloat())  # case: convertible-but-not-a-number
     assert_that(1).is_greater_than(numpy.array([0, 1]))  # case: array-as-a-scalar-operand
+    assert_that(5).is_close_to(5.5, True)  # case: bool-as-a-closeness-tolerance
+    assert_that(2).is_close_to(True, 1)  # case: bool-as-a-closeness-operand
 
 
 def _methods_that_do_not_fit_the_value() -> None:
