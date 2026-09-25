@@ -286,6 +286,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "pivot-on-a-negated-poll": _NOT_CALLABLE,
     "expectation-on-a-negated-poll": _NOT_CALLABLE,
     "poll-on-a-sync-poll": _NOT_THE_CHAINS_VALUE,
+    "bare-type-expectation-on-a-poll": {
+        "ty": frozenset({"invalid-argument-type"}),
+        "mypy": frozenset(),
+        "pyright": frozenset(),
+        "pyrefly": frozenset(),
+    },
     "poll-on-an-async-poll": _NOT_THE_CHAINS_VALUE,
     # the call ladder: the expectation views carry `when_called_with()`, and each landing carries what
     # the run time lets it be asked.  All four checkers read a missing declaration the same way
@@ -323,17 +329,20 @@ SPLIT: frozenset[str] = frozenset(
         "element-of-another-type-on-a-polled-string",
         "text-assertion-on-an-async-probe",
         "warned-return-read-as-text",
+        "bare-type-expectation-on-a-poll",
     }
 )
 """The cases the four do not agree on, named so a new one has to be decided about.
 
-Eight relations.  ty is silent in six.  The two predicates are a lambda over the subject reading a
+Nine relations.  ty is silent in six.  The two predicates are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
 The pivoted number is a verdict asked of a value the builder holds, refused through the ``self``
 annotation of a rung on its twin, which ty does not read.  The polled string is handed an element of
 another type, where the rung that matches carries `str` operands and only mypy and pyright say so.  The
 async probe is a chain ty reads as `Unknown`, and so is what `warns()` returned.  In the two
-`when_called_with()` calls made before any expectation, mypy is the silent one.
+`when_called_with()` calls made before any expectation, mypy is the silent one.  In the ninth ty is the
+only one to refuse: a polled `raises()` given a bare `type`, which the others take through the rung
+carrying the class.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as the dialects agreeing.

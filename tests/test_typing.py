@@ -54,7 +54,7 @@ if TYPE_CHECKING:
         _CheckWarnedAssertion,
     )
     from assertpy2._engine._negated_typing import _NegatedObjectAssertion
-    from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll
+    from assertpy2._engine._poll_typing import _AsyncPoll, _SyncPoll, _SyncPollCompleted, _SyncPollInvoked
     from assertpy2._engine._typing import (
         _ArrayAssertion,
         _ArrayShape,
@@ -293,6 +293,31 @@ if TYPE_CHECKING:
     assert_type(assert_that(_maybe_counts).eventually_sync().is_not_none(), _SyncPoll[list[int]])
     assert_type(assert_that(_maybe_grid).eventually_sync().is_not_none().first().val, list[int])
     assert_type(assert_that(_maybe_counts).eventually().is_not_none(), _AsyncPoll[list[int]])
+
+    # a polled callable's call lands where its expectation says, with that landing's own pivots declared
+    def _handler() -> Callable[[int], int]: ...
+
+    polled = assert_that(_handler).eventually_sync()
+    assert_type(polled.raises(ValueError).when_called_with(1), _SyncPollInvoked[ValueError])
+    assert_type(polled.raises(ValueError).when_called_with(1).val, str)
+    assert_type(polled.raises(ValueError).when_called_with(1).contains("x").raised().val, ValueError)
+    assert_type(polled.raises(ValueError).when_called_with(1).caused_by(KeyError).raised().val, KeyError)
+    assert_type(polled.raises(ValueError).when_called_with(1).not_.caused_by(KeyError).raised().val, ValueError)
+    assert_type(polled.does_not_raise(ValueError).when_called_with(1), _SyncPollCompleted[int])
+    assert_type(polled.does_not_raise(ValueError).when_called_with(1).returned().val, int)
+    assert_type(polled.warns().when_called_with(1).returned().val, int)
+    assert_type(polled.warns().when_called_with(1).val, str)
+    assert_type(polled.does_not_warn().when_called_with(1).returned().val, int)
+    assert_type(polled.does_not_raise(ValueError).when_called_with(1).is_callable().returned().val, int)
+    assert_type(polled.raises(ValueError).when_called_with(1).not_.contains("x").raised().val, ValueError)
+
+    async def _awaited() -> None:
+        awaited = assert_that(_handler).eventually()
+        assert_type((await awaited.raises(ValueError).when_called_with(1)).raised().value, ValueError)
+        assert_type((await awaited.does_not_raise(ValueError).when_called_with(1).returned()).value, int)
+        assert_type((await awaited.warns().when_called_with(1).returned()).value, int)
+        assert_type((await awaited.does_not_warn().when_called_with(1).returned()).value, int)
+        assert_type((await awaited.raises(ValueError).when_called_with(1)).value, str)
 
     # the four ways to set an expectation, each landing the call somewhere different: an exception
     # message, a warning message, or the callable itself with the return value reachable

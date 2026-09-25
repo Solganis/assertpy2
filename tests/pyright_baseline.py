@@ -102,7 +102,9 @@ LADDER_OVERLAP: dict[tuple[str, str], int] = {
     ("assertpy2/_engine/_negated_typing.py", "caused_by"): 1,
     ("assertpy2/_engine/_negated_typing.py", "error_of"): 1,
     ("assertpy2/_engine/_negated_typing.py", "has_root_cause"): 1,
-    ("assertpy2/_engine/_poll_typing.py", "raises"): 4,
+    ("assertpy2/_engine/_poll_typing.py", "caused_by"): 3,
+    ("assertpy2/_engine/_poll_typing.py", "has_root_cause"): 3,
+    ("assertpy2/_engine/_poll_typing.py", "error_of"): 3,
 }
 """Where a refinement ladder makes pyright call a later rung redundant, by the method it is on.
 

@@ -311,6 +311,9 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_a_factory).eventually().does_not_raise(
         ValueError
     ).when_called_with()  # case: valid-async-call-after-an-expectation
+    # a polled `raises()` carries the class it was given to the call, and a bare `type` gives none: the rung
+    # that took one made ty read every polled `raises()` as `Unknown`, so the chain leaves it off
+    assert_that(_a_factory).eventually_sync().raises(_an_exception_class())  # case: bare-type-expectation-on-a-poll
     # a poll delivers its own failure, so `check()` is refused at run time and declared as not callable
     # a chain hands its value back under `val`; `value` is the builder's name and was recorded as an
     # assertion, which failed inside the replay rather than where it was written.  Read through a use,
@@ -389,6 +392,10 @@ def _adder(first: int, second: int) -> int:
 
 def _a_factory() -> Callable[..., int]:
     return lambda: 1
+
+
+def _an_exception_class() -> type:
+    return ValueError
 
 
 def _boom() -> int:

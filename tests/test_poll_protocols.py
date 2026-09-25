@@ -11,9 +11,11 @@ from __future__ import annotations
 import ast
 import asyncio
 import dataclasses
+import itertools
 import pathlib
 import subprocess
 import sys
+import warnings
 from typing import TYPE_CHECKING
 
 import pytest
@@ -25,6 +27,7 @@ from assertpy2 import assert_that
 from assertpy2._engine import _builder_check_typing, _poll_typing, _typing
 from assertpy2._engine._operations import NOT_AN_OPERATION, POLLS, WITHOUT_A_VERDICT
 from assertpy2.assertpy import AssertionBuilder
+from tests.group_compat import ExceptionGroup, needs_groups
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -155,8 +158,8 @@ def _names(source: str, protocol: str | None = None) -> set[str]:
     return found
 
 
-# reached through `when_called_with()` only. It adds these nine to the surface its value type
-# would have, so the chain gives up its type at that pivot and they come off the hook
+# reached through `when_called_with()` only. It adds these nine to the surface its value type would have:
+# the landing declares the six that move the chain, and the three that keep it come off its hook
 _AFTER_A_CALL = frozenset(
     {
         "caused_by",
@@ -271,9 +274,10 @@ class TestWhatTheTwinsCarry:
         twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), flavour)
         assert_that(twins).contains("within", "every", "ignoring", "not_", "__getattr__")
 
-    def test_every_declared_name_is_one_the_replay_can_answer(self) -> None:
+    @pytest.mark.parametrize("chain", ["_SyncPoll", "_SyncPollInvoked", "_SyncPollWarned", "_SyncPollCompleted"])
+    def test_every_declared_name_is_one_the_replay_can_answer(self, chain) -> None:
         # a chain answers any name off its hook, so parity is about the builder the steps are replayed on
-        twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), "_SyncPoll")
+        twins = _names(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"), chain)
         declared = {name for name in twins if not name.startswith("_") and name not in _THE_CHAIN_ITSELF}
         assert_that(sorted(declared - set(dir(AssertionBuilder)))).described_as(
             "promised on a chain and absent from the builder its steps replay on"
@@ -297,21 +301,139 @@ class TestWhereAPivotLands:
     def test_an_element_pivot_keeps_what_the_landing_view_holds(self) -> None:
         assert_that(self._returns("first")).contains("_SyncPoll[str]", "_SyncPoll[_K]")
 
-    def test_the_invoked_pivot_gives_the_type_up(self) -> None:
-        """The call is declared on the state an expectation puts the chain in, and erases the value.
+    def test_the_call_lands_where_its_expectation_says(self) -> None:
+        """Each expectation names its landing, and `when_called_with()` hands that back.
 
-        Its landing view adds eight names, so a chain that kept its type through the call would answer
-        those off the hook and claim the caught message was whatever went in.
+        The landing view adds names to the value it holds, `raised()` and `returned()` among them, so each
+        landing declares those rather than leaving them to a hook over the message: a chain over text answered
+        them off its own hook and claimed the caught message was whatever went in.  Before this every landing
+        was a chain over `Any`.
         """
-        source = pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8")
-        returns = {
-            ast.unparse(item.returns)
-            for node in ast.walk(ast.parse(source))
-            if isinstance(node, ast.ClassDef) and node.name.endswith("Expecting")
-            for item in node.body
-            if isinstance(item, ast.FunctionDef) and item.name == "when_called_with" and item.returns is not None
-        }
-        assert_that(returns).is_equal_to({"_SyncPoll[Any]", "_AsyncPoll[Any]"})
+        tree = ast.parse(pathlib.Path(_poll_typing.__file__).read_text(encoding="utf-8"))
+        classes = {node.name: node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+
+        def returns(klass: str, name: str) -> set[str]:
+            return {
+                ast.unparse(item.returns)
+                for item in classes[klass].body
+                if isinstance(item, ast.FunctionDef) and item.name == name and item.returns is not None
+            }
+
+        for flavour in ("_SyncPoll", "_AsyncPoll"):
+            assert_that(returns(f"{flavour}Expecting", "when_called_with")).is_equal_to({"_L_co"})
+            expecting = f"{flavour}Expecting[_P_co, {flavour}"
+            landed = {name: returns(flavour, name) for name in ("raises", "does_not_raise", "warns", "does_not_warn")}
+            assert_that(landed).described_as(flavour).is_equal_to(
+                {
+                    "raises": {f"{expecting}Invoked[_Landed]]"},
+                    "does_not_raise": {f"{expecting}Completed[_P]]"},
+                    "warns": {f"{expecting}Warned[_P]]"},
+                    "does_not_warn": {f"{expecting}Completed[_P]]"},
+                }
+            )
+        assert_that(returns("_SyncPollInvoked", "raised")).is_equal_to({"_SyncPoll[_Exc_co]"})
+        assert_that(returns("_SyncPollCompleted", "returned")).is_equal_to({"_SyncPoll[_R_co]"})
+        assert_that(returns("_AsyncPollInvoked", "__await__")).is_equal_to(
+            {"Generator[Any, None, _InvokedAssertion[_Exc]]"}
+        )
+
+
+def _failing_from_a_lookup(number: int) -> int:
+    try:
+        raise KeyError("missing")
+    except KeyError as exc:
+        raise ValueError("bad") from exc
+
+
+def _doubling(number: int) -> int:
+    return number * 2
+
+
+def _failing_as_a_group(number: int) -> int:
+    raise ExceptionGroup("two failed", [ValueError("bad"), KeyError("missing")])
+
+
+def _noisy_doubling(number: int) -> int:
+    warnings.warn("old", DeprecationWarning, stacklevel=2)
+    return number * 2
+
+
+class TestTheLandingsHoldWhatTheyDeclare:
+    """What a polled call hands back at run time is what its landing's declaration names."""
+
+    @pytest.mark.parametrize(
+        ("probed", "call", "held"),
+        [
+            (_failing_from_a_lookup, lambda chain: chain.raises(ValueError).when_called_with(1).val, str),
+            (
+                _failing_from_a_lookup,
+                lambda chain: chain.raises(ValueError).when_called_with(1).raised().val,
+                ValueError,
+            ),
+            (
+                _failing_from_a_lookup,
+                lambda chain: chain.raises(ValueError).when_called_with(1).contains("ba").raised().val,
+                ValueError,
+            ),
+            (
+                _failing_from_a_lookup,
+                lambda chain: chain.raises(ValueError).when_called_with(1).caused_by(KeyError).raised().val,
+                KeyError,
+            ),
+            (
+                _failing_from_a_lookup,
+                lambda chain: chain.raises(ValueError).when_called_with(1).not_.caused_by(OSError).raised().val,
+                ValueError,
+            ),
+            (_doubling, lambda chain: chain.does_not_raise(ValueError).when_called_with(1).val, type(_doubling)),
+            (_doubling, lambda chain: chain.does_not_raise(ValueError).when_called_with(1).returned().val, int),
+            (_doubling, lambda chain: chain.does_not_warn(UserWarning).when_called_with(1).returned().val, int),
+            (_noisy_doubling, lambda chain: chain.warns(DeprecationWarning).when_called_with(1).val, str),
+            (_noisy_doubling, lambda chain: chain.warns(DeprecationWarning).when_called_with(1).returned().val, int),
+        ],
+        ids=[
+            "raises",
+            "raised",
+            "raised-after-an-assertion",
+            "caused-by",
+            "negated-caused-by",
+            "does-not-raise",
+            "returned",
+            "does-not-warn-returned",
+            "warns",
+            "warns-returned",
+        ],
+    )
+    def test_the_value_is_the_declared_type(self, probed, call, held) -> None:
+        answer = call(assert_that(lambda: probed).eventually_sync(timeout=0.5, trace=False))
+        assert_that(answer).is_instance_of(held)
+
+    @needs_groups
+    def test_errors_hands_back_the_members_of_the_group(self) -> None:
+        chain = assert_that(lambda: _failing_as_a_group).eventually_sync(timeout=0.5, trace=False)
+        members = chain.raises(ExceptionGroup).when_called_with(1).errors().val
+        assert_that(members).is_instance_of(list).all_satisfy(lambda member: isinstance(member, BaseException))
+
+    def test_a_probe_that_raises_only_later_lands_the_same(self) -> None:
+        """A retried call still lands on the caught exception once it raises."""
+        attempts = itertools.chain([_doubling, _doubling], itertools.repeat(_failing_from_a_lookup))
+        chain = assert_that(lambda: next(attempts)).eventually_sync(timeout=2, interval=0, trace=False)
+        assert_that(chain.raises(ValueError).when_called_with(1).raised().val).is_instance_of(ValueError)
+
+    @pytest.mark.parametrize(
+        ("probed", "call", "held"),
+        [
+            (_failing_from_a_lookup, lambda chain: chain.raises(ValueError).when_called_with(1).raised(), ValueError),
+            (_doubling, lambda chain: chain.does_not_raise(ValueError).when_called_with(1).returned(), int),
+            (_noisy_doubling, lambda chain: chain.warns(DeprecationWarning).when_called_with(1).returned(), int),
+        ],
+        ids=["raised", "returned", "warns-returned"],
+    )
+    def test_the_awaited_value_is_the_declared_type(self, probed, call, held) -> None:
+        async def run() -> object:
+            return (await call(assert_that(lambda: probed).eventually(timeout=0.5, trace=False))).value
+
+        assert_that(asyncio.run(run())).is_instance_of(held)
 
 
 class TestTheRuntimeAnswersThroughThem:

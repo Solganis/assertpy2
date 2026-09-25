@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         _U,
         _ArrayT_co,
         _CapableT,
+        _Exc,
         _FrameT_co,
         _Landed,
         _Other,
@@ -73,6 +74,12 @@ if TYPE_CHECKING:
     # the rungs below restrict `self` with the annotations `assert_that()` overloads are written with
     _T = TypeVar("_T")
     _P = TypeVar("_P")
+    from ._typing import _CompletedAssertion, _InvokedAssertion, _WarnedAssertion
+
+    # what the call lands on, carried by the expectation and read by `when_called_with()`
+    _L_co = TypeVar("_L_co", covariant=True)
+    _R_co = TypeVar("_R_co", covariant=True)
+    _Exc_co = TypeVar("_Exc_co", bound=BaseException, covariant=True)
 
     class _NoVerdictAfterAPoll:
         """The type of `check` on a polling chain, which is not callable and says why in the diagnostic.
@@ -1270,31 +1277,21 @@ if TYPE_CHECKING:
             **options: Any,
         ) -> _SyncPoll[_P_co]: ...
 
-        @overload
-        def raises(self: _SyncPoll[Callable[..., _P]], ex: type[_Landed]) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _SyncPoll[_Callable], ex: type[_Landed]) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _SyncPoll[_Callable], ex: type) -> _SyncPollExpecting[_P_co]: ...
+        def raises(
+            self: _SyncPoll[Callable[..., _P]], ex: type[_Landed]
+        ) -> _SyncPollExpecting[_P_co, _SyncPollInvoked[_Landed]]: ...
 
-        @overload
-        def does_not_raise(self: _SyncPoll[Callable[..., _P]], ex: type) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def does_not_raise(self: _SyncPoll[_Callable], ex: type) -> _SyncPollExpecting[_P_co]: ...
+        def does_not_raise(
+            self: _SyncPoll[Callable[..., _P]], ex: type
+        ) -> _SyncPollExpecting[_P_co, _SyncPollCompleted[_P]]: ...
 
-        @overload
-        def warns(self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def warns(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
+        def warns(
+            self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+        ) -> _SyncPollExpecting[_P_co, _SyncPollWarned[_P]]: ...
 
-        @overload
         def does_not_warn(
             self: _SyncPoll[Callable[..., _P]], warning: type[Warning] = ...
-        ) -> _SyncPollExpecting[_P_co]: ...
-        @overload
-        def does_not_warn(self: _SyncPoll[_Callable], warning: type[Warning] = ...) -> _SyncPollExpecting[_P_co]: ...
+        ) -> _SyncPollExpecting[_P_co, _SyncPollCompleted[_P]]: ...
 
         @overload
         def eventually(
@@ -1469,7 +1466,7 @@ if TYPE_CHECKING:
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _SyncPoll[_P_co]: ...
 
-    class _SyncPollExpecting(Protocol[_P_co]):
+    class _SyncPollExpecting(Protocol[_P_co, _L_co]):
         """A chain with an expectation set, which is the one state `when_called_with()` needs.
 
         Its own protocol rather than a subclass, for the reason the negated chain is one: a protocol
@@ -1477,18 +1474,19 @@ if TYPE_CHECKING:
 
         The assertions come off the hook rather than being repeated here.  Nothing in the tree or the
         docs writes an assertion between an expectation and the call, and repeating them costs about
-        1300 declarations for that shape alone.
+        1300 declarations for that shape alone.  `_L_co` is the chain the call lands on, which each
+        expectation names: the caught message, the warning's message, or the callable that completed.
         """
 
-        def within(self, timeout: float) -> _SyncPollExpecting[_P_co]: ...
-        def every(self, interval: float) -> _SyncPollExpecting[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollExpecting[_P_co]: ...
+        def within(self, timeout: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
+        def every(self, interval: float) -> _SyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollExpecting[_P_co, _L_co]: ...
         @property
         def val(self) -> _P_co: ...
 
         check: _NoVerdictAfterAPoll
 
-        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _SyncPoll[Any]: ...
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _L_co: ...
         def __getattr__(self, name: str) -> Callable[..., _SyncPoll[_P_co]]: ...
 
     class _NegatedSyncPoll(Protocol[_P_co]):
@@ -4003,31 +4001,21 @@ if TYPE_CHECKING:
             **options: Any,
         ) -> _AsyncPoll[_P_co]: ...
 
-        @overload
-        def raises(self: _AsyncPoll[Callable[..., _P]], ex: type[_Landed]) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _AsyncPoll[_Callable], ex: type[_Landed]) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def raises(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPollExpecting[_P_co]: ...
+        def raises(
+            self: _AsyncPoll[Callable[..., _P]], ex: type[_Landed]
+        ) -> _AsyncPollExpecting[_P_co, _AsyncPollInvoked[_Landed]]: ...
 
-        @overload
-        def does_not_raise(self: _AsyncPoll[Callable[..., _P]], ex: type) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def does_not_raise(self: _AsyncPoll[_Callable], ex: type) -> _AsyncPollExpecting[_P_co]: ...
+        def does_not_raise(
+            self: _AsyncPoll[Callable[..., _P]], ex: type
+        ) -> _AsyncPollExpecting[_P_co, _AsyncPollCompleted[_P]]: ...
 
-        @overload
-        def warns(self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def warns(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
+        def warns(
+            self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...
+        ) -> _AsyncPollExpecting[_P_co, _AsyncPollWarned[_P]]: ...
 
-        @overload
         def does_not_warn(
             self: _AsyncPoll[Callable[..., _P]], warning: type[Warning] = ...
-        ) -> _AsyncPollExpecting[_P_co]: ...
-        @overload
-        def does_not_warn(self: _AsyncPoll[_Callable], warning: type[Warning] = ...) -> _AsyncPollExpecting[_P_co]: ...
+        ) -> _AsyncPollExpecting[_P_co, _AsyncPollCompleted[_P]]: ...
 
         @overload
         def eventually(
@@ -4202,19 +4190,19 @@ if TYPE_CHECKING:
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
 
-    class _AsyncPollExpecting(Protocol[_P_co]):
+    class _AsyncPollExpecting(Protocol[_P_co, _L_co]):
         """The awaitable chain with an expectation set, built the same way."""
 
-        def within(self, timeout: float) -> _AsyncPollExpecting[_P_co]: ...
-        def every(self, interval: float) -> _AsyncPollExpecting[_P_co]: ...
-        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollExpecting[_P_co]: ...
+        def within(self, timeout: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
+        def every(self, interval: float) -> _AsyncPollExpecting[_P_co, _L_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollExpecting[_P_co, _L_co]: ...
         def close(self) -> None: ...
         @property
         def val(self) -> _P_co: ...
 
         check: _NoVerdictAfterAPoll
 
-        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _AsyncPoll[Any]: ...
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _L_co: ...
         def __getattr__(self, name: str) -> Callable[..., _AsyncPoll[_P_co]]: ...
 
     class _NegatedAsyncPoll(Protocol[_P_co]):
@@ -5553,3 +5541,347 @@ if TYPE_CHECKING:
             comparators: dict[Any, Callable[[Any, Any], Any]] | None = ...,
             placeholders: Mapping[Any, Matcher[Any] | Callable[[Any], object]] | None = ...,
         ) -> _AsyncPoll[_P_co]: ...
+
+    class _SyncPollInvoked(Protocol[_Exc_co]):
+        """Where the call lands, `_InvokedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _SyncPollInvoked[_Exc_co]: ...
+        def every(self, interval: float) -> _SyncPollInvoked[_Exc_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollInvoked[_Exc_co]: ...
+        @property
+        def not_(self) -> _NegatedSyncPollInvoked[_Exc_co]: ...
+        @property
+        def val(self) -> str: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def raised(self) -> _SyncPoll[_Exc_co]: ...
+        @overload
+        def caused_by(self, ex: type[_Landed]) -> _SyncPollInvoked[_Landed]: ...
+        @overload
+        def caused_by(self, ex: type) -> _SyncPollInvoked[BaseException]: ...
+        @overload
+        def has_root_cause(self, ex: type[_Landed]) -> _SyncPollInvoked[_Landed]: ...
+        @overload
+        def has_root_cause(self, ex: type) -> _SyncPollInvoked[BaseException]: ...
+        @overload
+        def error_of(self, ex: type[_Landed]) -> _SyncPollInvoked[_Landed]: ...
+        @overload
+        def error_of(self, ex: type) -> _SyncPollInvoked[BaseException]: ...
+        def errors(self) -> _SyncPoll[list[BaseException]]: ...
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollInvoked[_Exc_co]]: ...
+
+    class _NegatedSyncPollInvoked(Protocol[_Exc_co]):
+        """`not_` after the call: the assertion after it hands back `_SyncPollInvoked`."""
+
+        def within(self, timeout: float) -> _NegatedSyncPollInvoked[_Exc_co]: ...
+        def every(self, interval: float) -> _NegatedSyncPollInvoked[_Exc_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollInvoked[_Exc_co]: ...
+        @property
+        def val(self) -> str: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollInvoked[_Exc_co]]: ...
+
+    class _SyncPollWarned(Protocol[_R_co]):
+        """Where the call lands, `_WarnedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _SyncPollWarned[_R_co]: ...
+        def every(self, interval: float) -> _SyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollWarned[_R_co]: ...
+        @property
+        def not_(self) -> _NegatedSyncPollWarned[_R_co]: ...
+        @property
+        def val(self) -> str: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def returned(self) -> _SyncPoll[_R_co]: ...
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollWarned[_R_co]]: ...
+
+    class _NegatedSyncPollWarned(Protocol[_R_co]):
+        """`not_` after the call: the assertion after it hands back `_SyncPollWarned`."""
+
+        def within(self, timeout: float) -> _NegatedSyncPollWarned[_R_co]: ...
+        def every(self, interval: float) -> _NegatedSyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollWarned[_R_co]: ...
+        @property
+        def val(self) -> str: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollWarned[_R_co]]: ...
+
+    class _SyncPollCompleted(Protocol[_R_co]):
+        """Where the call lands, `_CompletedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _SyncPollCompleted[_R_co]: ...
+        def every(self, interval: float) -> _SyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _SyncPollCompleted[_R_co]: ...
+        @property
+        def not_(self) -> _NegatedSyncPollCompleted[_R_co]: ...
+        @property
+        def val(self) -> Callable[..., _R_co]: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def returned(self) -> _SyncPoll[_R_co]: ...
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollCompleted[_R_co]]: ...
+
+    class _NegatedSyncPollCompleted(Protocol[_R_co]):
+        """`not_` after the call: the assertion after it hands back `_SyncPollCompleted`."""
+
+        def within(self, timeout: float) -> _NegatedSyncPollCompleted[_R_co]: ...
+        def every(self, interval: float) -> _NegatedSyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedSyncPollCompleted[_R_co]: ...
+        @property
+        def val(self) -> Callable[..., _R_co]: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _SyncPollCompleted[_R_co]]: ...
+
+    class _AsyncPollInvoked(Protocol[_Exc]):
+        """Where the call lands, `_InvokedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _AsyncPollInvoked[_Exc]: ...
+        def every(self, interval: float) -> _AsyncPollInvoked[_Exc]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollInvoked[_Exc]: ...
+        def close(self) -> None: ...
+        @property
+        def not_(self) -> _NegatedAsyncPollInvoked[_Exc]: ...
+        def __await__(self) -> Generator[Any, None, _InvokedAssertion[_Exc]]: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def raised(self) -> _AsyncPoll[_Exc]: ...
+        @overload
+        def caused_by(self, ex: type[_Landed]) -> _AsyncPollInvoked[_Landed]: ...
+        @overload
+        def caused_by(self, ex: type) -> _AsyncPollInvoked[BaseException]: ...
+        @overload
+        def has_root_cause(self, ex: type[_Landed]) -> _AsyncPollInvoked[_Landed]: ...
+        @overload
+        def has_root_cause(self, ex: type) -> _AsyncPollInvoked[BaseException]: ...
+        @overload
+        def error_of(self, ex: type[_Landed]) -> _AsyncPollInvoked[_Landed]: ...
+        @overload
+        def error_of(self, ex: type) -> _AsyncPollInvoked[BaseException]: ...
+        def errors(self) -> _AsyncPoll[list[BaseException]]: ...
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollInvoked[_Exc]]: ...
+
+    class _NegatedAsyncPollInvoked(Protocol[_Exc]):
+        """`not_` after the call: the assertion after it hands back `_AsyncPollInvoked`."""
+
+        def within(self, timeout: float) -> _NegatedAsyncPollInvoked[_Exc]: ...
+        def every(self, interval: float) -> _NegatedAsyncPollInvoked[_Exc]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollInvoked[_Exc]: ...
+        def close(self) -> None: ...
+        def __await__(self) -> Generator[Any, None, _InvokedAssertion[_Exc]]: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollInvoked[_Exc]]: ...
+
+    class _AsyncPollWarned(Protocol[_R_co]):
+        """Where the call lands, `_WarnedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _AsyncPollWarned[_R_co]: ...
+        def every(self, interval: float) -> _AsyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollWarned[_R_co]: ...
+        def close(self) -> None: ...
+        @property
+        def not_(self) -> _NegatedAsyncPollWarned[_R_co]: ...
+        def __await__(self) -> Generator[Any, None, _WarnedAssertion[_R_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def returned(self) -> _AsyncPoll[_R_co]: ...
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollWarned[_R_co]]: ...
+
+    class _NegatedAsyncPollWarned(Protocol[_R_co]):
+        """`not_` after the call: the assertion after it hands back `_AsyncPollWarned`."""
+
+        def within(self, timeout: float) -> _NegatedAsyncPollWarned[_R_co]: ...
+        def every(self, interval: float) -> _NegatedAsyncPollWarned[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollWarned[_R_co]: ...
+        def close(self) -> None: ...
+        def __await__(self) -> Generator[Any, None, _WarnedAssertion[_R_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollWarned[_R_co]]: ...
+
+    class _AsyncPollCompleted(Protocol[_R_co]):
+        """Where the call lands, `_CompletedAssertion` over a probe polled again."""
+
+        def within(self, timeout: float) -> _AsyncPollCompleted[_R_co]: ...
+        def every(self, interval: float) -> _AsyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _AsyncPollCompleted[_R_co]: ...
+        def close(self) -> None: ...
+        @property
+        def not_(self) -> _NegatedAsyncPollCompleted[_R_co]: ...
+        def __await__(self) -> Generator[Any, None, _CompletedAssertion[_R_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        value: _NoValueOnAChain
+        when_called_with: _NoExpectationOnAChain
+
+        def returned(self) -> _AsyncPoll[_R_co]: ...
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollCompleted[_R_co]]: ...
+
+    class _NegatedAsyncPollCompleted(Protocol[_R_co]):
+        """`not_` after the call: the assertion after it hands back `_AsyncPollCompleted`."""
+
+        def within(self, timeout: float) -> _NegatedAsyncPollCompleted[_R_co]: ...
+        def every(self, interval: float) -> _NegatedAsyncPollCompleted[_R_co]: ...
+        def ignoring(self, *exceptions: type[Exception]) -> _NegatedAsyncPollCompleted[_R_co]: ...
+        def close(self) -> None: ...
+        def __await__(self) -> Generator[Any, None, _CompletedAssertion[_R_co]]: ...
+
+        check: _NoVerdictAfterAPoll
+        at_json_path: _NotAnAssertionToNegate
+        decoded_as: _NotAnAssertionToNegate
+        decoded_as_json: _NotAnAssertionToNegate
+        described_as: _NotAnAssertionToNegate
+        does_not_raise: _NotAnAssertionToNegate
+        does_not_warn: _NotAnAssertionToNegate
+        element: _NotAnAssertionToNegate
+        errors: _NotAnAssertionToNegate
+        eventually: _NotAnAssertionToNegate
+        eventually_sync: _NotAnAssertionToNegate
+        extracting: _NotAnAssertionToNegate
+        filtered_on: _NotAnAssertionToNegate
+        first: _NotAnAssertionToNegate
+        flat_mapped: _NotAnAssertionToNegate
+        last: _NotAnAssertionToNegate
+        mapped: _NotAnAssertionToNegate
+        not_: _NotAnAssertionToNegate
+        raised: _NotAnAssertionToNegate
+        raises: _NotAnAssertionToNegate
+        returned: _NotAnAssertionToNegate
+        single: _NotAnAssertionToNegate
+        warns: _NotAnAssertionToNegate
+
+        def __getattr__(self, name: str) -> Callable[..., _AsyncPollCompleted[_R_co]]: ...
