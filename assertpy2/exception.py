@@ -9,6 +9,7 @@ from ._engine._compat import BaseExceptionGroup
 from ._engine._mixin_base import _MixinBase
 from ._engine._pairing import maximum_pairing
 from ._engine._require import argument, refuse
+from ._matcher_impls import _require_class_info
 from .errors import _callable_name, _safe_str, _type_expression_name
 from .outcome import AssertionOutcome
 
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from ._engine._compat import Self
+    from ._matcher_impls import ClassInfo
 
 __tracebackhide__ = True
 
@@ -453,7 +455,7 @@ class ExceptionMixin(_MixinBase):
         exc = self._require_raised("raised")
         return self.builder(exc, self.description, self.kind, logger=self.logger)
 
-    def caused_by(self, ex: type) -> Self:
+    def caused_by(self, ex: ClassInfo) -> Self:
         """Asserts the caught exception was chained from a cause of type ``ex`` (``raise ... from``, or an
         exception raised during handling), then pivots the chain to that cause's message.
 
@@ -463,11 +465,15 @@ class ExceptionMixin(_MixinBase):
                 assert_that(save).raises(ServiceError).when_called_with(row).caused_by(TimeoutError)
 
         Args:
-            ex: the expected cause type
+            ex: the expected cause type, or a union or tuple of them as `isinstance` takes
 
         Returns:
             AssertionBuilder: a new instance wrapping the cause's message (chain on it, or walk deeper)
+
+        Raises:
+            TypeError: if ``ex`` holds anything `isinstance` cannot take, checked member by member
         """
+        _require_class_info(ex, subject=argument("exception"))
         exc = self._require_raised("caused_by")
         cause = _effective_cause(exc)
         if cause is None or not isinstance(cause, ex):
@@ -482,16 +488,20 @@ class ExceptionMixin(_MixinBase):
         pivoted._raised_exception = cause
         return pivoted
 
-    def has_root_cause(self, ex: type) -> Self:
+    def has_root_cause(self, ex: ClassInfo) -> Self:
         """Asserts the *root* of the caught exception's cause chain is of type ``ex``, then pivots the chain
         to that root cause's message.
 
         Args:
-            ex: the expected root-cause type
+            ex: the expected root-cause type, or a union or tuple of them as `isinstance` takes
 
         Returns:
             AssertionBuilder: a new instance wrapping the root cause's message
+
+        Raises:
+            TypeError: if ``ex`` holds anything `isinstance` cannot take, checked member by member
         """
+        _require_class_info(ex, subject=argument("exception"))
         exc = self._require_raised("has_root_cause")
         root = exc
         seen = {id(root)}

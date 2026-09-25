@@ -827,8 +827,8 @@ _PIVOTS_OF_A_LANDING: Final = {
         "        def raised(self) -> {flavour}[{held}]: ...",
         *(
             f"        @overload\n        def {name}(self, ex: type[_Landed]) -> {{landing}}[_Landed]: ...\n"
-            f"        @overload\n        def {name}(self, ex: type) -> {{landing}}[BaseException]: ..."
-            for name in ("caused_by", "has_root_cause", "error_of")
+            f"        @overload\n        def {name}(self, ex: {taken}) -> {{landing}}[BaseException]: ..."
+            for name, taken in (("caused_by", "ClassInfo"), ("has_root_cause", "ClassInfo"), ("error_of", "type"))
         ),
         "        def errors(self) -> {flavour}[list[BaseException]]: ...",
     ),

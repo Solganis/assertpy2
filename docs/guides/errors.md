@@ -677,6 +677,10 @@ assert_that(save).raises(ServiceError).when_called_with(row).has_root_cause(
 ).is_equal_to("db timeout")
 ```
 
+Either pivot also takes a union or a tuple of classes, as `isinstance` does, and holds when the cause is any
+one of them: `caused_by(TimeoutError | ConnectionError)`. With no single class named, a type checker reads the
+cause as `BaseException` (Pyrefly keeps a union as the union).
+
 **Exception groups** (`ExceptionGroup`, Python 3.11+, e.g. from an `asyncio.TaskGroup`). `contains_error()`
 asserts the caught group holds an exception of each given type, and `does_not_contain_error()` asserts it
 holds none of them. Both search the whole tree, so a group nested inside a group is reached.

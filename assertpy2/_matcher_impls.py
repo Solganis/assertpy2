@@ -683,17 +683,26 @@ def _class_info_members(expected: object) -> list[object]:
     return [expected]
 
 
+def _require_class_info(expected: object, *, subject: str) -> None:
+    """Refuse what `isinstance` cannot take, member by member, since `isinstance` stops at the first match.
+
+    A union or a tuple holding `list[str]` is otherwise answered by whichever member comes first: taken
+    when an earlier one matches, a `TypeError` when none does, and on 3.10 a union refused either way.
+    """
+    try:
+        for member in _class_info_members(expected):
+            # cast because whether it is class info at all is the question this loop answers
+            isinstance(None, cast("ClassInfo", member))
+    except TypeError as exc:
+        if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
+            raise
+        refuse(expected, "a class", subject=subject)
+
+
 class IsInstanceOfMatcher(BaseMatcher):
     def __init__(self, expected_type: ClassInfo):
-        # eagerly, like the regex matcher, and member by member: `isinstance` stops at the first match
-        try:
-            for member in _class_info_members(expected_type):
-                # cast because whether it is class info at all is the question this loop answers
-                isinstance(None, cast("ClassInfo", member))
-        except TypeError as exc:
-            if raised_inside(exc):  # their operator raised: that is a bug in the value, not a non-match
-                raise
-            refuse(expected_type, "a class", subject=argument("class"))
+        # eagerly, like the regex matcher
+        _require_class_info(expected_type, subject=argument("class"))
         self.expected_type = expected_type
 
     def matches(self, value: Any) -> bool:

@@ -70,9 +70,7 @@ _UNPINNABLE = {
     ("_WarnedAssertion", "returned", "AssertionBuilder", ""),
     # the fallback for a bare `type` is ty's alone: mypy takes the first rung as `Never`, the others as `Unknown`
     ("_CapableAssertion", "raises", "_ExpectedRaiseAssertion[Any, BaseException]", ""),
-    ("_InvokedAssertion", "caused_by", "_InvokedAssertion[BaseException]", ""),
     ("_InvokedAssertion", "error_of", "_InvokedAssertion[BaseException]", ""),
-    ("_InvokedAssertion", "has_root_cause", "_InvokedAssertion[BaseException]", ""),
     # `not_` on every view, held by `test_negated_protocols.py` instead: it derives the pairs from the
     # reachable closure, so a view added later is covered without a pin being remembered for it
     ("_ArrayAssertion", "not_", "_NegatedArrayAssertion", "<the subject's own type>"),

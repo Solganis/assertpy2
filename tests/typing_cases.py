@@ -380,6 +380,9 @@ def _methods_that_do_not_fit_the_value() -> None:
     _read_as_text(caught.value)  # case: raised-exception-read-as-text
     cause = assert_that(_boom).raises(ValueError).when_called_with().caused_by(KeyError).raised()
     _read_as_text(cause.value)  # case: raised-cause-read-as-text
+    # a group member is picked by one class: `error_of()` refuses a union at run time, where the cause pivots take one
+    invoked = assert_that(_boom).raises(ValueError).when_called_with()
+    invoked.error_of(KeyError | OSError)  # case: group-member-by-a-union
 
 
 def _a_number() -> int:

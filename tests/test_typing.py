@@ -302,6 +302,9 @@ if TYPE_CHECKING:
     assert_type(polled.raises(ValueError).when_called_with(1).val, str)
     assert_type(polled.raises(ValueError).when_called_with(1).contains("x").raised().val, ValueError)
     assert_type(polled.raises(ValueError).when_called_with(1).caused_by(KeyError).raised().val, KeyError)
+    landed = polled.raises(ValueError).when_called_with(1)
+    polled_cause: BaseException = landed.caused_by(KeyError | OSError).raised().val
+    assert_type(landed.has_root_cause((KeyError, OSError)), _SyncPollInvoked[BaseException])
     assert_type(polled.raises(ValueError).when_called_with(1).not_.caused_by(KeyError).raised().val, ValueError)
     assert_type(polled.does_not_raise(ValueError).when_called_with(1), _SyncPollCompleted[int])
     assert_type(polled.does_not_raise(ValueError).when_called_with(1).returned().val, int)
@@ -363,6 +366,11 @@ if TYPE_CHECKING:
     assert_type(invoked.caused_by(KeyError).raised().value, KeyError)
     assert_type(invoked.has_root_cause(OSError).raised().value, OSError)
     assert_type(invoked.contains("x").raised().value, ValueError)
+    # the cause is read with `isinstance`, so a tuple or a union is taken and lands on no one class.  pyrefly
+    # reads the union as `type[KeyError | OSError]` and lands on that, so the union is held by what it assigns to
+    assert_type(invoked.caused_by((KeyError, OSError)), _InvokedAssertion[BaseException])
+    assert_type(invoked.has_root_cause((KeyError, OSError)), _InvokedAssertion[BaseException])
+    either_cause: BaseException = invoked.caused_by(KeyError | OSError).raised().value
     # a negated pivot asserts the cause is not there, so the chain keeps the exception it was on
     assert_type(invoked.not_.caused_by(KeyError).raised().value, ValueError)
 

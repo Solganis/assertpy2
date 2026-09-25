@@ -413,6 +413,69 @@ class TestCausedBy:
         assert_that(str(exc_info.value)).contains("no exception captured")
 
 
+class TestACauseMayBeOneOfSeveral:
+    """The cause is read with `isinstance`, so a union or a tuple of classes is what it takes."""
+
+    @pytest.mark.parametrize("pivot", ["caused_by", "has_root_cause"])
+    @pytest.mark.parametrize(
+        "expected",
+        [KeyError | OSError, (KeyError, OSError), ((OSError,), (KeyError | TypeError,))],
+        ids=["union", "tuple", "nested"],
+    )
+    def test_one_of_them_holds(self, pivot, expected):
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()
+        assert_that(getattr(chain, pivot)(expected).raised().value).is_instance_of(KeyError)
+
+    @pytest.mark.parametrize(
+        ("pivot", "words"), [("caused_by", "to be caused by"), ("has_root_cause", "to have root cause")]
+    )
+    @pytest.mark.parametrize(
+        ("expected", "named"),
+        [
+            (TypeError | OSError, "TypeError | OSError"),
+            ((TypeError, OSError), "TypeError, OSError"),
+            ((TypeError, (OSError | ArithmeticError,)), "TypeError, OSError | ArithmeticError"),
+        ],
+        ids=["union", "tuple", "nested"],
+    )
+    def test_none_of_them_fails_naming_all_of_them(self, pivot, words, expected, named):
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()
+        with pytest.raises(AssertionError) as exc_info:
+            getattr(chain, pivot)(expected)
+        assert_that(str(exc_info.value)).contains(f"{words} <{named}>")
+
+    @pytest.mark.parametrize("pivot", ["caused_by", "has_root_cause"])
+    @pytest.mark.parametrize(
+        "expected",
+        [
+            KeyError | list[str],
+            list[str] | KeyError,
+            OSError | list[str],
+            (KeyError, list[str]),
+            (list[str], KeyError),
+            (OSError, (list[str],)),
+            "KeyError",
+        ],
+        ids=[
+            "union-first-matches",
+            "union-generic-first",
+            "union-none-match",
+            "tuple-first-matches",
+            "tuple-generic-first",
+            "nested-none-match",
+            "text",
+        ],
+    )
+    def test_what_isinstance_cannot_take_is_refused_whichever_member_comes_first(self, pivot, expected):
+        chain = assert_that(_raise_wrapped_from).raises(ValueError).when_called_with()
+        with pytest.raises(TypeError, match="given exception arg must be a class"):
+            getattr(chain, pivot)(expected)
+
+    def test_a_group_member_is_still_asked_for_by_one_class(self):
+        with pytest.raises(TypeError, match="must be an exception type"):
+            assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().error_of(KeyError | OSError)
+
+
 class TestHasRootCause:
     def test_single_level_root(self):
         assert_that(_raise_wrapped_from).raises(ValueError).when_called_with().has_root_cause(KeyError)

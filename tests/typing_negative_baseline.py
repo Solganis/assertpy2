@@ -226,6 +226,12 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "warned-return-read-as-text": {**_ARGUMENT, "ty": frozenset()},
     "raised-exception-read-as-text": _ARGUMENT,
     "raised-cause-read-as-text": _ARGUMENT,
+    "group-member-by-a-union": {
+        "ty": frozenset({"no-matching-overload"}),
+        "mypy": frozenset({"arg-type"}),
+        "pyright": frozenset(),
+        "pyrefly": frozenset(),
+    },
     # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
     "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
     # the view binds the predicate to its own value, so a lambda reading a missing name is refused. ty
@@ -330,11 +336,12 @@ SPLIT: frozenset[str] = frozenset(
         "text-assertion-on-an-async-probe",
         "warned-return-read-as-text",
         "bare-type-expectation-on-a-poll",
+        "group-member-by-a-union",
     }
 )
 """The cases the four do not agree on, named so a new one has to be decided about.
 
-Nine relations.  ty is silent in six.  The two predicates are a lambda over the subject reading a
+Ten relations.  ty is silent in six.  The two predicates are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
 The pivoted number is a verdict asked of a value the builder holds, refused through the ``self``
 annotation of a rung on its twin, which ty does not read.  The polled string is handed an element of
@@ -342,7 +349,8 @@ another type, where the rung that matches carries `str` operands and only mypy a
 async probe is a chain ty reads as `Unknown`, and so is what `warns()` returned.  In the two
 `when_called_with()` calls made before any expectation, mypy is the silent one.  In the ninth ty is the
 only one to refuse: a polled `raises()` given a bare `type`, which the others take through the rung
-carrying the class.
+carrying the class.  In the tenth pyright and pyrefly are silent: `error_of()` refuses a union at run time,
+and they read `KeyError | OSError` as a class that is one of the two, which a variable of that type is.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as the dialects agreeing.
