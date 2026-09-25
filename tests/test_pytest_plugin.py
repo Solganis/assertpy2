@@ -229,8 +229,8 @@ class TestTheProfileFromAConfigFile:
         "def test_vacuous_quantifier():\n    assert_that([]).all_satisfy(lambda item: False)\n"
     )
 
-    def _run(self, tmp_path, *settings, **environment):
-        (tmp_path / "test_guards.py").write_text(self._SUITE, encoding="utf-8")
+    def _run(self, tmp_path, *settings, suite=None, **environment):
+        (tmp_path / "test_guards.py").write_bytes(suite if suite is not None else self._SUITE.encode("utf-8"))
         (tmp_path / "pytest.ini").write_text("\n".join(["[pytest]", *settings, ""]), encoding="utf-8")
         return subprocess.run(
             # this interpreter, not `uv run`: the child starts in `tmp_path`, outside the project, where `uv run`
@@ -267,6 +267,31 @@ class TestTheProfileFromAConfigFile:
     def test_the_safe_profile_turns_both_warnings_on(self, tmp_path):
         result = self._run(tmp_path, "assertpy2_profile = safe")
         self._reported(result).contains("DanglingAssertionWarning", "VacuousAssertionWarning")
+
+    def test_a_comment_that_is_not_utf8_leaves_the_run_standing(self, tmp_path):
+        # a cp1251 comment and no declared encoding: 3.10 to 3.13 import it, and a strict read aborted the whole run
+        suite = (
+            b"# \xcf\xf0\xe8\xec\xe5\xf0\n"
+            b"from assertpy2 import assert_that\n\n\ndef test_dangling():\n    assert_that(1)\n"
+        )
+        result = self._run(tmp_path, "assertpy2_profile = safe", suite=suite)
+        assert_that(result.stdout + result.stderr).does_not_contain("INTERNALERROR")
+        try:
+            compile(suite, "test_guards.py", "exec")
+        except SyntaxError:
+            # this interpreter refuses the source itself, so the module never reaches the check
+            assert_that(result.returncode).is_equal_to(pytest.ExitCode.INTERRUPTED)
+        else:
+            self._reported(result).contains("DanglingAssertionWarning")
+
+    def test_a_module_in_its_declared_encoding_is_read_in_it(self, tmp_path):
+        # replacing what UTF-8 cannot decode would turn the identifier into U+FFFD, which does not parse
+        suite = (
+            "# coding: cp1251\nfrom assertpy2 import assert_that\n\n\n"
+            "def test_dangling():\n    значение = 1\n    assert_that(значение)\n"
+        ).encode("cp1251")
+        result = self._run(tmp_path, "assertpy2_profile = safe", suite=suite)
+        self._reported(result).contains("DanglingAssertionWarning")
 
     def test_a_named_setting_wins_over_the_profile_in_a_real_run(self, tmp_path):
         result = self._run(tmp_path, "assertpy2_profile = safe", "assertpy2_dangling = off")

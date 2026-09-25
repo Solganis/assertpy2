@@ -40,7 +40,7 @@ from __future__ import annotations
 import ast
 import io
 import tokenize
-from typing import Final, NamedTuple
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from ._engine._operations import (
     ALSO_ASSERTS,
@@ -51,6 +51,9 @@ from ._engine._operations import (
     TRANSFORMS,
     WITHOUT_A_VERDICT,
 )
+
+if TYPE_CHECKING:
+    import pathlib
 
 __tracebackhide__ = True
 
@@ -438,6 +441,23 @@ def _silenced(statement: ast.stmt, marked: frozenset[int]) -> bool:
     """
     last = getattr(statement, "end_lineno", statement.lineno) or statement.lineno
     return any(line in marked for line in range(statement.lineno, last + 1))
+
+
+def read_module(path: pathlib.Path) -> str:
+    """A test module's text as the interpreter decodes it, which is what `findings` reads.
+
+    The encoding a PEP 263 cookie or a BOM declares, found the way `tokenize` finds it, and UTF-8 where
+    none is declared.  A byte that still does not decode is replaced rather than refused: 3.10 to 3.13
+    import a module whose comment is not UTF-8, and reading it strictly aborted a whole run from the
+    collection hook.  A comment's text is not something the check reads.
+    """
+    data = path.read_bytes()
+    try:
+        encoding = tokenize.detect_encoding(io.BytesIO(data).readline)[0]
+    except SyntaxError:
+        # a first line that is not UTF-8 and names no encoding, which 3.10 to 3.13 import all the same
+        encoding = "utf-8"
+    return data.decode(encoding, errors="replace")
 
 
 def findings(source: str, path: str, extra_entries: frozenset[str] = frozenset()) -> list[Finding]:

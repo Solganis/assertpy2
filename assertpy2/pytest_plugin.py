@@ -443,7 +443,7 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
         if path is None or path in stashed._assertpy2_dangling:  # pragma: no cover - items carry a path
             continue
         try:
-            source = path.read_text(encoding="utf-8")
+            source = _dangling.read_module(path)
             entries = getattr(config, "_assertpy2_dangling_entries", frozenset())
             stashed._assertpy2_dangling[path] = _dangling.findings(source, str(path), entries)
         except (OSError, SyntaxError):  # pragma: no cover - pytest imported the module, so it read and parsed

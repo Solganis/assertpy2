@@ -26,6 +26,7 @@ from assertpy2._dangling import (
     _UNDER_ASSERT,
     ALLOW_MARKER,
     findings,
+    read_module,
 )
 from assertpy2._engine._operations import WHAT_IT_DOES
 from assertpy2.pytest_plugin import (
@@ -516,6 +517,25 @@ class TestAwaitedChains:
 def test_unparsable_source_raises_rather_than_reporting_nothing():
     with pytest.raises(SyntaxError):
         findings("def (:\n", "broken.py")
+
+
+class TestReadingAModule:
+    """The text of a test module as the interpreter decodes it, read here rather than in a child run."""
+
+    def test_a_declared_encoding_is_the_one_it_is_read_in(self, tmp_path):
+        module = tmp_path / "test_cp1251.py"
+        module.write_bytes("# coding: cp1251\nимя = 1\n".encode("cp1251"))
+        assert_that(read_module(module)).is_equal_to("# coding: cp1251\nимя = 1\n")
+
+    def test_a_first_line_that_is_not_utf8_and_names_no_encoding_is_read_with_the_bytes_replaced(self, tmp_path):
+        module = tmp_path / "test_undeclared.py"
+        module.write_bytes(b"# \xcf\xf0\xe8\nx = 1\n")
+        assert_that(read_module(module)).is_equal_to("# \ufffd\ufffd\ufffd\nx = 1\n")
+
+    def test_a_byte_order_mark_is_not_part_of_the_text(self, tmp_path):
+        module = tmp_path / "test_bom.py"
+        module.write_bytes(b"\xef\xbb\xbfx = 1\n")
+        assert_that(read_module(module)).is_equal_to("x = 1\n")
 
 
 class TestAProjectsOwnWrapper:
