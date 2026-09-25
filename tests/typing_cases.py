@@ -177,6 +177,8 @@ def _numbers_that_are_not_ordinary_numbers() -> None:
     assert_that(1 + 2j).is_nan()  # case: complex-nan
     assert_that(True).is_even()  # case: bool-parity
     assert_that(True).is_divisible_by(2)  # case: bool-divisibility
+    assert_that(True).is_close_to(1, 0.5)  # case: bool-closeness
+    assert_that(False).is_not_close_to(1, 0.5)  # case: bool-distance
 
 
 def _chaining_must_not_widen_what_the_value_offers() -> None:

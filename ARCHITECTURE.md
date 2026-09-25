@@ -23,7 +23,7 @@ Most of it is not yours to edit:
 | `_engine/_builder_check_typing.py` | 1 | 317 |
 | `_engine/_capable_typing.py` | 10 | 323 |
 | `_engine/_poll_typing.py` | 22 | 1499 |
-| `_engine/_negated_typing.py` | 23 | 1051 |
+| `_engine/_negated_typing.py` | 23 | 1049 |
 
 One is written by hand. `tests/test_architecture_doc.py` recomputes this table. No line counts, which
 move on every edit to a generated file.

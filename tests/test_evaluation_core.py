@@ -2250,7 +2250,6 @@ class TestTheMatcherMeasuresWhatTheAssertionMeasures:
             ),
             pytest.param(decimal.Decimal("0.1"), 1, math.inf, id="an-infinite-float-tolerance-around-a-decimal"),
             pytest.param(0.7, 1, decimal.Decimal("Infinity"), id="an-infinite-decimal-tolerance-around-a-float"),
-            pytest.param(True, 2, 1, id="a-bool-read-as-its-int"),
         ],
     )
     def test_both_spellings_hold_the_pair(self, value, expected, tolerance):
@@ -2270,6 +2269,15 @@ class TestTheMatcherMeasuresWhatTheAssertionMeasures:
         with pytest.raises(TypeError):
             assert_that(value).is_close_to(expected, tolerance)
         assert_that(match.close_to(expected, tolerance).matches(value)).is_false()
+
+    @pytest.mark.parametrize(
+        ("value", "expected"), [(True, 2), (2, True), (True, True)], ids=["subject", "expected", "both"]
+    )
+    def test_a_bool_is_refused_by_the_assertion_and_close_to_nothing(self, value, expected):
+        """Both read a bool as its int once, where `tolerance=` leaves a bool out of any distance."""
+        with pytest.raises(TypeError):
+            assert_that(value).is_close_to(expected, 1)
+        assert_that(match.close_to(expected, 1).matches(value)).is_false()
 
     def test_a_naive_moment_is_no_match_for_an_aware_one_rather_than_an_error(self):
         aware = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)

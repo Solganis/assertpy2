@@ -161,7 +161,9 @@ if TYPE_CHECKING:
         """What a real number can be asked, whether it is spelled `int`, `float` or `bool`.
 
         `bool` is here because it is an `int` in Python, and an assertion that works on one works on the
-        other; leaving it out would be a distinction the runtime does not make.
+        other; leaving it out would be a distinction the runtime does not make.  Closeness is the
+        exception, declared on the numeric view alone: a distance measured from a flag is a mistake the
+        runtime refuses, as `tolerance=` does.
         """
 
         def is_positive(self) -> Self: ...
@@ -170,8 +172,6 @@ if TYPE_CHECKING:
         def is_not_nan(self) -> Self: ...
         def is_inf(self) -> Self: ...
         def is_not_inf(self) -> Self: ...
-        def is_close_to(self, other: _Number, tolerance: _Number) -> Self: ...
-        def is_not_close_to(self, other: _Number, tolerance: _Number) -> Self: ...
         def is_not_between(self, low: _Number, high: _Number) -> Self: ...
         def is_between(self, low: _Number, high: _Number) -> Self: ...
         def is_greater_than(self, other: _Number) -> Self: ...
@@ -641,6 +641,8 @@ if TYPE_CHECKING:
         accepts for that type rather than the whole numeric set.
         """
 
+        def is_close_to(self, other: _Number, tolerance: _Number) -> Self: ...
+        def is_not_close_to(self, other: _Number, tolerance: _Number) -> Self: ...
         @property
         def not_(self) -> _NegatedNumericAssertion[_N]: ...
 
@@ -705,12 +707,12 @@ if TYPE_CHECKING:
         def value(self) -> complex: ...
 
     class _BoolAssertion(_RealNumberAssertion, _ZeroAssertion, _CoreAssertion, Protocol):
-        """Assertions available for ``bool``, which is every numeric one except the integer-only three.
+        """Assertions available for ``bool``: every numeric one but the integer-only three and closeness.
 
         `bool` is a subclass of `int`, so it used to resolve to the numeric protocol and be offered
         `is_even`, `is_odd` and `is_divisible_by`.  The runtime refuses exactly those three with
-        `TypeError: val is not an integer, got bool`, and accepts the rest: `True > 0` is a real
-        comparison.  The type now says the same thing.
+        `TypeError: val is not an integer, got bool`, and closeness too, and accepts the rest: `True > 0`
+        is a real comparison.  The type now says the same thing.
         """
 
         @property

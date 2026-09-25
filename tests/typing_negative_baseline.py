@@ -185,6 +185,8 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "complex-signed": _MISSING,
     "complex-nan": _MISSING,
     "bool-parity": _MISSING,
+    "bool-closeness": _MISSING,
+    "bool-distance": _MISSING,
     "bool-divisibility": _MISSING,
     "numeric-assertion-on-text": _MISSING,
     # the same four through `check()`, which answered every one with a callable: its `__getattr__` typed any

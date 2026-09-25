@@ -930,42 +930,6 @@ if TYPE_CHECKING:
         def is_not_inf(self: _SyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
 
         @overload
-        def is_close_to(
-            self: _SyncPoll[bool] | _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _SyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _SyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
-        ) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_not_close_to(
-            self: _SyncPoll[bool] | _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _SyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(self: _SyncPoll[_CapableT], other: _Number, tolerance: _Number) -> _SyncPoll[_P_co]: ...
-
-        @overload
         def is_not_between(
             self: _SyncPoll[bool] | _SyncPoll[int] | _SyncPoll[float], low: _Number, high: _Number
         ) -> _SyncPoll[_P_co]: ...
@@ -1014,6 +978,42 @@ if TYPE_CHECKING:
         def is_not_zero(self: _SyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_zero(self: _SyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _SyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _SyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _SyncPoll[int] | _SyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _SyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _SyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(self: _SyncPoll[_CapableT], other: _Number, tolerance: _Number) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _SyncPoll[int] | _SyncPoll[float]) -> _SyncPoll[_P_co]: ...
@@ -2312,48 +2312,6 @@ if TYPE_CHECKING:
         def is_not_inf(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
 
         @overload
-        def is_close_to(
-            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
-            other: _Number,
-            tolerance: _Number,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
-        ) -> _SyncPoll[_P_co]: ...
-
-        @overload
-        def is_not_close_to(
-            self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float],
-            other: _Number,
-            tolerance: _Number,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _SyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedSyncPoll[_CapableT], other: _Number, tolerance: _Number
-        ) -> _SyncPoll[_P_co]: ...
-
-        @overload
         def is_not_between(
             self: _NegatedSyncPoll[bool] | _NegatedSyncPoll[int] | _NegatedSyncPoll[float], low: _Number, high: _Number
         ) -> _SyncPoll[_P_co]: ...
@@ -2404,6 +2362,44 @@ if TYPE_CHECKING:
         def is_not_zero(self: _NegatedSyncPoll[SupportsFloat | SupportsIndex]) -> _SyncPoll[_P_co]: ...
         @overload
         def is_not_zero(self: _NegatedSyncPoll[_CapableT]) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _SyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedSyncPoll[_CapableT], other: _Number, tolerance: _Number
+        ) -> _SyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _NegatedSyncPoll[int] | _NegatedSyncPoll[float]) -> _SyncPoll[_P_co]: ...
@@ -3646,42 +3642,6 @@ if TYPE_CHECKING:
         def is_not_inf(self: _AsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
 
         @overload
-        def is_close_to(
-            self: _AsyncPoll[bool] | _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _AsyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _AsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
-        ) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_not_close_to(
-            self: _AsyncPoll[bool] | _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _AsyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(self: _AsyncPoll[_CapableT], other: _Number, tolerance: _Number) -> _AsyncPoll[_P_co]: ...
-
-        @overload
         def is_not_between(
             self: _AsyncPoll[bool] | _AsyncPoll[int] | _AsyncPoll[float], low: _Number, high: _Number
         ) -> _AsyncPoll[_P_co]: ...
@@ -3732,6 +3692,42 @@ if TYPE_CHECKING:
         def is_not_zero(self: _AsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_zero(self: _AsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _AsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _AsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _AsyncPoll[int] | _AsyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _AsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _AsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(self: _AsyncPoll[_CapableT], other: _Number, tolerance: _Number) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _AsyncPoll[int] | _AsyncPoll[float]) -> _AsyncPoll[_P_co]: ...
@@ -5021,48 +5017,6 @@ if TYPE_CHECKING:
         def is_not_inf(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
 
         @overload
-        def is_close_to(
-            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
-            other: _Number,
-            tolerance: _Number,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_close_to(
-            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
-        ) -> _AsyncPoll[_P_co]: ...
-
-        @overload
-        def is_not_close_to(
-            self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
-            other: _Number,
-            tolerance: _Number,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> _AsyncPoll[_P_co]: ...
-        @overload
-        def is_not_close_to(
-            self: _NegatedAsyncPoll[_CapableT], other: _Number, tolerance: _Number
-        ) -> _AsyncPoll[_P_co]: ...
-
-        @overload
         def is_not_between(
             self: _NegatedAsyncPoll[bool] | _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float],
             low: _Number,
@@ -5123,6 +5077,44 @@ if TYPE_CHECKING:
         def is_not_zero(self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex]) -> _AsyncPoll[_P_co]: ...
         @overload
         def is_not_zero(self: _NegatedAsyncPoll[_CapableT]) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> _AsyncPoll[_P_co]: ...
+        @overload
+        def is_not_close_to(
+            self: _NegatedAsyncPoll[_CapableT], other: _Number, tolerance: _Number
+        ) -> _AsyncPoll[_P_co]: ...
 
         @overload
         def is_even(self: _NegatedAsyncPoll[int] | _NegatedAsyncPoll[float]) -> _AsyncPoll[_P_co]: ...

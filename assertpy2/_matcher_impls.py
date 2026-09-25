@@ -614,12 +614,14 @@ class BetweenMatcher(BaseMatcher):
 def _measured_under(operand: object, tolerance: object) -> bool:
     """Whether `is_close_to` measures *operand* under *tolerance*: a datetime under a duration, else a number.
 
-    Any number but a complex one, `bool` included, as `is_close_to` reads it. Outside that domain an equal pair
+    Any number but a complex one or a `bool`, as `is_close_to` reads it. Outside that domain an equal pair
     would count as close, since equality answers before any distance does.
     """
     if isinstance(tolerance, timedelta):
         return isinstance(operand, datetime)
-    return type(operand) in (int, float) or (isinstance(operand, numbers.Number) and not isinstance(operand, complex))
+    return type(operand) in (int, float) or (
+        isinstance(operand, numbers.Number) and not isinstance(operand, (complex, bool))
+    )
 
 
 class CloseToMatcher(BaseMatcher):

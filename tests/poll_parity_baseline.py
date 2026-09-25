@@ -368,8 +368,10 @@ RECORDED: dict[str, frozenset[str]] = {
     ),
     "bool": frozenset(
         {
+            "is_close_to",
             "is_divisible_by",
             "is_even",
+            "is_not_close_to",
             "is_odd",
             "matches_structure",
         }

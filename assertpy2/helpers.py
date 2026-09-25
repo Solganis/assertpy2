@@ -264,6 +264,8 @@ class HelpersMixin(_MixinBase):
             if type(operand) is complex:
                 refuse(operand, "a value with an ordering (complex numbers have none)")
 
+        if isinstance(val, bool):
+            refuse(val, "a number other than a bool, or a datetime")
         if not isinstance(val, (numbers.Number, datetime.datetime)):
             refuse(val, "a number or a datetime")
 
@@ -271,6 +273,8 @@ class HelpersMixin(_MixinBase):
             require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
             require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
         else:
+            if isinstance(other, bool):
+                refuse(other, "a number other than a bool", subject=argument("other"))
             require_type(other, numbers.Number, "a number", subject=argument("other"))
             if isinstance(tolerance, bool):
                 refuse(tolerance, "a number other than a bool", subject=argument("tolerance"))

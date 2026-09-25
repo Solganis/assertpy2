@@ -828,44 +828,6 @@ if TYPE_CHECKING:
         def is_not_inf(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
 
         @overload
-        def is_close_to(
-            self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_close_to(
-            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_close_to(
-            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_close_to(
-            self: _CheckAnyValue[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
-        ) -> AssertionOutcome: ...
-
-        @overload
-        def is_not_close_to(
-            self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_not_close_to(
-            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_not_close_to(
-            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
-            other: SupportsFloat | SupportsIndex,
-            tolerance: SupportsFloat | SupportsIndex,
-        ) -> AssertionOutcome: ...
-        @overload
-        def is_not_close_to(
-            self: _CheckAnyValue[_CapableT], other: _Number, tolerance: _Number
-        ) -> AssertionOutcome: ...
-
-        @overload
         def is_not_between(
             self: _CheckAnyValue[bool] | _CheckAnyValue[int] | _CheckAnyValue[float], low: _Number, high: _Number
         ) -> AssertionOutcome: ...
@@ -916,6 +878,44 @@ if TYPE_CHECKING:
         def is_not_zero(self: _CheckAnyValue[SupportsFloat | SupportsIndex]) -> AssertionOutcome: ...
         @overload
         def is_not_zero(self: _CheckAnyValue[_CapableT]) -> AssertionOutcome: ...
+
+        @overload
+        def is_close_to(
+            self: _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_close_to(
+            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_close_to(
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_close_to(
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex], other: _Number, tolerance: _Number
+        ) -> AssertionOutcome: ...
+
+        @overload
+        def is_not_close_to(
+            self: _CheckAnyValue[int] | _CheckAnyValue[float], other: _Number, tolerance: _Number
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_not_close_to(
+            self: _CheckAnyValue[datetime.datetime], other: datetime.datetime, tolerance: datetime.timedelta
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_not_close_to(
+            self: _CheckAnyValue[SupportsFloat | SupportsIndex],
+            other: SupportsFloat | SupportsIndex,
+            tolerance: SupportsFloat | SupportsIndex,
+        ) -> AssertionOutcome: ...
+        @overload
+        def is_not_close_to(
+            self: _CheckAnyValue[_CapableT], other: _Number, tolerance: _Number
+        ) -> AssertionOutcome: ...
 
         @overload
         def is_even(self: _CheckAnyValue[int] | _CheckAnyValue[float]) -> AssertionOutcome: ...

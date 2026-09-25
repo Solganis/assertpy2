@@ -500,6 +500,22 @@ def test_a_bool_tolerance_is_refused_as_tolerance_refuses_it(assertion, flag):
     )
 
 
+@pytest.mark.parametrize("assertion", ["is_close_to", "is_not_close_to"])
+@pytest.mark.parametrize(
+    ("val", "other", "refusal"),
+    [
+        (True, 5.0, "val must be a number other than a bool, or a datetime, but was <True> (bool)"),
+        (1.0, False, "given other arg must be a number other than a bool, but was <False> (bool)"),
+    ],
+    ids=["val", "other"],
+)
+def test_a_bool_operand_is_refused_as_tolerance_compares_it_exactly(assertion, val, other, refusal):
+    # `tolerance=` leaves a bool out of the distance, and a flag measured against a number is a mistake
+    with pytest.raises(TypeError) as exc_info:
+        getattr(assert_that(val), assertion)(other, 0.5)
+    assert_that(str(exc_info.value)).is_equal_to(refusal)
+
+
 def test_is_close_to_negative_tolerance_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_close_to(123, -1)
