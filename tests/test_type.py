@@ -1,4 +1,5 @@
 import typing
+from collections.abc import Callable
 from unittest.mock import Mock
 
 import pytest
@@ -113,9 +114,11 @@ def test_is_instance_of_answers_what_isinstance_answers_for_a_value_that_passes_
     assert_that(assert_that(value).check().is_instance_of(expected).passed).is_equal_to(isinstance(value, expected))
 
 
-def test_is_instance_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10():
+# `Callable[[int], str]` is a subclass of `GenericAlias`, so the guard asks `isinstance` rather than `type() is`
+@pytest.mark.parametrize("generic", [list[int], Callable[[int], str]], ids=["list", "callable"])
+def test_is_instance_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10(generic):
     with pytest.raises(TypeError, match="given class arg must be a class"):
-        assert_that([1]).is_instance_of(list[int])
+        assert_that(len).is_instance_of(generic)
 
 
 def test_is_instance_of_refuses_a_bad_member_before_the_negation_reads_a_pass():
@@ -259,9 +262,10 @@ def test_is_subclass_of_refuses_a_bad_member_whichever_comes_first(expected):
         assert_that(bool).is_subclass_of(expected)
 
 
-def test_is_subclass_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10():
+@pytest.mark.parametrize("generic", [list[int], Callable[[int], str]], ids=["list", "callable"])
+def test_is_subclass_of_refuses_a_generic_alone_though_it_passes_for_a_class_on_3_10(generic):
     with pytest.raises(TypeError, match="given class arg must be a class"):
-        assert_that(list).is_subclass_of(list[int])
+        assert_that(list).is_subclass_of(generic)
 
 
 def test_is_subclass_of_refuses_a_bad_member_before_the_negation_reads_a_pass():

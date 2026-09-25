@@ -20,7 +20,7 @@ import re
 import sys
 import typing
 from collections import Counter, namedtuple
-from collections.abc import Hashable, Iterable, Mapping, Sized
+from collections.abc import Callable, Hashable, Iterable, Mapping, Sized
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from types import MappingProxyType, SimpleNamespace, UnionType
@@ -2871,7 +2871,7 @@ def _with_one_bad_member(leaves, bad_in_a_union, bad_in_a_tuple):
     )
 
 
-_GENERICS = st.sampled_from([list[str], dict[str, int]])
+_GENERICS = st.sampled_from([list[str], dict[str, int], Callable[[int], str]])
 _NOT_CLASSES = st.sampled_from(["int", 3])
 # a runtime protocol with data members answers `isinstance` and refuses `issubclass`, reliably from 3.12
 _ISINSTANCE_LEAVES = _CLASS_LEAVES | st.just(_NamedAtRunTime)

@@ -637,8 +637,8 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** an instance of the given class
             TypeError: if the given arg, or any member of a union or tuple, is not a class
         """
-        # a class answers `isinstance` itself, raising what it raises, though `list[int]` passes for one on 3.10
-        if not isinstance(some_class, type) or type(some_class) is GenericAlias:
+        # a class answers `isinstance` itself, raising what it raises, though a generic alias passes for one on 3.10
+        if not isinstance(some_class, type) or isinstance(some_class, GenericAlias):
             _require_class_info(some_class, name="class", probe=self.val)
         if not isinstance(self.val, some_class):
             type_name = self._type(self.val)
@@ -714,7 +714,7 @@ class BaseMixin(SatisfiesMixin):
         """
         require_type(self.val, type, "a class")
         # as in `is_instance_of`, with `issubclass` asking each member
-        if not isinstance(some_class, type) or type(some_class) is GenericAlias:
+        if not isinstance(some_class, type) or isinstance(some_class, GenericAlias):
             _require_class_info(some_class, name="class", probe=self.val, check=issubclass)
         if not issubclass(self.val, some_class):
             expected_name = _type_expression_name(some_class)
