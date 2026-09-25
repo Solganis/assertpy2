@@ -3233,20 +3233,6 @@
    "type-assertion-failure"
   ]
  },
- "c0811-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0811-poll": {
   "mypy": [
    "assert-type"
@@ -3262,20 +3248,6 @@
   ]
  },
  "c0812-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0812-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3317,20 +3289,6 @@
    "type-assertion-failure"
   ]
  },
- "c0813-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0813-poll": {
   "mypy": [
    "assert-type"
@@ -3346,20 +3304,6 @@
   ]
  },
  "c0814-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0814-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3401,20 +3345,6 @@
    "type-assertion-failure"
   ]
  },
- "c0815-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0815-poll": {
   "mypy": [
    "assert-type"
@@ -3430,20 +3360,6 @@
   ]
  },
  "c0816-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0816-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3485,20 +3401,6 @@
    "type-assertion-failure"
   ]
  },
- "c0817-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0817-poll": {
   "mypy": [
    "assert-type"
@@ -3514,20 +3416,6 @@
   ]
  },
  "c0818-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0818-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3569,20 +3457,6 @@
    "type-assertion-failure"
   ]
  },
- "c0819-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0819-poll": {
   "mypy": [
    "assert-type"
@@ -3597,35 +3471,7 @@
    "type-assertion-failure"
   ]
  },
- "c0820-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0821-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0821-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3667,20 +3513,6 @@
    "type-assertion-failure"
   ]
  },
- "c0822-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0822-poll": {
   "mypy": [
    "assert-type"
@@ -3696,20 +3528,6 @@
   ]
  },
  "c0823-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0823-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3751,20 +3569,6 @@
    "type-assertion-failure"
   ]
  },
- "c0824-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0824-poll": {
   "mypy": [
    "assert-type"
@@ -3780,20 +3584,6 @@
   ]
  },
  "c0825-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0825-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3835,20 +3625,6 @@
    "type-assertion-failure"
   ]
  },
- "c0826-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0826-poll": {
   "mypy": [
    "assert-type"
@@ -3864,20 +3640,6 @@
   ]
  },
  "c0827-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0827-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -3919,20 +3681,6 @@
    "type-assertion-failure"
   ]
  },
- "c0828-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0828-poll": {
   "mypy": [
    "assert-type"
@@ -3948,20 +3696,6 @@
   ]
  },
  "c0829-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0829-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4003,20 +3737,6 @@
    "type-assertion-failure"
   ]
  },
- "c0830-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0830-poll": {
   "mypy": [
    "assert-type"
@@ -4032,20 +3752,6 @@
   ]
  },
  "c0831-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0831-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4087,20 +3793,6 @@
    "type-assertion-failure"
   ]
  },
- "c0832-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0832-poll": {
   "mypy": [
    "assert-type"
@@ -4116,20 +3808,6 @@
   ]
  },
  "c0833-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0833-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4171,20 +3849,6 @@
    "type-assertion-failure"
   ]
  },
- "c0834-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0834-poll": {
   "mypy": [
    "assert-type"
@@ -4200,20 +3864,6 @@
   ]
  },
  "c0835-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0835-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4255,20 +3905,6 @@
    "type-assertion-failure"
   ]
  },
- "c0836-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0836-poll": {
   "mypy": [
    "assert-type"
@@ -4284,20 +3920,6 @@
   ]
  },
  "c0837-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0837-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4339,20 +3961,6 @@
    "type-assertion-failure"
   ]
  },
- "c0838-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0838-poll": {
   "mypy": [
    "assert-type"
@@ -4368,20 +3976,6 @@
   ]
  },
  "c0839-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0839-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -4423,42 +4017,6 @@
    "type-assertion-failure"
   ]
  },
- "c0840-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0840-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0840-poll": {
   "mypy": [
    "assert-type"
@@ -4485,42 +4043,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0841-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0841-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0841-poll": {
@@ -4551,42 +4073,6 @@
    "type-assertion-failure"
   ]
  },
- "c0842-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0842-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0842-poll": {
   "mypy": [
    "assert-type"
@@ -4613,42 +4099,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0843-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0843-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0843-poll": {
@@ -4679,42 +4129,6 @@
    "type-assertion-failure"
   ]
  },
- "c0844-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0844-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0844-poll": {
   "mypy": [
    "assert-type"
@@ -4741,42 +4155,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0845-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0845-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0845-poll": {
@@ -4807,42 +4185,6 @@
    "type-assertion-failure"
   ]
  },
- "c0846-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0846-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0846-poll": {
   "mypy": [
    "assert-type"
@@ -4869,42 +4211,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0847-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0847-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0847-poll": {
@@ -4935,42 +4241,6 @@
    "type-assertion-failure"
   ]
  },
- "c0848-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0848-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0848-poll": {
   "mypy": [
    "assert-type"
@@ -4997,42 +4267,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0849-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0849-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0849-poll": {
@@ -5063,42 +4297,6 @@
    "type-assertion-failure"
   ]
  },
- "c0850-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0850-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0850-poll": {
   "mypy": [
    "assert-type"
@@ -5125,42 +4323,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0851-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0851-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0851-poll": {
@@ -5191,42 +4353,6 @@
    "type-assertion-failure"
   ]
  },
- "c0852-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0852-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0852-poll": {
   "mypy": [
    "assert-type"
@@ -5253,42 +4379,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0853-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0853-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0853-poll": {
@@ -5319,42 +4409,6 @@
    "type-assertion-failure"
   ]
  },
- "c0854-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0854-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0854-poll": {
   "mypy": [
    "assert-type"
@@ -5381,42 +4435,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0855-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0855-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0855-poll": {
@@ -5447,42 +4465,6 @@
    "type-assertion-failure"
   ]
  },
- "c0856-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0856-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0856-poll": {
   "mypy": [
    "assert-type"
@@ -5509,42 +4491,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0857-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0857-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0857-poll": {
@@ -5575,42 +4521,6 @@
    "type-assertion-failure"
   ]
  },
- "c0858-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0858-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0858-poll": {
   "mypy": [
    "assert-type"
@@ -5637,42 +4547,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0859-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0859-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0859-poll": {
@@ -5703,42 +4577,6 @@
    "type-assertion-failure"
   ]
  },
- "c0860-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0860-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0860-poll": {
   "mypy": [
    "assert-type"
@@ -5765,42 +4603,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0861-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0861-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0861-poll": {
@@ -5831,42 +4633,6 @@
    "type-assertion-failure"
   ]
  },
- "c0862-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0862-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0862-poll": {
   "mypy": [
    "assert-type"
@@ -5893,42 +4659,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0863-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0863-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0863-poll": {
@@ -5959,42 +4689,6 @@
    "type-assertion-failure"
   ]
  },
- "c0864-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0864-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0864-poll": {
   "mypy": [
    "assert-type"
@@ -6021,42 +4715,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0865-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0865-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0865-poll": {
@@ -6087,42 +4745,6 @@
    "type-assertion-failure"
   ]
  },
- "c0866-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0866-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0866-poll": {
   "mypy": [
    "assert-type"
@@ -6149,42 +4771,6 @@
   ],
   "ty": [
    "type-assertion-failure"
-  ]
- },
- "c0867-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0867-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
   ]
  },
  "c0867-poll": {
@@ -6215,42 +4801,6 @@
    "type-assertion-failure"
   ]
  },
- "c0868-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0868-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0868-poll": {
   "mypy": [
    "assert-type"
@@ -6279,42 +4829,6 @@
    "type-assertion-failure"
   ]
  },
- "c0869-check": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
- "c0869-direct": {
-  "mypy": [
-   "assert-type",
-   "attr-defined"
-  ],
-  "pyrefly": [
-   "assert-type",
-   "missing-attribute"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure",
-   "reportAttributeAccessIssue"
-  ],
-  "ty": [
-   "type-assertion-failure",
-   "unresolved-attribute"
-  ]
- },
  "c0869-poll": {
   "mypy": [
    "assert-type"
@@ -6330,20 +4844,6 @@
   ]
  },
  "c0870-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0870-direct": {
   "mypy": [
    "assert-type"
   ],
@@ -6385,20 +4885,6 @@
    "type-assertion-failure"
   ]
  },
- "c0871-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0871-poll": {
   "mypy": [
    "assert-type"
@@ -6427,20 +4913,6 @@
    "type-assertion-failure"
   ]
  },
- "c0872-direct": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
  "c0872-poll": {
   "mypy": [
    "assert-type"
@@ -6456,20 +4928,6 @@
   ]
  },
  "c0873-await": {
-  "mypy": [
-   "assert-type"
-  ],
-  "pyrefly": [
-   "assert-type"
-  ],
-  "pyright": [
-   "reportAssertTypeFailure"
-  ],
-  "ty": [
-   "type-assertion-failure"
-  ]
- },
- "c0873-direct": {
   "mypy": [
    "assert-type"
   ],

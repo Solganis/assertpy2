@@ -251,15 +251,6 @@ if TYPE_CHECKING:
         def contains_only_once(self, *items: object) -> Self: ...
         def contains_in_order(self, *items: _E | Matcher[_E]) -> Self: ...
 
-    class _ReturningAssertion(Protocol):
-        """The value a completed call produced, which both non-raising landings hand back.
-
-        Its static type is unknown, so what comes back offers the assertions every value can answer
-        and nothing beyond them.
-        """
-
-        def returned(self) -> _CoreAssertion: ...
-
     class _ZeroAssertion(Protocol):
         """Zero and its negation, which every numeric spelling shares, complex included."""
 
@@ -1078,7 +1069,7 @@ if TYPE_CHECKING:
         # history, and naming it would suggest a precision the checkers do not carry
         def matches_error_tree(self, *expected: type | list[Any]) -> Self: ...
 
-    class _WarnedAssertion(_TextAssertion, _ReturningAssertion, Protocol):
+    class _WarnedAssertion(_TextAssertion, Protocol[_P_co]):
         """Assertions available after ``when_called_with()`` captured a warning message.
 
         The message is text like the invoked view's, and the call completed, so
@@ -1088,9 +1079,12 @@ if TYPE_CHECKING:
         """
 
         @property
-        def not_(self) -> _NegatedWarnedAssertion: ...
+        def not_(self) -> _NegatedWarnedAssertion[_P_co]: ...
 
-        def check(self) -> _CheckWarnedAssertion: ...
+        def check(self) -> _CheckWarnedAssertion[_P_co]: ...
+
+        # bound through `self`, the builder being invariant; ty needs a member using the parameter, not a twin's
+        def returned(self: _WarnedAssertion[_R]) -> AssertionBuilder[_R]: ...
 
     class _CallableAssertion(_CoreAssertion, Protocol[_P_co]):
         """Assertions available for callable values.
@@ -1138,7 +1132,7 @@ if TYPE_CHECKING:
             trace: bool = ...,
         ) -> _SyncPoll[_P_co]: ...
 
-    class _CompletedAssertion(_CallableAssertion[_P_co], _ReturningAssertion, Protocol[_P_co]):
+    class _CompletedAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
         """Assertions available after a `does_not_raise()` or `does_not_warn()` call completed.
 
         The value under test is still the callable, not a message, so the text assertions are absent:
@@ -1150,6 +1144,8 @@ if TYPE_CHECKING:
         def not_(self) -> _NegatedCompletedAssertion[_P_co]: ...
 
         def check(self) -> _CheckCompletedAssertion[_P_co]: ...
+
+        def returned(self: _CompletedAssertion[_R]) -> AssertionBuilder[_R]: ...
 
     class _ExpectedRaiseAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
         """A callable with a `raises()` expectation set, waiting for the call that tests it."""
@@ -1169,7 +1165,7 @@ if TYPE_CHECKING:
 
         def check(self) -> _CheckExpectedWarningAssertion[_P_co]: ...
 
-        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _WarnedAssertion: ...
+        def when_called_with(self, *some_args: object, **some_kwargs: object) -> _WarnedAssertion[_P_co]: ...
 
     class _ExpectedCompletionAssertion(_CallableAssertion[_P_co], Protocol[_P_co]):
         """A callable expected to complete, which is what `does_not_raise()` and `does_not_warn()` set."""

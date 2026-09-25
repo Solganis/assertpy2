@@ -58,6 +58,8 @@ _SHARED_ON_PURPOSE: frozenset[tuple[str, str, str]] = frozenset(
         ("does_not_contain", "_BytesAssertion", "_DictAssertion"),
         ("does_not_contain", "_BytesAssertion", "_CollectionShapedAssertion"),
         ("does_not_contain", "_CollectionShapedAssertion", "_DictAssertion"),
+        # `returned` binds the call's return through `self`, which ty solves on no base that hides the parameter
+        ("returned", "_CompletedAssertion", "_WarnedAssertion"),
         # narrowing `satisfies` redeclares the whole pair, whose first half is the core's `TypeIs` form
         # everywhere. Only the second half narrows, to `Matcher[str]` and `Matcher[_N]`
         ("satisfies", "_NumericAssertion", "_TextAssertion"),
@@ -158,8 +160,6 @@ _CAPABILITY_CARRIERS: dict[str, tuple[str, ...]] = {
     ),
     # what a message and a string share, which is everything except reading the value as a path
     "_TextAssertion": ("_StringAssertion", "_InvokedAssertion", "_WarnedAssertion"),
-    # what the two landings of a call that completed share, which is the value it produced
-    "_ReturningAssertion": ("_WarnedAssertion", "_CompletedAssertion"),
 }
 
 # Where a protocol redeclares what it inherits in order to narrow it. The pair of overloads is

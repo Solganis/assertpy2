@@ -304,8 +304,8 @@ if TYPE_CHECKING:
     assert_type(assert_that(_CallableResponse()).does_not_raise(ValueError), _ExpectedCompletionAssertion[Any])
     assert_type(assert_that(_CallableResponse()).does_not_warn(), _ExpectedCompletionAssertion[Any])
     assert_type(assert_that(_Shade).raises(ValueError).when_called_with("x"), _InvokedAssertion)
-    assert_type(assert_that(_CallableResponse()).warns().when_called_with(), _WarnedAssertion)
-    assert_type(assert_that(len).warns().when_called_with(), _WarnedAssertion)
+    assert_type(assert_that(_CallableResponse()).warns().when_called_with(), _WarnedAssertion[Any])
+    assert_type(assert_that(len).warns().when_called_with(), _WarnedAssertion[int])
     assert_type(assert_that(len).does_not_raise(ValueError).when_called_with(), _CompletedAssertion[int])
     assert_type(assert_that(len).raises(ValueError).when_called_with(), _InvokedAssertion)
     assert_type(assert_that(len).raises(ValueError).when_called_with().caused_by(KeyError), _InvokedAssertion)
@@ -542,8 +542,14 @@ if TYPE_CHECKING:
     assert_type(assert_that([{"id": 1}]).extracting("id"), _ListAssertion[Any])
     assert_type(assert_that({"a": {"b": 1}}).at_json_path("$.a.b"), _CoreAssertion)
     assert_type(assert_that("v1.2").matches_with_groups(r"v(\d)\.(\d)"), AssertionBuilder[Any])
-    assert_type(assert_that(lambda: 1).does_not_raise(ValueError).when_called_with().returned(), _CoreAssertion)
-    assert_type(assert_that(lambda: 1).warns().when_called_with().returned(), _CoreAssertion)
+    # what the call returned keeps the callable's return type, as every other pivot keeps its element's
+    assert_type(
+        assert_that(lambda: int("1")).does_not_raise(ValueError).when_called_with().returned(), AssertionBuilder[int]
+    )
+    # after `warns()` ty reads the builder over `Unknown`: the view only passes its parameter on to its twins
+    assert_that(len).warns().when_called_with().returned().is_positive()
+    assert_type(assert_that(lambda: int("1")).does_not_warn().when_called_with().returned().value, int)
+    assert_that(len).does_not_raise(ValueError).when_called_with().returned().is_positive()
 
     # the object fallback carries four numeric assertions, so `Decimal` and `Fraction` keep them. Neither
     # is an `int` or a `float`, so no overload names them and both land here
@@ -571,7 +577,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(len).raises(ValueError).check(), _CheckExpectedRaiseAssertion[int])
     assert_type(assert_that(len).warns().check(), _CheckExpectedWarningAssertion[int])
     assert_type(assert_that(len).does_not_raise(ValueError).check(), _CheckExpectedCompletionAssertion[int])
-    assert_type(assert_that(len).warns().when_called_with().check(), _CheckWarnedAssertion)
+    assert_type(assert_that(len).warns().when_called_with().check(), _CheckWarnedAssertion[int])
     assert_type(assert_that(len).does_not_raise(ValueError).when_called_with().check(), _CheckCompletedAssertion[int])
 
     # the rest of the element pivot on the text view, of which only `first` was pinned

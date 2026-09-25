@@ -87,6 +87,7 @@ _WORDS = {
     29: "twenty-nine",
     30: "thirty",
     31: "thirty-one",
+    34: "thirty-four",
     35: "thirty-five",
 }
 

@@ -367,6 +367,11 @@ def _methods_that_do_not_fit_the_value() -> None:
     assert_that(_noisy).warns(DeprecationWarning).when_called_with().errors()  # case: errors-after-warns
     assert_that(_adder).does_not_raise(ValueError).when_called_with(1, 2).starts_with("x")  # case: text-after-no-raise
     assert_that(_adder).does_not_warn(UserWarning).when_called_with(1, 2).contains("x")  # case: contains-after-no-warn
+    # what the call returned is typed as its return, so reading it as text is refused: an `Any` would let it by
+    completed = assert_that(_adder).does_not_raise(ValueError).when_called_with(1, 2).returned()
+    _read_as_text(completed.value)  # case: completed-return-read-as-text
+    warned = assert_that(_noisy).warns(DeprecationWarning).when_called_with().returned()
+    _read_as_text(warned.value)  # case: warned-return-read-as-text
 
 
 def _a_number() -> int:
@@ -396,6 +401,10 @@ def _a_person() -> _Person:
 
 def _a_row() -> _TakesAnyKey:
     return _TakesAnyKey()
+
+
+def _read_as_text(text: str) -> None:
+    del text
 
 
 def _some_text() -> str:

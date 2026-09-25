@@ -18,8 +18,8 @@ Most of it is not yours to edit:
 
 | file | protocols | declarations |
 |---|---|---|
-| `_engine/_typing.py` | 43 | 407 |
-| `_engine/_check_typing.py` | 35 | 323 |
+| `_engine/_typing.py` | 42 | 408 |
+| `_engine/_check_typing.py` | 34 | 322 |
 | `_engine/_builder_check_typing.py` | 1 | 317 |
 | `_engine/_capable_typing.py` | 10 | 322 |
 | `_engine/_poll_typing.py` | 10 | 1415 |

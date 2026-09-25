@@ -66,6 +66,8 @@ _UNPINNABLE = {
     ("_CapableAssertion", "decoded_as", "AssertionBuilder", ""),
     ("_CapableAssertion", "extracting_group", "AssertionBuilder", ""),
     ("_CapableAssertion", "matches_with_groups", "AssertionBuilder", ""),
+    # after `warns()` ty reads the builder over `Unknown`: the view only passes its parameter on to its twins
+    ("_WarnedAssertion", "returned", "AssertionBuilder", ""),
     # `not_` on every view, held by `test_negated_protocols.py` instead: it derives the pairs from the
     # reachable closure, so a view added later is covered without a pin being remembered for it
     ("_ArrayAssertion", "not_", "_NegatedArrayAssertion", "<the subject's own type>"),

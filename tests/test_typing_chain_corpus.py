@@ -6,7 +6,7 @@ included.  A declaration rewritten to say the same thing leaves this green, and 
 else, better or worse, has to be recorded on purpose.
 
 Most of what is recorded is a pin the library does not meet yet: a polled callable after an expectation
-reads `Any`, `raised()` and `returned()` read `object`, and ty loses the element after a polled pivot.
+reads `Any`, `raised()` reads `object`, and ty loses the element after a polled pivot.
 
 Skipped where the checkers are absent, like the other typing gates: the lint job runs it.
 """

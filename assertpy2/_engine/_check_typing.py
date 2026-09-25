@@ -150,12 +150,6 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
-    class _CheckReturningAssertion(Protocol):
-        """The verdict twin of `_ReturningAssertion`."""
-
-        @property
-        def not_(self) -> Self: ...
-
     class _CheckZeroAssertion(Protocol):
         """The verdict twin of `_ZeroAssertion`."""
 
@@ -689,7 +683,7 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
-    class _CheckWarnedAssertion(_CheckTextAssertion, _CheckReturningAssertion, Protocol):
+    class _CheckWarnedAssertion(_CheckTextAssertion, Protocol[_P_co]):
         """The verdict twin of `_WarnedAssertion`."""
 
         @property
@@ -701,7 +695,7 @@ if TYPE_CHECKING:
         @property
         def not_(self) -> Self: ...
 
-    class _CheckCompletedAssertion(_CheckCallableAssertion[_P_co], _CheckReturningAssertion, Protocol[_P_co]):
+    class _CheckCompletedAssertion(_CheckCallableAssertion[_P_co], Protocol[_P_co]):
         """The verdict twin of `_CompletedAssertion`."""
 
         @property

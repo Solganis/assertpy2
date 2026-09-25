@@ -8,7 +8,7 @@ an intention.
 | You can depend on | Enforced by |
 |---|---|
 | The 38 names `assertpy2` exports, and the fields of every record it hands you | [`test_public_surface.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_public_surface.py) pins both against a hand-written list |
-| Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all thirty-five protocols |
+| Every assertion the type checker offers you existing at runtime | [`test_protocol_parity.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_protocol_parity.py) walks all thirty-four protocols |
 | The signature you call: parameter names, their order, their defaults | [`test_api_compatibility.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_compatibility.py) compares a recorded snapshot of the whole surface and classifies every change as breaking, an addition, or typing-only |
 | The type your chain has after each step, and that the value at the end is that type | [`test_typing.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_typing.py), 394 `assert_type` checks under ty, mypy `--strict`, Pyright and Pyrefly, zero suppressions |
 | One relation keeping one name across the API | [`test_api_vocabulary.py`](https://github.com/Solganis/assertpy2/blob/main/tests/test_api_vocabulary.py) |
@@ -19,6 +19,11 @@ an intention.
 The records in the first row are `AssertionOutcome`, `MatchResult`, `DiffEntry`, `DiffResult`, `Step`,
 `PollSample`, `PollTrace` and `Requirement`. Fields are added, never renamed or removed, inside a
 major version.
+
+Where a checker cannot follow a step, that is recorded rather than suppressed. ty reads `Unknown` in two
+places the other three read exactly: `is_not_none()` on a nullable `bool`, `int`, `float` or `datetime`,
+and `returned()` after `warns()`. Both are listed in `tests/test_pin_coverage.py`, and the second is also
+held checker by checker in `tests/typing_negative_baseline.py`, so a change in either direction fails.
 
 Documentation is held to the same bar: the examples in these guides are type-checked in CI, and every
 page that can run in the suite is executed, with what each block prints compared against the page. A

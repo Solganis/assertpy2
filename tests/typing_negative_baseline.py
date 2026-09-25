@@ -221,6 +221,9 @@ CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "text-assertion-on-a-polled-number": _NOT_THE_CHAINS_VALUE,
     # ty reads a chain over an `async def` probe as `Unknown`, measured, and so refuses nothing on it
     "text-assertion-on-an-async-probe": {**_NOT_THE_CHAINS_VALUE, "ty": frozenset()},
+    "completed-return-read-as-text": _ARGUMENT,
+    # ty reads the builder after `warns()` over `Unknown`: the view passes its parameter only on to its twins
+    "warned-return-read-as-text": {**_ARGUMENT, "ty": frozenset()},
     # the same rung from the other end: no capability matches neither, so the core narrowing follows onto the chain
     "numeric-assertion-on-a-polled-object": _NOT_THE_CHAINS_VALUE,
     # the view binds the predicate to its own value, so a lambda reading a missing name is refused. ty
@@ -317,17 +320,18 @@ SPLIT: frozenset[str] = frozenset(
         "text-verdict-on-a-pivoted-number",
         "element-of-another-type-on-a-polled-string",
         "text-assertion-on-an-async-probe",
+        "warned-return-read-as-text",
     }
 )
 """The cases the four do not agree on, named so a new one has to be decided about.
 
-Seven relations.  ty is silent in five.  The two predicates are a lambda over the subject reading a
+Eight relations.  ty is silent in six.  The two predicates are a lambda over the subject reading a
 name the value has not got, where ty resolves the parameter through the overload set less precisely.
 The pivoted number is a verdict asked of a value the builder holds, refused through the ``self``
 annotation of a rung on its twin, which ty does not read.  The polled string is handed an element of
 another type, where the rung that matches carries `str` operands and only mypy and pyright say so.  The
-async probe is a chain ty reads as `Unknown`.  In the two `when_called_with()` calls made before any
-expectation, mypy is the silent one.
+async probe is a chain ty reads as `Unknown`, and so is what `warns()` returned.  In the two
+`when_called_with()` calls made before any expectation, mypy is the silent one.
 
 Each row records that silence as an empty set of codes rather than by leaving the checker out, since a
 missing checker would read as the dialects agreeing.
