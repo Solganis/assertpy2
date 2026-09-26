@@ -33,7 +33,7 @@ import difflib
 from typing import TYPE_CHECKING, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
-from ._compare import _guarded_not_equal, _node_decision
+from ._compare import _guarded_equal, _node_decision
 from ._introspection import (
     TakenApart,
     is_attrs_instance,
@@ -119,8 +119,8 @@ def _alignment_opcodes(actual, expected):
 
     `_rechecked_equal_runs()` is what makes the first paragraph true rather than merely intended, and
     both branches go through it: neither of difflib's two notions of a match is this library's.  The
-    repr keying matches values that print alike, and the hashable keying matches on ``==``, while every
-    verdict here is reached with ``!=``.
+    repr keying matches values that print alike, and the hashable keying matches through a dict lookup,
+    while every verdict here is reached by `_node_decision()`.
 
     The length cap lives in the caller, which reaches it before paying for anything here.
     """
@@ -146,12 +146,12 @@ def _rechecked_equal_runs(opcodes, actual, expected):
     A run difflib calls equal was matched on whatever it was keyed with, and neither key is the
     verdict.  Keyed on reprs, the run is only known to *print* the same, and a shared repr is not
     exotic: `_safe_repr()` renders every value of a type whose ``__repr__`` raises as the same string.
-    Keyed on the values, it is known to satisfy ``==``, which a type is free to define apart from
-    ``!=``.  Either way the pair would drop out of the diff and out of the message's elision, and the
-    failure would name a smaller difference than the one that caused it.
+    Kept, the pair would drop out of the diff and out of the message's elision, and the failure would name
+    a smaller difference than the one that caused it.  Keyed on the values, the run matched by identity or
+    ``==``, which is already the walk's own rule for an element.
 
-    Compared through `_guarded_not_equal()`, the same operator `_node_decision()` reaches its verdict
-    with, so a run split back into a substitution is exactly a pair the walk will then report.  That
+    Compared through `_guarded_equal()`, the same question `_node_decision()` reaches its verdict with, so
+    a run split back into a substitution is exactly a pair the walk will then report.  That
     costs one comparison per matched element, on the failing path only and under the caller's length
     cap.  Measured on 200 records with one inserted at the head: 0.38 ms to 0.48 ms for unhashable rows,
     and 0.15 ms to 0.20 ms for hashable ones, which is the path most sequences take.
@@ -162,7 +162,7 @@ def _rechecked_equal_runs(opcodes, actual, expected):
             revalidated.append((tag, actual_start, actual_stop, expected_start, expected_stop))
             continue
         holds = [
-            not _guarded_not_equal(actual[actual_start + offset], expected[expected_start + offset])
+            _guarded_equal(actual[actual_start + offset], expected[expected_start + offset])
             for offset in range(actual_stop - actual_start)
         ]
         run_start = 0
@@ -202,15 +202,15 @@ def _aligned_match_indices(seq, counterpart) -> set[int] | None:
 def _positional_difference_count(actual, expected) -> int:
     """How many positions the two sequences differ at when paired by index.
 
-    Guarded rather than bare ``!=``: an array member reached here has an element-wise ``==`` with no
-    single truth value, and the operand gate on the assertion never saw it - the top-level ``!=`` that
+    Guarded rather than bare ``==``: an array member reached here has an element-wise ``==`` with no
+    single truth value, and the operand gate on the assertion never saw it - the top-level ``==`` that
     admitted the failure short-circuited on an earlier element.  Without the guard numpy's own
     ``ValueError`` leaves the library in place of the actionable ``TypeError`` it promises.
     """
     return sum(
         1
         for index in range(max(len(actual), len(expected)))
-        if index >= len(actual) or index >= len(expected) or _guarded_not_equal(actual[index], expected[index])
+        if index >= len(actual) or index >= len(expected) or not _guarded_equal(actual[index], expected[index])
     )
 
 
@@ -482,6 +482,9 @@ def _build_equality_diff(
         for item in sorted(expected - actual, key=_safe_repr):
             entries.append(_prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
+    # under a strict descent this means the two sides were already equal, not that they differ
+    if strict_descent:
+        return DiffResult(kind="scalar", entries=[])
     # bytes render as `b'...'`, which difflib points into like text, and both expose `splitlines()`
     both_text = isinstance(actual, str) and isinstance(expected, str)
     both_bytes = isinstance(actual, (bytes, bytearray)) and isinstance(expected, (bytes, bytearray))
@@ -500,9 +503,6 @@ def _build_equality_diff(
         if not entries:
             entries.append(DiffEntry(path=".", actual=actual, expected=expected))
         return DiffResult(kind="string", entries=entries)
-    # under a strict descent this means the two sides were already equal, not that they differ
-    if strict_descent:
-        return DiffResult(kind="scalar", entries=[])
     return DiffResult(kind="scalar", entries=[_prefix.leaf_entry(actual=actual, expected=expected)])
 
 

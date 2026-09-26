@@ -174,10 +174,9 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key not in self.val:
-                missing.append(pair)  # bad key
-            elif self.val[entry_key] != pair[entry_key]:
-                missing.append(entry)  # bad val
+            if entry_key in self.val and self.val[entry_key] == pair[entry_key]:
+                continue
+            missing.append(pair)
         if missing:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to contain entries {self._fmt_items(entries)},"
@@ -224,7 +223,7 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key in self.val and pair[entry_key] == self.val[entry_key]:
+            if entry_key in self.val and self.val[entry_key] == pair[entry_key]:
                 found.append(pair)
         if found:
             return self.error(

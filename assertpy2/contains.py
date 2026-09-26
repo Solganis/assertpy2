@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
-from ._engine._compare import _guarded_not_equal
+from ._engine._compare import _guarded_equal
 from ._engine._diff import _sub_diff_entries
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import materialized
@@ -102,7 +102,7 @@ class ContainsMixin(_MixinBase):
         for element in self.val if values is None else values:
             if not mapping_shaped(element, check_values=False):
                 continue
-            if not any(key in item and not _guarded_not_equal(element[key], item[key]) for key in element):
+            if not any(key in item and _guarded_equal(element[key], item[key]) for key in element):
                 continue  # no shared equal key -> not related enough to suggest
             entries = _sub_diff_entries(element, item, _ROOT, config=None) or []
             if best is None or len(entries) < len(best[1]):
@@ -389,9 +389,10 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "a sequence, to contain a sequence")
         for i in range(len(values) - len(items) + 1):
             for j in range(len(items)):
-                if values[i + j] != items[j]:
-                    best_prefix = max(best_prefix, j)
-                    break
+                if values[i + j] == items[j]:
+                    continue
+                best_prefix = max(best_prefix, j)
+                break
             else:
                 return self
         # the longest run that lined up says where the sequence broke down
@@ -539,22 +540,27 @@ class ContainsMixin(_MixinBase):
         except TypeError:
             refuse(self.val, "iterable")
         expected_list = list(items)
-        if val_list != expected_list:
-            message = f"Expected <{_safe_str(self.val)}> to contain exactly {self._fmt_items(items)}, but did not."
-            entries = _multiset_diff_entries(val_list, expected_list)
-            if entries:
-                diff = DiffResult(kind="contains", entries=entries)
-            else:
-                # equal multisets, so only the order differs: name the first position that disagrees
-                pairs = enumerate(zip(val_list, expected_list, strict=True))  # equal multisets, equal lengths
-                index = next(i for i, (found, wanted) in pairs if found != wanted)
-                message += f" Same items, but the order differs at index {index}."
-                diff = DiffResult(
-                    kind="sequence",
-                    entries=[_ROOT.index(index).entry(actual=val_list[index], expected=expected_list[index])],
-                )
-            return self.error(message, diff=diff, expected=items)
-        return self
+        if val_list == expected_list:
+            return self
+        message = f"Expected <{_safe_str(self.val)}> to contain exactly {self._fmt_items(items)}, but did not."
+        entries = _multiset_diff_entries(val_list, expected_list)
+        # equal multisets, so only the order differs: name the first position that disagrees
+        disagreeing = (
+            i
+            for i, (found, wanted) in enumerate(zip(val_list, expected_list, strict=True))
+            if not _guarded_equal(found, wanted, method="contains_exactly")
+        )
+        # none, from an `__eq__` that answered the list's question and the rescan's differently
+        index = None if entries else next(disagreeing, None)
+        if index is None:
+            diff = DiffResult(kind="contains", entries=entries)
+        else:
+            message += f" Same items, but the order differs at index {index}."
+            diff = DiffResult(
+                kind="sequence",
+                entries=[_ROOT.index(index).entry(actual=val_list[index], expected=expected_list[index])],
+            )
+        return self.error(message, diff=diff, expected=items)
 
     def contains_exactly_in_any_order(self, *items: object) -> Self:
         """Asserts that val contains exactly the given items, in any order.

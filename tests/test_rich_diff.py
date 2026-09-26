@@ -1932,8 +1932,8 @@ class TestSequenceAlignment:
         rows = [(entry.path, entry.actual, entry.expected) for entry in result.entries]
         assert_that(rows).is_equal_to([("[0]", _Boxed(1), _Boxed(3)), ("[1]", _Boxed(2), None)])
 
-    def test_a_value_keyed_pair_is_rechecked_with_the_operator_the_walk_uses(self):
-        """difflib matches hashable elements on ``==``, which a type may define apart from ``!=``."""
+    def test_a_pair_equal_under_eq_is_not_reported_whatever_its_ne_says(self):
+        """The walk reads ``==``, as difflib does for hashable elements, and ``!=`` may disagree with both."""
 
         class Split:
             def __hash__(self):
@@ -1946,9 +1946,7 @@ class TestSequenceAlignment:
                 return True
 
         result = _build_equality_diff([0, Split(), 2, 3], [9, 0, Split(), 2, 3])
-        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to(
-            [("expected[0]", "actual"), ("[1]", None)]
-        )
+        assert_that([(entry.path, entry.absent) for entry in result.entries]).is_equal_to([("expected[0]", "actual")])
 
     def test_elements_that_are_equal_but_print_differently_are_paired_by_value(self):
         """`2 == 2.0` is a match difflib finds only on the values; on the reprs it reads as a third

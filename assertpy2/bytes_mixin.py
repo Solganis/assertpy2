@@ -115,11 +115,11 @@ class BytesMixin(_MixinBase):
         if index < 0 or index >= sized_len(self.val):
             raise IndexError(f"Expected index {index} to be in range [0, {sized_len(self.val)}), but was out of range.")
         actual = self.val[index]
-        if actual != expected:
-            return self.error(
-                f"Expected byte at index {index} to be <0x{expected:02x}>, but was <0x{actual:02x}>.", expected=expected
-            )
-        return self
+        if actual == expected:
+            return self
+        return self.error(
+            f"Expected byte at index {index} to be <0x{expected:02x}>, but was <0x{actual:02x}>.", expected=expected
+        )
 
     def is_hex_equal_to(self, expected_hex: str) -> Self:
         """Assert that val equals the given hex string.
@@ -135,9 +135,9 @@ class BytesMixin(_MixinBase):
         """
         self._check_bytes()
         expected = bytes.fromhex(expected_hex)
-        if self.val != expected:
-            return self.error(f"Expected hex <{expected_hex}>, but was <{self.val.hex()}>.", expected=expected_hex)
-        return self
+        if self.val == expected:
+            return self
+        return self.error(f"Expected hex <{expected_hex}>, but was <{self.val.hex()}>.", expected=expected_hex)
 
     def decoded_as(self, encoding: str = "utf-8") -> Self:
         """Decode val and return a new builder with the decoded string.

@@ -27,7 +27,7 @@ import uuid
 from typing import TYPE_CHECKING, Any, cast
 
 from ._compare import (
-    _guarded_not_equal,
+    _guarded_equal,
     _keyed_types_differ,
     _kinds_never_equal,
     _node_decision,
@@ -319,15 +319,15 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         # identity first, as Python's containers do.  Not at the root, where `nan` made `strict_types` the weaker rule
         return False
     if config is None:
-        return _guarded_not_equal(value, other)
-    if _kinds_never_equal(value, other) and _guarded_not_equal(value, other):
+        return not _guarded_equal(value, other)
+    if _kinds_never_equal(value, other) and not _guarded_equal(value, other):
         return True
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
         # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal
         if config.tolerance is not None or config.comparators:
             return _node_decision(value, other, config) != "equal"
-        return _guarded_not_equal(value, other)
+        return not _guarded_equal(value, other)
     return bool(entries)
 
 
@@ -392,7 +392,7 @@ def mapping_differs(
 
     ignoring, including = key_specs_given(ignore), key_specs_given(include)
     if not (ignoring or including or config is not None):
-        return _guarded_not_equal(actual, expected)
+        return not _guarded_equal(actual, expected)
 
     ignores = ignore_specs(ignore) if ignoring else []
     includes = include_specs(include) if including else []

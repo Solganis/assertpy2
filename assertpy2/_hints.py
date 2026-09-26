@@ -120,7 +120,7 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
 
     Comparison failures count as "not explained" rather than propagating.  This runs while a failure
     is already being raised, on values the caller wrote, and a numpy array or any object with an
-    opinionated ``__eq__`` can raise from ``!=``.  Letting that out would replace the assertion error
+    opinionated ``__eq__`` can raise from ``==``.  Letting that out would replace the assertion error
     the reader needs with a crash from the line that was only trying to be helpful.
     """
     try:
@@ -129,7 +129,8 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
                 return False
             for step in steps:
                 left, right = step(left), step(right)
-            if left != right:
+            explained = left == right
+            if not explained:
                 return False
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return False
@@ -272,18 +273,18 @@ def _fields_of(value: object) -> dict | None:
 def _defined_as(klass: type, name: str) -> bool:
     """Whether the definition of *name* the class tree carries is the one ``object`` carries."""
     found = definition_of(klass, name)
-    # pragma: no cover on the `None` half - `object` ends every tree and defines both names asked here
+    # pragma: no cover on the `None` half - `object` ends every tree and defines the name asked here
     return found is not None and found[1] is object.__dict__[name]
 
 
 def identity_candidate(left: object, right: object) -> bool:
     """Whether ``==`` between these two comes down to identity, asked *before* the comparison runs.
 
-    A type that leaves both ``__eq__`` and ``__ne__`` to ``object`` is equal only to itself, so no value
-    on the other side would have made the comparison pass.  That is a fact about the type rather than
-    about what the two hold, which is the only claim worth making: state can live in a slot, in a
-    descriptor's own table or in a C field, and a line that promised to have read all of it would be
-    promising more than any reading can deliver.
+    A type that leaves ``__eq__`` to ``object`` is equal only to itself, so no value on the other side
+    would have made the comparison pass.  That is a fact about the type rather than about what the two
+    hold, which is the only claim worth making: state can live in a slot, in a descriptor's own table or
+    in a C field, and a line that promised to have read all of it would be promising more than any
+    reading can deliver.
 
     Three details make the answer trustworthy, and each was put here by a case that defeated the one
     before it.  It is asked before the comparison, because a type may rewrite its own ``__eq__`` while
@@ -298,8 +299,8 @@ def identity_candidate(left: object, right: object) -> bool:
     instances of a type that compares by identity, which is a comparison that is about to fail anyway.
     Scalars reach none of it: their comparison returns before this is asked.
 
-    ``__ne__`` is asked about as well, since the comparison a failing assertion runs is
-    ``actual != expected``, so a type defining only that one still decides its own inequality.
+    ``__ne__`` is not asked about: the comparison a failing assertion runs is ``actual == expected``, so a
+    type defining only ``__ne__`` still compares by identity.
     """
     try:
         klass = type(left)
@@ -309,7 +310,7 @@ def identity_candidate(left: object, right: object) -> bool:
         # a cheap look first, so a type that does define equality pays only for this
         if type.__getattribute__(klass, "__eq__") is not object.__eq__:
             return False
-        return _defined_as(klass, "__eq__") and _defined_as(klass, "__ne__")
+        return _defined_as(klass, "__eq__")
     except Exception:  # pragma: no cover - no input is known to reach it, see below
         # every lookup above runs none of the type's own code, and the guard stays because a failure is on the way
         return False

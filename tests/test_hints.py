@@ -326,9 +326,9 @@ class TestSilenceOnEverythingElse:
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 
     def test_a_value_whose_comparison_raises_cannot_break_the_failure(self):
-        # an opinionated `__eq__` raises from `!=`, and this runs while an assertion error is already on its way out
+        # an opinionated `__eq__` raises from `==`, and this runs while an assertion error is already on its way out
         class Ambiguous:
-            def __ne__(self, other):
+            def __eq__(self, other):
                 raise ValueError("ambiguous")
 
             def __hash__(self):
@@ -549,17 +549,18 @@ class TestEqualityDecidedByIdentity:
     def test_a_type_that_defines_equality_is_not_blamed_for_identity(self):
         assert_that(_hint(_AlwaysUnequal(1), _AlwaysUnequal(1))).is_none()
 
-    def test_a_type_deciding_its_own_inequality_is_not_blamed_either(self):
+    def test_a_type_deciding_only_its_inequality_still_compares_by_identity(self):
+        # the verdict is read off `==`, so a `__ne__` of its own decides nothing about it
         class Contrary:
             def __init__(self, value):
                 self.value = value
 
             def __ne__(self, other):
-                return True
+                return False
 
             __hash__ = None
 
-        assert_that(_hint(Contrary(1), Contrary(1))).is_none()
+        assert_that(_hint(Contrary(1), Contrary(1))).contains("equality is identity")
 
     @pytest.mark.parametrize(
         "options",
@@ -622,9 +623,9 @@ class TestEqualityDecidedByIdentity:
             def __init__(self, value):
                 self.value = value
 
-            def __ne__(self, other):
-                Sneaky.__ne__ = object.__ne__
-                return True
+            def __eq__(self, other):
+                Sneaky.__eq__ = object.__eq__
+                return False
 
             __hash__ = None
 

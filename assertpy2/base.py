@@ -10,7 +10,6 @@ from ._engine._compare import (
     _build_compare_config,
     _config_note,
     _guarded_equal,
-    _guarded_not_equal,
     _node_decision,
     _types_differ,
 )
@@ -197,19 +196,19 @@ class BaseMixin(SatisfiesMixin):
         if not kwargs:
             if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
                 # atomic scalars: no array or dict likeness, and `==` yields a real bool
-                if self.val != other:
-                    if isinstance(self.val, str) and isinstance(other, str):
-                        actual_repr = _truncated(_elided_text_repr(self.val, other))
-                        expected_repr = _truncated(_elided_text_repr(other, self.val))
-                    else:
-                        actual_repr, expected_repr = _disambiguated(self.val, other)
-                    return self.error(
-                        f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
-                        actual=self.val,
-                        expected=other,
-                        diff=_build_equality_diff(self.val, other),
-                    )
-                return self
+                if self.val == other:
+                    return self
+                if isinstance(self.val, str) and isinstance(other, str):
+                    actual_repr = _truncated(_elided_text_repr(self.val, other))
+                    expected_repr = _truncated(_elided_text_repr(other, self.val))
+                else:
+                    actual_repr, expected_repr = _disambiguated(self.val, other)
+                return self.error(
+                    f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
+                    actual=self.val,
+                    expected=other,
+                    diff=_build_equality_diff(self.val, other),
+                )
             ignore = include = config = None
         else:
             reject_unknown_kwargs(kwargs, _IS_EQUAL_TO_OPTIONS, "is_equal_to")
@@ -278,7 +277,7 @@ class BaseMixin(SatisfiesMixin):
         else:
             # the one branch deciding with `==`, asked first since a type may rewrite its own `__eq__` while answering
             self._equality_comparison = identity_candidate(self.val, other)
-            if _guarded_not_equal(self.val, other):
+            if not _guarded_equal(self.val, other):
                 if _both_list_like(self.val, other):
                     actual_repr = _truncated(_elided_seq_repr(self.val, other))
                     expected_repr = _truncated(_elided_seq_repr(other, self.val))
@@ -355,7 +354,8 @@ class BaseMixin(SatisfiesMixin):
     def is_not_equal_to(self, other: object) -> Self:
         """Asserts that val is not equal to other.
 
-        Checks actual is not equal to expected using the ``!=`` operator.
+        Checks actual is not equal to expected using the ``==`` operator, the question `is_equal_to`
+        asks.  ``!=`` is never asked: a type's ``__ne__`` need not be the negation of its ``__eq__``.
 
         Args:
             other: the expected value

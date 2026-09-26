@@ -24,7 +24,7 @@ from typing import (
 from ._engine._compare import (
     _build_compare_config,
     _config_note,
-    _guarded_not_equal,
+    _guarded_equal,
     _is_real_number,
     _keyed_types_differ,
     _non_finite,
@@ -1506,6 +1506,6 @@ class StructureMatcher(BaseMatcher):
                     mismatches.extend(self._walk(normalized, expected, path.key(key), seen))
                 else:
                     mismatches.append(_SpecMismatch(path.key(key), actual, "a mapping", None))
-            elif _guarded_not_equal(actual, expected, method="matches_structure"):
+            elif not _guarded_equal(actual, expected, method="matches_structure"):
                 mismatches.append(_SpecMismatch(path.key(key), actual, f"<{expected}>", None))
         return mismatches

@@ -142,10 +142,6 @@ class TakenApart(dict):
         pairs = (keyed_pair(self, other, name) if name in keyed else (self[name], other[name]) for name in self)
         return self.keys() == other.keys() and all(left is right or bool(left == right) for left, right in pairs)
 
-    def __ne__(self, other: object) -> bool:
-        equal = self.__eq__(other)
-        return equal if equal is NotImplemented else not equal
-
 
 class KeyedValue:
     """One of two fields declared with an ``eq=`` key, for the one comparison of them: equal when the keys are.

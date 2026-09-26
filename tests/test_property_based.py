@@ -207,6 +207,40 @@ def test_is_not_equal_to_is_the_inverse(left, right):
             assert_that(left).is_not_equal_to(right)
 
 
+class _CaseInsensitive(str):
+    """Replaces `__eq__` alone and so keeps `str.__ne__`, which then disagrees with it on "A" against "a"."""
+
+    def __eq__(self, other):
+        return isinstance(other, str) and self.casefold() == other.casefold()
+
+    def __hash__(self):
+        return hash(self.casefold())
+
+
+_cased_atoms = st.one_of(
+    st.sampled_from(["a", "A", "b"]), st.builds(_CaseInsensitive, st.sampled_from(["a", "A", "b"]))
+)
+_cased_values = st.one_of(
+    _cased_atoms,
+    st.lists(_cased_atoms, max_size=3),
+    st.dictionaries(st.sampled_from(["id", "name"]), _cased_atoms, max_size=2),
+)
+
+
+@settings(deadline=None)
+@example(left=_CaseInsensitive("A"), right="a")
+@example(left="a", right=_CaseInsensitive("A"))
+@given(left=_cased_values, right=_cased_values)
+def test_every_spelling_of_equality_answers_what_eq_answers(left, right):
+    """`==` decides, whichever spelling asks, however the value is nested, and whatever `!=` would say."""
+    equal = bool(left == right)
+    assert_that(assert_that(left).check().is_equal_to(right).passed).is_equal_to(equal)
+    assert_that(assert_that(left).check().is_not_equal_to(right).passed).is_equal_to(not equal)
+    assert_that(assert_that(left).check().is_equal_to(right, tolerance=0.1).passed).is_equal_to(equal)
+    assert_that(match.equal_to(right).matches(left)).is_equal_to(equal)
+    assert_that(match.equal_to(right, tolerance=0.1).matches(left)).is_equal_to(equal)
+
+
 @given(left=st.sets(st.integers()), right=st.sets(st.integers()))
 def test_is_equal_to_consistent_with_eq_for_sets(left, right):
     if left == right:
@@ -443,7 +477,7 @@ def test_diff_is_well_formed_for_unequal_dataclasses(left, right):
 
 
 # a pair the pairing calls equal is never examined, so a wrong match hides a real difference.
-# Two defects of that shape shipped, both because difflib matches on reprs where verdicts use `!=`
+# Two defects of that shape shipped, both because difflib matched on something other than the verdict
 
 
 class _Twin:
@@ -462,7 +496,7 @@ class _Twin:
 
 
 class _Split:
-    """Hashable, with ``==`` and ``!=`` that disagree: difflib reads the first, the walk the second."""
+    """Hashable, with ``==`` and ``!=`` that disagree: difflib and the walk read the first, nothing the second."""
 
     def __init__(self, value):
         self.value = value
@@ -566,7 +600,7 @@ def test_a_sequence_diff_pairs_off_every_position_it_leaves_unnamed(pair):
         (left, right)
         for left, right in zip(kept_actual, kept_expected, strict=True)
         # identity is equality here, which is the rule a container's own `==` applies to its members
-        if left not in named and actual[left] is not expected[right] and actual[left] != expected[right]
+        if left not in named and actual[left] is not expected[right] and not bool(actual[left] == expected[right])
     ]
     assert unaccounted == []
 

@@ -158,12 +158,12 @@ class FileMixin(_MixinBase):
         require_type(filename, (str, os.PathLike), "a path", subject=argument("filename"))
         val_filename = os.path.basename(os.path.abspath(self.val))
         expected_filename = os.fspath(filename)  # normalize an os.PathLike arg to its string form
-        if val_filename != expected_filename:
-            return self.error(
-                f"Expected filename <{val_filename}> to be equal to <{expected_filename}>, but was not.",
-                expected=filename,
-            )
-        return self
+        if val_filename == expected_filename:
+            return self
+        return self.error(
+            f"Expected filename <{val_filename}> to be equal to <{expected_filename}>, but was not.",
+            expected=filename,
+        )
 
     def is_child_of(self, parent: object) -> Self:
         """Asserts that val is an existing path to a file and that file is a child of parent.

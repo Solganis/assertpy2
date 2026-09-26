@@ -120,13 +120,13 @@ class DynamicMixin(_MixinBase):
                     actual = val_attr
 
                 expected = bound.arguments["other"]
-                if actual != expected:
-                    kind = "key" if is_dict else "attribute"
-                    return self.error(
-                        f"Expected <{actual}> to be equal to <{expected}> on {kind} <{attr_name}>, but was not.",
-                        requirement=asked,
-                    )
-            return self
+                if actual == expected:
+                    return self
+                kind = "key" if is_dict else "attribute"
+                return self.error(
+                    f"Expected <{actual}> to be equal to <{expected}> on {kind} <{attr_name}>, but was not.",
+                    requirement=asked,
+                )
 
         # the arity check above is the wrapper's own, so its signature says what a caller writes and
         # `Requirement.parameters` reads the same key whether the call was negated or not.  Through

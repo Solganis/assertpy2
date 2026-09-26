@@ -896,6 +896,19 @@ class TestStrictTypesOnStdlibScalars:
         with pytest.raises(AssertionFailure):
             assert_that({"at": moment}).is_equal_to({"at": datetime.datetime(2026, 1, 1)}, strict_types=True)
 
+    @pytest.mark.parametrize("text", ["a", "a\nb"], ids=["one line", "two lines"])
+    def test_a_text_subclass_equal_at_the_root_passes(self, text):
+        """Equal and of one type, it was diffed line by line, and a diff with no line in it failed at the root."""
+
+        class Label(str):
+            pass
+
+        class Blob(bytes):
+            pass
+
+        assert_that(Label(text)).is_equal_to(Label(text), strict_types=True)
+        assert_that(Blob(text.encode())).is_equal_to(Blob(text.encode()), strict_types=True)
+
 
 class TestConfigSurvivesTheFilteredPaths:
     """`ignore` / `include` route the comparison through a separate walk, which must carry the config.
@@ -1114,6 +1127,20 @@ class _RaisingEqualityList(list):
     __hash__ = None
 
 
+@dataclass(eq=False)
+class _RefusingBase:
+    total: float
+
+    def __eq__(self, other):
+        raise RuntimeError("asked the base")
+
+
+@dataclass(eq=False)
+class _AnsweringChild(_RefusingBase):
+    def __eq__(self, other):
+        return False
+
+
 class _TupleFriendlyList(list):
     def __eq__(self, other):
         return list(self) == list(other) if isinstance(other, tuple) else super().__eq__(other)
@@ -1174,9 +1201,18 @@ class TestAnOptionOnlyRelaxesTheLeaves:
         assert_that(_TupleFriendlyList([1.0, 2.0])).is_equal_to((1.0, 2.001), **{**options, "tolerance": 0.01})
         assert_that(_ByTotal(1.0, "x")).is_equal_to(_ByTotalToo(1.001, "x"), **{**options, "tolerance": 0.01})
 
-    def test_an_equality_that_raises_decides_nothing(self):
-        """`!=` goes through the inherited `list.__ne__`, so only the barrier's own question reaches `__eq__`."""
-        assert_that(_RaisingEqualityList([1.0])).is_equal_to((1.001,), tolerance=0.01)
+    @pytest.mark.parametrize(
+        "options",
+        [pytest.param({}, id="no options"), *(option for option in _OPTIONS if option.id != "strict_types")],
+    )
+    def test_an_equality_that_raises_is_handed_on(self, options):
+        """`==` is asked, where `!=` went through the inherited `list.__ne__` and never reached `__eq__`."""
+        with pytest.raises(RuntimeError, match="no equality here"):
+            assert_that(_RaisingEqualityList([1.0])).is_equal_to((1.001,), **options)
+
+    def test_a_decline_probe_that_raises_where_eq_did_not_decides_nothing(self):
+        """`==` asks the subclass first and has its answer, while the probe of each side asks the base as well."""
+        assert_that(_RefusingBase(1.0)).is_equal_to(_AnsweringChild(1.001), tolerance=0.01)
 
     @pytest.mark.parametrize("options", _OPTIONS)
     def test_the_matcher_agrees(self, options):

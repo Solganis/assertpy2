@@ -20,6 +20,7 @@ import itertools
 import math
 import operator
 import traceback
+import unicodedata
 import unittest.mock
 from dataclasses import dataclass
 
@@ -119,6 +120,163 @@ class _Status(str, enum.Enum):
 
     PAID = "paid"
     DUE = "due"
+
+
+class _Split:
+    """`==` and `!=` both say yes, which is what a `str` or `dict` subclass replacing `__eq__` alone does."""
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return True
+
+    def __ne__(self, other: object) -> bool:
+        return True
+
+    __hash__ = None
+
+    def __repr__(self) -> str:
+        return f"_Split({self.value})"
+
+
+class _NeverEqual:
+    """`==` and `!=` both say no, so asking `!=` passed an equality `==` refuses."""
+
+    def __eq__(self, other: object) -> bool:
+        return False
+
+    def __ne__(self, other: object) -> bool:
+        return False
+
+    __hash__ = None
+
+
+class _Clause:
+    """What an expression DSL hands back from a comparison: an object, truthy, and not a bool."""
+
+
+class _Column:
+    """`==` and `!=` both build a truthy `_Clause`."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __eq__(self, other):
+        return _Clause()
+
+    def __ne__(self, other):
+        return _Clause()
+
+    __hash__ = None
+
+
+class _NeRaises:
+    """Equality by value and an `__ne__` that raises: `!=` was an error where `==` has an answer."""
+
+    def __init__(self, value: int) -> None:
+        self.value = value
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _NeRaises) and other.value == self.value
+
+    def __ne__(self, other: object) -> bool:
+        raise RuntimeError("__ne__ was asked")
+
+    __hash__ = None
+
+
+class _CaseInsensitive(str):
+    """Replaces `__eq__` alone, so `!=` is still `str.__ne__` and calls "Ada" and "ada" unequal."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and self.casefold() == other.casefold()
+
+    def __hash__(self) -> int:
+        return hash(self.casefold())
+
+
+class _WithinOne(int):
+    """Replaces `__eq__` alone, so `!=` is still `int.__ne__`."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, int) and abs(int(self) - int(other)) <= 1
+
+    __hash__ = int.__hash__
+
+
+class _CaseFoldedBytes(bytes):
+    """Replaces `__eq__` alone, so `!=` is still `bytes.__ne__`."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, bytes) and self.lower() == other.lower()
+
+    __hash__ = bytes.__hash__
+
+
+class _OrderSensitive(dict):
+    """Replaces `__eq__` with one that reads the order too, so `dict.__ne__` calls a reordered copy equal."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, dict) and list(self.items()) == list(other.items())
+
+    __hash__ = None
+
+
+@dataclass(eq=False)
+class _AnsweringInequality:
+    """Leaves `__eq__` to `object` and answers `!=` itself, so `!=` calls it equal to what `==` does not."""
+
+    value: int
+
+    def __ne__(self, other: object) -> bool:
+        return False
+
+
+@dataclass(eq=False)
+class _Unrelated:
+    value: int
+
+
+class _Accentless(str):
+    """Replaces `__eq__` alone and keeps its kind through `lower()`, so `!=` is still `str.__ne__`."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, str) and _unaccented(self) == _unaccented(other)
+
+    __hash__ = str.__hash__
+
+    def lower(self) -> _Accentless:
+        return _Accentless(str.lower(self))
+
+
+def _unaccented(text: str) -> str:
+    return "".join(char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char))
+
+
+class _SameMonth(datetime.date):
+    """Replaces `__eq__` alone, so `!=` is still `date.__ne__`."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, datetime.date) and (self.year, self.month) == (other.year, other.month)
+
+    __hash__ = datetime.date.__hash__
+
+
+class _MonthlyStamp(datetime.datetime):
+    def date(self) -> _SameMonth:
+        return _SameMonth(self.year, self.month, self.day)
+
+
+@dataclass
+class _Holder:
+    item: object
+    noise: int = 0
+
+
+class _Carrier:
+    def __init__(self, item: object) -> None:
+        self.item = item
 
 
 # both halves in one generator, so the properties below test the classifier and not the fast path.
@@ -2412,3 +2570,191 @@ class TestTheShortcutAndTheWalkAgree:
         walked = [item for item in items if item in values]
         outcome = assert_that(values).check().does_not_contain(*items)
         assert_that(outcome.passed).is_equal_to(not walked)
+
+
+_LEAF_OPTIONS = {
+    "tolerance": {"tolerance": 0.1},
+    "ignore_null": {"ignore_null": True},
+    "comparators": {"comparators": {"unrelated": lambda actual, expected: True}},
+    "strict_types": {"strict_types": True},
+}
+
+
+def _spellings_of_equality():
+    """Every way the library asks whether two values are equal, each answering as a bool."""
+    spellings = {
+        "is_equal_to": lambda actual, expected: assert_that(actual).check().is_equal_to(expected).passed,
+        "is_not_equal_to": lambda actual, expected: not assert_that(actual).check().is_not_equal_to(expected).passed,
+        "not_.is_equal_to": lambda actual, expected: not assert_that(actual).check().not_.is_equal_to(expected).passed,
+        "equal_to": lambda actual, expected: match.equal_to(expected).matches(actual),
+        "not_(equal_to)": lambda actual, expected: not match.not_(match.equal_to(expected)).matches(actual),
+        "matches_inline": lambda actual, expected: assert_that(actual).check().matches_inline(expected).passed,
+        "in a list": lambda actual, expected: assert_that([actual]).check().is_equal_to([expected]).passed,
+        "in a mapping": lambda actual, expected: (
+            assert_that({"item": actual}).check().is_equal_to({"item": expected}).passed
+        ),
+        "in a dataclass, ignore": lambda actual, expected: (
+            assert_that(_Holder(actual, 1)).check().is_equal_to(_Holder(expected, 2), ignore="noise").passed
+        ),
+        "equal_to in a mapping, ignore": lambda actual, expected: match.equal_to(
+            {"item": expected, "noise": 2}, ignore="noise"
+        ).matches({"item": actual, "noise": 1}),
+        "matches_structure": lambda actual, expected: (
+            assert_that({"item": actual}).check().matches_structure({"item": expected}).passed
+        ),
+        "structure": lambda actual, expected: match.structure({"item": expected}).matches({"item": actual}),
+        "has_<key>": lambda actual, expected: assert_that({"item": actual}).check().has_item(expected).passed,
+        "has_<attribute>": lambda actual, expected: assert_that(_Carrier(actual)).check().has_item(expected).passed,
+        "contains_entry": lambda actual, expected: (
+            assert_that({"item": actual}).check().contains_entry({"item": expected}).passed
+        ),
+        "does_not_contain_entry": lambda actual, expected: (
+            not assert_that({"item": actual}).check().does_not_contain_entry({"item": expected}).passed
+        ),
+        "contains_sequence": lambda actual, expected: (
+            assert_that([actual, 0]).check().contains_sequence(expected, 0).passed
+        ),
+        "contains": lambda actual, expected: assert_that([actual]).check().contains(expected).passed,
+    }
+    for name, selector in (("ignore", {"ignore": "noise"}), ("include", {"include": "item"})):
+        spellings[f"in a mapping, {name}"] = lambda actual, expected, selector=selector: (
+            (
+                assert_that({"item": actual, "noise": 1})
+                .check()
+                .is_equal_to({"item": expected, "noise": 2}, **selector)
+            ).passed
+        )
+    for name, options in _LEAF_OPTIONS.items():
+        spellings[f"is_equal_to, {name}"] = lambda actual, expected, options=options: (
+            assert_that(actual).check().is_equal_to(expected, **options).passed
+        )
+        spellings[f"equal_to, {name}"] = lambda actual, expected, options=options: match.equal_to(
+            expected, **options
+        ).matches(actual)
+        spellings[f"in a mapping, {name}"] = lambda actual, expected, options=options: (
+            assert_that({"item": actual}).check().is_equal_to({"item": expected}, **options).passed
+        )
+        spellings[f"in a list, {name}"] = lambda actual, expected, options=options: (
+            assert_that([actual]).check().is_equal_to([expected], **options).passed
+        )
+    return spellings
+
+
+def _asked(spelling, actual, expected):
+    try:
+        return spelling(actual, expected)
+    except Exception as error:  # a spelling that raises where `==` answered disagrees with it
+        return f"raised {type(error).__name__}: {error}"
+
+
+class TestEverySpellingOfEqualityAsksEq:
+    """`==` decides equality wherever a value is compared for it, and `!=` is never asked.
+
+    `is_equal_to` asked `!=` while `is_not_equal_to` asked `==`, so a type whose `__ne__` is not the negation
+    of its `__eq__` failed both, and a list holding the same pair, which compares its members with `==`,
+    passed.  A `str`, `int` or `dict` subclass replacing `__eq__` alone is such a type: it keeps the base
+    type's `__ne__`.
+    """
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            pytest.param(_Split(0), _Split(1), id="both-say-yes"),
+            pytest.param(_NeverEqual(), _NeverEqual(), id="both-say-no"),
+            pytest.param(_Column("a"), _Column("b"), id="truthy-non-bool"),
+            pytest.param(_NeRaises(0), _NeRaises(0), id="ne-raises-equal"),
+            pytest.param(_NeRaises(0), _NeRaises(1), id="ne-raises-unequal"),
+            pytest.param(_CaseInsensitive("Ada"), _CaseInsensitive("ada"), id="str-subclass"),
+        ],
+    )
+    def test_every_spelling_answers_what_eq_answers(self, actual, expected):
+        equal = bool(actual == expected)
+        answers = {name: _asked(spelling, actual, expected) for name, spelling in _spellings_of_equality().items()}
+        assert_that({name: answer for name, answer in answers.items() if answer is not equal}).is_empty()
+
+    def test_both_entry_assertions_ask_with_the_actual_value_on_the_left(self):
+        """As `is_equal_to` asks, where `does_not_contain_entry` alone put the expected value on the left."""
+        held = {"item": _Split(0)}
+        assert_that(held).contains_entry({"item": _NeverEqual()})
+        assert_that(assert_that(held).check().does_not_contain_entry({"item": _NeverEqual()}).passed).is_false()
+
+    def test_is_zero_asks_eq(self):
+        within_one_of_zero = _WithinOne(1)
+        assert_that(within_one_of_zero).is_zero()
+        assert_that(assert_that(within_one_of_zero).check().is_not_zero().passed).is_false()
+        assert_that(match.is_zero().matches(within_one_of_zero)).is_true()
+
+    def test_a_byte_is_compared_with_eq(self):
+        assert_that(b"\x01").has_byte_at(0, _WithinOne(2))
+
+    def test_hex_is_compared_with_eq(self):
+        assert_that(_CaseFoldedBytes(b"AB")).is_hex_equal_to("6162")
+
+    def test_a_file_name_is_compared_with_eq(self, tmp_path):
+        report = tmp_path / "Report.txt"
+        report.write_text("")
+        assert_that(str(report)).is_named(_CaseInsensitive("report.TXT"))
+
+    def test_the_position_contains_exactly_reports_is_found_with_eq(self):
+        """Equal multisets in another order, where `!=` found no differing position and `next()` ran dry."""
+        first, second = _OrderSensitive(x=1, y=2), _OrderSensitive(y=2, x=1)
+        with pytest.raises(AssertionFailure, match="the order differs at index 0"):
+            assert_that([first, second]).contains_exactly(second, first)
+
+    def test_a_closest_element_shares_a_key_eq_calls_equal(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([{"name": _CaseInsensitive("Ada"), "id": 1}]).contains({"name": "ada", "id": 2})
+        assert_that(str(failure.value)).contains("Closest element")
+
+    def test_a_pair_eq_calls_equal_is_elided_from_the_message(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([_CaseInsensitive("Ada"), "x" * 60]).is_equal_to(["ada", "y" * 60])
+        assert_that(str(failure.value)).starts_with("Expected <[.., 'xxx")
+
+    def test_two_classes_that_decline_equality_differ_whatever_ne_says(self):
+        """Under an option the walk would compare their fields, so the kinds decide, and `!=` had the last word."""
+        assert_that(match.equal_to(_Unrelated(1), tolerance=0.1).matches(_AnsweringInequality(1))).is_false()
+
+    def test_a_mapping_of_its_own_is_asked_with_eq(self):
+        """A `dict` subclass replacing `__eq__` alone keeps `dict.__ne__`, which ignores the order `==` reads."""
+        first, reordered = _OrderSensitive(x=1, y=2), _OrderSensitive(y=2, x=1)
+        assert_that(assert_that(first).check().is_equal_to(reordered).passed).is_false()
+        assert_that(first).is_not_equal_to(reordered)
+
+    def test_a_shifted_pair_eq_calls_equal_is_elided_from_the_message(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that(["p" * 30, _CaseInsensitive("Ada"), "q" * 30]).is_equal_to(["new", "p" * 30, "ada", "q" * 30])
+        assert_that(str(failure.value)).starts_with("Expected <[..]> to be equal to <['new', ..]>")
+
+    def test_a_pair_eq_calls_equal_leaves_nothing_for_an_alignment_to_win(self):
+        outcome = assert_that([_CaseInsensitive("Ada"), 1]).check().is_equal_to(["ada", 1, 2])
+        assert_that([(entry.path, entry.absent) for entry in outcome.diff.entries]).is_equal_to([("[2]", "actual")])
+
+    def test_case_is_ignored_by_asking_eq_of_the_lowered_values(self):
+        assert_that(_Accentless("Café")).is_equal_to_ignoring_case("CAFE")
+
+    @pytest.mark.parametrize(
+        "ignoring", ["is_equal_to_ignoring_milliseconds", "is_equal_to_ignoring_seconds", "is_equal_to_ignoring_time"]
+    )
+    def test_a_date_is_compared_by_asking_eq(self, ignoring):
+        getattr(assert_that(_MonthlyStamp(2026, 1, 2, 3, 4, 5)), ignoring)(datetime.datetime(2026, 1, 20, 3, 4, 5))
+
+    def test_an_eq_that_changes_its_answer_still_gets_a_failure(self):
+        """Unequal as a list, equal as a multiset and at every position: no position to name, and no crash."""
+        calls = []
+
+        class Fickle:
+            def __eq__(self, other):
+                calls.append(other)
+                return len(calls) > 1
+
+            __hash__ = None
+
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([Fickle()]).contains_exactly(Fickle())
+        assert_that(str(failure.value)).ends_with("but did not.")
+
+    def test_a_difference_eq_finds_is_not_explained_by_a_normalisation(self):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that([_NeverEqual()]).is_equal_to([_NeverEqual()])
+        assert_that(str(failure.value)).does_not_contain("every difference here")

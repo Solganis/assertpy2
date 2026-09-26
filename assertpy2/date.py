@@ -213,17 +213,17 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         instant = _read_in_the_zone_of(other, self.val)
         if (
-            self.val.date() != instant.date()
-            or self.val.hour != instant.hour
-            or self.val.minute != instant.minute
-            or self.val.second != instant.second
+            self.val.date() == instant.date()
+            and self.val.hour == instant.hour
+            and self.val.minute == instant.minute
+            and self.val.second == instant.second
         ):
-            return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
-                f" <{instant.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
-                expected=other,
-            )
-        return self
+            return self
+        return self.error(
+            f"Expected <{self.val.strftime('%Y-%m-%d %H:%M:%S')}> to be equal to"
+            f" <{instant.strftime('%Y-%m-%d %H:%M:%S')}>, but was not.",
+            expected=other,
+        )
 
     def is_equal_to_ignoring_seconds(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date to the minute.
@@ -251,13 +251,13 @@ class DateMixin(_MixinBase):
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         instant = _read_in_the_zone_of(other, self.val)
-        if self.val.date() != instant.date() or self.val.hour != instant.hour or self.val.minute != instant.minute:
-            return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
-                f" <{instant.strftime('%Y-%m-%d %H:%M')}>, but was not.",
-                expected=other,
-            )
-        return self
+        if self.val.date() == instant.date() and self.val.hour == instant.hour and self.val.minute == instant.minute:
+            return self
+        return self.error(
+            f"Expected <{self.val.strftime('%Y-%m-%d %H:%M')}> to be equal to"
+            f" <{instant.strftime('%Y-%m-%d %H:%M')}>, but was not.",
+            expected=other,
+        )
 
     def is_equal_to_ignoring_time(self, other: datetime.datetime) -> Self:
         """Asserts that val is a date and is equal to other date ignoring time.
@@ -285,10 +285,9 @@ class DateMixin(_MixinBase):
         _require_datetime(other, argument("other"))
         _require_comparable_datetimes(self.val, other)
         instant = _read_in_the_zone_of(other, self.val)
-        if self.val.date() != instant.date():
-            return self.error(
-                f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to"
-                f" <{instant.strftime('%Y-%m-%d')}>, but was not.",
-                expected=other,
-            )
-        return self
+        if self.val.date() == instant.date():
+            return self
+        return self.error(
+            f"Expected <{self.val.strftime('%Y-%m-%d')}> to be equal to <{instant.strftime('%Y-%m-%d')}>, but was not.",
+            expected=other,
+        )

@@ -8,7 +8,7 @@ from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
 from ._engine._compare import (
     _CompareConfig,
     _config_note,
-    _guarded_not_equal,
+    _guarded_equal,
     _is_nan,
     _node_decision,
     _spec_matches,
@@ -150,7 +150,7 @@ def _elided_seq_repr(seq, counterpart) -> str:
         if aligned is not None:
             matched = index in aligned
         else:
-            matched = index < len(counterpart) and not _guarded_not_equal(value, counterpart[index])
+            matched = index < len(counterpart) and _guarded_equal(value, counterpart[index])
         if matched:
             pending = True
             continue

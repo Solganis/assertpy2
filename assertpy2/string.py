@@ -57,12 +57,12 @@ class StringMixin(_MixinBase):
         """
         require_type(self.val, str, "a string")
         require_type(other, str, "a string", subject=argument("other"))
-        if self.val.lower() != other.lower():
-            return self.error(
-                f"Expected <{_safe_str(self.val)}> to be case-insensitive equal to <{other}>, but was not.",
-                expected=other,
-            )
-        return self
+        if self.val.lower() == other.lower():
+            return self
+        return self.error(
+            f"Expected <{_safe_str(self.val)}> to be case-insensitive equal to <{other}>, but was not.",
+            expected=other,
+        )
 
     def is_equal_to_ignoring_whitespace(self, other: str) -> Self:
         """Asserts that val is a string and is equal to other ignoring all whitespace.
@@ -90,12 +90,12 @@ class StringMixin(_MixinBase):
         """
         require_type(self.val, str, "a string")
         require_type(other, str, "a string", subject=argument("other"))
-        if "".join(self.val.split()) != "".join(other.split()):
-            return self.error(
-                f"Expected <{_safe_str(self.val)}> to be equal to <{other}> ignoring whitespace, but was not.",
-                expected=other,
-            )
-        return self
+        if "".join(self.val.split()) == "".join(other.split()):
+            return self
+        return self.error(
+            f"Expected <{_safe_str(self.val)}> to be equal to <{other}> ignoring whitespace, but was not.",
+            expected=other,
+        )
 
     def contains_ignoring_case(self, *items: str) -> Self:
         """Asserts that val is string and contains the given item or items.

@@ -4,7 +4,7 @@
 through both the boolean comparison (`HelpersMixin._dict_not_equal()`) and the diff/message rendering
 (`assertpy2._engine._diff._sub_diff_entries()`, `HelpersMixin._dict_err()`).  `_node_decision()` is the single
 switch both sides consult, so a tolerated or comparator-equal leaf is reported in neither.  With ``config is
-None`` every helper reproduces the engine's historical ``actual != expected`` behavior exactly.
+None`` every helper reproduces plain ``actual == expected`` exactly.
 
 Following the package convention, the impl helpers take unannotated args (the typed public surface lives in
 `assertpy2._engine._typing`); they operate on arbitrary user values whose operators ``numbers.Number`` cannot
@@ -221,24 +221,18 @@ def _keyed_members(actual: Any, expected: Any) -> tuple[tuple[Any, Any], ...]:
             for one in actual.__attrs_attrs__
             if one.eq is not False
         )
-    except (TypeError, ValueError):  # the two errors `_guarded_not_equal` hands to this search
+    except (TypeError, ValueError):  # the two errors `_guarded_equal` hands to this search
         return ()
 
 
-def _guarded_not_equal(actual, expected, *, method="is_equal_to") -> bool:
-    """``bool(actual != expected)``, converting the ambiguity raised from *inside* a container's ``==``
-    (where the top-level operand gate cannot see the array member) into the actionable ``TypeError``."""
-    try:
-        return bool(actual != expected)
-    except (ValueError, TypeError) as error:
-        operand = _find_ambiguous_operand(actual, expected)
-        if operand is None:
-            raise
-        raise _array_equality_error(method, operand) from error
+def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
+    """``bool(actual == expected)``, converting the ambiguity raised from *inside* a container's ``==``
+    (where the top-level operand gate cannot see the array member) into the actionable ``TypeError``.
 
-
-def _guarded_equal(actual, expected, *, method) -> bool:
-    """``bool(actual == expected)`` with the same nested array/frame-like guard as `_guarded_not_equal`."""
+    The one question every equality verdict asks, the negative ones included: a type's ``__ne__`` need
+    not be the negation of its ``__eq__``, and asking it made ``is_equal_to`` and ``is_not_equal_to``
+    fail the same pair while a list holding that pair, which compares its members with ``==``, passed.
+    """
     try:
         return bool(actual == expected)
     except (ValueError, TypeError) as error:
@@ -445,7 +439,7 @@ def _types_differ(actual, expected) -> bool:
     comparing its type against an ``int`` would break every composed matcher rather than catch a bug.
 
     ``_is_matcher`` is imported here rather than at module scope because ``_matcher_impls`` imports
-    ``_guarded_not_equal`` from this module, so the module-level import would be a cycle.
+    ``_guarded_equal`` from this module, so the module-level import would be a cycle.
     """
     if kind_of(actual) is kind_of(expected):
         return False
@@ -549,7 +543,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if _keyed_types_differ(actual, expected):
                 # before the walk: it descends keys into values, so `True` and `1` keys present the same values
                 return "leaf"
-            if type(actual) not in _EQ_ATOMIC and not _guarded_not_equal(actual, expected):
+            if type(actual) not in _EQ_ATOMIC and _guarded_equal(actual, expected):
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
         if config.tolerance is not None and _is_real_number(as_held(actual)) and _is_real_number(as_held(expected)):
@@ -565,7 +559,7 @@ def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root:
         # the same rule a container's own `==` applies to its members, and the verdict came from that `==`:
         # without it the diff listed a NaN both sides hold as differing, and the hint blamed it
         return "equal"
-    if not _guarded_not_equal(actual, expected):
+    if _guarded_equal(actual, expected):
         return "equal"
     return "leaf" if config is not None and _kinds_never_equal(actual, expected) else "recurse"
 
