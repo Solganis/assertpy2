@@ -292,6 +292,14 @@ class _InertBuilder:
         """
         return _InertVerdict(self._reason or "")
 
+    @property
+    def not_(self) -> _InertBuilder:
+        """This chain again: nothing after its failure runs, so there is nothing to invert either.
+
+        Absorbed, it was the absorbing lambda, and the assertion named after it an `AttributeError`.
+        """
+        return self
+
     def __getattr__(self, name):
         return lambda *args, **kwargs: self
 
@@ -305,6 +313,11 @@ class _InertVerdict:
 
     def __init__(self, reason: str) -> None:
         self._outcome = AssertionOutcome(passed=False, message=reason)
+
+    @property
+    def not_(self) -> _InertVerdict:
+        """The same verdict, since a negated assertion after the failure never ran either."""
+        return self
 
     def __getattr__(self, name: str) -> Any:
         return lambda *args, **kwargs: self._outcome

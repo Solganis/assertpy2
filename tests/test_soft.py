@@ -1,9 +1,11 @@
 import contextlib
 import contextvars
+import io
+import logging
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_all, assert_that, fail, soft_assertions, soft_fail
+from assertpy2 import AssertionFailure, assert_all, assert_that, assert_warn, fail, soft_assertions, soft_fail
 
 
 def test_success():
@@ -619,3 +621,25 @@ class TestAnInertChainHandsBackNothing:
         with contextlib.suppress(AssertionFailure), soft_assertions():
             chain = assert_that(lambda: None).raises(ValueError).when_called_with()
             assert_that(chain.is_equal_to(1).is_none()).is_not_none()
+
+    def test_not_stays_on_the_inert_chain(self):
+        """Absorbed, `not_` was the absorbing lambda, and the assertion named after it an `AttributeError`."""
+        with pytest.raises(AssertionFailure) as exc_info, soft_assertions():
+            chain = assert_that(lambda: None).raises(ValueError).when_called_with()
+            assert_that(chain.not_.is_equal_to(1).not_.is_none()).is_same_as(chain)
+        assert_that(exc_info.value.failures).is_length(1)
+
+    def test_a_verdict_asked_through_not_is_the_failure_that_made_it_inert(self):
+        capture = io.StringIO()
+        logger = logging.getLogger("inert_negated_verdict")
+        handler = logging.StreamHandler(capture)
+        logger.addHandler(handler)
+        try:
+            chain = assert_warn(lambda: None, logger=logger).raises(ValueError).when_called_with()
+        finally:
+            logger.removeHandler(handler)
+        negated = chain.check().not_.is_equal_to(1)
+        assert_that(negated.passed).is_false()
+        assert_that(negated.message).is_equal_to(chain.check().is_equal_to(1).message).is_in(
+            *capture.getvalue().splitlines()
+        )

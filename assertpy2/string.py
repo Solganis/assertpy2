@@ -606,6 +606,9 @@ class StringMixin(_MixinBase):
     def extracting_group(self, pattern: str, group: int | str = 0) -> Self:
         """Search val for ``pattern`` and return a new builder whose val is the captured group.
 
+        A group the pattern does not have fails it with or without ``not_``: that is a mistake in the call,
+        found once the pattern matched, and not an answer about val.
+
         Args:
             pattern: the regular expression pattern (must contain at least one group)
             group: the group index (int) or name (str) to extract. Defaults to ``0``
@@ -642,11 +645,12 @@ class StringMixin(_MixinBase):
         try:
             extracted = match_obj.group(group)
         except IndexError:
-            return self.error(
+            self._unmet(
                 f"Expected pattern <{pattern}> to have group <{group}>, but it does not.",
                 suppress_context=True,
                 expected=pattern,
             )
+            return self
         if extracted is None:
             return self.error(
                 f"Expected group <{group}> of pattern <{pattern}> to be matched in <{_safe_str(self.val)}>, "

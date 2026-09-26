@@ -74,7 +74,8 @@ class BaseMixin(SatisfiesMixin):
                 keys/fields) to ignore.  Besides exact keys and nested-path tuples, a ``re.Pattern`` matches
                 field names by regex and a ``type`` matches fields by value type.
             include (Hashable | list | set | frozenset | None): the key/field (or list/set/frozenset of
-                keys/fields) to include.  Accepts the same ``re.Pattern`` / ``type`` specs as ``ignore``.
+                keys/fields) to include.  Accepts the same ``re.Pattern`` / ``type`` specs as ``ignore``.  A
+                key the value does not have fails the assertion with or without ``not_``.
             tolerance (float | None): an absolute tolerance applied to every real-number leaf anywhere in
                 the structure, so close floats compare equal (``abs(actual - expected) <= tolerance``).
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
@@ -333,7 +334,12 @@ class BaseMixin(SatisfiesMixin):
             actual_dict = as_comparable(actual_item)
             expected_dict = as_comparable(expected_item)
             if actual_dict is not None and expected_dict is not None:
-                if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
+                differs = self._dict_not_equal(
+                    actual_dict, expected_dict, ignore=ignore, include=include, config=config
+                )
+                if differs is None:
+                    return None
+                if differs:
                     self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
             else:
                 decision = _node_decision(actual_item, expected_item, config)

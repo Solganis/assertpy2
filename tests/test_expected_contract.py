@@ -91,11 +91,16 @@ _NOT_AN_ASSERTION = {
     "_check_placeholders",
     "_dict_not_equal",
     "_out_of_time",
-    "_unmet",
+    "_require_existing",
+    "_require_file",
+    "_require_group",
     "_wrapper",
     "conforms_to_openapi",
     "matches_contract_snapshot",
 }
+
+# a prerequisite's failure is decided at its `_unmet()` call, as an answer's is at `error()`
+_FAILURE_CALLS = frozenset({"error", "_unmet"})
 
 _EXCUSED = _NEGATIONS | _ASKS_ABOUT_THE_VALUE_ALONE | _NOT_AN_ASSERTION
 
@@ -112,7 +117,7 @@ def _by_owner() -> tuple[dict[str, list[str]], dict[str, list[str]]]:
                 for child in ast.walk(node):
                     owner[id(child)] = node.name
         for node in ast.walk(tree):
-            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "error"):
+            if not (isinstance(node, ast.Call) and getattr(node.func, "attr", "") in _FAILURE_CALLS):
                 continue
             where = f"{path.name}:{node.lineno}"
             side = named if any(keyword.arg == "expected" for keyword in node.keywords) else silent
@@ -146,7 +151,10 @@ def test_no_excused_name_stands_for_two_different_assertions() -> None:
             if not (isinstance(node, ast.FunctionDef) and node.name in _EXCUSED):
                 continue
             # only where a failure is raised: a protocol declares the names and raises nothing
-            if any(isinstance(call, ast.Call) and getattr(call.func, "attr", "") == "error" for call in ast.walk(node)):
+            if any(
+                isinstance(call, ast.Call) and getattr(call.func, "attr", "") in _FAILURE_CALLS
+                for call in ast.walk(node)
+            ):
                 owners[node.name].add(path.name)
     shared = {name: sorted(where) for name, where in owners.items() if len(where) > 1}
     assert_that(shared).described_as("one entry excusing more than one assertion").is_equal_to({})

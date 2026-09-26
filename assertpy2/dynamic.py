@@ -55,6 +55,9 @@ class DynamicMixin(_MixinBase):
         assert_that(fred).has_first_name('Fred')
         assert_that(fred).has_last_name('Smith')
         assert_that(fred).has_shoe_size(12)
+
+    A name the value does not have fails with ``not_`` as well: negation inverts the comparison, never
+    whether there is a field to compare, so ``not_.has_frist_name('Joe')`` does not pass on a typo.
     """
 
     def __getattr__(self, attr: str) -> Any:
@@ -97,7 +100,8 @@ class DynamicMixin(_MixinBase):
             # named here rather than read off the stack: the operation is the attribute, not this closure
             asked = Requirement(attr, _one_operand(args, kwargs))
             if err_msg:
-                return self.error(err_msg, requirement=asked)  # ok to raise now that we are inside wrapper
+                self._unmet(err_msg, requirement=asked)  # ok to raise now that we are inside wrapper
+                return self
             else:
                 try:
                     # bound rather than counted: the signature says `other`, and writing it was refused

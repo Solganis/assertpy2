@@ -43,8 +43,8 @@ class TestNotBasic:
     def test_not_is_instance_of(self):
         assert_that("hello").not_.is_instance_of(int)
 
-    def test_not_has_length(self):
-        assert_that([1, 2]).not_.has_length(5)
+    def test_not_is_length(self):
+        assert_that([1, 2]).not_.is_length(5)
 
 
 class TestNotFailure:

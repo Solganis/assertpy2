@@ -19,7 +19,16 @@ import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import AssertionFailure, VacuousAssertionWarning, _satisfies, assert_that, match, soft_assertions
+from assertpy2 import (
+    AssertionFailure,
+    VacuousAssertionWarning,
+    _satisfies,
+    add_extension,
+    assert_that,
+    match,
+    remove_extension,
+    soft_assertions,
+)
 from assertpy2.snapshot import SnapshotCreatedWarning
 
 
@@ -624,6 +633,21 @@ class TestANegationSaysNothingBesideItsFailure:
             assert_that([]).not_.all_satisfy(lambda item: True)
         with pytest.warns(VacuousAssertionWarning):
             assert_that([]).all_satisfy(lambda item: True)
+
+    def test_a_pivot_inside_a_negated_extension_is_part_of_the_negation(self, guarded):
+        """A pivot made in the negation's run answered for itself, so its empty walk warned beside the failure."""
+
+        def walks_a_copy(self):
+            self.mapped(lambda item: item).all_satisfy(lambda item: True)
+            return self
+
+        add_extension(walks_a_copy)
+        try:
+            warnings.simplefilter("error", VacuousAssertionWarning)
+            with pytest.raises(AssertionFailure, match="NOT"):
+                assert_that([]).not_.walks_a_copy()
+        finally:
+            remove_extension(walks_a_copy)
 
 
 _RECORDS = st.dictionaries(st.sampled_from("abc"), st.integers(0, 1), max_size=3)

@@ -315,7 +315,11 @@ class HelpersMixin(_MixinBase):
 
         The decision lives in `_engine._equality`, where a matcher reaches it too.  What stays here is
         the one part that is not a comparison: an `include` naming a key the mapping does not have is a
-        mistake in the call, and it is reported as a failure in the builder's own wording.
+        mistake in the call, and it is reported as a failure in the builder's own wording.  Reported as
+        a prerequisite, since a comparison of keys that are not there has no answer to invert, and
+        ``not_.is_equal_to(other, include="typo")`` passed on it.
+
+        Returns ``None`` once that is reported rather than a verdict.
         """
         try:
             return mapping_differs(
@@ -334,12 +338,12 @@ class HelpersMixin(_MixinBase):
         includes_fmt = self._fmt_items(
             [".".join([str(segment) for segment in key]) if type(key) is tuple else key for key in absent.includes]
         )
-        self.error(
+        self._unmet(
             f"Expected <{absent.mapping}> to include key{keys_suffix} {includes_fmt},"
             f" but did not include key{missing_suffix} {self._fmt_items(absent.missing)}."
         )
-        # reported: a soft or warn builder is truthy, and read as "differs" it added a second, false failure
-        return False
+        # reported: falsy, so no second failure follows it, and `None` so a caller walking items stops there
+        return None
 
     @staticmethod
     def _normalize_key_specs(specs, param):

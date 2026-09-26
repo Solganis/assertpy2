@@ -66,6 +66,17 @@ assert_that(-5).not_.satisfies(match.is_positive())
 assert_that([1, -2, 3]).not_.each(match.is_positive())
 ```
 
+`.not_` inverts the answer, never whether the question could be asked. When what an assertion
+presupposes is missing, it fails under `.not_` with the message it fails with anyway: an existing path
+for `is_readable()`, a file for `is_named()`, the field a `has_<name>()` assertion reads, an `include=`
+key, the group `extracting_group()` names, an exception group for `contains_error()`.
+
+<!-- docs-guard: raises -->
+```python
+assert_that("no/such/file.txt").not_.is_readable()
+# assertpy2.AssertionFailure: Expected <no/such/file.txt> to exist, but was not found.
+```
+
 !!! note
     Only assertions can be negated. Steps that configure or transform - not assert - raise a
     `TypeError` under `.not_`:

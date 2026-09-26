@@ -1265,29 +1265,38 @@ class NegatedBuilder(Generic[_S]):
         the other three modes now do the same.
 
         A failure on something the question presupposes is not a verdict either, and inverting it turns
-        "the question has no answer" into a pass.  The first one the run recorded is delivered before this
-        returns, whatever failed after it, and handed back like any failure so no caller inverts it.  It
-        keeps the positive assertion's message and values, takes the requirement every negated failure
-        carries, and is recorded in turn for a negation this one runs inside of.
+        "the question has no answer" into a pass.  When it is the run's first failure it is delivered
+        before this returns, whatever failed after it, and handed back like any failure so no caller
+        inverts it.  One after an ordinary failure was never reached by the strict run, which stops at
+        the first, so the answer stands.  It keeps the positive assertion's message and values, takes the
+        requirement every negated failure carries, and is recorded in turn for a negation this one runs
+        inside of when it is that run's first failure too.
+
+        Both records are read where `_verdict_holder()` keeps them, so a negation asked of a pivot inside
+        an extension's own verdict run reads and restores that run's records rather than a stray copy.
+        Only a run inside another one records what it passes on: at the top nobody reads it afterwards.
         """
         builder = self._builder
-        kind, sink, answering = builder.kind, builder._check_sink, builder._answering_another
-        enclosing = builder._unmet_prerequisite
+        holder = builder if builder._answers_to is None else builder._answers_to
+        kind, answering = builder.kind, builder._answering_another
+        sink, enclosing = holder._check_sink, holder._unmet_prerequisite
         builder.kind = "check"
-        builder._check_sink = None
         builder._answering_another = True
-        builder._unmet_prerequisite = None
+        holder._check_sink = None
+        holder._unmet_prerequisite = None
         try:
             attr(*args, **kwargs)
-            decided, unmet = builder._check_sink, builder._unmet_prerequisite
+            decided, unmet = holder._check_sink, holder._unmet_prerequisite
         finally:
-            builder.kind, builder._check_sink, builder._answering_another = kind, sink, answering
-            builder._unmet_prerequisite = enclosing
+            builder.kind, builder._answering_another = kind, answering
+            holder._check_sink, holder._unmet_prerequisite = sink, enclosing
+            if kind != "check" and holder._run_pivots is not None:
+                holder._release_pivots()
         if unmet is None:
             return decided
         passed_on = replace(unmet, requirement=_what_was_asked(builder, self._asked(attr, name, *args, **kwargs)))
-        if enclosing is None:
-            builder._unmet_prerequisite = passed_on
+        if kind == "check" and sink is None:
+            holder._unmet_prerequisite = passed_on
         failure = builder._deliver(passed_on)
         if failure is not None:
             raise failure
@@ -1334,11 +1343,13 @@ class NegatedBuilder(Generic[_S]):
     ) -> AssertionBuilder:
         if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
-        self._builder._check_sink = AssertionOutcome(
-            message=self._make_msg(name, *args, **kwargs),
-            actual=self._builder.val,
-            requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
-        )
+        holder = self._builder._verdict_holder()
+        if holder._check_sink is None:
+            holder._check_sink = AssertionOutcome(
+                message=self._make_msg(name, *args, **kwargs),
+                actual=self._builder.val,
+                requirement=_what_was_asked(self._builder, self._asked(attr, name, *args, **kwargs)),
+            )
         return self._builder
 
     def _negated_warn(
@@ -1391,14 +1402,17 @@ class CheckBuilder:
         def _checked(*args: object, **kwargs: object) -> AssertionOutcome:
             # the verdict is answered here, so one this runs inside keeps its own failure and prerequisite
             builder = self._builder
-            kind, sink, unmet = builder.kind, builder._check_sink, builder._unmet_prerequisite
+            holder = builder if builder._answers_to is None else builder._answers_to
+            kind, sink, unmet = builder.kind, holder._check_sink, holder._unmet_prerequisite
             builder.kind = "check"
-            builder._check_sink = None
+            holder._check_sink = None
             try:
                 attr(*args, **kwargs)
-                failure = builder._check_sink
+                failure = holder._check_sink
             finally:
-                builder.kind, builder._check_sink, builder._unmet_prerequisite = kind, sink, unmet
+                builder.kind, holder._check_sink, holder._unmet_prerequisite = kind, sink, unmet
+                if kind != "check" and holder._run_pivots is not None:
+                    holder._release_pivots()
             if failure is not None:
                 return failure
             return AssertionOutcome(passed=True, actual=builder.val)
@@ -1483,6 +1497,9 @@ class AssertionBuilder(
 
         A bad argument still raises.  ``TypeError`` and ``ValueError`` mean the call itself is wrong,
         which is not a verdict about the value and would be silenced by returning one.
+
+        An assertion or an extension that fails more than once answers with its first failure, the one
+        it raises outside ``check()``.
 
         Examples:
             Usage:
@@ -1654,6 +1671,13 @@ class AssertionBuilder(
         """
         pivoted = _builder(val, description, kind, expected, logger)
         pivoted._value_origin = origin
+        if kind == "check":
+            holder = self._verdict_holder()
+            pivoted._answers_to = holder
+            pivoted._answering_another = self._answering_another
+            if holder._run_pivots is None:
+                holder._run_pivots = []
+            holder._run_pivots.append(pivoted)
         # kept across the pivot, and `is not None` not `or`, since a `requests.Response` is falsey for every 4xx
         pivoted._response = self._response if self._response is not None else response_of(self.val)
         return pivoted
@@ -1711,15 +1735,40 @@ class AssertionBuilder(
             raise failure from None
         raise failure
 
-    def _unmet(self, msg: str) -> None:
+    def _unmet(
+        self,
+        msg: str,
+        *,
+        expected: Any = MISSING,
+        requirement: Requirement | None = None,
+        suppress_context: bool = False,
+    ) -> None:
         """Deliver *msg* as a failure of something the question presupposes rather than as its answer.
 
-        Delivered like any failure.  What differs is under `not_`, whose verdict run is in check mode: the
-        first such record it leaves is kept, and `NegatedBuilder._verdict()` delivers it as it stands.
+        Delivered like any failure, with the keywords `error()` takes.  What differs is under `not_`, whose
+        verdict run is in check mode: recorded when it is the run's first failure, it is what
+        `NegatedBuilder._verdict()` delivers as it stands.
         """
-        self.error(msg)
-        if self._unmet_prerequisite is None:
-            self._unmet_prerequisite = self._check_sink
+        holder = self._verdict_holder()
+        first = holder._check_sink is None
+        self.error(msg, expected=expected, requirement=requirement, suppress_context=suppress_context)
+        if first:
+            holder._unmet_prerequisite = holder._check_sink
+
+    def _verdict_holder(self) -> AssertionBuilder[Any]:
+        """The builder whose check-mode sink this one's failures land in: itself, unless it was pivoted to
+        during another builder's verdict run, whose failures they then are."""
+        return self if self._answers_to is None else self._answers_to
+
+    def _release_pivots(self) -> None:
+        """Hand the pivots made during the verdict run that just ended the mode this builder is back in.
+
+        Kept in check mode, a pivot an extension held on to after the run swallowed every later failure.
+        Called by the outermost run only, since a run inside another still belongs to that one.
+        """
+        made, self._run_pivots = self._run_pivots, None
+        for pivot in made or ():
+            pivot.kind, pivot._answers_to, pivot._answering_another = self.kind, None, self._answering_another
 
     def _compose(
         self,
@@ -1781,8 +1830,10 @@ class AssertionBuilder(
             block.failures.append(replace(outcome, group=_soft_group.get(), location=_caller_location()))
             return None
         if self.kind == "check":
-            # no taint: a verdict was asked for, not asserted; every `self.error(...)` returns at once
-            self._check_sink = outcome
+            # no taint, as a verdict was asked for and not asserted, and the first failure is it: strict stops there
+            holder = self._verdict_holder()
+            if holder._check_sink is None:
+                holder._check_sink = outcome
             return None
         return self._failure(outcome)
 

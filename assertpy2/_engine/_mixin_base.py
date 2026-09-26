@@ -36,15 +36,27 @@ class _MixinBase:
     """
 
     _unmet_prerequisite: AssertionOutcome | None = None
-    """The first failure on something the question presupposes, recorded while `not_` asks for a verdict.
+    """A verdict run's first failure when it is on something the question presupposes.
 
     Recorded by `_unmet()` and read by `not_`, which delivers it as it stands instead of inverting it.
     Inverted, a caught exception that is not a group passed `not_.contains_error(ValueError)`: "not a
-    group" read as "holds no such error", where the question has no answer at all.  The record itself
-    rather than a flag, since an extension goes on after it in check mode and may fail again, and that
-    later failure is not the one to report.  Cleared for each verdict run and put back after it, so one
-    left behind outside a run is never read.
+    group" read as "holds no such error", where the question has no answer at all.  Only the first
+    failure, since the strict run stops there: a prerequisite missed after an ordinary failure was
+    never reached.  Cleared for each verdict run and put back after it, so one left behind outside a
+    run is never read.
     """
+
+    _answers_to: Any = None
+    """The builder whose verdict run a pivot made during that run belongs to, or ``None`` for its own.
+
+    A pivot inherits check mode, and its failures landed in a sink of its own that nobody read: an
+    extension asserting on `extracting_group()` held under `check()` while its strict run failed, and
+    failed under `not_` for the wrong reason.  Set by `builder()` and read through `_verdict_holder()`.
+    The pivot takes `_answering_another` along too, since what it asserts answers the same run.
+    """
+
+    _run_pivots: list[Any] | None = None
+    """The pivots made during the verdict run this builder holds, released by `_release_pivots()` when it ends."""
 
     _compared_nothing = False
     """Whether a comparison under ``ignore``/``include`` passed with no key left to compare.
@@ -87,7 +99,14 @@ class _MixinBase:
             requirement: Requirement | None = ...,
         ) -> AssertionOutcome: ...
 
-        def _unmet(self, msg: str) -> None: ...
+        def _unmet(
+            self,
+            msg: str,
+            *,
+            expected: object = ...,
+            requirement: Requirement | None = ...,
+            suppress_context: bool = ...,
+        ) -> None: ...
 
         @staticmethod
         def _failure(outcome: AssertionOutcome) -> AssertionFailure: ...
@@ -144,7 +163,7 @@ class _MixinBase:
             ignore: object = ...,
             include: object = ...,
             config: _CompareConfig | None = ...,
-        ) -> bool: ...
+        ) -> bool | None: ...
 
         def _dict_err(
             self,

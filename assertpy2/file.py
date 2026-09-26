@@ -74,9 +74,9 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist
         """
-        require_type(self.val, (str, os.PathLike), "a path")
-        if not os.path.exists(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to exist, but was not found.")
+        missing = self._missing()
+        if missing is not None:
+            return self.error(missing)
         return self
 
     def does_not_exist(self) -> Self:
@@ -102,6 +102,9 @@ class FileMixin(_MixinBase):
     def is_file(self) -> Self:
         """Asserts that val is a *file* and that it exists.
 
+        Nothing at the path is one of the answers rather than a question left unasked, so
+        ``not_.is_file()`` holds for a path that does not exist.
+
         Examples:
             Usage:
 
@@ -113,13 +116,16 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist, or is **not** a file
         """
-        self.exists()
-        if not os.path.isfile(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be a file, but was not.")
+        not_a_file = self._not_a_file()
+        if not_a_file is not None:
+            return self.error(not_a_file)
         return self
 
     def is_directory(self) -> Self:
         """Asserts that val is a *directory* and that it exists.
+
+        Nothing at the path is one of the answers rather than a question left unasked, so
+        ``not_.is_directory()`` holds for a path that does not exist.
 
         Examples:
             Usage:
@@ -132,13 +138,17 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist, or is **not** a directory
         """
-        self.exists()
+        missing = self._missing()
+        if missing is not None:
+            return self.error(missing)
         if not os.path.isdir(self.val):
             return self.error(f"Expected <{_safe_str(self.val)}> to be a directory, but was not.")
         return self
 
     def is_named(self, filename: str) -> Self:
         """Asserts that val is an existing path to a file and that file is named filename.
+
+        A path that is not an existing file fails it with or without ``not_``: the name is asked of the file.
 
         Args:
             filename: the expected filename
@@ -153,9 +163,11 @@ class FileMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does **not** exist, or is **not** a file, or is **not** named the given filename
+            TypeError: if filename is not a path, whatever val is
         """
-        self.is_file()
         require_type(filename, (str, os.PathLike), "a path", subject=argument("filename"))
+        if not self._require_file():
+            return self
         val_filename = os.path.basename(os.path.abspath(self.val))
         expected_filename = os.fspath(filename)  # normalize an os.PathLike arg to its string form
         if val_filename == expected_filename:
@@ -167,6 +179,8 @@ class FileMixin(_MixinBase):
 
     def is_child_of(self, parent: object) -> Self:
         """Asserts that val is an existing path to a file and that file is a child of parent.
+
+        A path that is not an existing file fails it with or without ``not_``: the parent is asked of the file.
 
         Args:
             parent: the expected parent directory
@@ -183,9 +197,11 @@ class FileMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does **not** exist, is **not** a file, or is **not** a child of given directory
+            TypeError: if parent is not a path, whatever val is
         """
-        self.is_file()
         parent_path = require_type(parent, (str, os.PathLike), "a path", subject=argument("parent directory"))
+        if not self._require_file():
+            return self
         val_abspath = os.path.abspath(self.val)
         parent_abspath = os.path.abspath(parent_path)
         try:
@@ -201,6 +217,9 @@ class FileMixin(_MixinBase):
     def is_readable(self) -> Self:
         """Asserts that val is an existing path and is readable.
 
+        A path that does not exist fails it with or without ``not_``: a permission is asked of what is at
+        the path.
+
         Examples:
             Usage:
 
@@ -212,13 +231,17 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist, or is **not** readable
         """
-        self.exists()
+        if not self._require_existing():
+            return self
         if not os.access(self.val, os.R_OK):
             return self.error(f"Expected <{_safe_str(self.val)}> to be readable, but was not.")
         return self
 
     def is_writable(self) -> Self:
         """Asserts that val is an existing path and is writable.
+
+        A path that does not exist fails it with or without ``not_``: a permission is asked of what is at
+        the path.
 
         Examples:
             Usage:
@@ -231,13 +254,17 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist, or is **not** writable
         """
-        self.exists()
+        if not self._require_existing():
+            return self
         if not os.access(self.val, os.W_OK):
             return self.error(f"Expected <{_safe_str(self.val)}> to be writable, but was not.")
         return self
 
     def is_executable(self) -> Self:
         """Asserts that val is an existing path and is executable.
+
+        A path that does not exist fails it with or without ``not_``: a permission is asked of what is at
+        the path.
 
         Examples:
             Usage:
@@ -250,7 +277,48 @@ class FileMixin(_MixinBase):
         Raises:
             AssertionError: if val does **not** exist, or is **not** executable
         """
-        self.exists()
+        if not self._require_existing():
+            return self
         if not os.access(self.val, os.X_OK):
             return self.error(f"Expected <{_safe_str(self.val)}> to be executable, but was not.")
         return self
+
+    def _missing(self) -> str | None:
+        """The failure for a path that does not exist, or ``None`` when it does.
+
+        Composed once for both of its readings: `exists()` answers with it, and an assertion about what is
+        at the path reports it as the prerequisite its question presupposes.
+        """
+        require_type(self.val, (str, os.PathLike), "a path")
+        if os.path.exists(self.val):
+            return None
+        return f"Expected <{_safe_str(self.val)}> to exist, but was not found."
+
+    def _not_a_file(self) -> str | None:
+        """The failure for a path that is not an existing file, or ``None`` when it is one."""
+        missing = self._missing()
+        if missing is not None or os.path.isfile(self.val):
+            return missing
+        return f"Expected <{_safe_str(self.val)}> to be a file, but was not."
+
+    def _require_existing(self) -> bool:
+        """Whether val exists, after reporting as a prerequisite that it does not.
+
+        A permission belongs to what is at the path, so with nothing there the question has no answer.
+        Inverted, a mistyped path passed ``not_.is_readable()`` as a file nobody may read.
+        """
+        missing = self._missing()
+        if missing is not None:
+            self._unmet(missing)
+        return missing is None
+
+    def _require_file(self) -> bool:
+        """Whether val is an existing file, after reporting as a prerequisite that it is not.
+
+        A name and a parent are asked of the file at the path, so a missing path or a directory answers
+        neither the question nor its negation.
+        """
+        not_a_file = self._not_a_file()
+        if not_a_file is not None:
+            self._unmet(not_a_file)
+        return not_a_file is None

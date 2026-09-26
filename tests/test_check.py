@@ -131,6 +131,14 @@ def _asks_a_refused_check(builder):
         builder.check().contains_error()
 
 
+def _fails_again(builder):
+    builder.is_equal_to(13)
+
+
+def _fails_a_negation(builder):
+    builder.not_.is_equal_to(12)
+
+
 class TestAVerdictAskedInsideKeepsTheFailureAroundIt:
     """An extension goes on after a failure in check mode, and a verdict it asked for next used to wipe it.
 
@@ -138,7 +146,9 @@ class TestAVerdictAskedInsideKeepsTheFailureAroundIt:
     `not_` a failure for an extension whose strict run fails at its first step.
     """
 
-    @pytest.mark.parametrize("ask", [_asks_a_held_negation, _asks_a_passing_check, _asks_a_refused_check])
+    @pytest.mark.parametrize(
+        "ask", [_asks_a_held_negation, _asks_a_passing_check, _asks_a_refused_check, _fails_again, _fails_a_negation]
+    )
     def test_check_and_not_both_read_the_earlier_failure(self, ask):
         def is_below_ten(self):
             self.is_less_than(10)
@@ -153,6 +163,157 @@ class TestAVerdictAskedInsideKeepsTheFailureAroundIt:
             remove_extension(is_below_ten)
         assert_that(outcome.passed).is_false()
         assert_that(outcome.message).is_equal_to("Expected <12> to be less than <10>, but was not.")
+
+
+def carries_code(self, code):
+    self.extracting_group(r"code=(\d+)", 1).is_equal_to(code)
+    return self
+
+
+def lacks_code(self, code):
+    self.extracting_group(r"code=(\d+)", 1).not_.is_equal_to(code)
+    return self
+
+
+def carries_code_other_than(self, avoided, code):
+    pivot = self.extracting_group(r"code=(\d+)", 1)
+    if pivot.check().is_equal_to(avoided).passed:
+        return self.error(f"Expected a code other than <{avoided}>, but it was.")
+    pivot.is_equal_to(code)
+    return self
+
+
+def names_a_code(self):
+    self.matches_with_groups(r"(?P<code>\d+)").has_cod("404")
+    return self
+
+
+def refuses_to_start(self):
+    self.raises(ValueError).when_called_with()
+    return self
+
+
+def keeps_its_pivot_then_refuses(self, kept):
+    kept.append(self.extracting_group(r"code=(\d+)", 1))
+    return self.is_length("three")
+
+
+def keeps_its_pivot(self, kept):
+    code = self.extracting_group(r"code=(\d+)", 1)
+    kept.extend((code, code.extracting_group(r"(\d)", 1)))
+    return self
+
+
+def _starts():
+    return None
+
+
+@pytest.fixture()
+def _pivoting_extensions():
+    extensions = (
+        carries_code,
+        lacks_code,
+        carries_code_other_than,
+        names_a_code,
+        refuses_to_start,
+        keeps_its_pivot,
+        keeps_its_pivot_then_refuses,
+    )
+    for extension in extensions:
+        add_extension(extension)
+    yield
+    for extension in extensions:
+        remove_extension(extension)
+
+
+@pytest.mark.usefixtures("_pivoting_extensions")
+class TestAPivotInsideAnExtensionAnswersForIt:
+    """A pivot inherits check mode, and its failures landed in a sink of its own that nobody read.
+
+    An extension asserting through `extracting_group()` held under `check()` while its strict run failed,
+    and failed under `not_` whatever the pivot answered.
+    """
+
+    def test_check_reads_what_the_strict_run_raises(self):
+        with pytest.raises(AssertionError) as strict:
+            assert_that("code=404").carries_code("200")
+        outcome = assert_that("code=404").check().carries_code("200")
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).is_equal_to(str(strict.value)).is_equal_to(
+            "Expected <404> to be equal to <200>, but was not."
+        )
+        assert_that(assert_that("code=404").check().carries_code("404").passed).is_true()
+
+    def test_not_inverts_what_the_pivot_answered(self):
+        assert_that("code=404").not_.carries_code("200")
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that("code=404").not_.carries_code("404")
+        assert_that(str(exc_info.value)).is_equal_to("Expected <code=404> to NOT satisfy: carries_code('404')")
+
+    def test_a_negation_asked_of_the_pivot_is_read_and_restored_where_the_run_keeps_it(self):
+        assert_that(assert_that("code=404").check().lacks_code("200").passed).is_true()
+        outcome = assert_that("code=404").check().lacks_code("404")
+        assert_that(outcome.message).is_equal_to("Expected <404> to NOT satisfy: is_equal_to('404')")
+        assert_that("code=404").not_.lacks_code("404")
+
+    def test_a_verdict_asked_of_the_pivot_stays_the_extension_own(self):
+        outcome = assert_that("code=404").check().carries_code_other_than("500", "200")
+        assert_that(outcome.message).is_equal_to("Expected <404> to be equal to <200>, but was not.")
+        assert_that(assert_that("code=404").check().carries_code_other_than("500", "404").passed).is_true()
+
+    def test_a_prerequisite_the_pivot_misses_is_delivered_as_it_stands(self):
+        missing = "Expected key <cod>, but val has no key <cod>."
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that("code=404").not_.names_a_code()
+        outcome = assert_that("code=404").check().not_.names_a_code()
+        assert_that(str(exc_info.value)).is_equal_to(missing)
+        assert_that(outcome.message).is_equal_to(missing)
+
+    def test_an_expectation_configured_inside_answers_for_it_too(self):
+        outcome = assert_that(_starts).check().refuses_to_start()
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).is_equal_to("Expected <_starts> to raise <ValueError> when called with ().")
+        assert_that(_starts).not_.refuses_to_start()
+
+    def test_a_pivot_kept_past_the_run_asserts_in_the_mode_its_chain_is_back_in(self):
+        """Left in check mode, a pivot an extension held on to swallowed every failure after the run."""
+        kept = []
+        chain = assert_that("code=404")
+        assert_that(chain.check().keeps_its_pivot(kept).passed).is_true()
+        with pytest.raises(AssertionError, match="to NOT satisfy"):
+            chain.not_.keeps_its_pivot(kept)
+        for pivot, value in zip(kept, ("404", "4", "404", "4"), strict=True):
+            with pytest.raises(AssertionError, match=f"Expected <{value}> to be equal to <200>"):
+                pivot.is_equal_to("200")
+        assert_that(chain.check().is_equal_to("code=404").passed).is_true()
+        with pytest.raises(AssertionError) as soft_run, soft_assertions():
+            assert_that("code=404").check().keeps_its_pivot(kept)
+            kept[-2].is_equal_to("200")
+            kept[-1].is_equal_to("200")
+        assert_that([failure.message for failure in soft_run.value.failures]).is_equal_to(
+            ["Expected <404> to be equal to <200>, but was not.", "Expected <4> to be equal to <200>, but was not."]
+        )
+
+    def test_a_pivot_kept_from_a_run_that_raised_is_released_too(self):
+        kept = []
+        with pytest.raises(TypeError):
+            assert_that("code=404").check().keeps_its_pivot_then_refuses(kept)
+        with pytest.raises(AssertionError, match="Expected <404> to be equal to <200>"):
+            kept[0].is_equal_to("200")
+
+
+class TestCheckAnswersWithTheFirstFailure:
+    """Check mode goes on past a failure, and an assertion failing twice answered with the second one.
+
+    The strict run stops at the first, so `check()` and the failure it stands in for named different items.
+    """
+
+    def test_a_comparison_failing_on_two_items(self):
+        subject, expected = [{"a": 1}, {"a": 2}], [{"a": 9}, {"a": 8}]
+        with pytest.raises(AssertionError) as strict:
+            assert_that(subject).is_equal_to(expected, ignore="b")
+        outcome = assert_that(subject).check().is_equal_to(expected, ignore="b")
+        assert_that(outcome.message).is_equal_to(str(strict.value)).contains("<{'a': 1}>")
 
 
 class TestTheReturnedRecordIsThePublicType:
