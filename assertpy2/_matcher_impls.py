@@ -1046,7 +1046,7 @@ class ContainsMatcher(BaseMatcher):
         if not is_searchable(searched):
             return False  # a value membership cannot be asked of simply does not contain anything
         try:
-            return not missing_items(searched, self.items, _is_matcher)
+            return not missing_items(searched, self.items, _is_matcher, marked=True)
         except MembershipRefusedError:
             return False  # an item this value cannot even be searched for is not one it holds
 
@@ -1071,7 +1071,7 @@ class ContainsMatcher(BaseMatcher):
                 mismatch=f"was <{_safe_repr(value)}>, which cannot be searched",
             )
         try:
-            absent = missing_items(searched, self.items, _is_matcher)
+            absent = missing_items(searched, self.items, _is_matcher, marked=True)
         except MembershipRefusedError as refusal:
             return MatchResult(matched=False, description=self.describe(), mismatch=_unsearchable(searched, refusal))
         return MatchResult(
@@ -1113,7 +1113,7 @@ class ContainsOnlyMatcher(BaseMatcher):
                 mismatch=f"was <{_safe_repr(value)}>, which cannot be listed",
             )
         try:
-            extra, missing = only_faults(searched, self.items)
+            extra, missing = only_faults(searched, self.items, marked=True)
         except MembershipRefusedError as refusal:
             return MatchResult(matched=False, description=self.describe(), mismatch=_unsearchable(searched, refusal))
         faults = []

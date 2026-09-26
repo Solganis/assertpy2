@@ -18,6 +18,8 @@ import enum
 import fractions
 import itertools
 import math
+import operator
+import traceback
 import unittest.mock
 from dataclasses import dataclass
 
@@ -25,7 +27,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from assertpy2 import AssertionFailure, BaseMatcher, assert_that, match
+from assertpy2 import AssertionFailure, BaseMatcher, assert_that, assert_warn, match, soft_assertions
 from assertpy2._engine._compare import (
     WindowRefusedError,
     _both_decline,
@@ -43,6 +45,7 @@ from assertpy2._engine._equality import (
 )
 from assertpy2._engine._introspection import materialized
 from assertpy2._engine._membership import (
+    MembershipRefusedError,
     _classified,
     _hash_safe,
     has_duplicates,
@@ -395,6 +398,41 @@ class TestMembershipIsOneDecisionToo:
         Python's own `argument of type 'int' is not iterable` out for the rest."""
         with pytest.raises(TypeError, match=r"^val must be a container or iterable, but was <"):
             getattr(assert_that(value), asked)(0)
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            lambda: assert_that("a").contains(1),
+            lambda: assert_that("a").contains("a", 1),
+            lambda: assert_that("a").does_not_contain("a", 1),
+            lambda: assert_that("a").contains_only(1),
+            lambda: assert_that("a").check().contains("a", 1),
+            lambda: assert_warn("a").contains("a", 1),
+        ],
+        ids=["contains-one", "contains-two", "does-not-contain-two", "contains-only", "check", "warn"],
+    )
+    def test_an_operand_refusal_reaches_a_builder_caller_as_the_operators_own(self, asked):
+        """Two or more items went through the matchers' private class, which named a private module to the caller."""
+        with pytest.raises(TypeError) as operator_refusal:
+            operator.contains("a", 1)
+        said = str(operator_refusal.value)
+        with pytest.raises(TypeError) as refused:
+            asked()
+        linked, pending = [], [refused.value]
+        while pending:
+            link = pending.pop()
+            if link is not None and all(link is not seen for seen in linked):
+                linked.append(link)
+                pending += [link.__cause__, link.__context__]
+        assert_that([type(link) for link in linked]).does_not_contain(MembershipRefusedError)
+        assert_that(type(refused.value)).is_same_as(TypeError)
+        assert_that(str(refused.value)).is_equal_to(said)
+        assert_that("".join(traceback.format_exception(refused.value))).does_not_contain("MembershipRefusedError")
+
+    def test_an_operand_refusal_is_not_collected_by_a_soft_block(self):
+        with pytest.raises(TypeError) as refused, soft_assertions():
+            assert_that("a").contains("a", 1)
+        assert_that(type(refused.value)).is_same_as(TypeError)
 
     @pytest.mark.parametrize(
         "pair", [("contains", "does_not_contain"), ("contains_key", "does_not_contain_key")], ids=["items", "keys"]

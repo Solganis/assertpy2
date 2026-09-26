@@ -165,11 +165,13 @@ class MembershipRefusedError(TypeError):
     """The operands refuse the question: this item cannot be searched for in this value at all.
 
     Its own type so a matcher can answer "no match" to it, while a `TypeError` raised inside the value's
-    own `__contains__` or `__eq__` still reaches the reader as the bug in that value it is.
+    own `__contains__` or `__eq__` still reaches the reader as the bug in that value it is.  Raised only for
+    a caller that asks with ``marked=True``: a builder's caller gets the operator's own `TypeError`, as a
+    single item does, where the class used to name a private module whenever two or more were asked.
     """
 
 
-def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError) -> NoReturn:
+def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError, *, marked: bool) -> NoReturn:
     """Ask again one expression at a time, so an operand refusal can be told from a bug in their code.
 
     Reached only where a walk has already raised, so the second ask costs a passing run nothing.  Asked
@@ -182,13 +184,15 @@ def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError) -> NoRetu
                 if item in container:
                     continue
             except TypeError as refusal:
-                if raised_inside(refusal):
+                if raised_inside(refusal) or not marked:
                     raise
                 raise MembershipRefusedError(str(refusal)) from refusal
     raise original
 
 
-def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool]) -> list[Any]:
+def missing_items(
+    value: Any, items: Sequence[Any], is_matcher: Callable[[object], bool], *, marked: bool = False
+) -> list[Any]:
     """Which of *items* are not in *value*, in the order they were asked for.
 
     A matcher among the items is satisfied by any single element, which is what makes this more than
@@ -205,7 +209,7 @@ def missing_items(value: Any, items: Sequence[Any], is_matcher: Callable[[object
     try:
         return _absent_from(searched, wanted, is_matcher, walked)
     except TypeError as refusal:
-        _told_apart(((wanted, searched),), refusal)
+        _told_apart(((wanted, searched),), refusal, marked=marked)
 
 
 def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool], walked: Any) -> list[Any]:
@@ -220,7 +224,7 @@ def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool],
     return absent
 
 
-def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]:
+def only_faults(value: Any, items: Sequence[Any], *, marked: bool = False) -> tuple[list[Any], list[Any]]:
     """``(extra, missing)`` for "contains only these": what is there but unwanted, and what is absent.
 
     Both halves at once, because reporting only the extras sends the reader to fix one problem and rerun
@@ -243,7 +247,7 @@ def only_faults(value: Any, items: Sequence[Any]) -> tuple[list[Any], list[Any]]
         extra = [item for item in walked if item not in wanted]
         missing = [item for item in wanted_items if item not in present]
     except TypeError as refusal:
-        _told_apart(((walked, wanted_items), (wanted_items, walked)), refusal)
+        _told_apart(((walked, wanted_items), (wanted_items, walked)), refusal, marked=marked)
     return extra, missing
 
 
