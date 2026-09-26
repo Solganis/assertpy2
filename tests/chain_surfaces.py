@@ -50,6 +50,7 @@ class Answer:
         text: The failure or refusal message as the surface delivered it.
         result: What the call handed back: the next builder, or the outcome for `check()`.
         count: How many failures a soft block collected, or how many records a warn call logged.
+        raised: The refusal itself, for a refusal: its class and its traceback say what `error` cannot.
     """
 
     status: str
@@ -58,6 +59,7 @@ class Answer:
     text: str = ""
     result: Any = None
     count: int = 0
+    raised: BaseException | None = None
 
     def brief(self) -> str:
         detail = self.error or (self.text.splitlines()[0] if self.text else "")
@@ -110,7 +112,7 @@ def invoke(target: Any, name: str, args: tuple[Any, ...], kwargs: dict[str, Any]
 
 
 def _refused(exc: BaseException) -> Answer:
-    return Answer("refused", error=type(exc).__name__, text=str(exc))
+    return Answer("refused", error=type(exc).__name__, text=str(exc), raised=exc)
 
 
 def run_hard(builder: Any, name: str, args: tuple[Any, ...], kwargs: dict[str, Any], negated: bool) -> Answer:
