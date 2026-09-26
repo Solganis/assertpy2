@@ -61,6 +61,9 @@ _EXCUSED = {
     ("async_assertions.py", "_seconds", "float(timeout)"): (
         "renders a timeout already added to a float deadline, where a bignum or a Decimal refuses"
     ),
+    ("async_assertions.py", "_duration", "float(value)"): (
+        "turns a timeout or interval, already known to be a Real, into the float the poll loop adds and sleeps"
+    ),
     ("pytest_plugin.py", "_poll_threshold", "float(written)"): "parses ini text, not a value under test",
     ("behave_matchers.py", "_positive_float", "float(text)"): "parses step text behave matched as digits",
 }

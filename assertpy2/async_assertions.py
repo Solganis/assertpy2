@@ -3,12 +3,16 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import inspect
+import math
+import numbers
 import time
 import warnings
 from collections import OrderedDict, deque
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Final
 
+from ._engine._compare import _is_infinite, _is_nan
+from ._engine._require import argument, refuse
 from .errors import AssertionFailure, PollSample, PollTrace, _json_safe, _safe_repr, _safe_str
 from .exception import _InertBuilder
 
@@ -263,6 +267,26 @@ def _last_failure_text(exc: BaseException) -> str:
     return _safe_str(exc) if isinstance(exc, AssertionError) else _safe_repr(exc)
 
 
+def _duration(value: object, name: str, *, endless: bool) -> float:
+    """*value* as the seconds a poll waits, refused where it is given rather than inside the loop.
+
+    A NaN timeout compared false against every clock reading and polled forever.  A string or a `Decimal`
+    failed in the deadline arithmetic, and an interval `time.sleep` cannot take failed in its C code, while
+    the async loop slept a negative one as zero.  An endless timeout is kept, since waiting until the
+    condition holds is a thing to ask for, and one past the float range is endless.
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        refuse(value, "a number of seconds", subject=argument(name))
+    try:
+        seconds = float(value)
+    except OverflowError:
+        seconds = -math.inf if value < 0 else math.inf
+    if _is_nan(seconds) or seconds < 0 or (not endless and _is_infinite(seconds)):
+        shape = "a non-negative number of seconds" if endless else "a finite, non-negative number of seconds"
+        raise ValueError(f"given {name} arg must be {shape}, but was <{value}>")
+    return seconds
+
+
 def _seconds(timeout: float) -> str:
     """The budget as it was given: `:.1f` printed 0.04 as 0.0, and `:g` rounds past six digits."""
     return str(float(timeout))
@@ -440,8 +464,8 @@ class AsyncAssertionBuilder:
         self._func = func
         self._builder_func = builder_func
         self._description = description
-        self._timeout = timeout
-        self._interval = interval
+        self._timeout = _duration(timeout, "timeout", endless=True)
+        self._interval = _duration(interval, "interval", endless=False)
         self._ignoring = ignoring
         self._kind = kind
         self._logger = logger
@@ -472,12 +496,12 @@ class AsyncAssertionBuilder:
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
-        self._timeout = timeout
+        self._timeout = _duration(timeout, "timeout", endless=True)
         return self
 
     def every(self, interval: float) -> Self:
         """Override the polling interval (in seconds)."""
-        self._interval = interval
+        self._interval = _duration(interval, "interval", endless=False)
         return self
 
     def ignoring(self, *exceptions: type[Exception]) -> Self:
@@ -602,9 +626,10 @@ class AsyncAssertionBuilder:
             ) as exc:  # retry-on-failure needs the try/except per poll iteration
                 last_error = exc
                 failure = _record_poll(recorder, exc, probed, loop.time() - start)
-                if loop.time() >= deadline:
-                    return _out_of_time(self, recorder, loop.time() - start, failure, last_error)
-                await asyncio.sleep(self._interval)
+                now = loop.time()
+                if now >= deadline:
+                    return _out_of_time(self, recorder, now - start, failure, last_error)
+                await asyncio.sleep(min(self._interval, deadline - now))
 
 
 class SyncAssertionBuilder:
@@ -645,8 +670,8 @@ class SyncAssertionBuilder:
         self._func = func
         self._builder_func = builder_func
         self._description = description
-        self._timeout = timeout
-        self._interval = interval
+        self._timeout = _duration(timeout, "timeout", endless=True)
+        self._interval = _duration(interval, "interval", endless=False)
         self._ignoring = ignoring
         self._kind = kind
         self._logger = logger
@@ -686,12 +711,12 @@ class SyncAssertionBuilder:
 
     def within(self, timeout: float) -> Self:
         """Override the timeout (in seconds)."""
-        self._timeout = timeout
+        self._timeout = _duration(timeout, "timeout", endless=True)
         return self
 
     def every(self, interval: float) -> Self:
         """Override the polling interval (in seconds)."""
-        self._interval = interval
+        self._interval = _duration(interval, "interval", endless=False)
         return self
 
     def ignoring(self, *exceptions: type[Exception]) -> Self:
@@ -749,8 +774,9 @@ class SyncAssertionBuilder:
                 ) as exc:  # retry-on-failure needs the try/except per poll iteration
                     last_error = exc
                     failure = _record_poll(recorder, exc, probed, time.monotonic() - start)
-                    if time.monotonic() >= deadline:
-                        return _out_of_time(self, recorder, time.monotonic() - start, failure, last_error)
-                    time.sleep(self._interval)
+                    now = time.monotonic()
+                    if now >= deadline:
+                        return _out_of_time(self, recorder, now - start, failure, last_error)
+                    time.sleep(min(self._interval, deadline - now))
 
         return _run

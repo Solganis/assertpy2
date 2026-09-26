@@ -1,5 +1,7 @@
 import asyncio
 import contextlib
+import decimal
+import fractions
 import gc
 import inspect
 import itertools
@@ -10,6 +12,7 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
 import warnings
 from collections import Counter, OrderedDict, defaultdict
 from dataclasses import dataclass, field
@@ -82,6 +85,93 @@ class TestEventuallyWithAsyncCallable:
             return 42
 
         asyncio.run(assert_that(lambda: compute()).eventually(timeout=1, interval=0.05).is_equal_to(42))
+
+
+def _ready():
+    return 1
+
+
+_DURATION_SPELLINGS = {
+    "sync-timeout": lambda value: assert_that(_ready).eventually_sync(timeout=value),
+    "sync-within": lambda value: assert_that(_ready).eventually_sync().within(value),
+    "async-timeout": lambda value: assert_that(_ready).eventually(timeout=value),
+    "async-within": lambda value: assert_that(_ready).eventually().within(value),
+    "sync-interval": lambda value: assert_that(_ready).eventually_sync(interval=value),
+    "sync-every": lambda value: assert_that(_ready).eventually_sync().every(value),
+    "async-interval": lambda value: assert_that(_ready).eventually(interval=value),
+    "async-every": lambda value: assert_that(_ready).eventually().every(value),
+}
+
+
+class TestPollDurations:
+    """A timeout or interval is refused where it is given, never inside the loop that uses it.
+
+    A NaN timeout compared false against every clock reading and polled forever; a string or a `Decimal`
+    failed in the deadline arithmetic; an interval `time.sleep` cannot take failed in its C code, while the
+    async loop slept a negative one as zero.
+    """
+
+    @pytest.mark.parametrize("spelling", sorted(_DURATION_SPELLINGS))
+    @pytest.mark.parametrize(
+        ("value", "refusal"),
+        [
+            (float("nan"), ValueError),
+            (-0.1, ValueError),
+            (True, TypeError),
+            ("1", TypeError),
+            (decimal.Decimal(1), TypeError),
+        ],
+        ids=["nan", "negative", "bool", "text", "decimal"],
+    )
+    def test_a_duration_that_is_no_number_of_seconds_is_refused(self, spelling, value, refusal):
+        with pytest.raises(refusal, match=r"^given (timeout|interval) arg must be "):
+            _DURATION_SPELLINGS[spelling](value)
+
+    @pytest.mark.parametrize("spelling", ["sync-interval", "sync-every", "async-interval", "async-every"])
+    @pytest.mark.parametrize("value", [float("inf"), 10**1000], ids=["infinite", "past-the-float-range"])
+    def test_an_interval_the_loop_cannot_sleep_is_refused(self, spelling, value):
+        with pytest.raises(ValueError, match=r"^given interval arg must be a finite, non-negative number of seconds"):
+            _DURATION_SPELLINGS[spelling](value)
+
+    @staticmethod
+    def _ready_on_the_second_poll():
+        polls = []
+
+        def probe():
+            polls.append(1)
+            return len(polls)
+
+        return probe, polls
+
+    @pytest.mark.parametrize(
+        "timeout",
+        [float("inf"), 10**1000, fractions.Fraction(1, 2)],
+        ids=["infinite", "past-the-float-range", "fraction"],
+    )
+    def test_a_timeout_of_any_non_negative_length_keeps_polling_until_it_holds(self, timeout):
+        probe, polls = self._ready_on_the_second_poll()
+        assert_that(probe).eventually_sync(timeout=timeout, interval=0).is_equal_to(2)
+        assert_that(polls).is_length(2)
+        probe, polls = self._ready_on_the_second_poll()
+        asyncio.run(assert_that(probe).eventually().within(timeout).every(0).is_equal_to(2))
+        assert_that(polls).is_length(2)
+
+    def test_a_zero_timeout_polls_once(self):
+        probe, polls = self._ready_on_the_second_poll()
+        with pytest.raises(AssertionFailure):
+            assert_that(probe).eventually_sync(timeout=0, interval=0).is_equal_to(2)
+        assert_that(polls).is_length(1)
+
+    @pytest.mark.parametrize("flavour", ["sync", "async"])
+    def test_an_interval_longer_than_the_budget_does_not_sleep_past_the_deadline(self, flavour):
+        """It slept the whole interval, so a 50 ms budget with a 30 s interval took 30 s to fail."""
+        start = time.monotonic()
+        with pytest.raises(AssertionFailure):
+            if flavour == "sync":
+                assert_that(lambda: 1).eventually_sync(timeout=0.05, interval=30).is_equal_to(2)
+            else:
+                asyncio.run(assert_that(lambda: 1).eventually(timeout=0.05, interval=30).is_equal_to(2))
+        assert_that(time.monotonic() - start).is_less_than(5)
 
 
 class TestEventuallyChaining:
