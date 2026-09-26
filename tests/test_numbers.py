@@ -449,6 +449,71 @@ def test_is_not_between_bad_arg_delta_failure():
     assert_that(str(exc_info.value)).is_equal_to("given low arg must be less than given high arg")
 
 
+@pytest.mark.parametrize("nan", [decimal.Decimal("NaN"), decimal.Decimal("sNaN")], ids=["quiet", "signalling"])
+@pytest.mark.parametrize("side", ["low", "high"])
+def test_a_decimal_nan_bound_holds_nothing_between_it_and_the_other(nan, side):
+    """Checking the bounds' order asked `low > high` itself, and a `Decimal` NaN signals there.
+
+    The ordering engine reads the signal as unordered, which is what `match.between` already answered.
+    """
+    low, high = (nan, 9) if side == "low" else (-9, nan)
+    with pytest.raises(AssertionError, match="to be between"):
+        assert_that(-1).is_between(low, high)
+    assert_that(-1).is_not_between(low, high)
+    assert_that(match.between(low, high).matches(-1)).is_false()
+
+
+@pytest.mark.parametrize(
+    ("value", "low", "high", "message"),
+    [
+        (1, 1j, 2, "given low arg must be a number, but was <1j> (complex)"),
+        (1, 0, 2j, "given high arg must be a number, but was <2j> (complex)"),
+        (0, 1, 1 + 2j, "given high arg must be a number, but was <(1+2j)> (complex)"),
+    ],
+    ids=["low", "high", "high-with-the-value-below-low"],
+)
+def test_a_bound_with_no_ordering_is_refused_under_its_own_name(value, low, high, message):
+    """The raw `>` used to let the operator's own `not supported between` out, naming neither bound.
+
+    Refused with the bounds, not where the value meets them: below the low bound the high one is never asked.
+    """
+    for question in ("is_between", "is_not_between"):
+        with pytest.raises(TypeError) as caught:
+            getattr(assert_that(value), question)(low, high)
+        assert_that(str(caught.value)).is_equal_to(message)
+
+
+class _RaisingGreaterThan:
+    """Registered as a real, with a `>` of its own that raises what it was built with."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def __gt__(self, other: object) -> bool:
+        raise self.error
+
+
+numbers.Real.register(_RaisingGreaterThan)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [TypeError("my __gt__ is broken"), decimal.InvalidOperation("my __gt__ is broken")],
+    ids=["type-error", "decimal-signal"],
+)
+def test_a_bound_whose_own_comparison_raises_is_handed_on(error):
+    """Only a `Decimal` NaN among the bounds makes a signal a verdict, and only the operator's own refusal a pair."""
+    with pytest.raises(type(error), match="my __gt__ is broken"):
+        assert_that(5).is_between(_RaisingGreaterThan(error), 9)
+
+
+def test_a_signal_from_a_bounds_own_comparison_surfaces_beside_a_nan_bound():
+    """A NaN high bound makes the bounds' order no question, and the value is still ordered against the low one."""
+    raising = _RaisingGreaterThan(decimal.InvalidOperation("my __gt__ is broken"))
+    with pytest.raises(decimal.InvalidOperation, match="my __gt__ is broken"):
+        assert_that(5).is_between(raising, decimal.Decimal("NaN"))
+
+
 def test_is_close_to():
     assert_that(123.01).is_close_to(123, 1)
     assert_that(0.01).is_close_to(0, 1)
@@ -679,6 +744,15 @@ def test_a_range_over_a_pair_with_no_order_refuses_as_one_relation_does(question
         getattr(assert_that(_NumberWithNoOrder()), question)(*arguments)
     assert_that(str(caught.value)).is_equal_to(
         f"given {operand} arg must be comparable with val <<NumberWithNoOrder>> (_NumberWithNoOrder), but was <0> (int)"
+    )
+
+
+def test_bounds_with_no_order_between_them_are_refused_as_a_pair():
+    with pytest.raises(TypeError) as caught:
+        assert_that(5).is_between(_NumberWithNoOrder(), 9)
+    assert_that(str(caught.value)).is_equal_to(
+        "given high arg must be comparable with given low arg <<NumberWithNoOrder>> (_NumberWithNoOrder),"
+        " but was <9> (int)"
     )
 
 

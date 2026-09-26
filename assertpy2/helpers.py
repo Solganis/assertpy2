@@ -1,6 +1,7 @@
 import collections
 import collections.abc
 import datetime
+import decimal
 import numbers
 
 from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
@@ -35,8 +36,9 @@ from ._engine._introspection import (
     keyed_snapshot,
 )
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import UnorderableError, holds, nan_operand
 from ._engine._path import _ROOT
-from ._engine._require import argument, refuse, require_type
+from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
 __tracebackhide__ = True
 
@@ -197,6 +199,35 @@ def _informative(val: object, other: object, val_repr: str, other_repr: str, *, 
     return _truncated(val_repr), _truncated(other_repr)
 
 
+def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
+    """Whether the bounds are the wrong way round as the ordering engine reads them, once ``>`` raised *refusal*.
+
+    A `Decimal` NaN signals at ``>``, where the engine reads it as unordered.  Bounds with no ordering between
+    them are refused here, under the name of the bound the engine stopped at: left to `_within`, a value below
+    the low bound failed before the high one was ever asked.  A `TypeError` raised inside a comparison of the
+    value's own is a bug in the value and is handed on, and so is a signal with no NaN among the bounds, which
+    the operands decide as the engine does, since the traceback's depth differs between the C and the
+    pure-Python `decimal`.  A signal is a verdict only where the engine reads the pair as a NaN it can answer.
+    """
+    if isinstance(refusal, TypeError):
+        handed_on = raised_inside(refusal)
+    else:
+        handed_on = not (nan_operand(low) or nan_operand(high))
+    if handed_on:
+        raise refusal
+    try:
+        return holds(low, high, "gt")
+    except UnorderableError as unordered:
+        failure = unordered
+    if not isinstance(refusal, TypeError):
+        raise refusal
+    if failure.kind == "value":
+        refuse(low, "a number", subject=argument("low"))
+    if failure.kind == "kind":
+        refuse(high, "a number", subject=argument("high"))
+    refuse(high, f"comparable with given low arg {_shown(low)}", subject=argument("high"))
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -255,7 +286,11 @@ class HelpersMixin(_MixinBase):
         else:
             refuse(self.val, "a number or a date, which is what an ordering is defined for")
 
-        if low > high:
+        try:
+            swapped = low > high
+        except (TypeError, decimal.InvalidOperation) as refusal:
+            swapped = _swapped_as_ordered(low, high, refusal)
+        if swapped:
             raise ValueError("given low arg must be less than given high arg")
 
     def _validate_close_to_args(self, val, other, tolerance):
