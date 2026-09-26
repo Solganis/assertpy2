@@ -432,9 +432,9 @@ def _present_includes(value: object) -> list:
     if fields is None:
         return []
     found: list = list(fields)
-    for key, held in fields.items():
-        inner = _fields_of(held)
-        found.extend((key, deeper) for deeper in inner or ())
+    # by key and item, which a refusing mapping in the pool leaves alone where its own `items()` raises
+    for key in list(fields):
+        found.extend((key, deeper) for deeper in _fields_of(fields[key]) or ())
     return sorted(found, key=repr)
 
 
