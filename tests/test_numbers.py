@@ -1011,6 +1011,149 @@ def test_an_own_method_reaching_the_standard_conversion_is_still_handed_on():
         assert_that(_ReachingTheConversion(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5)
 
 
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize("scalar", ["int64", "float32"])
+@pytest.mark.parametrize("scalar_first", [True, False], ids=["scalar-first", "bignum-first"])
+@pytest.mark.parametrize(("tolerance", "within"), [(0.5, False), (10**401, True)], ids=["apart", "within"])
+def test_a_numpy_scalar_against_a_bignum_is_measured(spelling, scalar, scalar_first, tolerance, within):
+    """`numpy` converts a Python int past its own range and overflows, in `==`, `-` and `<` alike.
+
+    The exact difference answers, where every spelling let the `OverflowError` out, and a `numpy.int64` goes
+    into `Fraction` through `int`, since `Fraction` kept it as a fixed-width numerator that overflowed again.
+    """
+    numpy = pytest.importorskip("numpy")
+    value, other = getattr(numpy, scalar)(5), 10**400
+    if not scalar_first:
+        value, other = other, value
+    assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(within)
+
+
+_BIGNUM = 10**400
+
+
+@pytest.mark.parametrize(
+    ("question", "value", "other", "holds"),
+    [
+        ("less_than", "inf", _BIGNUM, False),
+        ("greater_than", "inf", _BIGNUM, True),
+        ("less_than", "1", _BIGNUM, True),
+        ("greater_than", "1", -_BIGNUM, True),
+        ("less_than", "-inf", -_BIGNUM, True),
+        ("less_than_or_equal_to", _BIGNUM, "inf", True),
+        ("greater_than", _BIGNUM, "1", True),
+        ("less_than", "nan", _BIGNUM, False),
+        ("greater_than_or_equal_to", "nan", _BIGNUM, False),
+        ("less_than", _BIGNUM, "nan", False),
+    ],
+)
+def test_a_numpy_float_against_a_bignum_is_ordered_by_its_exact_value(question, value, other, holds):
+    """numpy 2 converts the Python int to a float to compare, which overflows, where numpy 1 answered.
+
+    The engine orders the pair by the exact values both stand for: an infinity above every finite value, and
+    a NaN against nothing.  Before, the assertion and the matcher let the `OverflowError` out.  Written as
+    text, the `numpy.float32` side.
+    """
+    numpy = pytest.importorskip("numpy")
+    value, other = (numpy.float32(side) if isinstance(side, str) else side for side in (value, other))
+    with numpy.errstate(all="ignore"):
+        assert_that(getattr(assert_that(value).check(), f"is_{question}")(other).passed).is_equal_to(holds)
+        assert_that(getattr(match, question)(other).matches(value)).is_equal_to(holds)
+
+
+def _ratio_raising(error: type[Exception]):
+    def as_integer_ratio(self: object) -> tuple[int, int]:
+        raise error("my own ratio refuses")
+
+    return as_integer_ratio
+
+
+@pytest.mark.parametrize(
+    "as_integer_ratio",
+    [None, _ratio_raising(OverflowError), _ratio_raising(ValueError), int.as_integer_ratio, "float32"],
+    ids=[
+        "none",
+        "overflow-for-a-finite-value",
+        "value-error-for-a-finite-value",
+        "another-types-c-method",
+        "another-numpy-types-method",
+    ],
+)
+def test_an_overflow_with_no_trusted_exact_value_is_handed_on(as_integer_ratio):
+    """No exact value, or one read from Python code that could call a finite value an infinity or a NaN."""
+    numpy = pytest.importorskip("numpy", minversion="2", reason="numpy 1 turns the bignum into a float and answers")
+    if as_integer_ratio == "float32":
+        as_integer_ratio = numpy.float32.as_integer_ratio
+    finite = type("Finite", (numpy.float64,), {"as_integer_ratio": as_integer_ratio})(1.0)
+    with pytest.raises(OverflowError, match="too large"):
+        assert_that(finite).is_less_than(_BIGNUM)
+
+
+def _lying_through_the_instance(numpy):
+    shadowed = type("Shadowed", (numpy.float64,), {})(1.0)
+    shadowed.as_integer_ratio = _ratio_raising(OverflowError).__get__(shadowed)
+    return shadowed
+
+
+def _lying_through_attribute_lookup(numpy):
+    def intercepting(self, name):
+        if name == "as_integer_ratio":
+            return _ratio_raising(OverflowError).__get__(self)
+        return numpy.float64.__getattribute__(self, name)
+
+    return type("Intercepting", (numpy.float64,), {"__getattribute__": intercepting})(1.0)
+
+
+def _lying_about_its_sign(numpy, value=float("-inf")):
+    return type("Signed", (numpy.float64,), {"__gt__": lambda self, other: True})(value)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [_lying_through_the_instance, _lying_through_attribute_lookup],
+    ids=["instance-attribute", "getattribute"],
+)
+def test_a_finite_value_is_read_through_its_types_own_ratio(build):
+    """The ratio is called as the type holds it, so neither the instance nor its lookup can call it infinite."""
+    numpy = pytest.importorskip("numpy", minversion="2", reason="numpy 1 turns the bignum into a float and answers")
+    assert_that(build(numpy)).is_less_than(_BIGNUM)
+
+
+def test_a_finite_value_with_a_comparison_of_its_own_is_still_measured():
+    """Its own `>` is only needed for an infinity's sign, so a finite value is ordered by its exact value."""
+    numpy = pytest.importorskip("numpy", minversion="2", reason="numpy 1 turns the bignum into a float and answers")
+    assert_that(_lying_about_its_sign(numpy, 1.0)).is_less_than(_BIGNUM)
+
+
+def test_an_infinitys_sign_is_not_read_from_a_comparison_of_its_own():
+    numpy = pytest.importorskip("numpy", minversion="2", reason="numpy 1 turns the bignum into a float and answers")
+    with pytest.raises(OverflowError, match="too large"):
+        assert_that(_lying_about_its_sign(numpy)).is_less_than(-_BIGNUM)
+
+
+@pytest.mark.parametrize(("bound", "outcome"), [("inf", ValueError), ("nan", AssertionError)])
+def test_a_numpy_float_bound_against_a_bignum_is_ordered(bound, outcome):
+    """An infinite low bound sits above the bignum high one, and a NaN bound holds nothing between."""
+    numpy = pytest.importorskip("numpy")
+    with numpy.errstate(all="ignore"), pytest.raises(outcome):
+        assert_that(-1).is_between(numpy.float32(bound), 10**401)
+    with numpy.errstate(all="ignore"):
+        assert_that(match.between(numpy.float32("-inf"), 10**401).matches(-1)).is_true()
+
+
+class _ArrayShapedEqualityThatOverflows:
+    """Shaped like an array for the guard in front of `==`, with an `__eq__` of its own that overflows."""
+
+    __array__ = None
+
+    def __eq__(self, other: object) -> bool:
+        raise OverflowError("my own equality overflows")
+
+
+def test_an_overflow_from_the_values_own_equality_is_handed_on_through_the_array_guard():
+    with pytest.raises(OverflowError, match="my own equality overflows"):
+        assert_that(_ArrayShapedEqualityThatOverflows()).is_equal_to(1, tolerance=0.5)
+
+
 def test_a_pair_a_decimal_will_not_order_fails_as_an_assertion_rather_than_refusing():
     numpy = pytest.importorskip("numpy")
     message = r"^Expected <1.5> to be close to <5> within tolerance <0>, but was not\.$"

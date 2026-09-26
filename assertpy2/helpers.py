@@ -204,12 +204,13 @@ def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
 
     A `Decimal` NaN signals at ``>``, where the engine reads it as unordered.  Bounds with no ordering between
     them are refused here, under the name of the bound the engine stopped at: left to `_within`, a value below
-    the low bound failed before the high one was ever asked.  A `TypeError` raised inside a comparison of the
-    value's own is a bug in the value and is handed on, and so is a signal with no NaN among the bounds, which
-    the operands decide as the engine does, since the traceback's depth differs between the C and the
-    pure-Python `decimal`.  A signal is a verdict only where the engine reads the pair as a NaN it can answer.
+    the low bound failed before the high one was ever asked.  A `TypeError` or an overflow raised inside a
+    comparison of the value's own is a bug in the value and is handed on, and so is a signal with no NaN among
+    the bounds, which the operands decide as the engine does, since the traceback's depth differs between the C
+    and the pure-Python `decimal`.  A signal is a verdict only where the engine reads the pair as a NaN it can
+    answer.
     """
-    if isinstance(refusal, TypeError):
+    if isinstance(refusal, (TypeError, OverflowError)):
         handed_on = raised_inside(refusal)
     else:
         handed_on = not (nan_operand(low) or nan_operand(high))
@@ -219,7 +220,7 @@ def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
         return holds(low, high, "gt")
     except UnorderableError as unordered:
         failure = unordered
-    if not isinstance(refusal, TypeError):
+    if isinstance(refusal, decimal.InvalidOperation):
         raise refusal
     if failure.kind == "value":
         refuse(low, "a number", subject=argument("low"))
@@ -288,7 +289,7 @@ class HelpersMixin(_MixinBase):
 
         try:
             swapped = low > high
-        except (TypeError, decimal.InvalidOperation) as refusal:
+        except (TypeError, OverflowError, decimal.InvalidOperation) as refusal:
             swapped = _swapped_as_ordered(low, high, refusal)
         if swapped:
             raise ValueError("given low arg must be less than given high arg")

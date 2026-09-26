@@ -15,8 +15,11 @@ answers "no match", because it feeds `==` and the combinators where raising woul
 from __future__ import annotations
 
 import decimal
+import fractions
+import inspect
 import numbers
 import operator
+import types
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -74,10 +77,74 @@ def _kind_of(value: Any) -> type | None:
 
 
 def _equal(actual: Any, expected: Any) -> bool:
-    """``==``, with a NaN on either side answering ``False`` rather than signalling."""
+    """``==``, with a NaN on either side answering ``False`` rather than signalling.
+
+    An operator that overflows converting the pair is answered from the exact values, as `compare` answers it.
+    """
     if nan_operand(actual) or nan_operand(expected):
         return False
-    return bool(actual == expected)
+    try:
+        return bool(actual == expected)
+    except OverflowError as refusal:
+        return _order_past(actual, expected, refusal) == 0
+
+
+def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
+    """How a pair orders once its own operator raised *refusal*: ``-1``, ``0`` or ``1``, ``None`` for a NaN.
+
+    A `TypeError` is the operator refusing the pair, which has no order.  An `OverflowError` is a `numpy` float
+    converting a Python int past its range, and the pair orders by the exact values both stand for, an
+    infinity above every finite value and a NaN against nothing.  Raised inside a comparison of the value's
+    own, either is a bug in the value and is handed on, and so is an overflow from a value with no exact
+    value to order by.
+    """
+    if raised_inside(refusal):
+        raise refusal
+    if isinstance(refusal, TypeError):
+        raise UnorderableError("pair") from None
+    left, right = _exact_real(actual), _exact_real(expected)
+    if left is None or right is None:
+        raise refusal
+    if isinstance(left, str) or isinstance(right, str):
+        return None
+    return (left > right) - (left < right)
+
+
+def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
+    """*value* as ``(rank, exact)`` for ordering past an overflow, ``"nan"``, or ``None`` with no exact value.
+
+    The rank puts an infinity above or below every finite value, whose exact value is compared otherwise.  Read
+    through `as_integer_ratio`, which never rounds and refuses an infinity and a NaN by the error it raises,
+    rather than through a conversion to ``float``.  Only as `float`, `Decimal` or a `numpy` float wrote it in C,
+    whose errors mean exactly that, and called as the type holds it, as is its ``>`` for an infinity's sign:
+    any other, on the class or reached through the instance, can raise either error for a finite value, and
+    would order it as an infinity or leave it unordered.
+    """
+    if isinstance(value, numbers.Integral):
+        return 0, fractions.Fraction(int(value))
+    ratio = _known_number_method(type(value), "as_integer_ratio", types.MethodDescriptorType)
+    if ratio is None:
+        return None
+    try:
+        numerator, denominator = ratio(value)
+    except OverflowError:
+        greater = _known_number_method(type(value), "__gt__", types.WrapperDescriptorType)
+        if greater is None:
+            return None
+        return (1 if greater(value, 0) else -1), fractions.Fraction(0)
+    except ValueError:
+        return "nan"
+    return 0, fractions.Fraction(int(numerator), int(denominator))
+
+
+def _known_number_method(owner: type, name: str, kind: type) -> Any | None:
+    """*owner*'s *name* as the type holds it, if `float`, `Decimal` or a `numpy` float wrote it in C, else ``None``."""
+    method = inspect.getattr_static(owner, name, None)
+    maker = getattr(method, "__objclass__", None)
+    known = maker in (float, decimal.Decimal) or getattr(maker, "__module__", None) == "numpy"
+    # borrowed from another number type, the method refuses the instance with a `TypeError` of its own
+    owned = isinstance(maker, type) and issubclass(owner, maker)
+    return method if isinstance(method, kind) and known and owned else None
 
 
 def compare(actual: Any, expected: Any) -> int:
@@ -110,10 +177,9 @@ def compare(actual: Any, expected: Any) -> int:
             return -1
         if right < left:
             return 1
-    except TypeError as exc:
-        if raised_inside(exc):
-            raise
-        raise UnorderableError("pair") from None
+    except (TypeError, OverflowError) as refusal:
+        order = _order_past(actual, expected, refusal)
+        return 0 if order is None else order
     except decimal.InvalidOperation:
         # a `Decimal` NaN signals rather than answering.  Asked here rather than before the comparison:
         # checked first, `'a'` against a NaN read as a verdict where the same pair without one is refused.

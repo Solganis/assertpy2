@@ -145,6 +145,10 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
                 bool(candidate == counterpart)
             except (ValueError, TypeError):
                 return candidate
+            except OverflowError as overflow:
+                if raised_inside(overflow):
+                    raise
+                continue  # a `numpy` scalar converting a bignum, which says nothing about element-wise `==`
     return None
 
 
@@ -280,7 +284,7 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     try:
         if actual == expected:
             return True
-    except TypeError as refusal:
+    except (TypeError, OverflowError) as refusal:
         # `Decimal` refuses to compare a `numpy.int64` it subtracts exactly: the equality is unknown, not false
         if raised_inside(refusal):
             raise
@@ -317,9 +321,18 @@ def _difference_within(actual, expected, tolerance) -> bool | None:
         if raised_inside(error) and not _rational_overflow(error):
             raise
         try:
-            return abs(fractions.Fraction(actual) - fractions.Fraction(expected)) <= fractions.Fraction(tolerance)
+            return abs(_as_fraction(actual) - _as_fraction(expected)) <= _as_fraction(tolerance)
         except (TypeError, ValueError, OverflowError):
             return None
+
+
+def _as_fraction(value: Any) -> fractions.Fraction:
+    """*value* as an exact `fractions.Fraction`, an integer through `int` first.
+
+    `Fraction` keeps the numerator an `Integral` gives it, so a `numpy.int64` stayed a fixed-width integer inside
+    it and overflowed again the moment a bignum met it in the exact arithmetic.
+    """
+    return fractions.Fraction(int(value) if isinstance(value, numbers.Integral) else value)
 
 
 def _rational_overflow(error: BaseException) -> bool:
@@ -451,7 +464,7 @@ def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
         # a `Decimal` refuses a `float` or a `Fraction` and a bignum overflows a `float`, all converting
         # exactly, while an infinite or NaN one does not convert at all
         try:
-            exact, span = fractions.Fraction(middle), fractions.Fraction(tolerance)
+            exact, span = _as_fraction(middle), _as_fraction(tolerance)
         except (TypeError, ValueError, OverflowError) as failed:
             raise WindowRefusedError(str(failed)) from None
         return exact - span, exact + span
