@@ -793,6 +793,67 @@ def test_a_registered_number_with_no_arithmetic_is_close_to_nothing():
     assert_that(match.close_to(_NumberWithNoOrder(), 1).matches(1)).is_false()
 
 
+def test_a_tolerance_over_a_pair_with_no_distance_leaves_the_answer_to_equality():
+    """`is_equal_to(tolerance=)` let the ordering engine's private `UnorderableError` out on this pair."""
+    with pytest.raises(AssertionError, match="to be equal to <0>"):
+        assert_that(_NumberWithNoOrder()).is_equal_to(0, tolerance=1)
+
+
+_CLOSENESS_SPELLINGS = {
+    "is_close_to": lambda value, other, tolerance: assert_that(value).check().is_close_to(other, tolerance).passed,
+    "is_not_close_to": lambda value, other, tolerance: (
+        not assert_that(value).check().is_not_close_to(other, tolerance).passed
+    ),
+    "tolerance=": lambda value, other, tolerance: (
+        assert_that(value).check().is_equal_to(other, tolerance=tolerance).passed
+    ),
+    "match.close_to": lambda value, other, tolerance: match.close_to(other, tolerance).matches(value),
+}
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize("int64_first", [True, False], ids=["int64-first", "decimal-first"])
+@pytest.mark.parametrize(("tolerance", "within"), [(0, False), (4, True)], ids=["apart", "within"])
+def test_a_pair_a_decimal_will_not_order_is_measured_by_its_difference(spelling, int64_first, tolerance, within):
+    """`Decimal("1.5") == numpy.int64(5)` raises rather than answering, and so does ordering them that way round.
+
+    The difference between them is exact, so every spelling answers from it: before, `is_equal_to(tolerance=)`
+    let the private `UnorderableError` out, `is_close_to` over the `Decimal` a bare `TypeError`, and over the
+    `numpy.int64` refused a pair it can measure.
+    """
+    numpy = pytest.importorskip("numpy")
+    value, other = numpy.int64(5), decimal.Decimal("1.5")
+    if not int64_first:
+        value, other = other, value
+    assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(within)
+
+
+def test_a_pair_a_decimal_will_not_order_fails_as_an_assertion_rather_than_refusing():
+    numpy = pytest.importorskip("numpy")
+    message = r"^Expected <1.5> to be close to <5> within tolerance <0>, but was not\.$"
+    with pytest.raises(AssertionError, match=message):
+        assert_that(decimal.Decimal("1.5")).is_close_to(numpy.int64(5), 0)
+
+
+class _EqualityThatRaises:
+    """Registered as a real and converting to a float, with an `__eq__` of its own that raises."""
+
+    def __float__(self) -> float:
+        return 1.0
+
+    def __eq__(self, other: object) -> bool:
+        raise TypeError("my __eq__ is broken")
+
+
+numbers.Real.register(_EqualityThatRaises)
+
+
+def test_closeness_hands_on_an_error_from_the_values_own_equality():
+    """An operator refusing the pair leaves equality unknown, where the value's own `__eq__` raising is a bug."""
+    with pytest.raises(TypeError, match="my __eq__ is broken"):
+        assert_that(_EqualityThatRaises()).is_close_to(1, 1)
+
+
 class _OrderedAgainstIntsOnly:
     """A registered real standing for five, ordered against an `int` and against nothing else."""
 

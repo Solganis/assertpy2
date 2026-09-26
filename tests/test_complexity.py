@@ -52,6 +52,10 @@ RECORDED: dict[str, int] = {
     "assertpy2/_dangling.py::findings": 11,
     # 11: the NaN answer moved inside the try, so the pair is tried before a NaN answers for it
     "assertpy2/_engine/_ordering.py::compare": 11,
+    # 11: an unorderable window no longer refuses a measured pair. As a helper it cost a no-match close_to 8%
+    "assertpy2/_engine/_compare.py::_within_tolerance": 11,
+    # 11: a pair with no distance is left to `==`. A wrapper per leaf cost a 200-key tolerance compare 3%
+    "assertpy2/_engine/_compare.py::_node_decision": 11,
     "assertpy2/_engine/_contract.py::contract_drift": 11,
     "assertpy2/assertpy.py::assert_conforms": 11,
     # one more name refused by the poll chain: check() after a poll used to skip the wait and answer nothing

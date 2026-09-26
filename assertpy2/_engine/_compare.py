@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import holds
+from ._ordering import UnorderableError, holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -262,8 +262,10 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     ``is_equal_to(tolerance=)``, which takes the difference.  Taking any of the three, no spelling now
     fails a pair it passed before.
 
-    A pair the ordering engine cannot order raises `UnorderableError` out of the windows, for the caller
-    to refuse or to read as no match.
+    A window the ordering engine cannot order is one way fewer of holding, and the difference still
+    answers: a `Decimal` refuses to order against a `numpy.int64` it subtracts exactly.  Only a pair with
+    no difference either raises `UnorderableError` out of the windows, for the caller to refuse or to read
+    as no match.
 
     ``NaN`` is never within, and an infinity is within only of itself, whatever the tolerance, the rule
     `math.isclose` keeps.  The operands are classified before equality is asked, since a value's own
@@ -275,13 +277,30 @@ def _within_tolerance(actual, expected, tolerance) -> bool:
     actual_kind, expected_kind = _non_finite(actual), _non_finite(expected)
     if actual_kind or expected_kind:
         return actual_kind == expected_kind == "inf" and bool(actual == expected)
-    if actual == expected:
+    try:
+        if actual == expected:
+            return True
+    except TypeError as refusal:
+        # `Decimal` refuses to compare a `numpy.int64` it subtracts exactly: the equality is unknown, not false
+        if raised_inside(refusal):
+            raise
+    difference = _difference_within(actual, expected, tolerance)
+    if difference:
         return True
-    return (
-        bool(_difference_within(actual, expected, tolerance))
-        or _window_holds(expected, actual, tolerance)
-        or _window_holds(actual, expected, tolerance)
-    )
+    unordered = None
+    try:
+        if _window_holds(expected, actual, tolerance):
+            return True
+    except UnorderableError as refusal:
+        unordered = refusal
+    try:
+        if _window_holds(actual, expected, tolerance):
+            return True
+    except UnorderableError as refusal:
+        unordered = unordered or refusal
+    if unordered is not None and difference is None:
+        raise unordered
+    return False
 
 
 def _difference_within(actual, expected, tolerance) -> bool | None:
@@ -547,8 +566,11 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
         if config.tolerance is not None and _is_real_number(as_held(actual)) and _is_real_number(as_held(expected)):
+            try:
+                within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
+            except UnorderableError:
+                return _plain_decision(actual, expected, config, at_root=at_root)
             # a keyed field's key still holds equal what the tolerance would not: it only ever loosens `==`
-            within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
             return "equal" if within or (type(actual) is KeyedValue and actual == expected) else "leaf"
     return _plain_decision(actual, expected, config, at_root=at_root)
 
