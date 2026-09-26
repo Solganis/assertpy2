@@ -9,6 +9,7 @@ what teaches people to stop reading the line at all, taking the useful ones down
 from __future__ import annotations
 
 import dataclasses
+import decimal
 import enum
 
 import pytest
@@ -235,6 +236,33 @@ class TestNaNIsSaidBeforeAnythingElse:
     def test_nan_nested_among_other_differences(self):
         message = _message({"score": float("nan"), "name": "a"}, {"score": 1.0, "name": "b"})
         assert_that(message).contains("a NaN takes part in this comparison")
+
+    @pytest.mark.parametrize(
+        ("actual", "expected"),
+        [
+            pytest.param({"a": decimal.Decimal("NaN")}, {"a": decimal.Decimal("NaN")}, id="both"),
+            pytest.param([decimal.Decimal(1)], [decimal.Decimal("NaN")], id="expected-side"),
+        ],
+    )
+    def test_a_decimal_nan_is_the_reason_as_a_float_one_is(self, actual, expected):
+        """Asked with `value != value` behind a `float` check, a `Decimal` NaN failed with no line at all."""
+        assert_that(assert_that(actual).check().is_equal_to(expected).hint).contains("a NaN is equal to nothing")
+
+    def test_a_float_saying_it_differs_from_itself_is_not_a_nan(self):
+        """The value's own `__ne__` answered, and a `1.0` whose `__eq__` refuses everything was called a NaN."""
+
+        class Aloof(float):
+            __hash__ = float.__hash__
+
+            def __eq__(self, other: object) -> bool:
+                return False
+
+            def __ne__(self, other: object) -> bool:
+                return True
+
+        outcome = assert_that([Aloof(1.0)]).check().is_equal_to([Aloof(1.0)])
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.hint or "").does_not_contain("NaN")
 
 
 class TestSilenceOnEverythingElse:

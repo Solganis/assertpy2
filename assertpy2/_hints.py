@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Final
 
 from ._engine._equality import comparable_fields
 from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object, kind_of
+from ._engine._ordering import nan_operand
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -201,8 +202,7 @@ def diagnose(
     positional = True
     for entry in entries:
         left, right = entry.actual, entry.expected
-        # isinstance first: `value != value` calls a user `__ne__`, and one that raises would take the failure down
-        if (isinstance(left, float) and left != left) or (isinstance(right, float) and right != right):
+        if nan_operand(left) or nan_operand(right):
             # with a NaN in the comparison no other value would make it pass, so it comes before anything else
             return _NAN_FACT
         absent = entry.absent
