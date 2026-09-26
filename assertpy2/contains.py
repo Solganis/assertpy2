@@ -141,6 +141,7 @@ class ContainsMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does **not** contain the item or items
+            TypeError: if val is not a container or iterable
 
         Tip:
             Use the [`contains_key()`][assertpy2.dict.DictMixin.contains_key] alias when working with
@@ -246,6 +247,7 @@ class ContainsMixin(_MixinBase):
 
         Raises:
             AssertionError: if val **does** contain the item or items
+            TypeError: if val is not a container or iterable
 
         Note:
             Accepts a `Matcher` for any item, the same as
@@ -259,6 +261,8 @@ class ContainsMixin(_MixinBase):
         if len(items) == 0:
             raise ValueError("one or more args must be given")
         values = materialized(self.val)
+        if not is_searchable(values):
+            refuse(self.val, "a container or iterable")
         probes = [item for item in items if not _is_matcher(item)]
         # the index `contains` already builds for the same question: asked one item at a time, each of
         # them walks the whole collection

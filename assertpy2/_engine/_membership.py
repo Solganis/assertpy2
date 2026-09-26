@@ -54,7 +54,10 @@ def is_searchable(value: object) -> bool:
     `__contains__` and nothing else can be asked whether it holds something, and cannot be listed: it
     fits `contains` and does not fit `contains_only`, which has to see everything that is there.
     """
-    return isinstance(value, Iterable) or hasattr(type(value), "__contains__")
+    # the builtins skip the ABC's 88 ns walk; each has `__contains__`, so the probe below said yes to them anyway
+    return isinstance(value, (list, tuple, str, bytes, dict, set, frozenset, Iterable)) or hasattr(
+        type(value), "__contains__"
+    )
 
 
 def is_walkable(value: object) -> bool:

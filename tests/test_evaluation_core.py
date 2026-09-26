@@ -375,6 +375,46 @@ class TestMembershipIsOneDecisionToo:
         with pytest.raises(TypeError, match=r"^val must be a container or iterable"):
             assert_that(42).contains("x")
 
+    class _OldSequence:
+        """Iterated by the interpreter through `__getitem__`, which `collections.abc.Iterable` does not see."""
+
+        def __getitem__(self, index):
+            if index < 3:
+                return index
+            raise IndexError(index)
+
+    class _IterationRefused(_OldSequence):
+        __iter__ = None
+
+    @pytest.mark.parametrize(
+        "value", [42, _OldSequence(), _IterationRefused()], ids=["a-number", "an-old-sequence", "iter-set-to-none"]
+    )
+    @pytest.mark.parametrize("asked", ["contains", "does_not_contain"])
+    def test_both_sides_refuse_a_value_that_cannot_be_searched(self, value, asked):
+        """`does_not_contain` asked `in` unguarded: it answered an old sequence `contains` refused, and let
+        Python's own `argument of type 'int' is not iterable` out for the rest."""
+        with pytest.raises(TypeError, match=r"^val must be a container or iterable, but was <"):
+            getattr(assert_that(value), asked)(0)
+
+    @pytest.mark.parametrize(
+        "pair", [("contains", "does_not_contain"), ("contains_key", "does_not_contain_key")], ids=["items", "keys"]
+    )
+    def test_both_sides_refuse_in_the_same_words(self, pair):
+        value = self._OldSequence()
+        refusals = set()
+        for asked in pair:
+            with pytest.raises(TypeError) as refused:
+                getattr(assert_that(value), asked)(0)
+            refusals.add(str(refused.value))
+        assert_that(refusals).is_length(1)
+
+    def test_a_value_answering_membership_alone_is_searched_by_both_sides(self):
+        class Evens:
+            def __contains__(self, item):
+                return item % 2 == 0
+
+        assert_that(Evens()).contains(2).does_not_contain(3)
+
     def test_a_one_shot_iterator_is_searched_rather_than_consumed(self):
         assert_that(match.contains(1, 3).matches(iter([1, 2, 3]))).is_true()
 
