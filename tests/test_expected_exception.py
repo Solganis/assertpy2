@@ -1,10 +1,19 @@
+import asyncio
 import logging
+from dataclasses import replace
 from functools import partial
 from io import StringIO
 
 import pytest
 
-from assertpy2 import WarningLoggingAdapter, assert_that, assert_warn, soft_assertions
+from assertpy2 import (
+    WarningLoggingAdapter,
+    add_extension,
+    assert_that,
+    assert_warn,
+    remove_extension,
+    soft_assertions,
+)
 from tests.group_compat import BaseExceptionGroup as _BaseExceptionGroup
 from tests.group_compat import ExceptionGroup as _ExceptionGroup
 from tests.group_compat import needs_groups
@@ -1028,3 +1037,168 @@ class TestMatchesErrorTree:
         assert_that(_raise_group).raises(_ExceptionGroup).when_called_with().matches_error_tree(
             ValueError, KeyError
         ).errors().is_length(2)
+
+
+_NOT_A_GROUP = "Expected the raised <_ConfigError> to be an exception group, but it was not."
+
+_GROUP_QUESTIONS = {
+    "contains_error": lambda chain: chain.contains_error(ValueError),
+    "does_not_contain_error": lambda chain: chain.does_not_contain_error(ValueError),
+    "error_of": lambda chain: chain.error_of(ValueError),
+    "matches_error_tree": lambda chain: chain.matches_error_tree(ValueError),
+}
+
+
+class TestNegationKeepsTheGroupRequirement:
+    """The group family asks what a group holds, and a plain exception answers neither that nor its negation.
+
+    Inverted, the failure saying the caught exception is not a group read as a pass, so
+    `not_.contains_error(ValueError)` held for a plain `ValueError`.
+    """
+
+    @pytest.mark.parametrize("question", list(_GROUP_QUESTIONS))
+    def test_a_plain_exception_fails_it_either_way_with_the_same_message(self, question):
+        caught = assert_that(_raise_config).raises(_ConfigError).when_called_with()
+        for asked in (caught, caught.not_):
+            with pytest.raises(AssertionError) as exc_info:
+                _GROUP_QUESTIONS[question](asked)
+            assert_that(str(exc_info.value)).is_equal_to(_NOT_A_GROUP)
+
+    @pytest.mark.parametrize("question", list(_GROUP_QUESTIONS))
+    def test_check_answers_the_positive_failure_asked_through_not(self, question):
+        caught = assert_that(_raise_config).raises(_ConfigError).when_called_with()
+        positive = _GROUP_QUESTIONS[question](caught.check())
+        negated = _GROUP_QUESTIONS[question](caught.check().not_)
+        assert_that(negated.passed).is_false()
+        assert_that(negated.message).is_equal_to(_NOT_A_GROUP)
+        assert_that(negated.requirement).is_equal_to(replace(positive.requirement, negated=True))
+        assert_that(replace(negated, requirement=None)).is_equal_to(replace(positive, requirement=None))
+
+    @pytest.mark.parametrize("question", list(_GROUP_QUESTIONS))
+    def test_a_soft_block_collects_it_either_way_where_the_positive_lands(self, question):
+        with pytest.raises(AssertionError) as exc_info, soft_assertions() as soft, soft.group("plain"):
+            _GROUP_QUESTIONS[question](assert_that(_raise_config).raises(_ConfigError).when_called_with())
+            negated = _GROUP_QUESTIONS[question](
+                assert_that(_raise_config).raises(_ConfigError).when_called_with().not_
+            )
+            with pytest.raises(TypeError) as refusal:
+                _ = negated.value
+        positive, collected = exc_info.value.failures
+        assert_that(collected.message).is_equal_to(positive.message).is_equal_to(_NOT_A_GROUP)
+        assert_that(collected.group).is_equal_to(positive.group).is_equal_to("plain")
+        assert_that(collected.location).is_equal_to(positive.location)
+        assert_that(collected.location[0]).ends_with("test_expected_exception.py")
+        assert_that(str(refusal.value)).contains(f"soft or warn mode - {_NOT_A_GROUP}")
+
+    @pytest.mark.parametrize("question", list(_GROUP_QUESTIONS))
+    def test_warn_logs_it_under_not_and_the_value_refuses(self, question):
+        capture = StringIO()
+        logger = logging.getLogger(f"negated_group_requirement_{question}")
+        handler = logging.StreamHandler(capture)
+        logger.addHandler(handler)
+        try:
+            caught = assert_warn(_raise_config, logger=WarningLoggingAdapter(logger, None))
+            negated = _GROUP_QUESTIONS[question](caught.raises(_ConfigError).when_called_with().not_)
+        finally:
+            logger.removeHandler(handler)
+        assert_that(capture.getvalue()).contains(_NOT_A_GROUP)
+        with pytest.raises(TypeError) as refusal:
+            _ = negated.value
+        assert_that(str(refusal.value)).contains(f"soft or warn mode - {_NOT_A_GROUP}")
+
+    @pytest.mark.parametrize("question", list(_GROUP_QUESTIONS))
+    def test_a_poll_never_holds_it_under_not(self, question):
+        chain = assert_that(lambda: _raise_config).eventually_sync(timeout=0.05, interval=0.01)
+        with pytest.raises(AssertionError) as exc_info:
+            _GROUP_QUESTIONS[question](chain.raises(_ConfigError).when_called_with().not_)
+        assert_that(str(exc_info.value)).contains(f"Last failure: {_NOT_A_GROUP}")
+
+    def test_an_async_poll_never_holds_it_under_not(self):
+        async def poll():
+            chain = assert_that(lambda: _raise_config).eventually(timeout=0.05, interval=0.01)
+            await chain.raises(_ConfigError).when_called_with().not_.contains_error(ValueError)
+
+        with pytest.raises(AssertionError) as exc_info:
+            asyncio.run(poll())
+        assert_that(str(exc_info.value)).contains(f"Last failure: {_NOT_A_GROUP}")
+
+    def test_an_extension_that_goes_on_after_it_still_reports_it_under_not(self):
+        """Check mode does not stop an extension at a failure, and the one after it is not the one to report."""
+
+        def is_a_group_saying_so(self):
+            self.contains_error(ValueError)
+            self.does_not_contain_error(KeyError)
+            self.not_.error_of(KeyError)
+            return self.is_equal_to("a message it does not have")
+
+        add_extension(is_a_group_saying_so)
+        try:
+            caught = assert_that(_raise_config).raises(_ConfigError).when_called_with()
+            with pytest.raises(AssertionError) as exc_info:
+                caught.not_.is_a_group_saying_so()
+        finally:
+            remove_extension(is_a_group_saying_so)
+        assert_that(str(exc_info.value)).is_equal_to(_NOT_A_GROUP)
+
+    def test_a_verdict_an_extension_asks_for_itself_stays_its_own_under_not(self):
+        def is_plain(self):
+            if self.check().contains_error(ValueError).passed:
+                self.error("Expected a plain exception, but it was a group.")
+            return self
+
+        add_extension(is_plain)
+        try:
+            caught = assert_that(_raise_config).raises(_ConfigError).when_called_with()
+            with pytest.raises(AssertionError) as exc_info:
+                caught.not_.is_plain()
+        finally:
+            remove_extension(is_plain)
+        assert_that(str(exc_info.value)).is_equal_to("Expected <bad config> to NOT satisfy: is_plain()")
+
+    def test_two_negations_report_it_as_one_does(self):
+        def holds_no_value_error(self):
+            return self.not_.contains_error(ValueError)
+
+        add_extension(holds_no_value_error)
+        try:
+            caught = assert_that(_raise_config).raises(_ConfigError).when_called_with()
+            outcome = caught.check().not_.holds_no_value_error()
+            with pytest.raises(AssertionError) as exc_info:
+                caught.not_.holds_no_value_error()
+        finally:
+            remove_extension(holds_no_value_error)
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).is_equal_to(_NOT_A_GROUP)
+        assert_that(str(exc_info.value)).is_equal_to(_NOT_A_GROUP)
+
+    @needs_groups
+    @pytest.mark.parametrize(
+        ("question", "holds"),
+        [
+            (lambda chain: chain.contains_error(ValueError), True),
+            (lambda chain: chain.contains_error(TypeError), False),
+            (lambda chain: chain.does_not_contain_error(TypeError), True),
+            (lambda chain: chain.does_not_contain_error(ValueError), False),
+            (lambda chain: chain.error_of(KeyError), True),
+            (lambda chain: chain.error_of(TypeError), False),
+            (lambda chain: chain.matches_error_tree(KeyError, ValueError), True),
+            (lambda chain: chain.matches_error_tree(ValueError), False),
+        ],
+        ids=[
+            "contains-held",
+            "contains-missed",
+            "not-contain-held",
+            "not-contain-missed",
+            "error-of-held",
+            "error-of-missed",
+            "tree-held",
+            "tree-missed",
+        ],
+    )
+    def test_on_a_group_not_still_inverts_the_question(self, question, holds):
+        caught = assert_that(_raise_group).raises(_ExceptionGroup).when_called_with()
+        passing, failing = (caught, caught.not_) if holds else (caught.not_, caught)
+        question(passing)
+        with pytest.raises(AssertionError) as exc_info:
+            question(failing)
+        assert_that(str(exc_info.value)).does_not_contain("to be an exception group")

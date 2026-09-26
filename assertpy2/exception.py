@@ -523,6 +523,9 @@ class ExceptionMixin(_MixinBase):
         """Asserts the caught exception is an exception group that contains, recursively, an exception of
         each given type (for [`raises(ExceptionGroup)`][assertpy2.exception.ExceptionMixin.raises]).
 
+        A caught exception that is not a group fails with ``not_`` as well: negation inverts what the group
+        holds, never whether there is a group.
+
         Examples:
             Usage:
 
@@ -559,6 +562,7 @@ class ExceptionMixin(_MixinBase):
         The none-of counterpart to [`contains_error()`][assertpy2.exception.ExceptionMixin.contains_error]
         rather than its negation: that one asks for every type given, this one refuses every type given.
         With several arguments both can fail on the same group, which is what "some but not all" means.
+        A caught exception that is not a group fails it with or without ``not_``.
 
         Examples:
             Usage:
@@ -626,7 +630,7 @@ class ExceptionMixin(_MixinBase):
 
         Both search the same exceptions, groups included, so whatever one finds the other pivots to.  Asking
         for a group type therefore answers with that group, and for the outermost one that is the message
-        the chain already held.
+        the chain already held.  A caught exception that is not a group fails it with or without ``not_``.
 
         Examples:
             Usage:
@@ -669,7 +673,8 @@ class ExceptionMixin(_MixinBase):
         and stops there: only a nested list looks inside one, and what a matched subgroup holds is unsaid.
 
         Order is not part of the shape.  Whoever raised the group usually did not choose it: an
-        `asyncio.TaskGroup` reports its failures in the order the tasks finished.
+        `asyncio.TaskGroup` reports its failures in the order the tasks finished.  A caught exception that
+        is not a group fails it with or without ``not_``.
 
         Examples:
             Usage:
@@ -709,13 +714,16 @@ class ExceptionMixin(_MixinBase):
     def _require_group(self, method: str) -> Any:
         """The caught exception as a group, or ``None`` after reporting that it was not one.
 
+        Reported as a prerequisite, so `not_` fails on it too: the group family asks about what a group
+        holds, and a plain exception answers neither that question nor its negation.
+
         Returns ``Any`` rather than the group type: on the 3.10 floor the compat name falls back to an
         empty tuple, which is a value and not a type, so an annotation naming it is rejected outright.
         Callers walk `.exceptions` on the result, which is why the check has to happen before they do.
         """
         exc = self._require_raised(method)
         if not isinstance(exc, BaseExceptionGroup):
-            self.error(f"Expected the raised <{type(exc).__name__}> to be an exception group, but it was not.")
+            self._unmet(f"Expected the raised <{type(exc).__name__}> to be an exception group, but it was not.")
             return None
         return exc
 

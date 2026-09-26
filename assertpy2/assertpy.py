@@ -1250,7 +1250,9 @@ class NegatedBuilder(Generic[_S]):
         bound.apply_defaults()
         return Requirement(name, dict(bound.arguments), negated=True)
 
-    def _verdict(self, attr: Callable[..., object], *args: object, **kwargs: object) -> AssertionOutcome | None:
+    def _verdict(
+        self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
+    ) -> AssertionOutcome | None:
         """What the underlying assertion decided, or ``None`` when it held.
 
         Run in check mode, the one mode that hands a verdict back instead of delivering it.  That is
@@ -1261,22 +1263,40 @@ class NegatedBuilder(Generic[_S]):
         that asserts with this library raises this library's own failure, and it is still not the
         verdict of the assertion being negated.  `_negated_check()` has always read the sink instead;
         the other three modes now do the same.
+
+        A failure on something the question presupposes is not a verdict either, and inverting it turns
+        "the question has no answer" into a pass.  The first one the run recorded is delivered before this
+        returns, whatever failed after it, and handed back like any failure so no caller inverts it.  It
+        keeps the positive assertion's message and values, takes the requirement every negated failure
+        carries, and is recorded in turn for a negation this one runs inside of.
         """
         builder = self._builder
         kind, sink, answering = builder.kind, builder._check_sink, builder._answering_another
+        enclosing = builder._unmet_prerequisite
         builder.kind = "check"
         builder._check_sink = None
         builder._answering_another = True
+        builder._unmet_prerequisite = None
         try:
             attr(*args, **kwargs)
-            return builder._check_sink
+            decided, unmet = builder._check_sink, builder._unmet_prerequisite
         finally:
             builder.kind, builder._check_sink, builder._answering_another = kind, sink, answering
+            builder._unmet_prerequisite = enclosing
+        if unmet is None:
+            return decided
+        passed_on = replace(unmet, requirement=_what_was_asked(builder, self._asked(attr, name, *args, **kwargs)))
+        if enclosing is None:
+            builder._unmet_prerequisite = passed_on
+        failure = builder._deliver(passed_on)
+        if failure is not None:
+            raise failure
+        return passed_on
 
     def _negated_strict(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        if self._verdict(attr, *args, **kwargs) is not None:
+        if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
         # composed here rather than by `error()`, which would prefix the description twice
         raise AssertionBuilder._failure(
@@ -1290,7 +1310,7 @@ class NegatedBuilder(Generic[_S]):
     def _negated_soft(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        if self._verdict(attr, *args, **kwargs) is not None:
+        if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
         msg = self._make_msg(name, *args, **kwargs)
         outcome = AssertionOutcome(
@@ -1312,8 +1332,7 @@ class NegatedBuilder(Generic[_S]):
     def _negated_check(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        if self._verdict(attr, *args, **kwargs) is not None:
-            self._builder._check_sink = None
+        if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
         self._builder._check_sink = AssertionOutcome(
             message=self._make_msg(name, *args, **kwargs),
@@ -1325,7 +1344,7 @@ class NegatedBuilder(Generic[_S]):
     def _negated_warn(
         self, name: str, attr: Callable[..., object], *args: object, **kwargs: object
     ) -> AssertionBuilder:
-        if self._verdict(attr, *args, **kwargs) is not None:
+        if self._verdict(name, attr, *args, **kwargs) is not None:
             return self._builder
         msg = self._make_msg(name, *args, **kwargs)
         if self._builder._value_taint_reason is None:
@@ -1370,18 +1389,19 @@ class CheckBuilder:
             return attr
 
         def _checked(*args: object, **kwargs: object) -> AssertionOutcome:
-            previous_kind = self._builder.kind
-            self._builder.kind = "check"
-            self._builder._check_sink = None
+            # the verdict is answered here, so one this runs inside keeps its own failure and prerequisite
+            builder = self._builder
+            kind, sink, unmet = builder.kind, builder._check_sink, builder._unmet_prerequisite
+            builder.kind = "check"
+            builder._check_sink = None
             try:
                 attr(*args, **kwargs)
+                failure = builder._check_sink
             finally:
-                self._builder.kind = previous_kind
-            failure = self._builder._check_sink
-            self._builder._check_sink = None
+                builder.kind, builder._check_sink, builder._unmet_prerequisite = kind, sink, unmet
             if failure is not None:
                 return failure
-            return AssertionOutcome(passed=True, actual=self._builder.val)
+            return AssertionOutcome(passed=True, actual=builder.val)
 
         return _checked
 
@@ -1690,6 +1710,16 @@ class AssertionBuilder(
         if suppress_context:
             raise failure from None
         raise failure
+
+    def _unmet(self, msg: str) -> None:
+        """Deliver *msg* as a failure of something the question presupposes rather than as its answer.
+
+        Delivered like any failure.  What differs is under `not_`, whose verdict run is in check mode: the
+        first such record it leaves is kept, and `NegatedBuilder._verdict()` delivers it as it stands.
+        """
+        self.error(msg)
+        if self._unmet_prerequisite is None:
+            self._unmet_prerequisite = self._check_sink
 
     def _compose(
         self,

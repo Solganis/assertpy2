@@ -35,6 +35,17 @@ class _MixinBase:
     a comparator or predicate of the caller's runs is on a builder of its own, and is the caller's own.
     """
 
+    _unmet_prerequisite: AssertionOutcome | None = None
+    """The first failure on something the question presupposes, recorded while `not_` asks for a verdict.
+
+    Recorded by `_unmet()` and read by `not_`, which delivers it as it stands instead of inverting it.
+    Inverted, a caught exception that is not a group passed `not_.contains_error(ValueError)`: "not a
+    group" read as "holds no such error", where the question has no answer at all.  The record itself
+    rather than a flag, since an extension goes on after it in check mode and may fail again, and that
+    later failure is not the one to report.  Cleared for each verdict run and put back after it, so one
+    left behind outside a run is never read.
+    """
+
     _compared_nothing = False
     """Whether a comparison under ``ignore``/``include`` passed with no key left to compare.
 
@@ -75,6 +86,8 @@ class _MixinBase:
             trace: PollTrace | None,
             requirement: Requirement | None = ...,
         ) -> AssertionOutcome: ...
+
+        def _unmet(self, msg: str) -> None: ...
 
         @staticmethod
         def _failure(outcome: AssertionOutcome) -> AssertionFailure: ...

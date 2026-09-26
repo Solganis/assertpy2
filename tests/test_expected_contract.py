@@ -91,7 +91,7 @@ _NOT_AN_ASSERTION = {
     "_check_placeholders",
     "_dict_not_equal",
     "_out_of_time",
-    "_require_group",
+    "_unmet",
     "_wrapper",
     "conforms_to_openapi",
     "matches_contract_snapshot",

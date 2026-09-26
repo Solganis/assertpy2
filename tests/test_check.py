@@ -10,7 +10,15 @@ import logging
 
 import pytest
 
-from assertpy2 import AssertionFailure, AssertionOutcome, assert_that, assert_warn, soft_assertions
+from assertpy2 import (
+    AssertionFailure,
+    AssertionOutcome,
+    add_extension,
+    assert_that,
+    assert_warn,
+    remove_extension,
+    soft_assertions,
+)
 
 
 class TestTheVerdictComesBackInsteadOfBeingRaised:
@@ -108,6 +116,43 @@ class TestNegationIsProxiedRatherThanRefused:
         builder = assert_that(-5)
         builder.check().not_.is_positive()
         assert_that(builder.check().is_negative().passed).is_true()
+
+
+def _asks_a_held_negation(builder):
+    builder.not_.is_equal_to(7)
+
+
+def _asks_a_passing_check(builder):
+    builder.check().is_equal_to(12)
+
+
+def _asks_a_refused_check(builder):
+    with pytest.raises(ValueError, match="one or more args"):
+        builder.check().contains_error()
+
+
+class TestAVerdictAskedInsideKeepsTheFailureAroundIt:
+    """An extension goes on after a failure in check mode, and a verdict it asked for next used to wipe it.
+
+    Both inner proxies cleared the one sink the enclosing verdict reads, so `check()` answered a pass and
+    `not_` a failure for an extension whose strict run fails at its first step.
+    """
+
+    @pytest.mark.parametrize("ask", [_asks_a_held_negation, _asks_a_passing_check, _asks_a_refused_check])
+    def test_check_and_not_both_read_the_earlier_failure(self, ask):
+        def is_below_ten(self):
+            self.is_less_than(10)
+            ask(self)
+            return self
+
+        add_extension(is_below_ten)
+        try:
+            outcome = assert_that(12).check().is_below_ten()
+            assert_that(12).not_.is_below_ten()
+        finally:
+            remove_extension(is_below_ten)
+        assert_that(outcome.passed).is_false()
+        assert_that(outcome.message).is_equal_to("Expected <12> to be less than <10>, but was not.")
 
 
 class TestTheReturnedRecordIsThePublicType:
