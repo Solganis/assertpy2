@@ -2,6 +2,7 @@ import decimal
 import fractions
 import math
 import numbers
+import types
 
 import pytest
 
@@ -900,6 +901,114 @@ def test_a_pair_a_decimal_will_not_order_is_measured_by_its_difference(spelling,
     if not int64_first:
         value, other = other, value
     assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(within)
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize("fraction_first", [True, False], ids=["fraction-first", "float-first"])
+@pytest.mark.parametrize(("tolerance", "within"), [(0.5, False), (10**401, True)], ids=["apart", "within"])
+def test_a_fraction_past_the_float_range_is_measured_against_a_float(spelling, fraction_first, tolerance, within):
+    """`Fraction` converts to a `float` inside its own Python code to subtract one, and past the range that overflows.
+
+    Read as a bug in the value, every spelling let the `OverflowError` out, where the exact difference answers.
+    """
+    value, other = fractions.Fraction(10**400, 3), 0.5
+    if not fraction_first:
+        value, other = other, value
+    assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(within)
+
+
+class _OverflowingFloat(float):
+    """A `float` whose own subtraction overflows, which no exact measure is allowed to paper over."""
+
+    def __sub__(self, other: object) -> float:
+        raise OverflowError("my own subtraction overflows")
+
+    def __rsub__(self, other: object) -> float:
+        raise OverflowError("my own subtraction overflows")
+
+
+class _OverflowingUnderAStandardName(float):
+    """The same own overflow, from a function whose module claims the standard library's name."""
+
+    __sub__ = types.FunctionType(_OverflowingFloat.__sub__.__code__, {"__name__": "numbers"})
+    __rsub__ = types.FunctionType(_OverflowingFloat.__rsub__.__code__, {"__name__": "numbers"})
+
+
+class _OverflowingInAStandardNamespace(float):
+    """The same own overflow, from a function built over the standard library module's own namespace."""
+
+    __sub__ = types.FunctionType(_OverflowingFloat.__sub__.__code__, vars(numbers))
+    __rsub__ = types.FunctionType(_OverflowingFloat.__rsub__.__code__, vars(numbers))
+
+
+class _HugeDistance:
+    """What `_ReachingTheConversion` subtracts to: a distance whose own `abs()` runs the standard conversion."""
+
+    numerator = 10**400
+    denominator = 1
+    __abs__ = numbers.Rational.__float__
+
+
+class _ReachingTheConversion(float):
+    """A `float` whose own subtraction hands back something that overflows in the standard conversion's code."""
+
+    def __sub__(self, other: object) -> _HugeDistance:
+        return _HugeDistance()
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda: assert_that(_OverflowingFloat(1.0)).is_close_to(3.0, 0.5),
+        lambda: assert_that(_OverflowingFloat(1.0)).is_close_to(3, 0.5),
+        lambda: assert_that(_OverflowingFloat(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5),
+        lambda: assert_that(3).is_close_to(_OverflowingFloat(1.0), 0.5),
+        lambda: assert_that(_OverflowingFloat(1.0)).is_equal_to(fractions.Fraction(10**400, 3), tolerance=0.5),
+        lambda: match.close_to(3, 0.5).matches(_OverflowingFloat(1.0)),
+        lambda: match.close_to(_OverflowingFloat(1.0), 0.5).matches(fractions.Fraction(10**400, 3)),
+        lambda: assert_that(_OverflowingUnderAStandardName(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5),
+        lambda: assert_that(_OverflowingInAStandardNamespace(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5),
+    ],
+    ids=[
+        "float",
+        "int",
+        "big-fraction",
+        "int-first",
+        "tolerance=",
+        "matcher",
+        "matcher-around-it",
+        "spoofed-name",
+        "spoofed-namespace",
+    ],
+)
+def test_an_overflow_of_the_values_own_is_handed_on_beside_any_other_operand(call):
+    """Only an overflow raised in the standard library's conversion is measured exactly instead.
+
+    Deciding by the operands would have measured this one whenever a rational, an `int` included, sat beside it.
+    """
+    with pytest.raises(OverflowError, match="my own subtraction overflows"):
+        call()
+
+
+class _BorrowingFractionArithmetic(float):
+    """A `float` that borrows `Fraction`'s own subtraction and the standard conversion, over a huge numerator."""
+
+    numerator = 10**400
+    denominator = 1
+    __sub__ = fractions.Fraction.__sub__
+    __float__ = numbers.Rational.__float__
+
+
+def test_a_value_borrowing_fractions_own_code_is_still_handed_on():
+    """Both code objects match, and the value converted is not a `Fraction`, so the overflow is its own."""
+    with pytest.raises(OverflowError, match="too large for a float"):
+        assert_that(_BorrowingFractionArithmetic(1.0)).is_close_to(0.5, 0.5)
+
+
+def test_an_own_method_reaching_the_standard_conversion_is_still_handed_on():
+    """The conversion's code alone is not enough: the operator that reached it has to be `Fraction`'s own."""
+    with pytest.raises(OverflowError, match="too large for a float"):
+        assert_that(_ReachingTheConversion(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5)
 
 
 def test_a_pair_a_decimal_will_not_order_fails_as_an_assertion_rather_than_refusing():
