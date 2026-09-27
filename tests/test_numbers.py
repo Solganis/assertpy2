@@ -1014,6 +1014,87 @@ def test_an_own_method_reaching_the_standard_conversion_is_still_handed_on():
         assert_that(_ReachingTheConversion(1.0)).is_close_to(fractions.Fraction(10**400, 3), 0.5)
 
 
+_TINY = fractions.Fraction(1, 10**20)
+
+
+@pytest.mark.parametrize("width", ["int8", "int64", "uint64"])
+@pytest.mark.parametrize(
+    ("ask", "holds"),
+    [
+        (lambda tiny, five: assert_that(tiny).check().is_less_than(five).passed, True),
+        (lambda tiny, five: assert_that(tiny).check().is_greater_than(five).passed, False),
+        (lambda tiny, five: assert_that(five).check().is_less_than_or_equal_to(tiny).passed, False),
+        (lambda tiny, five: assert_that(1).check().is_between(tiny, five).passed, True),
+        (lambda tiny, five: assert_that([tiny, five]).check().is_sorted().passed, True),
+        (lambda tiny, five: assert_that([five, tiny]).check().is_sorted().passed, False),
+        (lambda tiny, five: match.less_than(five).matches(tiny), True),
+        (lambda tiny, five: assert_that(decimal.Decimal("0.1")).check().is_close_to(five, 1e-17).passed, False),
+    ],
+    ids=["less", "greater", "at-most-reversed", "between", "sorted", "unsorted", "matcher", "exact-window"],
+)
+def test_a_fraction_past_a_numpy_integers_width_is_ordered_by_exact_value(width, ask, holds):
+    """`Fraction` orders against a `numpy` integer by multiplying its own denominator into the integer's width.
+
+    That overflows inside `Fraction`'s own code, which read as a bug in the value, so every ordering let numpy's
+    `OverflowError` out.  An exact closeness window around a `Decimal` is such a `Fraction`.
+    """
+    numpy = pytest.importorskip("numpy")
+    five = getattr(numpy, width)(5)
+    assert_that(ask(_TINY, five)).is_equal_to(holds)
+
+
+class _OrderingOverflowsOfItsOwn(fractions.Fraction):
+    """A `Fraction` whose own ordering overflows, which the exact order is not allowed to paper over."""
+
+    def __lt__(self, other: object) -> bool:
+        raise OverflowError("my own ordering overflows")
+
+    __gt__ = __le__ = __ge__ = __lt__
+
+
+class _BorrowingFractionOrdering(float):
+    """A `float` that borrows `Fraction`'s own ordering and the code it runs, over a huge denominator."""
+
+    _numerator = 1
+    _denominator = 10**20
+    __lt__ = fractions.Fraction.__lt__
+    __gt__ = fractions.Fraction.__gt__
+    _richcmp = vars(fractions.Fraction)["_richcmp"]
+
+
+def test_an_ordering_overflow_of_the_values_own_is_handed_on():
+    """Only `Fraction`'s own ordering running its own comparison, for a `Fraction`, is ordered exactly instead."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(OverflowError, match="my own ordering overflows"):
+        assert_that(_OrderingOverflowsOfItsOwn(1, 3)).is_less_than(numpy.int64(5))
+
+
+class _FractionOfItsOwn(fractions.Fraction):
+    """A `Fraction` subclass, whose fields `Fraction`'s own code reads could be its own."""
+
+
+def test_a_conversion_overflow_off_an_exact_fraction_is_still_handed_on():
+    """The arithmetic's overflow is measured exactly for an exact `Fraction` only, as the ordering's is."""
+    with pytest.raises(OverflowError, match="too large"):
+        assert_that(_FractionOfItsOwn(10**400, 3)).is_close_to(0.5, 0.5)
+
+
+@pytest.mark.parametrize(
+    "value", [_BorrowingFractionOrdering(1.0), _FractionOfItsOwn(1, 10**20)], ids=["borrowed", "subclass"]
+)
+def test_an_ordering_overflow_off_an_exact_fraction_is_still_handed_on(value):
+    """Both code objects match, but the value compared is no exact `Fraction`, so the overflow is left as it is."""
+    numpy = pytest.importorskip("numpy")
+    try:
+        10**20 * numpy.int64(5)
+    except OverflowError:
+        pass
+    else:
+        pytest.skip("numpy before 2 widens the product rather than overflowing")
+    with pytest.raises(OverflowError):
+        assert_that(value).is_less_than(numpy.int64(5))
+
+
 @pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
 @pytest.mark.parametrize("scalar", ["int64", "float32"])
 @pytest.mark.parametrize("scalar_first", [True, False], ids=["scalar-first", "bignum-first"])

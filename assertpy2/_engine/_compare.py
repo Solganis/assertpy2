@@ -45,6 +45,7 @@ from ._ordering import (
     held_key,
     holds,
     numpy_duration,
+    rational_overflow,
 )
 from ._require import raised_inside, verdict
 
@@ -354,7 +355,7 @@ def _difference_within(actual, expected, tolerance) -> bool | None:
         return abs(actual - expected) <= tolerance
     except (TypeError, OverflowError) as error:
         # their own `__sub__` or `__abs__` raised: a bug in the value, not a refusal
-        if raised_inside(error) and not _rational_overflow(error):
+        if raised_inside(error) and not rational_overflow(error):
             raise
         try:
             distance = abs(_as_fraction(actual) - _as_fraction(expected))
@@ -376,32 +377,6 @@ def _as_fraction(value: Any) -> fractions.Fraction:
     if isinstance(exact, tuple) and not exact[0]:
         return exact[1]
     return fractions.Fraction(int(value) if isinstance(value, numbers.Integral) else value)
-
-
-def _rational_overflow(error: BaseException) -> bool:
-    """Whether *error* is `Fraction` overflowing its own conversion to ``float``, which an exact measure removes.
-
-    `Fraction` meets a ``float`` by converting itself through `numbers.Rational.__float__`, which is Python code,
-    so `raised_inside` read the overflow as a bug in the value.  The call decides instead: the operator the
-    arithmetic called is `Fraction`'s own, and the overflow was raised in the conversion's own code, converting a
-    `Fraction`.  Checked by code object at both ends, since a module's name or namespace can be claimed by a
-    function of anybody's, the conversion's code alone can be reached from a value's own method, and both can
-    be borrowed by a class of anybody's, which is why the value converted has to be a `Fraction` as well.
-    """
-    called = error.__traceback__.tb_next if error.__traceback__ is not None else None
-    if not isinstance(error, OverflowError) or called is None:
-        return False
-    raised = called
-    while raised.tb_next is not None:
-        raised = raised.tb_next
-    arithmetic = (fractions.Fraction.__sub__.__code__, fractions.Fraction.__rsub__.__code__)
-    conversion = (numbers.Rational.__float__.__code__, fractions.Fraction.__float__.__code__)
-    converted = raised.tb_frame.f_locals.get("self")
-    return (
-        called.tb_frame.f_code in arithmetic
-        and raised.tb_frame.f_code in conversion
-        and isinstance(converted, fractions.Fraction)
-    )
 
 
 def _window_holds(middle, value, tolerance) -> bool:
@@ -500,7 +475,7 @@ def tolerance_window(middle: Any, tolerance: Any) -> tuple[Any, Any]:
     try:
         return middle - tolerance, middle + tolerance
     except (TypeError, OverflowError) as refusal:
-        if raised_inside(refusal) and not _rational_overflow(refusal):  # their own `__sub__` raised: a bug
+        if raised_inside(refusal) and not rational_overflow(refusal):  # their own `__sub__` raised: a bug
             raise
         if not all(isinstance(operand, numbers.Number) for operand in (middle, tolerance)):
             raise WindowRefusedError(str(refusal)) from None

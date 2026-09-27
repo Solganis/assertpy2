@@ -45,6 +45,7 @@ _ORDINARY: dict[str, Any] = {
     "-bignum": -(10**400),
     "big-fraction": fractions.Fraction(10**400, 3),
     "third": fractions.Fraction(1, 3),
+    "tiny-fraction": fractions.Fraction(1, 10**20),
     "decimal": decimal.Decimal("1.5"),
 }
 """Finite real numbers."""
@@ -83,6 +84,7 @@ _NUMPY_REAL: tuple[type, ...] = (
 
 _TOLERANCES: dict[str, Any] = {
     "0": 0,
+    "tiny": 1e-17,
     "half": 0.5,
     "bignum": 10**400,
     "inf": math.inf,
@@ -95,7 +97,7 @@ _TOLERANCES: dict[str, Any] = {
 }
 if numpy is not None:
     _TOLERANCES["f32-half"] = numpy.float32(0.5)
-_FINITE_TOLERANCES = ("0", "half", "bignum")
+_FINITE_TOLERANCES = ("0", "tiny", "half", "bignum")
 """Finite tolerances every spelling measures, in ascending order."""
 _UNBOUNDED = {"inf", "decimal-inf"}
 """Tolerances every finite pair lies within."""

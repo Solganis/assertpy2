@@ -37,7 +37,7 @@ from ._engine._introspection import (
     keyed_snapshot,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, holds, lookup, nan_operand, numpy_duration
+from ._engine._ordering import UnorderableError, holds, lookup, nan_operand, numpy_duration, rational_overflow
 from ._engine._path import _ROOT
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
@@ -226,13 +226,13 @@ def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
     A `Decimal` NaN signals at ``>``, where the engine reads it as unordered.  Bounds with no ordering between
     them are refused here, under the name of the bound the engine stopped at: left to `_within`, a value below
     the low bound failed before the high one was ever asked.  A `TypeError` or an overflow raised inside a
-    comparison of the value's own is a bug in the value and is handed on, and so is a signal with no NaN among
-    the bounds, which the operands decide as the engine does, since the traceback's depth differs between the C
-    and the pure-Python `decimal`.  A signal is a verdict only where the engine reads the pair as a NaN it can
-    answer.
+    comparison of the value's own is a bug in the value and is handed on, unless `rational_overflow` names it,
+    and so is a signal with no NaN among the bounds, which the operands decide as the engine does, since the
+    traceback's depth differs between the C and the pure-Python `decimal`.  A signal is a verdict only where the
+    engine reads the pair as a NaN it can answer.
     """
     if isinstance(refusal, (TypeError, OverflowError)):
-        handed_on = raised_inside(refusal)
+        handed_on = raised_inside(refusal) and not rational_overflow(refusal)
     else:
         handed_on = not (nan_operand(low) or nan_operand(high))
     if handed_on:

@@ -407,10 +407,11 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     refusing the pair, as a `Decimal` refuses a `numpy` integer.  Where both stand for exact values the pair
     orders by them, an infinity above every finite value and a NaN against nothing.  A `TypeError` between any
     other two leaves the pair with no order.  Raised inside a comparison of the value's own, either is a bug in
-    the value and is handed on, and so is an overflow from a value with no exact value to order by.  A
-    `ValueError` otherwise leaves only a pair `broadcasts` names either way with no order, and is handed on.
+    the value and is handed on, unless `rational_overflow` names it, and so is an overflow from a value with no
+    exact value to order by.  A `ValueError` otherwise leaves only a pair `broadcasts` names either way with no
+    order, and is handed on.
     """
-    if raised_inside(refusal):
+    if raised_inside(refusal) and not rational_overflow(refusal):
         raise refusal
     if _lexicographic(actual, expected):
         return _order_by_element(actual, expected)
@@ -426,6 +427,49 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     if isinstance(left, str) or isinstance(right, str):
         return None
     return (left > right) - (left < right)
+
+
+def _own_code(owner: type, name: str) -> types.CodeType | None:
+    """The code of the function *owner* itself defines as *name*, or ``None`` where it defines no Python one."""
+    return getattr(vars(owner).get(name), "__code__", None)
+
+
+_FRACTION_ARITHMETIC = frozenset(
+    filter(None, (_own_code(fractions.Fraction, "__sub__"), _own_code(fractions.Fraction, "__rsub__")))
+)
+_FRACTION_CONVERSION = frozenset(
+    filter(None, (_own_code(numbers.Rational, "__float__"), _own_code(fractions.Fraction, "__float__")))
+)
+_FRACTION_ORDERING = frozenset(
+    filter(None, (_own_code(fractions.Fraction, name) for name in ("__lt__", "__le__", "__gt__", "__ge__")))
+)
+_FRACTION_COMPARISON = _own_code(fractions.Fraction, "_richcmp")
+
+
+def rational_overflow(error: BaseException) -> bool:
+    """Whether *error* is `Fraction`'s own code overflowing, which the exact values of the pair remove.
+
+    Two places in `Fraction` meet the other operand in Python code, so `raised_inside` read their overflow as a
+    bug in the value: its arithmetic converting itself to ``float`` through `numbers.Rational.__float__`, and its
+    ordering multiplying its denominator by a fixed-width `numpy` integer.  The call decides instead: the
+    operator called is `Fraction`'s own, and the overflow was raised in the code that operator runs, for a
+    `Fraction`.  Checked by code object at both ends, since a module's name or namespace can be claimed by a
+    function of anybody's, the inner code alone can be reached from a value's own method, and both can be
+    borrowed by a class of anybody's, which is why the value has to be a `Fraction` as well, and an exact one,
+    since a subclass can hand either code fields of its own.  The code objects are read once, and an
+    interpreter whose `Fraction` runs either in C names nothing.
+    """
+    called = error.__traceback__.tb_next if error.__traceback__ is not None else None
+    if not isinstance(error, OverflowError) or called is None:
+        return False
+    raised = called
+    while raised.tb_next is not None:
+        raised = raised.tb_next
+    if type(raised.tb_frame.f_locals.get("self")) is not fractions.Fraction:
+        return False
+    if called.tb_frame.f_code in _FRACTION_ARITHMETIC:
+        return raised.tb_frame.f_code in _FRACTION_CONVERSION
+    return called.tb_frame.f_code in _FRACTION_ORDERING and raised.tb_frame.f_code is _FRACTION_COMPARISON
 
 
 def _lexicographic(actual: Any, expected: Any) -> bool:
@@ -456,7 +500,8 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
 
     The rank puts an infinity above or below every finite value, whose exact value is compared otherwise.  An
     integer is read by `int`'s own `__index__` or a `numpy` integer's, never by a conversion of the value's own,
-    which a registered `numbers.Integral` can make answer anything.  Any other number is read through
+    which a registered `numbers.Integral` can make answer anything.  A `Fraction` is its own exact value, and a
+    subclass of one is read as any other number.  Any other number is read through
     `as_integer_ratio`, which never rounds and refuses an infinity and a NaN by the error it raises, rather than
     through a conversion to ``float``.  Only as `float`, `Decimal` or a `numpy` float wrote it in C,
     whose errors mean exactly that, and called as the type holds it, as is its ``>`` for an infinity's sign:
@@ -466,6 +511,8 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
     if issubclass(type(value), int) or issubclass(type(value), numbers.Integral):
         whole = exact_int(value)
         return None if whole is None else (0, fractions.Fraction(whole))
+    if type(value) is fractions.Fraction:
+        return 0, value
     ratio = _known_number_method(type(value), "as_integer_ratio", types.MethodDescriptorType)
     if ratio is None:
         return None
