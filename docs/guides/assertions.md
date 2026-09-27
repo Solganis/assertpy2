@@ -50,13 +50,14 @@ assert_that("foo").does_not_match(r"\d+")
     no first element to compare against.
 
 !!! note "Regex matching"
-    Use raw strings (`r"..."`) for patterns. `matches()` passes on **partial** matches (like the
-    underlying `re.match`). Anchor the pattern (`^...$`) to match the whole string. Inline flags such as
-    `(?m)` and `(?s)` work, even though `matches()` takes no flags argument.
+    Use raw strings (`r"..."`) for patterns. `matches()` passes when the pattern is found anywhere in
+    the string, as `re.search` finds it. Anchor the pattern (`^...$`) to match the whole string. Inline
+    flags such as `(?m)` and `(?s)` work, even though `matches()` takes no flags argument.
 
     <!-- docs-guard: skip -->
     ```python
     assert_that("foo").matches(r"\w{2}")     # partial, passes
+    assert_that("xfoo").matches(r"foo")      # not at the start, passes
     assert_that("foo").matches(r"^\w{3}$")   # whole string, passes
     assert_that("foo").matches(r"^\w{2}$")   # fails
     ```
@@ -89,6 +90,36 @@ assert_that(123.4).is_not_inf()
 
 !!! warning "Floats and equality"
     Avoid `is_equal_to()` with `float` values. Use `is_close_to()` or `is_between()` instead.
+
+`is_close_to()` takes the distance three ways, the difference and the window around each side, and
+passes when any of them is within the tolerance. Float rounding differs between the three at the
+boundary, so `-1.1` is close to `-0.9` within `0.2`, although `-0.9 - -1.1` comes out as
+`0.20000000000000007`. The answer is the same whichever operand is the value. `match.close_to()` gives
+the same one, `is_not_close_to()` its opposite, and `is_equal_to(..., tolerance=)` measures the same way
+each pair it measures.
+
+A pair that Python's own arithmetic refuses or overflows is measured by exact value rather than
+refused: a `Decimal` against a `float` or a `numpy` integer, or an `int` past the float range against a
+`float`. Other pairs are measured by their own arithmetic. An infinity is close only to an equal
+infinity, whatever the tolerance, and a NaN is close to nothing and is neither less than, greater than
+nor between anything:
+
+```python
+assert_that(-1.1).is_close_to(-0.9, 0.2)
+assert_that(10**400).is_close_to(10**400 + 1, 1)
+assert_that(float("inf")).is_not_close_to(1e308, float("inf"))
+assert_that(float("nan")).is_not_close_to(float("nan"), 1)
+```
+
+A `bool` is refused as the value, the expected value or the tolerance, and so is a negative or NaN
+tolerance:
+
+<!-- docs-guard: raises -->
+<!-- docs-guard: type-error -->
+```python
+assert_that(True).is_close_to(1, 0)
+# TypeError: val must be a number other than a bool, or a datetime, but was <True> (bool)
+```
 
 ## Lists
 
@@ -394,7 +425,8 @@ assert_that({"a": 1, "b": 2}).does_not_contain("x", "y")
 assert_that({"a": 1, "b": 2}).contains_only("a", "b")
 assert_that({"a": 1, "b": 2}).is_subset_of({"a": 1, "b": 2, "c": 3})
 
-# contains_key / does_not_contain_key are aliases of contains / does_not_contain
+# contains_key / does_not_contain_key search the keys as contains / does_not_contain do,
+# and refuse a value that is not dict-like
 assert_that({"a": 1, "b": 2}).contains_key("b", "a")
 assert_that({"a": 1, "b": 2}).does_not_contain_key("x", "y")
 
@@ -464,7 +496,9 @@ assert_that(payload).is_equal_to(expected, ignore=float)
 `is_equal_to()` can compare two concrete nested structures with a numeric tolerance or with custom
 comparators, anywhere in the graph:
 
-- `tolerance` - an absolute tolerance applied to every real-number leaf (`abs(actual - expected) <= tolerance`).
+- `tolerance` - an absolute tolerance applied to every real-number leaf, measured as `is_close_to()`
+  measures it (see [Numbers](#numbers)). A `bool` leaf is compared exactly. A numpy duration
+  tolerance measures only numpy duration leaves, and a numeric one measures no duration leaf.
 - `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
   field-name key wins over a type key).
 
@@ -803,6 +837,7 @@ assert_that({"id": 1, "profile": {"name": "Alice"}}).has_no_none_fields()
 
 assert_that({"a": 1, "b": {"c": -2}}).all_fields_satisfy(match.is_positive())  # fails
 # Expected all fields to satisfy a positive value, but 1 field did not.
+# diff (match):
 #   b.c: expected a positive value, but was -2
 ```
 

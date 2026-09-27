@@ -113,6 +113,12 @@ By default it polls for 5 seconds every 0.5 seconds. Tune with `within()` and `e
 await assert_that(get_count).eventually().within(10).every(0.2).is_greater_than(100)
 ```
 
+Both take seconds as a real number, and both are checked where they are given, in `eventually()`,
+`eventually_sync()`, `within()` and `every()`. A bool, text or a `Decimal` raises `TypeError`, and a
+negative or NaN one raises `ValueError`. An infinite timeout, or one past the float range, waits until
+the condition holds. The interval has to be finite. An interval longer than the time left sleeps only
+until the deadline, so the poll fails on time after one last try.
+
 The subject is a callable rather than a value, and that is the design rather than a limitation. A value
 is refused outright, because polling one would re-read nothing: an immutable subject could only spin to
 the timeout, and the library cannot tell one apart from a live object. The callable says what to read
@@ -546,9 +552,10 @@ It is value-tolerant by construction, so dynamic ids, timestamps, and amounts (a
 freely. A real contract change fails with the drifted paths:
 
 ```text
-Expected <{...}> to match contract snapshot <...>, but the structure drifted:
+Expected <{...}> to match contract snapshot, but the structure drifted:
   + promo_code
   ~ id number -> str
+Contract snapshot <...>; rerun with --assertpy2-snapshot-update to accept the new shape.
 ```
 
 No hand-written model is needed. The contract is inferred from the first response, and it shares the

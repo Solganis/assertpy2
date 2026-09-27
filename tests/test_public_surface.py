@@ -67,6 +67,7 @@ def _names_protocol(base: ast.expr) -> bool:
 
 _WORDS = {
     5: "five",
+    6: "six",
     9: "nine",
     10: "ten",
     11: "eleven",

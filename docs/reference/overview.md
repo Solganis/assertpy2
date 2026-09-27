@@ -5,8 +5,9 @@ each assertion**, mirroring the code layout.
 
 The assertions actually available on a value are the **union of the mixins for its type**. On a string
 (``assert_that("x")``), for example, that is everything on [String assertions](strings.md),
-[Containment assertions](containment.md), [Core & objects](core.md), and
-[File & path assertions](files.md).
+[Containment assertions](containment.md), [Collection assertions](collections.md),
+[File & path assertions](files.md), and [Core & objects](core.md) apart from ``matches_structure()``,
+which a type checker offers on mappings, models and objects only.
 
 For a task-oriented view organized by value type instead, see the
 [Type assertions guide](../guides/assertions.md).

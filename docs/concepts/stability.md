@@ -90,10 +90,13 @@ Where the promise ends, so the edges are decided rather than assumed:
 
 Semantic versioning, read strictly: a new assertion is a minor, a patch carries fixes only.
 
-Five kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
+Six kinds of change ship in a minor, and the release notes list each one under **Behaviour changes**:
 
 - **an input that was silently wrong starts raising**, such as an empty prefix that no value could fail
-- **a wrong verdict is corrected**, so an assertion that passed and should not have begins to fail
+- **a wrong verdict is corrected**, so an assertion that passed and should not have begins to fail, or
+  one that failed and should not have begins to pass
+- **a wrong refusal becomes an answer**, so a call that raised gets a verdict, such as a `Decimal`
+  against a `numpy` integer, which is compared by value
 - **a diagnostic that was wrong is corrected**, so a failure says something different while failing for
   the same reason
 - **a type stops offering what the value cannot answer**, so a call that type-checked and then raised
@@ -104,11 +107,11 @@ Five kinds of change ship in a minor, and the release notes list each one under 
 Nothing else in a minor is designed to change what your suite reports, which is why that section is
 the one to read before upgrading.
 
-The third kind moves no verdict. A count that described more than it had measured is the usual case,
+The fourth kind moves no verdict. A count that described more than it had measured is the usual case,
 and the fix moves the number rather than the pass or fail. What it does move is a test matching the old
 text with `pytest.raises(match=...)`.
 
-The fourth is the half worth planning for. Runtime does not change and your tests keep passing, but a
+The fifth is the half worth planning for. Runtime does not change and your tests keep passing, but a
 CI stage running ty, mypy, Pyright or Pyrefly can go red before them. Every narrowed chain is named in the
 release notes, and these are the ones so far:
 
@@ -119,6 +122,8 @@ release notes, and these are the ones so far:
 | `extracting()` | its first selector as optional or by keyword, since `extracting(name="user")` never ran |
 | a predicate parameter | an unnamed element, now naming the one it is handed |
 | a `datetime.date` value | the nine assertions that read a time of day, which always raised on a plain date. A `datetime` keeps every one |
+| a `bool` value | `is_close_to()` and `is_not_close_to()`, which refuse a bool at run time |
+| a numpy scalar value | the array view: size, membership and iteration, which a scalar cannot answer, and with them `is_array_equal()` and `is_array_close_to()`, which run. It gets the plain-class view, with ordering and closeness |
 | a value the library cannot use | the assertions it could never answer |
 
 The last row is the widest so far, so it is worth saying plainly which values it touches:
@@ -137,7 +142,7 @@ it, as `assert_that(person.name).is_equal_to("Fred")`.
 
 ### Which release a typing change ships in
 
-The fourth kind above is the one that needs its own reading, because a typing change and a runtime
+The fifth kind above is the one that needs its own reading, because a typing change and a runtime
 change are not the same size even when they touch the same method. Three categories, and the test is
 what a caller has to do about it.
 

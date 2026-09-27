@@ -102,9 +102,10 @@ assert 42 == (match.is_positive() & match.less_than(100))
     This makes matchers a drop-in addition to an existing suite: add one import, use `match.*` in any
     `==` comparison, no rewrite required.
 
-Matcher `==` never raises. When the predicate can't evaluate an operand - a string handed to
-`match.is_positive()`, or an object with no ordering - it simply compares as not equal. So a matcher
-that leaks into a membership check or a foreign comparison stays safe.
+A built-in matcher's `==` does not raise over an operand its predicate cannot evaluate. A string
+handed to `match.is_positive()`, or an object with no ordering, simply compares as not equal, so a
+matcher that leaks into a membership check or a foreign comparison stays safe. What a custom matcher's
+own `matches()` raises still propagates, and so does a coroutine handed back where a verdict belongs.
 
 ## Available matchers
 
@@ -157,6 +158,21 @@ that leaks into a membership check or a foreign comparison stays safe.
 
 `all_of()`, `any_of()`, and `not_()` are named function equivalents of the `&`, `|`, and `~`
 operators from [Composition](#composition). Use whichever reads better.
+
+A matcher checks its arguments when it is built, as the assertion of the same name does, so a mistake
+raises where it is written rather than at the first comparison. `match.between(10, 1)` and
+`match.close_to(1.0, -0.1)` raise `ValueError`, and `match.has_length(2.5)` and
+`match.is_divisible_by("3")` raise `TypeError`. The factories that take a matcher, `has_property()`,
+`each_item()`, `not_()`, `all_of()` and `any_of()`, refuse anything else, as `&` and `|` do:
+
+<!-- docs-guard: raises -->
+<!-- docs-guard: type-error -->
+```python
+match.each_item(lambda x: x > 0)
+# TypeError: given matcher arg must be a Matcher, but was <<function <lambda> at ...
+```
+
+Wrap a plain predicate in a matcher of its own, or pass it to `satisfies()`, which takes a callable.
 
 ## Structural matching
 
@@ -251,11 +267,6 @@ assert_that({"id": "abc-123", "tags": ["python", "testing"]}).matches_structure(
     "tags": match.each_item(match.is_instance_of(str)),
 })
 ```
-
-!!! note
-    `each_item` iterates the value twice on failure, once to decide and once to describe the failing
-    item. A one-shot generator is drained before the matcher sees it, so both walks read the same
-    items and the failure names the right one.
 
 !!! note
     Keys present in the value but absent from the spec are ignored, so a structure spec validates a

@@ -394,9 +394,8 @@ class StringMixin(_MixinBase):
         Tip:
             Regular expressions are tricky.  Be sure to use raw strings (aka prefixed with ``r``).
             Also, note that the [`matches()`][assertpy2.string.StringMixin.matches] assertion passes
-            for partial matches (as does the
-            underlying ``re.match`` method).  So, if you need to match the entire string, you must
-            include anchors in the regex pattern.
+            when the pattern is found anywhere in the string (it calls ``re.search``).  So, if you need
+            to match the entire string, you must include anchors in the regex pattern.
         """
         require_type(self.val, str, "a string")
         require_type(pattern, str, "a string", subject=argument("pattern"))

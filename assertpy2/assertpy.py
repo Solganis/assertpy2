@@ -1897,8 +1897,9 @@ class AssertionBuilder(
         and under [`assert_warn()`][assertpy2.assertpy.assert_warn] it is logged.
 
         Args:
-            timeout: maximum seconds to keep retrying (default ``5.0``)
-            interval: seconds between retries (default ``0.5``)
+            timeout: maximum seconds to keep retrying (default ``5.0``). Infinity, or a number past the
+                float range, retries until the assertion passes
+            interval: seconds between retries (default ``0.5``), finite
             ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
                 propagating (default: none)
             trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
@@ -1932,8 +1933,9 @@ class AssertionBuilder(
             AsyncAssertionBuilder: an async builder whose assertion methods are awaitable
 
         Raises:
-            TypeError: if ``val`` is not callable, or if ``ignoring`` contains anything that is not an
-                ``Exception`` subclass
+            TypeError: if ``val`` is not callable, if ``timeout`` or ``interval`` is not a real number or is
+                a bool, or if ``ignoring`` contains anything that is not an ``Exception`` subclass
+            ValueError: if ``timeout`` or ``interval`` is negative or NaN, or ``interval`` is infinite
         """
         if not callable(self.val):
             refuse(self.val, "callable, since eventually() polls it")
@@ -1972,8 +1974,9 @@ class AssertionBuilder(
         [`PollTrace`][assertpy2.errors.PollTrace] flight recorder.
 
         Args:
-            timeout: maximum seconds to keep retrying (default ``5.0``)
-            interval: seconds between retries (default ``0.5``)
+            timeout: maximum seconds to keep retrying (default ``5.0``). Infinity, or a number past the
+                float range, retries until the assertion passes
+            interval: seconds between retries (default ``0.5``), finite
             ignoring: an ``Exception`` subclass (or tuple of them) the polling loop retries instead of
                 propagating (default: none)
             trace: record a [`PollTrace`][assertpy2.errors.PollTrace] flight recorder attached to the
@@ -2004,8 +2007,9 @@ class AssertionBuilder(
             SyncAssertionBuilder: a blocking builder whose assertion methods poll on call
 
         Raises:
-            TypeError: if ``val`` is not callable, or if ``ignoring`` contains anything that is not an
-                ``Exception`` subclass
+            TypeError: if ``val`` is not callable, if ``timeout`` or ``interval`` is not a real number or is
+                a bool, or if ``ignoring`` contains anything that is not an ``Exception`` subclass
+            ValueError: if ``timeout`` or ``interval`` is negative or NaN, or ``interval`` is infinite
         """
         if not callable(self.val):
             refuse(self.val, "callable, since eventually_sync() polls it")

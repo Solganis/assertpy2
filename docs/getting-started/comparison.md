@@ -203,11 +203,12 @@ assert_that(payload).matches_contract_snapshot("orders")  # paths and types, not
 ```
 
 The third is the one with no equivalent elsewhere. It records the *shape* rather than the values, so a
-changing total does not fail the test and a disappearing field does:
+changing total does not fail the test and a total that turns into a string does:
 
 ```text
-Expected <{...}> to match the recorded contract, but 1 path changed
-  order.total: recorded a number, got a string
+Expected <{...}> to match contract snapshot, but the structure drifted:
+  ~ order.total number -> str
+Contract snapshot <...>; rerun with --assertpy2-snapshot-update to accept the new shape.
 ```
 
 If snapshots are the workflow, the specialists lead that niche:

@@ -6,7 +6,8 @@ the switch is a single import.
 
 !!! success "TL;DR"
     On Python 3.10+, replace `from assertpy import ...` with `from assertpy2 import ...` and run your
-    tests. The assertions you already use carry over unchanged.
+    tests. The assertions you already use carry over, apart from the few answers listed under
+    [Where results differ](#where-results-differ).
 
 ## Before you start
 
@@ -14,7 +15,8 @@ the switch is a single import.
   3.10 through 3.15. If you are on an older interpreter, upgrade Python first. That is the only hard
   requirement of the migration.
 - **No runtime dependencies on Python 3.11+.** On 3.10 a single tiny backport (`typing_extensions`) is
-  pulled in automatically. The extras (`[json]`, `[data]`, `[allure]`, `[behave]`) stay opt-in.
+  pulled in automatically. The extras (`[json]`, `[inline]`, `[data]` or one of `[numpy]`, `[pandas]`,
+  `[polars]`, `[allure]`, `[behave]`) stay opt-in.
 
 ## Switch the import
 
@@ -53,8 +55,8 @@ entire migration.
 
 ## What stays the same
 
-assertpy2 is a superset of the original, so the assertions you already use are present and produce the
-same results:
+assertpy2 is a superset of the original, so the assertions you already use are present and, outside
+the cases under [Where results differ](#where-results-differ), produce the same results:
 
 - the `assert_that()` entry point and fluent (`return self`) chaining
 - strings, numbers, lists, tuples, dicts, sets, booleans, `None`, dates, files, and objects
@@ -79,6 +81,22 @@ same results:
 
     Prefer matching a substring. Better still, skip the text and assert on the structured data the
     failure carries: `AssertionFailure.actual`, `.expected` and `.diff`.
+
+## Where results differ
+
+A few answers the original gave were wrong, and assertpy2 corrects them. A test can change its outcome
+on the switch in either direction, and each row below is measured against assertpy 1.1:
+
+| Call | assertpy | assertpy2 |
+|---|---|---|
+| `is_close_to()` with a `bool` value, expected value or tolerance | measured `True` as `1` | raises `TypeError` |
+| `is_close_to()` with a NaN tolerance | passed | raises `ValueError` |
+| a NaN as the value or the operand of `is_less_than()`, `is_greater_than()`, their `_or_equal_to` forms and `is_close_to()`, or as the value of `is_between()`, `is_positive()` and `is_negative()` | passed | fails |
+| an infinity against a finite number under an infinite tolerance | passed | fails |
+| `is_in()` and `is_not_in()` when the items hold the very NaN object under test | `is_in()` failed and `is_not_in()` passed | the reverse, as `in` answers |
+| `is_equal_to()` on a type whose `__ne__` is not the negation of its `__eq__` | decided by `!=` | decided by `==` |
+| `contains()` and `does_not_contain()` on a class iterated only through `__getitem__` | searched it | raise `TypeError` |
+| `add_extension()` with a name already in use, by a built-in or by another function | replaced it | raises `ValueError` unless `override=True` |
 
 ## What improves automatically
 

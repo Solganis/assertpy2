@@ -573,7 +573,9 @@ class NumericMixin(_MixinBase):
     ) -> Self:
         """Asserts that val is numeric and is close to other within tolerance.
 
-        An infinity is close only to itself, whatever the tolerance, and a NaN to nothing.
+        The distance is taken three ways, the difference and the window around each side, and any of them
+        holding is enough, so the answer is the same whichever operand is val.  An infinity is close only
+        to itself, whatever the tolerance, and a NaN to nothing.
 
         Args:
             other (object): the other value, expected to be close to val within tolerance
@@ -599,6 +601,9 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** close to other within tolerance
+            TypeError: if val, other or tolerance is not a number (or a ``datetime`` and a ``timedelta``),
+                or is a bool, or if a numpy duration meets a number
+            ValueError: if tolerance is negative or NaN
         """
         self._validate_close_to_args(self.val, other, tolerance)
 
@@ -627,6 +632,9 @@ class NumericMixin(_MixinBase):
     ) -> Self:
         """Asserts that val is numeric and is *not* close to other within tolerance.
 
+        Measured as [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to] measures, so an infinity
+        is not close to anything but itself and a NaN to nothing.
+
         Args:
             other (object): the other value
             tolerance (object): the tolerance
@@ -642,6 +650,9 @@ class NumericMixin(_MixinBase):
 
         Raises:
             AssertionError: if val **is** close to other within tolerance
+            TypeError: if val, other or tolerance is not a number (or a ``datetime`` and a ``timedelta``),
+                or is a bool, or if a numpy duration meets a number
+            ValueError: if tolerance is negative or NaN
         """
         self._validate_close_to_args(self.val, other, tolerance)
 

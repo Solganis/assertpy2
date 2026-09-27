@@ -58,7 +58,11 @@ Anything JSON cannot express degrades to a marked fallback instead of failing th
 - `{"__type__": "dict", "__data__": [[key, value], ...]}` for a mapping with any non-string key, since a
   JSON object has string keys only and rendering `1` as `"1"` drops whichever of the two came second.
 
-Oversized values are capped: strings at 4000 chars, containers at 100 items.
+Oversized values are capped: strings at 4000 chars, containers at 100 items, where a mapping says how
+many keys it dropped under `"__truncated__"`. Nesting past six levels degrades to `{"__repr__": ...}`.
+The entries themselves stop at `assertpy2_diff_max_entries` (50 by default), and the attachment then
+carries `"truncated"` with the number left out. A polling trace that dropped samples says how many
+under `"dropped"`.
 
 An **AssertionFailure** attachment (mode `full` only) with what was asked of the value, and with the
 actual and expected values the assertion named:

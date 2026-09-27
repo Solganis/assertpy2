@@ -138,7 +138,9 @@ assert_that([42]).single().is_equal_to(42)
 
 !!! warning
     `first()`, `last()`, and `single()` raise `ValueError` on an empty collection (`single()` also on
-    more than one element). `element(index)` raises `IndexError` when the index is out of range.
+    more than one element). `element(index)` raises `IndexError` when the index is out of range, a
+    negative one included, and `TypeError` when it is not an integer, a `bool` included. A numpy
+    integer is taken.
 
 ### Chaining pipeline steps
 

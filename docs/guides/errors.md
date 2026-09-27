@@ -769,8 +769,12 @@ To also assert on the value the call returned (alongside the warning, or after `
 )
 ```
 
-`returned()` exposes the type-agnostic core assertions (`is_equal_to`, `is_instance_of`, `satisfies`,
-...). It raises `TypeError` if the call raised (there is no return value to inspect).
+`returned()` hands back a builder over the value the call returned, so that value's own assertions
+apply: `contains()` on a returned list, `starts_with()` on a returned string. A type checker reads its
+`.value` as the callable's declared return type. The builder is the whole one rather than the view
+`assert_that()` would pick for that type, so a checker accepts any assertion on it, and one the value
+cannot answer raises at run time. `returned()` raises `TypeError` if the call raised (there is no return
+value to inspect).
 
 !!! warning "Not thread-safe"
     `warns()` / `does_not_warn()` rely on `warnings.catch_warnings()`, which mutates process-global

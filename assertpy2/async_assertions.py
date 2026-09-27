@@ -495,12 +495,24 @@ class AsyncAssertionBuilder:
         )
 
     def within(self, timeout: float) -> Self:
-        """Override the timeout (in seconds)."""
+        """Override the timeout (in seconds).
+
+        Infinity, or a number past the float range, retries until the assertion passes.
+
+        Raises:
+            TypeError: if ``timeout`` is not a real number, or is a bool
+            ValueError: if ``timeout`` is negative or NaN
+        """
         self._timeout = _duration(timeout, "timeout", endless=True)
         return self
 
     def every(self, interval: float) -> Self:
-        """Override the polling interval (in seconds)."""
+        """Override the polling interval (in seconds).
+
+        Raises:
+            TypeError: if ``interval`` is not a real number, or is a bool
+            ValueError: if ``interval`` is negative, NaN or infinite
+        """
         self._interval = _duration(interval, "interval", endless=False)
         return self
 
@@ -710,12 +722,24 @@ class SyncAssertionBuilder:
         )
 
     def within(self, timeout: float) -> Self:
-        """Override the timeout (in seconds)."""
+        """Override the timeout (in seconds).
+
+        Infinity, or a number past the float range, retries until the assertion passes.
+
+        Raises:
+            TypeError: if ``timeout`` is not a real number, or is a bool
+            ValueError: if ``timeout`` is negative or NaN
+        """
         self._timeout = _duration(timeout, "timeout", endless=True)
         return self
 
     def every(self, interval: float) -> Self:
-        """Override the polling interval (in seconds)."""
+        """Override the polling interval (in seconds).
+
+        Raises:
+            TypeError: if ``interval`` is not a real number, or is a bool
+            ValueError: if ``interval`` is negative, NaN or infinite
+        """
         self._interval = _duration(interval, "interval", endless=False)
         return self
 

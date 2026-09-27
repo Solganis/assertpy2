@@ -10,7 +10,7 @@ Optional extras:
 
 - `assertpy2[json]` - JSONPath, JSON Schema, and OpenAPI contracts
 - `assertpy2[inline]` - inline snapshots (`matches_inline()`)
-- `assertpy2[data]` - pandas / polars / numpy
+- `assertpy2[data]` - pandas, polars and numpy together, or `[pandas]`, `[polars]` or `[numpy]` alone
 - `assertpy2[allure]` - Allure reporting
 - `assertpy2[behave]` - Behave step matchers
 

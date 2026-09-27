@@ -104,7 +104,7 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     pandas / polars / numpy data-frame and array assertions, alongside Allure and Behave integrations.
 
-    [:octicons-arrow-right-24: Integrations](extending/integrations.md)
+    [:octicons-arrow-right-24: Data frames and arrays](extending/integrations.md#data-frames-and-arrays)
 
 -   :material-api:{ .lg .middle } __JSON & API assertions__
 
@@ -136,7 +136,7 @@ Optional extras:
 
 - `assertpy2[json]` - JSONPath, JSON Schema, and OpenAPI contracts
 - `assertpy2[inline]` - inline snapshots (`matches_inline()`)
-- `assertpy2[data]` - pandas / polars / numpy
+- `assertpy2[data]` - pandas, polars and numpy together, or `[pandas]`, `[polars]` or `[numpy]` alone
 - `assertpy2[allure]` - Allure reporting
 - `assertpy2[behave]` - Behave step matchers
 

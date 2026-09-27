@@ -30,7 +30,8 @@ then suggests only what fits the value under test rather than the whole surface:
 | `pathlib.Path` | path assertions | `exists`, `is_file`, `is_directory`, `is_readable` |
 | `bytes` / `bytearray` | bytes assertions | `starts_with_bytes`, `is_valid_utf8`, `decoded_as` |
 | a pandas or polars frame | frame assertions | `is_frame_equal`, `is_array_equal`, plus size, membership and iteration |
-| a numpy array | array assertions | `is_array_equal`, `is_array_close_to`, plus the same three |
+| a numpy array | array assertions, a zero-dimensional array included | `is_array_equal`, `is_array_close_to`, plus the same three |
+| a numpy scalar | `np.float64` the `float` view, since it subclasses `float`, and any other the plain-class view below | `is_greater_than`, `is_close_to`, `is_zero` |
 | any callable | callable assertions | `raises`, `warns`, `eventually` |
 | a plain class | the core, plus structural matching and an ordering that refuses nothing | `is_greater_than`, `is_between`, `matches_structure` |
 
@@ -83,8 +84,8 @@ def what_a_checker_allows(anything: object, someone: Person) -> None:
 Both type-check, and both raise at runtime with the library's own refusal rather than the operator's:
 
 ```text
-given other arg must be comparable with val <...>
-val must be a number or a date, which is what an ordering is
+given other arg must be comparable with val <...>, but was <'text'> (str)
+val must be a number or a date, which is what an ordering is defined for, but was <...> (Person)
 ```
 
 That is deliberate, and it is the second attempt. The first spelling bound the operand to a list of
@@ -95,7 +96,7 @@ and accepting incorrect ones. Refusing correct code is the worse of the two.
 Comparing an `int` against a `float`, passing a matcher where an item is expected, and every other
 ordinary combination keep working. Which relations are refused and which stay accepted is measured
 rather than asserted: [`tests/typing_cases.py`](https://github.com/Solganis/assertpy2/blob/main/tests/typing_cases.py)
-holds the spellings that were tried, and CI compares all three checkers against a recorded baseline in
+holds the spellings that were tried, and CI compares all four checkers against a recorded baseline in
 both directions.
 
 [ty](https://github.com/astral-sh/ty), [mypy `--strict`](https://github.com/python/mypy),
@@ -110,8 +111,9 @@ package.
 
 !!! note "Callables and captured values stay typed too"
     `assert_that(func).raises(...).when_called_with(...)` exposes string assertions on the captured
-    message, and `returned()` pivots to the type-agnostic core assertions for the call's return value -
-    never advertising methods that may not apply. See [Errors & Reporting](../guides/errors.md#expected-exceptions).
+    message. `returned()` and `raised()` hand back a builder whose `.value` is typed as the call's
+    declared return and as the exception caught. That builder offers every assertion rather than the
+    view of the value's type. See [Errors & Reporting](../guides/errors.md#expected-exceptions).
 
 ### Where the typed surface ends
 
@@ -389,8 +391,8 @@ A few refinements keep it precise:
 Under mypy, one setting decides whether any of this reaches your tests. mypy does not look inside a
 function with no annotations at all, and a test written as `def test_orders():` is exactly that.
 
-So the same three mistakes below are reported six times by Pyright, `ty` and Pyrefly out of the box,
-three times by mypy at its defaults, and six by mypy once it is told to read those bodies:
+So the one mistake below, written in two tests, is reported twice by Pyright, `ty` and Pyrefly out of
+the box, once by mypy at its defaults, and twice by mypy once it is told to read those bodies:
 
 <!-- docs-guard: skip -->
 

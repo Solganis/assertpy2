@@ -87,8 +87,9 @@ Call the factory directly rather than registering the matcher under a dynamic na
 
 ## Project-wide reuse
 
-`is_5()` is only available in the file where `add_extension()` is called. To share extensions across
-all test files, register them in a pytest fixture in `conftest.py`:
+An extension is registered for the whole process from the moment `add_extension()` runs, in every
+module, until `remove_extension()` takes it away. To register it at a point you choose rather than
+wherever a module happens to be imported, do it in a pytest fixture in `conftest.py`:
 
 ```python
 import pytest
@@ -115,6 +116,15 @@ def test_foo(my_extensions):
     assert_that(5).is_5()
     assert_that(6).is_5()  # fails!
 ```
+
+A name already in use is refused with `ValueError`, whether a built-in such as `is_equal_to` holds
+it or another function added earlier, so an extension cannot replace an assertion by accident. Pass
+`override=True` to replace it on purpose. Adding the same function again is not a clash, so the
+module-scoped fixture above can run once for every module that requests it.
+
+A name a polling chain uses for itself, such as `within` or `every`, or one starting with `_`, `cr_` or
+`gi_`, is refused with `ValueError` even under `override=True`, since after `eventually()` the extension
+could never be reached.
 
 ## Writing custom assertions
 

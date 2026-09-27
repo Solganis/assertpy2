@@ -214,13 +214,12 @@ narrowed type. See [Typed narrowing](concepts/type-safety.md#typed-narrowing-wit
 
 Register a reusable matcher for a domain rule once, then use it everywhere via `match.*` or `satisfies()`:
 
-<!-- docs-guard: skip -->
 ```python
-from assertpy2 import register_matcher
+from assertpy2 import assert_that, match, register_matcher
 
-register_matcher(
-    "is_valid_sku", lambda value: bool(re.fullmatch(r"[A-Z]{3}-\d{4}", value))
-)
+@register_matcher("is_valid_sku")
+def is_valid_sku():
+    return match.matches_regex(r"^[A-Z]{3}-\d{4}$")
 
 assert_that("ABC-1234").satisfies(match.is_valid_sku())
 ```
@@ -245,7 +244,7 @@ assert_that(response).has_json_path("$.meta.total")
 assert_that(response["meta"]["total"]).is_equal_to(2)
 ```
 
-`extracting()` pulls a field or JSON path off every element of a collection. `has_json_path()` and
+`extracting()` pulls a key or an attribute off every element of a collection. `has_json_path()` and
 `at_json_path()` navigate into a nested payload, and need the JSON extra
 (`pip install assertpy2[json]`). This keeps the failure focused on the field that broke.
 

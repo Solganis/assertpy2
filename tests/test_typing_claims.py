@@ -85,6 +85,7 @@ _TYPE_TABLE = re.compile(r"^\| `?(?P<types>[^|]+?)`? \| (?P<gets>[^|]+?) \| (?P<
 _NAMED_IN_PROSE = {
     "a pandas or polars frame": "_FrameT_co",
     "a numpy array": "_ArrayT_co",
+    "a numpy scalar": "_T",
     "any callable": "Callable",
     "a plain class": "_T",
 }
