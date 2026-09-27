@@ -13,6 +13,7 @@ from ._engine._compare import (
     _is_nan,
     _node_decision,
     _spec_matches,
+    zero_of,
 )
 from ._engine._diff import _aligned_match_indices, _sub_diff_entries
 from ._engine._equality import (
@@ -36,7 +37,7 @@ from ._engine._introspection import (
     keyed_snapshot,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, holds, lookup, nan_operand
+from ._engine._ordering import UnorderableError, holds, lookup, nan_operand, numpy_duration
 from ._engine._path import _ROOT
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
@@ -199,6 +200,26 @@ def _informative(val: object, other: object, val_repr: str, other_repr: str, *, 
     return _truncated(val_repr), _truncated(other_repr)
 
 
+def _zero_for(val, other, tolerance):
+    """The zero *tolerance* is signed against, once *other* and it are numbers of *val*'s measure.
+
+    A bool is refused, and so is a `numpy` duration measured against a number, either way round, since `numpy`
+    registers one as an integer.  Asked of three plain numbers too, the duration check cost `is_close_to` 20%.
+    """
+    if isinstance(other, bool):
+        refuse(other, "a number other than a bool", subject=argument("other"))
+    require_type(other, numbers.Number, "a number", subject=argument("other"))
+    if isinstance(tolerance, bool):
+        refuse(tolerance, "a number other than a bool", subject=argument("tolerance"))
+    require_type(tolerance, numbers.Number, "a number", subject=argument("tolerance"))
+    duration = numpy_duration(val)
+    for operand, name in ((other, "other"), (tolerance, "tolerance")):
+        if numpy_duration(operand) != duration:
+            kind = "a numpy timedelta64" if duration else "a number"
+            refuse(operand, f"{kind}, to match val", subject=argument(name))
+    return zero_of(tolerance)
+
+
 def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
     """Whether the bounds are the wrong way round as the ordering engine reads them, once ``>`` raised *refusal*.
 
@@ -309,15 +330,11 @@ class HelpersMixin(_MixinBase):
             require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
             require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
         else:
-            if isinstance(other, bool):
-                refuse(other, "a number other than a bool", subject=argument("other"))
-            require_type(other, numbers.Number, "a number", subject=argument("other"))
-            if isinstance(tolerance, bool):
-                refuse(tolerance, "a number other than a bool", subject=argument("tolerance"))
-            require_type(tolerance, numbers.Number, "a number", subject=argument("tolerance"))
+            plain = type(val) in (int, float) and type(other) in (int, float) and type(tolerance) in (int, float)
+            zero = 0 if plain else _zero_for(val, other, tolerance)
             if _is_nan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
-            if tolerance < 0:
+            if tolerance < zero:
                 raise ValueError("given tolerance arg must be positive")
 
     def _is_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True):

@@ -116,6 +116,12 @@ def equals(actual: Any, expected: Any) -> bool:
 _SEQUENCES = (list, tuple)
 
 
+def numpy_duration(value: object) -> bool:
+    """Whether *value* is a `numpy.timedelta64`, a duration `numpy` registers as an integer all the same."""
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and type(value) is numpy.timedelta64
+
+
 _UNANSWERED: Any = object()
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-import numbers
 import re
 import sys
 import uuid as _uuid_mod
@@ -32,6 +31,7 @@ from ._engine._compare import (
     _keyed_types_differ,
     _non_finite,
     _within_tolerance,
+    zero_of,
 )
 from ._engine._equality import (
     IncludeKeysMissingError,
@@ -68,6 +68,7 @@ from ._engine._ordering import (
     lookup,
     may_broadcast,
     member,
+    numpy_duration,
     require_integer,
     whole_number,
 )
@@ -629,15 +630,19 @@ def _sequence_or_numpy(value: object) -> bool:
     return issubclass(type(value), (list, tuple)) or may_broadcast(value)
 
 
-def _plainly_ordered(value: object) -> bool:
-    """Whether a value's ordering is a builtin one or a `numpy` number's, so asking it at construction runs nobody
-    else's code: a `numpy` tolerance below zero was never refused, and covered every distance.
+def _ordered_kind(value: object) -> str | None:
+    """``"plain"`` or ``"duration"`` where asking a value's order at construction runs no code of anybody's.
+
+    A builtin's order is plain, and so is a `numpy` number's, whose tolerance below zero was never refused and
+    covered every distance.  A `numpy` duration orders only against another.
     """
     kind = id(type(value))
     if kind in _BUILT_IN_ORDERED:
-        return True
+        return "plain"
     numpy = sys.modules.get("numpy")
-    return numpy is not None and kind in _numpy_real_types(numpy)
+    if numpy is None or kind not in _numpy_ordered_types(numpy):
+        return None
+    return "duration" if type(value) is numpy.timedelta64 else "plain"
 
 
 _BUILT_IN_ORDERED = frozenset(map(id, (int, float, Decimal, Fraction, datetime, date, time, timedelta)))
@@ -645,13 +650,14 @@ _BUILT_IN_ORDERED = frozenset(map(id, (int, float, Decimal, Fraction, datetime, 
 
 
 @functools.cache
-def _numpy_real_types(numpy: Any) -> frozenset[int]:
-    """The ids of `numpy`'s own integer and floating scalar types.
+def _numpy_ordered_types(numpy: Any) -> frozenset[int]:
+    """The ids of `numpy`'s own integer, floating and duration scalar types.
 
     Told by identity, which neither a subclass naming its module `numpy` nor a metaclass answering attribute
     reads can claim, and without hashing a class of anybody's.
     """
-    return frozenset(id(numpy.dtype(code).type) for code in numpy.typecodes["AllInteger"] + numpy.typecodes["Float"])
+    codes = numpy.typecodes["AllInteger"] + numpy.typecodes["Float"] + "m"
+    return frozenset(id(numpy.dtype(code).type) for code in codes)
 
 
 def _swapped(low: object, high: object) -> bool:
@@ -660,7 +666,8 @@ def _swapped(low: object, high: object) -> bool:
     Two values may each order plainly and still not order against each other, a `datetime` against a
     `date` among them, and a pair with no ordering is judged where it is used rather than here.
     """
-    if not (_plainly_ordered(low) and _plainly_ordered(high)):
+    low_kind = _ordered_kind(low)
+    if low_kind is None or low_kind != _ordered_kind(high):
         return False
     try:
         return holds(low, high, "gt")
@@ -685,35 +692,37 @@ class BetweenMatcher(BaseMatcher):
         return f"a value between <{self.low}> and <{self.high}>"
 
 
-def _measured_under(operand: object, tolerance: object) -> bool:
+def _measured_under(operand: object, tolerance: object, duration: bool) -> bool:
     """Whether `is_close_to` measures *operand* under *tolerance*: a datetime under a duration, else a number.
 
-    Any number but a complex one or a `bool`, as `is_close_to` reads it. Outside that domain an equal pair
-    would count as close, since equality answers before any distance does.
+    Any number but a complex one or a `bool`, as `is_close_to` reads it, and a `numpy` duration only under
+    another, which *duration* says the tolerance is. Outside that domain an equal pair would count as close,
+    since equality answers before any distance does.
     """
+    if duration:
+        return numpy_duration(operand)
     if isinstance(tolerance, timedelta):
         return isinstance(operand, datetime)
-    return type(operand) in (int, float) or (
-        isinstance(operand, numbers.Number) and not isinstance(operand, (complex, bool))
-    )
+    return type(operand) in (int, float) or _is_real_number(operand)
 
 
 class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
-        zero = timedelta(0) if isinstance(tolerance, timedelta) else 0
+        zero = timedelta(0) if isinstance(tolerance, timedelta) else zero_of(tolerance)
         if _swapped(zero, tolerance):
             raise ValueError("given tolerance arg must be positive")
         self.expected = expected
         self.tolerance = tolerance
+        self._duration: bool = type(tolerance) not in (int, float) and numpy_duration(tolerance)
         # a tolerance that is no ordered distance has nothing within it, not even the value itself
         self._measures = (
-            (_is_real_number(tolerance) or isinstance(tolerance, timedelta))
+            (_is_real_number(tolerance) or isinstance(tolerance, timedelta) or self._duration)
             and _non_finite(tolerance) != "nan"
-            and _measured_under(expected, tolerance)
+            and _measured_under(expected, tolerance, self._duration)
         )
 
     def matches(self, value: Any) -> bool:
-        if not self._measures or not _measured_under(value, self.tolerance):
+        if not self._measures or not _measured_under(value, self.tolerance, self._duration):
             return False
         try:
             return _within_tolerance(value, self.expected, self.tolerance)

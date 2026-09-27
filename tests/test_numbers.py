@@ -1964,3 +1964,81 @@ def test_two_lists_whose_own_order_raised_on_a_numpy_scalar_are_ordered_as_the_i
         return assert_that([number]).check().is_less_than(sequence).passed
 
     assert_that(_order_outcome(asked, [[5, 6]], numpy.int64(5))).is_equal_to(_order_outcome(asked, [[5, 6]], 5))
+
+
+_DURATIONS_CLOSE = {
+    "seconds": (((5, "s"), (6, "s"), (2, "s")), True),
+    "seconds-far": (((5, "s"), (9, "s"), (2, "s")), False),
+    "mixed-units": (((5, "s"), (5500, "ms"), (1, "s")), True),
+    "days-tolerance": (((5, "h"), (6, "h"), (1, "D")), True),
+    "not-a-time-value": ((("NaT", "s"), (6, "s"), (2, "s")), False),
+    "not-a-time-tolerance": (((5, "s"), (6, "s"), ("NaT", "s")), False),
+}
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize("case", list(_DURATIONS_CLOSE))
+def test_a_numpy_duration_is_measured_against_another_in_every_spelling(spelling, case):
+    """Signed against a zero of its own unit: against a bare `0`, numpy 2 warned that a bare int has no unit."""
+    numpy = pytest.importorskip("numpy")
+    operands, close = _DURATIONS_CLOSE[case]
+    value, other, tolerance = (numpy.timedelta64(*operand) for operand in operands)
+    assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(close)
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+def test_a_negative_numpy_duration_tolerance_is_refused_in_every_spelling(spelling):
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ValueError, match="given tolerance arg must"):
+        _CLOSENESS_SPELLINGS[spelling](numpy.timedelta64(5, "s"), numpy.timedelta64(6, "s"), numpy.timedelta64(-2, "s"))
+
+
+_MIXED_WITH_A_DURATION = {
+    "duration-tolerance": (lambda second: (1, 1.5, second), "given tolerance arg must be a number, to match val"),
+    "duration-other": (lambda second: (1, second, 1), "given other arg must be a number, to match val"),
+    "duration-value": (lambda second: (second, second, 1), "given tolerance arg must be a numpy timedelta64"),
+}
+
+
+@pytest.mark.parametrize("spelling", ["is_close_to", "is_not_close_to"])
+@pytest.mark.parametrize("mixed", list(_MIXED_WITH_A_DURATION))
+def test_an_assertion_refuses_a_numpy_duration_measured_against_a_number(spelling, mixed):
+    """numpy registers a duration as an integer, and a number within one second has no meaning."""
+    numpy = pytest.importorskip("numpy")
+    operands, refusal = _MIXED_WITH_A_DURATION[mixed]
+    with pytest.raises(TypeError, match=refusal):
+        _CLOSENESS_SPELLINGS[spelling](*operands(numpy.timedelta64(1, "s")))
+
+
+@pytest.mark.parametrize("mixed", list(_MIXED_WITH_A_DURATION))
+def test_a_matcher_measures_nothing_between_a_numpy_duration_and_a_number(mixed):
+    numpy = pytest.importorskip("numpy")
+    value, other, tolerance = _MIXED_WITH_A_DURATION[mixed][0](numpy.timedelta64(1, "s"))
+    assert_that(_CLOSENESS_SPELLINGS["match.close_to"](value, other, tolerance)).is_false()
+
+
+def test_a_tolerance_leaves_a_leaf_of_the_other_kind_to_equality():
+    """A duration tolerance measures no number, and a number measures no duration, as a string is not measured."""
+    numpy = pytest.importorskip("numpy")
+    second = numpy.timedelta64(1, "s")
+    assert_that(assert_that({"a": 1}).check().is_equal_to({"a": 1.5}, tolerance=second).passed).is_false()
+    assert_that(assert_that({"a": 1}).check().is_equal_to({"a": 1}, tolerance=second).passed).is_true()
+    durations = {"a": numpy.timedelta64(5, "s")}, {"a": numpy.timedelta64(6, "s")}
+    assert_that(assert_that(durations[0]).check().is_equal_to(durations[1], tolerance=2).passed).is_false()
+
+
+def test_a_between_matcher_refuses_reversed_numpy_duration_bounds_when_built():
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ValueError, match="given low arg must be less than given high arg"):
+        match.between(numpy.timedelta64(5, "s"), numpy.timedelta64(1, "s"))
+    assert_that(
+        match.between(numpy.timedelta64(1, "s"), numpy.timedelta64(5, "m")).matches(numpy.timedelta64(3, "s"))
+    ).is_true()
+
+
+@pytest.mark.parametrize("duration_low", [True, False], ids=["duration-low", "duration-high"])
+def test_a_between_matcher_does_not_order_a_numpy_duration_against_a_number_when_built(duration_low):
+    """Asked, numpy 2 warns that a bare int has no unit, and the suite's warnings are errors."""
+    numpy = pytest.importorskip("numpy")
+    bounds = (numpy.timedelta64(5, "s"), 1) if duration_low else (1, numpy.timedelta64(5, "s"))
+    assert_that(match.between(*bounds).describe()).starts_with("a value between")

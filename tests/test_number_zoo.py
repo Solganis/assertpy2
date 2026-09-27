@@ -334,7 +334,7 @@ def _range_expected(value_name: str, low_name: str, high_name: str) -> dict[str,
     """Reversed bounds are refused before the value is asked, and a NaN anywhere else holds nothing between.
 
     The matcher asks its bounds at construction only where that runs no code but the interpreter's or `numpy`'s
-    (`_plainly_ordered`), and between reversed bounds it did not ask, which nothing lies between, answers no match.
+    (`_ordered_kind`), and between reversed bounds it did not ask, which nothing lies between, answers no match.
     """
     if not {low_name, high_name} & _UNORDERED.keys() and _real(low_name) > _real(high_name):
         bounds = (_ZOO[low_name], _ZOO[high_name])

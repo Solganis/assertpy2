@@ -36,7 +36,16 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import REFUSALS, UnorderableError, _exact_real, broadcasts, equal_past, held_key, holds
+from ._ordering import (
+    REFUSALS,
+    UnorderableError,
+    _exact_real,
+    broadcasts,
+    equal_past,
+    held_key,
+    holds,
+    numpy_duration,
+)
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -95,6 +104,8 @@ class _CompareConfig:
     comparators: dict[Any, Callable[[Any, Any], Any]] | None = None
     ignore_null: bool = False
     strict_types: bool = False
+    # read once for the whole comparison: a `numpy` duration measures only another
+    duration: bool = False
 
 
 def _build_compare_config(tolerance, comparators, ignore_null=False, strict_types=False) -> _CompareConfig | None:
@@ -115,7 +126,7 @@ def _build_compare_config(tolerance, comparators, ignore_null=False, strict_type
             raise TypeError("given tolerance arg must be a real number")
         if _is_nan(tolerance):
             raise ValueError("given tolerance arg must not be NaN")
-        if tolerance < 0:
+        if tolerance < zero_of(tolerance):
             raise ValueError("given tolerance arg must not be negative")
     if comparators is not None:
         if not isinstance(comparators, dict):
@@ -124,7 +135,11 @@ def _build_compare_config(tolerance, comparators, ignore_null=False, strict_type
             if not callable(comparator):
                 raise TypeError("each comparator must be callable")
     return _CompareConfig(
-        tolerance=tolerance, comparators=comparators, ignore_null=ignore_null, strict_types=strict_types
+        tolerance=tolerance,
+        comparators=comparators,
+        ignore_null=ignore_null,
+        strict_types=strict_types,
+        duration=type(tolerance) not in (int, float) and numpy_duration(tolerance),
     )
 
 
@@ -262,9 +277,17 @@ def _is_real_number(value) -> bool:
 
     Array/frame-likes are not `numbers.Number`, so they are excluded too - tolerance never triggers
     their element-wise ``==`` that has no single truth value.  An exact `int` or `float` answers before
-    the ABC check, which cost a hundred nanoseconds on every leaf a tolerance is asked about.
+    the ABC check, which cost a hundred nanoseconds on every leaf a tolerance is asked about.  A `numpy`
+    duration is none, though `numpy` registers it as an integer: only another duration measures it.
     """
-    return type(value) in (int, float) or (isinstance(value, numbers.Number) and not isinstance(value, (bool, complex)))
+    return type(value) in (int, float) or (
+        isinstance(value, numbers.Number) and not isinstance(value, (bool, complex)) and not numpy_duration(value)
+    )
+
+
+def zero_of(tolerance: Any) -> Any:
+    """The zero a *tolerance* is signed against: a `numpy` duration's in its own unit, which a bare ``0`` is not."""
+    return tolerance - tolerance if type(tolerance) not in (int, float) and numpy_duration(tolerance) else 0
 
 
 def _within_tolerance(actual, expected, tolerance) -> bool:
@@ -625,7 +648,11 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if type(actual) not in _EQ_ATOMIC and _guarded_equal(actual, expected):
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
-        if config.tolerance is not None and _is_real_number(as_held(actual)) and _is_real_number(as_held(expected)):
+        if config.tolerance is not None and (
+            numpy_duration(as_held(actual)) and numpy_duration(as_held(expected))
+            if config.duration
+            else _is_real_number(as_held(actual)) and _is_real_number(as_held(expected))
+        ):
             try:
                 within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
             except UnorderableError:

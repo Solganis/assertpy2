@@ -27,7 +27,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("assertpy2/helpers.py", "reportGeneralTypeIssues"): 1,
     ("assertpy2/helpers.py", "reportIndexIssue"): 2,
     ("assertpy2/_engine/_compare.py", "reportArgumentType"): 1,
-    ("assertpy2/_engine/_compare.py", "reportOperatorIssue"): 1,
     ("assertpy2/helpers.py", "reportOperatorIssue"): 2,
     ("assertpy2/behave_matchers.py", "reportAttributeAccessIssue"): 1,
     ("assertpy2/behave_matchers.py", "reportMissingModuleSource"): 1,
