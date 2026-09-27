@@ -2139,12 +2139,11 @@ class TestConfigLeafRowsHoldBothSides:
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).is_equal_to([(".value", 1.0, 2.0)])
 
-    def test_strict_types_refuses_a_pair_a_comparator_called_equal(self):
-        # the type check runs first, so the failure carries an empty scalar diff rather than a row claiming a difference
+    def test_a_comparator_refusing_the_root_names_the_root(self):
         with pytest.raises(AssertionError) as exc_info:
-            assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: True})
-        assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
-        assert_that(exc_info.value.diff.entries).is_empty()
+            assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: False})
+        rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([(".", 1, "1")])
 
     def test_a_strict_type_difference_at_the_root(self):
         with pytest.raises(AssertionError) as exc_info:

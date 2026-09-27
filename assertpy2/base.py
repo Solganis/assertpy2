@@ -12,6 +12,7 @@ from ._engine._compare import (
     _config_note,
     _guarded_equal,
     _node_decision,
+    _resolve_comparator,
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
@@ -78,11 +79,14 @@ class BaseMixin(SatisfiesMixin):
             include (Hashable | list | set | frozenset | None): the key/field (or list/set/frozenset of
                 keys/fields) to include.  Accepts the same ``re.Pattern`` / ``type`` specs as ``ignore``.  A
                 key the value does not have fails the assertion with or without ``not_``.
-            tolerance (float | None): an absolute tolerance applied to every real-number leaf anywhere in
-                the structure, so close floats compare equal (``abs(actual - expected) <= tolerance``).
+            tolerance (float | None): an absolute tolerance that widens ``==`` for every pair of real-number
+                leaves anywhere in the structure: a pair ``==`` holds equal stays equal, and any other is
+                measured as [`is_close_to()`][assertpy2.numeric.NumericMixin.is_close_to] measures it.
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
-                ``(actual, expected) -> bool`` predicate that owns matching leaves; a field-name key wins
-                over a type key.
+                ``(actual, expected) -> bool`` predicate that alone decides every node it matches, the root
+                included, even inside a container whose ``==`` holds; a field-name key wins over a type
+                key.  Mapping keys, set members and whatever a container shared by both sides holds are
+                left to ``==``.
             ignore_null (bool): when ``True``, skip any named field the *expected* side leaves ``None``
                 (a partial expected/template), at any depth.  Only the expected side is skipped, so an
                 unexpectedly ``None`` actual field is still reported.  Defaults to ``False``.
@@ -92,10 +96,10 @@ class BaseMixin(SatisfiesMixin):
                 integer without a word.  Opting in also rejects pairs some callers consider equal
                 (``IntEnum`` against ``int``, a ``dict`` subclass against ``dict``, ``float`` against
                 ``int``), and it wins over ``tolerance``, which says how far apart two numbers may be
-                and not that they may be different types.  A ``comparators`` entry still owns its
-                leaves, and a `Matcher` on the expected side is exempt, so composed matchers keep
-                working.  Dictionary keys and set elements are covered too, although a container
-                matches them by hash before any type is looked at: ``{True: "a"}`` against
+                and not that they may be different types.  A ``comparators`` entry still decides the
+                nodes it matches ahead of it, the root included, and a `Matcher` on the expected side is
+                exempt, so composed matchers keep working.  Dictionary keys and set elements are covered
+                too, although a container matches them by hash before any type is looked at: ``{True: "a"}`` against
                 ``{1: "a"}`` and ``{1}`` against ``{1.0}`` both fail, as ``[True]`` against ``[1]``
                 does.  Defaults to ``False``.
 
@@ -243,6 +247,9 @@ class BaseMixin(SatisfiesMixin):
 
     def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
         """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
+        if config is not None and config.comparators and _resolve_comparator(self.val, config, field=None) is not None:
+            # a comparator owns the root as it owns any node, ahead of strict types and of the key walk
+            return self._config_verdict(other, config)
         if config is not None and config.strict_types and _types_differ(self.val, other):
             # the key walk never sees the pair, so an OrderedDict against a dict would pass a strict comparison
             actual_repr, expected_repr = _disambiguated(self.val, other)
@@ -271,15 +278,7 @@ class BaseMixin(SatisfiesMixin):
             else:
                 self._obj_equal_with_filter(self.val, other, ignore=ignore, include=include, config=config)
         elif config is not None:
-            diff = _build_equality_diff(self.val, other, config=config)
-            if diff.entries:
-                return self.error(
-                    f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not."
-                    f"{_config_note(config)}",
-                    actual=self.val,
-                    expected=other,
-                    diff=diff,
-                )
+            return self._config_verdict(other, config)
         else:
             # the one branch deciding with `==`, asked first since a type may rewrite its own `__eq__` while answering
             self._equality_comparison = identity_candidate(self.val, other)
@@ -296,6 +295,19 @@ class BaseMixin(SatisfiesMixin):
                     expected=other,
                     diff=diff,
                 )
+        return self
+
+    def _config_verdict(self, other: object, config: _CompareConfig) -> Self:
+        """`is_equal_to` under a compare config, decided by the structural walk from the root down."""
+        diff = _build_equality_diff(self.val, other, config=config)
+        if diff.entries:
+            return self.error(
+                f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not."
+                f"{_config_note(config)}",
+                actual=self.val,
+                expected=other,
+                diff=diff,
+            )
         return self
 
     def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):

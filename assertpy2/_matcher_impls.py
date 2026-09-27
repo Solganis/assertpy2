@@ -30,6 +30,7 @@ from ._engine._compare import (
     _is_real_number,
     _keyed_types_differ,
     _non_finite,
+    _resolve_comparator,
     _within_tolerance,
     zero_of,
 )
@@ -516,6 +517,12 @@ class EqualToMatcher(BaseMatcher):
                 return equal_past(value, self.expected, refusal)
         if self.guarded:
             return equals(value, self.expected)
+        return self._configured_match(value)
+
+    def _configured_match(self, value: Any) -> bool:
+        """The comparison under options: a comparator owning the root, strict types, a key filter, then the walk."""
+        if self.config is not None and _resolve_comparator(value, self.config, field=None) is not None:
+            return not values_differ(value, self.expected, self.config, at_root=True)
         if self.strict_types and type(value) is not type(self.expected):
             return False
         if mapping_shaped(value, check_values=False) and mapping_shaped(self.expected, check_values=False):

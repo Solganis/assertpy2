@@ -580,9 +580,11 @@ class SnapshotMixin(_MixinBase):
                 ``re.Pattern`` and ``type`` specs as ``is_equal_to()``.
             include (Hashable | list | set | frozenset | None): the key/field (or collection of
                 keys/fields) to compare, everything else ignored.
-            tolerance (float | None): an absolute tolerance applied to every real-number leaf.
+            tolerance (float | None): an absolute tolerance that widens ``==`` for every pair of real-number
+                leaves, as in ``is_equal_to()``.
             comparators (dict | None): a dict mapping a ``type`` or a field name to an
-                ``(actual, expected) -> bool`` predicate that owns matching leaves.
+                ``(actual, expected) -> bool`` predicate that decides every leaf it matches, as in
+                ``is_equal_to()``.
             placeholders (dict | None): a dict mapping a top-level key of a *dict-like* val to a
                 ``Matcher`` (or callable predicate).  The stored snapshot records a descriptive token
                 (``Any<...>``) for that field instead of the volatile value; each run then asserts the

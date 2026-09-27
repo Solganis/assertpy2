@@ -496,11 +496,18 @@ assert_that(payload).is_equal_to(expected, ignore=float)
 `is_equal_to()` can compare two concrete nested structures with a numeric tolerance or with custom
 comparators, anywhere in the graph:
 
-- `tolerance` - an absolute tolerance applied to every real-number leaf, measured as `is_close_to()`
-  measures it (see [Numbers](#numbers)). A `bool` leaf is compared exactly. A numpy duration
-  tolerance measures only numpy duration leaves, and a numeric one measures no duration leaf.
+- `tolerance` - an absolute tolerance that widens `==` for every pair of real-number leaves: a pair `==`
+  holds equal stays equal, and any other is measured as `is_close_to()` measures it (see
+  [Numbers](#numbers)). A `bool` leaf is compared exactly. A numpy duration tolerance measures only numpy
+  duration leaves, and a numeric one measures no duration leaf.
 - `comparators` - maps a `type` or a field name to an `(actual, expected) -> bool` predicate (a
-  field-name key wins over a type key).
+  field-name key wins over a type key). A node it matches, a value or a whole container whose type you
+  name, is decided by the predicate alone, at any depth and at the root. A container whose `==` holds is
+  still walked, since `==` says nothing of what your predicate says of what it holds, so a comparator
+  stricter than `==` fails a pair inside a list as inside a dict. Three things are left to `==`: mapping
+  keys, set members, which have no positions to pair them by, and whatever a container shared by both
+  sides holds. The predicate may be asked about one pair more than once while a failure is reported, so
+  keep it free of side effects. The walk reaches a few hundred levels deep, where `==` alone goes deeper.
 
 Tolerated or comparator-equal leaves are reported in neither the message nor the diff.
 

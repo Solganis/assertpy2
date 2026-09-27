@@ -1654,11 +1654,16 @@ numbers.Number.register(_FloatsToNan)
 
 
 def test_a_value_that_converts_to_nan_is_close_to_nothing_whatever_its_equality_says():
-    """The assertion converted it to find the NaN, and the matcher and `tolerance=` asked its equality."""
+    """The assertion converted it to find the NaN, and the matcher asked its equality."""
     with pytest.raises(AssertionError):
         assert_that(_FloatsToNan()).is_close_to(1, 0.5)
     assert_that(match.close_to(1, 0.5).matches(_FloatsToNan())).is_false()
-    assert_that(assert_that(_FloatsToNan()).check().is_equal_to(1, tolerance=0.5).passed).is_false()
+
+
+def test_a_tolerance_only_widens_what_equality_already_holds():
+    """`tolerance=` asks `==` first, so a pair `==` accepts stays equal, whatever the measure would say."""
+    assert_that(_FloatsToNan()).is_equal_to(1)
+    assert_that(_FloatsToNan()).is_equal_to(1, tolerance=0.5)
 
 
 @pytest.mark.parametrize(

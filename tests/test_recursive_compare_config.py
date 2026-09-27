@@ -620,12 +620,12 @@ class TestStrictTypes:
         with pytest.raises(AssertionError):
             assert_that(actual).is_equal_to(expected, strict_types=True)
 
-    def test_a_comparator_settling_the_root_leaves_a_scalar_diff_with_no_rows(self):
-        """The pair is decided at the root, so the diff keeps its category and has nothing to show."""
-        with pytest.raises(AssertionFailure) as exc_info:
-            assert_that(1).is_equal_to("1", strict_types=True, comparators={int: lambda actual, expected: True})
-        assert_that(exc_info.value.diff.kind).is_equal_to("scalar")
-        assert_that(exc_info.value.diff.entries).is_empty()
+    def test_a_comparator_decides_the_root_ahead_of_strict_types(self):
+        """As it decides `[1]` against `["1"]`: the root failed with an empty diff, which said the pair was equal."""
+        comparators = {int: lambda actual, expected: True}
+        assert_that(1).is_equal_to("1", strict_types=True, comparators=comparators)
+        assert_that([1]).is_equal_to(["1"], strict_types=True, comparators=comparators)
+        assert_that(match.equal_to("1", strict_types=True, comparators=comparators).matches(1)).is_true()
 
     def test_equal_payload_still_passes(self):
         payload = {"id": 1, "tags": ["a"], "meta": {"ok": True, "n": None}}
@@ -1045,13 +1045,14 @@ class TestDecisionSentinelsReachTheDiff:
             assert_that({"a": {"x": 1}}).is_equal_to({"a": {"x": 2}}, comparators={"a": lambda actual, expected: False})
         assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
 
-    def test_the_same_nan_on_both_sides_is_still_outside_the_tolerance(self):
-        """The mapping walk short-circuits on identity, so a tolerance verdict that does not arrive as
-        a leaf is never asked for again, and the one value unequal to itself passes."""
+    def test_the_same_nan_on_both_sides_is_equal_below_the_root_and_not_at_it(self):
+        """A tolerance only widens `==`, and a container's `==` holds the very NaN it holds on both sides."""
         nan = float("nan")
+        assert_that({"a": nan}).is_equal_to({"a": nan}, tolerance=0.5)
+        assert_that([nan]).is_equal_to([nan], tolerance=0.5)
         with pytest.raises(AssertionFailure) as exc_info:
-            assert_that({"a": nan}).is_equal_to({"a": nan}, tolerance=0.5)
-        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["a"])
+            assert_that(nan).is_equal_to(nan, tolerance=0.5)
+        assert_that([entry.path for entry in exc_info.value.diff.entries]).is_equal_to(["."])
 
 
 class TestBuilderAndMatcherDecideAlike:
@@ -1239,6 +1240,91 @@ class TestAnOptionOnlyRelaxesTheLeaves:
     @pytest.mark.parametrize("options", [*_OPTIONS, pytest.param({"ignore": "unrelated"}, id="ignore")])
     def test_a_field_left_out_of_equality_stays_out(self, options):
         assert_that(_Reading(1.0, taken_at=1)).is_equal_to(_Reading(1.0, taken_at=2), **options)
+
+
+_UTC = datetime.timezone.utc
+_NOON_UTC = datetime.datetime(2026, 1, 1, 12, tzinfo=_UTC)
+_NOON_MSK = _NOON_UTC.astimezone(datetime.timezone(datetime.timedelta(hours=3)))
+_SAME_ZONE = {
+    datetime.datetime: lambda actual, expected: actual == expected and actual.utcoffset() == expected.utcoffset()
+}
+
+
+@dataclass
+class _Holder:
+    value: object
+
+
+_SHAPES = [
+    pytest.param(lambda value: value, id="root"),
+    pytest.param(lambda value: {"k": value}, id="dict"),
+    pytest.param(lambda value: [value], id="list"),
+    pytest.param(lambda value: (value,), id="tuple"),
+    pytest.param(_Holder, id="dataclass"),
+    pytest.param(lambda value: Pair(value, 0), id="namedtuple"),
+    pytest.param(lambda value: [{"k": value}], id="dict-in-list"),
+    pytest.param(lambda value: {"k": [value]}, id="list-in-dict"),
+]
+
+
+class TestEveryShapeAnswersAlike:
+    """A comparator decides every leaf it matches, and a tolerance only widens `==`, whatever holds the pair.
+
+    A dict was walked leaf by leaf while a list, a tuple or a dataclass was asked `==` first and left alone
+    when it held, so a comparator stricter than `==` failed `{"k": x}` and passed `[x]`, and the very NaN
+    both sides hold failed a tolerance in a dict and passed it in a list.
+    """
+
+    @pytest.mark.parametrize("shape", _SHAPES)
+    def test_a_comparator_stricter_than_equality_fails_the_pair_in_every_shape(self, shape):
+        assert _NOON_UTC == _NOON_MSK
+        outcome = assert_that(shape(_NOON_UTC)).check().is_equal_to(shape(_NOON_MSK), comparators=_SAME_ZONE)
+        assert_that(outcome.passed).is_false()
+        assert_that(match.equal_to(shape(_NOON_MSK), comparators=_SAME_ZONE).matches(shape(_NOON_UTC))).is_false()
+
+    @pytest.mark.parametrize("shape", _SHAPES)
+    def test_a_comparator_looser_than_equality_passes_the_pair_in_every_shape(self, shape):
+        loose = {datetime.datetime: lambda actual, expected: actual.date() == expected.date()}
+        later = _NOON_UTC + datetime.timedelta(hours=1)
+        assert_that(shape(_NOON_UTC)).is_equal_to(shape(later), comparators=loose)
+        assert_that(match.equal_to(shape(later), comparators=loose).matches(shape(_NOON_UTC))).is_true()
+
+    @pytest.mark.parametrize("shape", [param for param in _SHAPES if param.id != "root"])
+    def test_the_same_nan_under_a_tolerance_is_equal_in_every_container(self, shape):
+        nan = float("nan")
+        assert_that(shape(nan)).is_equal_to(shape(nan), tolerance=0.5)
+        assert_that(match.equal_to(shape(nan), tolerance=0.5).matches(shape(nan))).is_true()
+
+    def test_a_comparator_owns_a_root_mapping_too(self):
+        comparators = {dict: lambda actual, expected: actual.keys() == expected.keys()}
+        assert_that({"a": 1}).is_equal_to({"a": 2}, comparators=comparators)
+        assert_that(match.equal_to({"a": 2}, comparators=comparators).matches({"a": 1})).is_true()
+
+    def test_the_comparator_is_asked_only_where_a_leaf_matches_it(self):
+        calls = []
+
+        def on_floats(actual, expected):
+            calls.append((actual, expected))
+            return actual == expected
+
+        assert_that([{"a": 1.5, "b": "x"}, [2.5]]).is_equal_to(
+            [{"a": 1.5, "b": "x"}, [2.5]], comparators={float: on_floats}
+        )
+        assert_that(calls).is_equal_to([(1.5, 1.5), (2.5, 2.5)])
+
+    def test_a_container_both_sides_share_is_equal_to_itself(self):
+        """Identity holds a shared container equal without asking a comparator about what it holds, as `==` does."""
+        shared = [1.0]
+        never = {float: lambda actual, expected: False}
+        assert_that({"k": shared}).is_equal_to({"k": shared}, comparators=never)
+        assert_that(assert_that({"k": [1.0]}).check().is_equal_to({"k": [1.0]}, comparators=never).passed).is_false()
+
+    def test_a_set_member_is_not_paired_with_a_comparator(self):
+        """A set has no positions to pair its members by, so `==` decides it whatever a comparator would say."""
+        never = {int: lambda actual, expected: False}
+        always = {int: lambda actual, expected: True}
+        assert_that({"s": {1, 2}}).is_equal_to({"s": {1, 2}}, comparators=never)
+        assert_that(assert_that({1}).check().is_equal_to({2}, comparators=always).passed).is_false()
 
 
 class TestKeySelectorsReachEveryShape:

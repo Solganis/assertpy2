@@ -27,7 +27,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ._introspection import (
-    KeyedValue,
     as_held,
     eq_keyed,
     is_attrs_instance,
@@ -94,10 +93,11 @@ class _CompareConfig:
     """Tolerance and custom comparators for a single ``is_equal_to`` call.
 
     ``tolerance`` is an absolute tolerance applied to real-number leaves; ``comparators`` maps a ``type`` or
-    an immediate field name to a ``(actual, expected) -> bool`` predicate that owns matching leaves;
+    an immediate field name to a ``(actual, expected) -> bool`` predicate that decides every leaf it matches;
     ``ignore_null`` skips a named field whenever the *expected* side leaves it ``None``;
-    ``strict_types`` additionally requires both sides of every node to be the same type, which plain
-    ``==`` does not (``True == 1``, ``Decimal("1") == 1``, and so on all the way down a payload).
+    ``strict_types`` additionally requires both sides of every node a comparator does not decide to be the
+    same type, which plain ``==`` does not (``True == 1``, ``Decimal("1") == 1``, and so on all the way down
+    a payload).
     """
 
     tolerance: float | None = None
@@ -595,13 +595,13 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
 
     With ``config is None`` this is exactly the engine's historical behavior: differing values ``"recurse"``
     (to decompose into a sub-diff), equal values are ``"equal"`` (skipped); ``"leaf"`` never occurs.  With a
-    config, a matching comparator or tolerance owns the node - it is classified ``"equal"`` or ``"leaf"`` and
-    never recursed into.
+    config, a matching comparator decides the node, ahead of ``strict_types``, and a tolerance widens ``==``
+    for a pair of real numbers; either classifies the node ``"equal"`` or ``"leaf"``, never recursed into.
 
-    ``"strict"`` is the fourth: the two sides are equal and the same type, but ``strict_types`` still has
-    to look inside, because a container's ``==`` says nothing about the types of its members.  It differs
-    from ``"recurse"`` only in what an undecomposable value means, which
-    `assertpy2._engine._diff._child_entries()` is the single place to know.
+    ``"strict"`` is the fourth: the two sides are equal, but ``strict_types`` or a comparator still has to
+    look inside, because a container's ``==`` says nothing about the types of its members, nor about what a
+    comparator says of them.  It differs from ``"recurse"`` only in what an undecomposable value means,
+    which `assertpy2._engine._diff._child_entries()` is the single place to know.
     """
     if config is not None:
         if config.ignore_null and field is not None and as_held(expected) is None:
@@ -628,13 +628,31 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if config.duration
             else _is_real_number(as_held(actual)) and _is_real_number(as_held(expected))
         ):
-            try:
-                within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
-            except UnorderableError:
-                return _plain_decision(actual, expected, config, at_root=at_root)
-            # a keyed field's key still holds equal what the tolerance would not: it only ever loosens `==`
-            return "equal" if within or (type(actual) is KeyedValue and actual == expected) else "leaf"
+            return _tolerance_decision(actual, expected, config, at_root=at_root)
+        if (
+            config.comparators
+            and actual is not expected
+            and type(actual) not in _EQ_ATOMIC
+            and _guarded_equal(actual, expected)
+        ):
+            # a container's `==` says nothing of what a comparator says of the leaves inside it, so the walk goes on
+            return "strict"
     return _plain_decision(actual, expected, config, at_root=at_root)
+
+
+def _tolerance_decision(actual, expected, config: _CompareConfig, *, at_root: bool) -> str:
+    """A pair of real numbers under a tolerance, which only widens ``==``: equal if ``==`` says so, else measured.
+
+    Identity counts as ``==`` below the root, as it does inside a container, so the very NaN both sides hold is
+    equal in a dict as in a list, and a root NaN still is not.
+    """
+    if (actual is expected and not at_root) or _guarded_equal(actual, expected):
+        return "equal"
+    try:
+        within = _within_tolerance(as_held(actual), as_held(expected), config.tolerance)
+    except UnorderableError:
+        return _plain_decision(actual, expected, config, at_root=at_root)
+    return "equal" if within else "leaf"
 
 
 def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root: bool = False) -> str:

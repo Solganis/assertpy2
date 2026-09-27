@@ -31,6 +31,7 @@ from ._compare import (
     _keyed_types_differ,
     _kinds_never_equal,
     _node_decision,
+    _resolve_comparator,
     _spec_matches,
     _types_differ,
 )
@@ -321,13 +322,16 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         return False
     if config is None:
         return not _guarded_equal(value, other)
+    if at_root and config.comparators and _resolve_comparator(value, config, field=None) is not None:
+        # a comparator owns the root too, where the walk below starts at the children
+        return _node_decision(value, other, config, at_root=True) == "leaf"
     if _kinds_never_equal(value, other) and not _guarded_equal(value, other):
         return True
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
         # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal
         if config.tolerance is not None or config.comparators:
-            return _node_decision(value, other, config) != "equal"
+            return _node_decision(value, other, config) not in ("equal", "strict")
         return not _guarded_equal(value, other)
     return bool(entries)
 
