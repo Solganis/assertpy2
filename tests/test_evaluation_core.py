@@ -1235,17 +1235,13 @@ class TestTheCoresUnderTheAwkwardCases:
         """One side indexed and the other not is how the lookup started raising again.
 
         Plain decimals index cleanly, a signalling NaN among the wanted items does not, and asking a set
-        about it would hash it after all.
+        about it would hash it after all.  Walked instead, each signalling NaN is answered as absent.
         """
         plain = [decimal.Decimal(index) for index in range(30)]
         signalling = [decimal.Decimal("snan")] * 30
-        for call in (
-            lambda: only_faults(plain, tuple(signalling)),
-            lambda: not_contained_in(signalling, plain),
-            lambda: missing_items(plain, tuple(signalling), _is_matcher),
-        ):
-            with pytest.raises(decimal.InvalidOperation):
-                call()
+        assert_that(only_faults(plain, tuple(signalling))).is_equal_to((plain, signalling))
+        assert_that(not_contained_in(signalling, plain)).is_equal_to(signalling)
+        assert_that(missing_items(plain, tuple(signalling), _is_matcher)).is_equal_to(signalling)
 
     def test_a_raw_one_shot_value_is_materialised_before_it_is_classified(self):
         assert_that(only_faults(iter([1, 2, 3]), (1, 2, 3))).is_equal_to(([], []))

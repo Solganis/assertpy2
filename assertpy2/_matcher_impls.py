@@ -5,7 +5,7 @@ import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from types import UnionType
 from typing import (
@@ -55,7 +55,7 @@ from ._engine._membership import (
     searchable,
     subset_faults,
 )
-from ._engine._ordering import UnorderableError, first_out_of_order, holds
+from ._engine._ordering import UnorderableError, equal_past, first_out_of_order, holds, member
 from ._engine._path import _ROOT, _Path
 from ._engine._require import (
     NON_MATCHER_TYPES,
@@ -493,7 +493,10 @@ class EqualToMatcher(BaseMatcher):
 
     def matches(self, value: Any) -> bool:
         if self.plain:
-            return bool(value == self.expected)  # the hot path stays a plain comparison
+            try:
+                return bool(value == self.expected)  # the hot path stays a plain comparison
+            except (InvalidOperation, OverflowError) as refusal:
+                return equal_past(value, self.expected, refusal)
         if self.strict_types and type(value) is not type(self.expected):
             return False
         if mapping_shaped(value, check_values=False) and mapping_shaped(self.expected, check_values=False):
@@ -925,7 +928,10 @@ class IsInMatcher(BaseMatcher):
         self.values = values
 
     def matches(self, value: Any) -> bool:
-        return value in self.values
+        try:
+            return value in self.values
+        except (InvalidOperation, OverflowError):
+            return member(value, self.values)
 
     def describe(self) -> str:
         return f"a value in <{_safe_repr(self.values)}>"

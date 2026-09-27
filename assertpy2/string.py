@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import collections.abc
+import decimal
 import re
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import equal_past
 from ._engine._require import argument, refuse, require_type, sized_len
 from .errors import _safe_str
 
@@ -208,7 +210,11 @@ class StringMixin(_MixinBase):
                 first = next(iterator)
             except StopIteration:
                 raise ValueError("val must not be empty") from None
-            if first != prefix:
+            try:
+                starts = first == prefix
+            except (decimal.InvalidOperation, OverflowError) as refusal:
+                starts = equal_past(first, prefix, refusal)
+            if not starts:
                 return self.error(
                     f"Expected {_safe_str(self.val)} to start with <{prefix}>, but did not.", expected=prefix
                 )
@@ -260,7 +266,11 @@ class StringMixin(_MixinBase):
             items = list(self.val)
             if not items:
                 raise ValueError("val must not be empty")
-            if items[-1] != suffix:
+            try:
+                ends = items[-1] == suffix
+            except (decimal.InvalidOperation, OverflowError) as refusal:
+                ends = equal_past(items[-1], suffix, refusal)
+            if not ends:
                 return self.error(
                     f"Expected {_safe_str(self.val)} to end with <{suffix}>, but did not.", expected=suffix
                 )

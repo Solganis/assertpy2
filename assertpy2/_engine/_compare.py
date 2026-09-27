@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import UnorderableError, holds
+from ._ordering import UnorderableError, equal_past, holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -149,6 +149,10 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
                 if raised_inside(overflow):
                     raise
                 continue  # a `numpy` scalar converting a bignum, which says nothing about element-wise `==`
+            except decimal.InvalidOperation as signal:
+                if raised_inside(signal):
+                    raise
+                continue  # a signalling NaN, which `_guarded_equal` answers
     return None
 
 
@@ -236,6 +240,7 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
     The one question every equality verdict asks, the negative ones included: a type's ``__ne__`` need
     not be the negation of its ``__eq__``, and asking it made ``is_equal_to`` and ``is_not_equal_to``
     fail the same pair while a list holding that pair, which compares its members with ``==``, passed.
+    A signalling NaN or an overflowing `numpy` float, anywhere in the pair, is answered as `equals` answers it.
     """
     try:
         return bool(actual == expected)
@@ -244,6 +249,8 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
         if operand is None:
             raise
         raise _array_equality_error(method, operand) from error
+    except (decimal.InvalidOperation, OverflowError) as refusal:
+        return equal_past(actual, expected, refusal)
 
 
 def _is_real_number(value) -> bool:

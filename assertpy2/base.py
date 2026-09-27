@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import decimal
 from types import GenericAlias
 from typing import TYPE_CHECKING
 
@@ -197,8 +198,11 @@ class BaseMixin(SatisfiesMixin):
         if not kwargs:
             if type(self.val) in _EQ_ATOMIC and type(other) in _EQ_ATOMIC:
                 # atomic scalars: no array or dict likeness, and `==` yields a real bool
-                if self.val == other:
-                    return self
+                try:
+                    if self.val == other:
+                        return self
+                except decimal.InvalidOperation:
+                    pass  # only a signalling `Decimal` NaN signals between two atomic scalars, and it equals nothing
                 if isinstance(self.val, str) and isinstance(other, str):
                     actual_repr = _truncated(_elided_text_repr(self.val, other))
                     expected_repr = _truncated(_elided_text_repr(other, self.val))

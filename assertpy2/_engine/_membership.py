@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from ._introspection import definition_of, is_mapping_like, materialized
+from ._ordering import equals, member
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -183,6 +184,8 @@ def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError, *, marked
             try:
                 if item in container:
                     continue
+            except (decimal.InvalidOperation, OverflowError):
+                continue  # a signalling NaN or a `numpy` overflow, which `member` answers: not the refusal sought
             except TypeError as refusal:
                 if raised_inside(refusal) or not marked:
                     raise
@@ -219,7 +222,7 @@ def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool],
         if is_matcher(item):
             if not any(verdict(item.matches(element), subject="the matcher") for element in walked):
                 absent.append(item)
-        elif item not in present:
+        elif not member(item, present):
             absent.append(item)
     return absent
 
@@ -239,16 +242,25 @@ def only_faults(value: Any, items: Sequence[Any], *, marked: bool = False) -> tu
     both = _index_both(wanted_items, walked) if indexable else None
     try:
         if both is None:
-            return (
-                [item for item in walked if item not in wanted_items],
-                [item for item in wanted_items if item not in walked],
-            )
+            return _without(walked, wanted_items), _without(wanted_items, walked)
         wanted, present = both
-        extra = [item for item in walked if item not in wanted]
-        missing = [item for item in wanted_items if item not in present]
+        extra = _without(walked, wanted)
+        missing = _without(wanted_items, present)
     except TypeError as refusal:
         _told_apart(((walked, wanted_items), (wanted_items, walked)), refusal, marked=marked)
     return extra, missing
+
+
+def _without(items: Iterable[Any], container: Any) -> list[Any]:
+    """The *items* not in *container*, asked by ``in`` and, once that raised, as `member` asks it.
+
+    A `TypeError` is asked again too, since a signalling NaN refuses to hash for a set: `member` answers that
+    one and hands every other refusal on.
+    """
+    try:
+        return [item for item in items if item not in container]
+    except (decimal.InvalidOperation, OverflowError, TypeError):
+        return [item for item in items if not member(item, container)]
 
 
 def has_duplicates(values: Sequence[Any]) -> bool:
@@ -261,10 +273,13 @@ def has_duplicates(values: Sequence[Any]) -> bool:
             pass
     # `in` rather than a generator of `==`: the interpreter asks it, and it short-circuits on identity
     seen: list[Any] = []
-    for value in values:
-        if value in seen:
-            return True
-        seen.append(value)
+    try:
+        for value in values:
+            if value in seen:
+                return True
+            seen.append(value)
+    except (decimal.InvalidOperation, OverflowError):
+        return any(member(value, values[:index]) for index, value in enumerate(values))
     return False
 
 
@@ -287,8 +302,16 @@ def occurrences(values: Sequence[Any], items: Sequence[Any]) -> list[int]:
         except TypeError:  # a value that refuses to hash despite its type, such as a signalling NaN
             counted = None
     if counted is None:
-        return [values.count(item) for item in items]
+        return [_count(values, item) for item in items]
     return [counted[item] for item in items]
+
+
+def _count(values: Sequence[Any], item: Any) -> int:
+    """``values.count(item)``, each element asked as `equals` asks it once ``count`` raised."""
+    try:
+        return values.count(item)
+    except (decimal.InvalidOperation, OverflowError):
+        return sum(1 for value in values if value is item or equals(value, item))
 
 
 def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
@@ -307,8 +330,8 @@ def repeated_counts(values: Sequence[Any]) -> list[tuple[Any, int]]:
     if counts is None:
         named: list[tuple[Any, int]] = []
         for value in values:
-            total = values.count(value)
-            if total > 1 and not any(earlier is value or earlier == value for earlier, _ in named):
+            total = _count(values, value)
+            if total > 1 and not any(earlier is value or equals(earlier, value) for earlier, _ in named):
                 named.append((value, total))
         return named
     seen: set[Any] = set()
@@ -360,7 +383,7 @@ def _pair_held(key: Any, item: Any, supersets: Sequence[Any]) -> bool:
         if not is_mapping_like(superset) or key not in superset:
             continue
         held = superset[key]
-        if held is item or held == item:
+        if held is item or equals(held, item):
             return True
     return False
 
@@ -370,7 +393,7 @@ def not_contained_in(value: Any, container: Any) -> list[Any]:
     value, container = materialized(value), materialized(container)
     indexed = _index(container, value) if isinstance(container, (list, tuple)) else None
     allowed = container if indexed is None else indexed
-    return [item for item in value if item not in allowed]
+    return _without(value, allowed)
 
 
 def _classified(container: Any, probes: Any) -> bool:

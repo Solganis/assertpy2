@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import decimal
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
@@ -21,6 +22,7 @@ from ._engine._membership import (
     searchable,
 )
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import equals, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from .errors import DiffEntry, DiffResult, _safe_str
@@ -62,15 +64,33 @@ def _counted_difference(val_items, given_items):
     return list((val_counts - given_counts).elements()), list((given_counts - val_counts).elements())
 
 
+def _sequence_break(values, items, *, answered=False) -> int | None:
+    """``None`` where *items* run contiguously in *values*, else how many lined up in the longest run.
+
+    Asked by ``==``, and *answered* by `equals` once a signalling NaN or an overflowing `numpy` float raised.
+    """
+    best_prefix = 0
+    for i in range(len(values) - len(items) + 1):
+        for j in range(len(items)):
+            if equals(values[i + j], items[j]) if answered else values[i + j] == items[j]:
+                continue
+            best_prefix = max(best_prefix, j)
+            break
+        else:
+            return None
+    return best_prefix
+
+
 def _walked_difference(val_items, given_items):
     """``(extra, missing)`` by quadratic multiset subtraction through ``==``."""
     missing = list(given_items)
     extra = []
     for item in val_items:
-        if item in missing:
-            missing.remove(item)
-        else:
+        found = next((index for index, wanted in enumerate(missing) if wanted is item or equals(wanted, item)), None)
+        if found is None:
             extra.append(item)
+        else:
+            del missing[found]
     return extra, missing
 
 
@@ -171,7 +191,7 @@ class ContainsMixin(_MixinBase):
                         diff=diff,
                         expected=items,
                     )
-            elif item not in values:
+            elif not member(item, values):
                 if mapping_shaped(values):
                     diff = DiffResult(
                         kind="contains",
@@ -276,7 +296,7 @@ class ContainsMixin(_MixinBase):
             # a matcher handed here was compared with `in`, which asks the wrong question
             if _is_matcher(item):
                 return any(verdict(item.matches(value), subject="the matcher") for value in values)
-            return item in lookup
+            return member(item, lookup)
 
         if len(items) == 1:
             if present(items[0]):
@@ -380,21 +400,18 @@ class ContainsMixin(_MixinBase):
                     )
                 search_start = found_index + len(text)
             return self
-        best_prefix = 0
         # this walk is by index, which a one-shot iterator does not support at all
         values = materialized(self.val)
         if not isinstance(values, Sequence):
             # the old guard said "not iterable" for both: true for an int, false for a set, which has no order
             require_type(values, Iterable, "iterable")
             refuse(self.val, "a sequence, to contain a sequence")
-        for i in range(len(values) - len(items) + 1):
-            for j in range(len(items)):
-                if values[i + j] == items[j]:
-                    continue
-                best_prefix = max(best_prefix, j)
-                break
-            else:
-                return self
+        try:
+            best_prefix = _sequence_break(values, items)
+        except (decimal.InvalidOperation, OverflowError):
+            best_prefix = _sequence_break(values, items, answered=True)
+        if best_prefix is None:
+            return self
         # the longest run that lined up says where the sequence broke down
         detail = (
             f" The longest run that matched was {self._fmt_items(items[:best_prefix])}."
@@ -540,7 +557,7 @@ class ContainsMixin(_MixinBase):
         except TypeError:
             refuse(self.val, "iterable")
         expected_list = list(items)
-        if val_list == expected_list:
+        if equals(val_list, expected_list):
             return self
         message = f"Expected <{_safe_str(self.val)}> to contain exactly {self._fmt_items(items)}, but did not."
         entries = _multiset_diff_entries(val_list, expected_list)
@@ -637,7 +654,7 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "iterable")
         item_index = 0
         for element in val_list:
-            if item_index < len(items) and element == items[item_index]:
+            if item_index < len(items) and equals(element, items[item_index]):
                 item_index += 1
         if item_index != len(items):
             # item_index counts how many lined up before the run stopped, so the next one is the culprit
@@ -721,11 +738,9 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        else:
-            for item in items:
-                # identity first, as `in` asks: the very NaN a tuple holds is in it, and `==` alone said no
-                if self.val is item or self.val == item:
-                    return self
+        # identity first, as `in` asks: the very NaN a tuple holds is in it, and `==` alone said no
+        if member(self.val, items):
+            return self
         return self.error(
             f"Expected <{_safe_str(self.val)}> to be in {self._fmt_items(items)}, but was not.", expected=items
         )
@@ -750,10 +765,6 @@ class ContainsMixin(_MixinBase):
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
-        else:
-            for item in items:
-                if self.val is item or self.val == item:
-                    return self.error(
-                        f"Expected <{_safe_str(self.val)}> to not be in {self._fmt_items(items)}, but was."
-                    )
+        if member(self.val, items):
+            return self.error(f"Expected <{_safe_str(self.val)}> to not be in {self._fmt_items(items)}, but was.")
         return self

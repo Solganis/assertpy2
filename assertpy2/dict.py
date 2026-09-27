@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import equals, member
 from ._engine._require import argument, refuse
 from .errors import _safe_str
 
@@ -88,7 +89,7 @@ class DictMixin(_MixinBase):
         self._require_dict_like(self.val, check_getitem=False)
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
-        missing = [value for value in values if value not in self.val.values()]
+        missing = [value for value in values if not member(value, self.val.values())]
         if missing:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to contain values {self._fmt_items(values)},"
@@ -121,7 +122,7 @@ class DictMixin(_MixinBase):
         if len(values) == 0:
             raise ValueError("one or more value args must be given")
         else:
-            found = [value for value in values if value in self.val.values()]
+            found = [value for value in values if member(value, self.val.values())]
             if found:
                 return self.error(
                     f"Expected <{_safe_str(self.val)}> to not contain values {self._fmt_items(values)},"
@@ -174,7 +175,7 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key in self.val and self.val[entry_key] == pair[entry_key]:
+            if entry_key in self.val and equals(self.val[entry_key], pair[entry_key]):
                 continue
             missing.append(pair)
         if missing:
@@ -223,7 +224,7 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key in self.val and self.val[entry_key] == pair[entry_key]:
+            if entry_key in self.val and equals(self.val[entry_key], pair[entry_key]):
                 found.append(pair)
         if found:
             return self.error(

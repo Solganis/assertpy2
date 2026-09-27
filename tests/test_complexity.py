@@ -62,8 +62,10 @@ RECORDED: dict[str, int] = {
     "assertpy2/contains.py::contains": 11,
     "assertpy2/helpers.py::_dict_repr": 11,
     "assertpy2/json_mixin.py::_openapi_resolve": 11,
-    "assertpy2/string.py::ends_with": 11,
-    "assertpy2/string.py::starts_with": 11,
+    # 12: a signalling NaN is answered in place. Through `equals` it cost a list's prefix check 7%
+    "assertpy2/string.py::ends_with": 12,
+    # 12: as `ends_with`, for the same measured 7%
+    "assertpy2/string.py::starts_with": 12,
 }
 """Every function over mccabe's default, keyed by file and name, measured 2026-08-29."""
 

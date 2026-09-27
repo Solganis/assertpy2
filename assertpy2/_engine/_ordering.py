@@ -14,6 +14,8 @@ answers "no match", because it feeds `==` and the combinators where raising woul
 
 from __future__ import annotations
 
+import collections
+import collections.abc
 import decimal
 import fractions
 import inspect
@@ -87,6 +89,135 @@ def _equal(actual: Any, expected: Any) -> bool:
     if nan_operand(actual) or nan_operand(expected):
         return False
     return bool(actual == expected)
+
+
+def equals(actual: Any, expected: Any) -> bool:
+    """``actual == expected`` as a verdict, where Python's own ``==`` would raise instead of answering.
+
+    A signalling `Decimal` NaN signals at ``==`` and a `numpy` float overflows converting a Python int past its
+    range, in a list or a mapping as much as on its own.  Asked as written first, so every other pair keeps
+    the answer and the cost it always had.
+    """
+    try:
+        return bool(actual == expected)
+    except (decimal.InvalidOperation, OverflowError) as refusal:
+        return equal_past(actual, expected, refusal)
+
+
+def member(item: Any, container: Any) -> bool:
+    """``item in container`` as a verdict, each element asked as `equals` asks it once ``in`` raised.
+
+    A set or a mapping cannot hold a signalling NaN, which refuses to hash, alone or inside a tuple, so it holds
+    none: answered where the lookup ends in a built-in set's or dict's own (`_searches_by_hash`), which refuses
+    nothing but an unhashable key, and the item would hash but for the NaNs in it.  Any other error raised inside
+    the container's or an element's own code is handed on.  An iterator is searched on from where the raising
+    ``in`` stopped, which is enough: every element before it compared unequal, or ``in`` would have answered, and
+    the one that raised met a NaN or an int no float can equal.
+    """
+    try:
+        return item in container
+    except (decimal.InvalidOperation, OverflowError) as refusal:
+        if raised_inside(refusal):
+            raise
+        return any(element is item or equals(element, item) for element in container)
+    except TypeError:
+        # a dict's items view hashes the key of a pair alone, and asks about the value only once the key is there
+        pair = type(container) is type({}.items()) and isinstance(item, tuple) and len(item) == 2
+        if not (_searches_by_hash(container) and _unhashable_for_a_nan_alone(item[0] if pair else item)):
+            raise
+        return False
+
+
+def _unhashable_for_a_nan_alone(item: Any) -> bool:
+    """Whether *item* is a `Decimal` NaN, or a tuple holding one that would hash if its NaNs did."""
+    if nan_operand(item):
+        return True
+    if not isinstance(item, tuple):
+        return False
+    held = False
+    for element in item:
+        if _unhashable_for_a_nan_alone(element):
+            held = True
+            continue
+        try:
+            hash(element)
+        except TypeError:
+            return False
+    return held
+
+
+def _searches_by_hash(container: Any) -> bool:
+    """Whether ``in`` over *container* ends in a built-in set's or dict's own lookup, all the way down.
+
+    A built-in set or dict, or a view of one, directly.  A `UserDict` whose `data` is a built-in dict, and the
+    keys view over such a mapping, by following the path, read without running a descriptor of anybody's.
+    """
+    searched = inspect.getattr_static(type(container), "__contains__", None)
+    built_in = (set, frozenset, dict, type({}.keys()), type({}.items()))
+    if any(searched is inspect.getattr_static(kind, "__contains__") for kind in built_in):
+        return True
+    if searched is collections.UserDict.__contains__:
+        return type(inspect.getattr_static(container, "data", None)) is dict
+    if searched is collections.abc.KeysView.__contains__:
+        # the slot `MappingView` declares, read by its own descriptor, and only where no subclass has shadowed it
+        slot = inspect.getattr_static(collections.abc.MappingView, "_mapping")
+        return inspect.getattr_static(type(container), "_mapping") is slot and _searches_by_hash(
+            slot.__get__(container)
+        )
+    return False
+
+
+def equal_past(actual: Any, expected: Any, refusal: Exception) -> bool:
+    """Whether a pair whose own ``==`` raised *refusal* is equal, or *refusal* again where nothing can answer.
+
+    A NaN equals nothing, which answers a signal wherever one of the pair is a NaN, as the operands decide it for
+    ordering.  Two lists, two tuples or two mappings compared by the built-in ``==`` are equal element by
+    element, each asked as `equals` asks it.  Two numbers whose operator overflowed are equal where they order
+    equal by their exact values.  Either error raised inside a comparison of the value's own is handed on first,
+    whatever else the pair holds.
+    """
+    if raised_inside(refusal):
+        raise refusal
+    if isinstance(refusal, decimal.InvalidOperation) and (nan_operand(actual) or nan_operand(expected)):
+        return False
+    walked = _equal_by_element(actual, expected)
+    if walked is not None:
+        return walked
+    if isinstance(refusal, OverflowError):
+        return _order_past(actual, expected, refusal) == 0
+    # a scalar against a container broadcast by `numpy`: the NaN that signalled equals nothing it met
+    if _holds_nan(actual) or _holds_nan(expected):
+        return False
+    raise refusal  # pragma: no cover - `==` written in C signals only with a NaN in the pair, answered above
+
+
+def _holds_nan(value: Any, seen: frozenset[int] = frozenset()) -> bool:
+    """Whether *value* is a `Decimal` NaN or a list, tuple or dict holding one at any depth."""
+    if id(value) in seen:
+        return False
+    within = seen | {id(value)}
+    if isinstance(value, dict):
+        return any(_holds_nan(held, within) for held in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_holds_nan(held, within) for held in value)
+    return nan_operand(value)
+
+
+def _equal_by_element(actual: Any, expected: Any) -> bool | None:
+    """Built-in ``==`` over two lists, two tuples or two mappings, asked of each element, else ``None``."""
+    for kind in (list, tuple):
+        if isinstance(actual, kind) and isinstance(expected, kind):
+            if type(actual).__eq__ is not kind.__eq__ or type(expected).__eq__ is not kind.__eq__:
+                return None
+            pairs = zip(actual, expected, strict=False)
+            return len(actual) == len(expected) and all(left is right or equals(left, right) for left, right in pairs)
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        if type(actual).__eq__ is not dict.__eq__ or type(expected).__eq__ is not dict.__eq__:
+            return None
+        if actual.keys() != expected.keys():
+            return False
+        return all(actual[key] is expected[key] or equals(actual[key], expected[key]) for key in actual)
+    return None
 
 
 def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:

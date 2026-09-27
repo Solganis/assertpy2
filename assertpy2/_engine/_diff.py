@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import collections
 import dataclasses
+import decimal
 import difflib
 from typing import TYPE_CHECKING, TypeVar
 
@@ -126,7 +127,7 @@ def _alignment_opcodes(actual, expected):
     """
     try:
         opcodes = difflib.SequenceMatcher(None, actual, expected, autojunk=False).get_opcodes()
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, decimal.InvalidOperation, OverflowError):  # `difflib` asks `==` itself
         pass
     else:
         return _rechecked_equal_runs(opcodes, actual, expected)
