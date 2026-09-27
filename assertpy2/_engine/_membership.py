@@ -187,10 +187,23 @@ def _told_apart(pairs: Sequence[tuple[Any, Any]], original: TypeError, *, marked
             except (decimal.InvalidOperation, OverflowError):
                 continue  # a signalling NaN or a `numpy` overflow, which `member` answers: not the refusal sought
             except TypeError as refusal:
-                if raised_inside(refusal) or not marked:
+                if raised_inside(refusal):
+                    raise
+                if _answered(item, container):
+                    continue
+                if not marked:
                     raise
                 raise MembershipRefusedError(str(refusal)) from refusal
     raise original
+
+
+def _answered(item: Any, container: Any) -> bool:
+    """Whether `member` answers what ``in`` refused, as it does a `Decimal` against a `numpy` integer."""
+    try:
+        member(item, container)
+    except TypeError:
+        return False
+    return True
 
 
 def missing_items(
@@ -278,7 +291,7 @@ def has_duplicates(values: Sequence[Any]) -> bool:
             if value in seen:
                 return True
             seen.append(value)
-    except (decimal.InvalidOperation, OverflowError):
+    except (decimal.InvalidOperation, OverflowError, TypeError):
         return any(member(value, values[:index]) for index, value in enumerate(values))
     return False
 
@@ -310,7 +323,9 @@ def _count(values: Sequence[Any], item: Any) -> int:
     """``values.count(item)``, each element asked as `equals` asks it once ``count`` raised."""
     try:
         return values.count(item)
-    except (decimal.InvalidOperation, OverflowError):
+    except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
+        if raised_inside(refusal):
+            raise
         return sum(1 for value in values if value is item or equals(value, item))
 
 

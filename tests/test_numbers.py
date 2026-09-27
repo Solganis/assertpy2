@@ -1267,6 +1267,69 @@ def test_a_pair_a_decimal_will_not_order_fails_as_an_assertion_rather_than_refus
         assert_that(decimal.Decimal("1.5")).is_close_to(numpy.int64(5), 0)
 
 
+_ORDER_SPELLINGS = {
+    "is_less_than": lambda value, other: assert_that(value).check().is_less_than(other).passed,
+    "is_less_than_or_equal_to": lambda value, other: assert_that(value).check().is_less_than_or_equal_to(other).passed,
+    "is_greater_than": lambda value, other: assert_that(value).check().is_greater_than(other).passed,
+    "is_greater_than_or_equal_to": lambda value, other: (
+        assert_that(value).check().is_greater_than_or_equal_to(other).passed
+    ),
+    "is_between-low": lambda value, other: assert_that(value).check().is_between(other, 100).passed,
+    "is_between-high": lambda value, other: assert_that(value).check().is_between(-100, other).passed,
+    "is_not_between": lambda value, other: assert_that(value).check().is_not_between(other, 100).passed,
+    "is_sorted": lambda value, other: assert_that([value, other]).check().is_sorted().passed,
+    "match.less_than": lambda value, other: match.less_than(other).matches(value),
+    "match.greater_than_or_equal_to": lambda value, other: match.greater_than_or_equal_to(other).matches(value),
+    "match.between": lambda value, other: match.between(other, 100).matches(value),
+    "match.is_sorted": lambda value, other: match.is_sorted().matches([value, other]),
+}
+
+
+@pytest.mark.parametrize("spelling", list(_ORDER_SPELLINGS))
+@pytest.mark.parametrize("text", ["1.5", "5", "7"])
+@pytest.mark.parametrize("decimal_first", [True, False], ids=["decimal-first", "int64-first"])
+def test_a_decimal_against_a_numpy_integer_orders_as_against_the_int_it_holds(spelling, text, decimal_first):
+    """The `Decimal` reads the integer's numerator, a `numpy` one, and refused a pair with an exact order."""
+    numpy = pytest.importorskip("numpy")
+    pair, stand_in = [decimal.Decimal(text), numpy.int64(5)], [decimal.Decimal(text), 5]
+    if not decimal_first:
+        pair.reverse()
+        stand_in.reverse()
+    assert_that(_ORDER_SPELLINGS[spelling](*pair)).is_equal_to(_ORDER_SPELLINGS[spelling](*stand_in))
+
+
+_EXACT_SPELLINGS = {
+    **{name: _ORDER_SPELLINGS[name] for name in ("is_less_than", "is_greater_than_or_equal_to", "is_sorted")},
+    "is_equal_to": lambda value, other: assert_that(value).check().is_equal_to(other).passed,
+    "is_not_equal_to": lambda value, other: assert_that(value).check().is_not_equal_to(other).passed,
+    "contains": lambda value, other: assert_that([value]).check().contains(other).passed,
+    "set-contains": lambda value, other: assert_that({value}).check().contains(other).passed,
+    "match.equal_to": lambda value, other: match.equal_to(other).matches(value),
+}
+
+
+@pytest.mark.parametrize(
+    "text", ["1.5", "5", "-7", "0", "-128", "255", "18446744073709551615", "Infinity", "-Infinity", "NaN", "sNaN"]
+)
+@pytest.mark.parametrize(
+    ("width", "held"),
+    [("int8", -128), ("uint8", 255), ("int16", 0), ("int64", -(2**63)), ("int64", 5), ("uint64", 2**64 - 1)],
+)
+@pytest.mark.parametrize("decimal_first", [True, False], ids=["decimal-first", "integer-first"])
+def test_a_decimal_against_every_numpy_integer_width_answers_as_against_the_int_it_holds(
+    text, width, held, decimal_first
+):
+    """A `Decimal("sNaN")` refuses to go into a set on either side, so that one spelling is not asked of it."""
+    numpy = pytest.importorskip("numpy")
+    pair, stand_in = [decimal.Decimal(text), getattr(numpy, width)(held)], [decimal.Decimal(text), held]
+    if not decimal_first:
+        pair.reverse()
+        stand_in.reverse()
+    asked = [name for name in _EXACT_SPELLINGS if not (name == "set-contains" and text == "sNaN" and decimal_first)]
+    answers = {name: _EXACT_SPELLINGS[name](*pair) for name in asked}
+    assert_that(answers).is_equal_to({name: _EXACT_SPELLINGS[name](*stand_in) for name in asked})
+
+
 class _EqualityThatRaises:
     """Registered as a real and converting to a float, with an `__eq__` of its own that raises."""
 

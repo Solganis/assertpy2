@@ -246,9 +246,11 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
         return bool(actual == expected)
     except (ValueError, TypeError) as error:
         operand = _find_ambiguous_operand(actual, expected)
-        if operand is None:
+        if operand is not None:
+            raise _array_equality_error(method, operand) from error
+        if isinstance(error, ValueError):
             raise
-        raise _array_equality_error(method, operand) from error
+        return equal_past(actual, expected, error)
     except (decimal.InvalidOperation, OverflowError) as refusal:
         return equal_past(actual, expected, refusal)
 

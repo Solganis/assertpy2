@@ -11,10 +11,12 @@ from __future__ import annotations
 import collections
 import collections.abc
 import decimal
+import numbers
 
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._engine._membership import occurrences
 from assertpy2._engine._ordering import _holds_nan, member
 
 _ASKED = {
@@ -347,6 +349,136 @@ def test_a_bignum_against_a_numpy_float_answers_as_against_the_float_it_holds(as
     numpy = pytest.importorskip("numpy")
     with numpy.errstate(all="ignore"):
         assert_that(_ASKED[asked](bignum, numpy.float32(1))).is_equal_to(_ASKED[asked](bignum, 1.0))
+
+
+def _decimal_and_int64(text: str, *, decimal_first: bool) -> tuple[list[object], list[object]]:
+    """The pair of a `Decimal` and a `numpy.int64(5)`, and the same pair with a Python ``5`` standing in."""
+    numpy = pytest.importorskip("numpy")
+    pair, stand_in = [decimal.Decimal(text), numpy.int64(5)], [decimal.Decimal(text), 5]
+    if not decimal_first:
+        pair.reverse()
+        stand_in.reverse()
+    return pair, stand_in
+
+
+@pytest.mark.parametrize("asked", list(_ASKED))
+@pytest.mark.parametrize("text", ["5", "1.5"], ids=["equal", "apart"])
+@pytest.mark.parametrize("decimal_first", [True, False], ids=["decimal-first", "int64-first"])
+def test_a_decimal_against_a_numpy_integer_answers_as_against_the_int_it_holds(asked, text, decimal_first):
+    """The `Decimal` reads the integer's numerator, a `numpy` one, and raises `TypeError` rather than answering."""
+    pair, stand_in = _decimal_and_int64(text, decimal_first=decimal_first)
+    assert_that(_ASKED[asked](*pair)).is_equal_to(_ASKED[asked](*stand_in))
+
+
+_HOLDERS_ASKED = {
+    "set-contains": lambda held, item: assert_that({held}).check().contains(item).passed,
+    "set-does_not_contain": lambda held, item: assert_that({held}).check().does_not_contain(item).passed,
+    "set-contains_only": lambda held, item: assert_that({held}).check().contains_only(item).passed,
+    "set-is_subset_of": lambda held, item: assert_that([item]).check().is_subset_of({held}).passed,
+    "contains_key": lambda held, item: assert_that({held: 1}).check().contains_key(item).passed,
+    "keys-contains": lambda held, item: assert_that({held: 1}.keys()).check().contains(item).passed,
+    "items-contains": lambda held, item: assert_that({held: 1}.items()).check().contains((item, 1)).passed,
+    "deque-contains": lambda held, item: assert_that(collections.deque([held])).check().contains(item).passed,
+    "match.contains-set": lambda held, item: match.contains(item).matches({held}),
+}
+
+
+@pytest.mark.parametrize("asked", list(_HOLDERS_ASKED))
+@pytest.mark.parametrize("text", ["5", "1.5"], ids=["equal", "apart"])
+@pytest.mark.parametrize("decimal_held", [True, False], ids=["decimal-held", "int64-held"])
+def test_a_set_or_a_deque_searched_for_a_decimal_against_a_numpy_integer_answers(asked, text, decimal_held):
+    """Equal hashes lead a set to compare the pair, and a deque compares every element, where the `Decimal` raises."""
+    (held, item), (held_stand_in, item_stand_in) = _decimal_and_int64(text, decimal_first=decimal_held)
+    expected = _HOLDERS_ASKED[asked](held_stand_in, item_stand_in)
+    assert_that(_HOLDERS_ASKED[asked](held, item)).is_equal_to(expected)
+
+
+def test_the_refusal_named_after_a_pair_a_decimal_refuses_is_the_item_refused():
+    """Asked again one item at a time, the `Decimal` refused ahead of the list, which is what the set refuses."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(TypeError, match="unhashable type: 'list'"):
+        assert_that({decimal.Decimal(5)}).contains(numpy.int64(5), [1])
+    assert_that(match.contains(numpy.int64(5), [1]).matches({decimal.Decimal(5)})).is_false()
+
+
+class _EqualityBrokenInside:
+    """An `__eq__` of its own that raises `TypeError`, met through a hash equal to the probe's."""
+
+    def __eq__(self, other: object) -> bool:
+        raise TypeError("my own __eq__")
+
+    def __hash__(self) -> int:
+        return 7
+
+
+class _CountedHash:
+    """Hashes as `_EqualityBrokenInside` does, counting how often it is asked."""
+
+    def __init__(self) -> None:
+        self.asked = 0
+
+    def __hash__(self) -> int:
+        self.asked += 1
+        return 7
+
+
+class _CountOfItsOwn(collections.UserList):
+    """A sequence whose own `count` raises `TypeError`."""
+
+    def count(self, item: object) -> int:
+        raise TypeError("my own count")
+
+
+def test_an_error_raised_inside_a_sequences_own_count_is_handed_on():
+    """Counted element by element only where `count` itself refused a pair, as `member` searches."""
+    with pytest.raises(TypeError, match="my own count"):
+        occurrences(_CountOfItsOwn([[1]]), [[1]])
+
+
+def test_an_error_raised_inside_a_hashed_lookup_is_handed_on_before_the_key_is_hashed_again():
+    probe = _CountedHash()
+    with pytest.raises(TypeError, match="my own __eq__"):
+        member(probe, {_EqualityBrokenInside()})
+    assert_that(probe.asked).is_equal_to(1)
+
+
+class _RationalOfItsOwn:
+    """Registered as a rational, with a numerator a `Decimal` refuses and no exact value to answer by."""
+
+    numerator = 1.5
+    denominator = 1
+
+
+class _IntegralOfItsOwn:
+    """Registered as an integral, with a numerator a `Decimal` refuses and a conversion of its own to 5."""
+
+    numerator = 1.5
+    denominator = 1
+
+    def __index__(self) -> int:
+        return 5
+
+    __int__ = __index__
+
+
+numbers.Rational.register(_RationalOfItsOwn)
+numbers.Integral.register(_IntegralOfItsOwn)
+
+
+@pytest.mark.parametrize("refused", [_RationalOfItsOwn, _IntegralOfItsOwn])
+@pytest.mark.parametrize(
+    "asked", ["is_equal_to", "is_equal_to-list", "contains", "is_in", "match.equal_to", "starts_with"]
+)
+def test_a_refusal_with_no_exact_value_to_answer_by_is_handed_on(asked, refused):
+    """Only `int`'s own or a `numpy` integer's conversion is read: the value's own could answer anything."""
+    with pytest.raises(TypeError, match="argument must be an integer"):
+        _ASKED[asked](decimal.Decimal(5), refused())
+
+
+@pytest.mark.parametrize("refused", [_RationalOfItsOwn, _IntegralOfItsOwn])
+def test_a_pair_with_no_exact_value_to_order_by_is_left_unordered(refused):
+    with pytest.raises(TypeError, match="must be comparable"):
+        assert_that(decimal.Decimal(5)).is_less_than(refused())
 
 
 class _SignallingOfItsOwn:

@@ -495,7 +495,7 @@ class EqualToMatcher(BaseMatcher):
         if self.plain:
             try:
                 return bool(value == self.expected)  # the hot path stays a plain comparison
-            except (InvalidOperation, OverflowError) as refusal:
+            except (InvalidOperation, OverflowError, TypeError) as refusal:
                 return equal_past(value, self.expected, refusal)
         if self.strict_types and type(value) is not type(self.expected):
             return False
@@ -930,7 +930,7 @@ class IsInMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         try:
             return value in self.values
-        except (InvalidOperation, OverflowError):
+        except (InvalidOperation, OverflowError, TypeError):
             return member(value, self.values)
 
     def describe(self) -> str:

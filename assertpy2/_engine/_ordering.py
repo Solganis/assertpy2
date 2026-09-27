@@ -35,6 +35,7 @@ _UNORDERED = frozenset({complex})
 # types whose ordering needs no rule at all: identical on both sides, total, and not kind-bound
 _PLAIN = frozenset({int, float, str, bytes})
 _DIRECT = {"lt": operator.lt, "le": operator.le, "gt": operator.gt, "ge": operator.ge}
+_SEARCHED_BY_EQUALITY = frozenset({list, tuple, collections.deque, type({}.values())})
 
 
 class UnorderableError(Exception):
@@ -62,14 +63,17 @@ def nan_operand(value: Any) -> bool:
     `__ne__` could call itself unordered against everything.  A `numpy` float other than `float64` is no
     `float`, and is read through its own type's `as_integer_ratio` as the exact order reads it: missed, it
     let a `Decimal`'s signal out and passed `is_sorted` over a list a `float` NaN fails.  Subclasses
-    included, and only off a class built by `type` itself, since a metaclass of anybody's answers reads.
+    included, and only off a class built by `type` itself, since a metaclass of anybody's answers reads.  An
+    integer, built in or registered, is never one, and is not read at all.
     """
     if isinstance(value, float):
         return bool(float.__ne__(value, value))
     if isinstance(value, decimal.Decimal):
         return decimal.Decimal.is_nan(value)
     kind = type(value)
-    return kind is not int and type(kind) is type and _exact_real(value) == "nan"
+    if kind is int or type(kind) is not type or issubclass(kind, numbers.Integral):
+        return False
+    return _exact_real(value) == "nan"
 
 
 def _kind_of(value: Any) -> type | None:
@@ -88,19 +92,19 @@ def _equal(actual: Any, expected: Any) -> bool:
     """``==``, with a NaN on either side answering ``False`` rather than signalling."""
     if nan_operand(actual) or nan_operand(expected):
         return False
-    return bool(actual == expected)
+    return equals(actual, expected)
 
 
 def equals(actual: Any, expected: Any) -> bool:
     """``actual == expected`` as a verdict, where Python's own ``==`` would raise instead of answering.
 
-    A signalling `Decimal` NaN signals at ``==`` and a `numpy` float overflows converting a Python int past its
-    range, in a list or a mapping as much as on its own.  Asked as written first, so every other pair keeps
-    the answer and the cost it always had.
+    A signalling `Decimal` NaN signals at ``==``, a `numpy` float overflows converting a Python int past its
+    range and a `Decimal` refuses a `numpy` integer, in a list or a mapping as much as on its own.  Asked as
+    written first, so every other pair keeps the answer and the cost it always had.
     """
     try:
         return bool(actual == expected)
-    except (decimal.InvalidOperation, OverflowError) as refusal:
+    except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
         return equal_past(actual, expected, refusal)
 
 
@@ -109,10 +113,12 @@ def member(item: Any, container: Any) -> bool:
 
     A set or a mapping cannot hold a signalling NaN, which refuses to hash, alone or inside a tuple, so it holds
     none: answered where the lookup ends in a built-in set's or dict's own (`_searches_by_hash`), which refuses
-    nothing but an unhashable key, and the item would hash but for the NaNs in it.  Any other error raised inside
-    the container's or an element's own code is handed on.  An iterator is searched on from where the raising
-    ``in`` stopped, which is enough: every element before it compared unequal, or ``in`` would have answered, and
-    the one that raised met a NaN or an int no float can equal.
+    nothing but an unhashable key, and the item would hash but for the NaNs in it.  A built-in list, tuple, deque
+    or dict's values, or a set or mapping the item hashes for, whose comparison refused a pair, is searched
+    element by element too.  Any other error raised inside the container's or an element's own code is handed
+    on.  An iterator is searched on from where the raising ``in`` stopped, which is enough: every element before
+    it compared unequal, or ``in`` would have answered, and the one that raised met a NaN or an int no float can
+    equal.
     """
     try:
         return item in container
@@ -120,12 +126,25 @@ def member(item: Any, container: Any) -> bool:
         if raised_inside(refusal):
             raise
         return any(element is item or equals(element, item) for element in container)
-    except TypeError:
+    except TypeError as refusal:
         # a dict's items view hashes the key of a pair alone, and asks about the value only once the key is there
         pair = type(container) is type({}.items()) and isinstance(item, tuple) and len(item) == 2
-        if not (_searches_by_hash(container) and _unhashable_for_a_nan_alone(item[0] if pair else item)):
+        key = item[0] if pair else item
+        hashed = _searches_by_hash(container)
+        if hashed and _unhashable_for_a_nan_alone(key):
+            return False
+        if raised_inside(refusal) or not (type(container) in _SEARCHED_BY_EQUALITY or (hashed and _hashes(key))):
             raise
+        return any(element is item or equals(element, item) for element in container)
+
+
+def _hashes(key: Any) -> bool:
+    """Whether *key* hashes, so a lookup that refused it refused a comparison rather than the key."""
+    try:
+        hash(key)
+    except TypeError:
         return False
+    return True
 
 
 def _unhashable_for_a_nan_alone(item: Any) -> bool:
@@ -172,9 +191,9 @@ def equal_past(actual: Any, expected: Any, refusal: Exception) -> bool:
 
     A NaN equals nothing, which answers a signal wherever one of the pair is a NaN, as the operands decide it for
     ordering.  Two lists, two tuples or two mappings compared by the built-in ``==`` are equal element by
-    element, each asked as `equals` asks it.  Two numbers whose operator overflowed are equal where they order
-    equal by their exact values.  Either error raised inside a comparison of the value's own is handed on first,
-    whatever else the pair holds.
+    element, each asked as `equals` asks it.  Two numbers whose operator overflowed or refused the other are equal
+    where their exact values are.  An error raised inside a comparison of the value's own is handed on first,
+    whatever else the pair holds, and so is a refusal nothing here answers.
     """
     if raised_inside(refusal):
         raise refusal
@@ -183,12 +202,13 @@ def equal_past(actual: Any, expected: Any, refusal: Exception) -> bool:
     walked = _equal_by_element(actual, expected)
     if walked is not None:
         return walked
-    if isinstance(refusal, OverflowError):
-        return _order_past(actual, expected, refusal) == 0
+    left, right = _exact_real(actual), _exact_real(expected)
+    if not isinstance(refusal, decimal.InvalidOperation) and left is not None and right is not None:
+        return not isinstance(left, str) and left == right
     # a scalar against a container broadcast by `numpy`: the NaN that signalled equals nothing it met
-    if _holds_nan(actual) or _holds_nan(expected):
+    if isinstance(refusal, decimal.InvalidOperation) and (_holds_nan(actual) or _holds_nan(expected)):
         return False
-    raise refusal  # pragma: no cover - `==` written in C signals only with a NaN in the pair, answered above
+    raise refusal
 
 
 def _holds_nan(value: Any, seen: frozenset[int] = frozenset()) -> bool:
@@ -223,18 +243,18 @@ def _equal_by_element(actual: Any, expected: Any) -> bool | None:
 def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     """How a pair orders once its own operator raised *refusal*: ``-1``, ``0`` or ``1``, ``None`` for a NaN.
 
-    A `TypeError` is the operator refusing the pair, which has no order.  An `OverflowError` is a `numpy` float
-    converting a Python int past its range, and the pair orders by the exact values both stand for, an
-    infinity above every finite value and a NaN against nothing.  Raised inside a comparison of the value's
-    own, either is a bug in the value and is handed on, and so is an overflow from a value with no exact
-    value to order by.
+    An `OverflowError` is a `numpy` float converting a Python int past its range, and a `TypeError` the operator
+    refusing the pair, as a `Decimal` refuses a `numpy` integer.  Where both stand for exact values the pair
+    orders by them, an infinity above every finite value and a NaN against nothing.  A `TypeError` between any
+    other two leaves the pair with no order.  Raised inside a comparison of the value's own, either is a bug in
+    the value and is handed on, and so is an overflow from a value with no exact value to order by.
     """
     if raised_inside(refusal):
         raise refusal
-    if isinstance(refusal, TypeError):
-        raise UnorderableError("pair") from None
     left, right = _exact_real(actual), _exact_real(expected)
     if left is None or right is None:
+        if isinstance(refusal, TypeError):
+            raise UnorderableError("pair") from None
         raise refusal
     if isinstance(left, str) or isinstance(right, str):
         return None
@@ -244,15 +264,20 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
 def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
     """*value* as ``(rank, exact)`` for ordering past an overflow, ``"nan"``, or ``None`` with no exact value.
 
-    The rank puts an infinity above or below every finite value, whose exact value is compared otherwise.  Read
-    through `as_integer_ratio`, which never rounds and refuses an infinity and a NaN by the error it raises,
-    rather than through a conversion to ``float``.  Only as `float`, `Decimal` or a `numpy` float wrote it in C,
+    The rank puts an infinity above or below every finite value, whose exact value is compared otherwise.  An
+    integer is read by `int`'s own `__index__` or a `numpy` integer's, never by a conversion of the value's own,
+    which a registered `numbers.Integral` can make answer anything.  Any other number is read through
+    `as_integer_ratio`, which never rounds and refuses an infinity and a NaN by the error it raises, rather than
+    through a conversion to ``float``.  Only as `float`, `Decimal` or a `numpy` float wrote it in C,
     whose errors mean exactly that, and called as the type holds it, as is its ``>`` for an infinity's sign:
     any other, on the class or reached through the instance, can raise either error for a finite value, and
     would order it as an infinity or leave it unordered.
     """
-    if isinstance(value, numbers.Integral):
-        return 0, fractions.Fraction(int(value))
+    if issubclass(type(value), int):
+        return 0, fractions.Fraction(int.__index__(value))
+    if issubclass(type(value), numbers.Integral):
+        index = _known_number_method(type(value), "__index__", types.WrapperDescriptorType)
+        return None if index is None else (0, fractions.Fraction(index(value)))
     ratio = _known_number_method(type(value), "as_integer_ratio", types.MethodDescriptorType)
     if ratio is None:
         return None
@@ -269,7 +294,7 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
 
 
 def _known_number_method(owner: type, name: str, kind: type) -> Any | None:
-    """*owner*'s *name* as the type holds it, if `float`, `Decimal` or a `numpy` float wrote it in C, else ``None``."""
+    """*owner*'s *name* as the type holds it, if `float`, `Decimal` or a `numpy` number wrote it in C, else ``None``."""
     method = inspect.getattr_static(owner, name, None)
     maker = getattr(method, "__objclass__", None)
     known = maker in (float, decimal.Decimal) or getattr(maker, "__module__", None) == "numpy"

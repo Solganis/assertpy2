@@ -408,7 +408,7 @@ class ContainsMixin(_MixinBase):
             refuse(self.val, "a sequence, to contain a sequence")
         try:
             best_prefix = _sequence_break(values, items)
-        except (decimal.InvalidOperation, OverflowError):
+        except (decimal.InvalidOperation, OverflowError, TypeError):
             best_prefix = _sequence_break(values, items, answered=True)
         if best_prefix is None:
             return self

@@ -212,7 +212,7 @@ class StringMixin(_MixinBase):
                 raise ValueError("val must not be empty") from None
             try:
                 starts = first == prefix
-            except (decimal.InvalidOperation, OverflowError) as refusal:
+            except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
                 starts = equal_past(first, prefix, refusal)
             if not starts:
                 return self.error(
@@ -268,7 +268,7 @@ class StringMixin(_MixinBase):
                 raise ValueError("val must not be empty")
             try:
                 ends = items[-1] == suffix
-            except (decimal.InvalidOperation, OverflowError) as refusal:
+            except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
                 ends = equal_past(items[-1], suffix, refusal)
             if not ends:
                 return self.error(
