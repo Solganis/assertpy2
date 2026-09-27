@@ -1380,6 +1380,59 @@ def test_a_decimal_against_a_numpy_integer_orders_as_against_the_int_it_holds(sp
     assert_that(_ORDER_SPELLINGS[spelling](*pair)).is_equal_to(_ORDER_SPELLINGS[spelling](*stand_in))
 
 
+_SEQUENCE_ORDER = {
+    "is_less_than": lambda value, other: assert_that(value).check().is_less_than(other).passed,
+    "is_greater_than_or_equal_to": lambda value, other: (
+        assert_that(value).check().is_greater_than_or_equal_to(other).passed
+    ),
+    "is_sorted": lambda value, other: assert_that([value, other]).check().is_sorted().passed,
+    "match.less_than": lambda value, other: match.less_than(other).matches(value),
+}
+
+
+@pytest.mark.parametrize("spelling", list(_SEQUENCE_ORDER))
+@pytest.mark.parametrize("kind", [list, tuple])
+@pytest.mark.parametrize(
+    "built",
+    [
+        lambda number: ([decimal.Decimal(5), 1], [number]),
+        lambda number: ([decimal.Decimal(5), 1], [number, 2]),
+        lambda number: ([decimal.Decimal("1.5")], [number]),
+        lambda number: ([decimal.Decimal(7), 0], [number, 9]),
+        lambda number: ([[decimal.Decimal(5)], 2], [[number], 1]),
+    ],
+    ids=["longer", "later-element", "first-element", "first-element-above", "nested"],
+)
+@pytest.mark.parametrize("decimal_first", [True, False], ids=["decimal-first", "int64-first"])
+def test_two_sequences_holding_a_decimal_against_a_numpy_integer_order_as_with_the_int(
+    spelling, kind, built, decimal_first
+):
+    """The built-in order asks `==` of each pair and `<` of the first unequal one, where the `Decimal` raises."""
+    numpy = pytest.importorskip("numpy")
+    pair = [kind(side) for side in built(numpy.int64(5))]
+    stand_in = [kind(side) for side in built(5)]
+    if not decimal_first:
+        pair.reverse()
+        stand_in.reverse()
+    assert_that(_SEQUENCE_ORDER[spelling](*pair)).is_equal_to(_SEQUENCE_ORDER[spelling](*stand_in))
+
+
+@pytest.mark.parametrize(
+    ("value", "other", "less", "at_least"),
+    [
+        ([decimal.Decimal("NaN")], [1], False, False),
+        ([decimal.Decimal("sNaN")], [1], False, False),
+        ([1, decimal.Decimal("NaN")], [1, 2], False, False),
+        ([1, decimal.Decimal("NaN")], [0, 2], False, True),
+        ((1, decimal.Decimal("NaN")), (2, 0), True, False),
+    ],
+)
+def test_a_decimal_nan_inside_a_sequence_orders_it_as_a_nan_does(value, other, less, at_least):
+    """Python's own `<` lets the signal out; the first unequal pair decides, and a NaN there orders neither way."""
+    assert_that(assert_that(value).check().is_less_than(other).passed).is_equal_to(less)
+    assert_that(assert_that(value).check().is_greater_than_or_equal_to(other).passed).is_equal_to(at_least)
+
+
 _EXACT_SPELLINGS = {
     **{name: _ORDER_SPELLINGS[name] for name in ("is_less_than", "is_greater_than_or_equal_to", "is_sorted")},
     "is_equal_to": lambda value, other: assert_that(value).check().is_equal_to(other).passed,

@@ -55,7 +55,15 @@ from ._engine._membership import (
     searchable,
     subset_faults,
 )
-from ._engine._ordering import UnorderableError, equal_past, first_out_of_order, holds, member
+from ._engine._ordering import (
+    REFUSALS,
+    UnorderableError,
+    equal_past,
+    first_out_of_order,
+    holds,
+    lookup,
+    member,
+)
 from ._engine._path import _ROOT, _Path
 from ._engine._require import (
     NON_MATCHER_TYPES,
@@ -1477,10 +1485,16 @@ class StructureMatcher(BaseMatcher):
         mismatches: list[_SpecMismatch] = []
         for key, expected in spec.items():
             # built where needed: a spec that matches reads no path, and building one per key was the whole added cost
-            if key not in value:
-                mismatches.append(_SpecMismatch(path.key(key), _MISSING, _describe_spec_value(expected), None))
-                continue
-            actual = value[key]
+            try:
+                if key not in value:
+                    mismatches.append(_SpecMismatch(path.key(key), _MISSING, _describe_spec_value(expected), None))
+                    continue
+                actual = value[key]
+            except REFUSALS as refusal:
+                found, actual = lookup(value, key, refusal)
+                if not found:
+                    mismatches.append(_SpecMismatch(path.key(key), _MISSING, _describe_spec_value(expected), None))
+                    continue
             if isinstance(expected, StructureMatcher) and is_mapping_like(normalized := self._as_mapping(actual)):
                 mismatches.extend(self._walk(normalized, expected._spec, path.key(key), seen))
             elif _is_matcher(expected):

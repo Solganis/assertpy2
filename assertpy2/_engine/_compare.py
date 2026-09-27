@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import UnorderableError, _exact_real, equal_past, holds
+from ._ordering import REFUSALS, UnorderableError, _exact_real, equal_past, held_key, holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -192,7 +192,8 @@ def _members_compared(actual: Any, expected: Any) -> Iterable[tuple[Any, Any]]:
     """The pairs ``==`` walks into for two values of one container kind, and none for any other pair."""
     if is_mapping_like(actual) and is_mapping_like(expected):
         expected_keys = set(expected)
-        return ((actual[key], expected[key]) for key in actual if key in expected_keys)
+        found = ((key, *held_key(expected_keys, key)) for key in actual)
+        return ((actual[key], expected[held]) for key, present, held in found if present)
     if (
         dataclasses.is_dataclass(actual)
         and not isinstance(actual, type)
@@ -658,8 +659,13 @@ def _spec_matches(key, value, specs) -> bool:
         elif isinstance(spec, type):
             if isinstance(value, spec):
                 return True
-        elif spec == key:
-            return True
+        else:
+            try:
+                if spec == key:
+                    return True
+            except REFUSALS as refusal:
+                if equal_past(spec, key, refusal):
+                    return True
     return False
 
 

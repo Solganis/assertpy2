@@ -36,7 +36,7 @@ from ._engine._introspection import (
     keyed_snapshot,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, holds, nan_operand
+from ._engine._ordering import UnorderableError, holds, lookup, nan_operand
 from ._engine._path import _ROOT
 from ._engine._require import _shown, argument, raised_inside, refuse, require_type
 
@@ -474,13 +474,14 @@ class HelpersMixin(_MixinBase):
             pending = False
             # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
             for key, value in ((key, mapping[key]) for key in mapping):
-                if key not in counterpart:
+                found, other_value = lookup(counterpart, key)
+                if not found:
                     part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                 else:
                     decision = (
                         _node_decision(*keyed_pair(mapping, counterpart, key), config, field=key)
                         if key in keyed_fields
-                        else _node_decision(value, counterpart[key], config, field=key)
+                        else _node_decision(value, other_value, config, field=key)
                     )
                     if decision == "equal":
                         pending = True
@@ -488,7 +489,6 @@ class HelpersMixin(_MixinBase):
                     if decision == "leaf":
                         part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                     else:  # recurse
-                        other_value = counterpart[key]
                         if (keyed := _keyed_pair(value, other_value)) is not None:
                             value_repr = _dict_repr(*keyed, _seen)
                         elif _both_list_like(value, other_value):

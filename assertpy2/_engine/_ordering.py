@@ -138,6 +138,41 @@ def member(item: Any, container: Any) -> bool:
         return any(element is item or equals(element, item) for element in container)
 
 
+REFUSALS = (TypeError, decimal.InvalidOperation, OverflowError)
+"""What ``==`` raises for a pair it refuses to compare: a `Decimal` against a `numpy` integer, a signalling NaN, and a
+`numpy` float against a Python int past its range."""
+
+
+def held_key(keys: Any, key: Any) -> tuple[bool, Any]:
+    """Whether *keys* holds *key*, as `member` asks it, and the very key it holds there.
+
+    Where ``in`` answers, that is *key* itself.  Where it refused a comparison after an equal hash, as a `Decimal`
+    refuses a `numpy` integer, the key held is the one `equals` finds, which a lookup by that very object reaches
+    through identity and never compares again.  Only a set or a mapping whose lookup ends in a built-in one
+    (`_searches_by_hash`) is searched that way; anybody else's refusal is handed on.
+    """
+    try:
+        return key in keys, key
+    except REFUSALS:
+        if not _searches_by_hash(keys):
+            raise
+        if not member(key, keys):
+            return False, key
+    return True, next(held for held in keys if held is key or equals(held, key))
+
+
+def lookup(mapping: Any, key: Any, refusal: BaseException | None = None) -> tuple[bool, Any]:
+    """Whether *mapping* holds *key*, and ``mapping[key]`` where it does, the key found as `held_key` finds it.
+
+    *refusal* is what the caller's own lookup raised, handed on where it came from code of the mapping's, the
+    key's or a value's own rather than from the comparison of two keys.
+    """
+    if refusal is not None and raised_inside(refusal):
+        raise refusal
+    found, held = held_key(mapping, key)
+    return found, mapping[held] if found else None
+
+
 def _hashes(key: Any) -> bool:
     """Whether *key* hashes, so a lookup that refused it refused a comparison rather than the key."""
     try:
@@ -224,20 +259,40 @@ def _holds_nan(value: Any, seen: frozenset[int] = frozenset()) -> bool:
 
 
 def _equal_by_element(actual: Any, expected: Any) -> bool | None:
-    """Built-in ``==`` over two lists, two tuples or two mappings, asked of each element, else ``None``."""
+    """Built-in ``==`` over two lists, tuples, sets or mappings, asked of each element, else ``None``.
+
+    A set equals another of its size that holds each of its elements, and a mapping one of its size that holds
+    each of its keys, found as `member` finds it, under an equal value.
+    """
     for kind in (list, tuple):
         if isinstance(actual, kind) and isinstance(expected, kind):
             if type(actual).__eq__ is not kind.__eq__ or type(expected).__eq__ is not kind.__eq__:
                 return None
             pairs = zip(actual, expected, strict=False)
             return len(actual) == len(expected) and all(left is right or equals(left, right) for left, right in pairs)
-    if isinstance(actual, dict) and isinstance(expected, dict):
-        if type(actual).__eq__ is not dict.__eq__ or type(expected).__eq__ is not dict.__eq__:
+    if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
+        if not {type(actual).__eq__, type(expected).__eq__} <= {set.__eq__, frozenset.__eq__}:
             return None
-        if actual.keys() != expected.keys():
-            return False
-        return all(actual[key] is expected[key] or equals(actual[key], expected[key]) for key in actual)
+        return len(actual) == len(expected) and all(member(element, expected) for element in actual)
+    if isinstance(actual, dict) and isinstance(expected, dict):
+        return _mappings_equal(actual, expected)
     return None
+
+
+def _mappings_equal(actual: dict, expected: dict) -> bool | None:
+    """Two dicts, as ``==`` compares them: two `OrderedDict` values item by item in order, else key by key."""
+    kinds = {type(actual).__eq__, type(expected).__eq__}
+    if not kinds <= {dict.__eq__, collections.OrderedDict.__eq__}:
+        return None
+    if kinds == {collections.OrderedDict.__eq__}:
+        return equals(list(actual.items()), list(expected.items()))
+    return len(actual) == len(expected) and all(_held_alike(key, held, expected) for key, held in actual.items())
+
+
+def _held_alike(key: Any, held: Any, mapping: Any) -> bool:
+    """Whether *mapping* holds *key* under a value equal to *held*."""
+    found, other = lookup(mapping, key)
+    return found and (other is held or equals(held, other))
 
 
 def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
@@ -251,6 +306,8 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     """
     if raised_inside(refusal):
         raise refusal
+    if _lexicographic(actual, expected):
+        return _order_by_element(actual, expected)
     left, right = _exact_real(actual), _exact_real(expected)
     if left is None or right is None:
         if isinstance(refusal, TypeError):
@@ -259,6 +316,29 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     if isinstance(left, str) or isinstance(right, str):
         return None
     return (left > right) - (left < right)
+
+
+def _lexicographic(actual: Any, expected: Any) -> bool:
+    """Whether the pair is two lists or two tuples ordered by the built-in ``<``, element by element."""
+    return any(
+        isinstance(actual, kind)
+        and isinstance(expected, kind)
+        and type(actual).__lt__ is kind.__lt__
+        and type(expected).__lt__ is kind.__lt__
+        for kind in (list, tuple)
+    )
+
+
+def _order_by_element(actual: Any, expected: Any) -> int | None:
+    """Two sequences in the built-in order: the first pair `equals` calls unequal decides, else the length.
+
+    That pair ordered by `compare`, and ``None`` where it orders neither way, as a NaN does.
+    """
+    for left, right in zip(actual, expected, strict=False):
+        if left is right or equals(left, right):
+            continue
+        return compare(left, right) or None
+    return (len(actual) > len(expected)) - (len(actual) < len(expected))
 
 
 def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
@@ -336,15 +416,25 @@ def compare(actual: Any, expected: Any) -> int:
     except (TypeError, OverflowError) as refusal:
         order = _order_past(actual, expected, refusal)
         return 0 if order is None else order
-    except decimal.InvalidOperation:
-        # a `Decimal` NaN signals rather than answering.  Asked here rather than before the comparison:
-        # checked first, `'a'` against a NaN read as a verdict where the same pair without one is refused.
-        # The operands decide and not the traceback: measured, a signal comes from one frame under the C
-        # accelerator and from four under `_pydecimal`, so `raised_inside` answered the interpreter build
-        if nan_operand(actual) or nan_operand(expected):
-            return 0
-        raise
+    except decimal.InvalidOperation as signal:
+        return _order_past_signal(actual, expected, signal)
     return 0  # neither less nor greater, which is what a float NaN answers and `holds` keeps from reading equal
+
+
+def _order_past_signal(actual: Any, expected: Any, signal: decimal.InvalidOperation) -> int:
+    """How a pair orders once a `Decimal` NaN signalled at ``<``: a NaN operand neither way, two sequences by element.
+
+    Asked after the comparison rather than before: checked first, `'a'` against a NaN read as a verdict where the
+    same pair without one is refused.  The operands decide and not the traceback: measured, a signal comes from
+    one frame under the C accelerator and from four under `_pydecimal`, so `raised_inside` answered the
+    interpreter build.  Any other signal is handed on.
+    """
+    if nan_operand(actual) or nan_operand(expected):
+        return 0
+    if not _lexicographic(actual, expected):
+        raise signal
+    order = _order_by_element(actual, expected)
+    return 0 if order is None else order
 
 
 def holds(actual: Any, expected: Any, relation: str) -> bool:

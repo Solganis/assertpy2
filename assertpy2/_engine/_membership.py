@@ -20,7 +20,7 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from ._introspection import definition_of, is_mapping_like, materialized
-from ._ordering import equals, member
+from ._ordering import REFUSALS, equals, lookup, member
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -401,9 +401,14 @@ def subset_faults(value: Any, supersets: Sequence[Any]) -> list[Any]:
 def _pair_held(key: Any, item: Any, supersets: Sequence[Any]) -> bool:
     """Whether one key/value pair is in any of the supersets, by identity first, as a container asks."""
     for superset in supersets:
-        if not is_mapping_like(superset) or key not in superset:
-            continue
-        held = superset[key]
+        try:
+            if not is_mapping_like(superset) or key not in superset:
+                continue
+            held = superset[key]
+        except REFUSALS as refusal:
+            found, held = lookup(superset, key, refusal)
+            if not found:
+                continue
         if held is item or equals(held, item):
             return True
     return False

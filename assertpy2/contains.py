@@ -22,7 +22,7 @@ from ._engine._membership import (
     searchable,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import equals, member
+from ._engine._ordering import equals, lookup, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from .errors import DiffEntry, DiffResult, _safe_str
@@ -122,7 +122,8 @@ class ContainsMixin(_MixinBase):
         for element in self.val if values is None else values:
             if not mapping_shaped(element, check_values=False):
                 continue
-            if not any(key in item and _guarded_equal(element[key], item[key]) for key in element):
+            shared = ((element[key], *lookup(item, key)) for key in element)
+            if not any(found and _guarded_equal(mine, other) for mine, found, other in shared):
                 continue  # no shared equal key -> not related enough to suggest
             entries = _sub_diff_entries(element, item, _ROOT, config=None) or []
             if best is None or len(entries) < len(best[1]):

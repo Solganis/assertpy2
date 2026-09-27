@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import equals, member
+from ._engine._ordering import REFUSALS, equals, lookup, member
 from ._engine._require import argument, refuse
 from .errors import _safe_str
 
@@ -175,8 +175,13 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key in self.val and equals(self.val[entry_key], pair[entry_key]):
-                continue
+            try:
+                if entry_key in self.val and equals(self.val[entry_key], pair[entry_key]):
+                    continue
+            except REFUSALS as refusal:
+                found, held = lookup(self.val, entry_key, refusal)
+                if found and equals(held, pair[entry_key]):
+                    continue
             missing.append(pair)
         if missing:
             return self.error(
@@ -224,7 +229,12 @@ class DictMixin(_MixinBase):
             if len(pair) != 1:
                 raise ValueError("given entry args must contain exactly one key-value pair")
             entry_key = next(iter(pair))
-            if entry_key in self.val and equals(self.val[entry_key], pair[entry_key]):
+            try:
+                present = entry_key in self.val and equals(self.val[entry_key], pair[entry_key])
+            except REFUSALS as refusal:
+                held_there, held = lookup(self.val, entry_key, refusal)
+                present = held_there and equals(held, pair[entry_key])
+            if present:
                 found.append(pair)
         if found:
             return self.error(

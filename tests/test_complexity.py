@@ -37,7 +37,8 @@ RECORDED: dict[str, int] = {
     "assertpy2/_engine/_diff.py::_sub_diff_entries": 17,
     "assertpy2/_hints.py::diagnose": 17,
     "assertpy2/_engine/_diff.py::_walk_leaves": 15,
-    "assertpy2/_matcher_impls.py::_walk": 14,
+    # 16: a key the lookup refuses is found by `lookup`; through a helper per key a 50-key structure cost 10%
+    "assertpy2/_matcher_impls.py::_walk": 16,
     "assertpy2/_snapshot_codec.py::default": 14,
     "assertpy2/errors.py::_render_diff": 14,
     "assertpy2/snapshot.py::snapshot": 14,
@@ -45,7 +46,8 @@ RECORDED: dict[str, int] = {
     "assertpy2/errors.py::_json_native": 14,
     "assertpy2/string.py::contains_ignoring_case": 13,
     "assertpy2/_engine/_compare.py::_build_compare_config": 12,
-    "assertpy2/_engine/_equality.py::mapping_differs": 12,
+    # 14: the other side read raw and found by `lookup` past a refusal; a helper per key cost a 200-key ignore 7%
+    "assertpy2/_engine/_equality.py::mapping_differs": 14,
     "assertpy2/async_assertions.py::record": 12,
     "assertpy2/dynamic.py::__getattr__": 12,
     "assertpy2/_dangling.py::_survey": 11,

@@ -44,6 +44,7 @@ from ._introspection import (
     keyed_pair,
     model_field_values,
 )
+from ._ordering import REFUSALS, equals, lookup, member
 from ._path import _ROOT
 from ._require import refuse
 
@@ -363,7 +364,7 @@ def filtered_to_nothing(actual: object, expected: object, *, ignore: object, inc
 
 def missing_include_keys(mapping: MappingLike, includes: list) -> list:
     """Include-keys naming something the mapping does not have."""
-    return [key for key in includes if not isinstance(key, (re.Pattern, type)) and key not in mapping]
+    return [key for key in includes if not isinstance(key, (re.Pattern, type)) and not member(key, mapping)]
 
 
 def mapping_differs(
@@ -405,7 +406,7 @@ def mapping_differs(
             raise IncludeKeysMissingError(left, includes, missing)
     keys_in_actual = _kept_keys(left, ignores, includes)
     keys_in_expected = _kept_keys(right, ignores, includes)
-    if keys_in_actual != keys_in_expected or _order_differs(actual, expected, keys_in_actual):
+    if not equals(keys_in_actual, keys_in_expected) or _order_differs(actual, expected, keys_in_actual):
         return True
     if (
         config is not None
@@ -423,7 +424,13 @@ def mapping_differs(
         return True
     keyed = keyed_names(actual, expected)
     for key in keys_in_actual:
-        nested_left, nested_right = keyed_pair(left, right, key) if key in keyed else (left[key], right[key])
+        if key in keyed:
+            nested_left, nested_right = keyed_pair(left, right, key)
+        else:
+            try:
+                nested_left, nested_right = left[key], right[key]
+            except REFUSALS as refusal:
+                nested_left, nested_right = left[key], lookup(right, key, refusal)[1]
         if config is not None:
             decision = _node_decision(nested_left, nested_right, config, field=key)
             if decision == "equal":
@@ -431,11 +438,13 @@ def mapping_differs(
             if decision == "leaf":
                 return True
         nested_ignore = (
-            [entry[1:] for entry in ignores if type(entry) is tuple and entry[0] == key] if ignoring else None
+            [entry[1:] for entry in ignores if type(entry) is tuple and equals(entry[0], key)] if ignoring else None
         )
         # the nested half of an include keeps whole paths, and the level above already consumed the first segment
         nested_include = (
-            [entry[1:] for entry in nested_paths if type(entry) is tuple and entry[0] == key] if including else None
+            [entry[1:] for entry in nested_paths if type(entry) is tuple and equals(entry[0], key)]
+            if including
+            else None
         )
         if _nested_differs(
             nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, seen=seen
@@ -458,7 +467,7 @@ def _order_differs(actual: object, expected: object, kept: set) -> bool:
     """Whether two `OrderedDict` values hold the compared keys in different orders, which their `==` reads."""
     if not (isinstance(actual, collections.OrderedDict) and isinstance(expected, collections.OrderedDict)):
         return False
-    return [key for key in actual if key in kept] != [key for key in expected if key in kept]
+    return not equals([key for key in actual if member(key, kept)], [key for key in expected if member(key, kept)])
 
 
 def _nested_differs(

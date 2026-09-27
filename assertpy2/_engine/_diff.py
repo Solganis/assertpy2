@@ -46,6 +46,7 @@ from ._introspection import (
     keyed_snapshot,
     model_field_values,
 )
+from ._ordering import equals, held_key, lookup, member
 from ._path import _ROOT, _Path
 
 if TYPE_CHECKING:
@@ -340,7 +341,7 @@ def _ordered_keys(actual: Iterable[_K], expected: Iterable[_K]) -> list[_K]:
     side has is just as deterministic, and it is the order pytest shows.
     """
     seen = set(actual)
-    return [*actual, *(key for key in expected if key not in seen)]
+    return [*actual, *(key for key in expected if not member(key, seen))]
 
 
 def _dataclass_diff_entries(actual, expected, prefix: _Path, seen, config=None) -> list[DiffEntry]:
@@ -478,9 +479,9 @@ def _build_equality_diff(
         )
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = []
-        for item in sorted(actual - expected, key=_safe_repr):
+        for item in sorted((item for item in actual if not member(item, expected)), key=_safe_repr):
             entries.append(_prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected"))
-        for item in sorted(expected - actual, key=_safe_repr):
+        for item in sorted((item for item in expected if not member(item, actual)), key=_safe_repr):
             entries.append(_prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item))
         return DiffResult(kind="set", entries=entries)
     # under a strict descent this means the two sides were already equal, not that they differ
@@ -525,27 +526,31 @@ def _mapping_diff_entries(actual, expected, prefix: _Path, child_seen: set[int],
         # `{True} & {1}` hands back whichever side the set drew from, losing the type that differs
         stored = {key: key for key in kept_expected}
         for key in kept:
-            counterpart = stored.get(key, key)
+            found, counterpart = lookup(stored, key)
+            counterpart = counterpart if found else key
             if type(key) is not type(counterpart):
                 entries.append(prefix.key(key).entry(actual=key, expected=counterpart))
     for key in _ordered_keys(kept, kept_expected):
-        if key not in expected_keys:
+        # the side that holds an equal key under another object is read by that object, which no lookup compares
+        in_expected, expected_key = held_key(expected_keys, key)
+        in_actual, actual_key = held_key(actual_keys, key)
+        if not in_expected:
             entries.append(prefix.key(key).entry(actual=kept[key], expected=None, absent="expected"))
-        elif key not in actual_keys:
+        elif not in_actual:
             entries.append(prefix.key(key).entry(actual=None, absent="actual", expected=kept_expected[key]))
         else:
             decision = (
                 _node_decision(*keyed_pair(kept, kept_expected, key), config, field=key)
                 if key in keyed
-                else _node_decision(kept[key], kept_expected[key], config, field=key)
+                else _node_decision(kept[actual_key], kept_expected[expected_key], config, field=key)
             )
             if decision == "leaf":
-                entries.append(prefix.key(key).entry(actual=kept[key], expected=kept_expected[key]))
+                entries.append(prefix.key(key).entry(actual=kept[actual_key], expected=kept_expected[expected_key]))
             elif decision != "equal":
                 entries.extend(
                     _child_entries(
-                        kept[key],
-                        kept_expected[key],
+                        kept[actual_key],
+                        kept_expected[expected_key],
                         prefix.key(key),
                         descended_for=decision,
                         _seen=child_seen,
@@ -559,7 +564,7 @@ def _order_entries(actual, expected, kept, kept_expected, prefix: _Path) -> list
     """The key order of two `OrderedDict` values holding the same keys in different places, which their `==` reads."""
     if not (isinstance(actual, collections.OrderedDict) and isinstance(expected, collections.OrderedDict)):
         return []
-    if set(kept) != set(kept_expected) or list(kept) == list(kept_expected):
+    if not equals(set(kept), set(kept_expected)) or equals(list(kept), list(kept_expected)):
         return []
     return [prefix.leaf_entry(actual=list(kept), expected=list(kept_expected))]
 

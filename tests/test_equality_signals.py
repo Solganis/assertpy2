@@ -11,13 +11,14 @@ from __future__ import annotations
 import collections
 import collections.abc
 import decimal
+import math
 import numbers
 
 import pytest
 
 from assertpy2 import assert_that, match
 from assertpy2._engine._membership import occurrences
-from assertpy2._engine._ordering import _holds_nan, member
+from assertpy2._engine._ordering import _holds_nan, held_key, member
 
 _ASKED = {
     "is_equal_to": lambda value, other: assert_that(value).check().is_equal_to(other).passed,
@@ -522,3 +523,212 @@ def test_an_error_of_the_values_own_equality_is_handed_on(value, raised, asked):
     """Only a NaN, or a number overflowing its own conversion, makes the raise an answer."""
     with pytest.raises(raised, match="my own"):
         _ASKED[asked](value, 1)
+
+
+_KEYED_ASKED = {
+    "is_equal_to-set": lambda held, item: assert_that({held}).check().is_equal_to({item}).passed,
+    "is_equal_to-frozenset": lambda held, item: assert_that(frozenset({held})).check().is_equal_to({item}).passed,
+    "is_equal_to-frozensets": lambda held, item: (
+        assert_that(frozenset({held})).check().is_equal_to(frozenset({item})).passed
+    ),
+    "is_equal_to-set-frozenset": lambda held, item: assert_that({held}).check().is_equal_to(frozenset({item})).passed,
+    "is_equal_to-frozensets-and-more": lambda held, item: (
+        assert_that(frozenset({held, 1})).check().is_equal_to(frozenset({item, 2})).passed
+    ),
+    "is_not_equal_to-set": lambda held, item: assert_that({held}).check().is_not_equal_to({item}).passed,
+    "is_equal_to-keys": lambda held, item: assert_that({held: 1}).check().is_equal_to({item: 1}).passed,
+    "is_equal_to-values-differ": lambda held, item: assert_that({held: 1}).check().is_equal_to({item: 2}).passed,
+    "is_not_equal_to-keys": lambda held, item: assert_that({held: 1}).check().is_not_equal_to({item: 1}).passed,
+    "is_equal_to-set-and-more": lambda held, item: assert_that({held, 1}).check().is_equal_to({item, 2}).passed,
+    "is_equal_to-keys-and-more": lambda held, item: (
+        assert_that({held: 1, "x": 3}).check().is_equal_to({item: 2, "y": 3}).passed
+    ),
+    "is_equal_to-strict-keys": lambda held, item: (
+        assert_that({held: 1}).check().is_equal_to({item: 1}, strict_types=True).passed
+    ),
+    "ignore-and-fail": lambda held, item: (
+        assert_that({held: 1, "b": 2}).check().is_equal_to({item: 9, "b": 3}, ignore="b").passed
+    ),
+    "is_equal_to-nested": lambda held, item: assert_that([{"a": {held}}]).check().is_equal_to([{"a": {item}}]).passed,
+    "is_less_than_or_equal_to-set": lambda held, item: (
+        assert_that({held}).check().is_less_than_or_equal_to({item}).passed
+    ),
+    "is_greater_than_or_equal_to-set": lambda held, item: (
+        assert_that({held}).check().is_greater_than_or_equal_to({item}).passed
+    ),
+    "is_in-set": lambda held, item: assert_that({held}).check().is_in({item}, 2).passed,
+    "is_in-keys": lambda held, item: assert_that({held: 1}).check().is_in({item: 1}, 2).passed,
+    "contains_entry": lambda held, item: assert_that({held: 1}).check().contains_entry({item: 1}).passed,
+    "does_not_contain_entry": lambda held, item: (
+        assert_that({held: 1}).check().does_not_contain_entry({item: 1}).passed
+    ),
+    "is_subset_of-keys": lambda held, item: assert_that({item: 1}).check().is_subset_of({held: 1}).passed,
+    "matches_structure": lambda held, item: assert_that({held: 1}).check().matches_structure({item: 1}).passed,
+    "match.equal_to-keys": lambda held, item: match.equal_to({item: 1}).matches({held: 1}),
+    "contains-mapping-in-list": lambda held, item: (
+        assert_that([{held: 1, "a": 2}]).check().contains({item: 2, "a": 2}).passed
+    ),
+    "ignore": lambda held, item: (
+        assert_that({held: 1, "b": 2}).check().is_equal_to({item: 9, "b": 2}, ignore=item).passed
+    ),
+    "include": lambda held, item: (
+        assert_that({held: 1, "b": 2}).check().is_equal_to({item: 1, "b": 3}, include=item).passed
+    ),
+    "ordered": lambda held, item: (
+        assert_that(collections.OrderedDict([(held, 1), ("b", 2)]))
+        .check()
+        .is_equal_to(collections.OrderedDict([(item, 1), ("b", 2)]))
+        .passed
+    ),
+}
+
+
+@pytest.mark.parametrize("asked", list(_KEYED_ASKED))
+@pytest.mark.parametrize("text", ["5", "1.5"], ids=["equal", "apart"])
+@pytest.mark.parametrize("decimal_held", [True, False], ids=["decimal-held", "int64-held"])
+def test_a_decimal_and_a_numpy_integer_as_keys_or_elements_answer_as_the_int_does(asked, text, decimal_held):
+    """Equal hashes lead a set or a dict to compare the pair, where the `Decimal` raises rather than answering."""
+    (held, item), (held_stand_in, item_stand_in) = _decimal_and_int64(text, decimal_first=decimal_held)
+    expected = _KEYED_ASKED[asked](held_stand_in, item_stand_in)
+    assert_that(_KEYED_ASKED[asked](held, item)).is_equal_to(expected)
+
+
+class _InvertedSet(set):
+    __eq__ = set.__ne__
+
+
+def test_a_set_whose_equality_is_not_the_built_in_one_hands_its_refusal_on():
+    """Its elements decide nothing, so the `Decimal`'s refusal of the `numpy` integer is the answer's to give."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(TypeError, match="argument must be an integer"):
+        assert_that(_InvertedSet({numpy.int64(5)})).is_equal_to({decimal.Decimal(5)})
+
+
+_ABSENT_KEY_ASKED = {
+    "is_subset_of": lambda held, key: assert_that({key: 1}).check().is_subset_of({held: 1}).passed,
+    "matches_structure": lambda held, key: assert_that({held: 1}).check().matches_structure({key: 1}).passed,
+    "contains_entry": lambda held, key: assert_that({held: 1}).check().contains_entry({key: 1}).passed,
+    "does_not_contain_entry": lambda held, key: assert_that({held: 1}).check().does_not_contain_entry({key: 1}).passed,
+    "is_equal_to-keys": lambda held, key: assert_that({held: 1}).check().is_equal_to({key: 1}).passed,
+    "is_equal_to-set": lambda held, key: assert_that({held}).check().is_equal_to({key}).passed,
+    "contains-set": lambda held, key: assert_that({held}).check().contains(key).passed,
+}
+_BEYOND = 314159 + (2**61 - 1) * 10**400
+"""A Python int past the float range whose hash is an infinity's, which `numpy` overflows converting to compare."""
+
+
+@pytest.mark.parametrize("asked", list(_ABSENT_KEY_ASKED))
+@pytest.mark.parametrize("collision", ["decimal-int64", "float32-bignum"])
+@pytest.mark.parametrize("numpy_held", [True, False], ids=["numpy-held", "numpy-asked"])
+def test_a_key_whose_hash_collides_with_one_it_does_not_equal_is_absent(asked, collision, numpy_held):
+    """An equal hash leads the lookup to compare the two, and the comparison may raise instead of answering no.
+
+    `numpy.int64(2**61 - 1)` hashes to 0 as `Decimal(0)` does, where the `Decimal` refuses the integer (a held
+    `numpy.int64` answers for itself), and a `numpy.float32` infinity hashes as `_BEYOND` does, which `numpy`
+    overflows converting either way round.
+    """
+    numpy = pytest.importorskip("numpy")
+    kinds = {
+        "decimal-int64": (numpy.int64(2**61 - 1), decimal.Decimal(0), 2**61 - 1),
+        "float32-bignum": (numpy.float32("inf"), _BEYOND, math.inf),
+    }
+    numpy_side, other, stand_in = kinds[collision]
+    pair, plain = (numpy_side, other), (stand_in, other)
+    if not numpy_held:
+        pair, plain = pair[::-1], plain[::-1]
+    assert_that(_ABSENT_KEY_ASKED[asked](*pair)).is_equal_to(_ABSENT_KEY_ASKED[asked](*plain))
+
+
+class _EqualityCountedRaising:
+    """A value whose own `__eq__` raises `TypeError`, counting how often it is asked."""
+
+    def __init__(self) -> None:
+        self.asked = 0
+
+    def __eq__(self, other: object) -> bool:
+        self.asked += 1
+        raise TypeError("my own __eq__")
+
+    __hash__ = object.__hash__
+
+
+@pytest.mark.parametrize(
+    "asked",
+    [
+        lambda value: assert_that({"a": value}).contains_entry({"a": 1}),
+        lambda value: assert_that({"a": value}).does_not_contain_entry({"a": 1}),
+        lambda value: assert_that({"a": value}).is_subset_of({"a": 1}),
+        lambda value: assert_that({"a": 1}).matches_structure({"a": value}),
+    ],
+    ids=["contains_entry", "does_not_contain_entry", "is_subset_of", "matches_structure"],
+)
+def test_an_error_of_a_values_own_equality_is_handed_on_once_and_not_taken_for_a_key_refusal(asked):
+    value = _EqualityCountedRaising()
+    with pytest.raises(TypeError, match="my own __eq__"):
+        asked(value)
+    assert_that(value.asked).is_equal_to(1)
+
+
+def test_a_key_is_searched_past_a_refusal_only_in_a_container_searched_by_hash():
+    """Elsewhere the key held cannot be read back through identity, so the refusal is the answer's to give."""
+    numpy = pytest.importorskip("numpy")
+    assert_that(held_key({decimal.Decimal(5)}, numpy.int64(5))).is_equal_to((True, decimal.Decimal(5)))
+    with pytest.raises(TypeError, match="argument must be an integer"):
+        held_key([decimal.Decimal(5)], numpy.int64(5))
+
+
+class _SpecCounted:
+    """An ignore-spec whose own `__eq__` counts how often it is asked, and names no key."""
+
+    def __init__(self) -> None:
+        self.asked = 0
+
+    def __eq__(self, other: object) -> bool:
+        self.asked += 1
+        return False
+
+    __hash__ = object.__hash__
+
+
+@pytest.mark.parametrize("ignore_first", [True, False], ids=["counted-first", "counted-last"])
+def test_a_spec_that_refuses_the_key_asks_no_other_spec_again(ignore_first):
+    """The `Decimal` refuses the `numpy` key, and every other spec is asked as often as beside a spec that does not."""
+    numpy = pytest.importorskip("numpy")
+    value, other = {numpy.int64(5): 1, "b": 2}, {numpy.int64(5): 9, "b": 2}
+    asked = []
+    for last in (decimal.Decimal(5), 5):
+        counted = _SpecCounted()
+        specs = [counted, last] if ignore_first else [last, counted]
+        assert_that(value).is_equal_to(other, ignore=specs)
+        asked.append(counted.asked)
+    assert_that(asked[0]).is_equal_to(asked[1])
+
+
+class _RefusingInC:
+    """A key whose `__eq__` is C code of another type's, so it refuses with no frame of its own below the lookup."""
+
+    __eq__ = int.__add__
+
+    def __hash__(self) -> int:
+        return 0
+
+
+_REFUSED_KEY_ASKED = {
+    "contains_key": lambda key: assert_that({0: 1}).contains_key(key),
+    "contains_entry": lambda key: assert_that({0: 1}).contains_entry({key: 1}),
+    "does_not_contain_entry": lambda key: assert_that({0: 1}).does_not_contain_entry({key: 1}),
+    "is_subset_of": lambda key: assert_that({key: 1}).is_subset_of({0: 1}),
+    "matches_structure": lambda key: assert_that({0: 1}).matches_structure({key: 1}),
+    "is_equal_to-keys": lambda key: assert_that({0: 1}).is_equal_to({key: 1}),
+    "is_equal_to-set": lambda key: assert_that({0}).is_equal_to({key}),
+    "contains-set": lambda key: assert_that({0}).contains(key),
+    "is_in": lambda key: assert_that(key).is_in({0}, 2),
+    "ignore": lambda key: assert_that({0: 1, "b": 2}).is_equal_to({0: 1, "b": 3}, ignore=key),
+}
+
+
+@pytest.mark.parametrize("asked", list(_REFUSED_KEY_ASKED))
+def test_a_key_refusing_in_c_code_of_its_own_is_handed_on_not_answered(asked):
+    """The search past a refusal asks `equals`, which answers only numbers it reads exactly; this one it hands on."""
+    with pytest.raises(TypeError, match="descriptor '__add__'"):
+        _REFUSED_KEY_ASKED[asked](_RefusingInC())
