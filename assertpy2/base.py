@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import decimal
 from types import GenericAlias
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, SupportsIndex
 
 from ._engine._compare import (
     _EQ_ATOMIC,
@@ -17,6 +17,7 @@ from ._engine._compare import (
 from ._engine._diff import _build_equality_diff, _child_entries
 from ._engine._equality import filtered_to_nothing, key_specs_given, mapping_shaped
 from ._engine._introspection import is_namedtuple
+from ._engine._ordering import require_integer
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, reject_unknown_kwargs, require_type, sized_len, verdict
 from ._hints import identity_candidate
@@ -734,7 +735,7 @@ class BaseMixin(SatisfiesMixin):
             )
         return self
 
-    def is_length(self, length: int) -> Self:
+    def is_length(self, length: SupportsIndex) -> Self:
         """Asserts that val is the given length.
 
         Checks val is the given length using the ``len()`` built-in.
@@ -757,18 +758,17 @@ class BaseMixin(SatisfiesMixin):
         Raises:
             AssertionError: if val is **not** the given length
         """
-        if type(length) is not int:
-            refuse(length, "an integer", subject=argument("length"))
-        if length < 0:
+        wanted = length if type(length) is int else require_integer(length, "length")
+        if wanted < 0:
             raise ValueError("given arg must be a positive int")
-        if sized_len(self.val) != length:
+        if sized_len(self.val) != wanted:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to be of length <{length}>, but was <{sized_len(self.val)}>.",
                 expected=length,
             )
         return self
 
-    def is_length_between(self, low: int, high: int) -> Self:
+    def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> Self:
         """Asserts that val's length is between low and high (both inclusive).
 
         Checks val's length using the ``len()`` built-in, like
@@ -795,15 +795,13 @@ class BaseMixin(SatisfiesMixin):
             TypeError: if a given arg is not an int
             ValueError: if a given arg is negative, or low is greater than high
         """
-        if type(low) is not int:
-            refuse(low, "an integer", subject=argument("low"))
-        if type(high) is not int:
-            refuse(high, "an integer", subject=argument("high"))
-        if low < 0 or high < 0:
+        least = low if type(low) is int else require_integer(low, "low")
+        most = high if type(high) is int else require_integer(high, "high")
+        if least < 0 or most < 0:
             raise ValueError("given args must be positive ints")
-        if low > high:
+        if least > most:
             raise ValueError("given low arg must be less than given high arg")
-        if not low <= sized_len(self.val) <= high:
+        if not least <= sized_len(self.val) <= most:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to be of length between <{low}> and <{high}>, "
                 f"but was <{sized_len(self.val)}>.",

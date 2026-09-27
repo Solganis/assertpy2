@@ -614,3 +614,10 @@ def _relations_that_must_keep_working() -> None:
     assert_that(1).is_greater_than(numpy.int32(0))  # case: valid-numpy-int32
     assert_that(1).is_greater_than(numpy.uint64(0))  # case: valid-numpy-uint64
     assert_that(1.5).is_greater_than(numpy.float32(0))  # case: valid-numpy-float32
+    # an integer argument takes what `__index__` answers for, as the runtime does since it read numpy integers
+    assert_that([1, 2]).element(numpy.int64(0))  # case: valid-numpy-index
+    assert_that([1, 2]).is_length(numpy.int64(2))  # case: valid-numpy-length
+    assert_that([1, 2]).has_size_between(numpy.uint8(1), numpy.int64(2))  # case: valid-numpy-size-bounds
+    assert_that(4).is_divisible_by(numpy.int64(2))  # case: valid-numpy-divisor
+    assert_that(b"ab").has_byte_at(numpy.int64(0), numpy.uint8(97))  # case: valid-numpy-byte-at
+    assert_that([4]).satisfies(match.is_length(numpy.int64(1)))  # case: valid-numpy-length-matcher

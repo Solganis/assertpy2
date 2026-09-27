@@ -12,7 +12,19 @@ import sys
 import threading
 import types
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Final, Generic, Literal, NoReturn, Protocol, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Final,
+    Generic,
+    Literal,
+    NoReturn,
+    Protocol,
+    SupportsIndex,
+    TypeVar,
+    cast,
+    overload,
+)
 
 if TYPE_CHECKING:
     import datetime
@@ -1611,12 +1623,12 @@ class AssertionBuilder(
         def last(self) -> Any: ...
 
         @overload
-        def element(self: AssertionBuilder[Mapping[_K, _V]], index: int) -> AssertionBuilder[_K]: ...
+        def element(self: AssertionBuilder[Mapping[_K, _V]], index: SupportsIndex) -> AssertionBuilder[_K]: ...
         @overload
-        def element(self: _ElementSource[_E], index: int) -> AssertionBuilder[_E]: ...
+        def element(self: _ElementSource[_E], index: SupportsIndex) -> AssertionBuilder[_E]: ...
         @overload
-        def element(self, index: int) -> Self: ...
-        def element(self, index: int) -> Any: ...
+        def element(self, index: SupportsIndex) -> Self: ...
+        def element(self, index: SupportsIndex) -> Any: ...
 
         # `mapped()` builds a `list` whatever it was given, so `-> Self` was wrong about the container too and
         # refused working code.  Its boundary: a named function binds `_R` under both checkers, a lambda binds it

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import collections.abc
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
 from ._engine._introspection import is_mapping_like, materialized
 from ._engine._membership import flattened_supersets, subset_faults
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, first_out_of_order
+from ._engine._ordering import UnorderableError, first_out_of_order, require_integer
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
 from .errors import _safe_str
@@ -247,7 +247,7 @@ class CollectionMixin(_MixinBase):
             )
         return self
 
-    def has_size_greater_than(self, size: int) -> Self:
+    def has_size_greater_than(self, size: SupportsIndex) -> Self:
         """Asserts that val has a length strictly greater than the given size.
 
         Args:
@@ -268,19 +268,18 @@ class CollectionMixin(_MixinBase):
             TypeError: if the given arg is not an int
             ValueError: if the given arg is negative
         """
-        if type(size) is not int:
-            refuse(size, "an integer", subject=argument("size"))
-        if size < 0:
+        bound = size if type(size) is int else require_integer(size, "size")
+        if bound < 0:
             raise ValueError("given arg must be a positive int")
         actual = sized_len(self.val)
-        if actual <= size:
+        if actual <= bound:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to have size greater than <{size}>, but was <{actual}>.",
                 expected=size,
             )
         return self
 
-    def has_size_less_than(self, size: int) -> Self:
+    def has_size_less_than(self, size: SupportsIndex) -> Self:
         """Asserts that val has a length strictly less than the given size.
 
         Args:
@@ -301,18 +300,17 @@ class CollectionMixin(_MixinBase):
             TypeError: if the given arg is not an int
             ValueError: if the given arg is negative
         """
-        if type(size) is not int:
-            refuse(size, "an integer", subject=argument("size"))
-        if size < 0:
+        bound = size if type(size) is int else require_integer(size, "size")
+        if bound < 0:
             raise ValueError("given arg must be a positive int")
         actual = sized_len(self.val)
-        if actual >= size:
+        if actual >= bound:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to have size less than <{size}>, but was <{actual}>.", expected=size
             )
         return self
 
-    def has_size_between(self, low: int, high: int) -> Self:
+    def has_size_between(self, low: SupportsIndex, high: SupportsIndex) -> Self:
         """Asserts that val has a length between low and high (both inclusive).
 
         Args:
@@ -334,15 +332,13 @@ class CollectionMixin(_MixinBase):
             TypeError: if a given arg is not an int
             ValueError: if a given arg is negative, or low is greater than high
         """
-        if type(low) is not int:
-            refuse(low, "an integer", subject=argument("low"))
-        if type(high) is not int:
-            refuse(high, "an integer", subject=argument("high"))
-        if low < 0 or high < 0:
+        least = low if type(low) is int else require_integer(low, "low")
+        most = high if type(high) is int else require_integer(high, "high")
+        if least < 0 or most < 0:
             raise ValueError("given args must be positive ints")
-        if low > high:
+        if least > most:
             raise ValueError("given low arg must be less than given high arg")
-        if not low <= sized_len(self.val) <= high:
+        if not least <= sized_len(self.val) <= most:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to have size between <{low}> "
                 f"and <{high}>, but was <{sized_len(self.val)}>.",
@@ -457,7 +453,7 @@ class CollectionMixin(_MixinBase):
             raise ValueError("Expected non-empty iterable, but was empty.")
         return self.builder(items[-1], self.description, self.kind, logger=self.logger)
 
-    def element(self, index: int) -> Self:
+    def element(self, index: SupportsIndex) -> Self:
         """Returns a new builder with the element at the given index.
 
         Args:
@@ -474,10 +470,11 @@ class CollectionMixin(_MixinBase):
         Raises:
             IndexError: if index is out of range
         """
+        position = index if type(index) is int else require_integer(index, "index")
         items = self._as_list()
-        if index < 0 or index >= len(items):
+        if position < 0 or position >= len(items):
             raise IndexError(f"Expected index {index} to be in range [0, {len(items)}), but was out of range.")
-        return self.builder(items[index], self.description, self.kind, logger=self.logger)
+        return self.builder(items[position], self.description, self.kind, logger=self.logger)
 
     def single(self) -> Self:
         """Returns a new builder with the only element of val.

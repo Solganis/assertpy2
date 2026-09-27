@@ -14,6 +14,7 @@ from typing import (
     Final,
     NamedTuple,
     Protocol,
+    SupportsIndex,
     TypeVar,
     Union,
     cast,
@@ -65,6 +66,8 @@ from ._engine._ordering import (
     lookup,
     may_broadcast,
     member,
+    require_integer,
+    whole_number,
 )
 from ._engine._path import _ROOT, _Path
 from ._engine._require import (
@@ -825,8 +828,10 @@ class IsFalsyMatcher(BaseMatcher):
 
 
 class HasLengthMatcher(BaseMatcher):
-    def __init__(self, expected_length: int):
-        self.expected_length = expected_length
+    def __init__(self, expected_length: SupportsIndex):
+        self.expected_length: int = require_integer(expected_length, "length")
+        if self.expected_length < 0:
+            raise ValueError("given arg must be a positive int")
 
     def matches(self, value: Any) -> bool:
         # the core answers `None` for no length, and a raising `__len__` travels out rather than being swallowed
@@ -892,46 +897,50 @@ class IsZeroMatcher(BaseMatcher):
 
 class IsEvenMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return isinstance(value, int) and not isinstance(value, bool) and value % 2 == 0
+        whole = value if type(value) is int else whole_number(value)
+        return whole is not None and whole % 2 == 0
 
     def describe(self) -> str:
         return "an even integer"
 
     def describe_mismatch(self, value: Any) -> str:
-        if isinstance(value, bool) or not isinstance(value, int):
+        if whole_number(value) is None:
             return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
         return f"was <{_safe_str(value)}>, which is odd"
 
 
 class IsOddMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
-        return isinstance(value, int) and not isinstance(value, bool) and value % 2 != 0
+        whole = value if type(value) is int else whole_number(value)
+        return whole is not None and whole % 2 != 0
 
     def describe(self) -> str:
         return "an odd integer"
 
     def describe_mismatch(self, value: Any) -> str:
-        if isinstance(value, bool) or not isinstance(value, int):
+        if whole_number(value) is None:
             return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
         return f"was <{_safe_str(value)}>, which is even"
 
 
 class IsDivisibleByMatcher(BaseMatcher):
-    def __init__(self, divisor: int):
-        if divisor == 0:
+    def __init__(self, divisor: SupportsIndex):
+        self.divisor: int = require_integer(divisor, "divisor")
+        if self.divisor == 0:
             raise ValueError("given divisor arg must not be zero")
-        self.divisor = divisor
 
     def matches(self, value: Any) -> bool:
-        return isinstance(value, int) and not isinstance(value, bool) and value % self.divisor == 0
+        whole = value if type(value) is int else whole_number(value)
+        return whole is not None and whole % self.divisor == 0
 
     def describe(self) -> str:
         return f"an integer divisible by <{self.divisor}>"
 
     def describe_mismatch(self, value: Any) -> str:
-        if isinstance(value, bool) or not isinstance(value, int):
+        whole = value if type(value) is int else whole_number(value)
+        if whole is None:
             return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, not an integer"
-        return f"was <{_safe_str(value)}>, which has remainder <{value % self.divisor}>"
+        return f"was <{_safe_str(value)}>, which has remainder <{whole % self.divisor}>"
 
 
 class IsCallableMatcher(BaseMatcher):

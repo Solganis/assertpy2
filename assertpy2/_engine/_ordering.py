@@ -26,7 +26,7 @@ import types
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
-from ._require import raised_inside
+from ._require import argument, raised_inside, refuse
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -457,11 +457,9 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
     any other, on the class or reached through the instance, can raise either error for a finite value, and
     would order it as an infinity or leave it unordered.
     """
-    if issubclass(type(value), int):
-        return 0, fractions.Fraction(int.__index__(value))
-    if issubclass(type(value), numbers.Integral):
-        index = _known_number_method(type(value), "__index__", types.WrapperDescriptorType)
-        return None if index is None else (0, fractions.Fraction(index(value)))
+    if issubclass(type(value), int) or issubclass(type(value), numbers.Integral):
+        whole = exact_int(value)
+        return None if whole is None else (0, fractions.Fraction(whole))
     ratio = _known_number_method(type(value), "as_integer_ratio", types.MethodDescriptorType)
     if ratio is None:
         return None
@@ -475,6 +473,39 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
     except ValueError:
         return "nan"
     return 0, fractions.Fraction(int(numerator), int(denominator))
+
+
+def exact_int(value: Any) -> int | None:
+    """*value* as the int it holds, read by `int`'s own `__index__` or a `numpy` integer's, else ``None``.
+
+    Never by a conversion of the value's own, which a registered `numbers.Integral` can make answer anything.
+    """
+    kind = type(value)
+    if issubclass(kind, int):
+        return int.__index__(value)
+    if issubclass(kind, numbers.Integral):
+        index = _known_number_method(kind, "__index__", types.WrapperDescriptorType)
+        return None if index is None else index(value)
+    return None
+
+
+def whole_number(value: Any) -> int | None:
+    """*value* as the int it stands for where it is an integer, which a bool is not, else ``None``."""
+    if type(value) is int:
+        return value
+    return None if isinstance(value, bool) else exact_int(value)
+
+
+def require_integer(value: object, name: str | None = None) -> int:
+    """*value* as the int it stands for (`whole_number`), or refused as no integer: as the argument *name*, else val.
+
+    A caller on an assertion's own path asks ``value if type(value) is int else require_integer(value, name)``:
+    asked through the call with its subject built up front, a plain `int` cost `is_length` 37%.
+    """
+    whole = whole_number(value)
+    if whole is None:
+        refuse(value, "an integer", subject="val" if name is None else argument(name))
+    return whole
 
 
 def _known_number_method(owner: type, name: str, kind: type) -> Any | None:

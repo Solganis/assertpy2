@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, SupportsFloat, SupportsIndex
 
 from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, compare, holds
+from ._engine._ordering import UnorderableError, compare, holds, require_integer
 from ._engine._require import _shown, argument, refuse, require_type
 from .errors import _safe_str
 
@@ -494,9 +494,9 @@ class NumericMixin(_MixinBase):
             )
         return self
 
-    def _validate_int(self):
-        if isinstance(self.val, bool) or not isinstance(self.val, int):
-            refuse(self.val, "an integer")
+    def _integer_value(self) -> int:
+        value = self.val
+        return value if type(value) is int else require_integer(value)
 
     def is_even(self) -> Self:
         """Asserts that val is an integer and is even.
@@ -514,8 +514,7 @@ class NumericMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** even
         """
-        self._validate_int()
-        if self.val % 2 != 0:
+        if self._integer_value() % 2 != 0:
             return self.error(f"Expected <{_safe_str(self.val)}> to be even, but was not.")
         return self
 
@@ -535,12 +534,11 @@ class NumericMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** odd
         """
-        self._validate_int()
-        if self.val % 2 == 0:
+        if self._integer_value() % 2 == 0:
             return self.error(f"Expected <{_safe_str(self.val)}> to be odd, but was not.")
         return self
 
-    def is_divisible_by(self, divisor: int) -> Self:
+    def is_divisible_by(self, divisor: SupportsIndex) -> Self:
         """Asserts that val is an integer and is divisible by divisor.
 
         Args:
@@ -558,12 +556,11 @@ class NumericMixin(_MixinBase):
         Raises:
             AssertionError: if val is **not** divisible by divisor
         """
-        self._validate_int()
-        if isinstance(divisor, bool) or not isinstance(divisor, int):
-            refuse(divisor, "an integer", subject=argument("divisor"))
-        if divisor == 0:
+        value = self._integer_value()
+        modulus = divisor if type(divisor) is int else require_integer(divisor, "divisor")
+        if modulus == 0:
             raise ValueError("given divisor arg must not be zero")
-        if self.val % divisor != 0:
+        if value % modulus != 0:
             return self.error(
                 f"Expected <{_safe_str(self.val)}> to be divisible by <{divisor}>, but was not.", expected=divisor
             )

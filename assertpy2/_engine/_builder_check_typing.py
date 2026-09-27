@@ -717,10 +717,10 @@ if TYPE_CHECKING:
             | _CheckAnyValue[bytearray]
             | _CheckAnyValue[_FrameT_co]
             | _CheckAnyValue[_ArrayT_co],
-            size: int,
+            size: SupportsIndex,
         ) -> AssertionOutcome: ...
         @overload
-        def has_size_greater_than(self: _CheckAnyValue[_CapableT], size: int) -> AssertionOutcome: ...
+        def has_size_greater_than(self: _CheckAnyValue[_CapableT], size: SupportsIndex) -> AssertionOutcome: ...
 
         @overload
         def has_size_less_than(
@@ -734,10 +734,10 @@ if TYPE_CHECKING:
             | _CheckAnyValue[bytearray]
             | _CheckAnyValue[_FrameT_co]
             | _CheckAnyValue[_ArrayT_co],
-            size: int,
+            size: SupportsIndex,
         ) -> AssertionOutcome: ...
         @overload
-        def has_size_less_than(self: _CheckAnyValue[_CapableT], size: int) -> AssertionOutcome: ...
+        def has_size_less_than(self: _CheckAnyValue[_CapableT], size: SupportsIndex) -> AssertionOutcome: ...
 
         @overload
         def has_size_between(
@@ -751,11 +751,13 @@ if TYPE_CHECKING:
             | _CheckAnyValue[bytearray]
             | _CheckAnyValue[_FrameT_co]
             | _CheckAnyValue[_ArrayT_co],
-            low: int,
-            high: int,
+            low: SupportsIndex,
+            high: SupportsIndex,
         ) -> AssertionOutcome: ...
         @overload
-        def has_size_between(self: _CheckAnyValue[_CapableT], low: int, high: int) -> AssertionOutcome: ...
+        def has_size_between(
+            self: _CheckAnyValue[_CapableT], low: SupportsIndex, high: SupportsIndex
+        ) -> AssertionOutcome: ...
 
         @overload
         def is_empty(
@@ -928,9 +930,11 @@ if TYPE_CHECKING:
         def is_odd(self: _CheckAnyValue[int]) -> AssertionOutcome: ...
 
         @overload
-        def is_divisible_by(self: _CheckAnyValue[int] | _CheckAnyValue[float], divisor: int) -> AssertionOutcome: ...
+        def is_divisible_by(
+            self: _CheckAnyValue[int] | _CheckAnyValue[float], divisor: SupportsIndex
+        ) -> AssertionOutcome: ...
         @overload
-        def is_divisible_by(self: _CheckAnyValue[int], divisor: int) -> AssertionOutcome: ...
+        def is_divisible_by(self: _CheckAnyValue[int], divisor: SupportsIndex) -> AssertionOutcome: ...
 
         @overload
         def contains_key(self: _CheckAnyValue[dict[_K, _V]], *keys: _K | Matcher[_K]) -> AssertionOutcome: ...
@@ -1106,10 +1110,12 @@ if TYPE_CHECKING:
 
         @overload
         def has_byte_at(
-            self: _CheckAnyValue[bytes] | _CheckAnyValue[bytearray], index: int, expected: int
+            self: _CheckAnyValue[bytes] | _CheckAnyValue[bytearray], index: SupportsIndex, expected: SupportsIndex
         ) -> AssertionOutcome: ...
         @overload
-        def has_byte_at(self: _CheckAnyValue[bytes | bytearray], index: int, expected: int) -> AssertionOutcome: ...
+        def has_byte_at(
+            self: _CheckAnyValue[bytes | bytearray], index: SupportsIndex, expected: SupportsIndex
+        ) -> AssertionOutcome: ...
 
         @overload
         def is_hex_equal_to(
@@ -1266,9 +1272,9 @@ if TYPE_CHECKING:
 
         def is_subclass_of(self, some_class: ClassInfo) -> AssertionOutcome: ...
 
-        def is_length(self, length: int) -> AssertionOutcome: ...
+        def is_length(self, length: SupportsIndex) -> AssertionOutcome: ...
 
-        def is_length_between(self, low: int, high: int) -> AssertionOutcome: ...
+        def is_length_between(self, low: SupportsIndex, high: SupportsIndex) -> AssertionOutcome: ...
 
         def is_callable(self) -> AssertionOutcome: ...
 

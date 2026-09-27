@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, SupportsIndex
 
 from ._engine._mixin_base import _MixinBase
+from ._engine._ordering import require_integer
 from ._engine._require import refuse, sized_len
 
 if TYPE_CHECKING:
@@ -98,7 +99,7 @@ class BytesMixin(_MixinBase):
         self._check_bytes()
         return self.contains(sub)
 
-    def has_byte_at(self, index: int, expected: int) -> Self:
+    def has_byte_at(self, index: SupportsIndex, expected: SupportsIndex) -> Self:
         """Assert that the byte at the given index equals the expected value.
 
         Args:
@@ -112,9 +113,10 @@ class BytesMixin(_MixinBase):
             AssertionError: if the byte at index does not match
         """
         self._check_bytes()
-        if index < 0 or index >= sized_len(self.val):
+        position = index if type(index) is int else require_integer(index, "index")
+        if position < 0 or position >= sized_len(self.val):
             raise IndexError(f"Expected index {index} to be in range [0, {sized_len(self.val)}), but was out of range.")
-        actual = self.val[index]
+        actual = self.val[position]
         if actual == expected:
             return self
         return self.error(

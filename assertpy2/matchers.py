@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Any, NamedTuple, SupportsIndex, TypeVar, cast, overload
 
 from ._engine._introspection import is_same_implementation
 from ._engine._require import argument, refuse, verdict
@@ -364,12 +364,12 @@ class _MatchNamespace:
         return IsFalsyMatcher()
 
     @staticmethod
-    def has_length(length: int) -> HasLengthMatcher:
+    def has_length(length: SupportsIndex) -> HasLengthMatcher:
         """Matcher for a value whose ``len()`` equals ``length``."""
         return HasLengthMatcher(length)
 
     @staticmethod
-    def is_length(length: int) -> HasLengthMatcher:
+    def is_length(length: SupportsIndex) -> HasLengthMatcher:
         """Matcher for a value whose ``len()`` equals ``length``.
 
         The same matcher as `has_length()`, under the name the fluent assertion uses
@@ -415,7 +415,7 @@ class _MatchNamespace:
         return IsOddMatcher()
 
     @staticmethod
-    def is_divisible_by(divisor: int) -> IsDivisibleByMatcher:
+    def is_divisible_by(divisor: SupportsIndex) -> IsDivisibleByMatcher:
         """Matcher for an integer divisible by ``divisor``."""
         return IsDivisibleByMatcher(divisor)
 
