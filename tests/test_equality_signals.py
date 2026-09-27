@@ -800,6 +800,14 @@ def test_a_numpy_scalar_against_a_list_is_unequal_as_the_value_it_holds_is(asked
     assert_that(_BROADCAST_ASKED[asked](scalar, sequence)).is_equal_to(_BROADCAST_ASKED[asked](plain, sequence))
 
 
+@pytest.mark.parametrize("sequence", [[5], (5,)], ids=["list", "tuple"])
+def test_the_failure_of_a_numpy_scalar_against_a_sequence_does_not_call_them_equal(sequence):
+    """The hint used to read numpy's array for the pair as equal values and name only their types."""
+    numpy = pytest.importorskip("numpy")
+    message = assert_that(numpy.int64(5)).check().is_equal_to(sequence).message
+    assert_that(message).does_not_contain("only their types differ")
+
+
 class _Values(list):
     """A list that keeps the built-in search and iteration."""
 

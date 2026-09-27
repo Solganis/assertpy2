@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Final
 
 from ._engine._equality import comparable_fields
 from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object, kind_of
-from ._engine._ordering import nan_operand
+from ._engine._ordering import equals, nan_operand
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -126,11 +126,11 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
     """
     try:
         for left, right in pairs:
-            if left == right:
+            if equals(left, right):
                 return False
             for step in steps:
                 left, right = step(left), step(right)
-            explained = left == right
+            explained = equals(left, right)
             if not explained:
                 return False
     except Exception:  # a diagnostic must never outrank the failure it is describing
@@ -156,7 +156,7 @@ def _typed(pairs: Sequence[tuple[object, object]], kind: str) -> str | None:
             return None
         if kind == "scalar" and all(str(left) == str(right) for left, right in pairs):
             return None
-        if all(left == right for left, right in pairs):
+        if all(equals(left, right) for left, right in pairs):
             return "the values on both sides are equal, and only their types differ"
         if all(str(left) == str(right) for left, right in pairs):
             return "every difference here is the same text against a value of another type"
