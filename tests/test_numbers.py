@@ -1061,10 +1061,12 @@ def test_an_infinite_tolerance_covers_a_numpy_pair_measured_exactly(spelling, va
     assert_that(_CLOSENESS_SPELLINGS[spelling](*pair, kinds[tolerance][1])).is_true()
 
 
-def test_a_negative_infinite_numpy_tolerance_holds_no_pair_measured_exactly():
-    """Not asked at the matcher's construction, where only a built-in number's sign is, and covering nothing."""
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+def test_a_negative_infinite_numpy_tolerance_is_refused_in_every_spelling(spelling):
+    """The matcher asks a `numpy` number's sign at construction too, which runs no code but `numpy`'s."""
     numpy = pytest.importorskip("numpy")
-    assert_that(match.close_to(fractions.Fraction(10**400, 3), numpy.float32("-inf")).matches(0.5)).is_false()
+    with pytest.raises(ValueError, match="given tolerance arg must"):
+        _CLOSENESS_SPELLINGS[spelling](decimal.Decimal("1.5"), fractions.Fraction(10**400, 3), numpy.float32("-inf"))
 
 
 @pytest.mark.parametrize("tolerance", [-math.inf, decimal.Decimal("-Infinity")], ids=["float", "decimal"])

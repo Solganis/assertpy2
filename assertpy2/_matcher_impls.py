@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import functools
 import numbers
 import re
+import sys
 import uuid as _uuid_mod
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -628,8 +630,28 @@ def _sequence_or_numpy(value: object) -> bool:
 
 
 def _plainly_ordered(value: object) -> bool:
-    """Whether a value's ordering is a builtin one, so asking it at construction runs nobody else's code."""
-    return type(value) in (int, float, Decimal, Fraction, datetime, date, time, timedelta)
+    """Whether a value's ordering is a builtin one or a `numpy` number's, so asking it at construction runs nobody
+    else's code: a `numpy` tolerance below zero was never refused, and covered every distance.
+    """
+    kind = id(type(value))
+    if kind in _BUILT_IN_ORDERED:
+        return True
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and kind in _numpy_real_types(numpy)
+
+
+_BUILT_IN_ORDERED = frozenset(map(id, (int, float, Decimal, Fraction, datetime, date, time, timedelta)))
+"""By id: a membership test of the classes themselves asks a metaclass's `__eq__`, which is anybody's code."""
+
+
+@functools.cache
+def _numpy_real_types(numpy: Any) -> frozenset[int]:
+    """The ids of `numpy`'s own integer and floating scalar types.
+
+    Told by identity, which neither a subclass naming its module `numpy` nor a metaclass answering attribute
+    reads can claim, and without hashing a class of anybody's.
+    """
+    return frozenset(id(numpy.dtype(code).type) for code in numpy.typecodes["AllInteger"] + numpy.typecodes["Float"])
 
 
 def _swapped(low: object, high: object) -> bool:

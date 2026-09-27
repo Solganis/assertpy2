@@ -212,6 +212,50 @@ class TestCloseToMatcher:
     def test_nan_tolerance_never_matches(self):
         assert_that(match.close_to(5.0, nan).matches(5.0)).is_false()
 
+    def test_a_negative_numpy_tolerance_is_refused_at_construction(self):
+        numpy = pytest.importorskip("numpy")
+        with pytest.raises(ValueError, match="given tolerance arg must be positive"):
+            match.close_to(1, numpy.float32(-1))
+
+    def test_a_number_claiming_to_be_numpys_is_not_asked_at_construction(self):
+        """A subclass naming its module `numpy` still wrote its own comparison, which construction must not run."""
+        numpy = pytest.importorskip("numpy")
+
+        class Claiming(numpy.float64):
+            __module__ = "numpy"
+
+            def __gt__(self, other: object) -> bool:
+                raise AssertionError("asked at construction")
+
+            def __lt__(self, other: object) -> bool:
+                raise AssertionError("asked at construction")
+
+        assert_that(match.close_to(1, Claiming(-1)).describe()).is_equal_to("a value within <-1.0> of <1>")
+
+    def test_a_class_whose_metaclass_answers_attribute_reads_is_not_read_at_construction(self):
+        class Guarded(type):
+            def __getattribute__(cls, name: str) -> object:
+                if name == "__module__":
+                    raise AssertionError("read at construction")
+                return super().__getattribute__(name)
+
+        class Bound(metaclass=Guarded):
+            pass
+
+        assert_that(match.between(Bound(), 5).describe()).starts_with("a value between")
+
+    def test_a_class_whose_metaclass_answers_equality_is_not_compared_at_construction(self):
+        class Guarded(type):
+            def __eq__(cls, other: object) -> bool:
+                raise AssertionError("compared at construction")
+
+            __hash__ = type.__hash__
+
+        class Bound(metaclass=Guarded):
+            pass
+
+        assert_that(match.between(Bound(), 5).describe()).starts_with("a value between")
+
 
 class TestOrderingMatchersIncompatibleTypes:
     def test_greater_than_incompatible(self):

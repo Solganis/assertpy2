@@ -74,6 +74,13 @@ if numpy is not None:
 
 _ZOO: dict[str, Any] = {**_ORDINARY, **_UNORDERED, **_INFINITE, **_BOOLS}
 
+_NUMPY_REAL: tuple[type, ...] = (
+    ()
+    if numpy is None
+    else tuple({numpy.dtype(code).type for code in numpy.typecodes["AllInteger"] + numpy.typecodes["Float"]})
+)
+"""`numpy`'s own integer and floating scalar types, whose order a matcher asks at construction as a builtin's."""
+
 _TOLERANCES: dict[str, Any] = {
     "0": 0,
     "half": 0.5,
@@ -110,6 +117,12 @@ _TOLERANCE_REFUSES = {
 """The tolerances `is_equal_to(tolerance=)` refuses, before it looks at the operands at all."""
 _MATCHER_REFUSES = {"-1": "positive", "-half": "positive", "decimal-neg": "positive"}
 """The tolerances `match.close_to` refuses at construction; nothing lies within a NaN or a bool one."""
+
+if numpy is not None:
+    _TOLERANCES.update({"f32-neg": numpy.float32(-1), "f32-neg-inf": numpy.float32("-inf"), "i64-neg": numpy.int64(-1)})
+    for negative in ("f32-neg", "f32-neg-inf", "i64-neg"):
+        _CLOSE_TO_REFUSES[negative] = _MATCHER_REFUSES[negative] = "positive"
+        _TOLERANCE_REFUSES[negative] = "not-negative"
 
 _SHOWN = r"<[^<>\n]+> \((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*\)"
 _REFUSALS: dict[str, tuple[type[Exception], str, Callable[[], object]]] = {
@@ -320,12 +333,12 @@ def _ordering_expected(value_name: str, other_name: str) -> dict[str, str]:
 def _range_expected(value_name: str, low_name: str, high_name: str) -> dict[str, str]:
     """Reversed bounds are refused before the value is asked, and a NaN anywhere else holds nothing between.
 
-    The matcher asks its bounds at construction only where that runs no code but the interpreter's
+    The matcher asks its bounds at construction only where that runs no code but the interpreter's or `numpy`'s
     (`_plainly_ordered`), and between reversed bounds it did not ask, which nothing lies between, answers no match.
     """
     if not {low_name, high_name} & _UNORDERED.keys() and _real(low_name) > _real(high_name):
         bounds = (_ZOO[low_name], _ZOO[high_name])
-        plain = all(type(bound) in (int, float, decimal.Decimal, fractions.Fraction) for bound in bounds)
+        plain = all(type(bound) in (int, float, decimal.Decimal, fractions.Fraction, *_NUMPY_REAL) for bound in bounds)
         return {"between": "refused:low-high", "matcher": "refused:low-high" if plain else "failed"}
     if {value_name, low_name, high_name} & _UNORDERED.keys():
         return dict.fromkeys(_RANGE, "failed")
