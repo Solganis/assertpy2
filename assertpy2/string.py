@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import equal_past
+from ._engine._ordering import broadcasts, equal_past
 from ._engine._require import argument, refuse, require_type, sized_len
 from .errors import _safe_str
 
@@ -212,7 +212,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("val must not be empty") from None
             try:
                 starts = first == prefix
-            except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
+                starts = starts if type(starts) is bool or not broadcasts(first, prefix, answer=starts) else False
+            except (decimal.InvalidOperation, OverflowError, TypeError, ValueError) as refusal:
                 starts = equal_past(first, prefix, refusal)
             if not starts:
                 return self.error(
@@ -268,7 +269,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("val must not be empty")
             try:
                 ends = items[-1] == suffix
-            except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
+                ends = ends if type(ends) is bool or not broadcasts(items[-1], suffix, answer=ends) else False
+            except (decimal.InvalidOperation, OverflowError, TypeError, ValueError) as refusal:
                 ends = equal_past(items[-1], suffix, refusal)
             if not ends:
                 return self.error(

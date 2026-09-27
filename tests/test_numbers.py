@@ -3,6 +3,7 @@ import fractions
 import math
 import numbers
 import operator
+import re
 import types
 
 import pytest
@@ -1861,3 +1862,103 @@ def test_is_divisible_by_negative_divisor():
     assert_that(9).is_divisible_by(-3)
     with pytest.raises(AssertionError):
         assert_that(10).is_divisible_by(-3)
+
+
+_BROADCAST_ORDER = {
+    "is_less_than": lambda sequence, number: assert_that(sequence).check().is_less_than(number).passed,
+    "is_greater_than_or_equal_to": lambda sequence, number: (
+        assert_that(sequence).check().is_greater_than_or_equal_to(number).passed
+    ),
+    "is_less_than-swapped": lambda sequence, number: assert_that(number).check().is_less_than(sequence).passed,
+    "is_between": lambda sequence, number: assert_that(sequence).check().is_between(number, number + 9).passed,
+    "is_sorted": lambda sequence, number: assert_that([sequence, number]).check().is_sorted().passed,
+    "match.less_than": lambda sequence, number: match.less_than(number).matches(sequence),
+    "match.between": lambda sequence, number: match.between(number, number + 9).matches(sequence),
+}
+
+
+def _order_outcome(asked, sequence, number) -> object:
+    """The verdict, or the refusal's type and sentence with the number's own spelling taken out."""
+    try:
+        return asked(sequence, number)
+    except TypeError as refusal:
+        said = re.sub(r"np\.int64\((\d+)\)", r"\1", str(refusal))
+        return type(refusal), re.sub(r"\((?:numpy\.)?int(?:64)?\)", "", said)
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ORDER))
+@pytest.mark.parametrize("sequence", [[5], (5,), [5, 6]], ids=["one-element", "tuple", "two-elements"])
+def test_a_list_against_a_numpy_scalar_is_unordered_as_against_the_int_it_holds(asked, sequence):
+    """`numpy` answered an array for the pair, true for one element and raising for several; a number and a
+    list have no order, and each spelling refuses or fails the pair as it does the Python int's.
+    """
+    numpy = pytest.importorskip("numpy")
+    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, 6)
+    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, numpy.int64(6))).is_equal_to(expected)
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ORDER))
+@pytest.mark.parametrize(
+    "sequence",
+    [[[5], [5, 6]], [decimal.Decimal("NaN")], [decimal.Decimal("sNaN")]],
+    ids=["ragged", "decimal-nan", "signalling-nan"],
+)
+def test_a_list_numpy_cannot_order_against_a_numpy_scalar_is_unordered_as_against_the_int(asked, sequence):
+    """`numpy` raised from the comparison itself: `ValueError` building a ragged list's array, and the NaN's
+    signal where it ordered the element against the scalar.
+    """
+    numpy = pytest.importorskip("numpy")
+    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, 6)
+    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, numpy.int64(6))).is_equal_to(expected)
+
+
+class _NeverLess(list):
+    """A list whose own `<` answers `False`, so the reverse comparison is `numpy`'s."""
+
+    def __lt__(self, other: object) -> bool:
+        return False
+
+
+def test_the_reverse_comparison_of_a_list_against_a_numpy_scalar_is_asked_as_the_first_is():
+    """`numpy.int64(6) < _NeverLess([5])` broadcast, where the first comparison had answered a plain bool."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(TypeError, match="must be comparable"):
+        assert_that(_NeverLess([5])).is_greater_than(numpy.int64(6))
+
+
+class _DecliningOrder(list):
+    """A list whose own `<` and `>` decline every operand, leaving the order to the other side's."""
+
+    def __lt__(self, other: object) -> object:
+        return NotImplemented
+
+    def __gt__(self, other: object) -> object:
+        return NotImplemented
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ORDER))
+@pytest.mark.parametrize("held", [[5], [5, 6]], ids=["one-element", "two-elements"])
+def test_a_list_whose_own_order_declined_a_numpy_scalar_is_unordered_as_against_the_int(asked, held):
+    numpy = pytest.importorskip("numpy")
+    sequence = _DecliningOrder(held)
+    expected = _order_outcome(_BROADCAST_ORDER[asked], sequence, 6)
+    assert_that(_order_outcome(_BROADCAST_ORDER[asked], sequence, numpy.int64(6))).is_equal_to(expected)
+
+
+@pytest.mark.parametrize("written", ["__lt__", "__gt__"])
+def test_a_numpy_scalar_that_wrote_one_order_is_unordered_against_a_list_by_the_one_numpy_wrote(written):
+    """Its own operator answers `False`, and the one inherited from `numpy` broadcasts over the two elements."""
+    numpy = pytest.importorskip("numpy")
+    scalar = type("Written", (numpy.int64,), {written: lambda self, other: False, "__hash__": numpy.int64.__hash__})
+    with pytest.raises(TypeError, match="must be comparable"):
+        assert_that([5, 6]).is_greater_than(scalar(6))
+
+
+def test_two_lists_whose_own_order_raised_on_a_numpy_scalar_are_ordered_as_the_int_is():
+    """`numpy`'s array for the first pair had no truth, and the pairs are asked one by one."""
+    numpy = pytest.importorskip("numpy")
+
+    def asked(sequence: list[object], number: object) -> bool:
+        return assert_that([number]).check().is_less_than(sequence).passed
+
+    assert_that(_order_outcome(asked, [[5, 6]], numpy.int64(5))).is_equal_to(_order_outcome(asked, [[5, 6]], 5))

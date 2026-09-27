@@ -5,7 +5,7 @@ import re
 import uuid as _uuid_mod
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from fractions import Fraction
 from types import UnionType
 from typing import (
@@ -59,9 +59,11 @@ from ._engine._ordering import (
     REFUSALS,
     UnorderableError,
     equal_past,
+    equals,
     first_out_of_order,
     holds,
     lookup,
+    may_broadcast,
     member,
 )
 from ._engine._path import _ROOT, _Path
@@ -487,7 +489,8 @@ class EqualToMatcher(BaseMatcher):
         self.ignore: object = options.get("ignore")
         self.include: object = options.get("include")
         # `equal_to(value)` alone is what `matches_structure` and the loops use, so it is decided once here
-        self.plain: bool = not (strict_types or options)
+        self.guarded: bool = not (strict_types or options) and _sequence_or_numpy(expected)
+        self.plain: bool = not (strict_types or options or self.guarded)
         self.config: _CompareConfig | None = (
             _build_compare_config(
                 options.get("tolerance"),
@@ -503,8 +506,10 @@ class EqualToMatcher(BaseMatcher):
         if self.plain:
             try:
                 return bool(value == self.expected)  # the hot path stays a plain comparison
-            except (InvalidOperation, OverflowError, TypeError) as refusal:
+            except REFUSALS as refusal:
                 return equal_past(value, self.expected, refusal)
+        if self.guarded:
+            return equals(value, self.expected)
         if self.strict_types and type(value) is not type(self.expected):
             return False
         if mapping_shaped(value, check_values=False) and mapping_shaped(self.expected, check_values=False):
@@ -608,6 +613,15 @@ class LessThanOrEqualToMatcher(BaseMatcher):
 
     def describe(self) -> str:
         return f"a value less than or equal to <{self.boundary}>"
+
+
+def _sequence_or_numpy(value: object) -> bool:
+    """Whether *value* can meet a `numpy` scalar's element-wise ``==``: a list or a tuple, or a `numpy` scalar.
+
+    Decided when the matcher is built, so every other value keeps the plain comparison as its hot path.  A list or a
+    tuple counts whether or not `numpy` is loaded yet; a `numpy` scalar, of any subclass, exists only once it is.
+    """
+    return issubclass(type(value), (list, tuple)) or may_broadcast(value)
 
 
 def _plainly_ordered(value: object) -> bool:
@@ -931,14 +945,28 @@ class IsCallableMatcher(BaseMatcher):
         return f"was <{_safe_repr(value)}> of type <{type(value).__name__}>, which is not callable"
 
 
+class _SearchedByMember:
+    """Candidates searched as `member` searches them, where a `numpy` scalar may meet a list among them."""
+
+    __slots__ = ("values",)
+
+    def __init__(self, values: tuple[object, ...]):
+        self.values = values
+
+    def __contains__(self, item: object) -> bool:
+        return member(item, self.values)
+
+
 class IsInMatcher(BaseMatcher):
     def __init__(self, *values: object):
         self.values = values
+        broadcasting = any(_sequence_or_numpy(candidate) for candidate in values)
+        self._candidates: tuple[object, ...] | _SearchedByMember = _SearchedByMember(values) if broadcasting else values
 
     def matches(self, value: Any) -> bool:
         try:
-            return value in self.values
-        except (InvalidOperation, OverflowError, TypeError):
+            return value in self._candidates
+        except REFUSALS:
             return member(value, self.values)
 
     def describe(self) -> str:

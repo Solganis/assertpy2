@@ -13,12 +13,20 @@ import collections.abc
 import decimal
 import math
 import numbers
+import sys
 
 import pytest
 
 from assertpy2 import assert_that, match
 from assertpy2._engine._membership import occurrences
-from assertpy2._engine._ordering import _holds_nan, held_key, member
+from assertpy2._engine._ordering import (
+    _holds_nan,
+    broadcasts,
+    held_key,
+    may_broadcast,
+    member,
+    mixes_broadcasting,
+)
 
 _ASKED = {
     "is_equal_to": lambda value, other: assert_that(value).check().is_equal_to(other).passed,
@@ -186,7 +194,7 @@ def test_an_error_raised_in_code_of_the_values_own_is_handed_on(call, raised):
 def test_an_operand_refusal_is_told_apart_beside_a_signal():
     """The bytes' own ints signal against the NaN, and the NaN in the bytes is the operator refusing it."""
     with pytest.raises(TypeError, match="bytes-like"):
-        assert_that(b"").contains_only(decimal.Decimal("sNaN"))
+        assert_that(b"\x01").contains_only(decimal.Decimal("sNaN"))
 
 
 @pytest.mark.parametrize(("item", "held"), [(3, True), (4, False), (2, True)])
@@ -732,3 +740,270 @@ def test_a_key_refusing_in_c_code_of_its_own_is_handed_on_not_answered(asked):
     """The search past a refusal asks `equals`, which answers only numbers it reads exactly; this one it hands on."""
     with pytest.raises(TypeError, match="descriptor '__add__'"):
         _REFUSED_KEY_ASKED[asked](_RefusingInC())
+
+
+_BROADCAST_ASKED = {
+    "is_equal_to": lambda scalar, sequence: assert_that(scalar).check().is_equal_to(sequence).passed,
+    "is_equal_to-swapped": lambda scalar, sequence: assert_that(sequence).check().is_equal_to(scalar).passed,
+    "is_not_equal_to": lambda scalar, sequence: assert_that(scalar).check().is_not_equal_to(sequence).passed,
+    "match.equal_to": lambda scalar, sequence: match.equal_to(sequence).matches(scalar),
+    "match.equal_to-swapped": lambda scalar, sequence: match.equal_to(scalar).matches(sequence),
+    "is_in": lambda scalar, sequence: assert_that(scalar).check().is_in(sequence, 7).passed,
+    "is_in-swapped": lambda scalar, sequence: assert_that(sequence).check().is_in(scalar, 7).passed,
+    "is_not_in": lambda scalar, sequence: assert_that(scalar).check().is_not_in(sequence, 7).passed,
+    "match.is_in": lambda scalar, sequence: match.is_in(sequence, 7).matches(scalar),
+    "match.is_in-swapped": lambda scalar, sequence: match.is_in(scalar, 7).matches(sequence),
+    "contains": lambda scalar, sequence: assert_that([scalar, 7]).check().contains(sequence).passed,
+    "contains-swapped": lambda scalar, sequence: assert_that([sequence, 7]).check().contains(scalar).passed,
+    "contains-two": lambda scalar, sequence: assert_that([scalar, 7]).check().contains(sequence, 7).passed,
+    "does_not_contain": lambda scalar, sequence: assert_that([scalar]).check().does_not_contain(sequence).passed,
+    "match.contains": lambda scalar, sequence: match.contains(sequence).matches([scalar]),
+    "contains_only": lambda scalar, sequence: assert_that([scalar, 7]).check().contains_only(sequence, 7).passed,
+    "contains_only-swapped": lambda scalar, sequence: (
+        assert_that([sequence, 7]).check().contains_only(scalar, 7).passed
+    ),
+    "contains_only_once": lambda scalar, sequence: assert_that([scalar]).check().contains_only_once(sequence).passed,
+    "contains_sequence": lambda scalar, sequence: (
+        assert_that([scalar, 7]).check().contains_sequence(sequence, 7).passed
+    ),
+    "contains_value": lambda scalar, sequence: assert_that({"a": scalar}).check().contains_value(sequence).passed,
+    "is_subset_of": lambda scalar, sequence: assert_that([sequence]).check().is_subset_of([scalar, 7]).passed,
+    "contains_duplicates": lambda scalar, sequence: (
+        assert_that([scalar, sequence]).check().contains_duplicates().passed
+    ),
+    "starts_with": lambda scalar, sequence: assert_that([scalar, 7]).check().starts_with(sequence).passed,
+    "ends_with": lambda scalar, sequence: assert_that([7, scalar]).check().ends_with(sequence).passed,
+}
+
+
+_SCALAR_KINDS = {"int64": 5, "float32": 5.0, "float64": 5.0, "bool_": True, "str_": "5"}
+_SEQUENCE_SHAPES = {
+    "empty": lambda plain: [],
+    "one-element": lambda plain: [plain],
+    "tuple": lambda plain: (plain,),
+    "two-elements": lambda plain: [plain, plain],
+}
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ASKED))
+@pytest.mark.parametrize("kind", list(_SCALAR_KINDS))
+@pytest.mark.parametrize("shape", list(_SEQUENCE_SHAPES))
+def test_a_numpy_scalar_against_a_list_is_unequal_as_the_value_it_holds_is(asked, kind, shape):
+    """`numpy` compares a scalar with a sequence element by element: true for one equal element, raising on the
+    truth of several, and on none, where numpy 1 only warns; the library asked that pair itself, and a Python
+    value is simply unequal to a list.
+    """
+    numpy = pytest.importorskip("numpy")
+    plain = _SCALAR_KINDS[kind]
+    sequence = _SEQUENCE_SHAPES[shape](plain)
+    scalar = getattr(numpy, kind)(plain)
+    assert_that(_BROADCAST_ASKED[asked](scalar, sequence)).is_equal_to(_BROADCAST_ASKED[asked](plain, sequence))
+
+
+class _Values(list):
+    """A list that keeps the built-in search and iteration."""
+
+
+def test_a_list_subclass_keeping_the_built_in_search_is_searched_past_a_broadcast():
+    numpy = pytest.importorskip("numpy")
+    assert_that(assert_that(_Values([numpy.int64(5)])).check().contains([5]).passed).is_false()
+    assert_that(assert_that(_Values([[5]])).check().contains(numpy.int64(5)).passed).is_false()
+
+
+_HELD = (0, 1)
+"""A tuple whose hash an `int64` holds and hashes to as well, so a lookup of one meets the other and compares them."""
+
+_COLLISION_ASKED = {
+    "contains-set": lambda key: assert_that({_HELD}).check().contains(key).passed,
+    "is_in-set": lambda key: assert_that(key).check().is_in({_HELD}).passed,
+    "contains_only-set": lambda key: assert_that({_HELD}).check().contains_only(key).passed,
+    "is_equal_to-set": lambda key: assert_that({_HELD}).check().is_equal_to({key}).passed,
+    "contains_entry": lambda key: assert_that({_HELD: 1}).check().contains_entry({key: 1}).passed,
+    "does_not_contain_entry": lambda key: assert_that({_HELD: 1}).check().does_not_contain_entry({key: 1}).passed,
+    "is_equal_to": lambda key: assert_that({_HELD: 1}).check().is_equal_to({key: 1}).passed,
+    "is_equal_to-swapped": lambda key: assert_that({key: 1}).check().is_equal_to({_HELD: 1}).passed,
+    "is_equal_to-ignore": lambda key: (
+        assert_that({_HELD: 1, "a": 2}).check().is_equal_to({key: 1, "a": 3}, ignore="a").passed
+    ),
+    "is_subset_of": lambda key: assert_that({key: 1}).check().is_subset_of({_HELD: 1}).passed,
+    "is_subset_of-swapped": lambda key: assert_that({_HELD: 1}).check().is_subset_of({key: 1}).passed,
+    "match.equal_to": lambda key: match.equal_to({key: 1}).matches({_HELD: 1}),
+    "matches_structure": lambda key: assert_that({_HELD: 1}).check().matches_structure({key: 1}).passed,
+}
+
+
+@pytest.mark.parametrize("asked", list(_COLLISION_ASKED))
+def test_a_hash_collision_between_a_numpy_scalar_and_a_tuple_answers_as_the_int_does(asked):
+    numpy = pytest.importorskip("numpy")
+    colliding = numpy.int64(hash(_HELD))
+    assert_that(hash(colliding)).is_equal_to(hash(_HELD))
+    expected = _COLLISION_ASKED[asked](hash(_HELD))
+    assert_that(_COLLISION_ASKED[asked](colliding)).is_equal_to(expected)
+
+
+def test_a_one_shot_value_is_read_once_where_a_scalar_meets_a_list():
+    numpy = pytest.importorskip("numpy")
+    passed = assert_that(value for value in [numpy.int64(5), 2]).check().contains_only([5], 2).passed
+    assert_that(passed).is_equal_to(assert_that(value for value in [5, 2]).check().contains_only([5], 2).passed)
+
+
+@pytest.mark.parametrize(
+    "asked",
+    [
+        lambda scalar: assert_that([scalar]).check().contains_exactly([5]).passed,
+        lambda scalar: assert_that([scalar]).check().is_equal_to([[5]]).passed,
+        lambda scalar: assert_that({"a": scalar}).check().is_equal_to({"a": [5]}).passed,
+    ],
+    ids=["contains_exactly", "list-of-lists", "dict-values"],
+)
+def test_a_numpy_scalar_meeting_a_list_inside_a_containers_own_comparison_is_numpys_answer(asked):
+    """The recorded boundary: two containers compared by their own C `==` take the truth of numpy's array."""
+    numpy = pytest.importorskip("numpy")
+    assert_that(asked(numpy.int64(5))).is_true()
+
+
+_RAISED_INSIDE_ASKED = {
+    "is_equal_to": lambda scalar: assert_that([scalar]).check().is_equal_to([[5, 6]]).passed,
+    "is_equal_to-swapped": lambda scalar: assert_that([[5, 6]]).check().is_equal_to([scalar]).passed,
+    "dict-values": lambda scalar: assert_that({"a": scalar}).check().is_equal_to({"a": [5, 6]}).passed,
+    "match.equal_to": lambda scalar: match.equal_to({"a": [5, 6]}).matches({"a": scalar}),
+    "contains_exactly": lambda scalar: assert_that([scalar]).check().contains_exactly([5, 6]).passed,
+    "contains_duplicates": lambda scalar: assert_that([[scalar], [[5, 6]]]).check().contains_duplicates().passed,
+    "does_not_contain_duplicates": lambda scalar: (
+        assert_that([[scalar], [[5, 6]]]).check().does_not_contain_duplicates().passed
+    ),
+    "contains_only_once": lambda scalar: assert_that([[scalar], [[5, 6]]]).check().contains_only_once([[5, 6]]).passed,
+    "contains_only_once-swapped": lambda scalar: (
+        assert_that([[[5, 6]], [scalar]]).check().contains_only_once([scalar]).passed
+    ),
+    "contains_exactly_in_any_order": lambda scalar: (
+        assert_that([[scalar]]).check().contains_exactly_in_any_order([[5, 6]]).passed
+    ),
+    "contains_sequence": lambda scalar: assert_that([[scalar], 7]).check().contains_sequence([[5, 6]], 7).passed,
+    "match.is_in": lambda scalar: match.is_in([[5, 6]], 7).matches([scalar]),
+}
+
+
+@pytest.mark.parametrize("asked", list(_RAISED_INSIDE_ASKED))
+def test_a_containers_own_comparison_that_raised_on_the_pair_is_answered_as_the_int_is(asked):
+    """Where numpy's array had no truth, the container's `==` raised, and the pairs are asked one by one."""
+    numpy = pytest.importorskip("numpy")
+    assert_that(_RAISED_INSIDE_ASKED[asked](numpy.int64(5))).is_equal_to(_RAISED_INSIDE_ASKED[asked](5))
+
+
+def test_nothing_broadcasts_while_numpy_is_not_loaded(monkeypatch):
+    """No `numpy` scalar can exist before `numpy` is imported, so no list can meet one."""
+    monkeypatch.delitem(sys.modules, "numpy", raising=False)
+    assert_that(broadcasts(5, [5])).is_false()
+    assert_that(may_broadcast([5])).is_false()
+    assert_that(mixes_broadcasting([5, [5]])).is_false()
+
+
+class _ShiftingInC(int):
+    """An int whose `==` and `<` are C code of `int`'s shift, raising `ValueError` for a negative count."""
+
+    __eq__ = int.__rshift__
+    __lt__ = int.__rshift__
+    __hash__ = int.__hash__
+
+
+@pytest.mark.parametrize(
+    "asked",
+    [
+        lambda left, right: assert_that(left).is_equal_to(right),
+        lambda left, right: assert_that(left).is_less_than(right),
+    ],
+    ids=["is_equal_to", "is_less_than"],
+)
+def test_a_value_error_of_a_values_own_comparison_in_c_is_handed_on(asked):
+    with pytest.raises(ValueError, match="negative shift count"):
+        asked(_ShiftingInC(1), _ShiftingInC(-1))
+
+
+_NO_BROADCAST_ASKED = {
+    "member": lambda left, right: member(left, [right]),
+    "starts_with": lambda left, right: assert_that([[left]]).starts_with([right]),
+    "ends_with": lambda left, right: assert_that([[left]]).ends_with([right]),
+    "is_less_than": lambda left, right: assert_that([left]).is_less_than([right]),
+}
+
+
+@pytest.mark.parametrize("asked", list(_NO_BROADCAST_ASKED))
+def test_an_ambiguous_truth_that_is_no_broadcast_is_handed_on(asked):
+    """Two arrays are compared element by element by their own right, which `is_array_equal` is for."""
+    numpy = pytest.importorskip("numpy")
+    with pytest.raises(ValueError, match="truth value"):
+        _NO_BROADCAST_ASKED[asked](numpy.array([1, 2]), numpy.array([1, 3]))
+
+
+_RAGGED = [[5], [5, 6]]
+"""A list `numpy` cannot build an array from, which its scalar's `==` raises on before any truth is asked."""
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ASKED))
+def test_a_numpy_scalar_against_a_ragged_list_is_unequal_as_the_int_it_holds_is(asked):
+    numpy = pytest.importorskip("numpy")
+    assert_that(_BROADCAST_ASKED[asked](numpy.int64(5), _RAGGED)).is_equal_to(_BROADCAST_ASKED[asked](5, _RAGGED))
+
+
+class _AlwaysEqualList(list):
+    """A list that wrote its own `==`, answering a truthy object of its own."""
+
+    def __eq__(self, other: object) -> object:
+        return _Truthy()
+
+    __hash__ = None
+
+
+class _Truthy:
+    def __bool__(self) -> bool:
+        return True
+
+
+def test_a_list_that_wrote_its_own_equality_keeps_its_answer_against_a_numpy_scalar():
+    """Only `numpy`'s array is the broadcast; an answer of the subclass's own stands."""
+    numpy = pytest.importorskip("numpy")
+    assert_that(assert_that(_AlwaysEqualList([1])).check().is_equal_to(numpy.int64(5)).passed).is_true()
+
+
+class _Declining(list):
+    """A list whose own `==` declines every operand, leaving the answer to the other side's."""
+
+    def __eq__(self, other: object) -> object:
+        return NotImplemented
+
+    __hash__ = None
+
+
+@pytest.mark.parametrize("asked", list(_BROADCAST_ASKED))
+@pytest.mark.parametrize("held", [[5], [5, 6]], ids=["one-element", "two-elements"])
+def test_a_list_whose_own_equality_declined_a_numpy_scalar_is_unequal_as_to_the_int(asked, held):
+    """Declined, the scalar's reflected `==` answered with its array, which is `numpy`'s broadcast after all."""
+    numpy = pytest.importorskip("numpy")
+    sequence = _Declining(held)
+    assert_that(_BROADCAST_ASKED[asked](numpy.int64(5), sequence)).is_equal_to(_BROADCAST_ASKED[asked](5, sequence))
+
+
+def test_a_list_whose_own_equality_answers_an_array_is_read_as_numpys_broadcast():
+    """The recorded boundary: the answer is read and not the method that gave it, which only a second call could tell."""
+    numpy = pytest.importorskip("numpy")
+
+    class AnsweringArray(list):
+        def __eq__(self, other: object) -> object:
+            return numpy.array([True])
+
+        __hash__ = None
+
+    assert_that(assert_that(AnsweringArray([7])).check().is_equal_to(numpy.int64(5)).passed).is_false()
+
+
+def test_a_numpy_scalar_subclass_that_wrote_its_own_equality_keeps_its_answer():
+    numpy = pytest.importorskip("numpy")
+
+    class AlwaysEqual(numpy.int64):
+        def __eq__(self, other: object) -> object:
+            return numpy.array([True])
+
+        __hash__ = numpy.int64.__hash__
+
+    assert_that(assert_that(AlwaysEqual(5)).check().is_equal_to([7]).passed).is_true()

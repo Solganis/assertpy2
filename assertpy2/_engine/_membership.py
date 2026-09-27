@@ -20,7 +20,14 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from ._introspection import definition_of, is_mapping_like, materialized
-from ._ordering import REFUSALS, equals, lookup, member
+from ._ordering import (
+    REFUSALS,
+    equals,
+    lookup,
+    may_broadcast,
+    member,
+    mixes_broadcasting,
+)
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -233,13 +240,15 @@ def _absent_from(
     error of its own is its own and leaves as it was raised; an item `member` refused is asked again alone.
     """
     absent = []
+    # the index `_index` built holds only types that hash and compare alike, which no `numpy` scalar or list is
+    verify = present is walked
     for item in items:
         if is_matcher(item):
             if not any(verdict(item.matches(element), subject="the matcher") for element in walked):
                 absent.append(item)
             continue
         try:
-            if not member(item, present):
+            if not member(item, present, verify):
                 absent.append(item)
         except TypeError as refusal:
             _told_apart((((item,), present),), refusal, marked=marked)
@@ -276,9 +285,12 @@ def _without(items: Iterable[Any], container: Any) -> list[Any]:
     A `TypeError` is asked again too, since a signalling NaN refuses to hash for a set: `member` answers that
     one and hands every other refusal on.
     """
+    # a walk of a sequence is quadratic, so the pass that finds a `numpy` scalar meeting a list costs it nothing
+    if isinstance(container, (list, tuple)) and mixes_broadcasting(items, container):
+        return [item for item in items if not member(item, container)]
     try:
         return [item for item in items if item not in container]
-    except (decimal.InvalidOperation, OverflowError, TypeError):
+    except REFUSALS:
         return [item for item in items if not member(item, container)]
 
 
@@ -290,6 +302,8 @@ def has_duplicates(values: Sequence[Any]) -> bool:
             return len(set(values)) != len(values)
         except Exception:  # a value refused to hash after all; only hashing is inside this `try`
             pass
+    if mixes_broadcasting(values):
+        return any(member(value, values[:index]) for index, value in enumerate(values))
     # `in` rather than a generator of `==`: the interpreter asks it, and it short-circuits on identity
     seen: list[Any] = []
     try:
@@ -297,7 +311,7 @@ def has_duplicates(values: Sequence[Any]) -> bool:
             if value in seen:
                 return True
             seen.append(value)
-    except (decimal.InvalidOperation, OverflowError, TypeError):
+    except REFUSALS:
         return any(member(value, values[:index]) for index, value in enumerate(values))
     return False
 
@@ -327,9 +341,11 @@ def occurrences(values: Sequence[Any], items: Sequence[Any]) -> list[int]:
 
 def _count(values: Sequence[Any], item: Any) -> int:
     """``values.count(item)``, each element asked as `equals` asks it once ``count`` raised."""
+    if may_broadcast(item) and mixes_broadcasting(values, (item,)):
+        return sum(1 for value in values if value is item or equals(value, item))
     try:
         return values.count(item)
-    except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
+    except REFUSALS as refusal:
         if raised_inside(refusal):
             raise
         return sum(1 for value in values if value is item or equals(value, item))

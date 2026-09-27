@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import REFUSALS, UnorderableError, _exact_real, equal_past, held_key, holds
+from ._ordering import REFUSALS, UnorderableError, _exact_real, broadcasts, equal_past, held_key, holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -139,6 +139,8 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
     """
     if not hasattr(value, "__array__") and not hasattr(other, "__array__"):
         return None  # fast path: no array-like operand, skip the tuple/loop on every is_equal_to
+    if broadcasts(value, other):
+        return None  # a `numpy` scalar against a list, which `_guarded_equal` answers as unequal
     for candidate, counterpart in ((value, other), (other, value)):
         if hasattr(candidate, "__array__"):
             try:
@@ -244,13 +246,12 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
     A signalling NaN or an overflowing `numpy` float, anywhere in the pair, is answered as `equals` answers it.
     """
     try:
-        return bool(actual == expected)
+        equal = actual == expected
+        return bool(equal) if type(equal) is bool or not broadcasts(actual, expected, answer=equal) else False
     except (ValueError, TypeError) as error:
         operand = _find_ambiguous_operand(actual, expected)
         if operand is not None:
             raise _array_equality_error(method, operand) from error
-        if isinstance(error, ValueError):
-            raise
         return equal_past(actual, expected, error)
     except (decimal.InvalidOperation, OverflowError) as refusal:
         return equal_past(actual, expected, refusal)

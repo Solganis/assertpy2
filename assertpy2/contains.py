@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import decimal
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
@@ -22,7 +21,7 @@ from ._engine._membership import (
     searchable,
 )
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import equals, lookup, member
+from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from .errors import DiffEntry, DiffResult, _safe_str
@@ -408,8 +407,8 @@ class ContainsMixin(_MixinBase):
             require_type(values, Iterable, "iterable")
             refuse(self.val, "a sequence, to contain a sequence")
         try:
-            best_prefix = _sequence_break(values, items)
-        except (decimal.InvalidOperation, OverflowError, TypeError):
+            best_prefix = _sequence_break(values, items, answered=any(may_broadcast(item) for item in items))
+        except REFUSALS:
             best_prefix = _sequence_break(values, items, answered=True)
         if best_prefix is None:
             return self

@@ -21,6 +21,7 @@ import fractions
 import inspect
 import numbers
 import operator
+import sys
 import types
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
@@ -99,16 +100,76 @@ def equals(actual: Any, expected: Any) -> bool:
     """``actual == expected`` as a verdict, where Python's own ``==`` would raise instead of answering.
 
     A signalling `Decimal` NaN signals at ``==``, a `numpy` float overflows converting a Python int past its
-    range and a `Decimal` refuses a `numpy` integer, in a list or a mapping as much as on its own.  Asked as
-    written first, so every other pair keeps the answer and the cost it always had.
+    range and a `Decimal` refuses a `numpy` integer, in a list or a mapping as much as on its own.  A `numpy`
+    scalar against a list or a tuple answers an array, element by element (`broadcasts`), and is unequal to it
+    as a number is.  Asked as written first, so every other pair keeps the answer and the cost it always had.
     """
     try:
-        return bool(actual == expected)
-    except (decimal.InvalidOperation, OverflowError, TypeError) as refusal:
+        equal = actual == expected
+    except (decimal.InvalidOperation, OverflowError, TypeError, ValueError) as refusal:
         return equal_past(actual, expected, refusal)
+    if type(equal) is not bool and broadcasts(actual, expected, answer=equal):
+        return False
+    return bool(equal)
 
 
-def member(item: Any, container: Any) -> bool:
+_SEQUENCES = (list, tuple)
+
+
+_UNANSWERED: Any = object()
+
+
+def broadcasts(actual: Any, expected: Any, *, ordering: bool = False, answer: object = _UNANSWERED) -> bool:
+    """Whether `numpy` answered ``actual == expected``, or ``actual < expected`` with *ordering*, element by element.
+
+    One is a `numpy` scalar and the other a list or a tuple, which the scalar turns into an array.  It answers an
+    array, true where one element was equal, or raises on its truth where there were several, or on building the
+    array of a ragged list.  A number is simply unequal to a list and unordered against it.  Only where the scalar's
+    operator in that place is one `numpy` wrote, its own on the left and its reflected one on the right, and where
+    the *answer* is at hand, only for the array itself: a subclass that wrote the operator keeps the answer it
+    gives, and a sequence's own operator that declined the scalar leaves the answer to `numpy`.
+    """
+    numpy = sys.modules.get("numpy")
+    if numpy is None or (answer is not _UNANSWERED and type(answer) is not numpy.ndarray):
+        return False
+    first, second = type(actual), type(expected)
+    if issubclass(first, numpy.generic) and issubclass(second, _SEQUENCES):
+        return _written_by_numpy(first, "__lt__" if ordering else "__eq__")
+    if issubclass(second, numpy.generic) and issubclass(first, _SEQUENCES):
+        return _written_by_numpy(second, "__gt__" if ordering else "__eq__")
+    return False
+
+
+def _written_by_numpy(kind: type, name: str) -> bool:
+    """Whether *kind*'s operator *name* is one `numpy` wrote, read off the class without running it."""
+    owner = getattr(inspect.getattr_static(kind, name, None), "__objclass__", None)
+    return getattr(owner, "__module__", None) == "numpy"
+
+
+def may_broadcast(value: Any) -> bool:
+    """Whether *value* can be one side of a pair `broadcasts` names, while `numpy` is loaded."""
+    numpy = sys.modules.get("numpy")
+    return numpy is not None and issubclass(type(value), (numpy.generic, *_SEQUENCES))
+
+
+def mixes_broadcasting(values: Any, others: Any = ()) -> bool:
+    """Whether a `numpy` scalar and a list or a tuple meet across *values* and *others*, or within *values*.
+
+    One linear pass over the types, for a walk that compares every pair and is quadratic already.
+    """
+    numpy = sys.modules.get("numpy")
+    if numpy is None:
+        return False
+    try:
+        kinds: Any = {*map(type, values), *map(type, others)}
+    except TypeError:  # a metaclass may refuse to hash its classes
+        kinds = [*map(type, values), *map(type, others)]
+    return any(issubclass(kind, numpy.generic) for kind in kinds) and any(
+        issubclass(kind, _SEQUENCES) for kind in kinds
+    )
+
+
+def member(item: Any, container: Any, verify: bool = True) -> bool:
     """``item in container`` as a verdict, each element asked as `equals` asks it once ``in`` raised.
 
     A set or a mapping cannot hold a signalling NaN, which refuses to hash, alone or inside a tuple, so it holds
@@ -118,12 +179,22 @@ def member(item: Any, container: Any) -> bool:
     element by element too.  Any other error raised inside the container's or an element's own code is handed
     on.  An iterator is searched on from where the raising ``in`` stopped, which is enough: every element before
     it compared unequal, or ``in`` would have answered, and the one that raised met a NaN or an int no float can
-    equal.
+    equal.  An item that may broadcast (`may_broadcast`) is searched element by element in a container that
+    walks by ``==``, before ``in`` could take the truth of an array; *verify* false is a caller that knows no such
+    item comes.  A set or a mapping meets one only through a hash collision, whose ambiguous truth is answered
+    by the same walk.
     """
+    if verify and type(item) not in _PLAIN and may_broadcast(item) and _walks_by_equality(container):
+        return any(element is item or equals(element, item) for element in container)
     try:
         return item in container
     except (decimal.InvalidOperation, OverflowError) as refusal:
         if raised_inside(refusal):
+            raise
+        return any(element is item or equals(element, item) for element in container)
+    except (ValueError, DeprecationWarning) as ambiguous:
+        # a hash collision met a `numpy` scalar with a tuple, and `in` took the truth of their array
+        if raised_inside(ambiguous) or not may_broadcast(item) or not _searched_again(container):
             raise
         return any(element is item or equals(element, item) for element in container)
     except TypeError as refusal:
@@ -133,14 +204,37 @@ def member(item: Any, container: Any) -> bool:
         hashed = _searches_by_hash(container)
         if hashed and _unhashable_for_a_nan_alone(key):
             return False
-        if raised_inside(refusal) or not (type(container) in _SEARCHED_BY_EQUALITY or (hashed and _hashes(key))):
+        if raised_inside(refusal) or not (_walks_by_equality(container) or (hashed and _hashes(key))):
             raise
         return any(element is item or equals(element, item) for element in container)
 
 
-REFUSALS = (TypeError, decimal.InvalidOperation, OverflowError)
-"""What ``==`` raises for a pair it refuses to compare: a `Decimal` against a `numpy` integer, a signalling NaN, and a
-`numpy` float against a Python int past its range."""
+def _walks_by_equality(container: Any) -> bool:
+    """Whether ``in`` walks *container* asking ``==``: a built-in list, tuple, deque or dict's values.
+
+    A subclass counts where it keeps both the search and the iteration of the one it derives from, read off the
+    class without running either.
+    """
+    kind = type(container)
+    if kind in _SEARCHED_BY_EQUALITY:
+        return True
+    return any(
+        issubclass(kind, base)
+        and inspect.getattr_static(kind, "__contains__") is inspect.getattr_static(base, "__contains__")
+        and inspect.getattr_static(kind, "__iter__") is inspect.getattr_static(base, "__iter__")
+        for base in (list, tuple, collections.deque)
+    )
+
+
+def _searched_again(container: Any) -> bool:
+    """Whether *container* can be searched a second time: a built-in sequence, set or mapping, never an iterator."""
+    return _walks_by_equality(container) or _searches_by_hash(container)
+
+
+REFUSALS = (TypeError, decimal.InvalidOperation, OverflowError, ValueError)
+"""What ``==`` raises for a pair it refuses to compare: a `Decimal` against a `numpy` integer, a signalling NaN, a
+`numpy` float against a Python int past its range, and the truth of the array a `numpy` integer answers against a
+tuple key its hash collided with."""
 
 
 def held_key(keys: Any, key: Any) -> tuple[bool, Any]:
@@ -228,7 +322,8 @@ def equal_past(actual: Any, expected: Any, refusal: Exception) -> bool:
     ordering.  Two lists, two tuples or two mappings compared by the built-in ``==`` are equal element by
     element, each asked as `equals` asks it.  Two numbers whose operator overflowed or refused the other are equal
     where their exact values are.  An error raised inside a comparison of the value's own is handed on first,
-    whatever else the pair holds, and so is a refusal nothing here answers.
+    whatever else the pair holds, and so is a refusal nothing here answers.  A `ValueError` is otherwise answered
+    only for a pair `broadcasts` names, as unequal.
     """
     if raised_inside(refusal):
         raise refusal
@@ -237,6 +332,10 @@ def equal_past(actual: Any, expected: Any, refusal: Exception) -> bool:
     walked = _equal_by_element(actual, expected)
     if walked is not None:
         return walked
+    if isinstance(refusal, ValueError):
+        if broadcasts(actual, expected):
+            return False
+        raise refusal
     left, right = _exact_real(actual), _exact_real(expected)
     if not isinstance(refusal, decimal.InvalidOperation) and left is not None and right is not None:
         return not isinstance(left, str) and left == right
@@ -302,12 +401,17 @@ def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
     refusing the pair, as a `Decimal` refuses a `numpy` integer.  Where both stand for exact values the pair
     orders by them, an infinity above every finite value and a NaN against nothing.  A `TypeError` between any
     other two leaves the pair with no order.  Raised inside a comparison of the value's own, either is a bug in
-    the value and is handed on, and so is an overflow from a value with no exact value to order by.
+    the value and is handed on, and so is an overflow from a value with no exact value to order by.  A
+    `ValueError` otherwise leaves only a pair `broadcasts` names either way with no order, and is handed on.
     """
     if raised_inside(refusal):
         raise refusal
     if _lexicographic(actual, expected):
         return _order_by_element(actual, expected)
+    if isinstance(refusal, ValueError):
+        if broadcasts(actual, expected, ordering=True) or broadcasts(expected, actual, ordering=True):
+            raise UnorderableError("pair") from None
+        raise refusal
     left, right = _exact_real(actual), _exact_real(expected)
     if left is None or right is None:
         if isinstance(refusal, TypeError):
@@ -409,11 +513,17 @@ def compare(actual: Any, expected: Any) -> int:
     left: Any = actual
     right: Any = expected
     try:
-        if left < right:
+        less = left < right
+        if type(less) is not bool and broadcasts(left, right, ordering=True, answer=less):
+            raise UnorderableError("pair")
+        if less:
             return -1
-        if right < left:
+        greater = right < left
+        if type(greater) is not bool and broadcasts(right, left, ordering=True, answer=greater):
+            raise UnorderableError("pair")
+        if greater:
             return 1
-    except (TypeError, OverflowError) as refusal:
+    except (TypeError, OverflowError, ValueError) as refusal:
         order = _order_past(actual, expected, refusal)
         return 0 if order is None else order
     except decimal.InvalidOperation as signal:
@@ -427,10 +537,13 @@ def _order_past_signal(actual: Any, expected: Any, signal: decimal.InvalidOperat
     Asked after the comparison rather than before: checked first, `'a'` against a NaN read as a verdict where the
     same pair without one is refused.  The operands decide and not the traceback: measured, a signal comes from
     one frame under the C accelerator and from four under `_pydecimal`, so `raised_inside` answered the
-    interpreter build.  Any other signal is handed on.
+    interpreter build.  A `numpy` scalar against a sequence holding a NaN is no order, as a number against a list.
+    Any other signal is handed on.
     """
     if nan_operand(actual) or nan_operand(expected):
         return 0
+    if broadcasts(actual, expected, ordering=True) or broadcasts(expected, actual, ordering=True):
+        raise UnorderableError("pair") from None
     if not _lexicographic(actual, expected):
         raise signal
     order = _order_by_element(actual, expected)
