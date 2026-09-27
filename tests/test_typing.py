@@ -549,6 +549,18 @@ if TYPE_CHECKING:
         @property
         def strides(self) -> object: ...
 
+        def __len__(self) -> int:
+            return 0
+
+    class _Unsized:
+        """Carries what an array does but a length, as a numpy scalar does, and gets the fallback."""
+
+        def __array__(self) -> object: ...
+
+        @property
+        def strides(self) -> object: ...
+
+    assert_type(assert_that(cast("_Unsized", object())), _ObjectAssertion[_Unsized])
     assert_type(assert_that(cast("_FrameShape", object())), _FrameAssertion[_FrameShape])
     assert_type(assert_that(cast("_ArrayShape", object())), _ArrayAssertion[_ArrayShape])
     frame = cast("_FakeFrame", object())

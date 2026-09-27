@@ -113,7 +113,7 @@ class _TakesAnyKey(Mapping[object, str]):
 class _ConvertibleRow(_TakesAnyKey):
     """The same row that converts, which is what a value the umbrella claims and can be asked `is_nan()`.
 
-    A numpy scalar reads as a `float` subclass and lands on the numeric view, so it measures that view
+    `numpy.float64` reads as a `float` subclass and lands on the numeric view, so it measures that view
     and not this one: the umbrella's own float restriction needs a subject that reaches the umbrella.
     """
 
@@ -621,3 +621,8 @@ def _relations_that_must_keep_working() -> None:
     assert_that(4).is_divisible_by(numpy.int64(2))  # case: valid-numpy-divisor
     assert_that(b"ab").has_byte_at(numpy.int64(0), numpy.uint8(97))  # case: valid-numpy-byte-at
     assert_that([4]).satisfies(match.is_length(numpy.int64(1)))  # case: valid-numpy-length-matcher
+    # a numpy scalar as the value carries no length, so it leaves the array view for the numeric fallback
+    assert_that(numpy.int64(4)).is_greater_than(0)  # case: valid-numpy-integer-value-ordered
+    assert_that(numpy.float32(4)).is_close_to(4, 1)  # case: valid-numpy-float32-value-close
+    assert_that(numpy.uint8(4)).is_between(0, 9)  # case: valid-numpy-uint8-value-between
+    assert_that(numpy.timedelta64(1, "s")).is_greater_than(numpy.timedelta64(0, "s"))  # case: valid-numpy-duration

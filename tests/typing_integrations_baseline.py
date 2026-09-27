@@ -28,7 +28,7 @@ into the typed surface and giving up the zero-dependency property the shapes exi
 
 ## The other boundary, which is not a disagreement
 
-`numpy.ndarray[Any, Any]` covers a zero-dimensional array, and one carries `__array__` and `strides`
+`numpy.ndarray[Any, Any]` covers a zero-dimensional array, and one carries `__array__`, `strides` and `__len__`
 like any other.  So `array-sized` reads clean here while `assert_that(numpy.array(1)).is_not_empty()`
 raises: numpy answers `len()` with a `TypeError` of its own, and `length_of()` is written to let a
 raising `__len__` through rather than to report the value as unsized.  The dimension is not in the

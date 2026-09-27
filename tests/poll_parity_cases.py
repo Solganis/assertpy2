@@ -55,6 +55,7 @@ class _ArrayShaped:
     def __array__(self) -> Any: ...
     @property
     def strides(self) -> Any: ...
+    def __len__(self) -> int: ...
 
 
 class _FrameThatWalks(_FrameShaped):
@@ -65,10 +66,9 @@ class _FrameThatWalks(_FrameShaped):
 
 
 class _ArrayThatWalks(_ArrayShaped):
-    """The same for an array: a real one is iterable and sized, and the bound asks for neither."""
+    """The same for an array: a real one is iterable, and the bound asks only for its length."""
 
     def __iter__(self) -> Any: ...
-    def __len__(self) -> int: ...
 
 
 class _Everything:

@@ -240,8 +240,8 @@ class TestRealLibraries:
     def test_a_zero_dimensional_array_has_no_length_and_no_iteration(self):
         """The boundary of the array view, kept as a measurement rather than as a claim in a comment.
 
-        `numpy.array(1)` carries `__array__` and `strides` like any other array, so it matches the
-        shape the overload keys on and is offered the sized and walked families.  numpy answers those
+        `numpy.array(1)` carries `__array__`, `strides` and a declared `__len__` like any other array, so it
+        matches the shape the overload keys on and is offered the sized and walked families.  numpy answers those
         with its own `TypeError`, which is the value's `__len__` raising rather than a value without
         one, and `length_of()` is written to let that through.  Nothing static separates the two: the
         dimension is not in the stubs.
