@@ -221,22 +221,28 @@ def missing_items(
     walked = materialized(value)
     wanted = materialized(items)
     present = _index(walked, wanted) if isinstance(walked, (list, tuple)) else None
-    searched = walked if present is None else present
-    try:
-        return _absent_from(searched, wanted, is_matcher, walked)
-    except TypeError as refusal:
-        _told_apart(((wanted, searched),), refusal, marked=marked)
+    return _absent_from(walked if present is None else present, wanted, is_matcher, walked, marked)
 
 
-def _absent_from(present: Any, items: Any, is_matcher: Callable[[object], bool], walked: Any) -> list[Any]:
-    """The loop itself, so the fast and the walking form stay one piece of logic rather than two."""
+def _absent_from(
+    present: Any, items: Any, is_matcher: Callable[[object], bool], walked: Any, marked: bool
+) -> list[Any]:
+    """The loop itself, so the fast and the walking form stay one piece of logic rather than two.
+
+    A refusal is named by the item it came from.  A matcher is asked of the elements and never by ``in``, so an
+    error of its own is its own and leaves as it was raised; an item `member` refused is asked again alone.
+    """
     absent = []
     for item in items:
         if is_matcher(item):
             if not any(verdict(item.matches(element), subject="the matcher") for element in walked):
                 absent.append(item)
-        elif not member(item, present):
-            absent.append(item)
+            continue
+        try:
+            if not member(item, present):
+                absent.append(item)
+        except TypeError as refusal:
+            _told_apart((((item,), present),), refusal, marked=marked)
     return absent
 
 

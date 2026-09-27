@@ -587,6 +587,26 @@ class TestMembershipIsOneDecisionToo:
         assert_that(str(refused.value)).is_equal_to(said)
         assert_that("".join(traceback.format_exception(refused.value))).does_not_contain("MembershipRefusedError")
 
+    class _MatchesRaising(BaseMatcher):
+        def matches(self, value: object) -> bool:
+            raise TypeError("my own matches")
+
+        def describe(self) -> str:
+            return "a matcher whose own matches raises"
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            lambda matcher: assert_that("text").contains(matcher, None),
+            lambda matcher: match.contains(matcher, None).matches("text"),
+        ],
+        ids=["builder", "matcher"],
+    )
+    def test_a_matchers_own_error_is_not_taken_for_a_later_items_refusal(self, asked):
+        """The `None` refuses under `in` too, and named, it hid the bug in the matcher, or read it as no match."""
+        with pytest.raises(TypeError, match="my own matches"):
+            asked(self._MatchesRaising())
+
     def test_an_operand_refusal_is_not_collected_by_a_soft_block(self):
         with pytest.raises(TypeError) as refused, soft_assertions():
             assert_that("a").contains("a", 1)

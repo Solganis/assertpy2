@@ -393,12 +393,25 @@ def test_a_set_or_a_deque_searched_for_a_decimal_against_a_numpy_integer_answers
     assert_that(_HOLDERS_ASKED[asked](held, item)).is_equal_to(expected)
 
 
-def test_the_refusal_named_after_a_pair_a_decimal_refuses_is_the_item_refused():
+@pytest.mark.parametrize(
+    "asked",
+    [
+        lambda held, item: assert_that({held}).contains(item, [1]),
+        lambda held, item: assert_that({held}).contains_only(item, [1]),
+    ],
+    ids=["contains", "contains_only"],
+)
+def test_the_refusal_named_after_a_pair_a_decimal_refuses_is_the_item_refused(asked):
     """Asked again one item at a time, the `Decimal` refused ahead of the list, which is what the set refuses."""
     numpy = pytest.importorskip("numpy")
     with pytest.raises(TypeError, match="unhashable type: 'list'"):
-        assert_that({decimal.Decimal(5)}).contains(numpy.int64(5), [1])
-    assert_that(match.contains(numpy.int64(5), [1]).matches({decimal.Decimal(5)})).is_false()
+        asked(decimal.Decimal(5), numpy.int64(5))
+
+
+@pytest.mark.parametrize("asked", [match.contains, match.contains_only], ids=["contains", "contains_only"])
+def test_a_matcher_reads_the_refusal_after_a_pair_a_decimal_refuses_as_no_match(asked):
+    numpy = pytest.importorskip("numpy")
+    assert_that(asked(numpy.int64(5), [1]).matches({decimal.Decimal(5)})).is_false()
 
 
 class _EqualityBrokenInside:
