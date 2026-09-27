@@ -985,7 +985,7 @@ def test_a_list_whose_own_equality_declined_a_numpy_scalar_is_unequal_as_to_the_
 
 
 def test_a_list_whose_own_equality_answers_an_array_is_read_as_numpys_broadcast():
-    """The recorded boundary: the answer is read and not the method that gave it, which only a second call could tell."""
+    """The recorded boundary: only a second call could tell which method answered, so the array is read."""
     numpy = pytest.importorskip("numpy")
 
     class AnsweringArray(list):
