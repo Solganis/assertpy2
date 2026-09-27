@@ -2,6 +2,7 @@ import decimal
 import fractions
 import math
 import numbers
+import operator
 import types
 
 import pytest
@@ -1152,6 +1153,111 @@ class _ArrayShapedEqualityThatOverflows:
 def test_an_overflow_from_the_values_own_equality_is_handed_on_through_the_array_guard():
     with pytest.raises(OverflowError, match="my own equality overflows"):
         assert_that(_ArrayShapedEqualityThatOverflows()).is_equal_to(1, tolerance=0.5)
+
+
+@pytest.mark.parametrize("width", ["float16", "float32"])
+@pytest.mark.parametrize(
+    "check",
+    [
+        lambda nan: assert_that([1.0, nan, 2.0]).check().is_sorted().passed,
+        lambda nan: match.is_sorted().matches([1.0, nan, 2.0]),
+        lambda nan: assert_that(decimal.Decimal("Infinity")).check().is_less_than(nan).passed,
+        lambda nan: assert_that(decimal.Decimal(1)).check().is_greater_than_or_equal_to(nan).passed,
+        lambda nan: assert_that(nan).check().is_less_than(decimal.Decimal(1)).passed,
+        lambda nan: match.less_than(nan).matches(decimal.Decimal(1)),
+        lambda nan: assert_that(decimal.Decimal(1)).check().is_between(nan, 10**401).passed,
+    ],
+    ids=["is_sorted", "match.is_sorted", "decimal-below", "decimal-at-least", "nan-below", "matcher", "between"],
+)
+def test_a_numpy_float_nan_is_unordered_as_a_float_one_is(width, check):
+    """Not a `float`, so the NaN check read by type missed it.
+
+    A sort holding it passed where one holding a `float` NaN fails, and a `Decimal` compared with it let
+    `InvalidOperation` out where a `float` NaN is answered.
+    """
+    numpy = pytest.importorskip("numpy")
+    with numpy.errstate(all="ignore"):
+        assert_that(check(getattr(numpy, width)("nan"))).is_false()
+
+
+_ASKED: list[str] = []
+
+
+class _ClaimsNumpysModule:
+    """A class of this file's own that claims `numpy`'s module, with a ratio that records being asked."""
+
+    def as_integer_ratio(self) -> tuple[int, int]:
+        _ASKED.append("as_integer_ratio")
+        raise ValueError("claims to be a NaN")
+
+
+_ClaimsNumpysModule.__module__ = "numpy"
+
+
+class _Watching(type):
+    def __getattribute__(cls, name: str) -> object:
+        _ASKED.append(name)
+        return super().__getattribute__(name)
+
+
+class _WatchedKind(metaclass=_Watching):
+    """A class whose metaclass records every attribute read off it."""
+
+
+@pytest.mark.parametrize(
+    ("value", "unasked"),
+    [(_ClaimsNumpysModule(), "as_integer_ratio"), (_WatchedKind(), "__module__")],
+    ids=["claimed-module", "metaclass"],
+)
+def test_a_nan_check_runs_no_code_of_the_values_own(value, unasked):
+    """The module is read only off a class `type` built, and the ratio only as a `numpy` type holds it."""
+    _ASKED.clear()
+    assert_that(match.is_sorted().matches([value, value])).is_false()
+    assert_that(_ASKED).does_not_contain(unasked)
+
+
+@pytest.mark.parametrize("width", ["float16", "float32", "float64"])
+@pytest.mark.parametrize("text", ["1", "inf", "-inf", "nan"])
+@pytest.mark.parametrize("bignum", [10**400, -(10**400)], ids=["above", "below"])
+@pytest.mark.parametrize("relation", ["le", "ge"])
+def test_every_numpy_float_width_orders_against_a_bignum_as_python_does(width, text, bignum, relation):
+    """A `float` against a Python int is exact in Python itself, which is the oracle for these numpy widths.
+
+    On numpy 2 they overflow converting the int, and are ordered by their exact value, a NaN being caught
+    before equality is asked of it; numpy 1 answers them itself.  A `longdouble` is left out: its own operator
+    answers without overflowing, numpy 1 by refusing the pair and numpy 2 by turning the int into a
+    `longdouble` with a warning, which is lossy where that type is a double, and the engine asks no further.
+    """
+    numpy = pytest.importorskip("numpy")
+    value = getattr(numpy, width)(text)
+    expected = getattr(operator, relation)(float(text), bignum)
+    question = {"le": "is_less_than_or_equal_to", "ge": "is_greater_than_or_equal_to"}[relation]
+    matcher = {"le": match.less_than_or_equal_to, "ge": match.greater_than_or_equal_to}[relation]
+    with numpy.errstate(all="ignore"):
+        assert_that(getattr(assert_that(value).check(), question)(bignum).passed).is_equal_to(expected)
+        assert_that(matcher(bignum).matches(value)).is_equal_to(expected)
+
+
+def test_a_nan_of_a_numpy_float_subclass_is_unordered_too():
+    """A subclass carries its own module's name, so the NaN is read off the numpy type it inherits from."""
+    numpy = pytest.importorskip("numpy")
+    nan = type("Measured", (numpy.float32,), {})("nan")
+    with numpy.errstate(all="ignore"):
+        assert_that(assert_that([1.0, nan, 2.0]).check().is_sorted().passed).is_false()
+        assert_that(assert_that(decimal.Decimal("Infinity")).check().is_less_than(nan).passed).is_false()
+        assert_that(match.less_than(nan).matches(decimal.Decimal(1))).is_false()
+
+
+def test_a_nan_beside_a_value_it_has_no_order_with_still_breaks_a_sort():
+    """Asked only once the pair did not order, the NaN still answers before the pair is refused."""
+    assert_that(assert_that([float("nan"), "a"]).check().is_sorted().passed).is_false()
+
+
+def test_a_numpy_longdouble_nan_vouches_for_no_order_either():
+    numpy = pytest.importorskip("numpy")
+    nan = numpy.longdouble("nan")
+    assert_that(assert_that([1.0, nan, 2.0]).check().is_sorted().passed).is_false()
+    assert_that(match.is_sorted().matches([1.0, nan, 2.0])).is_false()
 
 
 def test_a_pair_a_decimal_will_not_order_fails_as_an_assertion_rather_than_refusing():

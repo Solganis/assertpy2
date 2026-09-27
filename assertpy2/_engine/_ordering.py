@@ -49,7 +49,7 @@ class UnorderableError(Exception):
 
 
 def nan_operand(value: Any) -> bool:
-    """A `float` or `Decimal` NaN, unordered against everything, the `Decimal` one by signalling.
+    """A `float`, `Decimal` or `numpy` float NaN, unordered against everything, the `Decimal` one by signalling.
 
     Asked by type rather than through `math.isnan`, which would call `__float__` on somebody else's
     number and raises on a signalling `Decimal` instead of answering.
@@ -57,11 +57,17 @@ def nan_operand(value: Any) -> bool:
     Through the base type's own operator and method rather than the value's, the rule `_is_infinite`
     already follows: this answer decides whether an `InvalidOperation` is a verdict or a bug in the
     value, so a subclass overriding `is_nan` could have its own signal absorbed, and one overriding
-    `__ne__` could call itself unordered against everything.
+    `__ne__` could call itself unordered against everything.  A `numpy` float other than `float64` is no
+    `float`, and is read through its own type's `as_integer_ratio` as the exact order reads it: missed, it
+    let a `Decimal`'s signal out and passed `is_sorted` over a list a `float` NaN fails.  Subclasses
+    included, and only off a class built by `type` itself, since a metaclass of anybody's answers reads.
     """
     if isinstance(value, float):
         return bool(float.__ne__(value, value))
-    return isinstance(value, decimal.Decimal) and decimal.Decimal.is_nan(value)
+    if isinstance(value, decimal.Decimal):
+        return decimal.Decimal.is_nan(value)
+    kind = type(value)
+    return kind is not int and type(kind) is type and _exact_real(value) == "nan"
 
 
 def _kind_of(value: Any) -> type | None:
@@ -77,16 +83,10 @@ def _kind_of(value: Any) -> type | None:
 
 
 def _equal(actual: Any, expected: Any) -> bool:
-    """``==``, with a NaN on either side answering ``False`` rather than signalling.
-
-    An operator that overflows converting the pair is answered from the exact values, as `compare` answers it.
-    """
+    """``==``, with a NaN on either side answering ``False`` rather than signalling."""
     if nan_operand(actual) or nan_operand(expected):
         return False
-    try:
-        return bool(actual == expected)
-    except OverflowError as refusal:
-        return _order_past(actual, expected, refusal) == 0
+    return bool(actual == expected)
 
 
 def _order_past(actual: Any, expected: Any, refusal: Exception) -> int | None:
@@ -220,17 +220,31 @@ def first_out_of_order(
     previous_key: Any = None
     for index, current in enumerate(items):
         current_key = key(current)
-        if index > 0:
-            # through `compare`, not `<`: a raise here reads to the origin check as a plain type mismatch.
-            # The key is carried rather than recomputed, which doubled the calls to the caller's `key`
-            # a NaN orders against nothing, so the pair holding one vouches for no order at all
-            broken = (
-                nan_operand(current_key)
-                or nan_operand(previous_key)
-                or holds(current_key, previous_key, "gt" if reverse else "lt")
-            )
-            if broken:
-                return index - 1, previous, current
+        # through `compare`, not `<`: a raise here reads to the origin check as a plain type mismatch.
+        # The key is carried rather than recomputed, which doubled the calls to the caller's `key`
+        if index > 0 and _out_of_order(current_key, previous_key, reverse=reverse):
+            return index - 1, previous, current
         previous = current
         previous_key = current_key
     return None
+
+
+def _out_of_order(later: Any, earlier: Any, *, reverse: bool) -> bool:
+    """Whether *later* breaks the order after *earlier*, a pair holding a NaN vouching for no order at all.
+
+    The NaN is asked only where the pair did not order, a tie or no order, since a NaN orders against
+    nothing: asked of every key, a `numpy` float's NaN check cost a sort of ints 18%.
+    """
+    try:
+        order = compare(later, earlier)
+    except UnorderableError:
+        if nan_operand(later) or nan_operand(earlier):
+            return True
+        raise
+    if order == 0:
+        # a tie of two exact ints or strings holds no NaN: asked anyway, a sort of equal ints cost 19%
+        never_nan = (int, str, bytes)
+        if type(later) in never_nan and type(earlier) in never_nan:
+            return False
+        return nan_operand(later) or nan_operand(earlier)
+    return order > 0 if reverse else order < 0
