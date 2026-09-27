@@ -8,6 +8,7 @@ import types
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._engine._compare import _difference_within
 
 
 def test_is_zero():
@@ -1027,6 +1028,87 @@ def test_a_numpy_scalar_against_a_bignum_is_measured(spelling, scalar, scalar_fi
     if not scalar_first:
         value, other = other, value
     assert_that(_CLOSENESS_SPELLINGS[spelling](value, other, tolerance)).is_equal_to(within)
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize(
+    ("value", "tolerance"),
+    [(0.5, decimal.Decimal("Infinity")), (-0.0, decimal.Decimal("Infinity")), (decimal.Decimal("1.5"), math.inf)],
+)
+@pytest.mark.parametrize("fraction_first", [False, True], ids=["fraction-second", "fraction-first"])
+def test_an_infinite_tolerance_covers_a_pair_measured_exactly(spelling, value, tolerance, fraction_first):
+    """The exact measure read the tolerance through `Fraction`, which refuses an infinity, and so measured nothing."""
+    pair = [value, fractions.Fraction(10**400, 3)]
+    if fraction_first:
+        pair.reverse()
+    assert_that(_CLOSENESS_SPELLINGS[spelling](*pair, tolerance)).is_true()
+
+
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize(("value", "tolerance"), [("decimal", "float32"), ("float32", "decimal")])
+@pytest.mark.parametrize("fraction_first", [False, True], ids=["fraction-second", "fraction-first"])
+def test_an_infinite_tolerance_covers_a_numpy_pair_measured_exactly(spelling, value, tolerance, fraction_first):
+    """A `numpy` infinity read as the ordering engine reads one, where `Fraction` refuses a `numpy` float."""
+    numpy = pytest.importorskip("numpy")
+    kinds = {
+        "decimal": (decimal.Decimal("1.5"), decimal.Decimal("Infinity")),
+        "float32": (numpy.float32(2), numpy.float32("inf")),
+    }
+    pair = [kinds[value][0], fractions.Fraction(10**400, 3)]
+    if fraction_first:
+        pair.reverse()
+    assert_that(_CLOSENESS_SPELLINGS[spelling](*pair, kinds[tolerance][1])).is_true()
+
+
+def test_a_negative_infinite_numpy_tolerance_holds_no_pair_measured_exactly():
+    """Not asked at the matcher's construction, where only a built-in number's sign is, and covering nothing."""
+    numpy = pytest.importorskip("numpy")
+    assert_that(match.close_to(fractions.Fraction(10**400, 3), numpy.float32("-inf")).matches(0.5)).is_false()
+
+
+@pytest.mark.parametrize("tolerance", [-math.inf, decimal.Decimal("-Infinity")], ids=["float", "decimal"])
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+def test_a_negative_infinite_tolerance_is_refused_in_every_spelling(spelling, tolerance):
+    with pytest.raises(ValueError, match="given tolerance arg must"):
+        _CLOSENESS_SPELLINGS[spelling](decimal.Decimal("1.5"), fractions.Fraction(10**400, 3), tolerance)
+
+
+@pytest.mark.parametrize(
+    ("tolerance", "within"),
+    [
+        (fractions.Fraction(1, 2), True),
+        (fractions.Fraction(1, 2) - fractions.Fraction(1, 10**30), False),
+        ("float32", True),
+        ("float32-below", False),
+    ],
+    ids=["fraction", "fraction-below", "float32", "float32-below"],
+)
+@pytest.mark.parametrize("spelling", list(_CLOSENESS_SPELLINGS))
+@pytest.mark.parametrize("fraction_first", [False, True], ids=["fraction-second", "fraction-first"])
+def test_a_pair_its_arithmetic_refuses_is_within_a_tolerance_exactly_its_distance(
+    spelling, tolerance, within, fraction_first
+):
+    """`Decimal` refuses to subtract a `Fraction`; a tolerance of exactly their distance holds it, one ulp less not."""
+    if isinstance(tolerance, str):
+        numpy = pytest.importorskip("numpy")
+        half = numpy.float32(0.5)
+        tolerance = half if tolerance == "float32" else numpy.nextafter(half, numpy.float32(0))
+    pair = [decimal.Decimal("1.5"), fractions.Fraction(1)]
+    if fraction_first:
+        pair.reverse()
+    assert_that(_CLOSENESS_SPELLINGS[spelling](*pair, tolerance)).is_equal_to(within)
+
+
+@pytest.mark.parametrize(
+    "nan",
+    [math.nan, decimal.Decimal("NaN"), decimal.Decimal("sNaN"), "float32"],
+    ids=["float", "decimal", "sNaN", "f32"],
+)
+def test_the_exact_measure_takes_no_nan_tolerance(nan):
+    """Out of reach of the public spellings, which refuse a NaN tolerance or hold nothing within one."""
+    if isinstance(nan, str):
+        nan = pytest.importorskip("numpy").float32("nan")
+    assert_that(_difference_within(decimal.Decimal("1.5"), fractions.Fraction(1), nan)).is_none()
 
 
 _BIGNUM = 10**400

@@ -36,7 +36,7 @@ from ._introspection import (
     kind_of,
     model_field_values,
 )
-from ._ordering import UnorderableError, equal_past, holds
+from ._ordering import UnorderableError, _exact_real, equal_past, holds
 from ._require import raised_inside, verdict
 
 if TYPE_CHECKING:
@@ -321,7 +321,9 @@ def _difference_within(actual, expected, tolerance) -> bool | None:
 
     Tried as written, so two floats keep the arithmetic they always had.  A `Decimal` against a ``float``
     refuses to subtract at all and a bignum ``int`` or a `Fraction` past the float range overflows one, and
-    those pairs are measured exactly instead, through `fractions.Fraction`.
+    those pairs are measured exactly instead, through `fractions.Fraction`.  The tolerance is read as the
+    ordering engine reads a number, so an infinite one keeps its sign and covers every finite distance, and
+    through `fractions.Fraction` where that reader has no exact value for it.
     """
     try:
         return abs(actual - expected) <= tolerance
@@ -330,17 +332,24 @@ def _difference_within(actual, expected, tolerance) -> bool | None:
         if raised_inside(error) and not _rational_overflow(error):
             raise
         try:
-            return abs(_as_fraction(actual) - _as_fraction(expected)) <= _as_fraction(tolerance)
+            distance = abs(_as_fraction(actual) - _as_fraction(expected))
+            bound = _exact_real(tolerance)
+            rank, exact = bound if isinstance(bound, tuple) else (0, _as_fraction(tolerance))
         except (TypeError, ValueError, OverflowError):
             return None
+        return rank > 0 if rank else distance <= exact
 
 
 def _as_fraction(value: Any) -> fractions.Fraction:
-    """*value* as an exact `fractions.Fraction`, an integer through `int` first.
+    """*value* as an exact `fractions.Fraction`, read as the ordering engine reads a finite number where it can.
 
     `Fraction` keeps the numerator an `Integral` gives it, so a `numpy.int64` stayed a fixed-width integer inside
-    it and overflowed again the moment a bignum met it in the exact arithmetic.
+    it and overflowed again the moment a bignum met it in the exact arithmetic, and some interpreters' `Fraction`
+    refuses a `numpy` float outright.  An infinity or a NaN is left to `Fraction`, which refuses both.
     """
+    exact = _exact_real(value)
+    if isinstance(exact, tuple) and not exact[0]:
+        return exact[1]
     return fractions.Fraction(int(value) if isinstance(value, numbers.Integral) else value)
 
 
