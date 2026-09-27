@@ -230,8 +230,8 @@ Fluent equality assertions for [pandas](https://pandas.pydata.org/),
 [polars](https://pola.rs/) and [numpy](https://numpy.org/). These types compare element-wise, so a
 plain `is_equal_to()` cannot reduce them to a single truth value.
 
-Instead it raises a clear `TypeError` pointing you to the methods below - including when the array or
-frame sits nested inside a dict, dataclass, or list under comparison.
+Instead it raises a clear `TypeError` pointing you to the methods below, also when the array or frame
+sits nested inside a dict, dataclass, or list under comparison.
 
 !!! note "Optional dependency"
     Each library is its own extra, so you only install what you use (a polars user does not pull in
@@ -269,26 +269,195 @@ assert_that(pl.DataFrame({"a": [1, 2]})).is_frame_equal(pl.DataFrame({"a": [1, 2
 
 On failure the library's own detailed diff is carried in the assertion message.
 
+A frame or a series is also a sized collection you can walk, so the size, membership and iteration
+assertions apply to it as they do to a list. Each asks the library's own `len()`, `in` and iteration:
+a pandas `DataFrame` walks its column labels, and `in` on a pandas `Series` looks at the index labels,
+not the values.
+
+```python
+frame = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+
+assert_that(frame).is_length(2).contains("a", "b")
+assert_that(frame["a"]).is_not_empty().contains(0)   # 0 is an index label of the series
+```
+
 ### numpy arrays
 
 Two array assertions, both accepting any array-like numpy can coerce:
 
-- `is_array_equal()` - exact, via `numpy.testing.assert_array_equal`, with the shapes compared first, so a
-  scalar is not broadcast over an array (pass `strict=False` to let numpy broadcast, or `strict=True` to
-  compare dtypes too)
-- `is_array_close_to()` - float-tolerant, via `numpy.testing.assert_allclose`, for comparing computed
-  arrays.
+- `is_array_equal()` is exact, through `numpy.testing.assert_array_equal`. The shapes are compared
+  first, so a scalar is never broadcast over an array, and a NaN equals a NaN in the same position, as
+  numpy has it. Options go through to numpy: `strict=True` compares the dtypes too.
+- `is_array_close_to()` is float-tolerant, through `numpy.testing.assert_allclose`, for comparing
+  computed arrays. `rtol` and `atol` default to `1e-05` and `1e-08`, the defaults of `numpy.isclose`,
+  where `assert_allclose` itself defaults to `1e-07` and `0`. `equal_nan` defaults to `False`, where
+  numpy's own default is `True`, so a NaN fails unless you pass `equal_nan=True`. The shapes are numpy's
+  to compare, so a scalar broadcasts over an array unless you pass `strict=True` (numpy 2).
 
 ```python
 import numpy as np
 from assertpy2 import assert_that
 
 assert_that(np.array([1, 2, 3])).is_array_equal(np.array([1, 2, 3]))
+assert_that(np.array([1, 2, 3])).is_array_equal([1, 2, 3])
 assert_that(np.array([1.0, 2.0])).is_array_close_to(np.array([1.0, 2.0000001]))
-assert_that(computed).is_array_close_to(expected, rtol=1e-3, atol=1e-6)
+computed = np.array([0.1, 0.2]) * 3
+assert_that(computed).is_array_close_to(np.array([0.3, 0.6]))
+assert_that(computed).is_array_close_to(np.array([0.3, 0.6]), rtol=1e-3, atol=1e-6)
+assert_that(np.array([np.nan])).is_array_close_to(np.array([np.nan]), equal_nan=True)
 ```
 
+<!-- docs-guard: raises -->
+```python
+assert_that(np.array([2, 2])).is_array_equal(2)
+# AssertionFailure: Expected an array of shape <()>, but was of shape <(2,)>.
+```
+
+An array is a sized collection too, so `is_length()`, `contains()` and the rest apply to it. A
+zero-dimensional array, `np.array(5)`, is still an array to both assertions and to a type checker, but
+numpy refuses it a length: `is_length()` on one raises numpy's own `TypeError`.
+
+### numpy scalars
+
+A numpy scalar, such as `np.int64(5)` or `np.float32(0.1)`, is a number to every assertion. It is
+compared by the exact value it holds, against a Python number, a `Decimal` or a `Fraction`, on its own,
+inside a list or a tuple, in a set or as a dict key, and past the range a float can hold:
+
+```python
+from decimal import Decimal
+
+import numpy as np
+from assertpy2 import assert_that
+
+assert_that(np.int64(5)).is_equal_to(Decimal(5))
+assert_that(Decimal("4.5")).is_less_than(np.int64(5))
+assert_that({np.int64(5): "a"}).is_equal_to({Decimal(5): "a"})
+assert_that(np.float32(1)).is_less_than(10**400)
+assert_that(np.uint8(200)).is_greater_than(100).is_close_to(200, 0.5)
+```
+
+Python raises on those pairs: a `Decimal` refuses a numpy integer at `==` and `<`, and on numpy 2 a
+numpy float overflows converting an int past its range. The library answers them by exact value.
+
+A numpy float NaN is a NaN, as a `float` one is. It is equal to nothing, not even itself, and it has no
+place in an order:
+
+```python
+assert_that(np.float32("nan")).is_not_equal_to(np.float32("nan"))
+```
+
+<!-- docs-guard: raises -->
+```python
+assert_that([1.0, np.float32("nan"), 2.0]).is_sorted()
+# AssertionFailure: Expected <[1.0, np.float32(nan), 2.0]> to be sorted, but subset <1.0, np.float32(nan)> at index 0 is not.
+```
+
+numpy compares a scalar with a list element by element and answers an array, so `np.int64(5) == [5]`
+is `array([ True])`. Wherever the library compares the pair itself, a scalar against a list or a tuple is
+unequal and unordered, as a Python number is:
+
+```python
+assert_that(np.int64(5)).is_not_equal_to([5])
+assert_that(np.int64(5)).is_not_in([5], (5, 6))
+```
+
+<!-- docs-guard: raises -->
+```python
+assert_that(np.int64(6)).is_greater_than([5])
+# TypeError: given other arg must be a number, but was <[5]> (list)
+```
+
+Inside a container's own `==` the answer stays numpy's. Python finds `[np.int64(5)] == [[5]]` true, so
+`assert_that([np.int64(5)]).is_equal_to([[5]])` passes.
+
+### Integer arguments
+
+Every argument that is an integer takes a numpy integer, an `IntEnum` member or any other `int`, and
+refuses a bool or anything else by name: the index of `element()` and `has_byte_at()`, the lengths and
+sizes of `is_length()`, `is_length_between()` and the `has_size_*` family, the divisor of
+`is_divisible_by()`, and `match.is_length()`, `match.has_length()` and `match.is_divisible_by()`. They
+are typed `SupportsIndex`, so a type checker takes a numpy integer too, and any other value with an
+`__index__`, which the run time still refuses unless it is an `int` or a numpy integer.
+
+```python
+assert_that(["a", "b"]).is_length(np.int64(2)).element(np.int64(1)).is_equal_to("b")
+assert_that(12).is_divisible_by(np.int64(4))
+```
+
+<!-- docs-guard: raises -->
+```python
+assert_that(["a", "b"]).element(True)
+# TypeError: given index arg must be an integer, but was <True> (bool)
+```
+
+### numpy durations
+
+`np.timedelta64` is a duration, although numpy registers it as an integer. Closeness measures a
+duration only against another duration, in any unit, in every spelling:
+
+```python
+assert_that(np.timedelta64(5, "s")).satisfies(match.close_to(np.timedelta64(5500, "ms"), np.timedelta64(1, "s")))
+assert_that(np.timedelta64(90, "s")).is_greater_than(np.timedelta64(1, "m"))
+```
+
+`is_close_to()` and `tolerance=` measure the same pairs at run time. Their parameters are typed for
+numbers, though, and the numpy stubs do not make a duration one, so ty and Pyright refuse the first call
+below and every checker refuses the second. `match.close_to()` takes any expected value and tolerance,
+which makes it the spelling that type-checks.
+
+<!-- docs-guard: untyped -->
+```python
+assert_that(np.timedelta64(5, "s")).is_close_to(np.timedelta64(5500, "ms"), np.timedelta64(1, "s"))
+assert_that({"wait": np.timedelta64(5, "h")}).is_equal_to(
+    {"wait": np.timedelta64(6, "h")}, tolerance=np.timedelta64(1, "D")
+)
+```
+
+A duration against a number has no distance. `is_close_to()` and `is_not_close_to()` refuse the pair,
+`match.close_to()` matches no such pair, and under `tolerance=` a leaf of the other kind is compared by
+`==` alone. A negative duration tolerance is refused like a negative number, and a `NaT` is close to
+nothing.
+
+<!-- docs-guard: raises -->
+<!-- docs-guard: type-error -->
+```python
+assert_that(1).is_close_to(1, np.timedelta64(1, "s"))
+# TypeError: given tolerance arg must be a number, to match val, but was <np.timedelta64(1,'s')> (timedelta64)
+```
+
+A type checker refuses that call as well. Durations order as numbers do, through `is_greater_than()`,
+`is_between()` and the rest. A `np.datetime64` value is not taken by `is_close_to()`, which measures a `datetime` under a `timedelta`.
+Comparing a duration with a bare number by `==` is numpy's own equality, which numpy 2 deprecates with
+a warning.
+
+### Type checking data values
+
+| Value | View a type checker offers |
+|---|---|
+| a pandas or polars frame or series | `is_frame_equal`, `is_array_equal`, plus size, membership and iteration |
+| a numpy array, zero-dimensional or not | `is_array_equal`, `is_array_close_to`, plus the same three |
+| `np.float64` | the `float` view, since it subclasses `float` |
+| any other numpy scalar | the generic view, whose ordering, closeness and `is_zero` take a number |
+
+On a numpy integer, `float32` or `bool_` value, `is_even()`, `is_positive()`, `is_nan()` and
+`is_array_equal()` run, but the generic view does not declare them, so a checker refuses them. Convert
+the value first, with `int()` or `float()`, to reach the numeric view:
+
+<!-- docs-guard: type-error -->
+```python
+assert_that(np.int64(4)).is_even()
+```
+
+```python
+assert_that(int(np.int64(4))).is_even()
+```
+
+A pandas `Series` matches every shape through the catch-all `__getattr__` in `pandas-stubs`, so the
+checkers resolve it differently: mypy offers the frame view, ty another, and Pyright the untyped
+builder. `is_frame_equal()` on a `Series` runs under all three, and only ty says it is not there.
+
 !!! note "Delegated semantics"
-    This integration adds only the fluent entry point and routes failures through the standard
-    assertpy2 error model (so soft assertions, `described_as`, and warn mode all apply). The actual
-    comparison is always the source library's, never a reimplementation.
+    The frame and array assertions add only the fluent entry point and route failures through the
+    standard assertpy2 error model (so soft assertions, `described_as`, and warn mode all apply). Their
+    comparison is always the source library's, never a reimplementation. A numpy scalar outside them
+    is compared by the library's own rules, as described above.
