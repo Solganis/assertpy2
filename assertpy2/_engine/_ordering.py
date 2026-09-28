@@ -72,9 +72,31 @@ def nan_operand(value: Any) -> bool:
     if isinstance(value, decimal.Decimal):
         return decimal.Decimal.is_nan(value)
     kind = type(value)
-    if kind is int or type(kind) is not type or issubclass(kind, numbers.Integral):
+    if kind is int or type(kind) is not type or kind in _INTEGRAL_KINDS or integral_kind(kind):
         return False
     return _exact_real(value) == "nan"
+
+
+def integral_kind(kind: type) -> bool:
+    """Whether a class built by `type` itself is a `numbers.Integral`, kept once found: a class never stops being one.
+
+    Asked of a `numpy` integer at every NaN and infinity question, where the ABC check cost an `int64` tie 11%.  At
+    most 256 are kept, so classes made on the fly cannot grow it without bound, and an ABC registry cleared by hand
+    through its private API is not followed.
+    """
+    if type(kind) is not type:
+        return False
+    if kind in _INTEGRAL_KINDS:
+        return True
+    if issubclass(kind, numbers.Integral):
+        if len(_INTEGRAL_KINDS) < 256:
+            _INTEGRAL_KINDS.add(kind)
+        return True
+    return False
+
+
+_INTEGRAL_KINDS: set[type] = set()
+"""What `integral_kind` has found, only classes built by `type` itself, so hashed as `type` hashes."""
 
 
 def _kind_of(value: Any) -> type | None:
@@ -108,7 +130,7 @@ def equals(actual: Any, expected: Any) -> bool:
         equal = actual == expected
     except (decimal.InvalidOperation, OverflowError, TypeError, ValueError) as refusal:
         return equal_past(actual, expected, refusal)
-    if type(equal) is not bool and broadcasts(actual, expected, answer=equal):
+    if type(equal) is not bool and type(actual) is not type(expected) and broadcasts(actual, expected, answer=equal):
         return False
     return bool(equal)
 
@@ -194,16 +216,31 @@ def member(item: Any, container: Any, verify: bool = True) -> bool:
         return any(element is item or equals(element, item) for element in container)
     try:
         return item in container
-    except (decimal.InvalidOperation, OverflowError) as refusal:
+    except MEMBERSHIP_REFUSALS as refusal:
+        found = member_past(item, container, refusal)
+        if found is None:
+            raise
+        return found
+
+
+MEMBERSHIP_REFUSALS = (decimal.InvalidOperation, OverflowError, ValueError, DeprecationWarning, TypeError)
+"""What ``in`` raises that `member_past` may answer."""
+
+
+def member_past(item: Any, container: Any, refusal: Exception) -> bool | None:
+    """`member`'s verdict once ``item in container`` raised *refusal*, or ``None`` to hand the refusal on as raised.
+
+    Answered from the refusal already caught, never by asking ``in`` again: an element whose ``==`` answers
+    differently the second time would have turned the refusal into a verdict.
+    """
+    if isinstance(refusal, (decimal.InvalidOperation, OverflowError)):
         if raised_inside(refusal):
-            raise
-        return any(element is item or equals(element, item) for element in container)
-    except (ValueError, DeprecationWarning) as ambiguous:
+            return None
+    elif isinstance(refusal, (ValueError, DeprecationWarning)):
         # a hash collision met a `numpy` scalar with a tuple, and `in` took the truth of their array
-        if raised_inside(ambiguous) or not may_broadcast(item) or not _searched_again(container):
-            raise
-        return any(element is item or equals(element, item) for element in container)
-    except TypeError as refusal:
+        if raised_inside(refusal) or not may_broadcast(item) or not _searched_again(container):
+            return None
+    else:
         # a dict's items view hashes the key of a pair alone, and asks about the value only once the key is there
         pair = type(container) is type({}.items()) and isinstance(item, tuple) and len(item) == 2
         key = item[0] if pair else item
@@ -211,8 +248,8 @@ def member(item: Any, container: Any, verify: bool = True) -> bool:
         if hashed and _unhashable_for_a_nan_alone(key):
             return False
         if raised_inside(refusal) or not (_walks_by_equality(container) or (hashed and _hashes(key))):
-            raise
-        return any(element is item or equals(element, item) for element in container)
+            return None
+    return any(element is item or equals(element, item) for element in container)
 
 
 def _walks_by_equality(container: Any) -> bool:
@@ -598,12 +635,14 @@ def compare(actual: Any, expected: Any) -> int:
     right: Any = expected
     try:
         less = left < right
-        if type(less) is not bool and broadcasts(left, right, ordering=True, answer=less):
+        mixed = actual_type is not type(expected)
+        # a pair of one type is never a scalar against a list: asked for it anyway, an `int64` tie cost 19% more
+        if mixed and type(less) is not bool and broadcasts(left, right, ordering=True, answer=less):
             raise UnorderableError("pair")
         if less:
             return -1
         greater = right < left
-        if type(greater) is not bool and broadcasts(right, left, ordering=True, answer=greater):
+        if mixed and type(greater) is not bool and broadcasts(right, left, ordering=True, answer=greater):
             raise UnorderableError("pair")
         if greater:
             return 1

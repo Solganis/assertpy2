@@ -2183,6 +2183,25 @@ class TestARefusalThatCannotBeReproducedIsNotRewritten:
         with pytest.raises(TypeError, match="only the first time"):
             missing_items(Moody(), [1], _is_matcher)
 
+    def test_an_element_whose_equality_changes_its_answer_is_asked_once(self):
+        """The refusal ``in`` raised is answered as caught: asked again, the second answer passed the item."""
+        numpy = pytest.importorskip("numpy")
+
+        class Fickle:
+            def __init__(self):
+                self.asked = 0
+
+            def __eq__(self, other):
+                self.asked += 1
+                return numpy.array([True, False]) if self.asked == 1 else True
+
+            __hash__ = None
+
+        fickle = Fickle()
+        with pytest.raises(ValueError, match="ambiguous"):
+            assert_that([fickle]).contains(5)
+        assert_that(fickle.asked).is_equal_to(1)
+
     def test_a_mapping_of_many_non_string_keys_says_how_many_it_dropped(self):
         wide = {index: index for index in range(101)}
         written = _json_safe(wide)

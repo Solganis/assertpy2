@@ -9,6 +9,7 @@ import types
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._engine import _ordering
 from assertpy2._engine._compare import _difference_within
 
 
@@ -1041,6 +1042,15 @@ def test_a_fraction_past_a_numpy_integers_width_is_ordered_by_exact_value(width,
     numpy = pytest.importorskip("numpy")
     five = getattr(numpy, width)(5)
     assert_that(ask(_TINY, five)).is_equal_to(holds)
+
+
+def test_an_integral_class_is_kept_at_most_so_many_times(monkeypatch):
+    """Found and answered past the bound, and not kept: classes made on the fly cannot grow the cache without end."""
+    kept = set(range(256))
+    monkeypatch.setattr(_ordering, "_INTEGRAL_KINDS", kept)
+    counted = type("Counted", (int,), {})
+    assert_that(_ordering.integral_kind(counted)).is_true()
+    assert_that(kept).is_length(256)
 
 
 class _OrderingOverflowsOfItsOwn(fractions.Fraction):

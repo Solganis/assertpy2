@@ -36,6 +36,7 @@ from ._introspection import (
     model_field_values,
 )
 from ._ordering import (
+    _SEQUENCES,
     REFUSALS,
     UnorderableError,
     _exact_real,
@@ -43,6 +44,7 @@ from ._ordering import (
     equal_past,
     held_key,
     holds,
+    integral_kind,
     numpy_duration,
     rational_overflow,
 )
@@ -155,7 +157,11 @@ def _ambiguous_array_operand(value: object, other: object) -> object | None:
     """
     if not hasattr(value, "__array__") and not hasattr(other, "__array__"):
         return None  # fast path: no array-like operand, skip the tuple/loop on every is_equal_to
-    if broadcasts(value, other):
+    if (
+        type(value) is not type(other)
+        and (isinstance(value, _SEQUENCES) or isinstance(other, _SEQUENCES))
+        and broadcasts(value, other)
+    ):
         return None  # a `numpy` scalar against a list, which `_guarded_equal` answers as unequal
     for candidate, counterpart in ((value, other), (other, value)):
         if hasattr(candidate, "__array__"):
@@ -263,7 +269,9 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
     """
     try:
         equal = actual == expected
-        return bool(equal) if type(equal) is bool or not broadcasts(actual, expected, answer=equal) else False
+        if type(equal) is bool or type(actual) is type(expected):
+            return bool(equal)
+        return not broadcasts(actual, expected, answer=equal) and bool(equal)
     except (ValueError, TypeError) as error:
         operand = _find_ambiguous_operand(actual, expected)
         if operand is not None:
@@ -289,6 +297,27 @@ def _is_real_number(value) -> bool:
 def zero_of(tolerance: Any) -> Any:
     """The zero a *tolerance* is signed against: a `numpy` duration's in its own unit, which a bare ``0`` is not."""
     return tolerance - tolerance if type(tolerance) not in (int, float) and numpy_duration(tolerance) else 0
+
+
+def plainly_within(actual, expected, tolerance) -> bool | None:
+    """`_within_tolerance` over three exact `int` or `float` operands, or ``None`` where an `int` overflows a `float`.
+
+    The same rule in its fewest steps: a NaN is close to nothing, an infinity only to an equal one, and a finite
+    pair by its difference or by the window around either side.
+    """
+    if actual != actual or expected != expected:
+        return False
+    try:
+        if actual in (math.inf, -math.inf) or expected in (math.inf, -math.inf):
+            return actual == expected
+        return (
+            actual == expected
+            or abs(actual - expected) <= tolerance
+            or expected - tolerance <= actual <= expected + tolerance
+            or actual - tolerance <= expected <= actual + tolerance
+        )
+    except OverflowError:
+        return None
 
 
 def _within_tolerance(actual, expected, tolerance) -> bool:
@@ -447,7 +476,7 @@ def _non_finite(value) -> str:
         if decimal.Decimal.is_finite(value):
             return ""
         return "nan" if decimal.Decimal.is_nan(value) else "inf"
-    if isinstance(value, int) or not hasattr(type(value), "__float__"):
+    if isinstance(value, int) or not hasattr(type(value), "__float__") or integral_kind(type(value)):
         return ""
     if _is_nan(value):
         return "nan"

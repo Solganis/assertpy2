@@ -66,6 +66,15 @@ _EXCUSED = {
     ),
     ("pytest_plugin.py", "_poll_threshold", "float(written)"): "parses ini text, not a value under test",
     ("behave_matchers.py", "_positive_float", "float(text)"): "parses step text behave matched as digits",
+    **dict.fromkeys(
+        (
+            ("_engine/_compare.py", "plainly_within", "actual != actual"),
+            ("_engine/_compare.py", "plainly_within", "expected != expected"),
+            ("_engine/_compare.py", "plainly_within", "actual in (math.inf, -math.inf)"),
+            ("_engine/_compare.py", "plainly_within", "expected in (math.inf, -math.inf)"),
+        ),
+        "its operands are exact ints and floats, the caller's condition, so the NaN and the infinity are float's",
+    ),
 }
 
 _NUMBER_MODULES = frozenset({"math", "cmath", "numpy"})

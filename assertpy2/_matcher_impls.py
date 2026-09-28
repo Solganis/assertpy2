@@ -32,6 +32,7 @@ from ._engine._compare import (
     _non_finite,
     _resolve_comparator,
     _within_tolerance,
+    plainly_within,
     zero_of,
 )
 from ._engine._equality import (
@@ -727,8 +728,13 @@ class CloseToMatcher(BaseMatcher):
             and _non_finite(tolerance) != "nan"
             and _measured_under(expected, tolerance, self._duration)
         )
+        self._plain = self._measures and type(expected) in (int, float) and type(tolerance) in (int, float)
 
     def matches(self, value: Any) -> bool:
+        if self._plain and type(value) in (int, float):
+            within = plainly_within(value, self.expected, self.tolerance)
+            if within is not None:
+                return within
         if not self._measures or not _measured_under(value, self.tolerance, self._duration):
             return False
         try:

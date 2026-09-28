@@ -21,11 +21,14 @@ from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 from ._introspection import definition_of, is_mapping_like, materialized
 from ._ordering import (
+    _PLAIN,
+    MEMBERSHIP_REFUSALS,
     REFUSALS,
     equals,
     lookup,
     may_broadcast,
     member,
+    member_past,
     mixes_broadcasting,
 )
 from ._require import raised_inside, verdict
@@ -248,11 +251,24 @@ def _absent_from(
                 absent.append(item)
             continue
         try:
-            if not member(item, present, verify):
+            if not _held(item, present, verify):
                 absent.append(item)
         except TypeError as refusal:
             _told_apart((((item,), present),), refusal, marked=marked)
     return absent
+
+
+def _held(item: Any, present: Any, verify: bool) -> bool:
+    """`member`, asking ``in`` itself where no item that may broadcast can come: through it cost 100 items 11%."""
+    if not verify or type(item) in _PLAIN:
+        try:
+            return item in present
+        except MEMBERSHIP_REFUSALS as refusal:
+            found = member_past(item, present, refusal)
+            if found is None:
+                raise
+            return found
+    return member(item, present, verify)
 
 
 def only_faults(value: Any, items: Sequence[Any], *, marked: bool = False) -> tuple[list[Any], list[Any]]:

@@ -34,7 +34,7 @@ import assertpy2.assertpy
 from assertpy2 import assert_conforms, assert_that, match, soft_assertions
 from assertpy2._clustering import _VALUE_LIMIT, Observation, Signature, _shown, clusters, render, stable_repr
 from assertpy2._dangling import findings as dangling_findings
-from assertpy2._engine._compare import _EQ_ATOMIC
+from assertpy2._engine._compare import _EQ_ATOMIC, _within_tolerance, plainly_within
 from assertpy2._engine._contract import contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
 from assertpy2._engine._equality import values_differ
@@ -2774,6 +2774,35 @@ def test_closeness_is_one_answer_however_it_is_asked(value, other, tolerance):
         "negated": not _passes(lambda: assert_that(value).is_not_close_to(other, tolerance)),
     }
     assert_that(set(answers.values())).described_as(str(answers)).is_length(1)
+
+
+_PLAIN_OPERANDS = st.one_of(
+    st.floats(allow_nan=True, allow_infinity=True, allow_subnormal=True),
+    st.integers(),
+    st.integers(-(10**400), 10**400),
+)
+_PLAIN_TOLERANCES = st.one_of(
+    st.floats(min_value=0, allow_infinity=True, allow_subnormal=True), st.integers(0, 10**400)
+)
+
+
+@settings(deadline=None)
+@example(value=-1.1, other=-0.9, tolerance=0.2)
+@example(value=0.1 + 0.2, other=0.3, tolerance=5.551115123125783e-17)
+@example(value=-0.0, other=0.0, tolerance=0)
+@example(value=5e-324, other=0.0, tolerance=5e-324)
+@example(value=10**400, other=1e308, tolerance=float("inf"))
+@example(value=float("inf"), other=float("inf"), tolerance=0)
+@example(value=float("-inf"), other=float("inf"), tolerance=float("inf"))
+@example(value=float("nan"), other=float("nan"), tolerance=float("inf"))
+@given(value=_PLAIN_OPERANDS, other=_PLAIN_OPERANDS, tolerance=_PLAIN_TOLERANCES)
+def test_the_plain_closeness_answers_as_the_general_one(value, other, tolerance):
+    """`match.close_to` answers exact ints and floats inline, and only an int past the float range leaves it."""
+    plain = plainly_within(value, other, tolerance)
+    general = _within_tolerance(value, other, tolerance)
+    assert_that(plain).described_as(f"{value!r}, {other!r}, {tolerance!r}").is_in(None, general)
+    if plain is None:
+        assert_that(any(type(operand) is int for operand in (value, other, tolerance))).is_true()
 
 
 _MOMENT = datetime.datetime(2026, 9, 24, 12, 0, 0)
