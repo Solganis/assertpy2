@@ -23,7 +23,9 @@ are not, and a rule with an exception is a rule nobody can rely on.
 
 from __future__ import annotations
 
+import decimal
 import difflib
+import functools
 import inspect
 import types
 from typing import Final, NoReturn, TypeVar
@@ -72,9 +74,57 @@ def raised_inside(exc: BaseException) -> bool:
     it.  A `__len__` or a `__lt__` that raises `TypeError` of its own adds a frame, and that error is a
     bug in the value being tested, not a wrong operand.  Answering it with "val must be a sized object"
     is a lie that sends the reader looking in the wrong file, so those are re-raised untouched.
+
+    A frame of `decimal` itself is the operation's own, where CPython was built without the C accelerator and
+    runs it in Python (`pure_decimal_code`): the same refusal raised in C adds no frame at all.  Only when the
+    method first called runs on a real `Decimal` or `Context`, since a class of anybody's can borrow one.
     """
     traceback = exc.__traceback__
-    return traceback is not None and traceback.tb_next is not None
+    deeper = traceback.tb_next if traceback is not None else None
+    if deeper is None:
+        return False
+    operation = pure_decimal_code()
+    entry = deeper.tb_frame
+    if entry.f_code not in operation or not isinstance(entry.f_locals.get("self"), (decimal.Decimal, decimal.Context)):
+        return True
+    while deeper is not None:
+        if deeper.tb_frame.f_code not in operation:
+            return True
+        deeper = deeper.tb_next
+    return False
+
+
+@functools.cache
+def pure_decimal_code() -> frozenset[types.CodeType]:
+    """The code `decimal` runs in Python where CPython was built without its C accelerator, else nothing.
+
+    Read once from the namespace `Decimal.__add__` was defined in, nested code included: the functions and the
+    classes defined there, `Decimal` and `Context` among them, and not what it imported from elsewhere, such as
+    `collections.namedtuple`.  That namespace is `_pydecimal`'s, whether `decimal` is that module itself, as on
+    3.15, or re-exports its names, as below it, and it must hold the very `Decimal` in use.
+    """
+    added = inspect.getattr_static(decimal.Decimal, "__add__")
+    if not isinstance(added, types.FunctionType) or added.__globals__.get("Decimal") is not decimal.Decimal:
+        return frozenset()
+    namespace = added.__globals__
+    held = list(namespace.values())
+    for kind in [one for one in held if isinstance(one, type) and one.__module__ == namespace.get("__name__")]:
+        for member in vars(kind).values():
+            held += [getattr(member, "__func__", member)]
+            if isinstance(member, property):
+                held += [member.fget, member.fset, member.fdel]
+    pending = [
+        function.__code__
+        for function in held
+        if isinstance(function, types.FunctionType) and function.__globals__ is namespace
+    ]
+    found: set[types.CodeType] = set()
+    while pending:
+        code = pending.pop()
+        if code not in found:
+            found.add(code)
+            pending += [constant for constant in code.co_consts if isinstance(constant, types.CodeType)]
+    return frozenset(found)
 
 
 def refuse(value: object, expectation: str, *, subject: str = "val") -> NoReturn:

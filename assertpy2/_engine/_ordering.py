@@ -26,7 +26,7 @@ import types
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
-from ._require import argument, raised_inside, refuse
+from ._require import argument, pure_decimal_code, raised_inside, refuse
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -599,8 +599,14 @@ def require_integer(value: object, name: str | None = None) -> int:
 
 
 def _known_number_method(owner: type, name: str, kind: type) -> Any | None:
-    """*owner*'s *name* as the type holds it, if `float`, `Decimal` or a `numpy` number wrote it in C, else ``None``."""
+    """*owner*'s *name* as the type holds it, if `float`, `Decimal` or a `numpy` number wrote it in C, else ``None``.
+
+    Or as `decimal` wrote it in Python, where CPython was built without its C accelerator (`pure_decimal_code`).
+    """
     method = inspect.getattr_static(owner, name, None)
+    if isinstance(method, types.FunctionType) and method.__code__ in pure_decimal_code():
+        stock = inspect.getattr_static(decimal.Decimal, name, None)
+        return method if method is stock and issubclass(owner, decimal.Decimal) else None
     maker = getattr(method, "__objclass__", None)
     known = maker in (float, decimal.Decimal) or getattr(maker, "__module__", None) == "numpy"
     # borrowed from another number type, the method refuses the instance with a `TypeError` of its own

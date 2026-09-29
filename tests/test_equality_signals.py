@@ -8,16 +8,21 @@ nothing but itself by identity inside a container, and a `numpy.float32` as the 
 
 from __future__ import annotations
 
+import _pydecimal
 import collections
 import collections.abc
 import decimal
 import math
 import numbers
+import operator
+import subprocess
 import sys
+import types
 
 import pytest
 
 from assertpy2 import assert_that, match
+from assertpy2._engine import _ordering, _require
 from assertpy2._engine._membership import occurrences
 from assertpy2._engine._ordering import (
     _holds_nan,
@@ -27,6 +32,13 @@ from assertpy2._engine._ordering import (
     member,
     mixes_broadcasting,
 )
+from assertpy2._engine._require import pure_decimal_code, raised_inside
+
+_DECIMAL_REFUSES_A_NUMPY_INTEGER = r"argument must be an integer|Cannot convert (np\.int64\(5\)|5) to Decimal"
+"""The C `decimal` and the one CPython runs in Python where built without it word this refusal differently."""
+
+_PURE_DECIMAL = bool(pure_decimal_code())
+"""Whether `decimal` runs in Python, which reads a registered rational's numerator itself rather than refusing it."""
 
 _ASKED = {
     "is_equal_to": lambda value, other: assert_that(value).check().is_equal_to(other).passed,
@@ -492,13 +504,22 @@ numbers.Integral.register(_IntegralOfItsOwn)
     "asked", ["is_equal_to", "is_equal_to-list", "contains", "is_in", "match.equal_to", "starts_with"]
 )
 def test_a_refusal_with_no_exact_value_to_answer_by_is_handed_on(asked, refused):
-    """Only `int`'s own or a `numpy` integer's conversion is read: the value's own could answer anything."""
+    """Only `int`'s own or a `numpy` integer's conversion is read: the value's own could answer anything.
+
+    Where `decimal` runs in Python its `==` reads the numerator itself and answers, and so does the library.
+    """
+    if _PURE_DECIMAL:
+        assert_that(_ASKED[asked](decimal.Decimal(5), refused())).is_false()
+        return
     with pytest.raises(TypeError, match="argument must be an integer"):
         _ASKED[asked](decimal.Decimal(5), refused())
 
 
 @pytest.mark.parametrize("refused", [_RationalOfItsOwn, _IntegralOfItsOwn])
 def test_a_pair_with_no_exact_value_to_order_by_is_left_unordered(refused):
+    if _PURE_DECIMAL:
+        assert_that(assert_that(decimal.Decimal(5)).check().is_less_than(refused()).passed).is_false()
+        return
     with pytest.raises(TypeError, match="must be comparable"):
         assert_that(decimal.Decimal(5)).is_less_than(refused())
 
@@ -608,7 +629,7 @@ class _InvertedSet(set):
 def test_a_set_whose_equality_is_not_the_built_in_one_hands_its_refusal_on():
     """Its elements decide nothing, so the `Decimal`'s refusal of the `numpy` integer is the answer's to give."""
     numpy = pytest.importorskip("numpy")
-    with pytest.raises(TypeError, match="argument must be an integer"):
+    with pytest.raises(TypeError, match=_DECIMAL_REFUSES_A_NUMPY_INTEGER):
         assert_that(_InvertedSet({numpy.int64(5)})).is_equal_to({decimal.Decimal(5)})
 
 
@@ -681,7 +702,7 @@ def test_a_key_is_searched_past_a_refusal_only_in_a_container_searched_by_hash()
     """Elsewhere the key held cannot be read back through identity, so the refusal is the answer's to give."""
     numpy = pytest.importorskip("numpy")
     assert_that(held_key({decimal.Decimal(5)}, numpy.int64(5))).is_equal_to((True, decimal.Decimal(5)))
-    with pytest.raises(TypeError, match="argument must be an integer"):
+    with pytest.raises(TypeError, match=_DECIMAL_REFUSES_A_NUMPY_INTEGER):
         held_key([decimal.Decimal(5)], numpy.int64(5))
 
 
@@ -1015,3 +1036,111 @@ def test_a_numpy_scalar_subclass_that_wrote_its_own_equality_keeps_its_answer():
         __hash__ = numpy.int64.__hash__
 
     assert_that(assert_that(AlwaysEqual(5)).check().is_equal_to([7]).passed).is_true()
+
+
+def _python_written_decimal_code(monkeypatch: pytest.MonkeyPatch) -> frozenset[types.CodeType]:
+    """What `pure_decimal_code` reads where CPython runs `decimal` in Python, read here off `_pydecimal` itself."""
+    monkeypatch.setattr(_require, "decimal", _pydecimal)
+    return _require.pure_decimal_code.__wrapped__()
+
+
+class TestADecimalWrittenInPython:
+    """CPython built without its C accelerator runs `decimal` in Python, as the 3.15 candidates do on Linux.
+
+    Its signal came out of Python frames, which `raised_inside` read as the value's own code, and its methods
+    are no C methods, which `_exact_real` refused to read: 103 tests failed there.
+    """
+
+    def test_a_fresh_interpreter_without_the_accelerator_is_told_and_answered(self):
+        """The real fallback, in a process of its own: 3.15 makes `decimal` the `_pydecimal` module, below it
+        `decimal` re-exports its names, and either way a signalling NaN is answered rather than let out."""
+        probe = (
+            "import sys\n"
+            "sys.modules['_decimal'] = None\n"
+            "import decimal\n"
+            "from assertpy2 import assert_that\n"
+            "from assertpy2._engine._require import pure_decimal_code\n"
+            "print(bool(pure_decimal_code()))\n"
+            "print(assert_that([decimal.Decimal('sNaN'), 1]).check().contains(1).passed)\n"
+            "print(assert_that(decimal.Decimal('sNaN')).check().is_equal_to(1).passed)\n"
+        )
+        ran = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, check=True)
+        assert_that(ran.stdout.split()).is_equal_to(["True", "True", "False"])
+
+    def test_its_code_is_read_whole_and_nothing_it_imported(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        assert_that(codes).contains(
+            _pydecimal.Decimal.__eq__.__code__,
+            _pydecimal.Context._raise_error.__code__,
+            _pydecimal.Decimal.real.fget.__code__,
+            _pydecimal.Decimal.from_float.__func__.__code__,
+            _pydecimal._dec_from_triple.__code__,
+        ).does_not_contain(collections.namedtuple.__code__)
+
+    def test_a_signal_raised_in_its_code_is_the_operations_own(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        monkeypatch.setattr(_require, "pure_decimal_code", lambda: codes)
+        with pytest.raises(_pydecimal.InvalidOperation) as signal:
+            operator.eq(_pydecimal.Decimal("sNaN"), 1)
+        assert_that(raised_inside(signal.value)).is_false()
+
+    def test_a_signal_from_a_value_of_its_own_calling_into_it_is_still_the_values(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        monkeypatch.setattr(_require, "pure_decimal_code", lambda: codes)
+
+        class Wrapping:
+            def __eq__(self, other: object) -> bool:
+                return bool(_pydecimal.Decimal("sNaN") == other)
+
+            __hash__ = None
+
+        with pytest.raises(_pydecimal.InvalidOperation) as signal:
+            operator.eq(Wrapping(), 1)
+        assert_that(raised_inside(signal.value)).is_true()
+
+    def test_an_error_from_a_value_it_calls_into_is_the_values(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        monkeypatch.setattr(_require, "pure_decimal_code", lambda: codes)
+
+        class Refusing:
+            denominator = 1
+
+            @property
+            def numerator(self) -> int:
+                raise ValueError("my own numerator")
+
+        numbers.Rational.register(Refusing)
+        with pytest.raises(ValueError, match="my own numerator") as raised:
+            operator.eq(_pydecimal.Decimal(5), Refusing())
+        assert_that(raised_inside(raised.value)).is_true()
+
+    def test_a_class_borrowing_its_method_owns_the_error(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        monkeypatch.setattr(_require, "pure_decimal_code", lambda: codes)
+
+        class Borrowing:
+            __eq__ = _pydecimal.Decimal.__eq__
+            __hash__ = None
+
+        with pytest.raises(AttributeError) as borrowed:
+            operator.eq(Borrowing(), 1)
+        assert_that(raised_inside(borrowed.value)).is_true()
+
+    def test_its_own_methods_are_read_as_the_c_ones_are(self, monkeypatch):
+        codes = _python_written_decimal_code(monkeypatch)
+        monkeypatch.setattr(_ordering, "pure_decimal_code", lambda: codes)
+        monkeypatch.setattr(_ordering, "decimal", _pydecimal)
+
+        class Borrowing:
+            as_integer_ratio = _pydecimal.Decimal.as_integer_ratio
+
+        read = _ordering._known_number_method
+        assert_that(read(_pydecimal.Decimal, "as_integer_ratio", types.MethodDescriptorType)).is_same_as(
+            _pydecimal.Decimal.as_integer_ratio
+        )
+        assert_that(read(Borrowing, "as_integer_ratio", types.MethodDescriptorType)).is_none()
+
+        class Renaming(_pydecimal.Decimal):
+            as_integer_ratio = _pydecimal.Decimal.__eq__
+
+        assert_that(read(Renaming, "as_integer_ratio", types.MethodDescriptorType)).is_none()
