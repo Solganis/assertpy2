@@ -630,7 +630,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
     ``"strict"`` is the fourth: the two sides are equal, but ``strict_types`` or a comparator still has to
     look inside, because a container's ``==`` says nothing about the types of its members, nor about what a
     comparator says of them.  It differs from ``"recurse"`` only in what an undecomposable value means,
-    which `assertpy2._engine._diff._child_entries()` is the single place to know.
+    which `assertpy2._engine._diff._Walk.descend()` is the single place to know.
     """
     if config is not None:
         if config.ignore_null and field is not None and as_held(expected) is None:

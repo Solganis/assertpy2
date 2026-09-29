@@ -15,7 +15,7 @@ from ._engine._compare import (
     _spec_matches,
     zero_of,
 )
-from ._engine._diff import _aligned_match_indices, _sub_diff_entries
+from ._engine._diff import _aligned_match_indices, _sub_diff_entries, run_nested
 from ._engine._equality import (
     IncludeKeysMissingError,
     carries_callable,
@@ -480,12 +480,12 @@ class HelpersMixin(_MixinBase):
         ``ignore`` / ``include`` are applied to both for the same reason.
         """
 
-        def _dict_repr(mapping, counterpart, _seen=None):
-            if _seen is None:
-                _seen = set()
-            if id(mapping) in _seen:
+        on_path: set[int] = set()
+
+        def _dict_repr(mapping, counterpart):
+            if id(mapping) in on_path:
                 return "{<circular ref>}"
-            _seen = _seen | {id(mapping)}
+            on_path.add(id(mapping))
             keyed_fields = keyed_names(mapping, counterpart)
             parts: list[_Part] = []
             pending = False
@@ -507,9 +507,9 @@ class HelpersMixin(_MixinBase):
                         part = f"{_safe_repr(key)}: {_safe_repr(value)}"
                     else:  # recurse
                         if (keyed := _keyed_pair(value, other_value)) is not None:
-                            value_repr = _dict_repr(*keyed, _seen)
+                            value_repr = yield _dict_repr(*keyed)
                         elif _both_list_like(value, other_value):
-                            value_repr = _list_repr(value, other_value, _seen)
+                            value_repr = yield _list_repr(value, other_value)
                         else:
                             value_repr = _safe_repr(value)
                         part = f"{_safe_repr(key)}: {value_repr}"
@@ -519,16 +519,17 @@ class HelpersMixin(_MixinBase):
                 parts.append(part)
             if pending:
                 parts.append(_ELIDED)
+            on_path.discard(id(mapping))
             return _joined_parts(parts, opener="{", closer="}")
 
-        def _list_repr(seq, counterpart, _seen):
+        def _list_repr(seq, counterpart):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
             the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}, ..]``
-            instead of dumping the whole list.  Always reached through ``_dict_repr`` (a list is only ever
-            a nested value), so ``_seen`` is passed in, never defaulted."""
-            if id(seq) in _seen:
+            instead of dumping the whole list.  Always reached through ``_dict_repr``, a list only ever being
+            a nested value.  Both are walks for `run_nested()`, which sends back each nested repr."""
+            if id(seq) in on_path:
                 return "[<circular ref>]"
-            _seen = _seen | {id(seq)}
+            on_path.add(id(seq))
             parts: list[_Part] = []
             pending = False
             for index, value in enumerate(seq):
@@ -543,9 +544,9 @@ class HelpersMixin(_MixinBase):
                     if decision == "leaf":
                         part = _safe_repr(value)
                     elif (keyed := _keyed_pair(value, other_value)) is not None:
-                        part = _dict_repr(*keyed, _seen)
+                        part = yield _dict_repr(*keyed)
                     elif _both_list_like(value, other_value):
-                        part = _list_repr(value, other_value, _seen)
+                        part = yield _list_repr(value, other_value)
                     else:
                         part = _safe_repr(value)
                 if pending:
@@ -554,6 +555,7 @@ class HelpersMixin(_MixinBase):
                 parts.append(part)
             if pending:
                 parts.append(_ELIDED)
+            on_path.discard(id(seq))
             opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
             return _joined_parts(parts, opener=opener, closer=closer)
 
@@ -565,8 +567,8 @@ class HelpersMixin(_MixinBase):
             val_repr, other_repr = _informative(
                 val,
                 other,
-                _dict_repr(reported_val, reported_other),
-                _dict_repr(reported_other, reported_val),
+                run_nested(_dict_repr(reported_val, reported_other)),
+                run_nested(_dict_repr(reported_other, reported_val)),
                 # a compare config hides no key, so only a key filter keeps the whole values out of the message
                 whole=not (key_specs_given(ignore) or key_specs_given(include)),
             )

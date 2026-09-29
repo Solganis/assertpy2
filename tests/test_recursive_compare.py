@@ -1,5 +1,6 @@
 import dataclasses
 import threading
+import types
 from collections import namedtuple
 
 import pytest
@@ -233,6 +234,22 @@ class TestToComparableDict:
 
         result = HelpersMixin._to_comparable_dict(FakeModel())
         assert_that(result).is_equal_to({"x": 1, "y": 2})
+
+    def test_a_sequence_subclass_is_built_from_what_its_constructor_always_got(self):
+        received = []
+
+        class Recorded(list):
+            def __init__(self, items=()):
+                received.append(type(items))
+                super().__init__(items)
+
+        @dataclasses.dataclass
+        class Holder:
+            items: object
+
+        result = HelpersMixin._to_comparable_dict(Holder(Recorded([1, 2])))
+        assert_that(result["items"]).is_instance_of(Recorded).is_equal_to([1, 2])
+        assert_that(received[-1]).is_equal_to(types.GeneratorType)
 
 
 class TestListUnconvertibleElements:

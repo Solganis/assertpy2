@@ -56,7 +56,7 @@ from hypothesis import Phase, example, find, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, _satisfies, assert_that, match
-from assertpy2._engine._diff import _positional_difference_count, _sequence_diff_entries
+from assertpy2._engine._diff import _positional_difference_count, _Walk
 from assertpy2._engine._equality import comparable_fields
 from assertpy2._engine._membership import _worth_hashing
 from assertpy2._satisfies import SatisfiesMixin
@@ -780,7 +780,7 @@ _KNOWN_READS = {
         "is_equal_to",
         _RefusingList,
         list,
-        _sequence_diff_entries,
+        _Walk.positional,
         _RefusingList.__getitem__,
         Case("is_equal_to", [], (_RefusingList([1]),)),
     ),

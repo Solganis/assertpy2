@@ -35,7 +35,7 @@ from ._compare import (
     _spec_matches,
     _types_differ,
 )
-from ._diff import _sub_diff_entries
+from ._diff import _escaped_stop, _sub_diff_entries
 from ._introspection import (
     TakenApart,
     is_attrs_instance,
@@ -50,10 +50,13 @@ from ._path import _ROOT
 from ._require import refuse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from ._compare import _CompareConfig
     from ._introspection import MappingLike
+
+    _KeysFrame = tuple[Iterator[Any], tuple[int, int]]
+    """A mapping's keys still to compare, and the pair it put on the path."""
 
 
 def normalize_key_specs(specs: object, param: str) -> list:
@@ -385,15 +388,51 @@ def mapping_differs(
     Normalization happens here rather than at the call sites, because the two spellings differ and the
     difference is easy to get wrong: at one level an `include` of `("user", "session")` selects `user`,
     while the recursion into `user` needs the whole path to strip its first segment from.
+
+    Walked on a list of frames as the structural diff is, `_Walk`, and for the same reasons: a mapping nested
+    past Python's recursion limit is answered, and the pairs on the path are one set rather than a copy a level.
     """
+    on_path: set[tuple[int, int]] = set() if seen is None else set(seen)
+    opened = _mapping_opened(actual, expected, ignore, include, config, on_path)
+    if isinstance(opened, bool):
+        return opened
+    stack = [opened]
+    while stack:
+        keys, pair = stack[-1]
+        try:
+            nested = next(keys, None)
+        except RuntimeError as error:
+            escaped = _escaped_stop(error)
+            if escaped is None:
+                raise
+        else:
+            if nested is None:
+                stack.pop()
+                on_path.discard(pair)
+            elif nested is True:
+                return True
+            else:
+                stack.append(nested)
+            continue
+        raise escaped
+    return False
+
+
+def _mapping_opened(
+    actual: object,
+    expected: object,
+    ignore: object,
+    include: object,
+    config: _CompareConfig | None,
+    on_path: set[tuple[int, int]],
+) -> bool | _KeysFrame:
+    """The verdict on two mappings where it is reached before their keys, else the frame over the keys."""
     # one cast at the top beats a suppression on each of the six lookups below
     left = cast("MappingLike", actual)
     right = cast("MappingLike", expected)
-    seen = frozenset() if seen is None else seen
     pair = (id(actual), id(expected))
-    if pair in seen:
+    if pair in on_path:
         return False
-    seen = seen | {pair}
 
     ignoring, including = key_specs_given(ignore), key_specs_given(include)
     if not (ignoring or including or config is not None):
@@ -426,7 +465,24 @@ def mapping_differs(
     ):
         # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; only the keys still compared
         return True
-    keyed = keyed_names(actual, expected)
+    on_path.add(pair)
+    keys = _differing_keys(left, right, keys_in_actual, ignores, nested_paths, config, on_path, ignoring, including)
+    return keys, pair
+
+
+def _differing_keys(
+    left: MappingLike,
+    right: MappingLike,
+    keys_in_actual: set,
+    ignores: list,
+    nested_paths: list,
+    config: _CompareConfig | None,
+    on_path: set[tuple[int, int]],
+    ignoring: bool,
+    including: bool,
+) -> Iterator[bool | _KeysFrame]:
+    """The keys of two mappings in turn: ``True`` where one differs, which ends the walk, or a mapping's frame."""
+    keyed = keyed_names(left, right)
     for key in keys_in_actual:
         if key in keyed:
             nested_left, nested_right = keyed_pair(left, right, key)
@@ -440,7 +496,7 @@ def mapping_differs(
             if decision == "equal":
                 continue
             if decision == "leaf":
-                return True
+                yield True
         nested_ignore = (
             [entry[1:] for entry in ignores if type(entry) is tuple and equals(entry[0], key)] if ignoring else None
         )
@@ -450,11 +506,13 @@ def mapping_differs(
             if including
             else None
         )
-        if _nested_differs(
-            nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, seen=seen
-        ):
-            return True
-    return False
+        nested = _nested_differs(
+            nested_left, nested_right, ignore=nested_ignore, include=nested_include, config=config, on_path=on_path
+        )
+        if nested is True:
+            yield True
+        elif nested is not False:
+            yield nested
 
 
 def _kept_keys(mapping: MappingLike, ignores: list, includes: list) -> set:
@@ -475,16 +533,25 @@ def _order_differs(actual: object, expected: object, kept: set) -> bool:
 
 
 def _nested_differs(
-    left: object, right: object, *, ignore: object, include: object, config: _CompareConfig | None, seen: frozenset
-) -> bool:
-    """One value under a key, compared with the rest of the key path that reaches into it."""
+    left: object,
+    right: object,
+    *,
+    ignore: object,
+    include: object,
+    config: _CompareConfig | None,
+    on_path: set[tuple[int, int]],
+) -> bool | _KeysFrame:
+    """One value under a key, compared with the rest of the key path that reaches into it.
+
+    A verdict, or the frame over the keys of a mapping still to compare, which `mapping_differs()` walks.
+    """
     if mapping_shaped(left, check_values=False) and mapping_shaped(right, check_values=False):
-        return mapping_differs(left, right, ignore=ignore, include=include, config=config, seen=seen)
+        return _mapping_opened(left, right, ignore, include, config, on_path)
     if key_specs_given(ignore) or key_specs_given(include):
         # a path that goes on into a dataclass, a model or an object is followed through its fields
         left_fields, right_fields = comparable_fields(left), comparable_fields(right)
         if left_fields is not None and right_fields is not None:
-            return mapping_differs(left_fields, right_fields, ignore=ignore, include=include, config=config, seen=seen)
+            return _mapping_opened(left_fields, right_fields, ignore, include, config, on_path)
     return values_differ(left, right, config)
 
 

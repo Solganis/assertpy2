@@ -1,7 +1,7 @@
 """A complexity ratchet, so the measure cannot grow where nobody looks.
 
-Twenty-eight functions in the package sit above mccabe's default of 10, the worst four being `extracting`
-at 32, `_build_equality_diff` at 30, `_dict_err` at 23 and `_object_hook` at 22.
+Twenty-six functions in the package sit above mccabe's default of 10, the worst four being `extracting`
+at 32, `_dict_err` and `_object_hook` at 22 and `_build_equality_diff` at 17.
 
 Getting them under 10 is deliberately NOT the goal. It fixes no defect, and rewriting
 `_build_equality_diff` for the sake of a number would risk code the suite and mutation testing hold.
@@ -29,14 +29,12 @@ _REPORTED = re.compile(r"`([^`]+)` is too complex \((\d+)")
 
 RECORDED: dict[str, int] = {
     "assertpy2/extracting.py::extracting": 32,
-    "assertpy2/_engine/_diff.py::_build_equality_diff": 30,
+    "assertpy2/_engine/_diff.py::_build_equality_diff": 17,
     # a flag per matched run instead of a call per matched element, which cost a failing is_equal_to 15%
-    "assertpy2/helpers.py::_dict_err": 23,
+    "assertpy2/helpers.py::_dict_err": 22,
     # three branches for what JSON cannot spell: a set element, a tuple-valued enum, and the retry that names it
     "assertpy2/_snapshot_codec.py::_object_hook": 22,
-    "assertpy2/_engine/_diff.py::_sub_diff_entries": 17,
     "assertpy2/_hints.py::diagnose": 17,
-    "assertpy2/_engine/_diff.py::_walk_leaves": 15,
     # 16: a key the lookup refuses is found by `lookup`; through a helper per key a 50-key structure cost 10%
     "assertpy2/_matcher_impls.py::_walk": 16,
     "assertpy2/_snapshot_codec.py::default": 14,
@@ -46,8 +44,6 @@ RECORDED: dict[str, int] = {
     "assertpy2/errors.py::_json_native": 14,
     "assertpy2/string.py::contains_ignoring_case": 13,
     "assertpy2/_engine/_compare.py::_build_compare_config": 12,
-    # 14: the other side read raw and found by `lookup` past a refusal; a helper per key cost a 200-key ignore 7%
-    "assertpy2/_engine/_equality.py::mapping_differs": 14,
     "assertpy2/async_assertions.py::record": 12,
     "assertpy2/dynamic.py::__getattr__": 12,
     "assertpy2/_dangling.py::_survey": 11,
@@ -64,7 +60,6 @@ RECORDED: dict[str, int] = {
     # 13: the chain refuses `value` by name, where the hook used to record it as an assertion
     "assertpy2/async_assertions.py::__getattr__": 13,
     "assertpy2/contains.py::contains": 11,
-    "assertpy2/helpers.py::_dict_repr": 11,
     "assertpy2/json_mixin.py::_openapi_resolve": 11,
     # 12: a signalling NaN is answered in place. Through `equals` it cost a list's prefix check 7%
     "assertpy2/string.py::ends_with": 12,
