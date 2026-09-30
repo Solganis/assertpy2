@@ -389,12 +389,15 @@ A few refinements keep it precise:
 - where validation reshaped a container so that its raw items no longer pair one by one with the items
   built from it (a set, a list a validator filtered, an object a validator wrapped into a list) and every
   built item is one model class, each raw item is validated again on its own by that class and checked
-  beside what it becomes. A model read from JSON text (`Json[...]`) is checked against the JSON the text
-  holds.
-- where neither works (items of mixed model classes, an item that validates only through its parent, dict
-  keys merged by coercion, a generator validation read up, an `Iterable[Model]` validated lazily), it fails
-  with `<path> cannot be checked:` and the reason rather than guess. A part in which no key can hide (a
-  number, text that is not JSON, a model passed as is) is never refused.
+  beside what it becomes. That runs the class's validators once more for those items, so a validator with
+  side effects runs twice. The items are the ones the payload sent: in a filtered list, an item the
+  validator dropped is checked too. A model read from JSON text (`Json[...]`) is checked against the
+  original JSON input.
+- where neither works (items of mixed model classes in a set or a resized list, an item that validates
+  only through its parent, dict keys merged by coercion, a generator consumed during validation, an
+  `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather
+  than guess. A part in which no key can hide (a number, text that is not JSON, a model passed as is) is
+  never refused.
 - it reads the payload as validation left it. A validator that renames keys, changes the payload in place,
   or reorders or rewrites the items of a container without changing its size is not seen, and those items
   are read by position. A validator that drops built items of one member of a union is read as if every

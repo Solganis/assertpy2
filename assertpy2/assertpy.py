@@ -705,8 +705,9 @@ def assert_conforms(
     and root models too, and reports the exact paths.  It is alias-aware, and respects a model that opts
     into extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set,
     a filtered list, an object wrapped into a list) are validated again by their model class when they all
-    became one, and JSON text is read as the JSON it holds.  What still cannot be paired (items of mixed
-    classes, merged dict keys, a generator read up, a lazy ``Iterable``) fails with ``<path> cannot be
+    became one, which runs that class's validators once more for them, and JSON text is read as the original
+    JSON input.  What still cannot be paired (items of mixed classes in a set or a resized list, merged dict
+    keys, a generator consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be
     checked`` and the reason.  It reads the payload as validation left it: a validator that renames keys,
     changes the payload in place, or reorders or rewrites the items of a container without changing its size
     is not seen, and those items are read by position.  A model inside a container of plain values

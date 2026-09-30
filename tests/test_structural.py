@@ -1569,6 +1569,49 @@ class TestExactnessRefusesWhatItCannotPair:
             }
         )
 
+    def test_an_item_validated_again_runs_its_validators_once_more(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, model_validator
+
+        runs = []
+
+        class Tag(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            name: str
+
+            @model_validator(mode="before")
+            @classmethod
+            def counted(cls, value):
+                runs.append(value["name"])
+                return value
+
+        class Tagged(BaseModel):
+            tags: set[Tag]
+
+        assert_conforms({"tags": [{"name": "a"}, {"name": "b"}]}, Tagged, exact=True)
+        assert_that(runs).is_equal_to(["a", "b", "a", "b"])
+
+    def test_a_filtered_list_is_checked_as_the_payload_sent_it(self):
+        """An item the validator dropped is checked too: the contract is the payload's, not what was kept."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class Plain(BaseModel):
+            x: int
+
+        class Live(BaseModel):
+            items: list[Plain]
+
+            @field_validator("items", mode="before")
+            @classmethod
+            def without_deleted(cls, value):
+                return [item for item in value if not item.get("deleted")]
+
+        found = self._refusal({"items": [{"x": 1, "deleted": True}, {"x": 2}]}, Live)
+        assert_that(found).is_equal_to(
+            "it carries 1 undeclared field(s) the model does not declare: ['items[0].deleted']"
+        )
+
     def test_items_of_one_model_class_are_validated_again_and_json_text_is_read(self):
         """Clean, each shape passes; with an undeclared field, the field is named where the raw item held it."""
         models = self._models()
