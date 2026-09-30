@@ -15,7 +15,7 @@ from ._engine._compare import (
     _spec_matches,
     zero_of,
 )
-from ._engine._diff import _aligned_match_indices, _sub_diff_entries, run_nested
+from ._engine._diff import _aligned_match_indices, _sub_diff_entries, readable, run_nested
 from ._engine._equality import (
     IncludeKeysMissingError,
     carries_callable,
@@ -140,20 +140,21 @@ def _elided_seq_repr(seq, counterpart) -> str:
     the same way it collapses in the diff.  Position is the fallback, for the pairs no alignment
     improves on.
     """
+    items, others = readable(seq), readable(counterpart)
     # past 20 elements the rendering is over budget, so the value is never rendered just to be measured
-    if len(seq) <= 20:
+    if len(items) <= 20:
         rendered = _safe_repr(seq)
         if len(rendered) <= 60:
             # on a two-element list the ".." form is the longer of the two
             return rendered
-    aligned = _aligned_match_indices(seq, counterpart)
+    aligned = _aligned_match_indices(items, others)
     parts: list[_Part] = []
     pending = False
-    for index, value in enumerate(seq):
+    for index, value in enumerate(items):
         if aligned is not None:
             matched = index in aligned
         else:
-            matched = index < len(counterpart) and _guarded_equal(value, counterpart[index])
+            matched = index < len(others) and _guarded_equal(value, others[index])
         if matched:
             pending = True
             continue

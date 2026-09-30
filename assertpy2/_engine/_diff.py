@@ -192,6 +192,81 @@ def _aligned_match_indices(seq, counterpart) -> set[int] | None:
     return matched
 
 
+class _Reads:
+    """One side of a sequence pair, read as the walk always read it, and through its storage once a read refuses.
+
+    The verdict is in before the walk starts, and `==` of a `list` or `tuple` may never have asked the value's own
+    `__len__`, `__getitem__` or `__iter__`: the base one compares the stored items.  A read that refuses there cannot
+    be allowed to turn the failure into the value's exception.  Reads that answer pass through untouched, in the
+    order and number the walk makes them; from the first refusal on, the stored items answer.  A value with no storage
+    behind it, one only posing as a list, keeps its refusal.
+    """
+
+    __slots__ = ("sequence",)
+
+    def __init__(self, sequence: Any) -> None:
+        self.sequence = sequence
+
+    def _stored(self) -> bool:
+        """Whether the stored items now answer in place of the value's own reads."""
+        held: Any = self.sequence
+        if issubclass(type(held), list):
+            self.sequence = list(list.__iter__(held))
+        elif issubclass(type(held), tuple):
+            self.sequence = list(tuple.__iter__(held))
+        else:
+            return False
+        return True
+
+    def __len__(self) -> int:
+        try:
+            return len(self.sequence)
+        except Exception:
+            if not self._stored():
+                raise
+            return len(self.sequence)
+
+    def __getitem__(self, index: Any) -> Any:
+        try:
+            return self.sequence[index]
+        except Exception:
+            if not self._stored():
+                raise
+            return self.sequence[index]
+
+    def __iter__(self) -> Iterator[Any]:
+        # asked out here: a `StopIteration` refusing the iterator inside a generator would become `RuntimeError`
+        try:
+            iterator = iter(self.sequence)
+        except Exception:
+            if not self._stored():
+                raise
+            return iter(self.sequence)
+        return self._continued(iterator)
+
+    def _continued(self, iterator: Iterator[Any]) -> Iterator[Any]:
+        # `next()` and not a `for`, which would ask the iterator for an iterator of its own first
+        read = 0
+        while True:
+            try:
+                item = next(iterator)
+            except StopIteration:
+                return
+            except Exception:
+                if not self._stored():
+                    raise
+                yield from self.sequence[read:]
+                return
+            read += 1
+            yield item
+
+
+def readable(sequence: Any) -> Any:
+    """*sequence*, or for anything but an exact `list` or `tuple` the `_Reads` of it."""
+    kind = type(sequence)
+    return sequence if kind is list or kind is tuple else _Reads(sequence)
+
+
 def _positional_difference_count(actual, expected) -> int:
     """How many positions the two sequences differ at when paired by index.
 
@@ -506,6 +581,7 @@ class _Walk:
         The walk over the children is handed to the driver itself rather than delegated to, so a `StopIteration`
         of the value's own that the walk turns into `RuntimeError` reaches `_escaped_stop()` with no frame between.
         """
+        actual, expected = readable(actual), readable(expected)
         opcodes = _alignment_opcodes_if_useful(actual, expected)
         if opcodes is not None:
             return self.aligned(actual, expected, prefix, opcodes)

@@ -24,12 +24,7 @@ arguments refused alike on a value meeting the prerequisite are refused there in
 
 (2) and (3) are asked of both members of every pair, including the calls only one member takes.  (1) is
 asked where both take the call.  A pair that is a complement only in part says which part in
-`_RESTRICTED`, and what still holds outside that part is asserted rather than skipped.  A defect the
-library has today is an exact entry in `_KNOWN_READS`: the member, the operand type, the library function
-the refusal leaves, and the operand's own method that raises it.  Only a case matching an entry is excused,
-and only that refusal: the other member is held to what it answers with that operand made plain, and the
-plain case to the whole property with no excuse.  Each entry has a reproduction run as
-`xfail(strict=True)`, so the fix turns it red and the entry has to go.
+`_RESTRICTED`, and what still holds outside that part is asserted rather than skipped.
 
 The pairs named as negations are read off the builder with the vocabulary `tests/test_api_vocabulary.py`
 gates, so a new negation is either tested here or says why it is not.  That covers naming patterns, not
@@ -56,11 +51,7 @@ from hypothesis import Phase, example, find, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, _satisfies, assert_that, match
-from assertpy2._engine._diff import _positional_difference_count, _Walk
 from assertpy2._engine._equality import comparable_fields
-from assertpy2._engine._membership import _worth_hashing
-from assertpy2._satisfies import SatisfiesMixin
-from assertpy2.helpers import _elided_seq_repr
 from tests import chain_model as model
 from tests.chain_surfaces import Answer, run_check, run_hard
 from tests.group_compat import BaseExceptionGroup, ExceptionGroup, needs_groups
@@ -754,103 +745,7 @@ _PREREQUISITES = {
 """Pairs whose value can miss what the question presupposes, each with why."""
 
 
-@dataclasses.dataclass(frozen=True)
-class _Read:
-    """A member that refuses where it should answer, because building its message reads the operand again.
-
-    Attributes:
-        member: The member that refuses.
-        operand: The type of the operand whose read raises.
-        plain: The builtin that type extends, whose instance answers every read.
-        where: The library function the read raises from.
-        reads: The operand's own method that raises.
-        case: The reproduction.
-    """
-
-    member: str
-    operand: type
-    plain: Callable[[Any], Any]
-    where: Callable[..., Any]
-    reads: Callable[..., Any]
-    case: Case
-
-
-_KNOWN_READS = {
-    "an equality diff indexes a sequence to pair its entries off": _Read(
-        "is_equal_to",
-        _RefusingList,
-        list,
-        _Walk.positional,
-        _RefusingList.__getitem__,
-        Case("is_equal_to", [], (_RefusingList([1]),)),
-    ),
-    "an equality diff indexes a sequence to count the positions that differ": _Read(
-        "is_equal_to",
-        _RefusingList,
-        list,
-        _positional_difference_count,
-        _RefusingList.__getitem__,
-        Case("is_equal_to", _RefusingList([1]), ([1, 2],)),
-    ),
-    "an equality message indexes the counterpart to elide the entries both share": _Read(
-        "is_equal_to",
-        _RefusingList,
-        list,
-        _elided_seq_repr,
-        _RefusingList.__getitem__,
-        Case("is_equal_to", ["x" * 70], (_RefusingList([1]),)),
-    ),
-    "any_satisfy sizes the value for its message once no item has satisfied": _Read(
-        "any_satisfy",
-        _RefusingStr,
-        str,
-        SatisfiesMixin.any_satisfy,
-        _RefusingStr.__len__,
-        Case("any_satisfy", _RefusingStr("text"), (model.is_positive_number,)),
-    ),
-    "does_not_contain sizes the value to decide whether a set search pays off": _Read(
-        "does_not_contain",
-        _RefusingStr,
-        str,
-        _worth_hashing,
-        _RefusingStr.__len__,
-        Case("contains", _RefusingStr("text"), ("t", "x")),
-    ),
-}
-"""Defects the library has today: the verdict is in, and the message then reads the operand and raises."""
-
-
-def _traced(error: BaseException | None) -> tuple[types.CodeType | None, types.CodeType | None, object]:
-    """Read off *error*'s traceback: the library function it left, the code that raised it, and that code's `self`."""
-    library = raised = None
-    owner: object = None
-    trace = None if error is None else error.__traceback__
-    while trace is not None:
-        raised, owner = trace.tb_frame.f_code, trace.tb_frame.f_locals.get("self")
-        if trace.tb_frame.f_globals.get("__name__", "").startswith("assertpy2.") and raised.co_name[0] != "<":
-            library = raised
-        trace = trace.tb_next
-    return library, raised, owner
-
-
-def _known_read(case: Case, answers: dict[str, Answer]) -> tuple[_Read, object] | None:
-    """The `_KNOWN_READS` entry these answers are, and the operand whose own method raised it."""
-    operands = (case.value, *case.args)
-    for read in _KNOWN_READS.values():
-        answer = answers.get(read.member)
-        if read.case.pair != case.pair or answer is None or answer.status != "refused":
-            continue
-        library, raised, owner = _traced(answer.raised)
-        if (
-            (library, raised) == (read.where.__code__, read.reads.__code__)
-            and type(owner) is read.operand
-            and any(owner is operand for operand in operands)
-        ):
-            return read, owner
-    return None
-
-
-def _hold_the_pair(case: Case, *, excused: bool = True) -> None:
+def _hold_the_pair(case: Case) -> None:
     """The three parts of duality the module docstring states, asked of one call of one pair."""
     pair = _PAIRS[case.pair]
     met = pair.prerequisite.holds(case)
@@ -866,7 +761,7 @@ def _hold_the_pair(case: Case, *, excused: bool = True) -> None:
     _hold_the_surfaces(negative, other, met)
     if not met:
         _hold_a_refusal_before_the_prerequisite(case, pair.negative, other["hard"])
-    _hold_the_complement(case, positive, negative, one["hard"], other["hard"], excused=excused)
+    _hold_the_complement(case, positive, negative, one["hard"], other["hard"])
 
 
 def _hold_a_refusal_before_the_prerequisite(case: Case, name: str, hard: Answer) -> None:
@@ -895,15 +790,10 @@ def _hold_the_surfaces(question: _Question, answers: dict[str, Answer], met: boo
     assert_that(reduced["check.not_"]).described_as(f"check().not_ on {question}").is_equal_to(reduced["not_"])
 
 
-def _hold_the_complement(
-    case: Case, positive: _Question, negative: _Question, one: Answer, other: Answer, *, excused: bool
-) -> None:
+def _hold_the_complement(case: Case, positive: _Question, negative: _Question, one: Answer, other: Answer) -> None:
     pair = _PAIRS[case.pair]
     said = f"{positive} said {_reduced(one)}, {negative} said {_reduced(other)}"
-    known = _known_read(case, {pair.positive: one, pair.negative: other}) if excused else None
-    if known is not None:
-        _hold_what_a_known_read_leaves(case, *known)
-    elif "refused" in (one.status, other.status):
+    if "refused" in (one.status, other.status):
         assert_that(_reduced(other)).described_as(f"refusals that differ: {said}").is_equal_to(_reduced(one))
     elif not pair.prerequisite.holds(case):
         assert_that(other.text).described_as(f"one prerequisite, two messages: {said}").is_equal_to(one.text)
@@ -915,20 +805,6 @@ def _hold_the_complement(
         assert_that({one.status, other.status}).described_as(f"not complements: {said}").is_equal_to({"held", "failed"})
     else:
         _hold_each_argument(case, one.status, other.status)
-
-
-def _hold_what_a_known_read_leaves(case: Case, read: _Read, operand: object) -> None:
-    """Only that refusal is excused: the other member answers as on the plain operand, where the pair holds outright."""
-    pair = _PAIRS[case.pair]
-
-    def plain_of(side: object) -> object:
-        return read.plain(side) if side is operand else side
-
-    plain = dataclasses.replace(case, value=plain_of(case.value), args=tuple(map(plain_of, case.args)))
-    other = pair.negative if read.member == pair.positive else pair.positive
-    here, there = (_reduced(_asked(pair.ask(other, asked), run_hard, False)) for asked in (case, plain))
-    assert_that(here).described_as(f"{other} on {case}, against the plain {plain}").is_equal_to(there)
-    _hold_the_pair(plain, excused=False)
 
 
 def _hold_each_argument(case: Case, one: str, other: str) -> None:
@@ -993,32 +869,14 @@ _CASES = st.one_of([pair.cases() for pair in _PAIRS.values()])
 @example(case=Case("has_json_path", {"a": 1}, ("$[",)))
 @example(case=Case("matches", "a", ("(",)))
 @example(case=Case("exists", os.fsencode(_HERE)))
+@example(case=Case("is_equal_to", [], (_RefusingList([1]),)))
+@example(case=Case("is_equal_to", _RefusingList([1]), ([1, 2],)))
+@example(case=Case("is_equal_to", ["x" * 70], (_RefusingList([1]),)))
+@example(case=Case("any_satisfy", _RefusingStr("text"), (model.is_positive_number,)))
+@example(case=Case("contains", _RefusingStr("text"), ("t", "x")))
 @given(case=_CASES)
 def test_a_pair_is_one_question_asked_twice(case: Case) -> None:
     _hold_the_pair(case)
-
-
-@pytest.mark.parametrize("reason", sorted(_KNOWN_READS))
-def test_a_known_read_is_excused_only_as_recorded(reason: str) -> None:
-    """The reproduction is its own entry and no other, and with that excuse alone the pair holds."""
-    read = _KNOWN_READS[reason]
-    pair = _PAIRS[read.case.pair]
-    answers = {name: _asked(pair.ask(name, read.case), run_hard, False) for name in (pair.positive, pair.negative)}
-    known = _known_read(read.case, answers)
-    assert_that(known).described_as(reason).is_not_none()
-    assert_that(known[0]).described_as(reason).is_same_as(read)
-    _hold_the_pair(read.case)
-
-
-@pytest.mark.parametrize(
-    "reason",
-    [
-        pytest.param(reason, marks=pytest.mark.xfail(strict=True, raises=AssertionFailure, reason=reason))
-        for reason in sorted(_KNOWN_READS)
-    ],
-)
-def test_a_known_read_breaks_the_pair_until_it_is_fixed(reason: str) -> None:
-    _hold_the_pair(_KNOWN_READS[reason].case, excused=False)
 
 
 def _negations() -> dict[str, str | None]:
@@ -1065,10 +923,7 @@ def test_every_listed_name_is_still_real() -> None:
     members = [name for pair in _PAIRS.values() for name in (pair.positive, pair.negative)]
     assert_that(names).contains(*members, *_UNPAIRED)
     assert_that(set(_PAIRS)).contains(*_RESTRICTED, *_PREREQUISITES)
-    for read in _KNOWN_READS.values():
-        pair = _PAIRS[read.case.pair]
-        assert_that(read.member).described_as(read.case.pair).is_in(pair.positive, pair.negative)
-    for reason in [*_RESTRICTED.values(), *_UNPAIRED.values(), *_PREREQUISITES.values(), *_KNOWN_READS]:
+    for reason in [*_RESTRICTED.values(), *_UNPAIRED.values(), *_PREREQUISITES.values()]:
         assert_that(len(reason)).described_as(reason).is_greater_than(40)
 
 

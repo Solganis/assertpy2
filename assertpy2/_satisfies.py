@@ -442,24 +442,25 @@ class SatisfiesMixin(_MixinBase):
         reading = _resolved(matcher)
         apply = reading.apply  # read once: the attribute lookup is per item otherwise
         values = materialized(self.val)
-        if not any(apply(item) for item in values):
-            # asked once the verdict is in, since it is wanted only for the message
-            description = reading.describe()
-            # "none did" alone leaves the reader to fetch the items themselves
-            items = list(values)
-            return self.error(
-                f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
-                actual=values,
-                expected=description,
-                diff=DiffResult(
-                    kind="match",
-                    entries=[
-                        _ROOT.index(index).entry(actual=item, expected=description)
-                        for index, item in enumerate(items[:5])
-                    ],
-                ),
-            )
-        return self
+        # kept as the verdict walks them: the message names them, and a second walk is a read the verdict never made
+        items = []
+        for item in values:
+            if apply(item):
+                return self
+            items.append(item)
+        # asked once the verdict is in, since it is wanted only for the message
+        description = reading.describe()
+        return self.error(
+            f"Expected any item to satisfy {description}, but none of the {len(items)} did.",
+            actual=values,
+            expected=description,
+            diff=DiffResult(
+                kind="match",
+                entries=[
+                    _ROOT.index(index).entry(actual=item, expected=description) for index, item in enumerate(items[:5])
+                ],
+            ),
+        )
 
     def all_satisfy(self, matcher: Matcher[Any] | Callable[..., bool], *, allow_empty: bool = False) -> Self:
         """Asserts that all items in val satisfy the given matcher.

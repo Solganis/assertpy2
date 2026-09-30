@@ -2899,3 +2899,279 @@ class TestTheOrderingShortcutsAnswerAsTheWalk:
             "was <[1, 2, 4, 3, 5, 6]>, out of order at index 2: <4> then <3>"
         )
         assert_that(list(range(6))).satisfies(match.is_sorted())
+
+
+class _Scaled(list):
+    """Items read through `__getitem__` scaled tenfold, while `list.__eq__` compares the stored ones."""
+
+    def __getitem__(self, index):
+        return list.__getitem__(self, index) * 10
+
+
+class _Unread(list):
+    """Refuses every read by index, which `list.__eq__` never makes."""
+
+    def __getitem__(self, index):
+        raise RuntimeError("no reads")
+
+
+class _UnreadTuple(tuple):
+    def __getitem__(self, index):
+        raise RuntimeError("no reads")
+
+
+class _StopsIndexing(list):
+    """Ends every read by index with `StopIteration`, which a `map` over the reads would take for the end."""
+
+    def __getitem__(self, index):
+        raise StopIteration
+
+
+class _StopsIndexingTuple(tuple):
+    def __getitem__(self, index):
+        raise StopIteration
+
+
+class _UnreadDelegating(_Unread):
+    """An `__eq__` of its own that hands the question to the base, which reads the storage."""
+
+    def __eq__(self, other):
+        return list.__eq__(self, other)
+
+    __hash__ = None
+
+
+class _PosingList:
+    """Claims to be a list through `__class__` and refuses to be sized: it has no storage to stand in."""
+
+    __class__ = property(lambda self: list)
+
+    def __len__(self):
+        raise RuntimeError("no length")
+
+
+class _Traced(list):
+    """Records every read the walk makes of it."""
+
+    def __init__(self, items):
+        super().__init__(items)
+        self.reads = []
+
+    def __len__(self):
+        self.reads.append("len")
+        return list.__len__(self)
+
+    def __getitem__(self, index):
+        self.reads.append(index)
+        return list.__getitem__(self, index)
+
+    def __iter__(self):
+        self.reads.append("iter")
+        return list.__iter__(self)
+
+
+class _Unsized(list):
+    def __len__(self):
+        raise RuntimeError("no length")
+
+
+class _IteratesOnce(list):
+    """Hands out its first item by iteration and refuses the next."""
+
+    def __iter__(self):
+        yield list.__getitem__(self, 0)
+        raise RuntimeError("iterated once")
+
+
+class _PosingSequence:
+    """A list by `__class__` only, with a length, reads by index, and an iteration it refuses."""
+
+    __class__ = property(lambda self: list)
+
+    def __len__(self):
+        return 3
+
+    def __getitem__(self, index):
+        if index >= 3:
+            raise IndexError(index)
+        return index
+
+    def __iter__(self):
+        raise RuntimeError("no iteration")
+
+
+class _PosingStopped(_PosingSequence):
+    """Thirty items long, so the message walks it, and ends its iteration before it starts."""
+
+    def __len__(self):
+        return 30
+
+    def __iter__(self):
+        raise StopIteration
+
+
+class _Uniterable(list):
+    def __iter__(self):
+        raise RuntimeError("no iteration")
+
+
+class _ThirtyNext:
+    """Thirty items by `next()`, and an `__iter__` of its own that stops, which nothing walking it asks."""
+
+    def __init__(self, failing_at=None):
+        self.position = 0
+        self.failing_at = failing_at
+
+    def __iter__(self):
+        raise StopIteration
+
+    def __next__(self):
+        if self.position == self.failing_at:
+            raise RuntimeError("broke off")
+        if self.position == 30:
+            raise StopIteration
+        self.position += 1
+        return self.position - 1
+
+
+class _PosingThirty(_PosingSequence):
+    failing_at = None
+
+    def __len__(self):
+        return 30
+
+    def __getitem__(self, index):
+        if index >= 30:
+            raise IndexError(index)
+        return index
+
+    def __iter__(self):
+        return _ThirtyNext(self.failing_at)
+
+
+class _PosingBreakingOff(_PosingThirty):
+    failing_at = 1
+
+
+class _PosingUnindexed(_PosingSequence):
+    def __getitem__(self, index):
+        raise RuntimeError("no reads")
+
+
+class _Walks:
+    """Counts how often it is walked."""
+
+    def __init__(self, items):
+        self.items = items
+        self.walks = 0
+
+    def __iter__(self):
+        self.walks += 1
+        return iter(self.items)
+
+
+def _diff_of(actual, expected):
+    with pytest.raises(AssertionFailure) as caught:
+        assert_that(actual).is_equal_to(expected)
+    return [(entry.path, entry.actual, entry.expected) for entry in caught.value.diff.entries]
+
+
+class TestADiffReadsASequenceTheVerdictCouldRead:
+    """A read the verdict never made may not refuse the failure; a read that answers is kept as it was.
+
+    Accepted with it: on a failure, a `list` or `tuple` subclass is read once more before the walk, to learn whether
+    its reads answer.
+    """
+
+    def test_reads_that_answer_are_the_reads_the_diff_shows(self):
+        assert_that(_diff_of(_Scaled([1, 2]), [10, 30])).is_equal_to([("[1]", 20, 30)])
+
+    def test_reads_that_answer_are_the_reads_the_message_shows(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(_Scaled(range(21))).is_equal_to([999] * 21)
+        assert_that(str(caught.value)).starts_with("Expected <[0, 1, 2, 3, 4, ... and 16 more]>")
+
+    @pytest.mark.parametrize(
+        "unread",
+        [
+            _Unread([1, 2]),
+            _UnreadTuple((1, 2)),
+            _UnreadDelegating([1, 2]),
+            _StopsIndexing([1, 2]),
+            _StopsIndexingTuple((1, 2)),
+        ],
+        ids=["list", "tuple", "equality-handed-to-the-base", "stop-iteration", "stop-iteration-tuple"],
+    )
+    def test_reads_that_refuse_leave_the_stored_items(self, unread):
+        expected = (1, 3) if isinstance(unread, tuple) else [1, 3]
+        assert_that(_diff_of(unread, expected)).is_equal_to([("[1]", 2, 3)])
+
+    def test_the_message_elides_what_the_stored_items_share(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(["x" * 70, 1]).is_equal_to(_Unread(["x" * 70, 2]))
+        assert_that(str(caught.value)).starts_with("Expected <[.., 1]> to be equal to <[.., 2]>")
+
+    def test_reads_that_answer_are_made_as_the_walk_always_made_them(self):
+        traced = _Traced([1, 2, 3])
+        _diff_of(traced, [1, 2, 4])
+        assert_that(traced.reads).is_equal_to(["len", "len", "len", "len", 0, "len", 1, "len", 2, 2])
+
+    def test_a_length_that_refuses_leaves_the_stored_items(self):
+        assert_that(_diff_of(_Unsized([1, 2]), [1, 3])).is_equal_to([("[1]", 2, 3)])
+
+    def test_an_iteration_that_refuses_part_way_is_finished_from_the_storage(self):
+        items = [*range(29), 99]
+        with pytest.raises(AssertionFailure) as plain:
+            assert_that(list(range(30))).is_equal_to(items)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(_IteratesOnce(range(30))).is_equal_to(items)
+        assert_that(str(caught.value)).is_equal_to(str(plain.value))
+
+    @pytest.mark.parametrize(
+        ("posing", "refusal"),
+        [(_PosingUnindexed, "no reads"), (_PosingSequence, "no iteration")],
+        ids=["index", "iteration"],
+    )
+    def test_a_value_posing_as_a_list_keeps_a_refusal_of_its_reads(self, posing, refusal):
+        with pytest.raises(RuntimeError, match=refusal):
+            assert_that([7]).is_equal_to(posing())
+
+    def test_a_value_posing_as_a_list_keeps_the_stop_its_iteration_raised(self):
+        with pytest.raises(StopIteration):
+            assert_that(_PosingStopped()).is_equal_to([0] * 30)
+
+    def test_an_iteration_refused_outright_is_answered_from_the_storage(self):
+        items = [*range(29), 99]
+        with pytest.raises(AssertionFailure) as plain:
+            assert_that(list(range(30))).is_equal_to(items)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(_Uniterable(range(30))).is_equal_to(items)
+        assert_that(str(caught.value)).is_equal_to(str(plain.value))
+
+    def test_an_iterator_is_walked_by_next_alone(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(_PosingThirty()).is_equal_to([*range(29), 99])
+        assert_that(str(caught.value)).contains("to be equal to <[.., 99]>")
+
+    def test_a_value_posing_as_a_list_keeps_a_refusal_part_way_through_its_iteration(self):
+        with pytest.raises(RuntimeError, match="broke off"):
+            assert_that(_PosingBreakingOff()).is_equal_to([*range(29), 99])
+
+    def test_a_value_only_posing_as_a_list_keeps_its_own_refusal(self):
+        with pytest.raises(RuntimeError, match="no length"):
+            assert_that([1]).is_equal_to(_PosingList())
+
+
+class TestAnySatisfyWalksTheValueOnce:
+    def test_the_message_walks_the_value_no_more_than_the_verdict_did(self):
+        passing, failing = _Walks([1, 2, 9]), _Walks([1, 2, 3])
+        assert_that(passing).any_satisfy(lambda item: item > 5)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(failing).any_satisfy(lambda item: item > 5)
+        assert_that(failing.walks).is_equal_to(passing.walks)
+        assert_that(str(caught.value)).contains("but none of the 3 did")
+
+    def test_an_iterator_is_counted_whole(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(iter([1, 2, 3])).any_satisfy(lambda item: item > 5)
+        assert_that(str(caught.value)).contains("but none of the 3 did")

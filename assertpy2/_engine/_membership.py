@@ -116,6 +116,8 @@ def _worth_hashing(container: Any, probes: Any) -> bool:
         return len(container) * max(len(probes), 1) >= _WALK_UNDER
     except TypeError:  # no length: an iterator or a view, where the walk cost is unknown but not small
         return True
+    except Exception:  # a length refused: the walk never sizes the value, and this is a cost, not a verdict
+        return False
 
 
 def _kinds(items: Any) -> set[type] | None:
