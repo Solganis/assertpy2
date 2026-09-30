@@ -14,6 +14,7 @@ import enum
 import fractions
 import json
 import pathlib
+import sys
 import types
 import uuid
 from functools import reduce
@@ -115,7 +116,147 @@ def _may_hold_model(annotation: object, outer: bool = True) -> bool:
     return origin is not None or not isinstance(annotation, type) or not issubclass(annotation, _KEYLESS)
 
 
-_FieldReads = tuple[tuple[str, tuple[tuple[object, ...], ...]], ...]
+def _alternatives(annotation: object) -> tuple[object, ...]:
+    """The members of a union, `Annotated` and nested unions opened, or the annotation alone."""
+    while get_origin(annotation) is Annotated:
+        annotation = get_args(annotation)[0]
+    if get_origin(annotation) in (Union, types.UnionType):
+        return tuple(member for argument in get_args(annotation) for member in _alternatives(argument))
+    return (annotation,)
+
+
+_ITEM_ORIGINS = frozenset(
+    {
+        list,
+        tuple,
+        set,
+        frozenset,
+        collections.deque,
+        collections.abc.Sequence,
+        collections.abc.MutableSequence,
+        collections.abc.Set,
+        collections.abc.MutableSet,
+        collections.abc.Collection,
+        collections.abc.Iterable,
+    }
+)
+
+
+_MAPPING_ORIGINS = frozenset({dict, collections.abc.Mapping, collections.abc.MutableMapping})
+
+_Declared = tuple[object, object]
+"""A declared type and the model class whose field declared it, whose config its validation ran in."""
+
+_DECLARED: dict[tuple[int, object], tuple[_Declared, Any]] = {}
+"""What a declaration says a container built from it holds, per declaration and kind of container: worked out once,
+since a list of 1000 orders asks it for each order.  At most 1024 entries."""
+
+
+def _declared_container(declared: _Declared | None) -> tuple[tuple[_Declared, ...] | None, _Declared | None] | None:
+    """What *declared* says the items of a container built from it are declared as: one declaration per position of a
+    fixed tuple, or one for every item; ``None`` where it does not say.
+
+    Only a declaration that leaves validation no choice says (`_sole_member`): which member of a union validation took
+    depends on what the field's own validators made of the payload, and the kind of container they left does not tell.
+    """
+    if declared is None:
+        return None
+    key = (id(declared), "items")
+    known = _DECLARED.get(key)
+    if known is not None and known[0] is declared:
+        return known[1]
+    annotation, owner = declared
+    container = _sole_member(annotation)
+    items = None
+    if get_origin(container) in _ITEM_ORIGINS and get_args(container):
+        arguments = get_args(container)
+        if _is_fixed_tuple(container):
+            items = (tuple((argument, owner) for argument in arguments), None)
+        else:
+            items = (None, (arguments[0], owner))
+    if len(_DECLARED) < 1024:
+        _DECLARED[key] = (declared, items)
+    return items
+
+
+def _declared_mapping_value(declared: _Declared | None) -> _Declared | None:
+    """The declaration of the values of the mapping *declared* is, where it leaves validation no choice, or ``None``."""
+    if declared is None:
+        return None
+    key = (id(declared), "values")
+    known = _DECLARED.get(key)
+    if known is not None and known[0] is declared:
+        return known[1]
+    annotation, owner = declared
+    mapping = _sole_member(annotation)
+    value = (
+        (get_args(mapping)[1], owner)
+        if get_origin(mapping) in _MAPPING_ORIGINS and len(get_args(mapping)) == 2
+        else None
+    )
+    if len(_DECLARED) < 1024:
+        _DECLARED[key] = (declared, value)
+    return value
+
+
+def _sole_member(annotation: object) -> object:
+    """*annotation* without `Annotated` and without ``None`` beside it; ``None`` where a union leaves a choice."""
+    members = [member for member in _alternatives(annotation) if member is not type(None)]
+    return members[0] if len(members) == 1 else None
+
+
+def _chooses(annotation: object) -> bool:
+    """Whether validation chose anywhere in *annotation* above the models it names: between two or more members of a
+    union besides ``None``, or inside a named type alias, which is not opened."""
+    members = [member for member in _alternatives(annotation) if member is not type(None)]
+    if len(members) > 1 or any(hasattr(member, "__value__") for member in members):
+        return True
+    return any(_chooses(argument) for member in members for argument in get_args(member) if argument is not Ellipsis)
+
+
+def _is_fixed_tuple(container: object) -> bool:
+    arguments = get_args(container)
+    return get_origin(container) is tuple and not (len(arguments) == 2 and arguments[1] is Ellipsis)
+
+
+def _item_declarations(declared: _Declared | None, count: int) -> list[_Declared | None]:
+    """The declaration of each of *count* items of a container built from *declared*, by position where a fixed tuple
+    declares one."""
+    items = _declared_container(declared)
+    if items is None:
+        return [None] * count
+    positional, common = items
+    if positional is None:
+        return [common] * count
+    return [positional[index] if index < len(positional) else None for index in range(count)]
+
+
+_ADAPTERS: dict[int, tuple[_Declared, Any]] = {}
+"""A pydantic `TypeAdapter` per declaration, or ``None`` where none can be built: building one costs a schema.  At
+most 256 entries, each holding its declaration so the id stays its own."""
+
+
+def _adapter(declared: _Declared) -> Any:
+    """A `TypeAdapter` for a declared type, in the config of the model that declared it, from the pydantic the models
+    came from; ``None`` where there is none."""
+    known = _ADAPTERS.get(id(declared))
+    if known is not None and known[0] is declared:
+        return known[1]
+    annotation, owner = declared
+    adapter_class = getattr(sys.modules.get("pydantic"), "TypeAdapter", None)
+    adapter = None
+    if adapter_class is not None:
+        # a schema pydantic refuses: TypeError in 2.0, RuntimeError in 2.13, NameError for a forward reference
+        try:
+            adapter = adapter_class(annotation, config=getattr(owner, "model_config", None) or None)
+        except (TypeError, RuntimeError, NameError):
+            adapter = None
+    if len(_ADAPTERS) < 256:
+        _ADAPTERS[id(declared)] = (declared, adapter)
+    return adapter
+
+
+_FieldReads = tuple[tuple[str, tuple[tuple[object, ...], ...], _Declared], ...]
 
 _READS: dict[type, tuple[object, frozenset[str], _FieldReads]] = {}
 """Per model class, with the validator they were read beside: the keys it declares and where each field is read.
@@ -132,7 +273,7 @@ def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads]:
     if known is None or known[0] is not validator:
         config = getattr(model, "model_config", {})
         fields = tuple(
-            (name, _field_sources(name, info, config))
+            (name, _field_sources(name, info, config), (getattr(info, "annotation", None), model))
             for name, info in model.model_fields.items()
             if _may_hold_model(getattr(info, "annotation", None))
         )
@@ -176,6 +317,10 @@ def _is_model(value: object) -> bool:
 
 _CONTAINERS = (dict, list, tuple, set, frozenset)
 
+_REPLAYED = (0, -1)
+"""In the pairs a walk has seen, where no pair of ids can be: the walk is under a replay (`_replayed`), which reads no
+field where validation chose, since the validators it skipped could have steered the choice."""
+
 
 class UncheckableDriftError(Exception):
     """A part of the payload no reading pairs with the model it became, so whether it drifted cannot be told."""
@@ -206,15 +351,17 @@ def contract_drift(
             is not seen, and the walk reads those items by position.
     """
     model = type(instance)
+    declared, fields = _reads_of(model)
+    if _REPLAYED in _seen:
+        fields = tuple(field for field in fields if not _chooses(field[2][0]))
     if getattr(model, "__pydantic_root_model__", False):
-        return _value_drift(payload, instance.root, path, _seen) if _reads_of(model)[1] else []
+        return _value_drift(payload, instance.root, path, _seen, fields[0][2]) if fields else []
     if not isinstance(payload, (dict, collections.abc.Mapping)):
         _refuse_if_key_hides(
             payload, instance, path, f"the payload holds a {type(payload).__name__} where a model was built"
         )
         return []
     seen = _seen | {(id(payload), id(instance))}
-    declared, fields = _reads_of(model)
     prefix = f"{path}." if path else ""
     drift: list[str] = []
     if getattr(model, "model_config", {}).get("extra") != "allow":
@@ -224,7 +371,7 @@ def contract_drift(
         for key, built in (getattr(instance, "__pydantic_extra__", None) or {}).items():
             if key in payload:
                 drift += _value_drift(payload[key], built, f"{prefix}{key}", seen)
-    for name, sources in fields:
+    for name, sources, annotated in fields:
         found, raw = _raw_field(payload, sources)
         if not found:
             continue
@@ -232,7 +379,7 @@ def contract_drift(
         # a scalar built from a scalar holds nothing to pair
         if (value is None or isinstance(value, (str, int, float, bytes))) and not isinstance(raw, _CONTAINERS):
             continue
-        drift += _value_drift(raw, value, f"{prefix}{name}", seen)
+        drift += _value_drift(raw, value, f"{prefix}{name}", seen, annotated)
     return drift
 
 
@@ -254,8 +401,14 @@ def exactness_failure(pairs: Any, *, carrier: str) -> str | None:
     return f"{carrier}{len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}"
 
 
-def _value_drift(raw: object, value: object, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
-    """Drift under one validated value: a model's own keys, and every element or dict value that became a model."""
+def _value_drift(
+    raw: object, value: object, path: str, seen: frozenset[tuple[int, int]], declared: _Declared | None = None
+) -> list[str]:
+    """Drift under one validated value: a model's own keys, and every element or dict value that became a model.
+
+    *declared* is the type the value was declared as and the model that declared it, where the walk knows them: what
+    a model field or a root declares, and from it the item type of each container below.
+    """
     # the payload's own object kept as it was, or a scalar: nothing was built from it
     if raw is value or value is None or isinstance(value, (str, int, float, bytes)):
         return []
@@ -268,48 +421,68 @@ def _value_drift(raw: object, value: object, path: str, seen: frozenset[tuple[in
     seen = seen | {pair}
     if _is_model(value):
         return contract_drift(raw, value, path, seen)
-    return _container_drift(raw, value, path, seen)
+    return _container_drift(raw, value, path, seen, declared)
 
 
-def _container_drift(raw: object, value: object, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+def _container_drift(
+    raw: object, value: object, path: str, seen: frozenset[tuple[int, int]], declared: _Declared | None
+) -> list[str]:
     """Drift under a built container, paired with the raw part it came from as its kind allows."""
     if isinstance(value, (list, tuple)):
-        return _sequence_drift(raw, value, path, seen)
+        return _sequence_drift(raw, value, path, seen, declared)
     if isinstance(value, dict):
-        return _mapping_drift(raw, value, path, seen)
+        return _mapping_drift(raw, value, path, seen, declared)
     if isinstance(value, (set, frozenset)):
-        return _set_drift(raw, value, path, seen)
+        return _set_drift(raw, value, path, seen, declared)
     if isinstance(value, collections.abc.Mapping):
-        return _mapping_drift(raw, dict(value), path, seen)
+        return _mapping_drift(raw, dict(value), path, seen, declared)
     if isinstance(value, collections.abc.Iterator):
         if _holds(raw, _is_mapping, read_text=True):
             raise UncheckableDriftError(path, "validation is lazy here and builds the models only as the value is read")
         return []
     # a sequence validation kept as the payload's own kind, a deque under `Sequence[A]`
     items = _items_of(value)
-    return [] if items is None else _sequence_drift(raw, items, path, seen)
+    return [] if items is None else _sequence_drift(raw, items, path, seen, declared)
 
 
-def _sequence_drift(raw: object, value: list | tuple, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+def _sequence_drift(
+    raw: object,
+    value: list | tuple,
+    path: str,
+    seen: frozenset[tuple[int, int]],
+    declared: _Declared | None = None,
+) -> list[str]:
     """Paired by index, a collection pydantic also takes for a sequence (a deque, a set, a dict's values) in the
     order it iterates, which is the order validation read it in."""
     if not isinstance(raw, (list, tuple)):
         items = _items_of(raw)
         if items is None:
             reason = f"the payload holds a {type(raw).__name__} where a sequence was built"
-            return _wrapped(raw, value, path, seen, reason)
+            return _wrapped(raw, value, path, seen, reason, declared)
         raw = items
     if len(raw) != len(value):
         reason = f"validation changed its length, {len(raw)} items became {len(value)}"
-        return _unpaired(raw, [(f"{path}[{i}]", part) for i, part in enumerate(raw)], value, path, seen, reason)
+        parts = [(f"{path}[{i}]", part) for i, part in enumerate(raw)]
+        return _unpaired(raw, parts, value, path, seen, reason, declared=declared)
+    items = _declared_container(declared)
+    if items is None or items[0] is None:
+        common = None if items is None else items[1]
+        return [
+            entry
+            for index, (part, element) in enumerate(zip(raw, value, strict=True))
+            for entry in _value_drift(part, element, f"{path}[{index}]", seen, common)
+        ]
+    declarations = _item_declarations(declared, len(value))
     return [
         entry
-        for index, (part, element) in enumerate(zip(raw, value, strict=True))
-        for entry in _value_drift(part, element, f"{path}[{index}]", seen)
+        for index, (part, element, item) in enumerate(zip(raw, value, declarations, strict=True))
+        for entry in _value_drift(part, element, f"{path}[{index}]", seen, item)
     ]
 
 
-def _mapping_drift(raw: object, value: dict, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+def _mapping_drift(
+    raw: object, value: dict, path: str, seen: frozenset[tuple[int, int]], declared: _Declared | None = None
+) -> list[str]:
     """Paired by key where validation kept the keys (a `TypedDict` reorders them), else by order, which dict validation
     keeps while it coerces them; a key built into something other than text or a number is walked beside its raw key."""
     if not isinstance(raw, (dict, collections.abc.Mapping)):
@@ -319,38 +492,48 @@ def _mapping_drift(raw: object, value: dict, path: str, seen: frozenset[tuple[in
         # an overwritten value may have become another member of a union than the one that survived
         _refuse_if_key_hides(raw, value, path, f"validation changed its size, {len(raw)} keys became {len(value)}")
         return []
+    item = _declared_mapping_value(declared)
     if raw.keys() == value.keys():
         return [
             entry
             for key, part in raw.items()
-            for entry in _value_drift(part, value[key], f"{path}.{key}" if path else str(key), seen)
+            for entry in _value_drift(part, value[key], f"{path}.{key}" if path else str(key), seen, item)
         ]
     drift: list[str] = []
     for (key, part), (built, element) in zip(raw.items(), value.items(), strict=True):
         if not isinstance(built, (str, int)):
             drift += _value_drift(key, built, path, seen)
-        drift += _value_drift(part, element, f"{path}.{key}" if path else str(key), seen)
+        drift += _value_drift(part, element, f"{path}.{key}" if path else str(key), seen, item)
     return drift
 
 
-def _set_drift(raw: object, value: set | frozenset, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+def _set_drift(
+    raw: object, value: set | frozenset, path: str, seen: frozenset[tuple[int, int]], declared: _Declared | None
+) -> list[str]:
     items = raw if isinstance(raw, (list, tuple)) else _items_of(raw)
     if items is None:
         reason = f"the payload holds a {type(raw).__name__} where a set was built"
-        return _wrapped(raw, value, path, seen, reason)
+        return _wrapped(raw, value, path, seen, reason, declared)
     reason = "a set keeps no order to pair its items with the models they became"
     parts = [(f"{path}[{i}]", part) for i, part in enumerate(items)]
-    return _unpaired(raw, parts, value, path, seen, reason, merged=True)
+    return _unpaired(raw, parts, value, path, seen, reason, merged=True, declared=declared)
 
 
-def _wrapped(raw: object, value: object, path: str, seen: frozenset[tuple[int, int]], reason: str) -> list[str]:
+def _wrapped(
+    raw: object,
+    value: object,
+    path: str,
+    seen: frozenset[tuple[int, int]],
+    reason: str,
+    declared: _Declared | None,
+) -> list[str]:
     """Drift under a mapping a validator turned into a sequence or a set, a single object sent where many may be.
 
-    Only a mapping that became one item is that item; one that became several was expanded in a way no reading
-    pairs.
+    Only a mapping that became one item, or none, is that item; one that became several was expanded in a way no
+    reading pairs.
     """
-    if isinstance(raw, (dict, collections.abc.Mapping)) and len(_items_of(value) or ()) == 1:
-        return _unpaired(raw, [(path, raw)], value, path, seen, reason)
+    if isinstance(raw, (dict, collections.abc.Mapping)) and len(_items_of(value) or ()) <= 1:
+        return _unpaired(raw, [(path, raw)], value, path, seen, reason, declared=declared)
     _refuse_if_key_hides(raw, value, path, reason)
     return []
 
@@ -364,21 +547,107 @@ def _unpaired(
     reason: str,
     *,
     merged: bool = False,
+    declared: _Declared | None = None,
 ) -> list[str]:
     """Drift under a container whose raw items no reading pairs one by one with the items validation built.
 
     Where every built item is an instance of one model class, each raw item became one too, so each raw item that
-    could hide a key is validated again on its own by that class, JSON text in JSON mode as `Json[...]` read it, and
-    walked beside what it becomes.  Anything else refuses with *reason*: items of mixed classes, an item the class
-    refuses on its own, which needed its parent, and, where equal items *merged*, a class whose own `__eq__` could
-    have merged an item of another class into it.
+    could hide a key is validated again on its own by that class and walked beside what it becomes.  Where validation
+    kept no model at all, the raw items are validated again whole by the type the field *declared*, in its model's
+    config, and what that builds is walked (`_replayed`).  Anything else refuses with *reason*: items of mixed classes,
+    an item that does not validate on its own, which needed its parent, and, where equal items *merged*, a class whose
+    own `__eq__` could have merged an item of another class into it.
     """
-    if not _holds(value, _builds_model) or not _holds(raw, _is_mapping, read_text=True):
+    if not _holds(raw, _is_mapping, read_text=True):
         return []
-    model = _sole_model_class(value)
+    if _holds(value, _builds_model):
+        model = _sole_model_class(value)
+        if model is None or (merged and not _equal_only_within_its_class(model)):
+            raise UncheckableDriftError(path, reason)
+        return _revalidated(parts, model, path, seen, reason)
+    return [] if declared is None else _replayed(parts, path, seen, reason, declared)
+
+
+def _replayed(
+    parts: list[tuple[str, object]],
+    path: str,
+    seen: frozenset[tuple[int, int]],
+    reason: str,
+    declared: _Declared,
+) -> list[str]:
+    """Drift under raw items validation left without a model: validated again whole as the *declared* type, in Python
+    mode as validation read them (`_replay_target`).  All of them are replayed first, so a fixed tuple's positions
+    see what validation saw; where pydantic refuses that, only the items that could hide a key.  What that builds is
+    paired item by item; a set it builds tells the one class they became.
+
+    The replay skips the field's own validators, so whatever they did to the payload is missing from it.  Where that
+    could have steered a choice (`_chooses`), nothing is read below it; where pydantic builds nothing from the items,
+    or no sequence of as many, nothing is read at all, since its refusal says nothing about the payload.
+    """
+    if _chooses(declared[0]):
+        return []
+    replayed = _replay_target(declared)
+    adapter = _adapter(replayed)
+    if adapter is None:
+        return []
+    rebuilt = _replay(adapter, parts)
+    if rebuilt is None:
+        parts = [(label, part) for label, part in parts if _holds(part, _is_mapping, read_text=True)]
+        rebuilt = _replay(adapter, parts)
+    seen = seen | {_REPLAYED}
+    if isinstance(rebuilt, collections.abc.Set):
+        return _unpaired([part for _, part in parts], parts, rebuilt, path, seen, reason, merged=True)
+    elements = _items_of(rebuilt)
+    if elements is None or len(elements) != len(parts):
+        return []
+    declarations = _item_declarations(replayed, len(elements))
+    return [
+        entry
+        for (label, part), element, item in zip(parts, elements, declarations, strict=True)
+        for entry in _value_drift(part, element, label, seen, item)
+    ]
+
+
+def _replay(adapter: Any, parts: list[tuple[str, object]]) -> object:
+    """What *adapter* builds from the raw items of *parts*, or ``None`` where pydantic refuses them."""
+    try:
+        return adapter.validate_python([part for _, part in parts])
+    # a validation error, or a schema pydantic builds only on first use and then refuses
+    except (ValueError, TypeError, RuntimeError, NameError):
+        return None
+
+
+def _replay_target(declared: _Declared) -> _Declared:
+    """The type raw items are validated again as: the one member of the *declared* type without the `Annotated`
+    validators of the container itself, which are what emptied it, and a set as a list of its items, so no model is
+    hashed and each item keeps its place."""
+    key = (id(declared), "replay")
+    known = _DECLARED.get(key)
+    if known is not None and known[0] is declared:
+        return known[1]
+    annotation, owner = declared
+    member = _sole_member(annotation) or annotation
+    if member in (set, frozenset) or get_origin(member) in (
+        set,
+        frozenset,
+        collections.abc.Set,
+        collections.abc.MutableSet,
+    ):
+        member = types.GenericAlias(list, get_args(member) or (Any,))
+    target = (member, owner)
+    if len(_DECLARED) < 1024:
+        _DECLARED[key] = (declared, target)
+    return target
+
+
+def _revalidated(
+    parts: list[tuple[str, object]], model: type, path: str, seen: frozenset[tuple[int, int]], reason: str
+) -> list[str]:
+    """Drift under each raw item that could hide a key, validated again on its own by *model*, JSON text in JSON mode
+    as `Json[...]` read it."""
     validate = getattr(model, "model_validate", None)
     validate_json = getattr(model, "model_validate_json", None)
-    if validate is None or validate_json is None or (merged and not _equal_only_within_its_class(model)):
+    if validate is None or validate_json is None:
         raise UncheckableDriftError(path, reason)
     drift: list[str] = []
     for label, item in parts:

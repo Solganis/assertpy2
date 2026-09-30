@@ -393,6 +393,12 @@ A few refinements keep it precise:
   side effects runs twice. The items are the ones the payload sent: in a filtered list, an item the
   validator dropped is checked too. A model read from JSON text (`Json[...]`) is checked against the
   original JSON input.
+- where a validator left no built item to tell (a list it emptied), the raw items are checked against the
+  type the field declares: validated again as that type, in its model's config, and what that builds is
+  checked. The field's own validators are not run again, so one that would have built them otherwise
+  (another class, a subclass of the declared one, renamed keys) is not seen. Nothing is checked where those
+  validators could have steered a choice: items pydantic will not build that type from, and anything below
+  a union of two or more types besides `None` or below a named type alias.
 - where neither works (items of mixed model classes in a set or a resized list, an item that validates
   only through its parent, dict keys merged by coercion, a generator consumed during validation, an
   `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather

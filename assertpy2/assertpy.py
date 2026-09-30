@@ -701,17 +701,21 @@ def assert_conforms(
     does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model keeps
     passing after the live API grows new ones.
 
-    ``exact`` catches that drift in the models the payload became inside lists, tuples, sets, dicts,
-    unions and root models, and reports the exact paths.  It is alias-aware, and respects a model that opts
-    into extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set,
-    a filtered list, an object wrapped into a list) are validated again by their model class when they all
+    ``exact`` catches that drift in the models the payload became inside lists, tuples, sets, dicts, unions
+    and root models, and reports the exact paths.  It is alias-aware, and respects a model that opts into
+    extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set, a
+    filtered list, an object wrapped into a list) are validated again by their model class when they all
     became one, which runs that class's validators once more for them, and JSON text is read as the original
-    JSON input.  What still cannot be paired (items of mixed classes in a set or a resized list, merged dict
-    keys, a generator consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be
-    checked`` and the reason.  It reads the payload as validation left it: a validator that renames keys,
-    changes the payload in place, or reorders or rewrites the items of a container without changing its size
-    is not seen, and those items are read by position.  A model inside a container of plain values
-    (``list[Any]``) or inside a dataclass is not reached.
+    JSON input.  Raw items a validator left no built item for (an emptied list) are checked against the type
+    their field declares: validated again as it, without the field's own validators, so a validator that would
+    have built them otherwise is not seen.  Items pydantic will not build that type from, and anything below a
+    union of two or more types besides ``None`` or below a named type alias, are not checked.  What still
+    cannot be paired (items of mixed classes in a set or a resized list, merged dict keys, a generator
+    consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be checked`` and the reason.
+    It reads the payload as validation left it: a validator that renames keys, changes the payload in place,
+    or reorders or rewrites the items of a container without changing its size is not seen, and those items
+    are read by position.  A model inside a container of plain values (``list[Any]``) or inside a dataclass is
+    not reached.
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)

@@ -1,7 +1,9 @@
 import collections.abc
 import datetime
+import inspect
 import io
 import itertools
+import sys
 import types
 import typing
 
@@ -1193,6 +1195,11 @@ class TestDriftFollowsWhatPydanticBuilt:
                 ["f[0].extra"],
             ),
             "a dict a validator froze": (Frozen, {"f": {"k": extra}}, ["f.k.extra"]),
+            "a declaration naming two lists": (
+                holding(list[dict[str, A]] | list[int]),
+                {"f": [{"k": extra}]},
+                ["f[0].k.extra"],
+            ),
             "alias paths reaching nothing": (Unreached, {"items": [extra]}, []),
             "alias paths into text": (Unreached, {"items": "text"}, []),
             "alias path through a bytes subclass": (Wrapped, {"wrap": _ByteItems(b"x")}, ["sub.extra"]),
@@ -1633,6 +1640,364 @@ class TestExactnessRefusesWhatItCannotPair:
         assert_that(found).is_equal_to(
             "it carries 1 undeclared field(s) the model does not declare: ['items[0].deleted']"
         )
+
+    def test_a_container_validation_emptied_is_checked_by_the_classes_its_field_declares(self):
+        """With no item left to tell what the dropped ones became, the raw items are validated again as the field's
+        declared type and what that builds is read; items pydantic will not build that type from, and anything below
+        a choice the skipped validators could have steered, are left unread."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, Json, RootModel, field_validator
+        from pydantic_core import core_schema
+        from typing_extensions import TypeAliasType
+
+        class A(BaseModel):
+            x: int
+
+        class B(BaseModel):
+            y: int
+
+        class Loose(BaseModel):
+            x: int
+            z: int = 0
+
+        class Stringly(BaseModel):
+            x: str
+            y: int
+
+        class FrozenA(BaseModel, frozen=True):
+            x: int
+
+        class FrozenB(BaseModel, frozen=True):
+            y: int
+
+        def emptying(annotation, mode="before"):
+            class Emptied(BaseModel):
+                f: annotation
+
+                @field_validator("f", mode=mode)
+                @classmethod
+                def emptied(cls, value):
+                    return [] if mode == "before" else type(value)()
+
+            return Emptied
+
+        def inner_emptied(annotation):
+            class InnerEmptied(BaseModel):
+                f: annotation
+
+                @field_validator("f", mode="before")
+                @classmethod
+                def empty_inner(cls, value):
+                    return [[] for _ in value]
+
+            return InnerEmptied
+
+        class EmptiedValues(BaseModel):
+            f: dict[str, typing.Annotated[list[A], BeforeValidator(lambda value: [])]]
+
+        class Wider(A):
+            y: int
+
+        class Widened(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def widened(cls, value):
+                return [Wider.model_validate(item) for item in value]
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def empty(cls, value):
+                return []
+
+        class Holder(BaseModel):
+            x: int
+            g: A | B
+
+        class Normalized(BaseModel):
+            f: list[A | Stringly]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def normalize(cls, value):
+                return [dict(item, x=f"{item['x']}!") for item in value]
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def empty(cls, value):
+                return []
+
+        class StrictTuple(BaseModel):
+            model_config = ConfigDict(strict=True)
+            f: tuple[A, ...]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def as_tuple(cls, value):
+                return tuple(value)
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def empty(cls, value):
+                return ()
+
+        class ValuesOrList(BaseModel):
+            f: dict[str, typing.Annotated[list[A], BeforeValidator(lambda value: [])]] | list[B]
+
+        class OptionalEmptied(BaseModel):
+            f: typing.Annotated[list[A], BeforeValidator(lambda value: [])] | None
+
+        class Tags(frozenset):
+            @classmethod
+            def __get_pydantic_core_schema__(cls, source, handler):
+                return core_schema.no_info_after_validator_function(
+                    cls, core_schema.frozenset_schema(handler.generate_schema(FrozenA))
+                )
+
+        class Nested(BaseModel):
+            f: list[list[A]]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def empty_inner(cls, value):
+                return [[] for _ in value]
+
+        class Rows(RootModel[list[A]]):
+            @field_validator("root", mode="before")
+            @classmethod
+            def emptied(cls, value):
+                return []
+
+        extra = {"x": 1, "extra": 2}
+        found = {
+            "a list": self._refusal({"f": [extra]}, emptying(list[A])),
+            "a set": self._refusal({"f": [extra]}, emptying(set[A])),
+            "an optional annotated list": self._refusal(
+                {"f": [extra]}, emptying(typing.Annotated[list[A], "meta"] | None)
+            ),
+            "a tuple of any length": self._refusal({"f": [extra]}, emptying(tuple[A, ...])),
+            "an object sent alone": self._refusal({"f": extra}, emptying(list[A])),
+            "a root model": self._refusal([extra], Rows),
+            "a list emptied inside a list": self._refusal({"f": [[extra]]}, Nested),
+            "an item beside a None the list does not take": self._refusal({"f": [None, extra]}, emptying(list[A])),
+            "a list emptied as a dict value": self._refusal({"f": {"k": [extra]}}, EmptiedValues),
+            "a list of JSON text": self._refusal({"f": ['{"x": 1, "extra": 2}']}, emptying(list[Json[A]])),
+            "an optional annotated list of lists": self._refusal(
+                {"f": [[extra]]}, inner_emptied(typing.Annotated[list[list[A]], "meta"] | None)
+            ),
+            "a fixed tuple of lists": self._refusal(
+                {"f": [[{"x": 1}], [{"y": 1, "extra": 2}]]}, inner_emptied(tuple[list[A], list[B]])
+            ),
+            "a fixed tuple with a number first": self._refusal(
+                {"f": [1, extra]}, emptying(tuple[int, A], mode="after")
+            ),
+            "a list optional, emptied by its own validator": self._refusal({"f": [extra]}, OptionalEmptied),
+            "a set of its own kind": self._refusal({"f": [{"x": 1}, extra]}, emptying(Tags, mode="after")),
+            "a fixed tuple emptied after validation": self._refusal(
+                {"f": [{"x": 1}, {"x": 2, "z": 3, "extra": 4}]}, emptying(tuple[A, Loose], mode="after")
+            ),
+            "a None dropped beside it": self._refusal({"f": [None, extra]}, emptying(list[A | None])),
+            "a subclass the skipped validator built, against the declared class": self._refusal(
+                {"f": [{"x": 1, "y": 2}]}, Widened
+            ),
+            "a choice inside the model": self._refusal(
+                {"f": [{"x": 1, "g": {"y": 1, "extra": 2}, "top": 3}]}, emptying(list[Holder])
+            ),
+        }
+        carries = "it carries 1 undeclared field(s) the model does not declare: "
+        assert_that(found).is_equal_to(
+            {
+                "a list": f"{carries}['f[0].extra']",
+                "a set": f"{carries}['f[0].extra']",
+                "an optional annotated list": f"{carries}['f[0].extra']",
+                "a tuple of any length": f"{carries}['f[0].extra']",
+                "an object sent alone": f"{carries}['f.extra']",
+                "a root model": f"{carries}['[0].extra']",
+                "a list emptied inside a list": f"{carries}['f[0][0].extra']",
+                "an item beside a None the list does not take": f"{carries}['f[1].extra']",
+                "a list emptied as a dict value": f"{carries}['f.k[0].extra']",
+                "a list of JSON text": f"{carries}['f[0].extra']",
+                "an optional annotated list of lists": f"{carries}['f[0][0].extra']",
+                "a fixed tuple of lists": f"{carries}['f[1][0].extra']",
+                "a fixed tuple with a number first": f"{carries}['f[1].extra']",
+                "a list optional, emptied by its own validator": f"{carries}['f[0].extra']",
+                "a set of its own kind": f"{carries}['f[1].extra']",
+                "a fixed tuple emptied after validation": f"{carries}['f[1].extra']",
+                "a None dropped beside it": f"{carries}['f[1].extra']",
+                "a subclass the skipped validator built, against the declared class": f"{carries}['f[0].y']",
+                "a choice inside the model": f"{carries}['f[0].top']",
+            }
+        )
+        clean = [
+            (emptying(list[A]), {"f": [{"x": 1}]}),
+            (emptying(list[A | dict[str, int]]), {"f": [{"k": 1}]}),
+            (emptying(typing.Any), {"f": [extra]}),
+            (emptying(list[A | Loose]), {"f": [{"x": 1}]}),
+            (emptying(list[A] | tuple[A, ...]), {"f": [{"x": 1}]}),
+            (emptying(tuple[A, Loose], mode="after"), {"f": [{"x": 1}, {"x": 2, "z": 3}]}),
+            (emptying(list[A] | tuple[B, ...], mode="after"), {"f": [{"y": 1}]}),
+            (emptying(tuple[int, A] | list[dict[str, int]], mode="after"), {"f": [0, {"x": 1}]}),
+            (emptying(set[FrozenA] | list[B], mode="after"), {"f": [{"y": 1}]}),
+            (OptionalEmptied, {"f": [{"x": 1}]}),
+            (emptying(Tags, mode="after"), {"f": [{"x": 1}, {"x": 2}]}),
+            (emptying(list[A | int]), {"f": [{"x": "bad", "extra": 2}]}),
+            (emptying(list[A]), {"f": [{"X": 1}]}),
+            (emptying(tuple[A, ...]), {"f": [{"X": 1}]}),
+            (emptying(list[A | None]), {"f": [{"X": 1}]}),
+            (emptying(list[A | B]), {"f": [{"y": 1, "extra": 2}]}),
+            (emptying(list[A] | tuple[A, ...]), {"f": [extra]}),
+            (inner_emptied(list[list[A]] | tuple[list[A], ...]), {"f": [[extra]]}),
+            (emptying(tuple[int, A] | list[dict[str, int]], mode="after"), {"f": [0, extra]}),
+            (emptying(set[FrozenA] | list[B], mode="after"), {"f": [{"y": 1, "extra": 2}]}),
+            (emptying(set[FrozenA] | set[FrozenB], mode="after"), {"f": [extra]}),
+            (emptying(list[A] | list[B], mode="after"), {"f": [extra]}),
+            (Normalized, {"f": [{"x": 1, "y": 2}]}),
+            (ValuesOrList, {"f": {"k": [extra]}}),
+            (StrictTuple, {"f": [{"x": 1}]}),
+            (StrictTuple, {"f": [extra]}),
+        ]
+        rows = TypeAliasType("Rows", typing.Annotated[list[A], BeforeValidator(lambda value: [])])
+        choice = TypeAliasType("Choice", A | Stringly)
+        try:
+            aliased, chosen = emptying(rows, mode="after"), emptying(list[choice])
+        # pydantic before 2.5 builds no schema for a named alias
+        except TypeError:
+            aliased = chosen = None
+        if aliased is not None:
+            clean += [(aliased, {"f": [{"x": 1}]}), (aliased, {"f": [extra]}), (chosen, {"f": [extra]})]
+        if "union_mode" in inspect.signature(Field).parameters:
+            first = typing.Annotated[dict[str, int] | A, Field(union_mode="left_to_right")]
+            clean.append((emptying(list[first], mode="after"), {"f": [extra]}))
+            if "coerce_numbers_to_str" in ConfigDict.__annotations__:
+                as_text = typing.Annotated[dict[str, str] | A, Field(union_mode="left_to_right")]
+
+                class Coerced(BaseModel):
+                    model_config = ConfigDict(coerce_numbers_to_str=True)
+                    f: list[as_text]
+
+                    @field_validator("f")
+                    @classmethod
+                    def emptied(cls, value):
+                        return []
+
+                clean.append((Coerced, {"f": [extra]}))
+        for model, payload in clean:
+            assert_conforms(payload, model, exact=True)
+
+    def test_a_recursive_model_emptied_at_every_level_is_checked_at_every_level(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class Node(BaseModel):
+            children: list["Node"] = []
+
+            @field_validator("children", mode="before")
+            @classmethod
+            def pruned(cls, value):
+                return []
+
+        payload = {"children": [{"children": [{"junk": 1}]}]}
+        # pydantic 2.0 keeps the self-reference as text in the field's annotation, which no replay can resolve
+        if isinstance(typing.get_args(Node.model_fields["children"].annotation)[0], str):
+            assert_conforms(payload, Node, exact=True)
+        else:
+            assert_that(self._refusal(payload, Node)).is_equal_to(
+                "it carries 1 undeclared field(s) the model does not declare: ['children[0].children[0].junk']"
+            )
+
+    def test_items_dropped_beside_plain_survivors_are_left_unread_or_refused(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class Duck:
+            model_fields: typing.ClassVar[dict] = {}
+
+        class Kept(BaseModel):
+            f: list[A | dict[str, int]]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def without_x(cls, value):
+                return [item for item in value if "x" not in item]
+
+        class Ducks(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+            f: list[Duck]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def emptied(cls, value):
+                return []
+
+        class DuckSurvivors(BaseModel):
+            model_config = ConfigDict(arbitrary_types_allowed=True)
+            f: list[Duck]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def ducked(cls, value):
+                return [Duck() for item in value if item]
+
+        assert_conforms({"f": [{"x": 1, "extra": "text"}, {"k": 1}]}, Kept, exact=True)
+        assert_conforms({"f": [{"a": 1}]}, Ducks, exact=True)
+        refused = self._refusal({"f": [{"a": 1}, None]}, DuckSurvivors)
+        assert_that(refused).is_equal_to("<f> cannot be checked: validation changed its length, 2 items became 1")
+
+    def test_an_emptied_container_is_answered_with_full_records_and_left_unread_without_pydantic(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class Emptied(BaseModel):
+            f: list[A]
+            g: dict[str, A] = {}
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def emptied(cls, value):
+                return []
+
+        declared, adapters = dict.fromkeys(range(1024)), dict.fromkeys(range(256))
+        monkeypatch.setattr(_contract, "_DECLARED", declared)
+        monkeypatch.setattr(_contract, "_ADAPTERS", adapters)
+        found = self._refusal({"f": [{"x": 1, "extra": 2}], "g": {"k": {"x": 1}}}, Emptied)
+        assert_that(found).is_equal_to("it carries 1 undeclared field(s) the model does not declare: ['f[0].extra']")
+        assert_that((len(declared), len(adapters))).is_equal_to((1024, 256))
+
+        def refusing(annotation, config=None):
+            raise TypeError(annotation)
+
+        stub = types.SimpleNamespace(TypeAdapter=refusing, ValidationError=sys.modules["pydantic"].ValidationError)
+        monkeypatch.setitem(sys.modules, "pydantic", stub)
+        assert_conforms({"f": [{"x": 1, "extra": 2}]}, Emptied, exact=True)
+        monkeypatch.setitem(sys.modules, "pydantic", None)
+        assert_conforms({"f": [{"x": 1, "extra": 2}]}, Emptied, exact=True)
+
+    def test_a_replay_that_builds_no_matching_sequence_is_left_unread(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class Emptied(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def emptied(cls, value):
+                return []
+
+        monkeypatch.setattr(
+            _contract, "_adapter", lambda declared: types.SimpleNamespace(validate_python=lambda items: 42)
+        )
+        assert_conforms({"f": [{"x": 1, "extra": 2}]}, Emptied, exact=True)
 
     def test_items_of_one_model_class_are_validated_again_and_json_text_is_read(self):
         """Clean, each shape passes; with an undeclared field, the field is named where the raw item held it."""
