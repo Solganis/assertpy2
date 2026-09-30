@@ -366,7 +366,8 @@ composes with `exact=True` for per-element drift (drift paths are prefixed with 
 after the live API grows new fields - your test is green while the contract has drifted.
 
 `exact=True` catches that: it fails when the payload carries any field the model does not declare,
-recursively into nested sub-models and lists, reporting the exact paths.
+in every model the payload became (inside lists, tuples, dicts, unions and root models too), reporting the
+exact paths.
 
 ```python
 # response grew a `promo_code` field, and its nested customer grew `loyalty_tier`
@@ -385,6 +386,17 @@ A few refinements keep it precise:
   legitimately arrives as a JSON string, so flagging coercions would be noise
 - it is stricter and more informative than pydantic's model-level `extra="forbid"` - per-call, and it
   names every drifted path.
+- where validation reshaped a part of the payload so that it no longer pairs with the models built from it
+  (a set of models, dict keys merged by coercion, a list a validator filtered, an object a validator wrapped
+  into a list, a model read from JSON text, a generator validation read up, an `Iterable[Model]` validated
+  lazily), it fails with `<path> cannot be checked:` and the reason rather than guess. A part in which no key can hide (a number, text that is not JSON, a model passed as is) is never
+  refused.
+- it reads the payload as validation left it. A validator that renames keys, changes the payload in place,
+  or reorders or rewrites the items of a container without changing its size is not seen, and those items
+  are read by position.
+- it follows the models where a field's type can hold one, and under `Any`. A model a validator puts inside
+  a container of plain values (`list[Any]`, `dict[str, int]`), and a model inside a dataclass or another
+  class that is not a model, are not reached.
 
 ## Set up your type checker
 

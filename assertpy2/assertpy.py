@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 from . import _hints
 from ._engine._compat import _LoggerAdapter
-from ._engine._contract import contract_drift
+from ._engine._contract import exactness_failure
 from ._engine._introspection import WarningLogger, is_same_implementation
 from ._engine._operations import (
     ALSO_ASSERTS,
@@ -701,8 +701,15 @@ def assert_conforms(
     does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model keeps
     passing after the live API grows new ones.
 
-    ``exact`` catches that drift - recursively, into nested sub-models and lists - and reports the
-    exact paths.  It is alias-aware, and respects a model that opts into extras (``extra="allow"``).
+    ``exact`` catches that drift in every model the payload became, inside lists, tuples, dicts, unions
+    and root models too, and reports the exact paths.  It is alias-aware, and respects a model that opts
+    into extras (``extra="allow"``).  Where validation reshaped a part of the payload so that it no longer
+    pairs with the models built from it (a set of models, dict keys merged by coercion, a list a validator
+    filtered, a model read from JSON text), it fails with ``<path> cannot be checked`` and the reason.  It
+    reads the payload as validation left it: a validator that renames keys, changes the payload in place,
+    or reorders or rewrites the items of a container without changing its size is not seen, and those
+    items are read by position.  A model inside a container of plain values (``list[Any]``) or inside a
+    dataclass is not reached.
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)
@@ -733,7 +740,8 @@ def assert_conforms(
 
     Raises:
         TypeError: if ``model`` is not a pydantic v2 model class
-        AssertionError: if ``val`` does not validate against ``model``, or (with ``exact``) drifts from it
+        AssertionError: if ``val`` does not validate against ``model``, or (with ``exact``) drifts from it or
+            holds a part that cannot be paired with the model built from it
     """
     if not (isinstance(model, type) and hasattr(model, "model_validate")):
         raise TypeError("assert_conforms requires a pydantic v2 model class")
@@ -757,11 +765,11 @@ def assert_conforms(
                     suppress_context=True,
                 )
         if exact:
-            drift = [f"[{index}].{path}" for index, item in enumerate(val) for path in contract_drift(item, model)]
-            if drift:
+            items = enumerate(zip(val, validated_items, strict=True))
+            failure = exactness_failure(((item, it, f"[{index}]") for index, (item, it) in items), carrier="")
+            if failure:
                 return builder.error(
-                    f"Expected every item to conform exactly to <{model.__name__}>, but"
-                    f" {len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}",
+                    f"Expected every item to conform exactly to <{model.__name__}>, but {failure}",
                     actual=val,
                     expected=model,
                 )
@@ -777,11 +785,10 @@ def assert_conforms(
             suppress_context=True,
         )
     if exact:
-        drift = contract_drift(val, model)
-        if drift:
+        failure = exactness_failure([(val, validated, "")], carrier="it carries ")
+        if failure:
             return builder.error(
-                f"Expected <{_truncated(_safe_str(val))}> to conform exactly to <{model.__name__}>, but it carries"
-                f" {len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}",
+                f"Expected <{_truncated(_safe_str(val))}> to conform exactly to <{model.__name__}>, but {failure}",
                 actual=val,
                 expected=model,
             )

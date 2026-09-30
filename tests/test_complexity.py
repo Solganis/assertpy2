@@ -54,7 +54,6 @@ RECORDED: dict[str, int] = {
     "assertpy2/_engine/_compare.py::_node_decision": 11,
     # 11: each `<` is read for a `numpy` broadcast in place. As a helper it cost a datetime greater-than 10%
     "assertpy2/_engine/_ordering.py::compare": 11,
-    "assertpy2/_engine/_contract.py::contract_drift": 11,
     "assertpy2/assertpy.py::assert_conforms": 11,
     # one more name refused by the poll chain: check() after a poll used to skip the wait and answer nothing
     # 13: the chain refuses `value` by name, where the hook used to record it as an assertion

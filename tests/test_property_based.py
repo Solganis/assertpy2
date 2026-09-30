@@ -7,6 +7,7 @@ shrunk counterexample plus assertpy2's structured ``AssertionFailure`` pinpoint 
 """
 
 import ast
+import contextlib
 import copy
 import datetime
 import decimal
@@ -35,7 +36,7 @@ from assertpy2 import assert_conforms, assert_that, match, soft_assertions
 from assertpy2._clustering import _VALUE_LIMIT, Observation, Signature, _shown, clusters, render, stable_repr
 from assertpy2._dangling import findings as dangling_findings
 from assertpy2._engine._compare import _EQ_ATOMIC, _within_tolerance, plainly_within
-from assertpy2._engine._contract import contract_drift, shape, shape_diff
+from assertpy2._engine._contract import UncheckableDriftError, contract_drift, shape, shape_diff
 from assertpy2._engine._diff import _build_equality_diff, _ordered_keys, _sub_diff_entries
 from assertpy2._engine._equality import values_differ
 from assertpy2._engine._introspection import is_mapping_like
@@ -993,7 +994,8 @@ def test_conforming_dump_has_no_drift(ident, name, tags):
         name: str
         tags: list[str]
 
-    assert_that(contract_drift(Item(id=ident, name=name, tags=tags).model_dump(), Item)).is_empty()
+    dump = Item(id=ident, name=name, tags=tags).model_dump()
+    assert_that(contract_drift(dump, Item.model_validate(dump))).is_empty()
 
 
 @settings(deadline=None)
@@ -1006,7 +1008,8 @@ def test_undeclared_key_is_always_detected(payload, extra_key):
         id: int
 
     assume(extra_key != "id")
-    assert_that(contract_drift({**payload, extra_key: 1}, Item)).contains(extra_key)
+    grown = {**payload, "id": 1, extra_key: 1}
+    assert_that(contract_drift(grown, Item.model_validate(grown))).contains(extra_key)
 
 
 @settings(deadline=None)
@@ -1023,7 +1026,9 @@ def test_contract_drift_is_total(payload):
         sub: Sub
         items: list[Sub]
 
-    contract_drift(payload, Item)
+    # a payload the instance was not built from, as a before-validator can leave it: answered or refused, nothing else
+    with contextlib.suppress(UncheckableDriftError):
+        contract_drift(payload, Item(id=1, sub=Sub(x=1), items=[Sub(x=2)]))
 
 
 _collidable = st.sampled_from([0, 1, 2, "0", "1", "2", 1.0, 2.0, "1.0", "2.0", True, False, None, "None", "True"])

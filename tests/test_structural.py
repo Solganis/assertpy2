@@ -7,7 +7,8 @@ import typing
 import pytest
 
 from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
-from assertpy2._engine._contract import _declared_keys, _submodel, contract_drift, shape, shape_diff
+from assertpy2._engine import _contract
+from assertpy2._engine._contract import UncheckableDriftError, _declared_keys, contract_drift, shape, shape_diff
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -788,6 +789,11 @@ class TestAssertConformsExact:
         assert_that(str(exc_info.value)).contains("item [0]")
 
 
+def _drift(payload, model):
+    """What `assert_conforms(..., exact=True)` reports: the payload walked beside the instance it validated into."""
+    return contract_drift(payload, model.model_validate(payload))
+
+
 class TestContractDrift:
     """Unit coverage of the drift walker's branches."""
 
@@ -807,9 +813,15 @@ class TestContractDrift:
 
         return Inner, Outer
 
-    def test_non_dict_payload_has_no_drift(self):
-        _, outer = self._submodels()
-        assert_that(contract_drift(42, outer)).is_empty()
+    def test_a_payload_of_another_shape_is_refused_only_where_a_key_could_hide(self):
+        inner, _ = self._submodels()
+        for hiding, kind in (([{"x": 1}], "list"), ("[" * 100_000, "str")):
+            with pytest.raises(UncheckableDriftError, match=f"holds a {kind} where a model was built"):
+                contract_drift(hiding, inner(x=1))
+        itself: list[object] = []
+        itself.append(itself)
+        for keyless in (42, None, [1, 2], itself, "not json", b"[1]", inner(x=1)):
+            assert_that(contract_drift(keyless, inner(x=1))).described_as(repr(keyless)).is_empty()
 
     def test_alias_resolved_tuple_and_union_branches(self):
         _, outer = self._submodels()
@@ -819,21 +831,16 @@ class TestContractDrift:
             "either": "ok",
             "note": "n",
         }
-        assert_that(sorted(contract_drift(payload, outer))).is_equal_to(["inner.deep", "pair[1].oops"])
+        assert_that(sorted(_drift(payload, outer))).is_equal_to(["inner.deep", "pair[1].oops"])
 
     def test_null_submodel_value_is_skipped(self):
-        _, outer = self._submodels()
-        payload = {"innerAlias": None, "pair": [], "either": 1, "note": "n"}
-        assert_that(contract_drift(payload, outer)).is_empty()
-
-    def test_submodel_peels_optional_list_and_rejects_non_models(self):
         inner, _ = self._submodels()
-        assert_that(_submodel(inner)).is_equal_to(inner)
-        assert_that(_submodel(inner | None)).is_equal_to(inner)
-        assert_that(_submodel(list[inner])).is_equal_to(inner)
-        assert_that(_submodel(int)).is_none()
-        assert_that(_submodel(typing.Any)).is_none()
-        assert_that(_submodel(int | str)).is_none()
+        from pydantic import BaseModel
+
+        class Holder(BaseModel):
+            inner: inner | None
+
+        assert_that(_drift({"inner": None}, Holder)).is_empty()
 
     def test_validation_alias_str_not_flagged(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -842,7 +849,7 @@ class TestContractDrift:
         class Model(BaseModel):
             user_id: int = Field(validation_alias="userId")
 
-        assert_that(contract_drift({"userId": 1}, Model)).is_empty()
+        assert_that(_drift({"userId": 1}, Model)).is_empty()
 
     def test_alias_choices_not_flagged_but_genuine_drift_caught(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -851,9 +858,9 @@ class TestContractDrift:
         class Model(BaseModel):
             user_id: int = Field(validation_alias=AliasChoices("uid", "userId"))
 
-        assert_that(contract_drift({"uid": 1}, Model)).is_empty()
-        assert_that(contract_drift({"userId": 1}, Model)).is_empty()
-        assert_that(contract_drift({"uid": 1, "surprise": 9}, Model)).is_equal_to(["surprise"])
+        assert_that(_drift({"uid": 1}, Model)).is_empty()
+        assert_that(_drift({"userId": 1}, Model)).is_empty()
+        assert_that(_drift({"uid": 1, "surprise": 9}, Model)).is_equal_to(["surprise"])
 
     def test_alias_path_top_level_key_not_flagged(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -862,7 +869,7 @@ class TestContractDrift:
         class Model(BaseModel):
             city: str = Field(validation_alias=AliasPath("address", "city"))
 
-        assert_that(contract_drift({"address": {"city": "NYC"}}, Model)).is_empty()
+        assert_that(_drift({"address": {"city": "NYC"}}, Model)).is_empty()
 
     def test_submodel_resolved_via_validation_alias(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -874,7 +881,7 @@ class TestContractDrift:
         class Outer(BaseModel):
             inner: Inner = Field(validation_alias="innerAlias")
 
-        assert_that(contract_drift({"innerAlias": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
+        assert_that(_drift({"innerAlias": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
 
     def test_submodel_value_resolution_alias_loop_branches(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -884,10 +891,10 @@ class TestContractDrift:
             x: int
 
         class Outer(BaseModel):
-            plain: Inner
+            plain: Inner | None = None
             aliased: Inner = Field(validation_alias=AliasChoices("first", "second"))
 
-        assert_that(contract_drift({"second": {"x": 1, "deep": 9}}, Outer)).is_equal_to(["aliased.deep"])
+        assert_that(_drift({"second": {"x": 1, "deep": 9}}, Outer)).is_equal_to(["aliased.deep"])
 
 
 class TestShape:
@@ -1035,7 +1042,7 @@ class TestAliasResolution:
             user_id: int = Field(validation_alias=AliasPath("meta", "id"))
 
         assert_that(_declared_keys(Model)).contains("meta")
-        assert_that(contract_drift({"meta": {"id": 1}}, Model)).is_empty()
+        assert_that(_drift({"meta": {"id": 1}}, Model)).is_empty()
 
 
 class TestSubmodelAnnotations:
@@ -1049,25 +1056,599 @@ class TestSubmodelAnnotations:
         class Outer(BaseModel):
             inner: Inner | None = None
 
-        assert_that(_submodel(Inner | None)).is_equal_to(Inner)
-        assert_that(contract_drift({"inner": {"a": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
+        assert_that(_drift({"inner": {"a": 1, "extra": 2}}, Outer)).is_equal_to(["inner.extra"])
 
-    def test_a_bare_container_annotation_resolves_to_nothing(self):
-        # `list` with no argument has an origin but no args, so there is no element type to peel
-        assert_that(_submodel(list)).is_none()
-        assert_that(_submodel(typing.List)).is_none()  # noqa: UP006  # the bare form is the point
 
-    def test_a_union_of_two_models_is_ambiguous_and_resolves_to_nothing(self):
+class TestDriftFollowsWhatPydanticBuilt:
+    """The payload is walked beside the instance it validated into, so each nested model is checked where pydantic put
+    one: the member of a union it chose, the element types of a tuple, the values of a dict, and the full path of an
+    `AliasPath`.  Read off the annotation, a union or a dict of models was never entered and extras inside it passed,
+    and an `AliasPath` was followed one segment only."""
+
+    @staticmethod
+    def _cases():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AliasPath, BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
+        from typing_extensions import TypedDict
+
+        class A(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            kind: typing.Literal["a"] = "a"
+            x: int
+
+        class B(BaseModel):
+            kind: typing.Literal["b"] = "b"
+            y: int
+
+        class Rows(RootModel[list[A]]):
+            pass
+
+        def holding(annotation, **extra):
+            return type("Holder", (BaseModel,), {"__annotations__": {"f": annotation}, **extra})
+
+        class Wrapped(BaseModel):
+            sub: A = Field(validation_alias=AliasPath("wrap", "inner"))
+
+        class Indexed(BaseModel):
+            first: A = Field(validation_alias=AliasPath("items", 0))
+            last: A = Field(validation_alias=AliasPath("items", -1))
+
+        class EmptyAlias(BaseModel):
+            sub: A = Field(validation_alias="")
+
+        class IntKeyed(BaseModel):
+            sub: A = Field(validation_alias=AliasPath("wrap", 0))
+
+        class ByName(BaseModel):
+            model_config = ConfigDict(populate_by_name=True)
+            sub: A = Field(alias="theSub")
+
+        class Extras(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            __pydantic_extra__: dict[str, A] = Field(init=False)
+
+        class Stamped(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            x: int
+
+            @model_validator(mode="after")
+            def stamped(self):
+                self.stamp = 1
+                return self
+
+        class AliasOnly(BaseModel):
+            model_config = ConfigDict(populate_by_name=True, validate_by_alias=True, validate_by_name=False)
+            sub: A = Field(default_factory=lambda: A(x=0), alias="theSub")
+
+        class Shape(TypedDict):
+            a: A
+            b: int
+
+        class Unreached(BaseModel):
+            past: A | None = Field(None, validation_alias=AliasPath("items", 5))
+            keyed: A | None = Field(None, validation_alias=AliasPath("items", "k"))
+
+        class Frozen(BaseModel):
+            f: dict[str, A]
+
+            @field_validator("f")
+            @classmethod
+            def frozen(cls, value):
+                return types.MappingProxyType(value)
+
+        extra = {"x": 1, "extra": 2}
+        discriminated = typing.Annotated[A | B, Field(discriminator="kind")]
+        return {
+            "union": (holding(A | B), {"f": extra}, ["f.extra"]),
+            "union, the other member": (holding(A | B), {"f": {"y": 1, "extra": 2}}, ["f.extra"]),
+            "dict of models": (holding(dict[str, A]), {"f": {"k": extra}}, ["f.k.extra"]),
+            "dict with a coerced key": (holding(dict[int, A]), {"f": {"1": extra}}, ["f.1.extra"]),
+            "list of a union": (holding(list[A | B]), {"f": [extra]}, ["f[0].extra"]),
+            "tuple, clean": (holding(tuple[A, B]), {"f": [{"x": 1}, {"y": 2}]}, []),
+            "tuple, extra in its second type": (
+                holding(tuple[A, B]),
+                {"f": [{"x": 1}, {"y": 2, "extra": 3}]},
+                ["f[1].extra"],
+            ),
+            "discriminated union": (holding(discriminated), {"f": {"kind": "b", "y": 1, "extra": 2}}, ["f.extra"]),
+            "dict of lists": (holding(dict[str, list[A]]), {"f": {"k": [extra]}}, ["f.k[0].extra"]),
+            "root model": (Rows, [extra], ["[0].extra"]),
+            "root model as a field": (holding(Rows), {"f": [extra]}, ["f[0].extra"]),
+            "alias path, clean": (Wrapped, {"wrap": {"inner": {"x": 1}}}, []),
+            "alias path, extra": (Wrapped, {"wrap": {"inner": extra}}, ["sub.extra"]),
+            "alias path by index": (Indexed, {"items": [{"x": 1}, extra]}, ["last.extra"]),
+            "a name allowed beside the alias": (ByName, {"sub": extra}, ["sub.extra"]),
+            "list of lists": (holding(list[list[A]]), {"f": [[extra]]}, ["f[0][0].extra"]),
+            "an empty alias": (EmptyAlias, {"": extra}, ["sub.extra"]),
+            "alias path by dict key": (IntKeyed, {"wrap": {0: extra}}, ["sub.extra"]),
+            "a typed dict it reorders": (holding(Shape), {"f": {"b": 1, "a": extra}}, ["f.a.extra"]),
+            "a deque for a list": (holding(list[A]), {"f": collections.deque([extra])}, ["f[0].extra"]),
+            "a dict's values for a list": (holding(list[A]), {"f": {"k": extra}.values()}, ["f[0].extra"]),
+            "a mapping proxy for a model": (holding(A), {"f": types.MappingProxyType(extra)}, ["f.extra"]),
+            "a mapping proxy for a dict": (
+                holding(dict[str, A]),
+                {"f": types.MappingProxyType({"k": extra})},
+                ["f.k.extra"],
+            ),
+            "a mapping proxy as the payload": (holding(A), types.MappingProxyType({"f": extra}), ["f.extra"]),
+            "alias path by index into a deque": (
+                Indexed,
+                {"items": collections.deque([{"x": 1}, extra])},
+                ["last.extra"],
+            ),
+            "alias path through a bare getitem": (Indexed, {"items": _Indexed([{"x": 1}, extra])}, ["last.extra"]),
+            "alias path by key through a bare getitem": (Wrapped, {"wrap": _Indexed({"inner": extra})}, ["sub.extra"]),
+            "a name the config refuses over populate_by_name": (AliasOnly, {"sub": extra}, []),
+            "a sequence kept as a deque": (
+                holding(collections.abc.Sequence[A]),
+                {"f": collections.deque([extra])},
+                ["f[0].extra"],
+            ),
+            "a dict a validator froze": (Frozen, {"f": {"k": extra}}, ["f.k.extra"]),
+            "alias paths reaching nothing": (Unreached, {"items": [extra]}, []),
+            "alias paths into text": (Unreached, {"items": "text"}, []),
+            "alias path through a bytes subclass": (Wrapped, {"wrap": _ByteItems(b"x")}, ["sub.extra"]),
+            "a typed extra": (Extras, {"added": extra}, ["added.extra"]),
+            "an extra a validator set": (Stamped, {"x": 1}, []),
+        }
+
+    def test_each_nested_model_is_checked_where_pydantic_put_it(self):
+        found = {label: sorted(_drift(payload, model)) for label, (model, payload, _) in self._cases().items()}
+        assert_that(found).is_equal_to({label: expected for label, (_, _, expected) in self._cases().items()})
+
+    def test_a_name_the_config_does_not_read_is_not_followed(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            sub: Inner = Field(alias="theSub")
+
+        # pydantic read `theSub` and ignored `sub`, so what `sub` holds is not the model that was built
+        assert_that(_drift({"theSub": {"x": 1}, "sub": {"x": 1, "extra": 2}}, Outer)).is_empty()
+
+    def test_a_config_reading_names_only_is_followed_by_name(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            model_config = ConfigDict(validate_by_alias=False, validate_by_name=True)
+            sub: Inner | None = Field(alias="theSub")
+
+        # pydantic read the `None` under the name, so what the ignored alias holds is not the model that was built
+        assert_that(_drift({"sub": None, "theSub": {"x": 1, "extra": 2}}, Outer)).is_empty()
+        assert_that(_drift({"sub": {"x": 1, "extra": 2}}, Outer)).is_equal_to(["sub.extra"])
+
+    def test_the_assertion_reports_what_the_walk_finds(self):
+        model, payload, _ = self._cases()["union"]
+        with pytest.raises(AssertionError) as caught:
+            assert_conforms(payload, model, exact=True)
+        assert_that(str(caught.value)).contains("['f.extra']")
+        model, payload, _ = self._cases()["alias path, clean"]
+        assert_that(assert_conforms(payload, model, exact=True).value.sub.x).is_equal_to(1)
+
+    def test_a_model_is_read_once_and_the_reading_kept(self, monkeypatch):
+        model, payload, expected = self._cases()["alias path, extra"]
+        read = []
+        original = _contract._field_sources
+        monkeypatch.setattr(_contract, "_READS", {})
+        monkeypatch.setattr(_contract, "_field_sources", lambda *args: read.append(args[0]) or original(*args))
+        assert_that(_drift(payload, model)).is_equal_to(expected)
+        first = list(read)
+        assert_that(_drift(payload, model)).is_equal_to(expected)
+        assert_that(read).is_equal_to(first).contains("sub")
+        assert_that(_contract._READS).contains_key(model)
+
+    def test_a_rebuilt_model_is_read_again(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+
+        class Inner(BaseModel):
+            x: int
+
+        class Outer(BaseModel):
+            sub: Inner | None = Field(default=None, alias="theSub")
+
+        payload = {"sub": {"x": 1, "extra": 2}}
+        assert_that(_drift(payload, Outer)).is_empty()
+        Outer.model_config["validate_by_alias"] = False
+        Outer.model_config["validate_by_name"] = True
+        Outer.model_rebuild(force=True)
+        assert_that(_drift(payload, Outer)).is_equal_to(["sub.extra"])
+
+    def test_a_payload_holding_itself_is_walked_once(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
         from pydantic import BaseModel
 
-        class One(BaseModel):
-            a: int
+        class Loose(BaseModel):
+            f: typing.Any
 
-        class Two(BaseModel):
-            b: int
+        looped: dict = {}
+        looped["f"] = looped
+        assert_that(assert_conforms(looped, Loose, exact=True).value.f).is_same_as(looped)
 
-        assert_that(_submodel(One | Two)).is_none()
+    def test_a_model_a_validator_made_hold_itself_is_walked_once(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Selfish(BaseModel):
+            f: typing.Optional["Selfish"] | typing.Any
+
+            @model_validator(mode="after")
+            def holding_itself(self):
+                self.f = self
+                return self
+
+        looped: dict = {}
+        looped["f"] = looped
+        conformed = assert_conforms(looped, Selfish, exact=True).value
+        assert_that(conformed.f).is_same_as(conformed)
+
+    def test_a_full_record_of_models_still_answers_a_new_one(self, monkeypatch):
+        model, payload, expected = self._cases()["union"]
+        full = dict.fromkeys(range(256))
+        monkeypatch.setattr(_contract, "_READS", full)
+        assert_that(_drift(payload, model)).is_equal_to(expected)
+        assert_that(full).is_length(256)
+
+    def test_each_item_of_a_root_model_is_named_by_its_own_index(self):
+        model, _, _ = self._cases()["root model"]
+        with pytest.raises(AssertionError) as caught:
+            assert_conforms([[{"x": 1}], [{"x": 1, "extra": 2}]], model, each=True, exact=True)
+        assert_that(str(caught.value)).contains("['[1][0].extra']")
+
+    def test_each_item_is_walked_beside_its_own_instance(self):
+        model, _, _ = self._cases()["union"]
+        with pytest.raises(AssertionError) as caught:
+            assert_conforms([{"f": {"x": 1}}, {"f": {"y": 1, "extra": 2}}], model, each=True, exact=True)
+        assert_that(str(caught.value)).contains("['[1].f.extra']")
+
+
+class _Indexed:
+    """Indexed through `__getitem__` alone, as an `AliasPath` step may read it."""
+
+    def __init__(self, items):
+        self.items = items
+
+    def __getitem__(self, index):
+        return self.items[index]
+
+
+class _ByteItems(bytes):
+    """Bytes whose own `__getitem__` answers any step, which pydantic's alias reading asks."""
+
+    def __getitem__(self, key):
+        return {"x": 1, "extra": 2}
+
+
+class _Rows:
+    """Iterable, and neither a collection nor an iterator."""
+
+    def __iter__(self):
+        yield {"x": 1, "extra": 2}
+
+
+class TestExactnessRefusesWhatItCannotPair:
+    """Where no reading pairs a part of the payload with the model built from it, `exact=True` fails and says where,
+    rather than pass it unread or read it against the wrong model."""
+
+    @staticmethod
+    def _models():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Json, RootModel, field_validator, model_validator
+
+        class A(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            x: int
+
+        class B(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            y: int
+
+        def holding(annotation):
+            return type("Holder", (BaseModel,), {"__annotations__": {"f": annotation}})
+
+        class Filtered(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def without_nulls(cls, value):
+                return [item for item in value if item is not None]
+
+        class Wrapped(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def listed(cls, value):
+                return value if isinstance(value, list) else [value]
+
+        class Money(BaseModel):
+            amount: int
+            currency: str
+
+            @model_validator(mode="before")
+            @classmethod
+            def spelled(cls, value):
+                if isinstance(value, str):
+                    amount, currency = value.split()
+                    return {"amount": amount, "currency": currency}
+                if isinstance(value, list):
+                    return dict(zip(("amount", "currency"), value, strict=True))
+                return value
+
+        class Priced(BaseModel):
+            f: list[Money]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def without_blanks(cls, value):
+                return [item for item in value if item]
+
+        class Paired(BaseModel):
+            f: dict[str, A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def from_pairs(cls, value):
+                return dict(value) if isinstance(value, list) else value
+
+        return {
+            "A": A,
+            "B": B,
+            "holding": holding,
+            "Filtered": Filtered,
+            "Wrapped": Wrapped,
+            "Json": Json,
+            "Money": Money,
+            "Priced": Priced,
+            "Paired": Paired,
+            "RootModel": RootModel,
+        }
+
+    def _refusal(self, payload, model, **options):
+        with pytest.raises(AssertionError) as caught:
+            assert_conforms(payload, model, exact=True, **options)
+        return str(caught.value).split(", but ", 1)[1]
+
+    def test_each_part_it_cannot_pair_is_named_with_the_reason(self):
+        models = self._models()
+        a, b, holding, json_of = models["A"], models["B"], models["holding"], models["Json"]
+        found = {
+            "a set of models": self._refusal({"f": [{"x": 1}]}, holding(set[a])),
+            "a set mixing model classes": self._refusal({"f": [{"x": 1}, {"y": 1}]}, holding(set[a | b])),
+            "merged keys of models": self._refusal({"f": {"01": {"x": 1}, "1": {"x": 2}}}, holding(dict[int, a])),
+            "merged keys of lists": self._refusal(
+                {"f": {"01": [{"x": 1}], "1": [{"x": 2, "extra": 3}]}}, holding(dict[int, list[a]])
+            ),
+            "a filtered list": self._refusal({"f": [None, {"x": 1}]}, models["Filtered"]),
+            "a wrapped object": self._refusal({"f": {"x": 1}}, models["Wrapped"]),
+            "a model read from text": self._refusal({"f": '{"x": 1}'}, holding(models["Json"][a])),
+            "models read from bytes": self._refusal({"f": b'[{"x": 1}]'}, holding(models["Json"][list[a]])),
+            "a mapping from a list": self._refusal({"f": [["k", {"x": 1}]]}, models["Paired"]),
+            "JSON text in a set": self._refusal({"f": ['{"x": 1, "extra": 2}']}, holding(set[json_of[a]])),
+            "a model built from a key": self._refusal(
+                {"f": {'{"x": 1, "extra": 2}': 10}}, holding(dict[json_of[a], int])
+            ),
+            "model keys merged": self._refusal({"f": {'{"x": 1}': 1, '{"x":1}': 2}}, holding(dict[json_of[a], int])),
+            "a generator read up": self._refusal({"f": (item for item in [{"x": 1}])}, holding(list[a])),
+            "an iterable that is no collection": self._refusal({"f": _Rows()}, holding(list[a])),
+            "a lazy iterable": self._refusal({"f": [{"x": 1, "extra": 2}]}, holding(collections.abc.Iterable[a])),
+            "merged keys of lazy iterables": self._refusal(
+                {"f": {"01": [{"x": 1}], "1": [{"x": 2, "extra": 3}]}},
+                holding(dict[int, collections.abc.Iterable[a]]),
+            ),
+            "a model read from JSON twice": self._refusal(
+                {"f": '"{\\"x\\": 1, \\"extra\\": 2}"'}, holding(json_of[models["RootModel"][json_of[a]]])
+            ),
+        }
+        cannot = "<f> cannot be checked: "
+        unordered = f"{cannot}a set keeps no order to pair its items with the models they became"
+        merged = f"{cannot}validation changed its size, 2 keys became 1"
+        assert_that(found).is_equal_to(
+            {
+                "a set of models": unordered,
+                "a set mixing model classes": unordered,
+                "merged keys of models": merged,
+                "merged keys of lists": merged,
+                "a filtered list": f"{cannot}validation changed its length, 2 items became 1",
+                "a wrapped object": f"{cannot}the payload holds a dict where a sequence was built",
+                "a model read from text": f"{cannot}the payload holds a str where a model was built",
+                "models read from bytes": f"{cannot}the payload holds a bytes where a sequence was built",
+                "a mapping from a list": f"{cannot}the payload holds a list where a mapping was built",
+                "JSON text in a set": unordered,
+                "a model built from a key": f"{cannot}the payload holds a str where a model was built",
+                "model keys merged": merged,
+                "a generator read up": f"{cannot}the payload holds a generator where a sequence was built",
+                "an iterable that is no collection": f"{cannot}the payload holds a _Rows where a sequence was built",
+                "a lazy iterable": f"{cannot}validation is lazy here and builds the models only as the value is read",
+                "merged keys of lazy iterables": merged,
+                "a model read from JSON twice": f"{cannot}the payload holds a str where a model was built",
+            }
+        )
+
+    def test_each_item_names_its_own_refusal(self):
+        models = self._models()
+        refusal = self._refusal([{"f": [{"x": 1}]}, {"f": [None, {"x": 1}]}], models["Filtered"], each=True)
+        assert_that(refusal).is_equal_to("<[1].f> cannot be checked: validation changed its length, 2 items became 1")
+
+    def test_what_holds_no_model_is_not_refused(self):
+        models = self._models()
+        a, holding = models["A"], models["holding"]
+        merged = assert_conforms({"f": {"01": 1, "1": 2}}, holding(dict[int, a | int]), exact=True)
+        assert_that(merged.value.f).is_length(1)
+        assert_that(assert_conforms({"f": [1, 1, 2]}, holding(set[a | int]), exact=True).value.f).is_length(2)
+        assert_that(assert_conforms({"f": [1, 2]}, holding(list[a | float]), exact=True).value.f).is_equal_to(
+            [1.0, 2.0]
+        )
+        assert_that(assert_conforms({"f": "a,b"}, holding(str), exact=True).value.f).is_equal_to("a,b")
+
+    def test_a_model_built_from_what_holds_no_key_is_not_refused(self):
+        models = self._models()
+        holding = models["holding"]
+        for spelled in ("10 USD", [10, "USD"]):
+            conformed = assert_conforms({"f": spelled}, holding(models["Money"]), exact=True)
+            assert_that(conformed.value.f.amount).is_equal_to(10)
+        filtered = assert_conforms({"f": ["1 A", "", "2 B"]}, models["Priced"], exact=True)
+        assert_that(filtered.value.f).is_length(2)
+
+    def test_a_model_given_instead_of_its_data_has_nothing_to_refuse(self):
+        models = self._models()
+        a = models["A"]
+        assert_that(assert_conforms({"f": a(x=1)}, models["holding"](a), exact=True).value.f.x).is_equal_to(1)
+        assert_that(assert_conforms({"f": a(x=1)}, models["Wrapped"], exact=True).value.f).is_length(1)
+        assert_that(assert_conforms({"f": [["k", a(x=1)]]}, models["Paired"], exact=True).value.f).contains_key("k")
+        lazy = assert_conforms({"f": [a(x=1)]}, models["holding"](collections.abc.Iterable[a]), exact=True)
+        assert_that(list(lazy.value.f)).is_length(1)
+
+    def test_a_validator_reordering_at_equal_length_is_read_by_position(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class B(BaseModel):
+            y: int
+
+        class Reversed(BaseModel):
+            f: list[A | B]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def backwards(cls, value):
+                return list(reversed(value))
+
+        found = self._refusal({"f": [{"x": 1}, {"y": 2}]}, Reversed)
+        assert_that(found).is_equal_to(
+            "it carries 2 undeclared field(s) the model does not declare: ['f[0].x', 'f[1].y']"
+        )
+
+    def test_a_nesting_deeper_than_the_walk_follows_is_refused(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class Rewrapped(BaseModel):
+            f: A | list[typing.Any]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def rewrapped(cls, value):
+                depth = 0
+                while isinstance(value, list):
+                    depth, value = depth + 1, value[0]
+                for _ in range(depth):
+                    value = [value]
+                return value
+
+        deep: object = 0
+        for _ in range(5_000):
+            deep = [deep]
+        found = self._refusal({"f": deep}, Rewrapped)
+        assert_that(found).is_equal_to("<the payload> cannot be checked: it nests deeper than the walk can follow")
+
+
+class TestExactnessWalksOnlyWhatCanHoldAModel:
+    """A field whose type is made of plain parts, and a part pydantic kept as the payload's own object, hold nothing
+    built from the payload, so `exact=True` does not walk them: a 300 by 300 grid of floats walked item by item cost
+    forty times its validation, and a deep list under `Any` overflowed the stack."""
+
+    @staticmethod
+    def _model():
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class A(BaseModel):
+            x: int
+
+        return A
+
+    def test_which_types_can_hold_a_model(self):
+        a = self._model()
+        from pydantic import Json
+
+        class Point(typing.NamedTuple):
+            a: a
+
+        class Shape(typing.TypedDict):
+            a: a
+
+        plain = {
+            "a bare list": list,
+            "a grid": list[list[float]],
+            "a JSON object": dict[str, typing.Any],
+            "a list of objects": list[object],
+            "an iterable of ints": collections.abc.Iterable[int],
+            "a tuple of ints": tuple[int, ...],
+            "a literal": typing.Literal[1, "a"],
+            "an annotated list": typing.Annotated[list[int], "meta"],
+            "optional text": str | None,
+            "an abstract mapping": collections.abc.Mapping[str, collections.abc.Sequence[bytes]],
+        }
+        holding = {
+            "Any": typing.Any,
+            "object": object,
+            "optional Any": typing.Annotated[typing.Any | None, "meta"],
+            "a model": a,
+            "an optional model": a | None,
+            "a model read from JSON": Json[a],
+            "a model deep inside": dict[str, list[tuple[int, a]]],
+            "a named tuple": Point,
+            "a typed dict": Shape,
+            "a type variable": typing.TypeVar("T"),
+            "an unresolved name": "A",
+        }
+        verdicts = {name: _contract._may_hold_model(annotation) for name, annotation in {**plain, **holding}.items()}
+        assert_that(verdicts).is_equal_to({**dict.fromkeys(plain, False), **dict.fromkeys(holding, True)})
+
+    def test_a_field_that_cannot_hold_a_model_is_not_walked(self, monkeypatch):
+        a = self._model()
+        from pydantic import BaseModel, RootModel
+
+        class Grid(BaseModel):
+            cells: list[list[float]]
+            tags: list[str]
+            sub: a
+
+        walked = []
+        walk = _contract._value_drift
+        monkeypatch.setattr(_contract, "_value_drift", lambda *args: walked.append(args[2]) or walk(*args))
+        assert_conforms({"cells": [[1.0, 2.0]], "tags": ["t"], "sub": {"x": 1}}, Grid, exact=True)
+        assert_conforms([[1.0, 2.0]], RootModel[list[list[float]]], exact=True)
+        assert_that(walked).is_equal_to(["sub"])
+
+    def test_a_deep_part_kept_as_given_is_not_walked(self):
+        a = self._model()
+        deep: object = 0
+        for _ in range(5_000):
+            deep = [deep]
+        loose = type("Loose", (a.__base__,), {"__annotations__": {"f": typing.Any}})
+        either = type("Either", (a.__base__,), {"__annotations__": {"f": a | list[typing.Any]}})
+        for model in (loose, either):
+            assert_that(assert_conforms({"f": deep}, model, exact=True).value.f).is_length(1)
+
+    def test_a_model_a_validator_put_under_any_is_walked(self):
+        a = self._model()
+        from pydantic import BaseModel, field_validator
+
+        class Built(BaseModel):
+            f: typing.Any
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def built(cls, value):
+                return a.model_validate(value)
+
+        assert_that(_drift({"f": {"x": 1, "extra": 2}}, Built)).is_equal_to(["f.extra"])
 
 
 class TestAliasesOnDuckTypedModels:
@@ -1105,7 +1686,7 @@ class TestDriftOnDuckTypedModels:
         class DuckModel:
             model_fields: typing.ClassVar = {"id": DuckField()}
 
-        assert_that(contract_drift({"id": 1, "surprise": 2}, DuckModel)).is_equal_to(["surprise"])
+        assert_that(contract_drift({"id": 1, "surprise": 2}, DuckModel())).is_equal_to(["surprise"])
 
 
 class TestStructureWalkPathsAndCycles:
