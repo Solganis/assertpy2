@@ -25,7 +25,7 @@ import unittest.mock
 from dataclasses import dataclass
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, BaseMatcher, assert_that, assert_warn, match, soft_assertions
@@ -2793,3 +2793,37 @@ class TestEverySpellingOfEqualityAsksEq:
         with pytest.raises(AssertionFailure) as failure:
             assert_that([_NeverEqual()]).is_equal_to([_NeverEqual()])
         assert_that(str(failure.value)).does_not_contain("every difference here")
+
+
+class _WalkedInt(int):
+    """An `int` the ordering shortcuts do not recognise, so a pair holding it goes the general way."""
+
+
+class _WalkedFloat(float):
+    """A `float` the ordering shortcuts do not recognise."""
+
+
+_REAL = st.one_of(st.integers(), st.integers(-(2**70), 2**70), st.floats(allow_nan=True, allow_infinity=True))
+
+
+class TestTheOrderingShortcutsAnswerAsTheWalk:
+    """An int against a float is ordered without the general walk; the answers are its own."""
+
+    @settings(max_examples=300)
+    @given(_REAL, _REAL)
+    @example(1, 1.0)
+    @example(1.0, 1)
+    @example(2**53 + 1, float(2**53))
+    @example(float(2**53), 2**53 + 1)
+    @example(10**400, 1e308)
+    @example(1e308, 10**400)
+    @example(10**400, math.inf)
+    @example(-(10**400), -math.inf)
+    @example(math.nan, 1)
+    @example(1, math.nan)
+    @example(0, -0.0)
+    def test_an_int_against_a_float_orders_as_the_general_path(self, left, right):
+        walked = _WalkedInt(left) if type(left) is int else _WalkedFloat(left)
+        assert_that(compare(left, right)).is_equal_to(compare(walked, right))
+        for relation in ("lt", "le", "gt", "ge"):
+            assert_that(holds(left, right, relation)).is_equal_to(holds(walked, right, relation))

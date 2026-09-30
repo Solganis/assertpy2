@@ -621,8 +621,11 @@ def compare(actual: Any, expected: Any) -> int:
     value, not an unorderable pair, and answering it either way would send the reader to the wrong file.
     """
     actual_type = type(actual)
-    # the ordinary case first: in a per-element loop, so the frozenset lookup and two `isinstance` were paid each time
-    if actual_type is type(expected) and actual_type in _PLAIN:
+    # the ordinary case first: in a per-element loop, so the frozenset lookup and two `isinstance` were paid each time.
+    # An int against a float orders exactly and never signals, and the walk below spent two ABC checks on it
+    if (actual_type is type(expected) and actual_type in _PLAIN) or (
+        (actual_type is int or actual_type is float) and (type(expected) is int or type(expected) is float)
+    ):
         return (actual > expected) - (actual < expected)
     if actual_type in _UNORDERED:
         raise UnorderableError("value")
@@ -687,7 +690,9 @@ def holds(actual: Any, expected: Any, relation: str) -> bool:
     "not less, not greater" does not mean "equal", so equality is asked separately.
     """
     actual_type = type(actual)
-    if actual_type is type(expected) and actual_type in _PLAIN:
+    if (actual_type is type(expected) and actual_type in _PLAIN) or (
+        (actual_type is int or actual_type is float) and (type(expected) is int or type(expected) is float)
+    ):
         # the shortcut `compare` takes, one call earlier: building the answer through a dict of four keys cost most
         return _DIRECT[relation](actual, expected)
     order = compare(actual, expected)
