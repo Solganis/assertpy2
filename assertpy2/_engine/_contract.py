@@ -198,11 +198,12 @@ def contract_drift(
 
     Raises:
         UncheckableDriftError: where a part of the payload that could hide an undeclared key (a dict inside it, or
-            inside the JSON text it is) cannot be paired with a model built from it: a set of models (no order),
-            a mapping or a sequence whose size validation changed, a part of another shape than what was built.  The
-            payload is read as validation left it: a validator renaming keys, changing the payload in place, or
-            reordering or rewriting a container's items without changing its size is not seen, and the walk reads
-            those items by position.
+            inside the JSON text it is) cannot be paired with a model built from it: a set, a resized list or an
+            object wrapped into either whose built items are not all one model class, or whose raw item that class
+            refuses on its own, dict keys coercion merged, a part of another shape than what was built, an iterable
+            validation read up or left lazy.  The payload is read as validation left it: a validator renaming keys,
+            changing the payload in place, or reordering or rewriting a container's items without changing its size
+            is not seen, and the walk reads those items by position.
     """
     model = type(instance)
     if getattr(model, "__pydantic_root_model__", False):
@@ -258,6 +259,8 @@ def _value_drift(raw: object, value: object, path: str, seen: frozenset[tuple[in
     # the payload's own object kept as it was, or a scalar: nothing was built from it
     if raw is value or value is None or isinstance(value, (str, int, float, bytes)):
         return []
+    if isinstance(raw, (str, bytes, bytearray)):
+        raw = _decoded_container(raw)
     # a pair already on the path is a cycle, the payload's own or one a validator built by assigning a model to itself
     pair = (id(raw), id(value))
     if pair in seen:
@@ -265,13 +268,17 @@ def _value_drift(raw: object, value: object, path: str, seen: frozenset[tuple[in
     seen = seen | {pair}
     if _is_model(value):
         return contract_drift(raw, value, path, seen)
+    return _container_drift(raw, value, path, seen)
+
+
+def _container_drift(raw: object, value: object, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+    """Drift under a built container, paired with the raw part it came from as its kind allows."""
     if isinstance(value, (list, tuple)):
         return _sequence_drift(raw, value, path, seen)
     if isinstance(value, dict):
         return _mapping_drift(raw, value, path, seen)
     if isinstance(value, (set, frozenset)):
-        _refuse_if_key_hides(raw, value, path, "a set keeps no order to pair its items with the models they became")
-        return []
+        return _set_drift(raw, value, path, seen)
     if isinstance(value, collections.abc.Mapping):
         return _mapping_drift(raw, dict(value), path, seen)
     if isinstance(value, collections.abc.Iterator):
@@ -290,12 +297,11 @@ def _sequence_drift(raw: object, value: list | tuple, path: str, seen: frozenset
         items = _items_of(raw)
         if items is None:
             reason = f"the payload holds a {type(raw).__name__} where a sequence was built"
-            _refuse_if_key_hides(raw, value, path, reason)
-            return []
+            return _wrapped(raw, value, path, seen, reason)
         raw = items
     if len(raw) != len(value):
-        _refuse_if_key_hides(raw, value, path, f"validation changed its length, {len(raw)} items became {len(value)}")
-        return []
+        reason = f"validation changed its length, {len(raw)} items became {len(value)}"
+        return _unpaired(raw, [(f"{path}[{i}]", part) for i, part in enumerate(raw)], value, path, seen, reason)
     return [
         entry
         for index, (part, element) in enumerate(zip(raw, value, strict=True))
@@ -310,6 +316,7 @@ def _mapping_drift(raw: object, value: dict, path: str, seen: frozenset[tuple[in
         _refuse_if_key_hides(raw, value, path, f"the payload holds a {type(raw).__name__} where a mapping was built")
         return []
     if len(raw) != len(value):
+        # an overwritten value may have become another member of a union than the one that survived
         _refuse_if_key_hides(raw, value, path, f"validation changed its size, {len(raw)} keys became {len(value)}")
         return []
     if raw.keys() == value.keys():
@@ -324,6 +331,98 @@ def _mapping_drift(raw: object, value: dict, path: str, seen: frozenset[tuple[in
             drift += _value_drift(key, built, path, seen)
         drift += _value_drift(part, element, f"{path}.{key}" if path else str(key), seen)
     return drift
+
+
+def _set_drift(raw: object, value: set | frozenset, path: str, seen: frozenset[tuple[int, int]]) -> list[str]:
+    items = raw if isinstance(raw, (list, tuple)) else _items_of(raw)
+    if items is None:
+        reason = f"the payload holds a {type(raw).__name__} where a set was built"
+        return _wrapped(raw, value, path, seen, reason)
+    reason = "a set keeps no order to pair its items with the models they became"
+    parts = [(f"{path}[{i}]", part) for i, part in enumerate(items)]
+    return _unpaired(raw, parts, value, path, seen, reason, merged=True)
+
+
+def _wrapped(raw: object, value: object, path: str, seen: frozenset[tuple[int, int]], reason: str) -> list[str]:
+    """Drift under a mapping a validator turned into a sequence or a set, a single object sent where many may be.
+
+    Only a mapping that became one item is that item; one that became several was expanded in a way no reading
+    pairs.
+    """
+    if isinstance(raw, (dict, collections.abc.Mapping)) and len(_items_of(value) or ()) == 1:
+        return _unpaired(raw, [(path, raw)], value, path, seen, reason)
+    _refuse_if_key_hides(raw, value, path, reason)
+    return []
+
+
+def _unpaired(
+    raw: object,
+    parts: list[tuple[str, object]],
+    value: object,
+    path: str,
+    seen: frozenset[tuple[int, int]],
+    reason: str,
+    *,
+    merged: bool = False,
+) -> list[str]:
+    """Drift under a container whose raw items no reading pairs one by one with the items validation built.
+
+    Where every built item is an instance of one model class, each raw item became one too, so each raw item that
+    could hide a key is validated again on its own by that class, JSON text in JSON mode as `Json[...]` read it, and
+    walked beside what it becomes.  Anything else refuses with *reason*: items of mixed classes, an item the class
+    refuses on its own, which needed its parent, and, where equal items *merged*, a class whose own `__eq__` could
+    have merged an item of another class into it.
+    """
+    if not _holds(value, _builds_model) or not _holds(raw, _is_mapping, read_text=True):
+        return []
+    model = _sole_model_class(value)
+    validate = getattr(model, "model_validate", None)
+    validate_json = getattr(model, "model_validate_json", None)
+    if validate is None or validate_json is None or (merged and not _equal_only_within_its_class(model)):
+        raise UncheckableDriftError(path, reason)
+    drift: list[str] = []
+    for label, item in parts:
+        part = _decoded_container(item) if isinstance(item, (str, bytes, bytearray)) else item
+        if _holds(part, _is_mapping, read_text=True):
+            try:
+                built = validate(part) if part is item else validate_json(item)
+            except ValueError:
+                raise UncheckableDriftError(path, reason) from None
+            drift += _value_drift(part, built, label, seen)
+    return drift
+
+
+def _equal_only_within_its_class(model: type | None) -> bool:
+    """Whether equal instances of *model* share its class: its `__eq__` is pydantic's own, which compares classes.
+
+    A parametrized generic model does not: pydantic compares its origin, which every specialization shares.
+    """
+    if (getattr(model, "__pydantic_generic_metadata__", None) or {}).get("origin") is not None:
+        return False
+    owner = next((klass for klass in getattr(model, "__mro__", ()) if "__eq__" in vars(klass)), object)
+    return owner.__module__.startswith("pydantic.")
+
+
+def _sole_model_class(value: object) -> type | None:
+    """The one model class every item of a built container is an instance of, or ``None``."""
+    items = _items_of(value) or []
+    kinds = {type(item) for item in items}
+    return kinds.pop() if len(kinds) == 1 and _is_model(items[0]) else None
+
+
+def _decoded_container(text: str | bytes | bytearray) -> object:
+    """What JSON *text* decodes to, decoded again while that is text, when it ends in a mapping or a list; else *text*.
+
+    A model read from JSON text (`Json[...]`) is walked beside what the text holds.  Text that is not JSON, or nests
+    deeper than the decoder goes, is left as it is.
+    """
+    try:
+        current = json.loads(text)
+        while isinstance(current, str):
+            current = json.loads(current)
+    except (ValueError, RecursionError):
+        return text
+    return current if isinstance(current, (dict, list)) else text
 
 
 def _refuse_if_key_hides(raw: object, value: object, path: str, reason: str) -> None:

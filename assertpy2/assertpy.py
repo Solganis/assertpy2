@@ -703,13 +703,14 @@ def assert_conforms(
 
     ``exact`` catches that drift in every model the payload became, inside lists, tuples, dicts, unions
     and root models too, and reports the exact paths.  It is alias-aware, and respects a model that opts
-    into extras (``extra="allow"``).  Where validation reshaped a part of the payload so that it no longer
-    pairs with the models built from it (a set of models, dict keys merged by coercion, a list a validator
-    filtered, a model read from JSON text), it fails with ``<path> cannot be checked`` and the reason.  It
-    reads the payload as validation left it: a validator that renames keys, changes the payload in place,
-    or reorders or rewrites the items of a container without changing its size is not seen, and those
-    items are read by position.  A model inside a container of plain values (``list[Any]``) or inside a
-    dataclass is not reached.
+    into extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set,
+    a filtered list, an object wrapped into a list) are validated again by their model class when they all
+    became one, and JSON text is read as the JSON it holds.  What still cannot be paired (items of mixed
+    classes, merged dict keys, a generator read up, a lazy ``Iterable``) fails with ``<path> cannot be
+    checked`` and the reason.  It reads the payload as validation left it: a validator that renames keys,
+    changes the payload in place, or reorders or rewrites the items of a container without changing its size
+    is not seen, and those items are read by position.  A model inside a container of plain values
+    (``list[Any]``) or inside a dataclass is not reached.
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)

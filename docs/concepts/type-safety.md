@@ -386,14 +386,19 @@ A few refinements keep it precise:
   legitimately arrives as a JSON string, so flagging coercions would be noise
 - it is stricter and more informative than pydantic's model-level `extra="forbid"` - per-call, and it
   names every drifted path.
-- where validation reshaped a part of the payload so that it no longer pairs with the models built from it
-  (a set of models, dict keys merged by coercion, a list a validator filtered, an object a validator wrapped
-  into a list, a model read from JSON text, a generator validation read up, an `Iterable[Model]` validated
-  lazily), it fails with `<path> cannot be checked:` and the reason rather than guess. A part in which no key can hide (a number, text that is not JSON, a model passed as is) is never
-  refused.
+- where validation reshaped a container so that its raw items no longer pair one by one with the items
+  built from it (a set, a list a validator filtered, an object a validator wrapped into a list) and every
+  built item is one model class, each raw item is validated again on its own by that class and checked
+  beside what it becomes. A model read from JSON text (`Json[...]`) is checked against the JSON the text
+  holds.
+- where neither works (items of mixed model classes, an item that validates only through its parent, dict
+  keys merged by coercion, a generator validation read up, an `Iterable[Model]` validated lazily), it fails
+  with `<path> cannot be checked:` and the reason rather than guess. A part in which no key can hide (a
+  number, text that is not JSON, a model passed as is) is never refused.
 - it reads the payload as validation left it. A validator that renames keys, changes the payload in place,
   or reorders or rewrites the items of a container without changing its size is not seen, and those items
-  are read by position.
+  are read by position. A validator that drops built items of one member of a union is read as if every
+  raw item became the class the remaining ones became.
 - it follows the models where a field's type can hold one, and under `Any`. A model a validator puts inside
   a container of plain values (`list[Any]`, `dict[str, int]`), and a model inside a dataclass or another
   class that is not a model, are not reached.

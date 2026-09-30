@@ -1,4 +1,5 @@
 import collections.abc
+import datetime
 import io
 import itertools
 import types
@@ -1326,6 +1327,9 @@ class _ByteItems(bytes):
         return {"x": 1, "extra": 2}
 
 
+_T = typing.TypeVar("_T")
+
+
 class _Rows:
     """Iterable, and neither a collection nor an iterator."""
 
@@ -1340,7 +1344,7 @@ class TestExactnessRefusesWhatItCannotPair:
     @staticmethod
     def _models():
         pytest.importorskip("pydantic", reason="pydantic not installed")
-        from pydantic import BaseModel, ConfigDict, Json, RootModel, field_validator, model_validator
+        from pydantic import BaseModel, ConfigDict, Field, Json, RootModel, field_validator, model_validator
 
         class A(BaseModel):
             model_config = ConfigDict(frozen=True)
@@ -1383,6 +1387,82 @@ class TestExactnessRefusesWhatItCannotPair:
                     return dict(zip(("amount", "currency"), value, strict=True))
                 return value
 
+        class WrappedSet(BaseModel):
+            f: set[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def listed(cls, value):
+                return value if isinstance(value, list) else [value]
+
+        class Wide(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            x: int
+            z: int
+
+        class FilteredUnion(BaseModel):
+            f: list[A | Wide]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def without_nulls(cls, value):
+                return [item for item in value if item is not None]
+
+        class Entry(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            id: int
+
+            def __eq__(self, other):
+                return isinstance(other, Entry) and self.id == other.id
+
+            def __hash__(self):
+                return hash(self.id)
+
+        class Narrow(BaseModel):
+            x: int
+
+        class Broad(BaseModel):
+            x: int
+            extra: int = 0
+
+        class First(Entry):
+            tag: typing.Literal[1]
+            child: Narrow
+
+        class Last(Entry):
+            tag: int
+            child: Broad
+
+        class Envelope(BaseModel, typing.Generic[_T]):
+            model_config = ConfigDict(frozen=True)
+            event: _T
+
+        class Batch(BaseModel):
+            f: set[typing.Annotated[Envelope[First] | Envelope[Last], Field(union_mode="left_to_right")]]
+
+        class Entries(BaseModel):
+            f: set[typing.Annotated[First | Last, Field(union_mode="left_to_right")]]
+
+        class Dated(BaseModel):
+            model_config = ConfigDict(frozen=True, strict=True)
+            d: datetime.date
+
+        class Expanded(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def expanded(cls, value):
+                return value if isinstance(value, list) else [value, *value.get("more", [])]
+
+        class Renamed(BaseModel):
+            f: list[A]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def renamed(cls, value):
+                return [{"x": item["X"]} for item in value if item]
+
         class Priced(BaseModel):
             f: list[Money]
 
@@ -1410,6 +1490,13 @@ class TestExactnessRefusesWhatItCannotPair:
             "Priced": Priced,
             "Paired": Paired,
             "RootModel": RootModel,
+            "Renamed": Renamed,
+            "WrappedSet": WrappedSet,
+            "FilteredUnion": FilteredUnion,
+            "Dated": Dated,
+            "Entries": Entries,
+            "Batch": Batch,
+            "Expanded": Expanded,
         }
 
     def _refusal(self, payload, model, **options):
@@ -1421,21 +1508,35 @@ class TestExactnessRefusesWhatItCannotPair:
         models = self._models()
         a, b, holding, json_of = models["A"], models["B"], models["holding"], models["Json"]
         found = {
-            "a set of models": self._refusal({"f": [{"x": 1}]}, holding(set[a])),
             "a set mixing model classes": self._refusal({"f": [{"x": 1}, {"y": 1}]}, holding(set[a | b])),
+            "an item its class refuses alone": self._refusal({"f": [None, {"X": 1}]}, models["Renamed"]),
+            "an object expanded into several": self._refusal(
+                {"f": {"x": 1, "more": [{"x": 2, "extra": 3}]}}, models["Expanded"]
+            ),
+            "a set merging generic specializations": self._refusal(
+                {
+                    "f": [
+                        {"event": {"id": 1, "tag": 2, "child": {"x": 1}}},
+                        {"event": {"id": 1, "tag": 1, "child": {"x": 1, "extra": 2}}},
+                    ]
+                },
+                models["Batch"],
+            ),
+            "a set merging classes through its own equality": self._refusal(
+                {"f": [{"id": 1, "tag": 2, "child": {"x": 1}}, {"id": 1, "tag": 1, "child": {"x": 1, "extra": 2}}]},
+                models["Entries"],
+            ),
+            "a filtered list of mixed classes": self._refusal(
+                {"f": [None, {"x": 1}, {"x": 2, "z": 3}]}, models["FilteredUnion"]
+            ),
             "merged keys of models": self._refusal({"f": {"01": {"x": 1}, "1": {"x": 2}}}, holding(dict[int, a])),
+            "merged model keys with model values": self._refusal(
+                {"f": {'{"x": 1, "extra": 2}': {"x": 1}, '{"x": 1}': {"x": 2}}}, holding(dict[json_of[a], a])
+            ),
             "merged keys of lists": self._refusal(
                 {"f": {"01": [{"x": 1}], "1": [{"x": 2, "extra": 3}]}}, holding(dict[int, list[a]])
             ),
-            "a filtered list": self._refusal({"f": [None, {"x": 1}]}, models["Filtered"]),
-            "a wrapped object": self._refusal({"f": {"x": 1}}, models["Wrapped"]),
-            "a model read from text": self._refusal({"f": '{"x": 1}'}, holding(models["Json"][a])),
-            "models read from bytes": self._refusal({"f": b'[{"x": 1}]'}, holding(models["Json"][list[a]])),
             "a mapping from a list": self._refusal({"f": [["k", {"x": 1}]]}, models["Paired"]),
-            "JSON text in a set": self._refusal({"f": ['{"x": 1, "extra": 2}']}, holding(set[json_of[a]])),
-            "a model built from a key": self._refusal(
-                {"f": {'{"x": 1, "extra": 2}': 10}}, holding(dict[json_of[a], int])
-            ),
             "model keys merged": self._refusal({"f": {'{"x": 1}': 1, '{"x":1}': 2}}, holding(dict[json_of[a], int])),
             "a generator read up": self._refusal({"f": (item for item in [{"x": 1}])}, holding(list[a])),
             "an iterable that is no collection": self._refusal({"f": _Rows()}, holding(list[a])),
@@ -1444,38 +1545,79 @@ class TestExactnessRefusesWhatItCannotPair:
                 {"f": {"01": [{"x": 1}], "1": [{"x": 2, "extra": 3}]}},
                 holding(dict[int, collections.abc.Iterable[a]]),
             ),
-            "a model read from JSON twice": self._refusal(
-                {"f": '"{\\"x\\": 1, \\"extra\\": 2}"'}, holding(json_of[models["RootModel"][json_of[a]]])
-            ),
         }
         cannot = "<f> cannot be checked: "
-        unordered = f"{cannot}a set keeps no order to pair its items with the models they became"
         merged = f"{cannot}validation changed its size, 2 keys became 1"
+        unordered = f"{cannot}a set keeps no order to pair its items with the models they became"
         assert_that(found).is_equal_to(
             {
-                "a set of models": unordered,
                 "a set mixing model classes": unordered,
+                "an item its class refuses alone": f"{cannot}validation changed its length, 2 items became 1",
+                "an object expanded into several": f"{cannot}the payload holds a dict where a sequence was built",
+                "a set merging classes through its own equality": unordered,
+                "a set merging generic specializations": unordered,
+                "a filtered list of mixed classes": f"{cannot}validation changed its length, 3 items became 2",
                 "merged keys of models": merged,
+                "merged model keys with model values": merged,
                 "merged keys of lists": merged,
-                "a filtered list": f"{cannot}validation changed its length, 2 items became 1",
-                "a wrapped object": f"{cannot}the payload holds a dict where a sequence was built",
-                "a model read from text": f"{cannot}the payload holds a str where a model was built",
-                "models read from bytes": f"{cannot}the payload holds a bytes where a sequence was built",
                 "a mapping from a list": f"{cannot}the payload holds a list where a mapping was built",
-                "JSON text in a set": unordered,
-                "a model built from a key": f"{cannot}the payload holds a str where a model was built",
                 "model keys merged": merged,
                 "a generator read up": f"{cannot}the payload holds a generator where a sequence was built",
                 "an iterable that is no collection": f"{cannot}the payload holds a _Rows where a sequence was built",
                 "a lazy iterable": f"{cannot}validation is lazy here and builds the models only as the value is read",
                 "merged keys of lazy iterables": merged,
-                "a model read from JSON twice": f"{cannot}the payload holds a str where a model was built",
+            }
+        )
+
+    def test_items_of_one_model_class_are_validated_again_and_json_text_is_read(self):
+        """Clean, each shape passes; with an undeclared field, the field is named where the raw item held it."""
+        models = self._models()
+        a, holding, json_of, dated = models["A"], models["holding"], models["Json"], models["Dated"]
+        cases = {
+            "a set of models": (holding(set[a]), [{"x": 1}], [{"x": 1}, {"x": 1, "extra": 2}], "f[1].extra"),
+            "a strict model read from JSON in a set": (
+                holding(set[json_of[dated]]),
+                ['{"d": "2026-09-30"}'],
+                ['{"d": "2026-09-30", "extra": 2}'],
+                "f[0].extra",
+            ),
+            "a filtered list": (models["Filtered"], [None, {"x": 1}], [None, {"x": 1, "extra": 2}], "f[1].extra"),
+            "an object wrapped into a list": (models["Wrapped"], {"x": 1}, {"x": 1, "extra": 2}, "f.extra"),
+            "an object wrapped into a set": (models["WrappedSet"], {"x": 1}, {"x": 1, "extra": 2}, "f.extra"),
+            "a model read from text": (holding(json_of[a]), '{"x": 1}', '{"x": 1, "extra": 2}', "f.extra"),
+            "models read from bytes": (
+                holding(json_of[list[a]]),
+                b'[{"x": 1}]',
+                b'[{"x": 1, "extra": 2}]',
+                "f[0].extra",
+            ),
+            "JSON text in a set": (holding(set[json_of[a]]), ['{"x": 1}'], ['{"x": 1, "extra": 2}'], "f[0].extra"),
+            "a model built from a key": (
+                holding(dict[json_of[a], int]),
+                {'{"x": 1}': 1},
+                {'{"x": 1, "extra": 2}': 1},
+                "f.extra",
+            ),
+            "a model read from JSON twice": (
+                holding(json_of[models["RootModel"][json_of[a]]]),
+                '"{\\"x\\": 1}"',
+                '"{\\"x\\": 1, \\"extra\\": 2}"',
+                "f.extra",
+            ),
+        }
+        for model, good, _, _ in cases.values():
+            assert_conforms({"f": good}, model, exact=True)
+        found = {name: self._refusal({"f": bad}, model) for name, (model, _, bad, _) in cases.items()}
+        assert_that(found).is_equal_to(
+            {
+                name: f"it carries 1 undeclared field(s) the model does not declare: ['{where}']"
+                for name, (_, _, _, where) in cases.items()
             }
         )
 
     def test_each_item_names_its_own_refusal(self):
         models = self._models()
-        refusal = self._refusal([{"f": [{"x": 1}]}, {"f": [None, {"x": 1}]}], models["Filtered"], each=True)
+        refusal = self._refusal([{"f": []}, {"f": [None, {"X": 1}]}], models["Renamed"], each=True)
         assert_that(refusal).is_equal_to("<[1].f> cannot be checked: validation changed its length, 2 items became 1")
 
     def test_what_holds_no_model_is_not_refused(self):
@@ -1503,6 +1645,7 @@ class TestExactnessRefusesWhatItCannotPair:
         a = models["A"]
         assert_that(assert_conforms({"f": a(x=1)}, models["holding"](a), exact=True).value.f.x).is_equal_to(1)
         assert_that(assert_conforms({"f": a(x=1)}, models["Wrapped"], exact=True).value.f).is_length(1)
+        assert_that(assert_conforms({"f": a(x=1)}, models["WrappedSet"], exact=True).value.f).is_length(1)
         assert_that(assert_conforms({"f": [["k", a(x=1)]]}, models["Paired"], exact=True).value.f).contains_key("k")
         lazy = assert_conforms({"f": [a(x=1)]}, models["holding"](collections.abc.Iterable[a]), exact=True)
         assert_that(list(lazy.value.f)).is_length(1)
@@ -1609,6 +1752,10 @@ class TestExactnessWalksOnlyWhatCanHoldAModel:
         }
         verdicts = {name: _contract._may_hold_model(annotation) for name, annotation in {**plain, **holding}.items()}
         assert_that(verdicts).is_equal_to({**dict.fromkeys(plain, False), **dict.fromkeys(holding, True)})
+
+    def test_json_text_inside_json_text_is_read_to_the_end(self):
+        twice = '"{\\"x\\": 1}"'
+        assert_that(_contract._holds([twice], _contract._is_mapping, read_text=True)).is_true()
 
     def test_a_field_that_cannot_hold_a_model_is_not_walked(self, monkeypatch):
         a = self._model()
