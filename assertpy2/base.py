@@ -24,7 +24,7 @@ from ._engine._require import argument, refuse, reject_unknown_kwargs, require_t
 from ._hints import identity_candidate
 from ._matcher_impls import _require_class_info
 from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
-from .errors import _disambiguated, _safe_str, _truncated, _type_expression_name
+from .errors import _disambiguated, _safe_format, _safe_str, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
@@ -302,8 +302,8 @@ class BaseMixin(SatisfiesMixin):
         diff = _build_equality_diff(self.val, other, config=config)
         if diff.entries:
             return self.error(
-                f"Expected <{_truncated(str(self.val))}> to be equal to <{_truncated(str(other))}>, but was not."
-                f"{_config_note(config)}",
+                f"Expected <{_truncated(_safe_str(self.val))}> to be equal to"
+                f" <{_truncated(_safe_str(other))}>, but was not.{_config_note(config)}",
                 actual=self.val,
                 expected=other,
                 diff=diff,
@@ -369,7 +369,8 @@ class BaseMixin(SatisfiesMixin):
                     )
                 if decision != "equal":
                     return self.error(
-                        f"Expected item at index <{index}> to be equal to <{expected_item}>, but was <{actual_item}>.",
+                        f"Expected item at index <{index}> to be equal to <{_safe_format(expected_item)}>,"
+                        f" but was <{_safe_format(actual_item)}>.",
                         actual=actual_item,
                         expected=expected_item,
                     )
@@ -410,7 +411,8 @@ class BaseMixin(SatisfiesMixin):
 
         if _guarded_equal(self.val, other, method="is_not_equal_to"):
             return self.error(
-                f"Expected <{_truncated(str(self.val))}> to be not equal to <{_truncated(str(other))}>, but was."
+                f"Expected <{_truncated(_safe_str(self.val))}> to be not equal to"
+                f" <{_truncated(_safe_str(other))}>, but was."
             )
         return self
 
@@ -454,7 +456,8 @@ class BaseMixin(SatisfiesMixin):
         """
         if self.val is not other:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be identical to <{other}>, but was not.", expected=other
+                f"Expected <{_safe_str(self.val)}> to be identical to <{_safe_format(other)}>, but was not.",
+                expected=other,
             )
         return self
 
@@ -486,7 +489,9 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if actual **is** identical to expected
         """
         if self.val is other:
-            return self.error(f"Expected <{_safe_str(self.val)}> to be not identical to <{other}>, but was.")
+            return self.error(
+                f"Expected <{_safe_str(self.val)}> to be not identical to <{_safe_format(other)}>, but was."
+            )
         return self
 
     def is_true(self) -> Self:

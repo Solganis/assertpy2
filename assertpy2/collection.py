@@ -9,7 +9,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, first_out_of_order, require_integer
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
-from .errors import _safe_str
+from .errors import _safe_format, _safe_str
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -119,7 +119,7 @@ class CollectionMixin(_MixinBase):
             searched_in = read[0] if len(read) == 1 else read
             if missing:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to be subset of <{searched_in}>, "
+                    f"Expected <{_safe_str(self.val)}> to be subset of <{_safe_format(searched_in)}>, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
                     expected=searched_in,
                 )
@@ -241,8 +241,8 @@ class CollectionMixin(_MixinBase):
         other_len = sized_len(other, subject=argument("other"))
         if actual_len != other_len:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to have same size as <{other}> of length <{other_len}>,"
-                f" but was length <{actual_len}>.",
+                f"Expected <{_safe_str(self.val)}> to have same size as <{_safe_format(other)}>"
+                f" of length <{other_len}>, but was length <{actual_len}>.",
                 expected=other_len,
             )
         return self

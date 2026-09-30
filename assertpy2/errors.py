@@ -32,6 +32,19 @@ def _safe_str(value: object) -> str:
         return _safe_repr(value)
 
 
+def _safe_format(value: object) -> str:
+    """``f"{value}"`` as an exact `str`, falling back to `_safe_repr` on any `Exception`.
+
+    Not `_safe_str`: ``format()`` and ``str()`` disagree on a ``numpy.float32`` and, below 3.12, on a mixed-in
+    enum, so an operand a message interpolated keeps the text it always had.
+    """
+    try:
+        # a lone field hands back what `__format__` returned, which may be a `str` subclass formatting itself again
+        return str.__str__(f"{value}")
+    except Exception:
+        return _safe_repr(value)
+
+
 def _callable_name(value: object) -> str:
     """A display name for a callable, tolerating those without ``__name__`` (partials, instances)."""
     return getattr(value, "__name__", None) or _safe_repr(value)

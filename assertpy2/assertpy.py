@@ -770,7 +770,7 @@ def assert_conforms(
         validated = model.model_validate(val)  # ty: ignore[call-non-callable]  # model_validate is dynamic
     except catchable as exc:
         return builder.error(
-            f"Expected <{_truncated(str(val))}> to conform to <{model.__name__}>, but it did not:\n{exc}",
+            f"Expected <{_truncated(_safe_str(val))}> to conform to <{model.__name__}>, but it did not:\n{exc}",
             actual=val,
             expected=model,
             diff=DiffResult(kind="match", entries=_contract_entries(exc)),
@@ -780,7 +780,7 @@ def assert_conforms(
         drift = contract_drift(val, model)
         if drift:
             return builder.error(
-                f"Expected <{_truncated(str(val))}> to conform exactly to <{model.__name__}>, but it carries"
+                f"Expected <{_truncated(_safe_str(val))}> to conform exactly to <{model.__name__}>, but it carries"
                 f" {len(drift)} undeclared field(s) the model does not declare: {sorted(drift)}",
                 actual=val,
                 expected=model,

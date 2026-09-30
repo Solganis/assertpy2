@@ -26,6 +26,7 @@ import types
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
+from ..errors import _safe_format
 from ._compare import (
     _guarded_equal,
     _keyed_types_differ,
@@ -348,7 +349,7 @@ class IncludeKeysMissingError(LookupError):
     """
 
     def __init__(self, mapping: object, includes: list, missing: list) -> None:
-        super().__init__(f"include names {missing}, which {mapping} does not have")
+        super().__init__(f"include names {_safe_format(missing)}, which {_safe_format(mapping)} does not have")
         self.mapping = mapping
         self.includes = includes
         self.missing = missing

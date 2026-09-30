@@ -88,7 +88,7 @@ from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
-from .errors import _safe_repr, _safe_str, _type_expression_name
+from .errors import _safe_format, _safe_repr, _safe_str, _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -564,8 +564,11 @@ class EqualToMatcher(BaseMatcher):
 
     def describe(self) -> str:
         if self.strict_types:
-            return f"a value equal to <{self.expected}> of type <{type(self.expected).__name__}>{self._settings()}"
-        return f"a value equal to <{self.expected}>{self._settings()}"
+            return (
+                f"a value equal to <{_safe_format(self.expected)}>"
+                f" of type <{type(self.expected).__name__}>{self._settings()}"
+            )
+        return f"a value equal to <{_safe_format(self.expected)}>{self._settings()}"
 
     def describe_mismatch(self, value: Any) -> str:
         if self.strict_types and type(value) is not type(self.expected):
@@ -584,7 +587,7 @@ class GreaterThanMatcher(BaseMatcher):
             return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
-        return f"a value greater than <{self.boundary}>"
+        return f"a value greater than <{_safe_format(self.boundary)}>"
 
 
 class GreaterThanOrEqualToMatcher(BaseMatcher):
@@ -598,7 +601,7 @@ class GreaterThanOrEqualToMatcher(BaseMatcher):
             return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
-        return f"a value greater than or equal to <{self.boundary}>"
+        return f"a value greater than or equal to <{_safe_format(self.boundary)}>"
 
 
 class LessThanMatcher(BaseMatcher):
@@ -612,7 +615,7 @@ class LessThanMatcher(BaseMatcher):
             return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
-        return f"a value less than <{self.boundary}>"
+        return f"a value less than <{_safe_format(self.boundary)}>"
 
 
 class LessThanOrEqualToMatcher(BaseMatcher):
@@ -626,7 +629,7 @@ class LessThanOrEqualToMatcher(BaseMatcher):
             return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
-        return f"a value less than or equal to <{self.boundary}>"
+        return f"a value less than or equal to <{_safe_format(self.boundary)}>"
 
 
 def _sequence_or_numpy(value: object) -> bool:
@@ -697,7 +700,7 @@ class BetweenMatcher(BaseMatcher):
             return False  # an operand this cannot be ordered against is a non-match, not an error
 
     def describe(self) -> str:
-        return f"a value between <{self.low}> and <{self.high}>"
+        return f"a value between <{_safe_format(self.low)}> and <{_safe_format(self.high)}>"
 
 
 def _measured_under(operand: object, tolerance: object, duration: bool) -> bool:
@@ -743,7 +746,7 @@ class CloseToMatcher(BaseMatcher):
             return False
 
     def describe(self) -> str:
-        return f"a value within <{self.tolerance}> of <{self.expected}>"
+        return f"a value within <{self.tolerance}> of <{_safe_format(self.expected)}>"
 
 
 class IsNoneMatcher(BaseMatcher):
@@ -1073,7 +1076,7 @@ class ContainsStringMatcher(BaseMatcher):
         return text_contains(value, self.substring)
 
     def describe(self) -> str:
-        return f"{_textlike_noun(self.substring)} containing <{self.substring}>"
+        return f"{_textlike_noun(self.substring)} containing <{_safe_format(self.substring)}>"
 
 
 class MatchesRegexMatcher(BaseMatcher):
@@ -1099,7 +1102,7 @@ class StartsWithMatcher(BaseMatcher):
         return text_starts_with(value, self.prefix)
 
     def describe(self) -> str:
-        return f"{_textlike_noun(self.prefix)} starting with <{self.prefix}>"
+        return f"{_textlike_noun(self.prefix)} starting with <{_safe_format(self.prefix)}>"
 
 
 class EndsWithMatcher(BaseMatcher):
@@ -1110,7 +1113,7 @@ class EndsWithMatcher(BaseMatcher):
         return text_ends_with(value, self.suffix)
 
     def describe(self) -> str:
-        return f"{_textlike_noun(self.suffix)} ending with <{self.suffix}>"
+        return f"{_textlike_noun(self.suffix)} ending with <{_safe_format(self.suffix)}>"
 
 
 def _listed(items: Any) -> str:
@@ -1219,7 +1222,7 @@ class ContainsOnlyMatcher(BaseMatcher):
         return MatchResult(
             matched=not faults,
             description=self.describe(),
-            mismatch="" if not faults else f"was <{searched}>, which {' and '.join(faults)}",
+            mismatch="" if not faults else f"was <{_safe_format(searched)}>, which {' and '.join(faults)}",
         )
 
 
@@ -1239,7 +1242,7 @@ class IsSubsetOfMatcher(BaseMatcher):
         return self.evaluate(value).matched
 
     def describe(self) -> str:
-        return f"a collection whose items all appear in <{self.superset}>"
+        return f"a collection whose items all appear in <{_safe_format(self.superset)}>"
 
     def describe_mismatch(self, value: Any) -> str:
         return self.evaluate(value).mismatch
@@ -1257,7 +1260,7 @@ class IsSubsetOfMatcher(BaseMatcher):
         return MatchResult(
             matched=not absent,
             description=self.describe(),
-            mismatch="" if not absent else f"was <{searched}>, with {_listed(absent)} outside it",
+            mismatch="" if not absent else f"was <{_safe_format(searched)}>, with {_listed(absent)} outside it",
         )
 
 
@@ -1292,7 +1295,7 @@ class IsSortedMatcher(BaseMatcher):
             return MatchResult(
                 matched=False,
                 description=self.describe(),
-                mismatch=f"was <{items}>, holding items that cannot be ordered against each other",
+                mismatch=f"was <{_safe_format(items)}>, holding items that cannot be ordered against each other",
             )
         if broken is None:
             return MatchResult(matched=True, description=self.describe(), mismatch="")
@@ -1300,7 +1303,8 @@ class IsSortedMatcher(BaseMatcher):
         return MatchResult(
             matched=False,
             description=self.describe(),
-            mismatch=f"was <{items}>, out of order at index {index}: <{earlier}> then <{later}>",
+            mismatch=f"was <{_safe_format(items)}>, out of order at index {index}:"
+            f" <{_safe_format(earlier)}> then <{_safe_format(later)}>",
         )
 
 
@@ -1365,7 +1369,7 @@ class IsBeforeMatcher(BaseMatcher):
             return False
 
     def describe(self) -> str:
-        return f"a datetime before {self._other}"
+        return f"a datetime before {_safe_format(self._other)}"
 
 
 class IsAfterMatcher(BaseMatcher):
@@ -1383,7 +1387,7 @@ class IsAfterMatcher(BaseMatcher):
             return False
 
     def describe(self) -> str:
-        return f"a datetime after {self._other}"
+        return f"a datetime after {_safe_format(self._other)}"
 
 
 class EachMatcher(BaseMatcher):
@@ -1496,9 +1500,9 @@ class StructureMatcher(BaseMatcher):
     def describe_mismatch(self, value: Any) -> str:
         mapping = self._as_mapping(value)
         if not is_mapping_like(mapping):
-            return f"was not a mapping: <{mapping}>"
+            return f"was not a mapping: <{_safe_format(mapping)}>"
         mismatches = self._walk(mapping, self._spec, _ROOT, set())
-        return self.render_mismatch(mismatches) if mismatches else f"was <{mapping}>"
+        return self.render_mismatch(mismatches) if mismatches else f"was <{_safe_format(mapping)}>"
 
     def evaluate(self, value: Any) -> MatchResult:
         """One walk of the spec instead of two.
@@ -1512,7 +1516,9 @@ class StructureMatcher(BaseMatcher):
         """
         mapped = self._as_mapping(value)
         if not is_mapping_like(mapped):
-            return MatchResult(matched=False, description=self.describe(), mismatch=f"was not a mapping: <{mapped}>")
+            return MatchResult(
+                matched=False, description=self.describe(), mismatch=f"was not a mapping: <{_safe_format(mapped)}>"
+            )
         mismatches = self._walk(mapped, self._spec, _ROOT, set())
         return MatchResult(
             matched=not mismatches,
@@ -1536,7 +1542,7 @@ class StructureMatcher(BaseMatcher):
             return f"circular reference detected at <{where or 'root'}>"
         if first.detail is not None:
             return f"at <{where}>: expected {first.expected_desc}, but {first.detail}"
-        return f"at <{where}>: expected {first.expected_desc}, but was <{first.actual}>"
+        return f"at <{where}>: expected {first.expected_desc}, but was <{_safe_format(first.actual)}>"
 
     def collect_mismatches(self, value: Any) -> list[tuple[_Path, object, str]]:
         """Collect every structural mismatch as ``(path, actual, expected_description)``.
@@ -1608,5 +1614,5 @@ class StructureMatcher(BaseMatcher):
                 else:
                     mismatches.append(_SpecMismatch(path.key(key), actual, "a mapping", None))
             elif not _guarded_equal(actual, expected, method="matches_structure"):
-                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{expected}>", None))
+                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{_safe_format(expected)}>", None))
         return mismatches

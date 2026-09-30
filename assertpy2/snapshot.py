@@ -14,7 +14,7 @@ from ._engine._compare import _build_compare_config
 from ._engine._contract import shape, shape_diff
 from ._engine._mixin_base import _MixinBase
 from ._snapshot_codec import _SERIALIZERS, _load, _save, _Serializer
-from .errors import AssertionFailure, _truncated
+from .errors import AssertionFailure, _safe_repr, _safe_str, _truncated
 from .matchers import _apply_matcher, _describe_matcher, _is_matcher
 from .outcome import MISSING
 
@@ -506,7 +506,7 @@ class SnapshotMixin(_MixinBase):
         for key, matcher in placeholders.items():
             present = key in self.val
             if not present or not _apply_matcher(matcher, self.val[key]):
-                actual = repr(self.val[key]) if present else "missing"
+                actual = _safe_repr(self.val[key]) if present else "missing"
                 self.error(
                     f"Expected snapshot placeholder <{key}> to satisfy {_describe_matcher(matcher)}, but was {actual}."
                 )
@@ -923,7 +923,7 @@ class SnapshotMixin(_MixinBase):
             if drift:
                 located = snapname if id else f"{snapname}::{lineno}"
                 return self.error(
-                    f"Expected <{_truncated(str(self.val))}> to match contract snapshot, but the structure"
+                    f"Expected <{_truncated(_safe_str(self.val))}> to match contract snapshot, but the structure"
                     f" drifted:\n{_format_shape_drift(drift)}\n"
                     f"{_update_hint(f'Contract snapshot <{located}>', 'accept the new shape')}",
                     actual=self.val,

@@ -8,7 +8,7 @@ from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds, require_integer
 from ._engine._require import _shown, argument, refuse, require_type
-from .errors import _safe_str
+from .errors import _safe_format, _safe_str
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-def _fmt_operand(value: object) -> object:
-    """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else verbatim."""
+def _fmt_operand(value: object) -> str:
+    """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else as interpolated."""
     if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
-    return value
+    return _safe_format(value)
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
@@ -619,7 +619,7 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to be close to <{other}> within tolerance "
+                    f"Expected <{_safe_str(self.val)}> to be close to <{_safe_format(other)}> within tolerance "
                     f"<{tolerance}>, but was not.",
                     expected=(other, tolerance),
                 )
@@ -665,7 +665,7 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to not be close to <{other}> within tolerance "
+                    f"Expected <{_safe_str(self.val)}> to not be close to <{_safe_format(other)}> within tolerance "
                     f"<{tolerance}>, but was.",
                 )
         return self

@@ -12,7 +12,7 @@ from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
 from ._engine._require import VerdictError, argument, refuse, verdict
 from ._matcher_impls import _has_own_evaluate
-from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _safe_str
+from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _safe_format, _safe_str
 from .matchers import (
     IsNotNoneMatcher,
     Matcher,
@@ -296,7 +296,8 @@ class SatisfiesMixin(_MixinBase):
                     # read off the refusal: the matcher said what it wanted, and asking twice ran its own method twice
                     description = outcome.description
                     return self.error(
-                        f"Expected all items to satisfy {description}, but item at index {i} <{item}> did not:"
+                        f"Expected all items to satisfy {description},"
+                        f" but item at index {i} <{_safe_format(item)}> did not:"
                         f" {outcome.mismatch}.",
                         actual=item,
                         expected=description,
@@ -310,7 +311,7 @@ class SatisfiesMixin(_MixinBase):
                 if not verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected all items to satisfy {_describe_matcher(matcher)},"
-                        f" but item at index {i} <{item}> did not.",
+                        f" but item at index {i} <{_safe_format(item)}> did not.",
                         expected=_describe_matcher(matcher),
                     )
         if not walked:
@@ -512,13 +513,15 @@ class SatisfiesMixin(_MixinBase):
             for i, item in enumerate(self.val):
                 if verdict(matcher.matches(item), subject="the matcher"):
                     return self.error(
-                        f"Expected no item to satisfy {matcher.describe()}, but item at index {i} <{item}> did."
+                        f"Expected no item to satisfy {matcher.describe()},"
+                        f" but item at index {i} <{_safe_format(item)}> did."
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
                 if verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
-                        f"Expected no item to satisfy {_describe_matcher(matcher)}, but item at index {i} <{item}> did."
+                        f"Expected no item to satisfy {_describe_matcher(matcher)},"
+                        f" but item at index {i} <{_safe_format(item)}> did."
                     )
         else:
             refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))

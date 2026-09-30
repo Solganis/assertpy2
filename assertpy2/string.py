@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import broadcasts, equal_past
 from ._engine._require import argument, refuse, require_type, sized_len
-from .errors import _safe_str
+from .errors import _safe_format, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -62,7 +62,7 @@ class StringMixin(_MixinBase):
         if self.val.lower() == other.lower():
             return self
         return self.error(
-            f"Expected <{_safe_str(self.val)}> to be case-insensitive equal to <{other}>, but was not.",
+            f"Expected <{_safe_str(self.val)}> to be case-insensitive equal to <{_safe_format(other)}>, but was not.",
             expected=other,
         )
 
@@ -95,7 +95,8 @@ class StringMixin(_MixinBase):
         if "".join(self.val.split()) == "".join(other.split()):
             return self
         return self.error(
-            f"Expected <{_safe_str(self.val)}> to be equal to <{other}> ignoring whitespace, but was not.",
+            f"Expected <{_safe_str(self.val)}> to be equal to <{_safe_format(other)}> ignoring whitespace,"
+            " but was not.",
             expected=other,
         )
 
@@ -128,7 +129,8 @@ class StringMixin(_MixinBase):
                 require_type(items[0], str, "a string", subject=argument("item"))
                 if items[0].lower() not in self.val.lower():
                     return self.error(
-                        f"Expected <{_safe_str(self.val)}> to case-insensitive contain item <{items[0]}>, but did not.",
+                        f"Expected <{_safe_str(self.val)}> to case-insensitive contain item"
+                        f" <{_safe_format(items[0])}>, but did not.",
                         expected=items[0],
                     )
             else:
@@ -193,7 +195,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(text_prefix):
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to start with <{text_prefix}>, but did not.", expected=prefix
+                    f"Expected <{_safe_str(self.val)}> to start with <{_safe_format(text_prefix)}>, but did not.",
+                    expected=prefix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
             # bytes are iterable: `b"foo"` would yield 102, failing an assertion that should pass
@@ -202,7 +205,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(raw_prefix):
                 return self.error(
-                    f"Expected <{self.val!r}> to start with <{raw_prefix!r}>, but did not.", expected=prefix
+                    f"Expected <{_safe_repr(self.val)}> to start with <{_safe_repr(raw_prefix)}>, but did not.",
+                    expected=prefix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
             iterator = iter(self.val)
@@ -217,7 +221,8 @@ class StringMixin(_MixinBase):
                 starts = equal_past(first, prefix, refusal)
             if not starts:
                 return self.error(
-                    f"Expected {_safe_str(self.val)} to start with <{prefix}>, but did not.", expected=prefix
+                    f"Expected {_safe_str(self.val)} to start with <{_safe_format(prefix)}>, but did not.",
+                    expected=prefix,
                 )
         else:
             refuse(self.val, "a string or an iterable")
@@ -252,7 +257,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(text_suffix):
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to end with <{text_suffix}>, but did not.", expected=suffix
+                    f"Expected <{_safe_str(self.val)}> to end with <{_safe_format(text_suffix)}>, but did not.",
+                    expected=suffix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
             # the mirror of the branch in `starts_with`: the last element of `b"foo"` is the int 111
@@ -261,7 +267,8 @@ class StringMixin(_MixinBase):
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(raw_suffix):
                 return self.error(
-                    f"Expected <{self.val!r}> to end with <{raw_suffix!r}>, but did not.", expected=suffix
+                    f"Expected <{_safe_repr(self.val)}> to end with <{_safe_repr(raw_suffix)}>, but did not.",
+                    expected=suffix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
             items = list(self.val)
@@ -274,7 +281,8 @@ class StringMixin(_MixinBase):
                 ends = equal_past(items[-1], suffix, refusal)
             if not ends:
                 return self.error(
-                    f"Expected {_safe_str(self.val)} to end with <{suffix}>, but did not.", expected=suffix
+                    f"Expected {_safe_str(self.val)} to end with <{_safe_format(suffix)}>, but did not.",
+                    expected=suffix,
                 )
         else:
             refuse(self.val, "a string or an iterable")
@@ -309,7 +317,8 @@ class StringMixin(_MixinBase):
             raise ValueError("given prefix arg must not be empty")
         if not self.val.lower().startswith(prefix.lower()):
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to case-insensitive start with <{prefix}>, but did not.",
+                f"Expected <{_safe_str(self.val)}> to case-insensitive start with <{_safe_format(prefix)}>,"
+                " but did not.",
                 expected=prefix,
             )
         return self
@@ -343,7 +352,7 @@ class StringMixin(_MixinBase):
             raise ValueError("given suffix arg must not be empty")
         if not self.val.lower().endswith(suffix.lower()):
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to case-insensitive end with <{suffix}>, but did not.",
+                f"Expected <{_safe_str(self.val)}> to case-insensitive end with <{_safe_format(suffix)}>, but did not.",
                 expected=suffix,
             )
         return self

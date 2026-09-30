@@ -4,7 +4,7 @@ import datetime
 import decimal
 import numbers
 
-from assertpy2.errors import DiffResult, _safe_repr, _truncated, _windowed
+from assertpy2.errors import DiffResult, _safe_format, _safe_repr, _safe_str, _truncated, _windowed
 
 from ._engine._compare import (
     _CompareConfig,
@@ -258,14 +258,14 @@ class HelpersMixin(_MixinBase):
         if len(items) == 0:
             return "<>"
         elif len(items) == 1 and hasattr(items, "__getitem__"):
-            return f"<{items[0]}>"
-        else:
-            formatted = str(items)
-            if formatted[0] in "([":
-                formatted = formatted[1:]
-            if formatted[-1] in ")]":
-                formatted = formatted[:-1]
-            return f"<{formatted}>"
+            return f"<{_safe_format(items[0])}>"
+        elif type(items) is tuple or type(items) is list:
+            try:
+                return f"<{str.__str__(str(items))[1:-1]}>"
+            except Exception:
+                # one element at a time, so one bad `__repr__` spoils only itself
+                return f"<{', '.join(map(_safe_repr, items))}>"
+        return f"<{_safe_str(items)}>"
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""
@@ -392,7 +392,7 @@ class HelpersMixin(_MixinBase):
             [".".join([str(segment) for segment in key]) if type(key) is tuple else key for key in absent.includes]
         )
         self._unmet(
-            f"Expected <{absent.mapping}> to include key{keys_suffix} {includes_fmt},"
+            f"Expected <{_safe_format(absent.mapping)}> to include key{keys_suffix} {includes_fmt},"
             f" but did not include key{missing_suffix} {self._fmt_items(absent.missing)}."
         )
         # reported: falsy, so no second failure follows it, and `None` so a caller walking items stops there
