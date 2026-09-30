@@ -267,6 +267,66 @@ def readable(sequence: Any) -> Any:
     return sequence if kind is list or kind is tuple else _Reads(sequence)
 
 
+def _stored_members(held: set | frozenset) -> set | frozenset:
+    """What a `set` or `frozenset` stores, as the base type: copied with the hashes it holds, so no item is hashed
+    again and no read of its own is made."""
+    return set.copy(held) if isinstance(held, set) else frozenset.copy(held)
+
+
+def _members(held: set | frozenset) -> Iterator[Any]:
+    """*held*'s items as its own iteration gives them, and from its storage once that refuses.
+
+    `==` of a `set` or `frozenset` compares the stored items and never asks the value's own `__iter__`, so an
+    iteration refusing there cannot turn the failure into the value's exception.  An item the own iteration gave
+    before refusing is not given twice.
+    """
+    if type(held) in (set, frozenset):
+        return iter(held)
+    # asked out here: a `StopIteration` refusing the iterator inside a generator would become `RuntimeError`
+    try:
+        iterator = iter(held)
+    except Exception:
+        return iter(_stored_members(held))
+    return _members_on(held, iterator)
+
+
+def _members_on(held: set | frozenset, iterator: Iterator[Any]) -> Iterator[Any]:
+    given: dict[int, Any] = {}
+    while True:
+        try:
+            item = next(iterator)
+        except StopIteration:
+            return
+        except Exception:
+            yield from (item for item in _stored_members(held) if id(item) not in given)
+            return
+        given[id(item)] = item
+        yield item
+
+
+def _absent_from(items: Iterator[Any], container: set | frozenset) -> list[Any]:
+    """The *items* `member` does not find in *container*, asked of its storage from its first lookup that refuses.
+
+    A refusal the storage repeats, an item's own comparison, is handed on.
+    """
+    if type(container) in (set, frozenset):
+        return [item for item in items if not member(item, container)]
+    stored: set | frozenset | None = None
+    absent = []
+    for item in items:
+        if stored is None:
+            try:
+                found = member(item, container)
+            except Exception:
+                stored = _stored_members(container)
+                found = member(item, stored)
+        else:
+            found = member(item, stored)
+        if not found:
+            absent.append(item)
+    return absent
+
+
 def _positional_difference_count(actual, expected) -> int:
     """How many positions the two sequences differ at when paired by index.
 
@@ -678,11 +738,11 @@ def _build_equality_diff(
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = [
             _prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected")
-            for item in sorted((item for item in actual if not member(item, expected)), key=_safe_repr)
+            for item in sorted(_absent_from(_members(actual), expected), key=_safe_repr)
         ]
         entries.extend(
             _prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item)
-            for item in sorted((item for item in expected if not member(item, actual)), key=_safe_repr)
+            for item in sorted(_absent_from(_members(expected), actual), key=_safe_repr)
         )
         return DiffResult(kind="set", entries=entries)
     # under a strict descent this means the two sides were already equal, not that they differ

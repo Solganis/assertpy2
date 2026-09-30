@@ -36,6 +36,7 @@ from assertpy2._engine._compare import (
     _declines,
     tolerance_window,
 )
+from assertpy2._engine._diff import _stored_members
 from assertpy2._engine._equality import (
     IncludeKeysMissingError,
     ignore_specs,
@@ -3058,6 +3059,72 @@ class _PosingUnindexed(_PosingSequence):
         raise RuntimeError("no reads")
 
 
+class _ScaledSet(set):
+    """Iterates ten times what it stores, which `set.__eq__` never asks."""
+
+    def __iter__(self):
+        return (item * 10 for item in set.__iter__(self))
+
+
+class _UnreadSet(set):
+    """Refuses its own iteration, which `set.__eq__` never makes."""
+
+    def __iter__(self):
+        raise RuntimeError("no items")
+
+
+class _UnreadFrozenset(frozenset):
+    def __iter__(self):
+        raise RuntimeError("no items")
+
+
+class _StoppedSet(set):
+    def __iter__(self):
+        raise StopIteration
+
+
+class _UnaskedSet(set):
+    """Refuses its own lookup, which `set.__eq__` never makes."""
+
+    def __contains__(self, item):
+        raise RuntimeError("no lookups")
+
+
+class _BreaksOffSet(set):
+    """Gives the first item it stores, then refuses."""
+
+    def __iter__(self):
+        yield from itertools.islice(set.__iter__(self), 1)
+        raise RuntimeError("no more items")
+
+
+class _Rehashed:
+    """Hashes once, when stored; asked again, it refuses."""
+
+    def __init__(self):
+        self.hashed = False
+
+    def __hash__(self):
+        if self.hashed:
+            raise RuntimeError("hashed again")
+        self.hashed = True
+        return 2
+
+
+class _TracedSet(set):
+    def __init__(self, items):
+        super().__init__(items)
+        self.reads = []
+
+    def __iter__(self):
+        self.reads.append("iter")
+        return set.__iter__(self)
+
+    def __contains__(self, item):
+        self.reads.append(item)
+        return set.__contains__(self, item)
+
+
 class _Walks:
     """Counts how often it is walked."""
 
@@ -3152,6 +3219,41 @@ class TestADiffReadsASequenceTheVerdictCouldRead:
         with pytest.raises(AssertionFailure) as caught:
             assert_that(_PosingThirty()).is_equal_to([*range(29), 99])
         assert_that(str(caught.value)).contains("to be equal to <[.., 99]>")
+
+
+class TestADiffReadsASetTheVerdictCouldRead:
+    """`==` of two sets compares what they store; the diff reads a set's own iteration and lookup while they answer,
+    and its storage from the first that refuses."""
+
+    def test_reads_that_answer_are_the_reads_the_diff_shows(self):
+        diff = _diff_of(_ScaledSet({1, 2}), {10, 30})
+        assert_that(diff).is_equal_to([("extra", 20, None), ("missing", None, 10), ("missing", None, 30)])
+
+    @pytest.mark.parametrize(
+        "unread",
+        [_UnreadSet({1, 2}), _UnreadFrozenset({1, 2}), _StoppedSet({1, 2}), _UnaskedSet({1, 2})],
+        ids=["iteration", "frozenset-iteration", "stop-iteration", "lookup"],
+    )
+    def test_reads_that_refuse_leave_the_stored_items(self, unread):
+        assert_that(_diff_of(unread, {1, 3})).is_equal_to([("extra", 2, None), ("missing", None, 3)])
+        assert_that(_diff_of({1, 3}, unread)).is_equal_to([("extra", 3, None), ("missing", None, 2)])
+
+    def test_an_iteration_that_refuses_part_way_is_finished_from_the_storage(self):
+        diff = _diff_of(_BreaksOffSet(range(30)), {*range(1, 30), 99})
+        assert_that(diff).is_equal_to([("extra", 0, None), ("missing", None, 99)])
+
+    @pytest.mark.parametrize("kind", [_UnaskedSet, _UnreadFrozenset], ids=["set", "frozenset"])
+    def test_the_storage_is_read_with_the_hashes_it_holds(self, kind):
+        stored = _stored_members(kind([_Rehashed()]))
+        assert_that(type(stored)).is_same_as(kind.__mro__[1])
+        assert_that(stored).is_length(1)
+
+    def test_reads_that_answer_are_made_as_the_walk_always_made_them(self):
+        rendered = _TracedSet({1, 2})
+        repr(rendered)
+        traced = _TracedSet({1, 2})
+        _diff_of(traced, {1, 3})
+        assert_that(traced.reads).is_equal_to([*rendered.reads, "iter", 1, 3])
 
     def test_a_value_posing_as_a_list_keeps_a_refusal_part_way_through_its_iteration(self):
         with pytest.raises(RuntimeError, match="broke off"):
