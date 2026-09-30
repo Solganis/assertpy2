@@ -57,7 +57,14 @@ from assertpy2._engine._membership import (
     repeated_items,
     searchable,
 )
-from assertpy2._engine._ordering import UnorderableError, compare, first_out_of_order, holds
+from assertpy2._engine._ordering import (
+    UnorderableError,
+    compare,
+    first_out_of_order,
+    first_plainly_out_of_order,
+    holds,
+    plainly_sortable,
+)
 from assertpy2._engine._size import length_of
 from assertpy2._engine._text import contains as text_contains
 from assertpy2._engine._text import starts_with as text_starts_with
@@ -2807,7 +2814,7 @@ _REAL = st.one_of(st.integers(), st.integers(-(2**70), 2**70), st.floats(allow_n
 
 
 class TestTheOrderingShortcutsAnswerAsTheWalk:
-    """An int against a float is ordered without the general walk; the answers are its own."""
+    """An int against a float, and a plain sequence, are ordered without the general walk; the answers are its own."""
 
     @settings(max_examples=300)
     @given(_REAL, _REAL)
@@ -2827,3 +2834,68 @@ class TestTheOrderingShortcutsAnswerAsTheWalk:
         assert_that(compare(left, right)).is_equal_to(compare(walked, right))
         for relation in ("lt", "le", "gt", "ge"):
             assert_that(holds(left, right, relation)).is_equal_to(holds(walked, right, relation))
+
+    @settings(max_examples=300)
+    @given(
+        st.one_of(
+            st.lists(st.integers(-3, 3), max_size=12),
+            st.lists(st.text("ab", max_size=2), max_size=12),
+            st.lists(st.binary(max_size=2), max_size=12),
+        ),
+        st.booleans(),
+    )
+    def test_a_plain_sequence_breaks_where_the_walk_does(self, items, reverse):
+        walked = first_out_of_order(items, key=lambda item: item, reverse=reverse)
+        assert_that(first_plainly_out_of_order(items, reverse=reverse)).is_equal_to(walked)
+        assert_that(first_plainly_out_of_order(tuple(items), reverse=reverse)).is_equal_to(walked)
+
+    @pytest.mark.parametrize(
+        ("items", "plain"),
+        [
+            pytest.param([1, 2, 3, 4, 5], True, id="ints"),
+            pytest.param(("a", "b", "c", "d", "e"), True, id="strings"),
+            pytest.param([b"a"] * 5, True, id="bytes"),
+            pytest.param([1, 2, 3, 4], False, id="under-five"),
+            pytest.param([1.0] * 5, False, id="a-float-may-be-nan"),
+            pytest.param([1, 2, 3, 4, "e"], False, id="mixed"),
+            pytest.param([True] * 5, False, id="bool"),
+            pytest.param([_WalkedInt(1)] * 5, False, id="int-subclass"),
+            pytest.param(type("Listed", (list,), {})([1] * 5), False, id="list-subclass"),
+            pytest.param(iter([1] * 5), False, id="one-shot"),
+        ],
+    )
+    def test_only_a_plain_sequence_takes_the_pass(self, items, plain):
+        assert_that(plainly_sortable(items)).is_equal_to(plain)
+
+    def test_a_type_is_told_apart_without_asking_its_metaclass_to_hash_it(self):
+        class Unhashed(type):
+            __hash__ = None
+
+        refusing = Unhashed("Refusing", (), {})()
+        assert_that(plainly_sortable([1, 2, 3, 4, 5, refusing])).is_false()
+
+    def test_a_key_set_on_the_matcher_afterwards_is_the_key_it_orders_by(self):
+        matcher = match.is_sorted()
+        matcher.key = operator.neg
+        assert_that(matcher.matches([1, 2, 3, 4, 5])).is_false()
+
+    def test_a_nan_among_floats_still_breaks_the_order(self):
+        with pytest.raises(AssertionFailure):
+            assert_that([1.0, 2.0, math.nan, 3.0, 4.0]).is_sorted()
+
+    def test_a_key_of_ones_own_is_still_asked_only_up_to_the_break(self):
+        asked = []
+
+        def key(item):
+            asked.append(item)
+            return item
+
+        with pytest.raises(AssertionFailure):
+            assert_that([1, 3, 2, 4, 5, 6]).is_sorted(key=key)
+        assert_that(asked).is_equal_to([1, 3, 2])
+
+    def test_the_matcher_takes_the_same_pass(self):
+        assert_that(match.is_sorted().evaluate([1, 2, 4, 3, 5, 6]).mismatch).is_equal_to(
+            "was <[1, 2, 4, 3, 5, 6]>, out of order at index 2: <4> then <3>"
+        )
+        assert_that(list(range(6))).satisfies(match.is_sorted())

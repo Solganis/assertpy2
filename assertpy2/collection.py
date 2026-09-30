@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import collections.abc
+import inspect
 from typing import TYPE_CHECKING, Any, SupportsIndex, cast
 
 from ._engine._introspection import is_mapping_like, materialized
 from ._engine._membership import flattened_supersets, subset_faults
 from ._engine._mixin_base import _MixinBase
-from ._engine._ordering import UnorderableError, first_out_of_order, require_integer
+from ._engine._ordering import (
+    UnorderableError,
+    first_out_of_order,
+    first_plainly_out_of_order,
+    plainly_sortable,
+    require_integer,
+)
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
 from .errors import _safe_format, _safe_str
@@ -197,7 +204,11 @@ class CollectionMixin(_MixinBase):
 
         broken = None
         try:
-            broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
+            if key is _UNKEYED and plainly_sortable(self.val):
+                walked = len(self.val)
+                broken = first_plainly_out_of_order(self.val, reverse=reverse)
+            else:
+                broken = first_out_of_order(_counted(self.val), key=key, reverse=reverse)
         except UnorderableError:
             # reported about the collection: Python's own message is about the operator and names neither side
             unorderable = True
@@ -496,3 +507,7 @@ class CollectionMixin(_MixinBase):
         if len(items) > 1:
             raise ValueError(f"Expected iterable with single element, but had {len(items)} elements.")
         return self.builder(items[0], self.description, self.kind, logger=self.logger)
+
+
+_UNKEYED = inspect.signature(CollectionMixin.is_sorted).parameters["key"].default
+"""`is_sorted` without a `key`, which asks nothing of anybody's code and so may compare plain items in C."""

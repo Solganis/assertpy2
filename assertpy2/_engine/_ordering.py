@@ -19,6 +19,7 @@ import collections.abc
 import decimal
 import fractions
 import inspect
+import itertools
 import numbers
 import operator
 import sys
@@ -29,7 +30,7 @@ from typing import TYPE_CHECKING, Any
 from ._require import argument, pure_decimal_code, raised_inside, refuse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Sequence
 
 # ordering exists for real numbers and not for complex ones, whatever `numbers.Number` says
 _UNORDERED = frozenset({complex})
@@ -720,6 +721,30 @@ def first_out_of_order(
         previous = current
         previous_key = current_key
     return None
+
+
+def plainly_sortable(items: object) -> bool:
+    """Whether *items* is an exact list or tuple of one exact `int`, `str` or `bytes` type: `<` orders it totally, in C.
+
+    Such a sequence holds no NaN and runs no code of anybody's, so `first_plainly_out_of_order` compares its pairs
+    in one C pass instead of pair by pair through `compare`, which took 106 us over 1000 ints.  Under five items
+    the pass costs more to set up than the walk: 344 against 186 ns at two.
+    """
+    if (type(items) is not list and type(items) is not tuple) or len(items) < 5:
+        return False
+    kind = type(items[0])
+    # by identity, stopping at the first other type: hashing a type asks its metaclass, which may refuse
+    if kind is not int and kind is not str and kind is not bytes:
+        return False
+    return all(map(operator.is_, map(type, items), itertools.repeat(kind)))
+
+
+def first_plainly_out_of_order(items: Sequence[Any], *, reverse: bool) -> tuple[int, Any, Any] | None:
+    """`first_out_of_order` over the items themselves, for a sequence `plainly_sortable` accepted."""
+    breaks = operator.lt if reverse else operator.gt
+    pairs = map(breaks, items, itertools.islice(items, 1, None))
+    index = next(itertools.compress(itertools.count(), pairs), None)
+    return None if index is None else (index, items[index], items[index + 1])
 
 
 def _out_of_order(later: Any, earlier: Any, *, reverse: bool) -> bool:

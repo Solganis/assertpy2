@@ -66,11 +66,13 @@ from ._engine._ordering import (
     equal_past,
     equals,
     first_out_of_order,
+    first_plainly_out_of_order,
     holds,
     lookup,
     may_broadcast,
     member,
     numpy_duration,
+    plainly_sortable,
     require_integer,
     whole_number,
 )
@@ -1264,11 +1266,16 @@ class IsSubsetOfMatcher(BaseMatcher):
         )
 
 
+def _itself(item: Any) -> Any:
+    """The key `match.is_sorted()` orders by when it was given none."""
+    return item
+
+
 class IsSortedMatcher(BaseMatcher):
     """The value is in order, by the same walk `is_sorted()` uses."""
 
     def __init__(self, key: Callable[[Any], Any] | None = None, reverse: bool = False):
-        self.key = key or (lambda item: item)
+        self.key = key or _itself
         self.reverse = reverse
 
     def matches(self, value: Any) -> bool:
@@ -1290,7 +1297,10 @@ class IsSortedMatcher(BaseMatcher):
             )
         items = searchable(value)
         try:
-            broken = first_out_of_order(items, key=self.key, reverse=self.reverse)
+            if self.key is _itself and plainly_sortable(items):
+                broken = first_plainly_out_of_order(items, reverse=self.reverse)
+            else:
+                broken = first_out_of_order(items, key=self.key, reverse=self.reverse)
         except UnorderableError:
             return MatchResult(
                 matched=False,
