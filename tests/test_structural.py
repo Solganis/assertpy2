@@ -835,11 +835,11 @@ class TestContractDrift:
         assert_that(sorted(_drift(payload, outer))).is_equal_to(["inner.deep", "pair[1].oops"])
 
     def test_null_submodel_value_is_skipped(self):
-        inner, _ = self._submodels()
+        inner_model, _ = self._submodels()
         from pydantic import BaseModel
 
         class Holder(BaseModel):
-            inner: inner | None
+            inner: inner_model | None
 
         assert_that(_drift({"inner": None}, Holder)).is_empty()
 
@@ -1106,7 +1106,7 @@ class TestDriftFollowsWhatPydanticBuilt:
 
         class Extras(BaseModel):
             model_config = ConfigDict(extra="allow")
-            __pydantic_extra__: dict[str, A] = Field(init=False)
+            __pydantic_extra__: dict[str, A]
 
         class Stamped(BaseModel):
             model_config = ConfigDict(extra="allow")
@@ -1139,7 +1139,7 @@ class TestDriftFollowsWhatPydanticBuilt:
 
         extra = {"x": 1, "extra": 2}
         discriminated = typing.Annotated[A | B, Field(discriminator="kind")]
-        return {
+        cases = {
             "union": (holding(A | B), {"f": extra}, ["f.extra"]),
             "union, the other member": (holding(A | B), {"f": {"y": 1, "extra": 2}}, ["f.extra"]),
             "dict of models": (holding(dict[str, A]), {"f": {"k": extra}}, ["f.k.extra"]),
@@ -1192,6 +1192,11 @@ class TestDriftFollowsWhatPydanticBuilt:
             "a typed extra": (Extras, {"added": extra}, ["added.extra"]),
             "an extra a validator set": (Stamped, {"x": 1}, []),
         }
+        try:
+            EmptyAlias.model_validate({"": {"x": 1}})
+        except ValueError:
+            del cases["an empty alias"]  # an older pydantic takes an empty alias for no alias
+        return cases
 
     def test_each_nested_model_is_checked_where_pydantic_put_it(self):
         found = {label: sorted(_drift(payload, model)) for label, (model, payload, _) in self._cases().items()}
@@ -1212,6 +1217,10 @@ class TestDriftFollowsWhatPydanticBuilt:
 
     def test_a_config_reading_names_only_is_followed_by_name(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import ConfigDict as _Config
+
+        if "validate_by_name" not in _Config.__annotations__:
+            pytest.skip(reason="validate_by_name arrived in pydantic 2.11")
         from pydantic import BaseModel, ConfigDict, Field
 
         class Inner(BaseModel):
@@ -1247,6 +1256,10 @@ class TestDriftFollowsWhatPydanticBuilt:
 
     def test_a_rebuilt_model_is_read_again(self):
         pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import ConfigDict as _Config
+
+        if "validate_by_name" not in _Config.__annotations__:
+            pytest.skip(reason="validate_by_name arrived in pydantic 2.11")
         from pydantic import BaseModel, Field
 
         class Inner(BaseModel):
@@ -1344,7 +1357,7 @@ class TestExactnessRefusesWhatItCannotPair:
     @staticmethod
     def _models():
         pytest.importorskip("pydantic", reason="pydantic not installed")
-        from pydantic import BaseModel, ConfigDict, Field, Json, RootModel, field_validator, model_validator
+        from pydantic import BaseModel, ConfigDict, Json, RootModel, field_validator, model_validator
 
         class A(BaseModel):
             model_config = ConfigDict(frozen=True)
@@ -1401,7 +1414,7 @@ class TestExactnessRefusesWhatItCannotPair:
             z: int
 
         class FilteredUnion(BaseModel):
-            f: list[A | Wide]
+            f: list[Wide | A]
 
             @field_validator("f", mode="before")
             @classmethod
@@ -1419,9 +1432,11 @@ class TestExactnessRefusesWhatItCannotPair:
                 return hash(self.id)
 
         class Narrow(BaseModel):
+            model_config = ConfigDict(frozen=True)
             x: int
 
         class Broad(BaseModel):
+            model_config = ConfigDict(frozen=True)
             x: int
             extra: int = 0
 
@@ -1438,10 +1453,10 @@ class TestExactnessRefusesWhatItCannotPair:
             event: _T
 
         class Batch(BaseModel):
-            f: set[typing.Annotated[Envelope[First] | Envelope[Last], Field(union_mode="left_to_right")]]
+            f: set[Envelope[First] | Envelope[Last]]
 
         class Entries(BaseModel):
-            f: set[typing.Annotated[First | Last, Field(union_mode="left_to_right")]]
+            f: set[First | Last]
 
         class Dated(BaseModel):
             model_config = ConfigDict(frozen=True, strict=True)
@@ -1759,14 +1774,14 @@ class TestExactnessWalksOnlyWhatCanHoldAModel:
         return A
 
     def test_which_types_can_hold_a_model(self):
-        a = self._model()
+        model = self._model()
         from pydantic import Json
 
         class Point(typing.NamedTuple):
-            a: a
+            a: model
 
         class Shape(typing.TypedDict):
-            a: a
+            a: model
 
         plain = {
             "a bare list": list,
@@ -1784,10 +1799,10 @@ class TestExactnessWalksOnlyWhatCanHoldAModel:
             "Any": typing.Any,
             "object": object,
             "optional Any": typing.Annotated[typing.Any | None, "meta"],
-            "a model": a,
-            "an optional model": a | None,
-            "a model read from JSON": Json[a],
-            "a model deep inside": dict[str, list[tuple[int, a]]],
+            "a model": model,
+            "an optional model": model | None,
+            "a model read from JSON": Json[model],
+            "a model deep inside": dict[str, list[tuple[int, model]]],
             "a named tuple": Point,
             "a typed dict": Shape,
             "a type variable": typing.TypeVar("T"),
