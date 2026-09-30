@@ -814,15 +814,22 @@ class TestContractDrift:
 
         return Inner, Outer
 
-    def test_a_payload_of_another_shape_is_refused_only_where_a_key_could_hide(self):
+    def test_a_payload_of_another_shape_is_refused_only_where_a_key_could_hide(self, monkeypatch):
         inner, _ = self._submodels()
-        for hiding, kind in (([{"x": 1}], "list"), ("[" * 100_000, "str")):
-            with pytest.raises(UncheckableDriftError, match=f"holds a {kind} where a model was built"):
-                contract_drift(hiding, inner(x=1))
+        with pytest.raises(UncheckableDriftError, match="holds a list where a model was built"):
+            contract_drift([{"x": 1}], inner(x=1))
         itself: list[object] = []
         itself.append(itself)
         for keyless in (42, None, [1, 2], itself, "not json", b"[1]", inner(x=1)):
             assert_that(contract_drift(keyless, inner(x=1))).described_as(repr(keyless)).is_empty()
+
+        # how deep the decoder goes before RecursionError depends on the platform's stack
+        def too_deep(text):
+            raise RecursionError
+
+        monkeypatch.setattr(_contract, "json", types.SimpleNamespace(loads=too_deep))
+        with pytest.raises(UncheckableDriftError, match="holds a str where a model was built"):
+            contract_drift("[[[", inner(x=1))
 
     def test_alias_resolved_tuple_and_union_branches(self):
         _, outer = self._submodels()
