@@ -283,16 +283,22 @@ class SatisfiesMixin(_MixinBase):
         """The walk both item quantifiers make, named by whichever of them asked for it."""
         walked = 0
         if _is_matcher(matcher):
+            # a structure is asked for its failure alone, so the spec is described only for the item that failed
+            structural = getattr(type(matcher), "evaluate", None) is StructureMatcher.evaluate
             for i, item in enumerate(self.val):
                 walked += 1
                 # the verdict and the reason come from the same look, so a user's `key` runs once
-                if _has_own_evaluate(matcher):
-                    outcome = _evaluate_matcher(matcher, item)
+                if structural or _has_own_evaluate(matcher):
+                    outcome = (
+                        cast("StructureMatcher", matcher)._failure(item)
+                        if structural
+                        else _evaluate_matcher(matcher, item)
+                    )
                 elif verdict(matcher.matches(item), subject="the matcher"):
                     continue
                 else:
                     outcome = _refused(matcher, item)
-                if not outcome.matched:
+                if outcome is not None and not outcome.matched:
                     # read off the refusal: the matcher said what it wanted, and asking twice ran its own method twice
                     description = outcome.description
                     return self.error(

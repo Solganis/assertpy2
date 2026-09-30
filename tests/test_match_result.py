@@ -133,6 +133,59 @@ class TestTheStructureMatcherWalksOnceInsteadOfTwice:
     def test_a_match_reports_no_reason(self):
         assert_that(match.structure({"role": match.is_in("admin")}).evaluate({"role": "admin"}).mismatch).is_empty()
 
+    def test_a_match_still_carries_its_requirement(self):
+        matcher = match.structure({"role": match.is_in("admin")})
+        assert_that(matcher.evaluate({"role": "admin"}).description).is_equal_to(matcher.describe())
+
+
+class TestEachDescribesTheSpecOnlyForTheItemThatFailed:
+    """Rendering is for reporting, the rule `_walk` already keeps for a leaf: a passing item is not described.
+
+    Accepted with it: a spec value whose `__str__` changes its own `__eq__` is no longer changed by the items before.
+    """
+
+    class _Spelled:
+        """Equal to anything, and counting how often the spec that holds it is described."""
+
+        def __init__(self):
+            self.described = 0
+
+        def __eq__(self, other):
+            return True
+
+        __hash__ = object.__hash__
+
+        def __str__(self):
+            self.described += 1
+            return "anything"
+
+    def test_a_passing_run_describes_nothing(self):
+        leaf = self._Spelled()
+        assert_that([{"k": 1}] * 100).each(match.structure({"k": leaf}))
+        assert_that(leaf.described).is_zero()
+
+    def test_only_the_failing_item_is_described(self):
+        alone = self._Spelled()
+        match.structure({"k": alone}).evaluate({"j": 2})
+        leaf = self._Spelled()
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that([{"k": 1}] * 99 + [{"j": 2}]).each(match.structure({"k": leaf}))
+        assert_that(leaf.described).is_equal_to(alone.described)
+        assert_that(str(caught.value)).starts_with(
+            "Expected all items to satisfy a mapping matching structure {k: <anything>}, but item at index 99"
+        )
+
+    def test_an_evaluate_of_its_own_is_still_asked(self):
+        asked = []
+
+        class Recorded(type(match.structure({}))):
+            def evaluate(self, value):
+                asked.append(value)
+                return super().evaluate(value)
+
+        assert_that([{"k": 1}, {"k": 2}]).each(Recorded({"k": match.is_positive()}))
+        assert_that(asked).is_equal_to([{"k": 1}, {"k": 2}])
+
 
 class TestTheVerdictIsTakenOnce:
     """A matcher that answers differently the second time used to have the second answer believed."""

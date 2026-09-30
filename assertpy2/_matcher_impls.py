@@ -1514,17 +1514,24 @@ class StructureMatcher(BaseMatcher):
         `matches_structure` does not go through here: it needs every mismatch for its diff, not only the
         first one in words, so it walks once via `walk_mismatches()` and renders from that.
         """
+        failure = self._failure(value)
+        return MatchResult(matched=True, description=self.describe()) if failure is None else failure
+
+    def _failure(self, value: Any) -> MatchResult | None:
+        """What `evaluate()` answers for a value that does not match, from the same walk, and `None` for one that does.
+
+        A pass needs no words.  `each` asks this of every item and describes the spec only for the one that
+        failed: on 10 000 passing records the description was 16 of 53 ms.
+        """
         mapped = self._as_mapping(value)
         if not is_mapping_like(mapped):
             return MatchResult(
                 matched=False, description=self.describe(), mismatch=f"was not a mapping: <{_safe_format(mapped)}>"
             )
         mismatches = self._walk(mapped, self._spec, _ROOT, set())
-        return MatchResult(
-            matched=not mismatches,
-            description=self.describe(),
-            mismatch="" if not mismatches else self.render_mismatch(mismatches),
-        )
+        if not mismatches:
+            return None
+        return MatchResult(matched=False, description=self.describe(), mismatch=self.render_mismatch(mismatches))
 
     @staticmethod
     def render_mismatch(mismatches: list[_SpecMismatch]) -> str:
