@@ -701,8 +701,8 @@ def assert_conforms(
     does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model keeps
     passing after the live API grows new ones.
 
-    ``exact`` catches that drift in every model the payload became, inside lists, tuples, dicts, unions
-    and root models too, and reports the exact paths.  It is alias-aware, and respects a model that opts
+    ``exact`` catches that drift in the models the payload became inside lists, tuples, sets, dicts,
+    unions and root models, and reports the exact paths.  It is alias-aware, and respects a model that opts
     into extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set,
     a filtered list, an object wrapped into a list) are validated again by their model class when they all
     became one, which runs that class's validators once more for them, and JSON text is read as the original

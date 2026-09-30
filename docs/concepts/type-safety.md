@@ -366,8 +366,8 @@ composes with `exact=True` for per-element drift (drift paths are prefixed with 
 after the live API grows new fields - your test is green while the contract has drifted.
 
 `exact=True` catches that: it fails when the payload carries any field the model does not declare,
-in every model the payload became (inside lists, tuples, dicts, unions and root models too), reporting the
-exact paths.
+in the models the payload became inside lists, tuples, sets, dicts, unions and root models, reporting the
+exact paths. A model inside a dataclass, or inside a container of plain values, is not reached (see below).
 
 ```python
 # response grew a `promo_code` field, and its nested customer grew `loyalty_tier`
