@@ -416,8 +416,13 @@ The details behind each row:
   opts into extras (`model_config = ConfigDict(extra="allow")`)
 - it reports only **structural** drift (undeclared fields), not type coercions: a `datetime` field
   legitimately arrives as a JSON string, so flagging coercions would be noise
-- it is stricter and more informative than pydantic's model-level `extra="forbid"` - per-call, and it
-  names every drifted path.
+- pydantic 2.12 and later forbids extras for one call too, `Model.model_validate(payload, extra="forbid")`,
+  and names each one in its validation error. Where that is all a test needs, it is the simpler tool.
+  `exact=True` differs in what it leaves alone and in what it still sees. It keeps a model's own
+  `extra="allow"`, which the per-call setting overrides. It does not change which member of a union
+  validates, where forbidding extras makes a member with an extra key fail. It finds a key a validator
+  removed from the payload in place, which validation no longer sees. It hands the validated instance on to
+  the chain, and it works on every pydantic 2 release.
 - where validation reshaped a container so that its raw items no longer pair one by one with the items
   built from it (a set, a list a validator filtered, an object a validator wrapped into a list) and every
   built item is one model class, each raw item is validated again on its own by that class and checked
@@ -433,6 +438,10 @@ The details behind each row:
   the field's validators could have decided what the items became, it fails with `cannot be checked`, on a
   clean payload too: items pydantic will not build the declared type from, and a union of two or more types
   besides `None` or a named type alias, in the declared type or in a model built from it.
+- an extra that a typed `__pydantic_extra__` built and a validator then removed from the model is checked
+  the same way: validated again as the declared type and checked beside what that builds, or refused with
+  `cannot be checked` where the declared type is a union of two or more types. Untyped extras are the
+  model's to keep or drop.
 - where neither works (items of mixed model classes in a set or a resized list, an item that validates
   only through its parent, dict keys merged by coercion, a generator consumed during validation, an
   `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather

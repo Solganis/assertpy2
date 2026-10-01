@@ -417,15 +417,22 @@ class _Walk:
     goes on when its frame opens and comes off when the frame is done.  A copy per level made memory quadratic
     in the depth.  Being on the path is what makes a reference circular, and a value two siblings share is
     not one.  Held by id, and the id holds its value, so no ancestor is freed for a new value to take its id.
+
+    ``paired`` holds the same ancestors as the pairs they were opened as.  Under a config the walk is the verdict,
+    and it reads a graph as the mapping core does: a pair it meets again while still inside it is equal as far as
+    that pair goes, and one side met again beside another partner is a new pair, walked like any other.  There are
+    only so many pairs, so that ends.  Without a config the walk only renders a failure already decided, and marks
+    the first value it meets again.
     """
 
-    __slots__ = ("config", "entries", "on_path")
+    __slots__ = ("config", "entries", "on_path", "paired")
 
     def __init__(self, config: _CompareConfig | None, on_path: Iterable[int] = ()) -> None:
         self.config = config
         self.entries: list[DiffEntry] = []
         self.on_path: dict[int, object] = {}
         self.on_path.update(dict.fromkeys(on_path))
+        self.paired: set[tuple[int, int]] = set()
 
     def run(self, children: Iterator[_Frame], left: int, right: int) -> list[DiffEntry]:
         """Walk *children* to the end, and every frame they open, and answer the entries found."""
@@ -444,6 +451,7 @@ class _Walk:
                     stack.pop()
                     on_path.pop(left, None)
                     on_path.pop(right, None)
+                    self.paired.discard((left, right))
                 else:
                     stack.append(nested)
                 continue
@@ -458,6 +466,7 @@ class _Walk:
         left, right = id(actual), id(expected)
         self.on_path[left] = actual
         self.on_path[right] = expected
+        self.paired.add((left, right))
         return children, left, right
 
     def descend(self, actual, expected, path: _Path, descended_for) -> _Frame | None:
@@ -476,7 +485,10 @@ class _Walk:
         `HelpersMixin._dict_err()` treats it as "nothing to render".  A new caller still has to decide what
         ``None`` means for what it is doing; it just must not invent a fourth answer for this one.
         """
-        if id(actual) in self.on_path or id(expected) in self.on_path:
+        if self.config is not None:
+            if (id(actual), id(expected)) in self.paired:
+                return None
+        elif id(actual) in self.on_path or id(expected) in self.on_path:
             self.entries.append(path.entry(actual="<circular ref>", expected="<circular ref>"))
             return None
         frame = self.opened(actual, expected, path)
@@ -708,6 +720,7 @@ def _build_equality_diff(
         )
     walk.on_path[left] = actual
     walk.on_path[right] = expected
+    walk.paired.add((left, right))
 
     strict_descent = False
     if config is not None:

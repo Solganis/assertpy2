@@ -2234,9 +2234,10 @@ class TestExactnessRefusesWhatItCannotPair:
             lambda: _contract._declared_container(sequence),
             lambda: _contract._replay_target(sequence),
             lambda: _contract._adapter(target),
+            lambda: _contract._listed(mapping),
         ]
         first = [ask() for ask in asks]
-        assert_that([ask() is answer for ask, answer in zip(asks, first, strict=True)]).is_equal_to([True] * 4)
+        assert_that([ask() is answer for ask, answer in zip(asks, first, strict=True)]).is_equal_to([True] * 5)
 
     def test_a_replay_that_builds_no_matching_sequence_refuses(self, monkeypatch):
         pytest.importorskip("pydantic", reason="pydantic not installed")
@@ -3325,6 +3326,186 @@ class TestExactnessReachesDataclassesAndTypedDicts:
         assert_that((0 in _contract._RECORDS, _contract._record_reads(record) is first)).is_equal_to((False, True))
         assert_that(self._found({"f": [{"one": {"y": 1}}]}, Emptied)).is_equal_to(
             "<f[0].one> cannot be checked: which of its declared types it became depends on validators not run again"
+        )
+
+
+class TestExactnessChecksAnExtraTheModelNoLongerHolds:
+    """Only the extras a model still held were walked: one a validator removed after it was built took the keys its
+    type had dropped with it, and the check passed."""
+
+    CARRIES = "undeclared field(s) the model does not declare: "
+
+    @staticmethod
+    def _found(payload, model):
+        try:
+            assert_conforms(payload, model, exact=True)
+        except AssertionFailure as failure:
+            return str(failure).split(", but ")[1].removeprefix("it carries ")
+        return "passes"
+
+    def test_an_extra_removed_after_it_was_built_is_checked_as_its_declared_type(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, model_validator
+
+        class Value(BaseModel):
+            x: int
+
+        def removing(removal):
+            class Holding(BaseModel):
+                model_config = ConfigDict(extra="allow")
+                __pydantic_extra__: dict[str, Value]
+                own: int = 0
+
+                @model_validator(mode="after")
+                def removed(self):
+                    removal(self)
+                    return self
+
+            return Holding
+
+        cleared = removing(lambda model: model.__pydantic_extra__.clear())
+        replaced = removing(lambda model: setattr(model, "__pydantic_extra__", {}))
+        listed = removing(lambda model: setattr(model, "__pydantic_extra__", ["anything"]))
+        unset = removing(lambda model: setattr(model, "__pydantic_extra__", None))
+        one = removing(lambda model: model.__pydantic_extra__.pop("first", None))
+        kept = removing(lambda model: None)
+        if not isinstance(kept.model_validate({"probe": {"x": 1}}).__pydantic_extra__["probe"], Value):
+            pytest.skip("this pydantic keeps extras as sent, whatever `__pydantic_extra__` declares")
+
+        class Outer(BaseModel):
+            inner: cleared
+
+        class Named(BaseModel):
+            name: str
+
+        class Beside(cleared):
+            named: Named
+
+        drifted = {"x": 1, "unexpected": 2}
+        found = {
+            # a field the model declares is no extra, whatever its value is built into
+            "beside a declared field": self._found({"named": {"name": "a"}, "first": drifted}, Beside),
+            "kept": self._found({"own": 1, "first": drifted}, kept),
+            "cleared": self._found({"own": 1, "first": drifted}, cleared),
+            "replaced": self._found({"own": 1, "first": drifted}, replaced),
+            "replaced by what is no dict": self._found({"own": 1, "first": drifted}, listed),
+            "unset": self._found({"own": 1, "first": drifted}, unset),
+            "one of two": self._found({"first": drifted, "second": {"x": 2, "other": 3}}, one),
+            "two of two": self._found({"first": drifted, "second": {"x": 2, "other": 3}}, cleared),
+            "in a nested model": self._found({"inner": {"first": drifted}}, Outer),
+            "clean": self._found({"own": 1, "first": {"x": 1}}, cleared),
+            "no extra sent": self._found({"own": 1}, cleared),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "beside a declared field": f"1 {self.CARRIES}['first.unexpected']",
+                "kept": f"1 {self.CARRIES}['first.unexpected']",
+                "cleared": f"1 {self.CARRIES}['first.unexpected']",
+                "replaced": f"1 {self.CARRIES}['first.unexpected']",
+                "replaced by what is no dict": f"1 {self.CARRIES}['first.unexpected']",
+                "unset": f"1 {self.CARRIES}['first.unexpected']",
+                "one of two": f"2 {self.CARRIES}['first.unexpected', 'second.other']",
+                "two of two": f"2 {self.CARRIES}['first.unexpected', 'second.other']",
+                "in a nested model": f"1 {self.CARRIES}['inner.first.unexpected']",
+                "clean": "passes",
+                "no extra sent": "passes",
+            }
+        )
+
+    def test_an_extra_typed_as_a_typed_dict_loses_only_what_that_typed_dict_drops(self):
+        """Under a model that allows extras a `TypedDict` takes that config and keeps a key it does not declare, so
+        nothing was dropped, held or removed.  One with a config of its own drops it, and is named either way."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, model_validator
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        class Strict(TypedDict):
+            __pydantic_config__ = ConfigDict(extra="ignore")  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
+            x: int
+
+        def holding(kind, clear):
+            class Holding(BaseModel):
+                model_config = ConfigDict(extra="allow")
+                __pydantic_extra__: dict[str, kind]
+
+                @model_validator(mode="after")
+                def after(self):
+                    if clear:
+                        self.__pydantic_extra__.clear()
+                    return self
+
+            return Holding
+
+        sent = {"first": {"x": 1, "unexpected": 2}}
+        if holding(Strict, False).model_validate(sent).__pydantic_extra__ != {"first": {"x": 1}}:
+            pytest.skip("this pydantic does not build an extra as the `TypedDict` declared for it")
+        kept = holding(Point, False).model_validate(sent).__pydantic_extra__ == sent
+        found = [self._found(sent, holding(kind, clear)) for kind in (Point, Strict) for clear in (False, True)]
+        inherited = "passes" if kept else f"1 {self.CARRIES}['first.unexpected']"
+        assert_that(found).is_equal_to([inherited, inherited, *[f"1 {self.CARRIES}['first.unexpected']"] * 2])
+
+    def test_where_the_declared_type_does_not_tell_it_refuses_and_where_nothing_hides_it_passes(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, model_validator
+
+        class Value(BaseModel):
+            x: int
+
+        class Other(BaseModel):
+            y: int
+
+        def clearing(extras):
+            namespace = {"__annotations__": {"own": int}, "own": 0, "model_config": ConfigDict(extra="allow")}
+            if extras is not None:
+                namespace["__annotations__"]["__pydantic_extra__"] = extras
+
+            def cleared(self):
+                self.__pydantic_extra__.clear()
+                return self
+
+            namespace["cleared"] = model_validator(mode="after")(cleared)
+            return type("Clearing", (BaseModel,), namespace)
+
+        either = clearing(dict[str, Value | Other])
+        if not isinstance(
+            type(
+                "Kept",
+                (BaseModel,),
+                {
+                    "__annotations__": {"__pydantic_extra__": dict[str, Value]},
+                    "model_config": ConfigDict(extra="allow"),
+                },
+            )
+            .model_validate({"probe": {"x": 1}})
+            .__pydantic_extra__["probe"],
+            Value,
+        ):
+            pytest.skip("this pydantic keeps extras as sent, whatever `__pydantic_extra__` declares")
+
+        class Outer(BaseModel):
+            inner: either
+
+        gone = "cannot be checked: the model no longer holds 1 of the extras it was sent"
+        found = {
+            "a choice of types": self._found({"first": {"x": 1, "unexpected": 2}}, either),
+            "a choice of types, clean": self._found({"first": {"x": 1}}, either),
+            "a choice of types, nested": self._found({"inner": {"first": {"x": 1}}}, Outer),
+            "untyped": self._found({"first": {"x": 1, "unexpected": 2}}, clearing(None)),
+            "plain values": self._found({"first": 5, "second": "text"}, clearing(dict[str, int | str])),
+            "any value": self._found({"first": {"x": 1, "unexpected": 2}}, clearing(dict[str, typing.Any])),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "a choice of types": f"<the payload> {gone}",
+                "a choice of types, clean": f"<the payload> {gone}",
+                "a choice of types, nested": f"<inner> {gone}",
+                "untyped": "passes",
+                "plain values": "passes",
+                "any value": "passes",
+            }
         )
 
 

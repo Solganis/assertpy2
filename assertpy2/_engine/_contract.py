@@ -757,7 +757,8 @@ def _field_nodes(model: Any) -> dict[str, Any]:
         kind = node.get("type")
         if kind == "model-fields":
             nodes = {name: field.get("schema") for name, field in node.get("fields", {}).items()}
-            return {**nodes, "__pydantic_extra__": node.get("extras_schema")}
+            # older pydantic names it `extra_validator`
+            return {**nodes, "__pydantic_extra__": node.get("extras_schema", node.get("extra_validator"))}
         if kind == "model" and node.get("root_model"):
             return {"root": node.get("schema")}
         node = refs.get(node.get("schema_ref", "")) if kind == "definition-ref" else node.get("schema")
@@ -1036,7 +1037,7 @@ def contract_drift(
     if getattr(model, "model_config", {}).get("extra") != "allow":
         drift += [((path, key, (key,)), payload[key]) for key in payload if key not in declared]
     else:
-        drift += _extras_drift(payload, instance, path, seen, extras, replayed)
+        drift += _extras_drift(payload, instance, path, seen, extras, replayed, declared)
     for name, sources, annotated in fields:
         source, raw = _raw_field(payload, sources)
         if source is None:
@@ -1059,15 +1060,49 @@ def _extras_drift(
     seen: frozenset[tuple[int, int]],
     declared: _Declared | None,
     replayed: bool,
+    own: frozenset[str],
 ) -> list[_Found]:
     """Drift under the extras of a model that allows them: built through a typed `__pydantic_extra__` and walked as it
-    *declared* them; untyped ones are the payload's own objects."""
-    return [
+    *declared* them; untyped ones are the payload's own objects.
+
+    An extra the payload sent that the model no longer holds was built as that type and removed afterwards, by a
+    validator.  What it was built into is gone, so it is validated again as the declared type and walked beside what
+    that builds, or refused where that cannot tell (`_replayed`).  *own* are the keys the model declares, which are
+    no extras.
+    """
+    held = getattr(instance, "__pydantic_extra__", None)
+    # a validator can leave anything there: what is no dict holds no extra
+    built = held if isinstance(held, dict) else {}
+    drift = [
         entry
-        for key, built in (getattr(instance, "__pydantic_extra__", None) or {}).items()
+        for key, value in built.items()
         if key in payload
-        for entry in _declared_drift(payload[key], built, (path, key, (key,)), seen, declared, replayed)
+        for entry in _declared_drift(payload[key], value, (path, key, (key,)), seen, declared, replayed)
     ]
+    if declared is not None:
+        gone: list[tuple[_Hop, object]] = [
+            ((path, key, (key,)), payload[key]) for key in payload if key not in own and key not in built
+        ]
+        if any(_holds(part, _is_mapping, read_text=True) for _, part in gone):
+            reason = f"the model no longer holds {len(gone)} of the extras it was sent"
+            drift += _replayed(payload, gone, path, seen, reason, _listed(declared))
+    return drift
+
+
+def _listed(declared: _Declared) -> _Declared:
+    """A list of what *declared* declares: the type several values declared so are validated again as."""
+    key = (id(declared), "listed")
+    known = _DECLARED.get(key)
+    if known is not None and known[0] is declared:
+        return known[1]
+    annotation, owner, node = declared
+    listed = (
+        None if annotation is None else types.GenericAlias(list, (annotation,)),
+        owner,
+        {"type": "list", "items_schema": node},
+    )
+    _remember(_DECLARED, key, declared, listed, 1024)
+    return listed
 
 
 def _declared_drift(

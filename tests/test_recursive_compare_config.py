@@ -13,6 +13,7 @@ import pytest
 
 from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
 from assertpy2._engine._compare import _build_compare_config
+from assertpy2._engine._diff import _build_equality_diff
 
 Pair = namedtuple("Pair", ["a", "b"])
 
@@ -788,6 +789,77 @@ class TestStrictTypes:
         with pytest.raises(AssertionFailure) as caught:
             assert_that(actual).is_equal_to(expected, strict_types=True)
         assert_that([entry.path for entry in caught.value.diff.entries]).contains("x")
+
+    @pytest.mark.parametrize(
+        "config",
+        [
+            {"strict_types": True},
+            {"tolerance": 0.1},
+            {"comparators": {str: lambda actual, expected: actual == expected}},
+        ],
+        ids=["strict_types", "tolerance", "comparators"],
+    )
+    def test_a_record_that_holds_itself_is_equal_to_one_built_alike_under_a_config(self, config):
+        """The walk is the verdict there, and stopped at the pair it was already inside by reporting it: two records
+        built alike failed with a diff that named no difference."""
+
+        @dataclass
+        class Account:
+            id: int
+            balance: float
+            owner: "Account | None" = None
+
+        def ring(length, balance=5.0, id=1):
+            nodes = [Account(id, balance) for _ in range(length)]
+            for index, node in enumerate(nodes):
+                node.owner = nodes[(index + 1) % length]
+            return nodes[0]
+
+        for length in (1, 2, 3):
+            assert_that(ring(length)).described_as(str(length)).is_equal_to(ring(length), **config)
+            with pytest.raises(AssertionFailure) as caught:
+                assert_that(ring(length)).is_equal_to(ring(length, id=2), **config)
+            found = [(entry.path, entry.actual, entry.expected) for entry in caught.value.diff.entries]
+            # each node once, the one the walk started at included
+            named = [".".join(["", *["owner"] * hops, "id"]) for hops in range(length)]
+            assert_that(found).described_as(str(length)).is_equal_to([(path, 1, 2) for path in named])
+        # a ring against a chain that ends differs where the chain ends
+        chain = Account(1, 5.0, Account(1, 5.0, Account(1, 5.0)))
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(ring(1)).is_equal_to(chain, **config)
+        found = [(entry.path, entry.expected) for entry in caught.value.diff.entries]
+        assert_that(found).is_equal_to([(".owner.owner.owner", None)])
+        # rings of two and of three read alike however far they are followed, and are equal, as two such dicts are
+        assert_that(ring(2)).is_equal_to(ring(3), **config)
+        # a pair is left behind once the walk is out of it: met again beside it, it is walked again
+        shared, differing = Account(1, 5.0), Account(2, 5.0)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that([shared, shared]).is_equal_to([differing, differing], **config)
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["[0].id", "[1].id"])
+        # two nodes that hold each other, compared from either end
+        one, other = Account(1, 5.0), Account(1, 5.0)
+        one.owner, other.owner = other, one
+        assert_that(one).is_equal_to(other, **config)
+        other.id = 2
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(one).is_equal_to(other, **config)
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to([".id", ".owner.id"])
+
+    def test_without_a_config_the_diff_of_a_pair_met_again_still_marks_where_it_stopped(self):
+        @dataclass
+        class Account:
+            id: int
+            owner: "Account | None" = None
+
+        left, right = Account(1), Account(2)
+        left.owner, right.owner = left, right
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(left).is_equal_to(right, ignore="missing")
+        assert_that(caught.value.diff.entries).is_not_empty()
+        entries = _build_equality_diff(left, right).entries
+        assert_that([(entry.path, entry.actual) for entry in entries]).is_equal_to(
+            [(".id", 1), (".owner", "<circular ref>")]
+        )
 
     @pytest.mark.parametrize(
         ("actual", "expected"),
