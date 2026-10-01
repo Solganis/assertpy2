@@ -12,6 +12,7 @@ import datetime
 import decimal
 import enum
 import fractions
+import inspect
 import json
 import pathlib
 import sys
@@ -149,7 +150,17 @@ _Declared = tuple[object, object]
 
 _DECLARED: dict[tuple[int, object], tuple[_Declared, Any]] = {}
 """What a declaration says a container built from it holds, per declaration and kind of container: worked out once,
-since a list of 1000 orders asks it for each order.  At most 1024 entries."""
+since a list of 1000 orders asks it for each order.  At most 1024 entries (`_remember`)."""
+
+
+def _remember(
+    cache: dict[Any, tuple[_Declared, Any]], key: object, declared: _Declared, answer: object, bound: int
+) -> None:
+    """Keep *answer* for *declared* under *key*, beside the declaration so the id stays its own.  A full *cache* starts
+    over rather than refusing new entries: a long run fills it early, and what it asks now is what it asks again."""
+    if len(cache) >= bound:
+        cache.clear()
+    cache[key] = (declared, answer)
 
 
 def _declared_container(declared: _Declared | None) -> tuple[tuple[_Declared, ...] | None, _Declared | None] | None:
@@ -174,8 +185,7 @@ def _declared_container(declared: _Declared | None) -> tuple[tuple[_Declared, ..
             items = (tuple((argument, owner) for argument in arguments), None)
         else:
             items = (None, (arguments[0], owner))
-    if len(_DECLARED) < 1024:
-        _DECLARED[key] = (declared, items)
+    _remember(_DECLARED, key, declared, items, 1024)
     return items
 
 
@@ -194,8 +204,7 @@ def _declared_mapping_value(declared: _Declared | None) -> _Declared | None:
         if get_origin(mapping) in _MAPPING_ORIGINS and len(get_args(mapping)) == 2
         else None
     )
-    if len(_DECLARED) < 1024:
-        _DECLARED[key] = (declared, value)
+    _remember(_DECLARED, key, declared, value, 1024)
     return value
 
 
@@ -207,9 +216,17 @@ def _sole_member(annotation: object) -> object:
 
 def _chooses(annotation: object) -> bool:
     """Whether validation chose anywhere in *annotation* above the models it names: between two or more members of a
-    union besides ``None``, or inside a named type alias, which is not opened."""
+    union besides ``None``, or inside a named type alias (`typing` or `typing_extensions`, plain or parametrized),
+    which is not opened."""
     members = [member for member in _alternatives(annotation) if member is not type(None)]
-    if len(members) > 1 or any(hasattr(member, "__value__") for member in members):
+    aliases = tuple(
+        kind
+        for module in ("typing", "typing_extensions")
+        if isinstance(kind := getattr(sys.modules.get(module), "TypeAliasType", None), type)
+    )
+    if len(members) > 1 or any(
+        isinstance(named, aliases) for member in members for named in (member, get_origin(member))
+    ):
         return True
     return any(_chooses(argument) for member in members for argument in get_args(member) if argument is not Ellipsis)
 
@@ -233,7 +250,7 @@ def _item_declarations(declared: _Declared | None, count: int) -> list[_Declared
 
 _ADAPTERS: dict[int, tuple[_Declared, Any]] = {}
 """A pydantic `TypeAdapter` per declaration, or ``None`` where none can be built: building one costs a schema.  At
-most 256 entries, each holding its declaration so the id stays its own."""
+most 256 entries (`_remember`)."""
 
 
 def _adapter(declared: _Declared) -> Any:
@@ -251,15 +268,15 @@ def _adapter(declared: _Declared) -> Any:
             adapter = adapter_class(annotation, config=getattr(owner, "model_config", None) or None)
         except (TypeError, RuntimeError, NameError):
             adapter = None
-    if len(_ADAPTERS) < 256:
-        _ADAPTERS[id(declared)] = (declared, adapter)
+    _remember(_ADAPTERS, id(declared), declared, adapter, 256)
     return adapter
 
 
 _FieldReads = tuple[tuple[str, tuple[tuple[object, ...], ...], _Declared], ...]
 
-_READS: dict[type, tuple[object, frozenset[str], _FieldReads]] = {}
-"""Per model class, with the validator they were read beside: the keys it declares and where each field is read.
+_READS: dict[type, tuple[object, frozenset[str], _FieldReads, _Declared | None]] = {}
+"""Per model class, with the validator they were read beside: the keys it declares, where each field is read, and
+what a typed `__pydantic_extra__` declares its extra values as.
 
 Worked out per level of every payload, it was most of the walk: a list of 1000 nested models asked for it 1000 times.
 A field whose type cannot hold a model is left out: a 300 by 300 grid of floats cost 35 ms to walk and holds nothing.
@@ -267,7 +284,7 @@ A rebuild replaces the validator, and with it what the class reads, so an entry 
 was made with.  At most 256 classes are kept, so models made on the fly cannot grow it without bound."""
 
 
-def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads]:
+def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads, _Declared | None]:
     validator = getattr(model, "__pydantic_validator__", None)
     known = _READS.get(model)
     if known is None or known[0] is not validator:
@@ -277,10 +294,29 @@ def _reads_of(model: Any) -> tuple[frozenset[str], _FieldReads]:
             for name, info in model.model_fields.items()
             if _may_hold_model(getattr(info, "annotation", None))
         )
-        known = (validator, frozenset(_declared_keys(model)), fields)
+        extras = _extra_values(model) if config.get("extra") == "allow" else None
+        known = (validator, frozenset(_declared_keys(model)), fields, extras)
         if model in _READS or len(_READS) < 256:
             _READS[model] = known
-    return known[1], known[2]
+    return known[1], known[2], known[3]
+
+
+def _extra_values(model: Any) -> _Declared | None:
+    """The declaration a typed `__pydantic_extra__` gives the extra values of *model*, as written.
+
+    ``None`` where it has none, and where it cannot be read: text, which pydantic read in the namespace of the frame
+    that defined the model, where a name can mean another type than in its module, and, from 3.14, annotations that
+    name what is defined only later, which reading them evaluates.
+    """
+    try:
+        for klass in getattr(model, "__mro__", ()):
+            own = inspect.get_annotations(klass)
+            if "__pydantic_extra__" in own:
+                annotation = own["__pydantic_extra__"]
+                return None if isinstance(annotation, str) else _declared_mapping_value((annotation, model))
+    except NameError:
+        return None
+    return None
 
 
 def _followed(payload: object, path: tuple[object, ...]) -> tuple[bool, object]:
@@ -318,8 +354,8 @@ def _is_model(value: object) -> bool:
 _CONTAINERS = (dict, list, tuple, set, frozenset)
 
 _REPLAYED = (0, -1)
-"""In the pairs a walk has seen, where no pair of ids can be: the walk is under a replay (`_replayed`), which reads no
-field where validation chose, since the validators it skipped could have steered the choice."""
+"""In the pairs a walk has seen, where no pair of ids can be: the walk is under a replay (`_replayed`), where a field
+whose type offers a choice cannot be read (`_steered`)."""
 
 
 class UncheckableDriftError(Exception):
@@ -346,16 +382,16 @@ def contract_drift(
             inside the JSON text it is) cannot be paired with a model built from it: a set, a resized list or an
             object wrapped into either whose built items are not all one model class, or whose raw item that class
             refuses on its own, dict keys coercion merged, a part of another shape than what was built, an iterable
-            validation read up or left lazy.  The payload is read as validation left it: a validator renaming keys,
-            changing the payload in place, or reordering or rewriting a container's items without changing its size
-            is not seen, and the walk reads those items by position.
+            validation read up or left lazy, raw items no built item is left for that their declared type does not
+            build again or that it declares through a choice.  The payload is read as validation left it: a validator
+            renaming keys, changing the payload in place, or reordering or rewriting a container's items without
+            changing its size is not seen, and the walk reads those items by position.
     """
     model = type(instance)
-    declared, fields = _reads_of(model)
-    if _REPLAYED in _seen:
-        fields = tuple(field for field in fields if not _chooses(field[2][0]))
+    declared, fields, extras = _reads_of(model)
+    replayed = _REPLAYED in _seen
     if getattr(model, "__pydantic_root_model__", False):
-        return _value_drift(payload, instance.root, path, _seen, fields[0][2]) if fields else []
+        return _declared_drift(payload, instance.root, path, _seen, fields[0][2], replayed) if fields else []
     if not isinstance(payload, (dict, collections.abc.Mapping)):
         _refuse_if_key_hides(
             payload, instance, path, f"the payload holds a {type(payload).__name__} where a model was built"
@@ -367,13 +403,13 @@ def contract_drift(
     if getattr(model, "model_config", {}).get("extra") != "allow":
         drift += [f"{prefix}{key}" for key in payload if key not in declared]
     else:
-        # extras typed through `__pydantic_extra__` are built too; untyped ones are the payload's own objects
-        for key, built in (getattr(instance, "__pydantic_extra__", None) or {}).items():
-            if key in payload:
-                drift += _value_drift(payload[key], built, f"{prefix}{key}", seen)
+        drift += _extras_drift(payload, instance, prefix, seen, extras, replayed)
     for name, sources, annotated in fields:
         found, raw = _raw_field(payload, sources)
         if not found:
+            continue
+        if replayed and _chooses(annotated[0]):
+            drift += _steered(raw, f"{prefix}{name}")
             continue
         value = getattr(instance, name, None)
         # a scalar built from a scalar holds nothing to pair
@@ -381,6 +417,47 @@ def contract_drift(
             continue
         drift += _value_drift(raw, value, f"{prefix}{name}", seen, annotated)
     return drift
+
+
+def _extras_drift(
+    payload: collections.abc.Mapping,
+    instance: Any,
+    prefix: str,
+    seen: frozenset[tuple[int, int]],
+    declared: _Declared | None,
+    replayed: bool,
+) -> list[str]:
+    """Drift under the extras of a model that allows them: built through a typed `__pydantic_extra__` and walked as it
+    *declared* them; untyped ones are the payload's own objects."""
+    return [
+        entry
+        for key, built in (getattr(instance, "__pydantic_extra__", None) or {}).items()
+        if key in payload
+        for entry in _declared_drift(payload[key], built, f"{prefix}{key}", seen, declared, replayed)
+    ]
+
+
+def _declared_drift(
+    raw: object,
+    value: object,
+    path: str,
+    seen: frozenset[tuple[int, int]],
+    declared: _Declared | None,
+    replayed: bool,
+) -> list[str]:
+    """Drift under a value its model declared, a root's or an extra's; `_steered` under a replay where validation built
+    it through a declared type that offers a choice, or one that cannot be read."""
+    if replayed and value is not raw and (declared is None or _chooses(declared[0])):
+        return _steered(raw, path)
+    return _value_drift(raw, value, path, seen, declared)
+
+
+def _steered(raw: object, path: str) -> list[str]:
+    """Nothing to read under a part a replay built where its type offered a choice, which the validators the replay
+    skipped could have steered; a refusal where a key could hide in it."""
+    if _holds(raw, _is_mapping, read_text=True):
+        raise UncheckableDriftError(path, "which of its declared types it became depends on validators not run again")
+    return []
 
 
 def exactness_failure(pairs: Any, *, carrier: str) -> str | None:
@@ -555,8 +632,8 @@ def _unpaired(
     could hide a key is validated again on its own by that class and walked beside what it becomes.  Where validation
     kept no model at all, the raw items are validated again whole by the type the field *declared*, in its model's
     config, and what that builds is walked (`_replayed`).  Anything else refuses with *reason*: items of mixed classes,
-    an item that does not validate on its own, which needed its parent, and, where equal items *merged*, a class whose
-    own `__eq__` could have merged an item of another class into it.
+    an item that does not validate on its own, which needed its parent, where equal items *merged*, a class whose own
+    `__eq__` could have merged an item of another class into it, and raw items no replay can tell the type of.
     """
     if not _holds(raw, _is_mapping, read_text=True):
         return []
@@ -565,7 +642,7 @@ def _unpaired(
         if model is None or (merged and not _equal_only_within_its_class(model)):
             raise UncheckableDriftError(path, reason)
         return _revalidated(parts, model, path, seen, reason)
-    return [] if declared is None else _replayed(parts, path, seen, reason, declared)
+    return _replayed(parts, path, seen, reason, declared)
 
 
 def _replayed(
@@ -573,33 +650,35 @@ def _replayed(
     path: str,
     seen: frozenset[tuple[int, int]],
     reason: str,
-    declared: _Declared,
+    declared: _Declared | None,
 ) -> list[str]:
     """Drift under raw items validation left without a model: validated again whole as the *declared* type, in Python
     mode as validation read them (`_replay_target`).  All of them are replayed first, so a fixed tuple's positions
     see what validation saw; where pydantic refuses that, only the items that could hide a key.  What that builds is
     paired item by item; a set it builds tells the one class they became.
 
-    The replay skips the field's own validators, so whatever they did to the payload is missing from it.  Where that
-    could have steered a choice (`_chooses`), nothing is read below it; where pydantic builds nothing from the items,
-    or no sequence of as many, nothing is read at all, since its refusal says nothing about the payload.
+    The replay skips the validators of the field itself, so whatever they did to the payload is missing from it, and
+    it refuses with *reason* wherever that leaves the type of the items open: a declaration that offers a choice
+    (`_chooses`) or none at all, items pydantic builds nothing from, or no sequence of as many.
     """
-    if _chooses(declared[0]):
-        return []
+    if declared is None or _chooses(declared[0]):
+        raise UncheckableDriftError(path, reason)
     replayed = _replay_target(declared)
     adapter = _adapter(replayed)
     if adapter is None:
-        return []
-    rebuilt = _replay(adapter, parts)
+        raise UncheckableDriftError(path, reason)
+    origin = get_origin(replayed[0])
+    kind = origin if origin in (tuple, collections.deque) else list
+    rebuilt = _replay(adapter, parts, kind)
     if rebuilt is None:
         parts = [(label, part) for label, part in parts if _holds(part, _is_mapping, read_text=True)]
-        rebuilt = _replay(adapter, parts)
+        rebuilt = _replay(adapter, parts, kind)
     seen = seen | {_REPLAYED}
     if isinstance(rebuilt, collections.abc.Set):
         return _unpaired([part for _, part in parts], parts, rebuilt, path, seen, reason, merged=True)
     elements = _items_of(rebuilt)
     if elements is None or len(elements) != len(parts):
-        return []
+        raise UncheckableDriftError(path, reason)
     declarations = _item_declarations(replayed, len(elements))
     return [
         entry
@@ -608,10 +687,11 @@ def _replayed(
     ]
 
 
-def _replay(adapter: Any, parts: list[tuple[str, object]]) -> object:
-    """What *adapter* builds from the raw items of *parts*, or ``None`` where pydantic refuses them."""
+def _replay(adapter: Any, parts: list[tuple[str, object]], kind: Callable[[list[object]], object]) -> object:
+    """What *adapter* builds from the raw items of *parts*, handed over as the *kind* of container a strict config
+    takes for its type, or ``None`` where pydantic refuses them."""
     try:
-        return adapter.validate_python([part for _, part in parts])
+        return adapter.validate_python(kind([part for _, part in parts]))
     # a validation error, or a schema pydantic builds only on first use and then refuses
     except (ValueError, TypeError, RuntimeError, NameError):
         return None
@@ -635,8 +715,7 @@ def _replay_target(declared: _Declared) -> _Declared:
     ):
         member = types.GenericAlias(list, get_args(member) or (Any,))
     target = (member, owner)
-    if len(_DECLARED) < 1024:
-        _DECLARED[key] = (declared, target)
+    _remember(_DECLARED, key, declared, target, 1024)
     return target
 
 

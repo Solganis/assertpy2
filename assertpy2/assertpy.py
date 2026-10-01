@@ -707,15 +707,15 @@ def assert_conforms(
     filtered list, an object wrapped into a list) are validated again by their model class when they all
     became one, which runs that class's validators once more for them, and JSON text is read as the original
     JSON input.  Raw items a validator left no built item for (an emptied list) are checked against the type
-    their field declares: validated again as it, without the field's own validators, so a validator that would
-    have built them otherwise is not seen.  Items pydantic will not build that type from, and anything below a
-    union of two or more types besides ``None`` or below a named type alias, are not checked.  What still
-    cannot be paired (items of mixed classes in a set or a resized list, merged dict keys, a generator
-    consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be checked`` and the reason.
-    It reads the payload as validation left it: a validator that renames keys, changes the payload in place,
-    or reorders or rewrites the items of a container without changing its size is not seen, and those items
-    are read by position.  A model inside a container of plain values (``list[Any]``) or inside a dataclass is
-    not reached.
+    their field declares: validated again as it, which runs the item model's validators but not the field's
+    own, so a field validator that would have built them otherwise is not seen.  What still cannot be paired
+    (items of mixed classes in a set or a resized list, emptied items the declared type does not build or
+    declares through a union of two or more types besides ``None`` or a named type alias, merged dict keys, a
+    generator consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be checked`` and the
+    reason.  It reads the payload as validation left it: a validator that renames keys, changes the payload in
+    place, or reorders or rewrites the items of a container without changing its size is not seen, and those
+    items are read by position.  A model inside a container of plain values (``list[Any]``) or inside a
+    dataclass is not reached.
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)

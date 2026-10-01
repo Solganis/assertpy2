@@ -395,10 +395,12 @@ A few refinements keep it precise:
   original JSON input.
 - where a validator left no built item to tell (a list it emptied), the raw items are checked against the
   type the field declares: validated again as that type, in its model's config, and what that builds is
-  checked. The field's own validators are not run again, so one that would have built them otherwise
-  (another class, a subclass of the declared one, renamed keys) is not seen. Nothing is checked where those
-  validators could have steered a choice: items pydantic will not build that type from, and anything below
-  a union of two or more types besides `None` or below a named type alias.
+  checked. The validators of the field itself are not run again, so one that would have built the items
+  otherwise (another class, a subclass of the declared one, renamed keys) is not seen. The validators of the
+  item's model do run for them, a second time where the field emptied the list after validating it. Where
+  the field's validators could have decided what the items became, it fails with `cannot be checked`, on a
+  clean payload too: items pydantic will not build the declared type from, and a union of two or more types
+  besides `None` or a named type alias, in the declared type or in a model built from it.
 - where neither works (items of mixed model classes in a set or a resized list, an item that validates
   only through its parent, dict keys merged by coercion, a generator consumed during validation, an
   `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather
