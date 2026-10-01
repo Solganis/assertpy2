@@ -649,7 +649,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             if _keyed_types_differ(actual, expected):
                 # before the walk: it descends keys into values, so `True` and `1` keys present the same values
                 return "leaf"
-            if type(actual) not in _EQ_ATOMIC and _guarded_equal(actual, expected):
+            if type(actual) not in _EQ_ATOMIC and _walked_equal(actual, expected):
                 # `[True] == [1]`: a container says nothing about the types inside it, so the walk keeps going
                 return "strict"
         if config.tolerance is not None and (
@@ -662,7 +662,7 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
             config.comparators
             and actual is not expected
             and type(actual) not in _EQ_ATOMIC
-            and _guarded_equal(actual, expected)
+            and _walked_equal(actual, expected)
         ):
             # a container's `==` says nothing of what a comparator says of the leaves inside it, so the walk goes on
             return "strict"
@@ -690,9 +690,19 @@ def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root:
         # the same rule a container's own `==` applies to its members, and the verdict came from that `==`:
         # without it the diff listed a NaN both sides hold as differing, and the hint blamed it
         return "equal"
-    if _guarded_equal(actual, expected):
+    equal = _walked_equal(actual, expected)
+    if equal:
         return "equal"
-    return "leaf" if config is not None and _kinds_never_equal(actual, expected) else "recurse"
+    return "leaf" if equal is False and config is not None and _kinds_never_equal(actual, expected) else "recurse"
+
+
+def _walked_equal(actual, expected) -> bool | None:
+    """`_guarded_equal` for a walk, which has its own answer where ``==`` has none: ``None`` for a graph ``==``
+    runs out of stack on, which the walk then enters, counting a pair it meets again as equal."""
+    try:
+        return _guarded_equal(actual, expected)
+    except RecursionError:
+        return None
 
 
 def _spec_matches(key, value, specs) -> bool:

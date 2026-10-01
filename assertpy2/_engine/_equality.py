@@ -97,13 +97,13 @@ def comparable_fields(obj: object) -> dict | None:
     `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.
     """
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return cast("dict", _flattened(obj, frozenset({"dataclass"})))
+        return cast("dict", _fields_through(obj, frozenset({"dataclass"})))
     if is_namedtuple(obj):
         return TakenApart(type(obj), obj._asdict())
     if is_model_dump_object(obj):
-        return cast("dict", _flattened(obj, frozenset({"model", "dataclass"})))
+        return cast("dict", _fields_through(obj, frozenset({"model", "dataclass"})))
     if is_attrs_instance(obj):
-        return cast("dict", _flattened(obj, frozenset({"attrs"})))
+        return cast("dict", _fields_through(obj, frozenset({"attrs"})))
     builtin_kinds = (
         type,
         numbers.Number,
@@ -161,8 +161,66 @@ def _flattened(node: Any, through: frozenset[str]) -> Any:
     if isinstance(node, (list, tuple)):
         return type(node)(_flattened(item, through) for item in node)
     if isinstance(node, dict):
-        return {_flattened(key, through): _flattened(value, through) for key, value in node.items()}
+        # a key stays as held: taken apart, a record used as one could not be hashed
+        return {key: _flattened(value, through) for key, value in node.items()}
     return node
+
+
+def _fields_through(node: object, through: frozenset[str]) -> Any:
+    """*node* taken apart (`_flattened`), and where that does not end, because the value leads back to itself, taken
+    apart once per value met (`_flattened_once`).
+
+    The second way is not the first one's price: remembering every value cost a fifth of a comparison under
+    ``ignore``, which a value that holds itself now pays alone, after one walk that ran out of stack.
+    """
+    try:
+        return _flattened(node, through)
+    except RecursionError:
+        return _flattened_once(node, through, {})
+
+
+def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) -> Any:
+    """`_flattened`, with each value taken apart once: met again, it is what it came apart into the first time.
+
+    So a value that holds itself comes apart into fields that hold themselves, and the walk over them meets the
+    pair again as it does in a graph of dicts.  A list, tuple or dict met again while it is still being rebuilt
+    stays as it is.  Every value met is held by the one being taken apart, so its id stays its own.
+    """
+    if id(node) in memo:
+        return memo[id(node)]
+    held = _held(node, through)
+    if held is not None:
+        fields, compared_by = held
+        taken = memo[id(node)] = TakenApart(type(node), {}, compared_by)
+        for name, value in fields.items():
+            taken[name] = value if name in taken.compared_by else _flattened_once(value, through, memo)
+        return taken
+    if not isinstance(node, (list, tuple, dict)):
+        return node
+    memo[id(node)] = node
+    if isinstance(node, dict):
+        rebuilt: Any = {key: _flattened_once(value, through, memo) for key, value in node.items()}
+    elif hasattr(node, "_fields"):
+        rebuilt = type(node)(*[_flattened_once(item, through, memo) for item in node])
+    else:
+        rebuilt = type(node)(_flattened_once(item, through, memo) for item in node)
+    memo[id(node)] = rebuilt
+    return rebuilt
+
+
+def _held(node: Any, through: frozenset[str]) -> tuple[collections.abc.Mapping, collections.abc.Mapping | None] | None:
+    """The fields `_flattened` takes *node* apart into, as *node* holds them, and the keys attrs compares some of
+    them through; ``None`` for a value it does not take apart."""
+    if "dataclass" in through and dataclasses.is_dataclass(node) and not isinstance(node, type):
+        return {field.name: getattr(node, field.name) for field in dataclasses.fields(node) if field.compare}, None
+    if "attrs" in through and is_attrs_instance(node):
+        compared = [attribute for attribute in node.__attrs_attrs__ if attribute.eq is not False]
+        keys = {attribute.name: _key_of(attribute) for attribute in compared}
+        held = {attribute.name: getattr(node, attribute.name) for attribute in compared}
+        return held, {name: key for name, key in keys.items() if key is not None}
+    if "model" in through and is_model_dump_object(node):
+        return model_field_values(node), None
+    return None
 
 
 def _key_of(attribute: Any) -> Any:
@@ -437,7 +495,12 @@ def _mapping_opened(
 
     ignoring, including = key_specs_given(ignore), key_specs_given(include)
     if not (ignoring or including or config is not None):
-        return not _guarded_equal(actual, expected)
+        try:
+            return not _guarded_equal(actual, expected)
+        except RecursionError:
+            # inside a walk, a graph `==` cannot finish is taken key by key below, where a pair met again is equal
+            if not on_path:
+                raise
 
     ignores = ignore_specs(ignore) if ignoring else []
     includes = include_specs(include) if including else []

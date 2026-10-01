@@ -236,7 +236,9 @@ The message then tags each with its type, so `assert_that("1").is_equal_to(1)` r
     Cycle detection covers every walker this library owns:
 
     - the diff rendering, and the selective-comparison path (`ignore` / `include`), which treat a
-      revisited pair as equal rather than recursing
+      revisited pair as equal rather than recursing. That covers mappings, and dataclasses, attrs
+      instances and models, which the selective path takes apart field by field. A cycle that runs
+      through a list or tuple is compared by that container's own `==`, and raises as Python does
     - a contract snapshot, which records a revisited node as `<circular ref>`
     - a value snapshot, which fails with a message naming the cycle, since json cannot represent one
 

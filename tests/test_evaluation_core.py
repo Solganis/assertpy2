@@ -431,19 +431,21 @@ class TestTheCoreItself:
         assert_that(mapping_shaped(42)).is_false()
 
     def test_a_cycle_is_answered_rather_than_recursed_into(self):
-        """The guard covers the path the core walks itself, which is the one with filtering.
+        """The guard covers the paths the core walks itself: with filtering, and under a compare config, where a
+        `==` that runs out of stack hands the pair to the walk.
 
-        Two *different* self-referential mappings still reach Python's own `==` when nothing is
-        filtered, and that raises `RecursionError` from the interpreter. Measured, not assumed: it did
-        so before this core existed too, so the guard is not claimed to be wider than it is.
+        Two *different* self-referential mappings still reach Python's own `==` when nothing is filtered and no
+        config is given, and that raises `RecursionError` from the interpreter, as it did before this core existed.
         """
         left: dict = {"name": "a"}
         right: dict = {"name": "a"}
         left["self"] = left
         right["self"] = right
         assert_that(mapping_differs(left, right, ignore="nothing")).is_false()
-        with pytest.raises(RecursionError):
-            mapping_differs(left, right, config=_CompareConfig())
+        assert_that(mapping_differs(left, right, config=_CompareConfig())).is_false()
+        for bare in (lambda: mapping_differs(left, right), lambda: values_differ(left, right, None)):
+            with pytest.raises(RecursionError):
+                bare()
 
     def test_identity_short_circuits_before_equality(self):
         # NaN is the one value where the two disagree, and the walker must not be asked about it twice

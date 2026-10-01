@@ -774,17 +774,20 @@ class TestStrictTypes:
         rows = [(entry.path, entry.actual, entry.expected) for entry in exc_info.value.diff.entries]
         assert_that(rows).is_equal_to([("b", 2, None)])
 
-    def test_a_self_referential_pair_behaves_the_same_either_way(self):
-        # nothing new on a cycle: two distinct self-referential structures already exhaust the stack without
-        # the flag, and so does bare `==` (CPython's guard covers `a is b`, not this)
+    def test_a_self_referential_pair_is_walked_under_the_flag_and_left_to_python_without_it(self):
+        # bare `==` on two distinct self-referential structures exhausts the stack (CPython's guard covers `a is b`,
+        # not this); under the flag the walk is the library's own, and a pair met again is equal
         actual = {"x": 1}
         actual["self"] = actual
         expected = {"x": 1}
         expected["self"] = expected
         with pytest.raises(RecursionError):
             assert_that(actual).is_equal_to(expected)
-        with pytest.raises(RecursionError):
+        assert_that(actual).is_equal_to(expected, strict_types=True)
+        expected["x"] = True
+        with pytest.raises(AssertionFailure) as caught:
             assert_that(actual).is_equal_to(expected, strict_types=True)
+        assert_that([entry.path for entry in caught.value.diff.entries]).contains("x")
 
     @pytest.mark.parametrize(
         ("actual", "expected"),

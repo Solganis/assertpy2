@@ -1,8 +1,11 @@
 import collections
+import dataclasses
+import typing
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that
+from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2._engine import _equality
 
 
 def test_ignore_key():
@@ -445,6 +448,149 @@ def test_cyclic_dict_under_ignore_is_treated_as_equal():
     expected = {"k": 2}
     expected["self"] = expected
     assert_that(actual).is_equal_to(expected, ignore="k")
+
+
+@dataclasses.dataclass
+class _Link:
+    next: "_Link | None" = None
+    value: int = 0
+    items: list = dataclasses.field(default_factory=list)
+
+
+def _ring(value, length=1, make=_Link):
+    """*length* nodes holding *value*, each one's ``next`` the following one and the last one's the first."""
+    nodes = [make(value=value) for _ in range(length)]
+    for index, node in enumerate(nodes):
+        node.next = nodes[(index + 1) % length]
+    return nodes[0]
+
+
+def _dict_ring(value, length=1):
+    nodes = [{"value": value} for _ in range(length)]
+    for index, node in enumerate(nodes):
+        node["next"] = nodes[(index + 1) % length]
+    return nodes[0]
+
+
+class TestAValueThatHoldsItselfUnderIgnoreAndInclude:
+    """Taken apart field by field, a dataclass, an attrs instance or a model that leads back to itself came apart
+    without end, whether or not the field that led back was compared."""
+
+    @pytest.mark.parametrize("length", [1, 2, 3])
+    def test_the_field_that_leads_back_is_left_out(self, length):
+        assert_that(_ring(1, length)).is_equal_to(_ring(1, length), ignore="next")
+        assert_that(_ring(1, length)).is_equal_to(_ring(1, length), include="value")
+        assert_that(match.equal_to(_ring(1, length), ignore="next").matches(_ring(1, length))).is_true()
+
+    @pytest.mark.parametrize("ring", [_ring, _dict_ring])
+    @pytest.mark.parametrize("length", [1, 2, 3])
+    def test_the_field_that_leads_back_is_compared_and_a_pair_met_again_is_equal(self, ring, length):
+        assert_that(ring(1, length)).is_equal_to(ring(1, length), ignore="items")
+
+    @pytest.mark.parametrize("ring", [_ring, _dict_ring])
+    def test_a_difference_beside_the_cycle_fails_and_is_named(self, ring):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(ring(1, 2)).is_equal_to(ring(2, 2), ignore="items")
+        assert_that([entry.path for entry in caught.value.diff.entries]).contains("value")
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(ring(1)).is_equal_to(ring(2), include="value")
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in caught.value.diff.entries]).is_equal_to(
+            [("value", 1, 2)]
+        )
+
+    def test_a_value_reached_twice_without_a_cycle_is_compared_both_times(self):
+        shared, other = _Link(value=1), _Link(value=2)
+        actual = [_Link(value=0, items=[shared, shared])]
+        assert_that(actual).is_equal_to([_Link(value=0, items=[_Link(value=1), _Link(value=1)])], ignore="next")
+        with pytest.raises(AssertionFailure):
+            assert_that(actual).is_equal_to([_Link(value=0, items=[_Link(value=1), other])], ignore="next")
+
+    def test_an_attrs_instance_and_a_model_that_hold_themselves(self):
+        attrs = pytest.importorskip("attrs", reason="attrs not installed")
+        pydantic = pytest.importorskip("pydantic", reason="pydantic not installed")
+
+        @attrs.define
+        class Knot:
+            value: int = 0
+            next: object = None
+
+        class Chain(pydantic.BaseModel):
+            value: int = 0
+            next: typing.Any = None
+
+        for make in (Knot, Chain):
+            assert_that(_ring(1, 2, make)).is_equal_to(_ring(1, 2, make), ignore="next")
+            assert_that(_ring(1, 2, make)).is_equal_to(_ring(1, 2, make), ignore="other")
+            with pytest.raises(AssertionFailure):
+                assert_that(_ring(1, 2, make)).is_equal_to(_ring(2, 2, make), ignore="other")
+
+    def test_a_cycle_through_a_list_is_the_lists_own_comparison(self):
+        """A list is compared by its own ``==``, which Python does not finish on a graph that holds itself."""
+        actual, expected = _Link(value=1), _Link(value=1)
+        actual.items.append(actual)
+        expected.items.append(expected)
+        assert_that(actual).is_equal_to(expected, ignore="items")
+        with pytest.raises(RecursionError):
+            assert_that(actual).is_equal_to(expected, ignore="next")
+
+    def test_both_ways_of_taking_apart_agree_where_nothing_leads_back(self):
+        """The way that remembers runs only after the plain one ran out of stack, so nothing else compares them."""
+        attrs = pytest.importorskip("attrs", reason="attrs not installed")
+        pydantic = pytest.importorskip("pydantic", reason="pydantic not installed")
+        point = collections.namedtuple("point", "x y")
+
+        @attrs.define
+        class Tagged:
+            name: str = attrs.field(eq=str.lower)
+            hidden: int = attrs.field(eq=False, default=0)
+            inner: object = None
+
+        @dataclasses.dataclass
+        class Row:
+            key: int
+            cells: object
+            note: str = dataclasses.field(default="", compare=False)
+
+        class Sheet(pydantic.BaseModel):
+            rows: list
+            meta: dict
+
+        row = Row(1, [point(1, Row(2, ("a", {"k": Row(3, None)})))], note="left out")
+        values = [
+            (row, frozenset({"dataclass"})),
+            (Tagged("A", 1, Tagged("b", 2, [row])), frozenset({"attrs"})),
+            (
+                Sheet(rows=[row, row], meta={"r": row, "nested": Sheet(rows=[], meta={})}),
+                frozenset({"model", "dataclass"}),
+            ),
+        ]
+        for value, through in values:
+            plain = _equality._flattened(value, through)
+            assert_that(_equality._flattened_once(value, through, {})).is_equal_to(plain)
+            assert_that(repr(_equality._flattened_once(value, through, {}))).is_equal_to(repr(plain))
+
+    @pytest.mark.parametrize("length", [0, 1])
+    def test_a_record_used_as_a_dict_key_stays_a_key(self, length):
+        """Taken apart like a value, a frozen dataclass used as a key could not be hashed, cycle or not."""
+
+        @dataclasses.dataclass(frozen=True)
+        class Key:
+            value: int
+
+        def holder(count):
+            link = _ring(1, length) if length else _Link(value=1)
+            link.items = {Key(1): count, (Key(2), "b"): [Key(3)]}
+            return link
+
+        assert_that(holder(0)).is_equal_to(holder(0), ignore="next")
+        with pytest.raises(AssertionFailure):
+            assert_that(holder(0)).is_equal_to(holder(1), ignore="next")
+
+    def test_a_tuple_met_again_while_it_is_taken_apart_stays_as_it_is(self):
+        held: list = []
+        pair = (_Link(value=1), held)
+        held.append(pair)
+        assert_that(_Link(value=0, items=[pair])).is_equal_to(_Link(value=0, items=[pair]), ignore="next")
 
 
 class TestTheDiffHonoursTheFilters:
