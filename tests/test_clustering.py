@@ -36,6 +36,7 @@ from assertpy2._clustering import (
     signature,
     stable_repr,
 )
+from assertpy2.errors import DiffEntry, DiffResult, Step
 from assertpy2.pytest_plugin import (
     _cluster_minimum,
     _observation_from_wire,
@@ -136,6 +137,26 @@ class _Payload:
         return isinstance(other, _Payload) and other.tail == self.tail
 
     __hash__ = None
+
+
+class TestEnteringJsonTextIsNoPlaceOfItsOwn:
+    """A step that enters JSON text holds what the text decodes to, which is another object in every run.  Keyed on
+    it, a difference inside the text had no location, and fell out of the summary."""
+
+    def test_a_difference_inside_json_text_is_located_by_the_keys_around_the_step(self):
+        decoded = {"x": 1, "extra": 2}
+        inside = DiffEntry(
+            path="f.extra",
+            steps=(Step("key", "f"), Step("json", decoded), Step("key", "extra")),
+            actual=2,
+            absent="expected",
+        )
+        beside = DiffEntry(path="f.extra", steps=(Step("key", "f"), Step("key", "extra")), actual=2, absent="expected")
+        found = [signature(DiffResult(kind="match", entries=[entry]), entry) for entry in (inside, beside)]
+        assert_that(found[0]).is_equal_to(found[1])
+        assert_that((found[0].located, found[0].where, is_well_formed(found[0]))).is_equal_to((True, "f.extra", True))
+        only = DiffEntry(path=".", steps=(Step("json", decoded),), actual=decoded, expected="cannot be checked")
+        assert_that(signature(DiffResult(kind="match", entries=[only]), only)).is_none()
 
 
 class TestTheKindsThatHaveNoCoordinate:

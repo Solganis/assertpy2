@@ -366,8 +366,9 @@ composes with `exact=True` for per-element drift (drift paths are prefixed with 
 after the live API grows new fields - your test is green while the contract has drifted.
 
 `exact=True` catches that: it fails when the payload carries any field the model does not declare,
-in the models the payload became inside lists, tuples, sets, dicts, unions and root models, reporting the
-exact paths. A model inside a dataclass, or inside a container of plain values, is not reached (see below).
+in the models, dataclasses and `TypedDict`s the payload became inside lists, tuples, sets, dicts, unions
+and root models, reporting the exact paths. A model inside a container of plain values is not reached (see
+below).
 
 ```python
 # response grew a `promo_code` field, and its nested customer grew `loyalty_tier`
@@ -378,7 +379,38 @@ Expected <{...}> to conform exactly to <OrderModel>, but it carries 2 undeclared
 the model does not declare: ['customer.loyalty_tier', 'promo_code']
 ```
 
-A few refinements keep it precise:
+The failure carries the same finds as a [structured diff](../guides/errors.md#paths-a-program-can-follow),
+one entry per undeclared field with the value the payload sent there:
+
+<!-- docs-guard: skip -->
+```python
+try:
+    assert_conforms(response.json(), OrderModel, exact=True)
+except AssertionFailure as failure:
+    for entry in failure.diff.entries:
+        print(entry.path, entry.actual, [step.value for step in entry.steps])
+# customer.loyalty_tier gold ['customer', 'loyalty_tier']
+# promo_code SPRING ['promo_code']
+```
+
+Each of those entries has `absent == "expected"`. Its `steps` lead into the payload by the keys the walk
+read, so by the alias where the path names the field. Where a field holds JSON text, a step of kind `json`
+carries what the text decodes to, and the steps after it lead on from there. A part that cannot be checked is
+a single entry holding that part, with the reason in `expected`.
+
+What the check reads, in short:
+
+| Part of the payload | How it is read |
+| --- | --- |
+| the keys of every model, dataclass and `TypedDict` it became | as the payload sent them, aliases included |
+| a plain dict or list a validator changed in place | as it was sent, put back for the check |
+| items a validator filtered, wrapped into a list or gathered into a set | validated again by the one class they became, or by the type the field declares |
+| a part no reading pairs with what it became | not guessed: the check fails with `<path> cannot be checked` |
+| keys a validator renames, items it rewrites without changing their count | not seen: read under the name and at the position the payload sent |
+| a dict one of several declared `TypedDict`s built | followed as whichever declares it, and a key it lost fails with `cannot be checked` |
+| a model inside a container of plain values | not reached |
+
+The details behind each row:
 
 - it is **alias-aware** - an aliased payload key is not mistaken for drift - and respects a model that
   opts into extras (`model_config = ConfigDict(extra="allow")`)
@@ -406,13 +438,34 @@ A few refinements keep it precise:
   `Iterable[Model]` validated lazily), it fails with `<path> cannot be checked:` and the reason rather
   than guess. A part in which no key can hide (a number, text that is not JSON, a model passed as is) is
   never refused.
-- it reads the payload as validation left it. A validator that renames keys, changes the payload in place,
-  or reorders or rewrites the items of a container without changing its size is not seen, and those items
+- it reads the payload as it was sent. Where the model runs code of its own during validation (a
+  validator, `model_post_init`, a custom `__init__`), the payload is kept before validation, and the plain
+  dicts and lists that code changed in place are put back for the check, then returned to what validation
+  left. So a validator that pops a key from its input is read like one that returns a copy without it. A
+  dict or list subclass changed in place is not put back.
+- what a validator does to bridge the payload to the model is not seen. A key it renames is reported under
+  the name the payload sent, and items it reorders or rewrites without changing the size of their container
   are read by position. A validator that drops built items of one member of a union is read as if every
   raw item became the class the remaining ones became.
 - it follows the models where a field's type can hold one, and under `Any`. A model a validator puts inside
-  a container of plain values (`list[Any]`, `dict[str, int]`), and a model inside a dataclass or another
-  class that is not a model, are not reached.
+  a container of plain values (`list[Any]`, `dict[str, int]`), and a model inside a class that is neither a
+  model nor a dataclass, are not reached.
+- a dataclass, pydantic's or a plain one, is checked like a model: a key for every field its `__init__`
+  takes is declared, an `InitVar` among them and a field with `init=False` not, and what its fields hold is
+  followed. Its keys and aliases are read off the schema pydantic built.
+- a `TypedDict` is checked for its own keys, and its values are followed, as the schema pydantic built
+  declares them. That holds where its annotation is text (`from __future__ import annotations`) and where a
+  type variable of a parametrized one stands for it.
+- a `TypedDict` builds a plain dict, which does not say what built it. Beside types that never build a dict
+  (`Point | int`, `Point | None`) it is read as that `TypedDict`. Where a field declares several
+  (`Point | Other`), one whose `Literal` fields do not hold what the dict holds is ruled out, so a tag tells
+  them apart, with a discriminator or without. That is done only in a model that runs no code of its own,
+  since a validator can rewrite the tag after the fact. If more than one is left, or a type beside them may
+  build a dict too (`dict[str, int]`, `Any`, a custom type), the check does not guess which one validation
+  took. A clean payload passes. A key the payload sent that the built dict lost fails with
+  `<path> cannot be checked`, and so does a field two of them read from different keys when the payload
+  sends both. A key read through an alias is not lost. What the dict holds is followed as whatever each of
+  the declared types says of it.
 
 ## Set up your type checker
 

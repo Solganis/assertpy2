@@ -1009,7 +1009,8 @@ def test_undeclared_key_is_always_detected(payload, extra_key):
 
     assume(extra_key != "id")
     grown = {**payload, "id": 1, extra_key: 1}
-    assert_that(contract_drift(grown, Item.model_validate(grown))).contains(extra_key)
+    found = contract_drift(grown, Item.model_validate(grown))
+    assert_that([(named, sent) for (_, named, _), sent in found]).contains((extra_key, 1))
 
 
 @settings(deadline=None)
@@ -1029,6 +1030,69 @@ def test_contract_drift_is_total(payload):
     # a payload the instance was not built from, as a before-validator can leave it: answered or refused, nothing else
     with contextlib.suppress(UncheckableDriftError):
         contract_drift(payload, Item(id=1, sub=Sub(x=1), items=[Sub(x=2)]))
+
+
+def _grown(draw, value):
+    """*value* with undeclared keys put into some of the model payloads under it, and how many were put."""
+    if isinstance(value, dict):
+        grown, count = {}, 0
+        for key, part in value.items():
+            grown[key], added = _grown(draw, part)
+            count += added
+        # a mapping of rows by name takes any key for a row
+        names = ["extra", "more", "0"] if value.keys() & {"x", "sub", "rows"} else []
+        for name in draw(st.lists(st.sampled_from(names), unique=True, max_size=2)) if names else []:
+            grown[name] = draw(_json_atoms | st.just([1]) | st.just({"k": 1}))
+            count += 1
+        return grown, count
+    if isinstance(value, list):
+        parts = [_grown(draw, part) for part in value]
+        return [part for part, _ in parts], sum(added for _, added in parts)
+    return value, 0
+
+
+@settings(deadline=None)
+@given(data=st.data(), widths=st.lists(st.integers(0, 3), min_size=3, max_size=3))
+def test_every_undeclared_key_is_an_entry_whose_steps_lead_back_to_it(data, widths):
+    pytest.importorskip("pydantic", reason="pydantic not installed")
+    from pydantic import BaseModel
+
+    class Sub(BaseModel):
+        x: int
+
+    class Row(BaseModel):
+        sub: Sub
+        subs: list[Sub]
+
+    class Item(BaseModel):
+        rows: list[Row]
+        named: dict[str, Row]
+        pair: tuple[Sub, list[Sub]]
+
+    def row(width):
+        return {"sub": {"x": 1}, "subs": [{"x": index} for index in range(width)]}
+
+    clean = {
+        "rows": [row(widths[0]) for _ in range(widths[1])],
+        "named": {str(index): row(1) for index in range(widths[2])},
+        "pair": [{"x": 1}, [{"x": 2}]],
+    }
+    payload, count = _grown(data.draw, clean)
+    if not count:
+        assert_conforms(payload, Item, exact=True)
+        return
+    with pytest.raises(AssertionFailure) as caught:
+        assert_conforms(payload, Item, exact=True)
+    entries = caught.value.diff.entries
+    assert_that(entries).is_length(count)
+    for entry in entries:
+        reached = payload
+        for step in entry.steps:
+            reached = reached[step.value]
+        assert_that(reached).described_as(entry.path).is_same_as(entry.actual)
+        assert_that(entry.absent).is_equal_to("expected")
+        rendered = "".join(f"[{step.value}]" if step.kind == "index" else f".{step.value}" for step in entry.steps)
+        assert_that(entry.path).is_equal_to(rendered.removeprefix("."))
 
 
 _collidable = st.sampled_from([0, 1, 2, "0", "1", "2", 1.0, 2.0, "1.0", "2.0", True, False, None, "None", "True"])

@@ -209,7 +209,8 @@ def canonical_steps(entry: DiffEntry) -> tuple[tuple[str, str], ...] | None:
     Indices collapse to one placeholder, and every other hop keeps its value's repr rather than its
     text, so two keys that render alike stay apart.
     """
-    steps = entry.steps
+    # entering JSON text is no place of its own: what lies in it is found by the same keys from one run to the next
+    steps = tuple(step for step in entry.steps if step.kind != "json")
     if not steps or any(step.kind not in _COORDINATE for step in steps):
         return None
     return tuple((step.kind, _ANY_POSITION if step.kind in _POSITIONAL else stable_repr(step.value)) for step in steps)

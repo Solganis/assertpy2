@@ -188,6 +188,10 @@ await assert_that(get_order).eventually().within(10).ignoring(
     failure honors the builder's mode: inside `soft_assertions()` it is collected instead of
     raised, and under `assert_warn()` it is logged.
 
+    The timeout bounds the retries, not a single call. A call in flight is never interrupted, so a
+    probe that takes 30 seconds makes a 5-second poll take 30. Bound the call itself, with the timeout
+    of the client it uses.
+
 ### Synchronous polling
 
 `eventually_sync()` is the same polling assertion without asyncio: assertion methods block the

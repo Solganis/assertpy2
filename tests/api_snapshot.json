@@ -2785,7 +2785,7 @@
    "kind": "class",
    "parameters": [
     {
-     "annotation": "ForwardRef(\"Literal['key', 'index', 'attr', 'item', 'line']\")",
+     "annotation": "ForwardRef(\"Literal['key', 'index', 'attr', 'item', 'line', 'json']\")",
      "default": null,
      "kind": "POSITIONAL_OR_KEYWORD",
      "name": "kind",

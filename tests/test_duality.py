@@ -977,11 +977,15 @@ def test_every_shape_of_include_is_reached(shape: str) -> None:
 
     Both verdicts on each shape are pinned as examples on the property, since generation reaches a held
     nested path and a failed element rarely enough that asking for them here only measured luck.
+
+    The draw is not the same from one revision to the next either: the engine mixes in the constants of every
+    module the process imported, so new code anywhere in the package moves it.  A shape was found on the 174th
+    example at one revision and on the 2970th at the next, which a budget of 4000 did not always leave room for.
     """
     found = find(
         _PAIRS["is_equal_to"].cases(),
         lambda case: _included(case) is not None and _INCLUDE_SHAPES[shape](case),
-        settings=settings(max_examples=4000, database=None, derandomize=True, phases=[Phase.generate]),
+        settings=settings(max_examples=40_000, database=None, derandomize=True, phases=[Phase.generate]),
     )
     assert_that(_included(found)).is_not_none()
 

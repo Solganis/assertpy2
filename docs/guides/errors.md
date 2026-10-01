@@ -143,6 +143,27 @@ Either way every difference stays in the diff, so the shorter message loses noth
 Matcher-based assertions (`matches_structure()`, `satisfies()`, `each()`) attach a `DiffResult` with
 `kind='match'`, where each entry's `expected` holds the failed predicate's description.
 
+`assert_conforms()` attaches one of the same kind. A validation failure has an entry per pydantic error.
+An `exact=True` failure has an entry per undeclared field, holding the value the payload sent there with
+`absent == "expected"`, or a single entry for the part that cannot be checked, with the reason in
+`expected`. The steps lead into the payload. Two kinds of step hold an object of their own rather than a
+key or an index into the one before. `item` holds a member of a collection that keeps no positions, or the
+mapping key a find lies inside. `json` stands where the value is JSON text (`Json[...]`) and holds what the
+text decodes to, the object the steps after it lead into. A reader takes `step.value` at both:
+
+```python
+def resolve(value, steps):
+    for step in steps:
+        value = step.value if step.kind in ("item", "json") else value[step.value]
+    return value
+```
+
+`resolve(payload, entry.steps)` is then the very object `entry.actual` holds, text or not, for a payload
+validation left as it was sent. Where a validator changed the payload in place, the payload is returned to
+what validation left, so an entry that holds one of its dicts, lists or tuples holds a copy of what was sent
+instead. An entry inside JSON text is not copied: it keeps the decoded value reached by following the steps
+after its `json` step.
+
 Under pytest the plugin attaches this same diff to the failure as its own section instead, keeping the
 message itself to a single line so the diff is never shown twice. The section travels with the failure,
 so the terminal, a JUnit report and an IDE runner such as PyCharm's all show it, and so does a failing
@@ -171,7 +192,7 @@ rendered by the plugin as diff sections on the failure.
 | attrs class | `attrs` | Field-by-field, recursive into nested fields |
 | other | `scalar` | Single actual-vs-expected entry |
 | `contains` family | `contains` | Missing and extra items, plus the repeat counts for a duplicate failure |
-| matcher mismatch | `match` | `satisfies()`, `each()`, `all_satisfy()`, `any_satisfy()`, `satisfies_exactly()`, `zip_satisfies()`, `matches_structure()`, `all_fields_satisfy()`: path + failed predicate |
+| matcher mismatch | `match` | `satisfies()`, `each()`, `all_satisfy()`, `any_satisfy()`, `satisfies_exactly()`, `zip_satisfies()`, `matches_structure()`, `all_fields_satisfy()`, `assert_conforms()`: path + failed predicate |
 
 ```text
 --- AssertionFailure ---
@@ -217,7 +238,8 @@ of values does not already say.
 ![Colored set diff: extra items in red, missing items in green](../assets/diff-set.svg)
 
 **Match** (the matcher-driven assertions listed in the table above) shows each field's path and the
-predicate that failed, with the actual value in red.
+predicate that failed, with the actual value in red. A field `assert_conforms(..., exact=True)` found
+undeclared has no predicate, and is shown as `path: - value`.
 
 Every mismatch is listed, not just the first. There is no green, since a predicate has no "addition".
 

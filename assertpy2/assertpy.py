@@ -61,7 +61,7 @@ if TYPE_CHECKING:
 
 from . import _hints
 from ._engine._compat import _LoggerAdapter
-from ._engine._contract import exactness_failure
+from ._engine._contract import exactness_failure, kept_apart, put_as_sent, put_back, runs_own_code, sent_record
 from ._engine._introspection import WarningLogger, is_same_implementation
 from ._engine._operations import (
     ALSO_ASSERTS,
@@ -676,6 +676,25 @@ def _contract_entries(exc: object, prefix: _Path = _ROOT) -> list[DiffEntry]:
     return entries
 
 
+def _exact_failure(val: object, pairs: Any, carrier: str, sent: Any) -> tuple[str, str, DiffResult] | None:
+    """What an exact check of *pairs* found, in the words a failure continues with, the payload as it then reads, and
+    the same finds as a diff.  ``None`` when it found nothing.
+
+    All are read while the payload is put back as it was *sent*, where validation changed it in place, and it is
+    returned to what validation left before this returns, whatever the check does.
+    """
+    left = put_as_sent(val, sent) if sent is not None else None
+    try:
+        found = exactness_failure(pairs, carrier=carrier)
+        if found is None:
+            return None
+        entries = kept_apart(found[1]) if left else found[1]
+        return found[0], _truncated(_safe_str(val)), DiffResult(kind="match", entries=entries)
+    finally:
+        if left:
+            put_back(left)
+
+
 @overload
 def assert_conforms(
     val: object, model: type[_U], description: str = ..., *, exact: bool = ..., each: Literal[False] = ...
@@ -701,21 +720,28 @@ def assert_conforms(
     does not declare.  ``model_validate`` silently drops undeclared fields, so a stale model keeps
     passing after the live API grows new ones.
 
-    ``exact`` catches that drift in the models the payload became inside lists, tuples, sets, dicts, unions
-    and root models, and reports the exact paths.  It is alias-aware, and respects a model that opts into
-    extras (``extra="allow"``).  Raw items that no longer pair one by one with what they became (a set, a
-    filtered list, an object wrapped into a list) are validated again by their model class when they all
-    became one, which runs that class's validators once more for them, and JSON text is read as the original
-    JSON input.  Raw items a validator left no built item for (an emptied list) are checked against the type
-    their field declares: validated again as it, which runs the item model's validators but not the field's
-    own, so a field validator that would have built them otherwise is not seen.  What still cannot be paired
-    (items of mixed classes in a set or a resized list, emptied items the declared type does not build or
-    declares through a union of two or more types besides ``None`` or a named type alias, merged dict keys, a
-    generator consumed during validation, a lazy ``Iterable``) fails with ``<path> cannot be checked`` and the
-    reason.  It reads the payload as validation left it: a validator that renames keys, changes the payload in
-    place, or reorders or rewrites the items of a container without changing its size is not seen, and those
-    items are read by position.  A model inside a container of plain values (``list[Any]``) or inside a
-    dataclass is not reached.
+    ``exact`` catches that drift in the models, dataclasses and ``TypedDict`` values the payload became inside
+    lists, tuples, sets, dicts, unions and root models, and reports the exact paths.  It is alias-aware, and
+    respects a model that opts into extras (``extra="allow"``).  Raw items that no longer pair one by one with
+    what they became (a set, a filtered list, an object wrapped into a list) are validated again by their
+    model class when they all became one, which runs that class's validators once more for them, and JSON text
+    is read as the original JSON input.  Raw items a validator left no built item for (an emptied list) are
+    checked against the type their field declares: validated again as it, which runs the item model's
+    validators but not the field's own, so a field validator that would have built them otherwise is not seen.
+    What still cannot be paired (items of mixed classes in a set or a resized list, emptied items the declared
+    type does not build or declares through a union of two or more types besides ``None`` or a named type
+    alias, merged dict keys, a generator consumed during validation, a lazy ``Iterable``) fails with ``<path>
+    cannot be checked`` and the reason.  It reads the payload as it was sent: what a validator changed in
+    place in a plain dict or list is put back for the check and returned afterwards.  A validator that renames
+    keys, or reorders or rewrites the items of a container without changing its size, is not seen, and those
+    items are read by position.  A model inside a container of plain values (``list[Any]``) is not reached.
+    A ``TypedDict`` is read off the schema pydantic built, so text annotations and type variables declare it
+    too.  Where several are declared for one value and their ``Literal`` fields do not tell them apart, or a
+    type beside them may build a dict as well, a key the built dict lost fails with ``cannot be checked``.
+
+    An ``exact`` failure carries its finds as a ``diff``: an entry per undeclared field, holding the value the
+    payload sent there and the steps that lead to it, or one entry holding the part that cannot be checked
+    against the reason.
 
     Args:
         val: the raw payload to validate (e.g. a decoded JSON response)
@@ -755,6 +781,8 @@ def assert_conforms(
     builder = _builder(val, description, kind)
     pydantic = sys.modules.get("pydantic")  # loaded already, since model exposes model_validate
     catchable: tuple[type[BaseException], ...] = (pydantic.ValidationError,) if pydantic is not None else ()
+    # only a model with code of its own can change the payload it validates; what it is sent is kept for the check
+    sent = sent_record(val) if exact and runs_own_code(model) else None
     if each:
         if not isinstance(val, (list, tuple)):
             raise TypeError("assert_conforms(each=True) requires a list or tuple payload")
@@ -772,12 +800,13 @@ def assert_conforms(
                 )
         if exact:
             items = enumerate(zip(val, validated_items, strict=True))
-            failure = exactness_failure(((item, it, f"[{index}]") for index, (item, it) in items), carrier="")
-            if failure:
+            found = _exact_failure(val, ((item, it, index) for index, (item, it) in items), "", sent)
+            if found:
                 return builder.error(
-                    f"Expected every item to conform exactly to <{model.__name__}>, but {failure}",
+                    f"Expected every item to conform exactly to <{model.__name__}>, but {found[0]}",
                     actual=val,
                     expected=model,
+                    diff=found[2],
                 )
         return builder.builder(validated_items, description, kind)
     try:
@@ -791,12 +820,13 @@ def assert_conforms(
             suppress_context=True,
         )
     if exact:
-        failure = exactness_failure([(val, validated, "")], carrier="it carries ")
-        if failure:
+        found = _exact_failure(val, [(val, validated, None)], "it carries ", sent)
+        if found:
             return builder.error(
-                f"Expected <{_truncated(_safe_str(val))}> to conform exactly to <{model.__name__}>, but {failure}",
+                f"Expected <{found[1]}> to conform exactly to <{model.__name__}>, but {found[0]}",
                 actual=val,
                 expected=model,
+                diff=found[2],
             )
     return builder.builder(validated, description, kind)
 

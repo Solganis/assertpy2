@@ -199,16 +199,23 @@ class Step(NamedTuple):
     came from instead of parsing a string that was never a grammar.
     """
 
-    kind: Literal["key", "index", "attr", "item", "line"]
+    kind: Literal["key", "index", "attr", "item", "line", "json"]
     """What kind of hop this is.
 
     ``key`` indexes a mapping, ``index`` a sequence, ``attr`` reads a field of a dataclass, namedtuple,
-    attrs class or model.  ``item`` names a member of a set, which has no position to index by.
+    attrs class or model.  ``item`` names a member of a set or of another collection that keeps no positions,
+    and the mapping key a difference lies inside.
     ``line`` is the 1-based line number of a text or bytes diff.
+    ``json`` stands where the value is JSON text and the difference lies in what it holds: the steps after it lead
+    into what the text decodes to.
     """
 
     value: object
-    """The key, index, field name, member or line number.  Not stringified: that is the whole point."""
+    """The key, index, field name, member or line number.  Not stringified: that is the whole point.
+
+    For ``json`` it is what the text decodes to, the very object the steps after it lead into: decoding the text
+    again would give an equal value and another object.
+    """
 
     side: Literal["actual", "expected"] | None = None
     """Which sequence the index belongs to, when the two have shifted apart.
@@ -329,6 +336,14 @@ def _windowed(actual: str, expected: str, width: int = 160) -> tuple[str, str]:
         return f"{head}{text[start : start + width]}{tail}"
 
     return cut(actual), cut(expected)
+
+
+def _match_line(entry: DiffEntry, *, red: str, cyan: str, reset: str) -> str:
+    """One row of a ``match`` diff: what was found against what was asked of it, or what nothing was asked of."""
+    was = _diff_side(entry.actual)
+    if entry.absent == "expected":
+        return f"  {red}{entry.path}: - {was}{reset}"
+    return f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{was}{reset}"
 
 
 def _append_string_entry(lines: list[str], entry: DiffEntry, *, red: str, green: str, reset: str) -> None:
@@ -474,10 +489,7 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
         for entry in visible:
             _append_string_entry(lines, entry, red=red, green=green, reset=reset)
     elif kind == "match":
-        lines.extend(
-            f"  {cyan}{entry.path}{reset}: expected {entry.expected}, but was {red}{_diff_side(entry.actual)}{reset}"
-            for entry in visible
-        )
+        lines.extend(_match_line(entry, red=red, cyan=cyan, reset=reset) for entry in visible)
     elif kind in {"set", "contains"}:
         # `absent` rather than the rendered label: a mapping key spelled "extra" used to land in the wrong group
         extra = ", ".join(_diff_side(entry.actual) for entry in visible if entry.absent == "expected")

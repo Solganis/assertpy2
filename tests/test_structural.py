@@ -1,5 +1,7 @@
 import collections.abc
+import dataclasses
 import datetime
+import enum
 import inspect
 import io
 import itertools
@@ -11,7 +13,14 @@ import pytest
 
 from assertpy2 import AssertionFailure, assert_conforms, assert_that, match, soft_assertions
 from assertpy2._engine import _contract
-from assertpy2._engine._contract import UncheckableDriftError, _declared_keys, contract_drift, shape, shape_diff
+from assertpy2._engine._contract import (
+    UncheckableDriftError,
+    _declared_keys,
+    _placed,
+    contract_drift,
+    shape,
+    shape_diff,
+)
 from assertpy2.matchers import (
     EachMatcher,
     IgnoreMatcher,
@@ -794,7 +803,50 @@ class TestAssertConformsExact:
 
 def _drift(payload, model):
     """What `assert_conforms(..., exact=True)` reports: the payload walked beside the instance it validated into."""
-    return contract_drift(payload, model.model_validate(payload))
+    return _paths(contract_drift(payload, model.model_validate(payload)))
+
+
+def _paths(found):
+    return [_placed(place)[0] for place, _ in found]
+
+
+def _is_text(value):
+    return isinstance(value, (str, bytes, bytearray))
+
+
+def _leads_back(whole, entry):
+    """Whether the steps of *entry* reach, in the payload *whole*, the very object the entry holds."""
+    reached = whole
+    for step in entry.steps:
+        if step.kind == "item":
+            if not any(part is step.value for part in reached):
+                return False
+            reached = step.value
+        elif step.kind == "json":
+            # the step holds what the text it stands at decodes to
+            if not _is_text(reached) or _contract._decoded_container(reached) != step.value:
+                return False
+            reached = step.value
+        else:
+            reached = reached[step.value]
+    return reached is entry.actual
+
+
+@pytest.fixture(autouse=True)
+def _every_entry_leads_back_to_what_it_holds(monkeypatch):
+    """Whatever an exact check of this module finds, the steps of each of its entries reach the value it holds."""
+    exactness = _contract.exactness_failure
+
+    def gated(pairs, *, carrier):
+        pairs = list(pairs)
+        found = exactness(pairs, carrier=carrier)
+        if found is not None:
+            whole = pairs[0][0] if pairs[0][2] is None else [payload for payload, _, _ in pairs]
+            astray = [entry.path for entry in found[1] if not _leads_back(whole, entry)]
+            assert_that(astray).described_as("entries whose steps do not reach what they hold").is_empty()
+        return found
+
+    monkeypatch.setattr("assertpy2.assertpy.exactness_failure", gated)
 
 
 class TestContractDrift:
@@ -2175,10 +2227,10 @@ class TestExactnessRefusesWhatItCannotPair:
 
         monkeypatch.setattr(_contract, "_DECLARED", {})
         monkeypatch.setattr(_contract, "_ADAPTERS", {})
-        mapping, sequence = (dict[str, list[A]], A), (set[A], A)
+        mapping, sequence = (dict[str, list[A]], A, None), (set[A], A, None)
         target = _contract._replay_target(sequence)
         asks = [
-            lambda: _contract._declared_mapping_value(mapping),
+            lambda: _contract._declared_mapping(mapping),
             lambda: _contract._declared_container(sequence),
             lambda: _contract._replay_target(sequence),
             lambda: _contract._adapter(target),
@@ -2338,6 +2390,2148 @@ class TestExactnessRefusesWhatItCannotPair:
         assert_that(found).is_equal_to("<the payload> cannot be checked: it nests deeper than the walk can follow")
 
 
+class TestExactnessReadsThePayloadAsItWasSent:
+    """A validator that changed the payload in place hid what it removed, since the walk read what validation left.
+    The plain dicts and lists of the payload are put back as they were sent for the check, and returned to what
+    validation left once it is over."""
+
+    @staticmethod
+    def _failure(payload, model, **options):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_conforms(payload, model, exact=True, **options)
+        return str(caught.value)
+
+    @staticmethod
+    def _stripping():
+        from pydantic import BaseModel, model_validator
+
+        class Stripping(BaseModel):
+            x: int
+
+            @model_validator(mode="before")
+            @classmethod
+            def strip(cls, data):
+                data.pop("extra", None)
+                return data
+
+        return Stripping
+
+    def test_a_key_removed_in_place_is_named_and_the_payload_is_left_as_validation_left_it(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        stripping = self._stripping()
+        payload = {"x": 1, "extra": 2}
+        assert_that(self._failure(payload, stripping)).is_equal_to(
+            "Expected <{'x': 1, 'extra': 2}> to conform exactly to <Stripping>, "
+            "but it carries 1 undeclared field(s) the model does not declare: ['extra']"
+        )
+        assert_that(payload).is_equal_to({"x": 1})
+        assert_conforms({"x": 1}, stripping, exact=True)
+
+    @pytest.mark.parametrize("stamp", [{}, {"at": datetime.date(2026, 10, 1)}], ids=["copied whole", "by container"])
+    def test_items_changed_and_dropped_in_place_are_read_as_sent(self, stamp):
+        """Plain data is kept as one copy; a payload holding a date cannot be, and is kept container by container."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator, model_validator
+
+        class Row(BaseModel):
+            x: int
+
+        class Rows(BaseModel):
+            rows: list[Row]
+            at: datetime.date | None = None
+
+            @field_validator("rows", mode="before")
+            @classmethod
+            def trimmed(cls, value):
+                for row in value:
+                    row.pop("extra", None)
+                del value[1:]
+                return value
+
+        class Renaming(BaseModel):
+            x: int
+            at: datetime.date | None = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def renamed(cls, data):
+                data["x"] = data.pop("old")
+                return data
+
+        class Paired(BaseModel):
+            pair: tuple[Row, ...]
+            at: datetime.date | None = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def strip(cls, data):
+                for row in data["pair"]:
+                    row.pop("extra", None)
+                return data
+
+        class Replacing(BaseModel):
+            rows: list[Row]
+            at: datetime.date | None = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def positive(cls, data):
+                data["rows"] = [row for row in data["rows"] if row["x"] > 0]
+                return data
+
+        payloads = [
+            {"rows": [{"x": 1, "extra": 2}, {"x": 2, "more": 3}], **stamp},
+            {"old": 1, **stamp},
+            {"pair": ({"x": 1, "extra": 2},), **stamp},
+            {"rows": [{"x": 1}, {"x": -1, "extra": 2}], **stamp},
+        ]
+        carries = "undeclared field(s) the model does not declare: "
+        found = [
+            self._failure(payload, model).split("it carries ")[1]
+            for payload, model in zip(payloads, (Rows, Renaming, Paired, Replacing), strict=True)
+        ]
+        assert_that(found).is_equal_to(
+            [
+                f"2 {carries}['rows[0].extra', 'rows[1].more']",
+                f"1 {carries}['old']",
+                f"1 {carries}['pair[0].extra']",
+                f"1 {carries}['rows[1].extra']",
+            ]
+        )
+        left = [{"rows": [{"x": 1}]}, {"x": 1}, {"pair": ({"x": 1},)}, {"rows": [{"x": 1}]}]
+        assert_that(payloads).is_equal_to([{**payload, **stamp} for payload in left])
+
+    @pytest.mark.parametrize("stamp", [{}, {"at": datetime.date(2026, 10, 1)}], ids=["copied whole", "by container"])
+    def test_a_tuple_of_items_is_put_back_item_by_item(self, stamp):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Stamped(BaseModel):
+            x: int
+            at: datetime.date | None = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def strip(cls, data):
+                data.pop("extra", None)
+                return data
+
+        payload = ({"x": 1, "extra": 2, **stamp}, {"x": 2, **stamp})
+        assert_that(self._failure(payload, Stamped, each=True)).ends_with("['[0].extra']")
+        assert_that(payload).is_equal_to(({"x": 1, **stamp}, {"x": 2, **stamp}))
+        mixed = (1, {"x": 1, "extra": 2, **stamp})
+        sent = _contract.sent_record(mixed)
+        mixed[1].pop("extra")
+        left = _contract.put_as_sent(mixed, sent)
+        assert_that(mixed).is_equal_to((1, {"x": 1, "extra": 2, **stamp}))
+        _contract.put_back(left)
+        assert_that(mixed).is_equal_to((1, {"x": 1, **stamp}))
+
+    def test_what_a_validator_run_again_changes_is_put_back_before_the_walk(self):
+        """The item class strips its input in place, and runs again on the payload itself: what it strips is put
+        back before the walk reads it."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        stripping = self._stripping()
+
+        class Kept(BaseModel):
+            items: list[stripping]
+
+            @field_validator("items")
+            @classmethod
+            def first(cls, value):
+                return value[:1]
+
+        class Emptied(BaseModel):
+            items: list[stripping]
+
+            @field_validator("items", mode="before")
+            @classmethod
+            def none(cls, value):
+                return []
+
+        for model, left in ((Kept, [{"x": 1}, {"x": 2}]), (Emptied, [{"x": 1, "extra": 2}, {"x": 2, "extra": 3}])):
+            payload = {"items": [{"x": 1, "extra": 2}, {"x": 2, "extra": 3}]}
+            assert_that(self._failure(payload, model)).ends_with("['items[0].extra', 'items[1].extra']")
+            assert_that(payload).is_equal_to({"items": left})
+
+    def test_each_item_is_kept_before_the_first_one_is_validated(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        later = {"x": 2, "extra": 3}
+
+        class Reaching(BaseModel):
+            x: int
+
+            @model_validator(mode="before")
+            @classmethod
+            def reach(cls, data):
+                later.pop("extra", None)
+                return data
+
+        assert_that(self._failure([{"x": 1}, later], Reaching, each=True)).is_equal_to(
+            "Expected every item to conform exactly to <Reaching>, "
+            "but 1 undeclared field(s) the model does not declare: ['[1].extra']"
+        )
+        assert_that(later).is_equal_to({"x": 2})
+
+    def test_a_retained_object_changed_in_place_and_a_payload_that_holds_itself(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator, model_validator
+
+        class Keeping(BaseModel):
+            data: typing.Any
+
+            @field_validator("data")
+            @classmethod
+            def trim(cls, value):
+                value.pop("b", None)
+                return value
+
+        payload = {"data": {"a": 1, "b": 2}}
+        payload["data"]["self"] = payload
+        validated = assert_conforms(payload, Keeping, exact=True).value
+        assert_that((validated.data is payload["data"], sorted(payload["data"]))).is_equal_to((True, ["a", "self"]))
+
+        class Looped(BaseModel):
+            x: int
+            back: typing.Any = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def renamed(cls, data):
+                data["x"] = data.pop("old")
+                return data
+
+        # as many keys as were sent, and the one that leads back comes first: `==` on the two does not end
+        looped = {"old": 1}
+        looped["back"] = looped
+        assert_that(self._failure(looped, Looped)).ends_with("['old']")
+        assert_that(sorted(looped)).is_equal_to(["back", "x"])
+
+    def test_the_payload_is_returned_when_the_check_itself_raises(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("walk")
+
+        monkeypatch.setattr("assertpy2.assertpy.exactness_failure", broken)
+        emptied = {"x": [1]}
+        assert_that(_contract._validated_again(dict.clear, emptied, [emptied])).is_none()
+        assert_that(emptied).is_equal_to({"x": [1]})
+        for options in ({}, {"each": True}):
+            payload = {"x": 1, "extra": 2}
+            with pytest.raises(RuntimeError, match="walk"):
+                assert_conforms([payload] if options else payload, self._stripping(), exact=True, **options)
+            assert_that(payload).is_equal_to({"x": 1})
+
+    def test_a_container_the_payload_holds_twice_is_left_as_validation_left_it(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        shared = {"x": 1, "extra": 2}
+        assert_that(self._failure((shared, shared), self._stripping(), each=True)).ends_with(
+            "['[0].extra', '[1].extra']"
+        )
+        assert_that(shared).is_equal_to({"x": 1})
+
+        class Row(BaseModel):
+            data: typing.Any
+
+            @field_validator("data")
+            @classmethod
+            def strip(cls, value):
+                value.pop("extra", None)
+                return value
+
+        class Rows(BaseModel):
+            items: list[Row]
+            side: typing.Any
+
+            @field_validator("items", mode="before")
+            @classmethod
+            def none(cls, value):
+                return []
+
+        aliased = {"extra": 2}
+        payload = {"items": [{"data": aliased}], "side": aliased}
+        assert_conforms(payload, Rows, exact=True)
+        assert_that((payload, payload["side"] is aliased, payload["items"][0]["data"] is aliased)).is_equal_to(
+            ({"items": [{"data": {"extra": 2}}], "side": {"extra": 2}}, True, True)
+        )
+
+    def test_a_subclass_is_read_as_the_builtin_it_is(self):
+        """Keeping the payload reads a subclass's storage, not through the methods it overrides."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Refusing(dict):
+            def values(self):
+                raise RuntimeError("values")
+
+        class Listed(list):
+            def __iter__(self):
+                raise RuntimeError("iter")
+
+        class Normalized(BaseModel):
+            x: int
+            rows: typing.Any = None
+
+            @model_validator(mode="before")
+            @classmethod
+            def normalize(cls, data):
+                return {"x": dict.__getitem__(data, "x")}
+
+        nested = ({"a": 1},)
+        assert_conforms(Refusing(x=1, rows=Listed([nested])), Normalized, exact=True)
+        assert_that(_contract._held_now(Refusing(x=1, rows=Listed([nested])))).is_equal_to([({"a": 1}, {"a": 1})])
+
+    def test_a_value_whose_comparison_raises_counts_as_a_change(self):
+        """A validator can put a value of any kind into the payload, and comparing it with what was sent calls its
+        own ``==``."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Bomb:
+            def __eq__(self, other):
+                raise RuntimeError("comparison")
+
+            __hash__ = None
+
+        class Replaced(BaseModel):
+            value: typing.Any
+
+            @model_validator(mode="before")
+            @classmethod
+            def replace(cls, data):
+                data.pop("extra", None)
+                data["value"] = Bomb()
+                return data
+
+        payload = {"value": 1, "extra": 2}
+        assert_that(self._failure(payload, Replaced)).ends_with("['extra']")
+        assert_that((sorted(payload), type(payload["value"]).__name__)).is_equal_to((["value"], "Bomb"))
+
+    def test_a_subclass_changed_in_place_is_not_put_back(self):
+        """Putting a subclass back would go through methods of its own, so what it lost stays unseen."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        assert_conforms(collections.OrderedDict(x=1, extra=2), self._stripping(), exact=True)
+
+    def test_a_model_with_no_code_of_its_own_keeps_no_record(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+
+        class Plain(BaseModel):
+            x: int
+            rows: list[dict[str, int]] = []
+
+        def refused(payload):
+            raise RuntimeError("no record is needed")
+
+        monkeypatch.setattr("assertpy2.assertpy.sent_record", refused)
+        assert_conforms({"x": 1, "rows": [{"a": 1}]}, Plain, exact=True)
+        assert_conforms([{"x": 1}], Plain, exact=True, each=True)
+        with pytest.raises(RuntimeError, match="no record"):
+            assert_conforms({"x": 1}, self._stripping(), exact=True)
+        assert_conforms({"x": 1}, self._stripping())
+
+    def test_which_models_run_code_of_their_own(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        import pydantic
+        from pydantic import AfterValidator, BaseModel, PrivateAttr, field_serializer, field_validator
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+        class Plain(BaseModel):
+            x: int
+            tags: list[str] = []
+            missing: int = 0
+            post_init: dict[str, int] = {}
+
+        class Serialized(BaseModel):
+            x: int
+
+            @field_serializer("x")
+            def render(self, value):
+                return str(value)
+
+        class Checked(BaseModel):
+            x: int
+
+            @field_validator("x")
+            @classmethod
+            def check(cls, value):
+                return value
+
+        class PostInit(BaseModel):
+            x: int
+
+            def model_post_init(self, context):
+                pass
+
+        class Private(BaseModel):
+            x: int
+            _cache: dict = PrivateAttr(default_factory=dict)
+
+        class OwnInit(BaseModel):
+            x: int
+
+            def __init__(self, **data):
+                super().__init__(**data)
+
+        class Annotated(BaseModel):
+            x: typing.Annotated[int, AfterValidator(lambda value: value)]
+
+        @pydantic_dataclass
+        class Posted:
+            x: int
+
+            def __post_init__(self):
+                pass
+
+        class Holding(BaseModel):
+            inner: list[self._stripping()]
+            plain: Plain
+
+        class Dataclassed(BaseModel):
+            posted: Posted
+
+        class Unbuilt:
+            __pydantic_core_schema__ = None
+
+        class Point(typing.NamedTuple):
+            x: int
+
+        class Called(BaseModel):
+            point: Point
+
+        class Shade(enum.Enum):
+            DARK = "dark"
+
+            @classmethod
+            def _missing_(cls, value):
+                return cls.DARK
+
+        class Shaded(BaseModel):
+            shade: Shade
+
+        ring: list = []
+        ring.append(ring)
+
+        class Defaulted(BaseModel):
+            x: int
+            held: typing.Any = ring
+
+        monkeypatch.setattr(_contract, "_OWN_CODE", dict.fromkeys(range(256)))
+        assert_that(_contract.runs_own_code(Defaulted)).is_false()
+        own = [Checked, PostInit, Private, OwnInit, Annotated, Holding, Dataclassed, Unbuilt, Called, Shaded]
+        if hasattr(pydantic, "Discriminator"):
+            tagged = typing.Annotated[
+                typing.Annotated[Plain, pydantic.Tag("plain")] | typing.Annotated[Serialized, pydantic.Tag("other")],
+                pydantic.Discriminator(lambda value: "plain"),
+            ]
+
+            class Discriminated(BaseModel):
+                one: tagged
+
+            own.append(Discriminated)
+        if hasattr(pydantic.fields.FieldInfo, "default_factory_takes_validated_data"):
+
+            class Derived(BaseModel):
+                x: int
+                twice: int = pydantic.Field(default_factory=lambda data: data["x"] * 2)
+
+            own.append(Derived)
+        answers = {model.__name__: _contract.runs_own_code(model) for model in [Plain, Serialized, *own]}
+        assert_that(answers).is_equal_to(
+            {"Plain": False, "Serialized": False} | {model.__name__: True for model in own}
+        )
+        assert_that((0 in _contract._OWN_CODE, _contract.runs_own_code(Plain))).is_equal_to((False, False))
+
+
+class TestExactnessReachesDataclassesAndTypedDicts:
+    """A dataclass and a `TypedDict` drop a key they do not declare as a model does, and passed for it: the walk
+    read neither their own keys nor the models inside a dataclass."""
+
+    CARRIES = "undeclared field(s) the model does not declare: "
+
+    @staticmethod
+    def _found(payload, model):
+        try:
+            assert_conforms(payload, model, exact=True)
+        except AssertionFailure as failure:
+            return str(failure).split(", but ")[1].removeprefix("it carries ")
+        return "passes"
+
+    @staticmethod
+    def _holding(annotation, **validators):
+        from pydantic import BaseModel
+
+        return type("Holding", (BaseModel,), {"__annotations__": {"f": annotation}, **validators})
+
+    def test_a_typed_dict_is_checked_for_its_own_keys_and_walked(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field
+        from typing_extensions import NotRequired, TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class Point(TypedDict):
+            x: int
+            y: NotRequired[int]
+
+        class Open(TypedDict):
+            __pydantic_config__ = ConfigDict(extra="allow")  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
+            x: int
+
+        class Aliased(TypedDict):
+            x: typing.Annotated[int, Field(alias="X")]
+
+        class Nested(TypedDict):
+            row: Row
+            points: NotRequired[list[Point]]
+            inner: NotRequired[Point]
+
+        class Wider(Point):
+            z: int
+
+        extra = {"x": 1, "extra": 2}
+        cases = {
+            "an undeclared key": (Point, extra),
+            "an optional key and an undeclared one": (Point, {"x": 1, "y": 2, "extra": 3}),
+            "a clean one": (Point, {"x": 1, "y": 2}),
+            "one that allows extras": (Open, extra),
+            "an alias": (Aliased, {"X": 1}),
+            "an alias and an undeclared key": (Aliased, {"X": 1, "x": 2, "extra": 3}),
+            "a model inside": (Nested, {"row": extra}),
+            "a list of them inside": (Nested, {"row": {"x": 1}, "points": [{"x": 1}, extra], "more": 1}),
+            "one inside another": (Nested, {"row": {"x": 1}, "inner": extra}),
+            "an inherited key": (Wider, {"x": 1, "z": 2, "extra": 3}),
+            "in a list": (list[Point], [{"x": 1}, extra]),
+            "as a dict value": (dict[str, Point], {"k": extra}),
+            "beside None": (Point | None, extra),
+        }
+        found = {label: self._found({"f": payload}, self._holding(kind)) for label, (kind, payload) in cases.items()}
+        assert_that(found).is_equal_to(
+            {
+                "an undeclared key": f"1 {self.CARRIES}['f.extra']",
+                "an optional key and an undeclared one": f"1 {self.CARRIES}['f.extra']",
+                "a clean one": "passes",
+                "one that allows extras": "passes",
+                "an alias": "passes",
+                "an alias and an undeclared key": f"1 {self.CARRIES}['f.extra']",
+                "a model inside": f"1 {self.CARRIES}['f.row.extra']",
+                "a list of them inside": f"2 {self.CARRIES}['f.more', 'f.points[1].extra']",
+                "one inside another": f"1 {self.CARRIES}['f.inner.extra']",
+                "an inherited key": f"1 {self.CARRIES}['f.extra']",
+                "in a list": f"1 {self.CARRIES}['f[1].extra']",
+                "as a dict value": f"1 {self.CARRIES}['f.k.extra']",
+                "beside None": f"1 {self.CARRIES}['f.extra']",
+            }
+        )
+
+    def test_a_typed_dict_declared_in_text_or_beside_another_is_read_off_the_schema(self, monkeypatch):
+        """The plain dict built does not say which of two it became, so a key lost there refuses.  Declared in text,
+        its own keys and aliases are read off the schema, and so is a `TypedDict` below it."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field, field_validator
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        class Other(TypedDict):
+            y: int
+
+        class Texted(TypedDict):
+            x: "int"
+            inner: "Point"
+
+        class TextedAlias(TypedDict):
+            x: "typing.Annotated[int, Field(alias='X')]"
+
+        class Emptied(BaseModel):
+            f: list[Point]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def none(cls, value):
+                return []
+
+        class HoldsTexted(BaseModel):
+            f: Texted
+
+        class HoldsTextedAlias(BaseModel):
+            f: TextedAlias
+
+        extra = {"x": 1, "extra": 2}
+        found = [
+            self._found({"f": extra}, self._holding(Point | Other)),
+            self._found({"f": {"x": 1, "inner": {"x": 1}, "extra": 2}}, HoldsTexted),
+            self._found({"f": {"x": 1, "inner": extra}}, HoldsTexted),
+            self._found({"f": {"X": 1}}, HoldsTextedAlias),
+            self._found({"f": {"X": 1, "x": 2, "extra": 3}}, HoldsTextedAlias),
+            self._found({"f": [extra]}, Emptied),
+            self._found({"f": [{"x": 1}]}, Emptied),
+        ]
+
+        # annotations that raise when read, as from 3.14 one naming what is defined only later does
+        def unreadable(owner, **options):
+            raise NameError("Later")
+
+        holding = self._holding(Point)
+        monkeypatch.setattr(_contract, "_RECORDS", {})
+        monkeypatch.setattr(inspect, "get_annotations", unreadable)
+        found.append(self._found({"f": extra}, holding))
+        assert_that(found).is_equal_to(
+            [
+                "<f> cannot be checked: it holds a key the dict built from it does not, and its declared types do not"
+                " say which built it",
+                f"1 {self.CARRIES}['f.extra']",
+                f"1 {self.CARRIES}['f.inner.extra']",
+                "passes",
+                f"1 {self.CARRIES}['f.extra']",
+                f"1 {self.CARRIES}['f[0].extra']",
+                "passes",
+                f"1 {self.CARRIES}['f.extra']",
+            ]
+        )
+
+    def test_a_record_is_read_as_the_schema_pydantic_built_says(self):
+        """What no annotation tells is in the schema: which of several aliases wins, a config that reaches a
+        `TypedDict` from the model above, an alias on a plain dataclass."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field, ValidationError
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class AliasedRow(TypedDict):
+            row: typing.Annotated[Row, Field(alias="R")]
+
+        class ByName(BaseModel):
+            model_config = ConfigDict(populate_by_name=True)
+            f: AliasedRow
+
+        class HasDict:
+            pass
+
+        @dataclasses.dataclass(slots=True)
+        class Slotted(HasDict):
+            row: Row
+
+        @pydantic_dataclass(config=ConfigDict(extra="allow"))
+        class Open:
+            x: int
+            kind: typing.ClassVar[str] = "default"
+
+        @pydantic_dataclass
+        class Twice:
+            x: int = Field(alias="A", validation_alias="V")
+
+        @dataclasses.dataclass
+        class PlainAliased:
+            x: typing.Annotated[int, Field(alias="X")]
+
+        class Several(TypedDict):
+            x: typing.Annotated[int, Field(alias="A"), Field(alias="B")]
+
+        extra = {"x": 1, "extra": 2}
+        found = [
+            self._found({"f": {"R": extra}}, ByName),
+            self._found({"f": {"row": extra}}, self._holding(Slotted)),
+            self._found({"f": {"x": 1, "kind": "other"}}, self._holding(Open)),
+            self._found({"f": {"V": 1, "A": 2}}, self._holding(Twice)),
+            self._found({"f": {"V": 1, "extra": 2}}, self._holding(Twice)),
+        ]
+        assert_that(found).is_equal_to(
+            [
+                f"1 {self.CARRIES}['f.row.extra']",
+                f"1 {self.CARRIES}['f.row.extra']",
+                "passes",
+                "passes",
+                f"1 {self.CARRIES}['f.extra']",
+            ]
+        )
+        try:
+            ByName.model_validate({"f": {"row": extra}})
+        # pydantic 2.0 does not hand the model's config down to the `TypedDict`
+        except ValidationError:
+            pass
+        else:
+            assert_that(self._found({"f": {"row": extra}}, ByName)).is_equal_to(f"1 {self.CARRIES}['f.row.extra']")
+        if "validate_by_alias" in ConfigDict.__annotations__:
+
+            class ByNameOnly(TypedDict):
+                __pydantic_config__ = ConfigDict(validate_by_alias=False, validate_by_name=True)  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
+                row: typing.Annotated[Row, Field(alias="R")]
+
+            # the alias still counts as declared, as a model's does; what matters is which mapping is walked
+            both = {"f": {"R": {"x": 1}, "row": extra}}
+            assert_that(self._found(both, self._holding(ByNameOnly))).is_equal_to(f"1 {self.CARRIES}['f.row.extra']")
+        # which alias pydantic reads here differs by its version; whichever it takes is declared, the rest are not
+        for kind, aliases in ((PlainAliased, ("X", "x")), (Several, ("B", "A"))):
+            holding = self._holding(kind)
+            for alias in aliases:
+                try:
+                    holding.model_validate({"f": {alias: 1}})
+                except ValidationError:
+                    continue
+                assert_that(self._found({"f": {alias: 1}}, holding)).is_equal_to("passes")
+                assert_that(self._found({"f": {alias: 1, "extra": 2}}, holding)).is_equal_to(
+                    f"1 {self.CARRIES}['f.extra']"
+                )
+                break
+
+    def test_a_record_no_schema_holds_is_read_as_its_annotations_are_written(self):
+        """A plain dataclass validated again on its own, out of a list its validator cut, has no schema that holds it,
+        and is read off its annotations; inside a union of containers the schema of its model reaches it.  A
+        parametrized `TypedDict` is read off the schema of what its variable is."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, BeforeValidator, Field, field_validator
+        from typing_extensions import NotRequired, TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        def plain(*several, aliased):
+            @dataclasses.dataclass
+            class Plain:
+                x: typing.Annotated[(int, Field(alias="X"), *several)] = 0
+                row: Row | None = None
+                derived: int = dataclasses.field(default=0, init=False)
+                y: int = aliased
+
+            return Plain
+
+        class Point(TypedDict):
+            x: int
+
+        item = typing.TypeVar("item")
+
+        class Box(TypedDict, typing.Generic[item]):
+            held: item
+            count: typing.Annotated[int, Field(alias="n")]
+
+        cut = {"cut": field_validator("f", mode="after")(classmethod(lambda cls, value: value[:1]))}
+        try:
+            full = plain(Field(description="the value"), aliased=Field(default=0, alias="Y"))
+            either, trimmed = self._holding(list[full] | tuple[int, ...]), self._holding(list[full], **cut)
+        # pydantic 2.0 takes one `Field` for a field, in its annotation or as its default
+        except TypeError:
+            lone = plain(aliased=0)
+            either, trimmed = self._holding(list[lone] | tuple[int, ...]), self._holding(list[lone], **cut)
+        sent = [{"x": 1, "extra": 2}, {"row": {"x": 1, "extra": 2}}, {"x": 1, "derived": 7}]
+        expected = [f"1 {self.CARRIES}['f[0].{name}']" for name in ("extra", "row.extra", "derived")]
+        # pydantic 2.0 reads neither alias off a plain dataclass, and drops both keys
+        built = either.model_validate({"f": [{"X": 5, "Y": 6}]}).f[0]
+        if (built.x, built.y) == (5, 6):
+            sent.append({"X": 5, "Y": 6})
+            expected.append("passes")
+        found = [self._found({"f": [item]}, either) for item in sent]
+        assert_that([self._found({"f": [item, {}]}, trimmed) for item in sent]).is_equal_to(expected)
+
+        class Rows(TypedDict):
+            rows: NotRequired[typing.Annotated[list[Row], BeforeValidator(lambda value: [])]]
+
+        # the list is read again as the annotation says, which is read without what marks the key as optional
+        found.append(self._found({"f": {"rows": [{"x": 1, "extra": 2}]}}, self._holding(Rows)))
+        expected.append(f"1 {self.CARRIES}['f.rows[0].extra']")
+        try:
+            boxed = self._holding(Box[Point])
+        # pydantic before 2.2 builds no schema for a parametrized `TypedDict`
+        except TypeError:
+            boxed = None
+        if boxed is not None:
+            found += [
+                self._found({"f": {"held": {"x": 1}, "n": 1, "extra": 2}}, boxed),
+                self._found({"f": {"held": {"x": 1, "extra": 2}, "n": 1}}, boxed),
+            ]
+            expected += [f"1 {self.CARRIES}['f.extra']", f"1 {self.CARRIES}['f.held.extra']"]
+        assert_that(found).is_equal_to(expected)
+
+    def test_a_dataclass_is_checked_for_its_own_keys_and_walked(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+        class Row(BaseModel):
+            x: int
+
+        @pydantic_dataclass
+        class Inner:
+            x: int
+            flag: dataclasses.InitVar[bool] = False
+            derived: int = dataclasses.field(default=0, init=False)
+            named: int = Field(default=0, alias="Named")
+            kind: typing.ClassVar[str] = "inner"
+
+        @pydantic_dataclass(config=ConfigDict(extra="allow"))
+        class Open:
+            x: int
+
+        @dataclasses.dataclass
+        class Plain:
+            x: int
+            row: "Row | None" = None
+            rows: list[Row] = dataclasses.field(default_factory=list)
+
+        @dataclasses.dataclass(slots=True)
+        class Slotted:
+            x: int
+            inner: Inner
+
+        class HoldsPlain(BaseModel):
+            f: Plain
+
+        class HoldsPlains(BaseModel):
+            f: list[Plain]
+
+        extra = {"x": 1, "extra": 2}
+        cases = {
+            "an undeclared key": (self._holding(Inner), extra),
+            "an init-only key and an alias": (self._holding(Inner), {"x": 1, "flag": True, "Named": 5}),
+            "a key for a field that is not set from input": (self._holding(Inner), {"x": 1, "derived": 7}),
+            "a class variable's name": (self._holding(Inner), {"x": 1, "kind": "other"}),
+            "one that allows extras": (self._holding(Open), extra),
+            "a plain dataclass": (HoldsPlain, extra),
+            "a model in a field declared in text": (HoldsPlain, {"x": 1, "row": extra}),
+            "models in a list field": (HoldsPlain, {"x": 1, "rows": [{"x": 1}, extra]}),
+            "a dataclass without a dict of its own": (self._holding(Slotted), {"x": 1, "inner": extra, "more": 3}),
+            "in a list": (HoldsPlains, [{"x": 1}, extra]),
+            "as a dict value": (self._holding(dict[str, Inner]), {"k": extra}),
+            "a clean one": (HoldsPlain, {"x": 1, "row": {"x": 2}, "rows": [{"x": 3}]}),
+        }
+        found = {label: self._found({"f": payload}, model) for label, (model, payload) in cases.items()}
+        assert_that(found).is_equal_to(
+            {
+                "an undeclared key": f"1 {self.CARRIES}['f.extra']",
+                "an init-only key and an alias": "passes",
+                "a key for a field that is not set from input": f"1 {self.CARRIES}['f.derived']",
+                "a class variable's name": f"1 {self.CARRIES}['f.kind']",
+                "one that allows extras": "passes",
+                "a plain dataclass": f"1 {self.CARRIES}['f.extra']",
+                "a model in a field declared in text": f"1 {self.CARRIES}['f.row.extra']",
+                "models in a list field": f"1 {self.CARRIES}['f.rows[1].extra']",
+                "a dataclass without a dict of its own": f"2 {self.CARRIES}['f.inner.extra', 'f.more']",
+                "in a list": f"1 {self.CARRIES}['f[1].extra']",
+                "as a dict value": f"1 {self.CARRIES}['f.k.extra']",
+                "a clean one": "passes",
+            }
+        )
+
+    def test_dataclasses_that_lost_their_order_or_their_count_are_validated_again(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import Json, field_validator
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+        @dataclasses.dataclass(frozen=True)
+        class Tag:
+            x: int
+
+        @pydantic_dataclass(frozen=True)
+        class Mark:
+            x: int
+
+        @dataclasses.dataclass(frozen=True, eq=False)
+        class Loose:
+            x: int
+
+            def __eq__(self, other):
+                return True
+
+            def __hash__(self):
+                return 0
+
+        def first(cls, value):
+            return value[:1]
+
+        def wrapped(cls, value):
+            return {"x": value[0]["x"]}
+
+        def numbered(cls, value):
+            return {"x": value}
+
+        dropping = {"kept": field_validator("f")(classmethod(first))}
+        wrapping = {"wrapped": field_validator("f", mode="before")(classmethod(wrapped))}
+        numbering = {"numbered": field_validator("f", mode="before")(classmethod(numbered))}
+        assert_that(self._found({"f": 5}, self._holding(Tag, **numbering))).is_equal_to("passes")
+        extra = {"x": 2, "extra": 3}
+        found = [
+            self._found({"f": [{"x": 1}, extra]}, self._holding(set[Tag])),
+            self._found({"f": [{"x": 1}, extra]}, self._holding(frozenset[Mark])),
+            self._found({"f": [{"x": 1}, {"x": 2}]}, self._holding(set[Tag])),
+            self._found({"f": [{"x": 1}, extra]}, self._holding(list[Tag], **dropping)),
+            self._found({"f": ['{"x": 1, "extra": 2}']}, self._holding(set[Json[Mark]])),
+            self._found({"f": [{"x": 1}, extra]}, self._holding(set[Loose])),
+            self._found({"f": [extra]}, self._holding(Tag, **wrapping)),
+        ]
+        order = "cannot be checked: a set keeps no order to pair its items with the models they became"
+        assert_that(found).is_equal_to(
+            [
+                f"1 {self.CARRIES}['f[1].extra']",
+                f"1 {self.CARRIES}['f[1].extra']",
+                "passes",
+                f"1 {self.CARRIES}['f[1].extra']",
+                f"1 {self.CARRIES}['f[0].extra']",
+                f"<f> {order}",
+                "<f> cannot be checked: the payload holds a list where a dataclass was built",
+            ]
+        )
+
+    def test_a_record_is_read_once_per_class_and_a_choice_in_it_refuses_under_a_replay(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, field_validator
+        from pydantic.dataclasses import dataclass as pydantic_dataclass
+
+        class A(BaseModel):
+            x: int
+
+        class B(BaseModel):
+            y: int
+
+        @dataclasses.dataclass
+        class Either:
+            one: A | B
+
+        class Emptied(BaseModel):
+            f: list[Either]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def none(cls, value):
+                return []
+
+        if "coerce_numbers_to_str" in ConfigDict.__annotations__:
+
+            @pydantic_dataclass(config=ConfigDict(coerce_numbers_to_str=True))
+            class Coercing:
+                rows: tuple[str, A]
+
+                @field_validator("rows")
+                @classmethod
+                def none(cls, value):
+                    return ()
+
+            found = self._found({"f": {"rows": [1, {"x": 1, "extra": 2}]}}, self._holding(Coercing))
+            assert_that(found).is_equal_to(f"1 {self.CARRIES}['f.rows[1].extra']")
+        monkeypatch.setattr(_contract, "_RECORDS", dict.fromkeys(range(256)))
+        record = _contract._Record(None, Either)
+        first = _contract._record_reads(record)
+        assert_that((0 in _contract._RECORDS, _contract._record_reads(record) is first)).is_equal_to((False, True))
+        assert_that(self._found({"f": [{"one": {"y": 1}}]}, Emptied)).is_equal_to(
+            "<f[0].one> cannot be checked: which of its declared types it became depends on validators not run again"
+        )
+
+
+class TestExactnessReadsATypedDictOffTheSchema:
+    """A `TypedDict` builds a plain dict, which names no class: under a union, under an annotation written as text and
+    in the place of a type variable the walk had no declaration for it, and a key it dropped passed."""
+
+    CARRIES = "undeclared field(s) the model does not declare: "
+    UNSURE = (
+        "cannot be checked: it holds a key the dict built from it does not,"
+        " and its declared types do not say which built it"
+    )
+
+    @staticmethod
+    def _found(payload, model):
+        try:
+            assert_conforms(payload, model, exact=True)
+        except AssertionFailure as failure:
+            return str(failure).split(", but ")[1].removeprefix("it carries ")
+        return "passes"
+
+    @staticmethod
+    def _holding(annotation, **validators):
+        from pydantic import BaseModel
+
+        return type("Holding", (BaseModel,), {"__annotations__": {"f": annotation}, **validators})
+
+    def test_one_typed_dict_beside_types_that_build_no_dict_is_that_record(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, RootModel
+        from typing_extensions import NotRequired, TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class Point(TypedDict):
+            x: int
+            row: NotRequired[Row]
+
+        class Defaulted(BaseModel):
+            f: Point | int = 0
+
+        class Linked(BaseModel):
+            f: Point | int
+            next: "Linked | None" = None
+
+        extra = {"x": 1, "extra": 2}
+        found = {
+            "with a default": self._found({"f": extra}, Defaulted),
+            "in a model that names itself": self._found({"f": 1, "next": {"f": extra}}, Linked),
+            "beside a scalar": self._found({"f": extra}, self._holding(Point | int)),
+            "beside a model and a list": self._found({"f": extra}, self._holding(Point | Row | list[int])),
+            "a model under it": self._found({"f": {"x": 1, "row": extra}}, self._holding(Point | int)),
+            "in a list": self._found({"f": [{"x": 1}, extra]}, self._holding(list[Point | int])),
+            "at the root": self._found(extra, RootModel[Point | int]),
+            "clean": self._found({"f": {"x": 1}}, self._holding(Point | int)),
+            "the other member": self._found({"f": 5}, self._holding(Point | int)),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "with a default": f"1 {self.CARRIES}['f.extra']",
+                "in a model that names itself": f"1 {self.CARRIES}['next.f.extra']",
+                "beside a scalar": f"1 {self.CARRIES}['f.extra']",
+                "beside a model and a list": f"1 {self.CARRIES}['f.extra']",
+                "a model under it": f"1 {self.CARRIES}['f.row.extra']",
+                "in a list": f"1 {self.CARRIES}['f[1].extra']",
+                "at the root": f"1 {self.CARRIES}['extra']",
+                "clean": "passes",
+                "the other member": "passes",
+            }
+        )
+
+    def test_several_typed_dicts_are_told_apart_only_by_what_their_literals_rule_out(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import Field, field_validator
+        from typing_extensions import NotRequired, TypedDict
+
+        class Inner(TypedDict):
+            x: int
+
+        class A(TypedDict):
+            tag: typing.Literal["a"]
+            nested: Inner
+
+        class B(TypedDict):
+            tag: typing.Literal["b", "c"]
+            nested: Inner
+            more: NotRequired[int]
+
+        def retagged(cls, value):
+            return {**value, "tag": "z"}
+
+        lost = {"tag": "a", "nested": {"x": 1, "extra": 2}}
+        tagged = typing.Annotated[A | B, Field(discriminator="tag")]
+        rewritten = self._holding(A | B, retagged=field_validator("f", mode="after")(classmethod(retagged)))
+        found = {
+            "a key lost below equal keys": self._found({"f": lost}, self._holding(A | B)),
+            "a key of the one it is not": self._found(
+                {"f": {"tag": "a", "nested": {"x": 1}, "more": 2}}, self._holding(A | B)
+            ),
+            "the other one keeps its key": self._found(
+                {"f": {"tag": "c", "nested": {"x": 1}, "more": 2}}, self._holding(A | B)
+            ),
+            "by a discriminator": self._found({"f": lost}, self._holding(tagged)),
+            "clean": self._found({"f": {"tag": "b", "nested": {"x": 1}}}, self._holding(A | B)),
+            "a tag none of them lists": self._found({"f": lost}, rewritten),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "a key lost below equal keys": f"1 {self.CARRIES}['f.nested.extra']",
+                "a key of the one it is not": f"1 {self.CARRIES}['f.more']",
+                "the other one keeps its key": "passes",
+                "by a discriminator": f"1 {self.CARRIES}['f.nested.extra']",
+                "clean": "passes",
+                # nothing rules either out, both declare `nested` as one type, and that type names the key
+                "a tag none of them lists": f"1 {self.CARRIES}['f.nested.extra']",
+            }
+        )
+
+    def test_where_nothing_tells_them_apart_a_lost_key_refuses_and_a_clean_payload_passes(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BeforeValidator, Field
+        from typing_extensions import NotRequired, TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        class Other(TypedDict):
+            y: int
+
+        class Aliased(TypedDict):
+            x: typing.Annotated[int, Field(validation_alias="X")]
+
+        class Left(TypedDict):
+            nested: Point
+
+        class Right(TypedDict):
+            nested: Other
+
+        class Wide(TypedDict):
+            nested: Point
+            more: NotRequired[int]
+
+        class ByX(TypedDict):
+            x: typing.Annotated[Point, Field(validation_alias="X")]
+
+        class ByY(TypedDict):
+            x: typing.Annotated[Point, Field(validation_alias="Y")]
+
+        checked = typing.Annotated[Point | Other, BeforeValidator(lambda value: value)]
+        found = {
+            "below the alias of either": self._found({"f": {"Y": {"x": 1, "extra": 2}}}, self._holding(ByX | ByY)),
+            "a key lost under a validator": self._found({"f": {"x": 1, "extra": 2}}, self._holding(checked)),
+            "a key lost": self._found({"f": {"x": 1, "extra": 2}}, self._holding(Point | Other)),
+            "clean": self._found({"f": {"x": 1}}, self._holding(Point | Other)),
+            "clean by an alias": self._found({"f": {"X": 1}}, self._holding(Aliased | Other)),
+            "a key lost beside an alias": self._found({"f": {"X": 1, "extra": 2}}, self._holding(Aliased | Other)),
+            "lost below, declared apart": self._found(
+                {"f": {"nested": {"x": 1, "extra": 2}}}, self._holding(Left | Right)
+            ),
+            "clean below, declared apart": self._found({"f": {"nested": {"y": 1}}}, self._holding(Left | Right)),
+            "lost below, declared alike": self._found(
+                {"f": {"nested": {"x": 1, "extra": 2}}}, self._holding(Left | Wide)
+            ),
+            "beside a dict": self._found({"f": {"x": 1, "extra": 2}}, self._holding(Point | dict[str, str])),
+            "beside a dict, clean": self._found({"f": {"x": 1}}, self._holding(Point | dict[str, str])),
+            "in a list": self._found({"f": [{"x": 1}, {"y": 1, "extra": 2}]}, self._holding(list[Point | Other])),
+            "in either list": self._found({"f": [{"x": 1, "extra": 2}]}, self._holding(list[Point] | list[Other])),
+            "in either list, clean": self._found({"f": [{"y": 1}]}, self._holding(list[Point] | list[Other])),
+            "as a dict's values": self._found(
+                {"f": {"k": {"x": 1, "extra": 2}}}, self._holding(dict[str, Point | Other])
+            ),
+            "in either dict": self._found(
+                {"f": {"k": {"x": 1, "extra": 2}}}, self._holding(dict[str, Point] | dict[str, Other])
+            ),
+            "in a tuple": self._found({"f": [{"x": 1, "extra": 2}, 1]}, self._holding(tuple[Point | Other, int])),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "below the alias of either": f"1 {self.CARRIES}['f.x.extra']",
+                "a key lost under a validator": f"<f> {self.UNSURE}",
+                "a key lost": f"<f> {self.UNSURE}",
+                "clean": "passes",
+                "clean by an alias": "passes",
+                "a key lost beside an alias": f"<f> {self.UNSURE}",
+                "lost below, declared apart": f"<f.nested> {self.UNSURE}",
+                "clean below, declared apart": "passes",
+                "lost below, declared alike": f"1 {self.CARRIES}['f.nested.extra']",
+                "beside a dict": f"<f> {self.UNSURE}",
+                "beside a dict, clean": "passes",
+                "in a list": f"<f[1]> {self.UNSURE}",
+                "in either list": f"<f[0]> {self.UNSURE}",
+                "in either list, clean": "passes",
+                "as a dict's values": f"<f.k> {self.UNSURE}",
+                "in either dict": f"<f.k> {self.UNSURE}",
+                "in a tuple": f"<f[0]> {self.UNSURE}",
+            }
+        )
+
+    def test_what_is_declared_beside_them_declares_what_the_dict_holds_as_well(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import Field, Json
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        class Other(TypedDict):
+            y: int
+
+        class Record(TypedDict):
+            nested: Point
+            required: int
+
+        class ByAlias(TypedDict):
+            nested: typing.Annotated[Point, Field(validation_alias="X")]
+            required: int
+
+        either = self._holding(Record | dict[str, Other])
+        alike = self._holding(Record | dict[str, Point])
+        found = {
+            # the dict took it; the record would have read `nested` from `X`, and the key's own value lost a key
+            "a key the record reads from another": self._found(
+                {"f": {"nested": {"y": 1, "extra": 2}, "X": {"y": 2}}}, self._holding(ByAlias | dict[str, Other])
+            ),
+            "a field both declare alike": self._found({"f": {"nested": {"x": 1, "extra": 2}, "required": 1}}, alike),
+            # the record lacks a key it requires, so the dict took the payload, the record's alias as a plain key
+            "the alias of the one as a key of the other": self._found(
+                {"f": {"X": {"x": 1, "extra": 2}}}, self._holding(ByAlias | dict[str, Point])
+            ),
+            # the dict took it, and dropped the key the record's own field would have kept
+            "a field of the one as a value of the other": self._found({"f": {"nested": {"x": 1, "y": 2}}}, either),
+            "a key that is no field": self._found({"f": {"k": {"y": 1, "extra": 2}}}, either),
+            "the record": self._found({"f": {"nested": {"x": 1, "extra": 2}, "required": 1}}, either),
+            "clean as the dict": self._found({"f": {"k": {"y": 1}}}, either),
+            "clean as the record": self._found({"f": {"nested": {"x": 1}, "required": 1}}, either),
+            "json text, one record": self._found({"f": '{"x": 1, "extra": 2}'}, self._holding(Json[Point | int])),
+            "json text, two": self._found({"f": '{"x": 1, "extra": 2}'}, self._holding(Json[Point | Other])),
+            "json text, clean": self._found({"f": '{"y": 1}'}, self._holding(Json[Point | Other])),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "a key the record reads from another": f"<f> {self.UNSURE}",
+                "a field both declare alike": f"1 {self.CARRIES}['f.nested.extra']",
+                "the alias of the one as a key of the other": f"1 {self.CARRIES}['f.X.extra']",
+                "a field of the one as a value of the other": f"<f.nested> {self.UNSURE}",
+                "a key that is no field": f"1 {self.CARRIES}['f.k.extra']",
+                "the record": f"<f.nested> {self.UNSURE}",
+                "clean as the dict": "passes",
+                "clean as the record": "passes",
+                "json text, one record": f"1 {self.CARRIES}['f.extra']",
+                "json text, two": f"<f> {self.UNSURE}",
+                "json text, clean": "passes",
+            }
+        )
+
+    def test_what_could_mislead_the_choice_between_them_refuses(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import Field, field_validator
+        from typing_extensions import NotRequired, TypedDict
+
+        class Inner(TypedDict):
+            x: int
+
+        class ByX(TypedDict):
+            nested: typing.Annotated[Inner, Field(validation_alias="X")]
+            required: int
+
+        class ByY(TypedDict):
+            nested: typing.Annotated[Inner, Field(validation_alias="Y")]
+
+        class A(TypedDict):
+            tag: typing.Literal["a"]
+            x: int
+
+        class B(TypedDict):
+            tag: typing.Literal["b"]
+            extra: NotRequired[int]
+
+        class Nullable(TypedDict):
+            tag: typing.Literal["a"] | None
+            x: int
+
+        class Loose(TypedDict):
+            tag: str | None
+            extra: int
+
+        def retagged(cls, value):
+            return {**value, "tag": "b"}
+
+        rewritten = self._holding(A | B, retagged=field_validator("f", mode="after")(classmethod(retagged)))
+        found = {
+            # the second took it, and dropped the key the first reads the same field from
+            "two keys for one field": self._found(
+                {"f": {"X": {"x": 1}, "Y": {"x": 1, "extra": 2}}}, self._holding(ByX | ByY)
+            ),
+            # the first took it and dropped the key, then the validator gave it the tag of the second, which keeps it
+            "a tag rewritten after": self._found({"f": {"tag": "a", "x": 1, "extra": 2}}, rewritten),
+            "a tag kept": self._found({"f": {"tag": "a", "x": 1, "extra": 2}}, self._holding(A | B)),
+            # `None` is a value the first takes for its tag, so it is not ruled out by holding it
+            "a tag that may be none": self._found(
+                {"f": {"tag": None, "x": 1, "extra": "no number"}}, self._holding(Nullable | Loose)
+            ),
+            "a tag that is none, clean": self._found({"f": {"tag": None, "x": 1}}, self._holding(Nullable | Loose)),
+            "a tag none rules the other out": self._found(
+                {"f": {"tag": None, "x": 1, "extra": 2}}, self._holding(Nullable | B)
+            ),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "two keys for one field": f"<f> {self.UNSURE}",
+                "a tag rewritten after": f"<f> {self.UNSURE}",
+                "a tag kept": f"1 {self.CARRIES}['f.extra']",
+                "a tag that may be none": f"<f> {self.UNSURE}",
+                "a tag that is none, clean": "passes",
+                "a tag none rules the other out": f"1 {self.CARRIES}['f.extra']",
+            }
+        )
+
+    def test_a_typed_dict_inside_a_schema_that_does_not_say_what_it_builds_is_one_of_them(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic_core import core_schema
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        def chained(inner, kind):
+            class Chained:
+                @classmethod
+                def __get_pydantic_core_schema__(cls, source, handler):
+                    return core_schema.chain_schema(
+                        [handler.generate_schema(inner), core_schema.no_info_plain_validator_function(kind)]
+                    )
+
+            return Chained
+
+        one, many = chained(Point, dict), chained(list[Point], list)
+        lost = {"x": 1, "extra": 2}
+        # a `TypedDict` two fields declare is held once in the schema, and named where each of them uses it
+        twice = type("Twice", (self._holding(one),), {"__annotations__": {"g": Point | None}, "g": None})
+        found = {
+            "named by a reference": self._found({"f": lost}, twice),
+            "a key lost": self._found({"f": lost}, self._holding(one)),
+            "clean": self._found({"f": {"x": 1}}, self._holding(one)),
+            "in a list": self._found({"f": [{"x": 1}, lost]}, self._holding(list[one])),
+            "a list inside it": self._found({"f": [lost]}, self._holding(many)),
+            "a list inside it, clean": self._found({"f": [{"x": 1}]}, self._holding(many)),
+            "beside a list": self._found({"f": [lost]}, self._holding(list[int] | many)),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "named by a reference": f"<f> {self.UNSURE}",
+                "a key lost": f"<f> {self.UNSURE}",
+                "clean": "passes",
+                "in a list": f"<f[1]> {self.UNSURE}",
+                "a list inside it": f"<f[0]> {self.UNSURE}",
+                "a list inside it, clean": "passes",
+                "beside a list": f"<f[0]> {self.UNSURE}",
+            }
+        )
+
+    def test_what_no_reading_pairs_refuses_where_a_typed_dict_is_declared_for_it(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import field_validator
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        def before(reshape):
+            return {"reshaped": field_validator("f", mode="before")(classmethod(lambda cls, value: reshape(value)))}
+
+        keyed = self._holding(dict[str, Point], **before(lambda value: {"k": value[0]}))
+        doubled = self._holding(list[Point], **before(lambda value: [value, value]))
+        merged = "cannot be checked: validation changed its size, 2 keys became 1"
+        reshaped = "cannot be checked: the payload holds a {} where a {} was built"
+        found = {
+            "a list made a mapping": self._found({"f": [{"x": 1, "extra": 2}]}, keyed),
+            "a mapping made two items": self._found({"f": {"x": 1, "extra": 2}}, doubled),
+            "a key lost under one of them": self._found(
+                {"f": {"1": {"x": 1, "extra": 2}, "01": {"x": 2}}}, self._holding(dict[int, Point])
+            ),
+            "in the lists under them": self._found(
+                {"f": {"1": [{"x": 1, "extra": 2}], "01": []}}, self._holding(dict[int, list[Point]])
+            ),
+            "plain values": self._found(
+                {"f": {"1": {"x": 1}, "01": {"x": 2}}}, self._holding(dict[int, dict[str, int]])
+            ),
+            "no merge": self._found({"f": {"1": {"x": 1, "extra": 2}, "2": {"x": 2}}}, self._holding(dict[int, Point])),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "a list made a mapping": f"<f> {reshaped.format('list', 'mapping')}",
+                "a mapping made two items": f"<f> {reshaped.format('dict', 'sequence')}",
+                "a key lost under one of them": f"<f> {merged}",
+                "in the lists under them": f"<f> {merged}",
+                "plain values": "passes",
+                "no merge": f"1 {self.CARRIES}['f.1.extra']",
+            }
+        )
+
+    def test_a_field_its_own_schema_validates_as_a_record_is_walked(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class Point(TypedDict):
+            x: int
+
+        def validated_as(kind):
+            class As:
+                def __get_pydantic_core_schema__(self, source, handler):
+                    return handler.generate_schema(kind)
+
+            return As()
+
+        class Holder(TypedDict):
+            inner: typing.Annotated[dict[str, int], validated_as(Point)]
+
+        extra = {"x": 1, "extra": 2}
+        found = {
+            "a typed dict": self._found(
+                {"f": extra}, self._holding(typing.Annotated[dict[str, int], validated_as(Point)])
+            ),
+            "a model": self._found({"f": extra}, self._holding(typing.Annotated[dict[str, int], validated_as(Row)])),
+            "in a typed dict": self._found({"f": {"inner": extra}}, self._holding(Holder)),
+            "clean": self._found({"f": {"x": 1}}, self._holding(typing.Annotated[dict[str, int], validated_as(Point)])),
+        }
+        assert_that(found).is_equal_to(
+            {
+                "a typed dict": f"1 {self.CARRIES}['f.extra']",
+                "a model": f"1 {self.CARRIES}['f.extra']",
+                "in a typed dict": f"1 {self.CARRIES}['f.inner.extra']",
+                "clean": "passes",
+            }
+        )
+
+    def test_a_type_that_may_build_a_dict_too_leaves_it_open(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import AfterValidator, PlainValidator
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        def marked(value):
+            if not isinstance(value, dict) or "marked" not in value:
+                raise ValueError("not marked")
+            return dict(value)
+
+        # a type whose schema does not say what it builds: here it takes none of these payloads, the others do
+        unknown = typing.Annotated[typing.Any, PlainValidator(marked)]
+        sent = {"x": 1, "extra": 2}
+        holding = self._holding(Point | unknown)
+        assert_that(holding.model_validate({"f": sent}).f).is_equal_to({"x": 1})
+        assert_that(self._found({"f": sent}, holding)).is_equal_to(f"<f> {self.UNSURE}")
+        assert_that(self._found({"f": {"x": 1}}, holding)).is_equal_to("passes")
+        marked_too = {**sent, "marked": 1}
+        # which of the two takes a payload both take is pydantic's to say, and it has said both
+        kept = holding.model_validate({"f": marked_too}).f == marked_too
+        assert_that(self._found({"f": marked_too}, holding)).is_equal_to("passes" if kept else f"<f> {self.UNSURE}")
+        either = self._holding(list[Point] | unknown | None)
+        assert_that(self._found({"f": [sent]}, either)).is_equal_to(f"<f[0]> {self.UNSURE}")
+        assert_that(self._found({"f": [{"x": 1}]}, either)).is_equal_to("passes")
+        keyed = self._holding(dict[str, Point] | unknown | None)
+        assert_that(self._found({"f": {"k": sent}}, keyed)).is_equal_to(f"<f.k> {self.UNSURE}")
+        assert_that(self._found({"f": {"k": {"x": 1}}}, keyed)).is_equal_to("passes")
+        # a validator around a type is read as keeping its kind, so a dict beside a list does not open the list
+        kept = typing.Annotated[dict[str, int], AfterValidator(lambda value: value)]
+        beside = self._holding(list[Point] | kept | None)
+        assert_that(self._found({"f": [{"x": 1, "extra": 2}]}, beside)).is_equal_to(f"1 {self.CARRIES}['f[0].extra']")
+
+    def test_without_a_schema_to_read_the_type_declares_as_far_as_it_says(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class Point(TypedDict):
+            x: int
+
+        class Holding(BaseModel):
+            f: Point
+            pair: tuple[Point, Row] | None = None
+
+        monkeypatch.setattr(_contract, "_field_nodes", lambda model: {})
+        monkeypatch.setattr(_contract, "_READS", {})
+        extra = {"x": 1, "extra": 2}
+        assert_that(self._found({"f": extra, "pair": [extra, extra]}, Holding)).is_equal_to(
+            f"3 {self.CARRIES}['f.extra', 'pair[0].extra', 'pair[1].extra']"
+        )
+
+    def test_what_text_and_a_type_variable_stand_for_is_read_off_the_schema(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Field
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        class Point(TypedDict):
+            x: int
+
+        class Other(TypedDict):
+            y: int
+
+        class Named(TypedDict):
+            x: typing.Annotated[int, Field(validation_alias="X")]
+
+        class Texted(TypedDict):
+            one: "Point"
+            named: "Named"
+            many: "list[Point]"
+            pair: "tuple[Point, Row]"
+            ragged: "tuple[Point, ...]"
+            keyed: "dict[str, Point]"
+            either: "Point | Other | None"
+            both: "tuple[Point, Other]"
+            row: "Row | None"
+
+        class Holding(BaseModel):
+            f: Texted
+
+        item = typing.TypeVar("item")
+
+        class Box(TypedDict, typing.Generic[item]):
+            held: item
+            many: list[item]
+
+        extra = {"x": 1, "extra": 2}
+        clean = {
+            "one": {"x": 1},
+            "named": {"X": 1},
+            "many": [{"x": 1}],
+            "pair": [{"x": 1}, {"x": 1}],
+            "ragged": [{"x": 1}],
+            "keyed": {"k": {"x": 1}},
+            "either": None,
+            "both": [{"x": 1}, {"y": 1}],
+            "row": None,
+        }
+        found = {
+            name: self._found({"f": {**clean, name: sent}}, Holding)
+            for name, sent in (
+                ("one", extra),
+                ("many", [{"x": 1}, extra]),
+                ("pair", [extra, extra]),
+                ("ragged", [{"x": 1}, extra]),
+                ("keyed", {"k": extra}),
+                ("either", extra),
+                ("both", [extra, {"y": 1, "x": 2}]),
+                ("row", extra),
+            )
+        }
+        found["clean"] = self._found({"f": clean}, Holding)
+        assert_that(found).is_equal_to(
+            {
+                "one": f"1 {self.CARRIES}['f.one.extra']",
+                "many": f"1 {self.CARRIES}['f.many[1].extra']",
+                "pair": f"2 {self.CARRIES}['f.pair[0].extra', 'f.pair[1].extra']",
+                "ragged": f"1 {self.CARRIES}['f.ragged[1].extra']",
+                "keyed": f"1 {self.CARRIES}['f.keyed.k.extra']",
+                "either": f"<f.either> {self.UNSURE}",
+                "both": f"2 {self.CARRIES}['f.both[0].extra', 'f.both[1].x']",
+                "row": f"1 {self.CARRIES}['f.row.extra']",
+                "clean": "passes",
+            }
+        )
+        try:
+
+            class Boxes(BaseModel):
+                points: Box[Point]
+                others: Box[Other]
+
+        # pydantic before 2.2 builds no schema for a parametrized `TypedDict`
+        except TypeError:
+            return
+        both = {"x": 1, "y": 2}
+        sent = {"points": {"held": both, "many": [both]}, "others": {"held": both, "many": [both]}}
+        assert_that(self._found(sent, Boxes)).is_equal_to(
+            f"4 {self.CARRIES}['others.held.x', 'others.many[0].x', 'points.held.y', 'points.many[0].y']"
+        )
+
+    def test_a_list_emptied_where_its_type_is_not_read_refuses(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, BeforeValidator
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            x: int
+
+        def none(value):
+            return []
+
+        class Texted(TypedDict):
+            rows: "typing.Annotated[list[Row], BeforeValidator(none)]"
+
+        class Holding(BaseModel):
+            f: Texted
+
+        emptied = "cannot be checked: validation changed its length, 1 items became 0"
+        assert_that(self._found({"f": {"rows": [{"x": 1, "extra": 2}]}}, Holding)).is_equal_to(f"<f.rows> {emptied}")
+
+        item = typing.TypeVar("item")
+
+        class Box(TypedDict, typing.Generic[item]):
+            many: typing.Annotated[list[item], BeforeValidator(none)]
+
+        try:
+            boxed = self._holding(Box[Row])
+        # pydantic before 2.2 builds no schema for a parametrized `TypedDict`
+        except TypeError:
+            return
+        # read again as its annotation, the list would be one of anything, and hold whatever was sent
+        assert_that(self._found({"f": {"many": [{"x": 1, "extra": 2}]}}, boxed)).is_equal_to(f"<f.many> {emptied}")
+
+    def test_under_a_replay_a_type_that_is_not_read_counts_as_a_choice(self, monkeypatch):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            x: int
+
+        # a replay reads the text in the module of the class, so the name has to be there
+        monkeypatch.setitem(globals(), "_TextedPoint", Point)
+
+        @dataclasses.dataclass
+        class Plain:
+            point: "_TextedPoint"  # noqa: F821  # put into the module just above
+
+        class Emptied(BaseModel):
+            f: list[Plain]
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def none(cls, value):
+                return []
+
+        expected = (
+            "<f[0].point> cannot be checked: which of its declared types it became depends on validators not run again"
+        )
+        # pydantic 2.0 reads the text only in the frame that asks, so no replay is built there
+        if _contract._adapter((list[Plain], Emptied, None)) is None:
+            expected = "<f> cannot be checked: validation changed its length, 1 items became 0"
+        assert_that(self._found({"f": [{"point": {"x": 1}}]}, Emptied)).is_equal_to(expected)
+
+    def test_a_dataclass_and_typed_extras_declared_in_text_are_read_off_the_schema(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict
+        from typing_extensions import TypedDict
+
+        class Point(TypedDict):
+            # a `TypedDict` takes the config of the model above it, which here keeps extras
+            __pydantic_config__ = ConfigDict(extra="ignore")  # ty: ignore[invalid-typed-dict-statement]  # pydantic's hook
+            x: int
+
+        @dataclasses.dataclass
+        class Plain:
+            point: "Point"
+            points: "list[Point]"
+
+        class Holding(BaseModel):
+            f: Plain
+
+        extra = {"x": 1, "extra": 2}
+        assert_that(self._found({"f": {"point": extra, "points": [extra]}}, Holding)).is_equal_to(
+            f"2 {self.CARRIES}['f.point.extra', 'f.points[0].extra']"
+        )
+        try:
+
+            class Open(BaseModel):
+                model_config = ConfigDict(extra="allow")
+                __pydantic_extra__: "dict[str, Point]"
+
+        # pydantic 2.0 takes no `__pydantic_extra__` written as text
+        except TypeError:
+            return
+        assert_that(self._found({"more": extra}, Open)).is_equal_to(f"1 {self.CARRIES}['more.extra']")
+        assert_that(self._found({"more": {"x": 1}}, Open)).is_equal_to("passes")
+
+
+class TestAnExactFailureCarriesADiff:
+    """An exact failure named its finds in the message alone: a reader of ``.diff`` got nothing, and one that wanted
+    the value sent under an undeclared key had to parse the path back out of the text."""
+
+    @staticmethod
+    def _diff(payload, model, **options):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_conforms(payload, model, exact=True, **options)
+        return caught.value.diff
+
+    @staticmethod
+    def _reached(payload, steps):
+        for step in steps:
+            payload = step.value if step.kind == "item" else payload[step.value]
+        return payload
+
+    @staticmethod
+    def _models():
+        from pydantic import AliasPath, BaseModel, Field
+
+        class Row(BaseModel):
+            x: int
+
+        class Order(BaseModel):
+            rows: list[Row] = []
+            by_name: dict[str, Row] = {}
+            sub: Row | None = Field(default=None, alias="theSub")
+            far: Row | None = Field(default=None, validation_alias=AliasPath("a", 0))
+
+        return Row, Order
+
+    def test_each_undeclared_field_is_an_entry_holding_what_was_sent_there(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        _, order = self._models()
+        payload = {
+            "rows": [{"x": 1}, {"x": 2, "extra": [3]}],
+            "by_name": {"k": {"x": 1, "more": None}},
+            "theSub": {"x": 1, "sub_extra": 4},
+            "a": [{"x": 1, "far_extra": 5}],
+            "top": {"any": 6},
+        }
+        diff = self._diff(payload, order)
+        assert_that(diff.kind).is_equal_to("match")
+        found = {entry.path: [(step.kind, step.value) for step in entry.steps] for entry in diff.entries}
+        assert_that(found).is_equal_to(
+            {
+                "by_name.k.more": [("key", "by_name"), ("key", "k"), ("key", "more")],
+                "far.far_extra": [("key", "a"), ("index", 0), ("key", "far_extra")],
+                "rows[1].extra": [("key", "rows"), ("index", 1), ("key", "extra")],
+                "sub.sub_extra": [("key", "theSub"), ("key", "sub_extra")],
+                "top": [("key", "top")],
+            }
+        )
+        assert_that([entry.absent for entry in diff.entries]).is_equal_to(["expected"] * 5)
+        assert_that([entry.expected for entry in diff.entries]).is_equal_to([None] * 5)
+        for entry in diff.entries:
+            assert_that(self._reached(payload, entry.steps)).described_as(entry.path).is_same_as(entry.actual)
+
+    def test_the_entries_name_what_the_message_names_in_its_order(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        row, order = self._models()
+        payloads = [
+            ({"zeta": 1, "rows": [{"x": 1, "b": 2, "a": 3}], "alpha": 4}, order, {}),
+            ([{"x": 1}, {"x": 2, "extra": 3}], row, {"each": True}),
+        ]
+        for payload, model, options in payloads:
+            with pytest.raises(AssertionFailure) as caught:
+                assert_conforms(payload, model, exact=True, **options)
+            named = str(caught.value).rsplit(": ", 1)[1]
+            assert_that(repr([entry.path for entry in caught.value.diff.entries])).is_equal_to(named)
+        each = self._diff([{"x": 1}, {"x": 2, "extra": 3}], row, each=True).entries[0]
+        assert_that((each.path, each.actual, [tuple(step) for step in each.steps])).is_equal_to(
+            ("[1].extra", 3, [("index", 1, None), ("key", "extra", None)])
+        )
+
+    def test_a_collection_that_keeps_no_positions_is_stepped_into_by_the_item(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Json
+
+        class Row(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            x: int
+
+        class Listed(BaseModel):
+            f: list[Row]
+
+        class Gathered(BaseModel):
+            f: frozenset[Json[Row]]
+
+        drifting = {"x": 1, "extra": 2}
+        values = {"a": {"x": 0}, "b": drifting}.values()
+        entry = self._diff({"f": values}, Listed).entries[0]
+        assert_that((entry.path, entry.actual)).is_equal_to(("f[1].extra", 2))
+        assert_that([step.kind for step in entry.steps]).is_equal_to(["key", "item", "key"])
+        assert_that(entry.steps[1].value).is_same_as(drifting)
+
+        queue = collections.deque([{"x": 0}, drifting])
+        entry = self._diff({"f": queue}, Listed).entries[0]
+        assert_that([tuple(step) for step in entry.steps]).is_equal_to(
+            [("key", "f", None), ("index", 1, None), ("key", "extra", None)]
+        )
+
+        text = '{"x": 1, "extra": 2}'
+        entry = self._diff({"f": {text}}, Gathered).entries[0]
+        assert_that((entry.path, entry.actual)).is_equal_to(("f[0].extra", 2))
+        assert_that([tuple(step) for step in entry.steps]).is_equal_to(
+            [("key", "f", None), ("item", text, None), ("json", {"x": 1, "extra": 2}, None), ("key", "extra", None)]
+        )
+
+    def test_a_find_inside_a_key_or_a_record_or_an_extra_is_stepped_into_as_it_was_read(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, ConfigDict, Field, Json
+        from pydantic.dataclasses import dataclass
+        from typing_extensions import TypedDict
+
+        class Row(BaseModel):
+            model_config = ConfigDict(frozen=True)
+            x: int
+
+        class Point(TypedDict):
+            row: typing.Annotated[Row, Field(alias="R")]
+
+        @dataclass
+        class Pair:
+            row: Row
+
+        class Keyed(BaseModel):
+            f: dict[Json[Row], int]
+
+        class Typed(BaseModel):
+            f: Point
+
+        class Paired(BaseModel):
+            f: Pair
+
+        class Open(BaseModel):
+            model_config = ConfigDict(extra="allow")
+            __pydantic_extra__: dict[str, Row]
+
+        key = '{"x": 1, "extra": 2}'
+        drifting = {"x": 1, "deep": [2]}
+        cases = {
+            "a key": (
+                Keyed,
+                {"f": {key: 1}},
+                "f.extra",
+                [("key", "f"), ("item", key), ("json", {"x": 1, "extra": 2}), ("key", "extra")],
+            ),
+            "a record's alias": (
+                Typed,
+                {"f": {"R": drifting}},
+                "f.row.deep",
+                [("key", "f"), ("key", "R"), ("key", "deep")],
+            ),
+            "a record's own key": (
+                Typed,
+                {"f": {"R": {"x": 1}, "more": drifting}},
+                "f.more",
+                [("key", "f"), ("key", "more")],
+            ),
+            "a dataclass": (
+                Paired,
+                {"f": {"row": drifting}},
+                "f.row.deep",
+                [("key", "f"), ("key", "row"), ("key", "deep")],
+            ),
+            "a dataclass's own key": (
+                Paired,
+                {"f": {"row": {"x": 1}, "more": 3}},
+                "f.more",
+                [("key", "f"), ("key", "more")],
+            ),
+            "an extra": (Open, {"more": drifting}, "more.deep", [("key", "more"), ("key", "deep")]),
+        }
+        if not isinstance(Open.model_validate({"more": {"x": 1}}).__pydantic_extra__["more"], Row):
+            # this pydantic keeps extras as sent, whatever `__pydantic_extra__` declares
+            del cases["an extra"]
+        found = {}
+        for label, (model, payload, _, _) in cases.items():
+            (entry,) = self._diff(payload, model).entries
+            found[label] = (entry.path, [(step.kind, step.value) for step in entry.steps])
+        assert_that(found).is_equal_to({label: (path, steps) for label, (_, _, path, steps) in cases.items()})
+        (entry,) = self._diff({"f": {"R": {"x": 1}, "more": drifting}}, Typed).entries
+        assert_that(entry.actual).is_same_as(drifting)
+        (entry,) = self._diff({"f": {"row": {"x": 1}, "more": drifting}}, Paired).entries
+        assert_that(entry.actual).is_same_as(drifting)
+
+    def test_json_text_is_entered_by_a_step_that_holds_what_it_decodes_to(self):
+        """The steps led on into what the text decodes to without saying so: a reader that followed them through the
+        payload met a string, and one that decoded it had an equal value and not the object the entry holds."""
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Json
+
+        class Row(BaseModel):
+            x: int
+
+        class One(BaseModel):
+            f: Json[Row]
+
+        class Twice(BaseModel):
+            f: Json[Json[Row]]
+
+        class Many(BaseModel):
+            f: Json[list[Row]]
+
+        class Keyed(BaseModel):
+            f: Json[dict[int, Row]]
+
+        holds = {"x": 1, "extra": [2]}
+        sent = {
+            "text": (One, '{"x": 1, "extra": [2]}', "f.extra", ["key", "json", "key"], holds),
+            "bytes": (One, b'{"x": 1, "extra": [2]}', "f.extra", ["key", "json", "key"], holds),
+            "text that holds the text": (
+                Twice,
+                '"{\\"x\\": 1, \\"extra\\": [2]}"',
+                "f.extra",
+                ["key", "json", "key"],
+                holds,
+            ),
+            "a list": (Many, '[{"x": 0}, {"x": 1, "extra": [2]}]', "f[1].extra", ["key", "json", "index", "key"], None),
+        }
+        for label, (model, text, path, kinds, decoded) in sent.items():
+            (entry,) = self._diff({"f": text}, model).entries
+            entered = entry.steps[1]
+            assert_that((entry.path, [step.kind for step in entry.steps])).described_as(label).is_equal_to(
+                (path, kinds)
+            )
+            assert_that(entered.value).described_as(label).is_equal_to(decoded or [{"x": 0}, holds])
+            reached = entered.value
+            for step in entry.steps[2:]:
+                reached = reached[step.value]
+            assert_that(reached).described_as(label).is_same_as(entry.actual)
+
+        merged = '{"1": {"x": 1, "extra": 2}, "01": {"x": 2}}'
+        (entry,) = self._diff({"f": merged}, Keyed).entries
+        assert_that((entry.path, [step.kind for step in entry.steps])).is_equal_to(("f", ["key", "json"]))
+        assert_that(entry.expected).is_equal_to("cannot be checked: validation changed its size, 2 keys became 1")
+        assert_that(entry.actual).is_same_as(entry.steps[1].value)
+        assert_that(entry.actual).is_equal_to({"1": {"x": 1, "extra": 2}, "01": {"x": 2}})
+
+    def test_what_json_text_holds_is_not_copied_where_the_payload_was_changed_in_place(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, Json, model_validator
+
+        class Row(BaseModel):
+            x: int
+
+        class Stripping(BaseModel):
+            x: int
+            row: Json[Row]
+
+            @model_validator(mode="before")
+            @classmethod
+            def stripped(cls, value):
+                value.pop("extra")["tags"].clear()
+                return value
+
+        payload = {"x": 1, "extra": {"tags": ["a"], "opaque": object()}, "row": '{"x": 1, "more": [2]}'}
+        found = {entry.path: entry for entry in self._diff(payload, Stripping).entries}
+        assert_that(payload).does_not_contain_key("extra")
+        assert_that(found["extra"].actual["tags"]).is_equal_to(["a"])
+        entered = found["row.more"].steps[1]
+        assert_that(entered.kind).is_equal_to("json")
+        # the entry keeps the very list the step holds: a copy would be equal, and no longer reached by the steps
+        assert_that(found["row.more"].actual).is_same_as(entered.value["more"])
+
+    def test_a_part_that_cannot_be_checked_is_an_entry_holding_the_part_against_the_reason(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator, model_validator
+        from pydantic_core import core_schema
+
+        class A(BaseModel):
+            x: int
+
+        class B(BaseModel):
+            y: int
+
+        class Mixed(BaseModel):
+            f: list[A | B]
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def first_two(cls, value):
+                return value[:2]
+
+        class Wrapped(BaseModel):
+            x: int
+
+            @model_validator(mode="before")
+            @classmethod
+            def unwrapped(cls, value):
+                return value[0] if isinstance(value, list) else value
+
+        items = [{"x": 1}, {"y": 2}, {"x": 3}]
+        with pytest.raises(AssertionFailure) as caught:
+            assert_conforms({"f": items}, Mixed, exact=True)
+        reason = "cannot be checked: validation changed its length, 3 items became 2"
+        assert_that(str(caught.value)).ends_with(f", but <f> {reason}")
+        (entry,) = caught.value.diff.entries
+        assert_that((entry.path, entry.expected, entry.absent)).is_equal_to(("f", reason, None))
+        assert_that(entry.actual).is_same_as(items)
+        assert_that([tuple(step) for step in entry.steps]).is_equal_to([("key", "f", None)])
+
+        whole = [{"x": 1}]
+        (entry,) = self._diff(whole, Wrapped).entries
+        assert_that((entry.path, entry.steps)).is_equal_to((".", ()))
+        assert_that(entry.actual).is_same_as(whole)
+        assert_that(entry.expected).is_equal_to("cannot be checked: the payload holds a list where a model was built")
+
+        class Own(BaseModel, frozen=True):
+            x: int
+
+            def __eq__(self, other):
+                return isinstance(other, Own) and other.x == self.x
+
+            def __hash__(self):
+                return hash(self.x)
+
+        class Bag(frozenset):
+            @classmethod
+            def __get_pydantic_core_schema__(cls, source, handler):
+                return core_schema.no_info_after_validator_function(
+                    cls, core_schema.frozenset_schema(handler.generate_schema(Own))
+                )
+
+        class Emptied(BaseModel):
+            f: Bag
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def emptied(cls, value):
+                return Bag()
+
+        sent = [{"x": 1}]
+        (entry,) = self._diff({"f": sent}, Emptied).entries
+        assert_that(entry.expected).is_equal_to(
+            "cannot be checked: a set keeps no order to pair its items with the models they became"
+        )
+        assert_that(entry.actual).is_same_as(sent)
+
+    def test_a_payload_too_deep_to_walk_is_an_entry_at_the_item_that_was_being_walked(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class Rewrapped(BaseModel):
+            f: A | list[typing.Any]
+
+            @field_validator("f", mode="before")
+            @classmethod
+            def rewrapped(cls, value):
+                depth = 0
+                while isinstance(value, list):
+                    depth, value = depth + 1, value[0]
+                for _ in range(depth):
+                    value = [value]
+                return value
+
+        deep: object = 0
+        for _ in range(5_000):
+            deep = [deep]
+        reason = "cannot be checked: it nests deeper than the walk can follow"
+        payload = {"f": deep}
+        (entry,) = self._diff(payload, Rewrapped).entries
+        assert_that((entry.path, entry.steps, entry.expected)).is_equal_to((".", (), reason))
+        assert_that(entry.actual).is_same_as(payload)
+        (entry,) = self._diff([{"f": [0]}, payload], Rewrapped, each=True).entries
+        assert_that((entry.path, [tuple(step) for step in entry.steps])).is_equal_to(("[1]", [("index", 1, None)]))
+        assert_that(entry.actual).is_same_as(payload)
+
+    def test_the_entries_of_one_failure_share_the_copies_of_what_they_share(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Emptying(BaseModel):
+            x: int
+
+            @model_validator(mode="before")
+            @classmethod
+            def emptied(cls, value):
+                value["a"].clear()
+                return value
+
+        shared = [1, 2]
+        deep: list = []
+        for _ in range(100_000):
+            deep = [deep]
+        payload = {"x": 1, "a": shared, "b": {"again": shared}, "deep": deep, "opaque": object()}
+        entries = {entry.path: entry.actual for entry in self._diff(payload, Emptying).entries}
+        assert_that(shared).is_empty()
+        assert_that(entries["a"]).is_equal_to([1, 2])
+        assert_that(entries["b"]["again"]).is_same_as(entries["a"])
+        assert_that(entries["deep"]).is_not_same_as(deep)
+
+    def test_an_entry_keeps_what_was_sent_where_validation_changed_the_payload_in_place(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, model_validator
+
+        class Stripping(BaseModel):
+            x: int
+
+            @model_validator(mode="before")
+            @classmethod
+            def stripped(cls, value):
+                if isinstance(value, list):
+                    return value.pop()
+                dropped = value.pop("extra")
+                dropped["tags"].clear()
+                for held in dropped.get("pair", ())[1:]:
+                    held.clear()
+                return value
+
+        # a payload holding what no copy is made of is kept container by container, and its own parts are walked
+        opaque = object()
+        frozen = (1, (2, opaque))
+        extra = {"tags": ["a", "b"], "pair": (1, [2]), "opaque": opaque, frozen: frozen, "mixed": (frozen, [3])}
+        extra["itself"] = extra
+        payload = {"x": 1, "extra": extra}
+        (entry,) = self._diff(payload, Stripping).entries
+        assert_that(payload).is_equal_to({"x": 1})
+        assert_that((extra["tags"], extra["pair"])).is_equal_to(([], (1, [])))
+        kept = entry.actual
+        assert_that(kept).is_not_same_as(extra)
+        assert_that((kept["tags"], kept["pair"])).is_equal_to((["a", "b"], (1, [2])))
+        assert_that(kept["itself"]).is_same_as(kept)
+        assert_that(kept["opaque"]).is_same_as(opaque)
+        # a tuple nothing under which can be refilled is the payload's own, as a key and as a value
+        assert_that(kept[frozen]).is_same_as(frozen)
+        assert_that(next(key for key in kept if key == frozen)).is_same_as(frozen)
+        assert_that(kept["mixed"]).is_not_same_as(extra["mixed"])
+        assert_that(kept["mixed"][0]).is_same_as(frozen)
+
+        whole = [{"x": 1}]
+        (entry,) = self._diff(whole, Stripping).entries
+        assert_that(whole).is_empty()
+        assert_that(entry.actual).is_equal_to([{"x": 1}])
+
+        deep: list = [opaque]
+        for _ in range(100_000):
+            deep = [deep]
+        nested: tuple = ([1],)
+        for _ in range(5_000):
+            nested = (nested,)
+        extra = {"tags": [deep], "pair": (nested, [nested]), "both": (nested, nested)}
+        payload = {"x": 1, "extra": extra}
+        (entry,) = self._diff(payload, Stripping).entries
+        assert_that((extra["tags"], extra["pair"][1])).is_equal_to(([], []))
+        reached, depth = entry.actual["tags"][0], 0
+        while isinstance(reached, list):
+            reached, depth = reached[0], depth + 1
+        assert_that((depth, reached)).is_equal_to((100_001, opaque))
+        kept, again = entry.actual["pair"]
+        assert_that(again).is_length(1)
+        assert_that(again[0]).is_same_as(kept)
+        assert_that(entry.actual["both"][0]).is_same_as(kept)
+        assert_that(entry.actual["both"][1]).is_same_as(kept)
+        depth = 0
+        while isinstance(kept, tuple):
+            kept, depth = kept[0], depth + 1
+        assert_that((depth, kept)).is_equal_to((5_001, [1]))
+
+    def test_a_key_named_by_nothing_joins_the_path_as_it_did(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, RootModel
+
+        class Row(BaseModel):
+            x: int
+
+        class Rows(BaseModel):
+            f: dict[str, list[Row]]
+
+        drifting = [{"x": 1, "": 2, "extra": 3}]
+        found = [
+            [entry.path for entry in self._diff(payload, model).entries]
+            for payload, model in (
+                ({"": drifting}, RootModel[dict[str, list[Row]]]),
+                ({"": {"": drifting[0]}}, RootModel[dict[str, dict[str, Row]]]),
+                ({"f": {"": drifting}}, Rows),
+            )
+        ]
+        assert_that(found).is_equal_to([["[0].", "[0].extra"], ["", "extra"], ["f.[0].", "f.[0].extra"]])
+
+    def test_the_diff_renders_an_undeclared_field_as_what_only_the_payload_holds(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        from pydantic import BaseModel, field_validator
+
+        class A(BaseModel):
+            x: int
+
+        class B(BaseModel):
+            y: int
+
+        class Halved(BaseModel):
+            f: list[A | B]
+
+            @field_validator("f", mode="after")
+            @classmethod
+            def halved(cls, value):
+                return value[:2]
+
+        drifting = self._diff({"x": 1, "extra": [2]}, A)
+        assert_that(str(drifting)).is_equal_to("diff (match):\n  extra: - [2]")
+        refused = self._diff({"f": [{"x": 1}, {"y": 2}, {"x": 3}]}, Halved)
+        assert_that(str(refused)).is_equal_to(
+            "diff (match):\n  f: expected cannot be checked: validation changed its length, 3 items became 2,"
+            " but was [{'x': 1}, {'y': 2}, {'x': 3}]"
+        )
+
+    def test_a_soft_failure_carries_the_same_diff(self):
+        pytest.importorskip("pydantic", reason="pydantic not installed")
+        row, _ = self._models()
+        with pytest.raises(AssertionError) as caught, soft_assertions():
+            assert_conforms({"x": 1, "extra": 2}, row, exact=True)
+        (failure,) = caught.value.failures
+        assert_that([(entry.path, entry.actual) for entry in failure.diff.entries]).is_equal_to([("extra", 2)])
+
+
 class TestExactnessWalksOnlyWhatCanHoldAModel:
     """A field whose type is made of plain parts, and a part pydantic kept as the payload's own object, hold nothing
     built from the payload, so `exact=True` does not walk them: a 300 by 300 grid of floats walked item by item cost
@@ -2406,7 +4600,7 @@ class TestExactnessWalksOnlyWhatCanHoldAModel:
 
         walked = []
         walk = _contract._value_drift
-        monkeypatch.setattr(_contract, "_value_drift", lambda *args: walked.append(args[2]) or walk(*args))
+        monkeypatch.setattr(_contract, "_value_drift", lambda *args: walked.append(_placed(args[2])[0]) or walk(*args))
         assert_conforms({"cells": [[1.0, 2.0]], "tags": ["t"], "sub": {"x": 1}}, Grid, exact=True)
         assert_conforms([[1.0, 2.0]], RootModel[list[list[float]]], exact=True)
         assert_that(walked).is_equal_to(["sub"])
@@ -2471,7 +4665,7 @@ class TestDriftOnDuckTypedModels:
         class DuckModel:
             model_fields: typing.ClassVar = {"id": DuckField()}
 
-        assert_that(contract_drift({"id": 1, "surprise": 2}, DuckModel())).is_equal_to(["surprise"])
+        assert_that(_paths(contract_drift({"id": 1, "surprise": 2}, DuckModel()))).is_equal_to(["surprise"])
 
 
 class TestStructureWalkPathsAndCycles:
