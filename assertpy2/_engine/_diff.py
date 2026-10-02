@@ -33,9 +33,10 @@ import difflib
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from ..errors import DiffEntry, DiffResult, _safe_repr
-from ._compare import _EQ_ATOMIC, _guarded_equal, _node_decision
+from ._compare import _EQ_ATOMIC, _node_decision, _walked_equal
 from ._introspection import (
     TakenApart,
+    compares_by_parts,
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
@@ -53,8 +54,11 @@ if TYPE_CHECKING:
 
     from ._compare import _CompareConfig
 
-    _Frame = tuple[Iterator[Any], int, int]
-    """A container's children still to walk, and the ids of the pair it put on the path."""
+    _Owed = tuple[_Path, object, object, int]
+    """A pair ``==`` held apart: where it is, its two sides, and how many entries there were before it."""
+
+    _Frame = tuple[Iterator[Any], tuple[int, int], _Owed | None]
+    """A container's children still to walk, the ids of the pair it put on the path, and the pair if it is owed."""
 
 _K = TypeVar("_K", bound="Hashable")  # a mapping key or a field name, kept as itself through the walk
 _T = TypeVar("_T")
@@ -143,8 +147,9 @@ def _rechecked_equal_runs(opcodes, actual, expected):
     a smaller difference than the one that caused it.  Keyed on the values, the run matched by identity or
     ``==``, which is already the walk's own rule for an element.
 
-    Compared through `_guarded_equal()`, the same question `_node_decision()` reaches its verdict with, so
-    a run split back into a substitution is exactly a pair the walk will then report.  That
+    Compared through `_walked_equal()`, the same question `_node_decision()` reaches its verdict with, and
+    through `_graphs_differ()` where that has no answer, so a run split back into a substitution is exactly a
+    pair the walk will then report.  That
     costs one comparison per matched element, on the failing path only and under the caller's length
     cap.  Measured on 200 records with one inserted at the head: 0.38 ms to 0.48 ms for unhashable rows,
     and 0.15 ms to 0.20 ms for hashable ones, which is the path most sequences take.
@@ -155,7 +160,8 @@ def _rechecked_equal_runs(opcodes, actual, expected):
             revalidated.append((tag, actual_start, actual_stop, expected_start, expected_stop))
             continue
         holds = [
-            _guarded_equal(actual[actual_start + offset], expected[expected_start + offset])
+            (equal := _walked_equal(actual[actual_start + offset], expected[expected_start + offset]))
+            or (equal is None and not _graphs_differ(actual[actual_start + offset], expected[expected_start + offset]))
             for offset in range(actual_stop - actual_start)
         ]
         run_start = 0
@@ -338,8 +344,23 @@ def _positional_difference_count(actual, expected) -> int:
     return sum(
         1
         for index in range(max(len(actual), len(expected)))
-        if index >= len(actual) or index >= len(expected) or not _guarded_equal(actual[index], expected[index])
+        if index >= len(actual)
+        or index >= len(expected)
+        or not (
+            (equal := _walked_equal(actual[index], expected[index]))
+            or (equal is None and not _graphs_differ(actual[index], expected[index]))
+        )
     )
+
+
+def _graphs_differ(actual, expected) -> bool:
+    """Whether two values ``==`` cannot finish on differ, as the walk finds.
+
+    Counted as a difference unasked, two equal values that hold themselves tipped a pairing towards alignment,
+    which then listed one as removed and the other as added.  Asked only of such a pair: as a wrapper around every
+    ``==`` it cost a failing comparison of 200 rows 8%.
+    """
+    return bool(_child_entries(actual, expected, _ROOT, descended_for="unanswered"))
 
 
 def _aligned_difference_count(opcodes) -> int:
@@ -405,6 +426,26 @@ def _order_entries(actual, expected, kept, kept_expected, prefix: _Path) -> list
     return [prefix.leaf_entry(actual=list(kept), expected=list(kept_expected))]
 
 
+def _differs_of_itself(actual: object, expected: object) -> bool:
+    """Whether ``==`` may hold apart two values the walk takes apart together, whatever they hold.
+
+    It may where either class has an ``==`` not known to read the parts the walk reads (`compares_by_parts`): one
+    left to `object`, which holds any two apart, or one written by hand, which answers for reasons of its own.
+    Two of different classes differ where the class is part of the comparison: a list against a tuple, and two
+    dataclasses, attrs classes or models, whose own ``==`` asks for the same class.  Two mappings of different
+    classes do not, and neither do a tuple and a namedtuple, nor a list and a subclass of it: each is compared by
+    what it holds.
+    """
+    kind = type(actual)
+    if kind is type(expected):
+        return not compares_by_parts(kind)
+    if not (compares_by_parts(kind) and compares_by_parts(type(expected))):
+        return True
+    if isinstance(actual, (list, tuple)):
+        return isinstance(actual, list) is not isinstance(expected, list)
+    return not is_mapping_like(actual)
+
+
 class _Walk:
     """One structural diff, walked on a list of frames rather than on the interpreter's stack.
 
@@ -413,33 +454,37 @@ class _Walk:
     every level cost three Python calls, and a pair nested four hundred levels deep raised `RecursionError` in
     place of its failure.
 
-    ``on_path`` holds the current node's ancestors and nothing else, one mapping for the whole walk: a pair
-    goes on when its frame opens and comes off when the frame is done.  A copy per level made memory quadratic
-    in the depth.  Being on the path is what makes a reference circular, and a value two siblings share is
-    not one.  Held by id, and the id holds its value, so no ancestor is freed for a new value to take its id.
+    ``paired`` holds the current node's ancestors and nothing else, as the pairs they were opened as, one
+    mapping for the whole walk: a pair goes on when its frame opens and comes off when the frame is done.  A copy
+    per level made memory quadratic in the depth.  Held by id, and the id holds its two values, so no ancestor
+    is freed for a new value to take its id.
 
-    ``paired`` holds the same ancestors as the pairs they were opened as.  Under a config the walk is the verdict,
-    and it reads a graph as the mapping core does: a pair it meets again while still inside it is equal as far as
-    that pair goes, and one side met again beside another partner is a new pair, walked like any other.  There are
-    only so many pairs, so that ends.  Without a config the walk only renders a failure already decided, and marks
-    the first value it meets again.
+    The walk reads a graph as the mapping core does: a pair it meets again while still inside it is equal as far
+    as that pair goes, so it adds nothing, and one side met again beside another partner is a new pair, walked
+    like any other.  There are only so many pairs, so that ends.  A value two siblings share is walked for each.
+
+    Under a config the walk is the verdict.  Without one it renders a failure already decided, and every pair
+    it enters because ``==`` held the two apart owes an entry: where nothing under the pair accounts for that
+    answer, an ``==`` of the value's own or of a container's kind, the pair itself is the entry.  A pair that
+    leads back to one it is inside differs as that one does, and owes nothing of its own, unless it differs
+    whatever it holds (`_differs_of_itself()`).
     """
 
-    __slots__ = ("config", "entries", "on_path", "paired")
+    __slots__ = ("config", "entries", "paired", "stack")
 
-    def __init__(self, config: _CompareConfig | None, on_path: Iterable[int] = ()) -> None:
+    def __init__(self, config: _CompareConfig | None) -> None:
         self.config = config
         self.entries: list[DiffEntry] = []
-        self.on_path: dict[int, object] = {}
-        self.on_path.update(dict.fromkeys(on_path))
-        self.paired: set[tuple[int, int]] = set()
+        self.paired: dict[tuple[int, int], tuple[object, object]] = {}
+        self.stack: list[_Frame] = []
 
-    def run(self, children: Iterator[_Frame], left: int, right: int) -> list[DiffEntry]:
+    def run(self, children: Iterator[_Frame], pair: tuple[int, int], owed: _Owed | None = None) -> list[DiffEntry]:
         """Walk *children* to the end, and every frame they open, and answer the entries found."""
-        stack = [(children, left, right)]
-        on_path = self.on_path
+        stack = self.stack
+        stack.append((children, pair, owed))
+        entries, paired = self.entries, self.paired
         while stack:
-            walking, left, right = stack[-1]
+            walking, pair, _ = stack[-1]
             try:
                 nested = next(walking, None)
             except RuntimeError as error:
@@ -448,10 +493,10 @@ class _Walk:
                     raise
             else:
                 if nested is None:
-                    stack.pop()
-                    on_path.pop(left, None)
-                    on_path.pop(right, None)
-                    self.paired.discard((left, right))
+                    owed = stack.pop()[2]
+                    del paired[pair]
+                    if owed is not None and len(entries) == owed[3]:
+                        entries.append(owed[0].leaf_entry(actual=owed[1], expected=owed[2]))
                 else:
                     stack.append(nested)
                 continue
@@ -463,11 +508,9 @@ class _Walk:
         children = self.children(actual, expected, prefix)
         if children is None:
             return None
-        left, right = id(actual), id(expected)
-        self.on_path[left] = actual
-        self.on_path[right] = expected
-        self.paired.add((left, right))
-        return children, left, right
+        pair = (id(actual), id(expected))
+        self.paired[pair] = (actual, expected)
+        return children, pair, None
 
     def descend(self, actual, expected, path: _Path, descended_for) -> _Frame | None:
         """Walk into a child, given *why* it was descended into: its entries, or the frame still to walk.
@@ -485,16 +528,29 @@ class _Walk:
         `HelpersMixin._dict_err()` treats it as "nothing to render".  A new caller still has to decide what
         ``None`` means for what it is doing; it just must not invent a fourth answer for this one.
         """
-        if self.config is not None:
-            if (id(actual), id(expected)) in self.paired:
-                return None
-        elif id(actual) in self.on_path or id(expected) in self.on_path:
-            self.entries.append(path.entry(actual="<circular ref>", expected="<circular ref>"))
+        pair = (id(actual), id(expected))
+        if pair in self.paired:
+            if self.config is None:
+                self.excuse(pair)
             return None
+        found = len(self.entries)
         frame = self.opened(actual, expected, path)
-        if frame is None and descended_for != "strict":
-            self.entries.append(path.entry(actual=actual, expected=expected))
+        if frame is None:
+            if descended_for != "strict":
+                self.entries.append(path.entry(actual=actual, expected=expected))
+        elif descended_for == "recurse" and self.config is None:
+            return frame[0], frame[1], (path, actual, expected, found)
         return frame
+
+    def excuse(self, pair: tuple[int, int]) -> None:
+        """Take what they owe off the frames inside *pair*, which one of them has just led back to."""
+        stack = self.stack
+        depth = len(stack) - 1
+        while stack[depth][1] != pair:
+            children, opened, owed = stack[depth]
+            if owed is not None and not _differs_of_itself(owed[1], owed[2]):
+                stack[depth] = (children, opened, None)
+            depth -= 1
 
     def children(self, actual, expected, prefix: _Path) -> Iterator[_Frame] | None:
         """The walk over a pair's children, in the nested ladder, or ``None`` for a pair it does not take apart.
@@ -708,19 +764,12 @@ class _Walk:
                             yield frame
 
 
-def _build_equality_diff(
-    actual: object, expected: object, *, _prefix: _Path = _ROOT, _seen: set[int] | None = None, config=None
-) -> DiffResult:
-    walk = _Walk(config, () if _seen is None else _seen)
-    left, right = id(actual), id(expected)
-    if left in walk.on_path or right in walk.on_path:
-        return DiffResult(
-            kind="scalar",
-            entries=[_prefix.leaf_entry(actual="<circular ref>", expected="<circular ref>")],
-        )
-    walk.on_path[left] = actual
-    walk.on_path[right] = expected
-    walk.paired.add((left, right))
+def _build_equality_diff(actual: object, expected: object, *, _prefix: _Path = _ROOT, config=None) -> DiffResult:
+    """The diff of a top-level pair.  Without a config the caller has found the two unequal, so the root owes."""
+    walk = _Walk(config)
+    pair = (id(actual), id(expected))
+    walk.paired[pair] = (actual, expected)
+    owed = None if config is not None else (_prefix, actual, expected, 0)
 
     strict_descent = False
     if config is not None:
@@ -733,21 +782,21 @@ def _build_equality_diff(
         strict_descent = decision == "strict"
 
     if is_namedtuple(actual) and is_namedtuple(expected):
-        return DiffResult(kind="namedtuple", entries=walk.run(walk.namedtuple(actual, expected, _prefix), left, right))
+        return DiffResult(kind="namedtuple", entries=walk.run(walk.namedtuple(actual, expected, _prefix), pair, owed))
     if (
         dataclasses.is_dataclass(actual)
         and not isinstance(actual, type)
         and dataclasses.is_dataclass(expected)
         and not isinstance(expected, type)
     ):
-        return DiffResult(kind="dataclass", entries=walk.run(walk.dataclass(actual, expected, _prefix), left, right))
+        return DiffResult(kind="dataclass", entries=walk.run(walk.dataclass(actual, expected, _prefix), pair, owed))
     both_model = is_model_dump_object(actual) and is_model_dump_object(expected)
     both_attrs = is_attrs_instance(actual) and is_attrs_instance(expected)
     if both_model or both_attrs:
         fields = walk.fields(actual, expected, _prefix, both_model=both_model)
-        return DiffResult(kind="model" if both_model else "attrs", entries=walk.run(fields, left, right))
+        return DiffResult(kind="model" if both_model else "attrs", entries=walk.run(fields, pair, owed))
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
-        return DiffResult(kind="sequence", entries=walk.run(walk.sequence(actual, expected, _prefix), left, right))
+        return DiffResult(kind="sequence", entries=walk.run(walk.sequence(actual, expected, _prefix), pair, owed))
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
         entries = [
             _prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected")
@@ -783,7 +832,7 @@ def _build_equality_diff(
 
 
 def _sub_diff_entries(
-    actual: object, expected: object, prefix: _Path = _ROOT, *, _seen: set[int] | None = None, config=None
+    actual: object, expected: object, prefix: _Path = _ROOT, *, config=None
 ) -> list[DiffEntry] | None:
     """Canonical recursive diff for a value, returning path-level entries (or ``None`` for a leaf).
 
@@ -796,9 +845,7 @@ def _sub_diff_entries(
     (`HelpersMixin._dict_err()`), which calls it with an empty ``prefix`` so the top-level dict
     keys render bare (``b``) and nested keys render dotted (``u.b``).
     """
-    walk = _Walk(config, () if _seen is None else _seen)
-    if id(actual) in walk.on_path or id(expected) in walk.on_path:
-        return [prefix.entry(actual="<circular ref>", expected="<circular ref>")]
+    walk = _Walk(config)
     frame = walk.opened(actual, expected, prefix)
     return None if frame is None else walk.run(*frame)
 
@@ -809,7 +856,8 @@ def _walk_leaves(value, prefix: _Path = _ROOT) -> Iterator[tuple[_Path, object]]
     Recurses into the same containers as the rich-diff engine (`_sub_diff_entries()`): mappings,
     dataclasses, namedtuples, model-dump objects, attrs instances, lists and tuples.  Anything else -
     scalars, strings, sets, opaque objects - is yielded as a single leaf, so the paths match the diffs.
-    A circular reference yields one ``(path, "<circular ref>")`` leaf and stops, mirroring the cycle guard.
+    A value met again inside itself yields nothing: its leaves are the ones the walk is already giving, and a
+    leaf standing for it was a value the graph does not hold, which a predicate was then asked about.
 
     A field of the value itself is named bare (``age``) where the diff walkers name it ``.age``: these
     paths go into a message about the fields of the value under test, not into a diff between two of them.
@@ -829,7 +877,6 @@ def _walk_leaves(value, prefix: _Path = _ROOT) -> Iterator[tuple[_Path, object]]
                     yield (path, part)
                     continue
                 if id(part) in on_path:
-                    yield (path, "<circular ref>")
                     continue
                 inner = _leaf_parts(part, path)
                 if inner is None:

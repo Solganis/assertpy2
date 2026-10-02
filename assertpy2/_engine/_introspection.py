@@ -9,7 +9,9 @@ models (``model_dump``), ``attrs`` classes (``__attrs_attrs__``) and namedtuples
 
 from __future__ import annotations
 
+import collections
 import collections.abc
+import dataclasses
 import itertools
 import sys
 import types
@@ -141,6 +143,21 @@ class TakenApart(dict):
         keyed = keyed_names(self, other)
         pairs = (keyed_pair(self, other, name) if name in keyed else (self[name], other[name]) for name in self)
         return self.keys() == other.keys() and all(left is right or bool(left == right) for left, right in pairs)
+
+
+_PART_READERS = tuple(
+    type.__getattribute__(kind, "__dict__")["__eq__"]
+    for kind in (
+        list,
+        tuple,
+        dict,
+        collections.OrderedDict,
+        collections.abc.Mapping,
+        types.MappingProxyType,
+        TakenApart,
+    )
+)
+"""The ``__eq__`` of each kind whose values are equal exactly as what they hold is."""
 
 
 class KeyedValue:
@@ -396,6 +413,79 @@ def materialized(value: Iterable[_T]) -> Iterable[_T]:
         return list(value) if iter(value) is value else value
     except TypeError:
         return value
+
+
+def compares_by_parts(kind: type) -> bool:
+    """Whether the ``==`` of *kind* is one known to read the parts a walk takes its values apart into.
+
+    Known by being the thing itself, never by where it says it came from: the method a builtin container, `Mapping`
+    or pydantic's ``BaseModel`` defines, or code that is what `dataclasses` or attrs writes for the fields the class
+    has (`_written_again`).  Any other ``==`` may hold two values apart for a reason their parts do not show.
+
+    Kept once found, for at most 256 classes, with the ``__eq__`` it was found for and the code that ran: building
+    the twin cost a ring of a hundred records 15 ms, and a class given another ``__eq__``, or one given other code,
+    is asked again.
+    """
+    owner, written = definition_of(kind, "__eq__") or (object, None)
+    ran = getattr(written, "__code__", None)
+    if kind in _COMPARED_BY_PARTS and _COMPARED_BY_PARTS[kind] == (id(written), id(ran)):
+        return True
+    pydantic = sys.modules.get("pydantic")
+    known = (
+        any(written is reader for reader in _PART_READERS)
+        or (pydantic is not None and written is type.__getattribute__(pydantic.BaseModel, "__dict__").get("__eq__"))
+        or _written_again(owner, written)
+    )
+    if known and len(_COMPARED_BY_PARTS) < 256:
+        _COMPARED_BY_PARTS[kind] = (id(written), id(ran))
+    return known
+
+
+_COMPARED_BY_PARTS: dict[type, tuple[int, int]] = {}
+"""What `compares_by_parts` has found: a class, and which ``__eq__`` and which code of it the answer was for.  The
+class holds both, so neither id is taken by another object while the class is here."""
+
+
+def _written_again(owner: type, written: object) -> bool:
+    """Whether *written*, the ``__eq__`` *owner* defines, is the code `dataclasses` or attrs writes for its fields.
+
+    Asked by having the same library write one for a twin with the same fields and comparing the two code objects.
+    A file name would not do: the method `dataclasses` writes names none, and neither does one put there by ``exec``.
+    Only a plain function is read: any other object can carry a ``__code__`` it does not run.  The keys attrs
+    compares fields through are globals of the function it writes, so those are held to being the same objects.
+    """
+    namespace = type.__getattribute__(owner, "__dict__")
+    attr = sys.modules.get("attr")
+    if type(written) is not types.FunctionType:
+        return False
+    if "__dataclass_fields__" in namespace:
+        fields = dataclasses.fields(cast("Any", owner))
+        twin = dataclasses.dataclass(
+            type(
+                "twin",
+                (),
+                {
+                    "__annotations__": dict.fromkeys((field.name for field in fields), object),
+                    **{field.name: dataclasses.field(default=None, compare=field.compare) for field in fields},
+                },
+            )
+        )
+    elif "__attrs_attrs__" in namespace and attr is not None:
+        twin = attr.make_class(
+            "twin",
+            {
+                attribute.name: attr.ib(default=None, eq=attribute.eq if attribute.eq_key is None else attribute.eq_key)
+                for attribute in namespace["__attrs_attrs__"]
+            },
+        )
+    else:
+        return False
+    again = type.__getattribute__(twin, "__dict__")["__eq__"]
+    code, ours = written.__code__, again.__code__
+    keys = again.__globals__ if "__attrs_attrs__" in namespace else {}
+    return (code.co_code, code.co_names, code.co_consts) == (ours.co_code, ours.co_names, ours.co_consts) and all(
+        written.__globals__.get(name) is key for name, key in keys.items() if name in ours.co_names
+    )
 
 
 def definition_of(klass: type, name: str) -> tuple[type, object] | None:

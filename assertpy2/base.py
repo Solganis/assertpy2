@@ -16,7 +16,7 @@ from ._engine._compare import (
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
-from ._engine._equality import filtered_to_nothing, key_specs_given, mapping_shaped
+from ._engine._equality import as_fields, filtered_to_nothing, key_specs_given, mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._ordering import require_integer
 from ._engine._path import _ROOT
@@ -313,8 +313,7 @@ class BaseMixin(SatisfiesMixin):
     def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two objects by converting to dicts and applying ignore/include filters."""
         # a plain dict against an object is what the sequence path already compares element by element
-        actual_dict = actual if isinstance(actual, dict) else self._to_comparable_dict(actual)
-        expected_dict = expected if isinstance(expected, dict) else self._to_comparable_dict(expected)
+        actual_dict, expected_dict = as_fields(actual), as_fields(expected)
         if actual_dict is None or expected_dict is None:
             raise TypeError(
                 "ignore/include requires dict-like objects or objects with introspectable fields"
@@ -335,45 +334,33 @@ class BaseMixin(SatisfiesMixin):
             self._compared_nothing = True
 
     def _seq_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
-        """Compare two sequences pairwise, converting elements to dicts for ignore/include."""
-        if len(actual) != len(expected):
-            return self.error(
-                f"Expected collection length <{len(expected)}>, but was <{len(actual)}>.",
-                actual=actual,
-                expected=expected,
-            )
+        """Compare two sequences pairwise, an element with fields through them under ``ignore``/``include``.
 
-        def as_comparable(item):
-            # `_to_comparable_dict` answers `None` for a plain dict, which would skip the ignore filter
-            return item if isinstance(item, dict) else self._to_comparable_dict(item)
-
-        for index, (actual_item, expected_item) in enumerate(zip(actual, expected, strict=True)):
-            actual_dict = as_comparable(actual_item)
-            expected_dict = as_comparable(expected_item)
-            if actual_dict is not None and expected_dict is not None:
-                differs = self._dict_not_equal(
-                    actual_dict, expected_dict, ignore=ignore, include=include, config=config
-                )
+        The first element that differs, or a length that does, ends the comparison, and the failure is one for the
+        two sequences, as a dict's is.  It used to be the element's own, which said neither where it stood nor what
+        else differed, and a length or a plain element failed with no diff at all.
+        """
+        if len(actual) == len(expected):
+            for actual_item, expected_item in zip(actual, expected, strict=True):
+                differs = self._item_differs(actual_item, expected_item, ignore, include, config)
                 if differs is None:
-                    return None
+                    return
                 if differs:
-                    self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
+                    break
             else:
-                decision = _node_decision(actual_item, expected_item, config)
-                if decision == "strict":
-                    # equal so far, but strict types looks inside; a value the walker does not take apart is equal
-                    decision = (
-                        "leaf"
-                        if _child_entries(actual_item, expected_item, _ROOT, descended_for="strict", config=config)
-                        else "equal"
-                    )
-                if decision != "equal":
-                    return self.error(
-                        f"Expected item at index <{index}> to be equal to <{_safe_format(expected_item)}>,"
-                        f" but was <{_safe_format(actual_item)}>.",
-                        actual=actual_item,
-                        expected=expected_item,
-                    )
+                return
+        self._dict_err(actual, expected, ignore=ignore, include=include, config=config)
+
+    def _item_differs(self, actual_item, expected_item, ignore, include, config) -> bool | None:
+        """Whether one element of a sequence differs from its counterpart, or ``None`` once a prerequisite failed."""
+        actual_fields, expected_fields = as_fields(actual_item), as_fields(expected_item)
+        if actual_fields is not None and expected_fields is not None:
+            return self._dict_not_equal(actual_fields, expected_fields, ignore=ignore, include=include, config=config)
+        decision = _node_decision(actual_item, expected_item, config)
+        if decision in ("strict", "unanswered") or (decision == "recurse" and config is not None):
+            # the walk decides where `==` alone cannot: under strict types, on a graph, or under a config
+            return bool(_child_entries(actual_item, expected_item, _ROOT, descended_for=decision, config=config))
+        return decision != "equal"
 
     def is_not_equal_to(self, other: object) -> Self:
         """Asserts that val is not equal to other.

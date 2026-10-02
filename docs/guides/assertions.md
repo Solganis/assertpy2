@@ -441,7 +441,16 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 
 `is_equal_to()` can ignore or include specific keys or fields. It works across dicts, dataclasses,
 namedtuples, Pydantic models, attrs classes, and plain objects. For a sequence, each element is
-compared pairwise under the same filters.
+compared pairwise under the same filters, and a failure is one for the two sequences: its diff lists
+every element that differs, at a path that starts at the sequence (`[1].name`).
+
+A key applies at the level it names. A nested-path tuple goes on into the value under its first key and
+reads that value by its fields, which for a mapping are its keys: under `ignore=("user", "id")` a dict
+and a dataclass that hold the same under `user` are equal, as they are at the top.
+
+A plain object is read by its attributes where they are all it holds. A subclass of a builtin container,
+an exception (which holds its `args`) and a class with a slot hold more than their `__dict__`, so they
+are compared by their own `==`, and at the top they are refused as a plain `set` is.
 
 The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those. Any other
 iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.
@@ -849,7 +858,7 @@ assert_that({"a": 1, "b": {"c": -2}}).all_fields_satisfy(match.is_positive())  #
 ```
 
 Scalars, strings and sets are treated as single leaves (use `each` / `all_satisfy` for element-wise set
-checks), and circular references are reported once rather than recursed into. A Pydantic model is walked
+checks), and a value met again inside itself is not walked a second time. A Pydantic model is walked
 through the values its fields hold, the way the diff reads it: a field declared `exclude=True` is walked, a
 `@computed_field` is not, and a `@field_serializer` does not apply.
 

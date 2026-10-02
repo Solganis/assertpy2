@@ -29,9 +29,9 @@ _REPORTED = re.compile(r"`([^`]+)` is too complex \((\d+)")
 
 RECORDED: dict[str, int] = {
     "assertpy2/extracting.py::extracting": 32,
-    "assertpy2/_engine/_diff.py::_build_equality_diff": 17,
+    "assertpy2/_engine/_diff.py::_build_equality_diff": 16,
     # a flag per matched run instead of a call per matched element, which cost a failing is_equal_to 15%
-    "assertpy2/helpers.py::_dict_err": 22,
+    "assertpy2/helpers.py::_dict_err": 21,
     # three branches for what JSON cannot spell: a set element, a tuple-valued enum, and the retry that names it
     "assertpy2/_snapshot_codec.py::_object_hook": 22,
     "assertpy2/_hints.py::diagnose": 17,

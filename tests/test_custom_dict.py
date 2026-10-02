@@ -721,7 +721,10 @@ def test_a_value_unreadable_by_key_keeps_its_failure():
         assert_that(recorder.call_args).is_equal_to(mock.call("alice", 31))
 
     assert_that(str(failure.value)).contains("call('alice', 30)", "call('alice', 31)")
-    assert_that(failure.value.diff).is_none()
+    diff = failure.value.diff
+    assert_that((diff.kind, [(entry.path, entry.actual, entry.expected) for entry in diff.entries])).is_equal_to(
+        ("scalar", [(".", recorder.call_args, mock.call("alice", 31))])
+    )
 
 
 class _MixedKeys:

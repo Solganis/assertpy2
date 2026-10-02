@@ -156,8 +156,10 @@ class TestListOfObjects:
     def test_list_length_mismatch(self):
         actual = [User(id=1, name="Alice", email="a@x.com")]
         expected = [User(id=1, name="Alice", email="a@x.com"), User(id=2, name="Bob", email="b@x.com")]
-        with pytest.raises(AssertionError, match="length"):
+        with pytest.raises(AssertionError) as failure:
             assert_that(actual).is_equal_to(expected, ignore="id")
+        rows = [(entry.path, entry.expected, entry.absent) for entry in failure.value.diff.entries]
+        assert_that(rows).is_equal_to([("[1]", {"name": "Bob", "email": "b@x.com"}, "actual")])
 
     def test_list_failure_at_element(self):
         actual = [User(id=1, name="Alice", email="a@x.com"), User(id=2, name="WRONG", email="b@x.com")]
@@ -254,8 +256,10 @@ class TestToComparableDict:
 
 class TestListUnconvertibleElements:
     def test_list_of_ints_with_ignore_falls_through_to_equality(self):
-        with pytest.raises(AssertionError, match="index"):
+        with pytest.raises(AssertionError) as failure:
             assert_that([1, 2]).is_equal_to([1, 3], ignore="x")
+        rows = [(entry.path, entry.actual, entry.expected) for entry in failure.value.diff.entries]
+        assert_that(rows).is_equal_to([("[1]", 2, 3)])
 
     def test_list_mixed_equal_unconvertible_passes(self):
         assert_that([1, User(id=1, name="A", email="a@x.com")]).is_equal_to(
@@ -263,7 +267,9 @@ class TestListUnconvertibleElements:
         )
 
     def test_list_mixed_unequal_unconvertible_fails(self):
-        with pytest.raises(AssertionError, match="index"):
+        with pytest.raises(AssertionError) as failure:
             assert_that([1, User(id=1, name="A", email="a@x.com")]).is_equal_to(
                 [2, User(id=99, name="A", email="a@x.com")], ignore="id"
             )
+        rows = [(entry.path, entry.actual, entry.expected) for entry in failure.value.diff.entries]
+        assert_that(rows).is_equal_to([("[0]", 1, 2)])

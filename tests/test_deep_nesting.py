@@ -79,8 +79,9 @@ class TestTheDepthOfAPair:
         assert_that(found).is_equal_to([("k" + ".k" * (_DEEP - 1), 1.5, 2.5)])
 
     def test_a_field_filter_reaches_a_value_nested_under_a_field(self):
-        # the fields are still taken apart by recursion, two frames a level, so this stays under it
-        depth = sys.getrecursionlimit() * 2 // 5
+        # the fields are still taken apart by recursion, a frame a level: through a generator it was three on
+        # Python 3.10 and two elsewhere, which this depth is past
+        depth = sys.getrecursionlimit() * 3 // 5
         actual, expected = Holder(_nested_list(1.5, depth), 1), Holder(_nested_list(2.5, depth), 2)
         assert_that(actual).is_equal_to(Holder(_nested_list(1.5, depth), 2), ignore="stamp")
         found = _found(lambda: assert_that(actual).is_equal_to(expected, ignore="stamp"))
@@ -141,7 +142,7 @@ class TestAValueReachedTwiceIsNotACycle:
         looped = [1]
         looped.append(looped)
         leaves = [(path.text, leaf) for path, leaf in _walk_leaves(looped)]
-        assert_that(leaves).is_equal_to([("[0]", 1), ("[1]", "<circular ref>")])
+        assert_that(leaves).is_equal_to([("[0]", 1)])
 
 
 class TestAnErrorLeavesNothingOpen:

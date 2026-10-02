@@ -74,7 +74,9 @@ def test_a_skip_that_says_why_is_left_alone(tmp_path):
         'importorskip("a_module_that_is_not_installed", reason="delegated to another job")',
     )
     result = _run(tmp_path, "--cov=assertpy2", "--cov-fail-under=1", suite=reasoned)
-    assert_that(result.returncode).described_as("exit code").is_equal_to(0)
+    # the child's own words ride along: under the whole suite it has exited 2 three times with nothing kept to read
+    said = f"exit code, the child having said: {result.stdout[-1500:]} {result.stderr[-1500:]}"
+    assert_that(result.returncode).described_as(said).is_equal_to(0)
     assert_that(result.stdout).described_as("the report").does_not_contain("gates skipped for a missing module")
 
 

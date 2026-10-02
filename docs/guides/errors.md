@@ -246,7 +246,9 @@ Every mismatch is listed, not just the first. There is no green, since a predica
 ![Colored match diff: each field's path, the failed predicate, and the actual value in red](../assets/diff-match.svg)
 
 Nested structures are diffed recursively and report the exact path to the differing value (for example
-`[1].name`). Circular references are detected and shown as `<circular ref>` rather than recursing forever.
+`[1].name`). A value that leads back into itself is read as far as the two sides differ, and the way back adds
+no row. Where `==` holds two values apart and nothing inside them differs, as with two instances of a class
+that compares by identity, the row is the pair itself.
 
 Two values can render to the same text and still not be equal, most often because they differ only in
 type.
@@ -257,10 +259,11 @@ The message then tags each with its type, so `assert_that("1").is_equal_to(1)` r
 !!! note
     Cycle detection covers every walker this library owns:
 
-    - the diff rendering, and the selective-comparison path (`ignore` / `include`), which treat a
-      revisited pair as equal rather than recursing. That covers mappings, and dataclasses, attrs
-      instances and models, which the selective path takes apart field by field. A cycle that runs
-      through a list or tuple is compared by that container's own `==`, and raises as Python does
+    - the diff rendering, and the comparison under an option (`ignore`, `include`, `strict_types`,
+      `tolerance`, `comparators`), which treat a pair met again inside itself as equal rather than
+      recursing, so two values are compared as the trees they unfold into. A key option applies at its
+      own level of a cyclic value as it does of a flat one: `ignore="id"` leaves out the `id` of the
+      value compared, not the `id` of what it leads back to
     - a contract snapshot, which records a revisited node as `<circular ref>`
     - a value snapshot, which fails with a message naming the cycle, since json cannot represent one
 

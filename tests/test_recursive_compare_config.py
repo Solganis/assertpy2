@@ -845,7 +845,7 @@ class TestStrictTypes:
             assert_that(one).is_equal_to(other, **config)
         assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to([".id", ".owner.id"])
 
-    def test_without_a_config_the_diff_of_a_pair_met_again_still_marks_where_it_stopped(self):
+    def test_without_a_config_the_diff_of_a_pair_met_again_holds_what_differs_alone(self):
         @dataclass
         class Account:
             id: int
@@ -855,11 +855,12 @@ class TestStrictTypes:
         left.owner, right.owner = left, right
         with pytest.raises(AssertionFailure) as caught:
             assert_that(left).is_equal_to(right, ignore="missing")
-        assert_that(caught.value.diff.entries).is_not_empty()
-        entries = _build_equality_diff(left, right).entries
-        assert_that([(entry.path, entry.actual) for entry in entries]).is_equal_to(
-            [(".id", 1), (".owner", "<circular ref>")]
+        # asked under a key spec the root is one question and the same pair below it another, so both are read
+        assert_that([(entry.path, entry.actual) for entry in caught.value.diff.entries]).is_equal_to(
+            [("id", 1), ("owner.id", 1)]
         )
+        entries = _build_equality_diff(left, right).entries
+        assert_that([(entry.path, entry.actual) for entry in entries]).is_equal_to([(".id", 1)])
 
     @pytest.mark.parametrize(
         ("actual", "expected"),
@@ -1012,10 +1013,14 @@ class TestConfigSurvivesTheFilteredPaths:
 
     def test_an_element_pair_where_only_one_side_introspects(self):
         # the pair guard is a conjunction: taking either side alone walks a None as if it were a mapping
-        with pytest.raises(AssertionFailure, match="index"):
+        with pytest.raises(AssertionFailure) as failure:
             assert_that([1]).is_equal_to([Point(1.0, 2.0)], ignore="id")
-        with pytest.raises(AssertionFailure, match="index"):
+        rows = [(entry.path, entry.actual, entry.expected) for entry in failure.value.diff.entries]
+        assert_that(rows).is_equal_to([("[0]", 1, Point(1.0, 2.0))])
+        with pytest.raises(AssertionFailure) as failure:
             assert_that([Point(1.0, 2.0)]).is_equal_to([1], ignore="id")
+        rows = [(entry.path, entry.actual, entry.expected) for entry in failure.value.diff.entries]
+        assert_that(rows).is_equal_to([("[0]", Point(1.0, 2.0), 1)])
 
     def test_a_length_mismatch_carries_both_sides_on_the_exception(self):
         # the message names both sequences, so dropping the structured `actual` cost only the report attachment

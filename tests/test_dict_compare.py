@@ -1,5 +1,6 @@
 import collections
 import dataclasses
+import sys
 import typing
 
 import pytest
@@ -443,11 +444,48 @@ def test_ignore_include_applies_to_dict_elements_in_a_list():
 
 def test_cyclic_dict_under_ignore_is_treated_as_equal():
     # a revisited pair counts as equal rather than recursing; without it the walk never sees the repeat
+    def holding_a_ring(tag):
+        ring = {"k": 1}
+        ring["self"] = ring
+        return {"t": tag, "ring": ring}
+
+    assert_that(holding_a_ring(1)).is_equal_to(holding_a_ring(2), ignore="t")
+
+
+@pytest.mark.parametrize(
+    "option",
+    [{"ignore": "k"}, {"include": "self"}, {"include": ("self", "k")}, {"ignore": "k", "strict_types": True}],
+    ids=repr,
+)
+def test_a_key_spec_applies_at_its_own_level_of_a_cyclic_dict_as_of_a_flat_one(option):
+    # the pair met again below was called equal as the one above, which was asked with the key left out
     actual = {"k": 1}
     actual["self"] = actual
     expected = {"k": 2}
     expected["self"] = expected
-    assert_that(actual).is_equal_to(expected, ignore="k")
+    flat_actual, flat_expected = {"k": 1, "self": {"k": 1}}, {"k": 2, "self": {"k": 2}}
+    with pytest.raises(AssertionError) as flat:
+        assert_that(flat_actual).is_equal_to(flat_expected, **option)
+    with pytest.raises(AssertionError) as cyclic:
+        assert_that(actual).is_equal_to(expected, **option)
+    assert_that([(entry.path, entry.actual, entry.expected) for entry in cyclic.value.diff.entries]).is_equal_to(
+        [(entry.path, entry.actual, entry.expected) for entry in flat.value.diff.entries]
+    )
+
+
+_Held = collections.namedtuple("_Held", "to")
+
+
+def _knotted(value: object) -> tuple:
+    """A tuple that leads back to itself through a list and a second tuple, which is the one made again."""
+    inner: list = []
+    outer = (inner,)
+    inner.append((outer, value))
+    return outer
+
+
+class _Kept(list):
+    """A list of a class of its own, which is rebuilt by its class and so cannot be put on record empty."""
 
 
 @dataclasses.dataclass
@@ -524,26 +562,144 @@ class TestAValueThatHoldsItselfUnderIgnoreAndInclude:
             with pytest.raises(AssertionFailure):
                 assert_that(_ring(1, 2, make)).is_equal_to(_ring(2, 2, make), ignore="other")
 
-    def test_a_cycle_through_a_list_is_the_lists_own_comparison(self):
-        """A list is compared by its own ``==``, which Python does not finish on a graph that holds itself."""
+    @pytest.mark.parametrize(
+        "held_in",
+        [
+            lambda value: {"to": value},
+            lambda value: [value],
+            lambda value: (value,),
+            lambda value: _Held(value),
+            lambda value: ((value,), 0),
+            lambda value: _Kept([value]),
+            _knotted,
+            lambda value: _Held(_knotted(value)),
+        ],
+        ids=[
+            "a dict",
+            "a list",
+            "a tuple",
+            "a namedtuple",
+            "a tuple in a tuple",
+            "a list subclass",
+            "a tuple that holds itself through a list",
+            "a namedtuple holding such a tuple",
+        ],
+    )
+    def test_a_record_behind_a_container_met_again_is_taken_apart_as_the_first_time(self, held_in):
+        """The container met again was left as it was, and the record behind it was then compared whole: against
+        a dict of the same fields it differed there, and one level up it had not."""
+
+        def looped():
+            first, second = _Link(), _Link()
+            first.next = held_in(second)
+            second.next = first.next
+            return first
+
+        def as_dicts(value=0):
+            first: dict = {"next": None, "value": 0, "items": []}
+            second: dict = {"next": None, "value": value, "items": []}
+            first["next"] = held_in(second)
+            second["next"] = first["next"]
+            return first
+
+        assert_that(as_dicts()).is_equal_to(looped(), ignore="missing")
+        assert_that(looped()).is_equal_to(as_dicts(), ignore="missing")
+        with pytest.raises(AssertionFailure):
+            assert_that(looped()).is_equal_to(as_dicts(1), ignore="missing")
+
+    def test_a_cycle_through_a_list_is_read_where_the_lists_own_comparison_does_not_end(self):
+        """A list is compared by its own ``==``, and where Python does not finish that on a graph that holds
+        itself, the pair is walked: met again inside itself, it is equal as far as that pair goes."""
         actual, expected = _Link(value=1), _Link(value=1)
         actual.items.append(actual)
         expected.items.append(expected)
         assert_that(actual).is_equal_to(expected, ignore="items")
-        with pytest.raises(RecursionError):
-            assert_that(actual).is_equal_to(expected, ignore="next")
+        assert_that(actual).is_equal_to(expected, ignore="next")
+        assert_that([actual]).is_equal_to([expected], ignore="next")
+        expected.value = 2
+        for one, other in ((actual, expected), ([actual], [expected])):
+            with pytest.raises(AssertionFailure):
+                assert_that(one).is_equal_to(other, ignore="next")
+
+    def test_a_field_compared_through_a_key_is_held_raw_where_its_tuple_was_met_again(self):
+        """A tuple met again is put back rebuilt, except in a field attrs compares through a key, which reads the
+        value as it is held: here the class of what the tuple holds."""
+        attrs = pytest.importorskip("attrs", reason="attrs not installed")
+
+        @attrs.define
+        class Keyed:
+            keyed: object = attrs.field(eq=lambda held: held and type(held[0]).__name__, default=None)
+            plain: object = None
+            back: object = None
+
+        def looped(shared):
+            inner = Keyed()
+            held = (inner,)
+            outer = Keyed(keyed=held, plain=held if shared else (inner,))
+            inner.back = outer
+            return outer
+
+        assert_that(looped(shared=True)).is_equal_to(looped(shared=False), ignore="missing")
+        assert_that(looped(shared=False)).is_equal_to(looped(shared=True), ignore="missing")
+
+    def test_the_plain_way_gives_up_on_a_value_that_holds_itself_long_before_the_frames_run_out(self):
+        """Left to `RecursionError`, a raised limit ran out of C stack first, which ends the process."""
+        with pytest.raises(_equality._NestedTooDeepError):
+            _equality._flattened(_ring(1), frozenset({"dataclass"}))
+
+    def test_where_the_plain_way_runs_out_of_frames_the_one_that_remembers_is_tried(self):
+        """It takes a frame a level where the plain one takes two, so it fits where that one did not."""
+        nested: object = 1
+        for _ in range(60):
+            nested = [nested]
+        record, through = _Link(items=[nested]), frozenset({"dataclass"})
+        expected = _equality._flattened(record, through)
+        frame, depth = sys._getframe(), 0
+        while frame is not None:
+            frame, depth = frame.f_back, depth + 1
+        limit = sys.getrecursionlimit()
+        sys.setrecursionlimit(depth + 100)
+        try:
+            with pytest.raises(RecursionError):
+                _equality._flattened(record, through)
+            taken = _equality._fields_through(record, through)
+        finally:
+            sys.setrecursionlimit(limit)
+        assert_that(taken).is_equal_to(expected)
+
+    def test_a_record_nested_deeper_than_the_plain_way_goes_is_compared(self):
+        def chain(last):
+            head = _Link(value=last)
+            for _ in range(80):
+                head = _Link(next=head)
+            return head
+
+        assert_that(chain(1)).is_equal_to(chain(1), ignore="items")
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(chain(1)).is_equal_to(chain(2), ignore="items")
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["next." * 80 + "value"])
 
     def test_both_ways_of_taking_apart_agree_where_nothing_leads_back(self):
-        """The way that remembers runs only after the plain one ran out of stack, so nothing else compares them."""
+        """The way that remembers runs only where the plain one gives up, so nothing else compares them."""
         attrs = pytest.importorskip("attrs", reason="attrs not installed")
         pydantic = pytest.importorskip("pydantic", reason="pydantic not installed")
         point = collections.namedtuple("point", "x y")
+
+        class Falsy:
+            """A key that is there and says it is not: asked for its truth, the plain way took the field apart."""
+
+            def __call__(self, held):
+                return held
+
+            def __bool__(self):
+                return False
 
         @attrs.define
         class Tagged:
             name: str = attrs.field(eq=str.lower)
             hidden: int = attrs.field(eq=False, default=0)
             inner: object = None
+            raw: object = attrs.field(eq=Falsy(), default=None)
 
         @dataclasses.dataclass
         class Row:
@@ -555,10 +711,11 @@ class TestAValueThatHoldsItselfUnderIgnoreAndInclude:
             rows: list
             meta: dict
 
-        row = Row(1, [point(1, Row(2, ("a", {"k": Row(3, None)})))], note="left out")
+        kept = type("Kept", (dict,), {})
+        row = Row(1, [point(1, Row(2, ("a", {"k": Row(3, kept(n=1))})))], note="left out")
         values = [
             (row, frozenset({"dataclass"})),
-            (Tagged("A", 1, Tagged("b", 2, [row])), frozenset({"attrs"})),
+            (Tagged("A", 1, Tagged("b", 2, [row]), raw=Tagged("c")), frozenset({"attrs"})),
             (
                 Sheet(rows=[row, row], meta={"r": row, "nested": Sheet(rows=[], meta={})}),
                 frozenset({"model", "dataclass"}),
@@ -568,6 +725,9 @@ class TestAValueThatHoldsItselfUnderIgnoreAndInclude:
             plain = _equality._flattened(value, through)
             assert_that(_equality._flattened_once(value, through, {})).is_equal_to(plain)
             assert_that(repr(_equality._flattened_once(value, through, {}))).is_equal_to(repr(plain))
+        for taken in (_equality._flattened(row, values[0][1]), _equality._flattened_once(row, values[0][1], {})):
+            deepest = taken["cells"][0].y["cells"][1]["k"]["cells"]
+            assert_that((type(deepest), deepest.kind)).is_equal_to((_equality.TakenApart, kept))
 
     @pytest.mark.parametrize("length", [0, 1])
     def test_a_record_used_as_a_dict_key_stays_a_key(self, length):

@@ -306,6 +306,8 @@ class TestCheckAnswersWithTheFirstFailure:
     """Check mode goes on past a failure, and an assertion failing twice answered with the second one.
 
     The strict run stops at the first, so `check()` and the failure it stands in for named different items.
+    A sequence under a key option was the assertion that failed once per item.  It fails once for the two
+    sequences now, and `check()` answers with what the strict run raises.
     """
 
     def test_a_comparison_failing_on_two_items(self):
@@ -313,7 +315,8 @@ class TestCheckAnswersWithTheFirstFailure:
         with pytest.raises(AssertionError) as strict:
             assert_that(subject).is_equal_to(expected, ignore="b")
         outcome = assert_that(subject).check().is_equal_to(expected, ignore="b")
-        assert_that(outcome.message).is_equal_to(str(strict.value)).contains("<{'a': 1}>")
+        assert_that(outcome.message).is_equal_to(strict.value._message).contains("<[{'a': 1}, {'a': 2}]>")
+        assert_that([entry.path for entry in outcome.diff.entries]).is_equal_to(["[0].a", "[1].a"])
 
 
 class TestTheReturnedRecordIsThePublicType:

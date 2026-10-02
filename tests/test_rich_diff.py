@@ -242,9 +242,10 @@ class TestBuildEqualityDiffDataclass:
         class Item:
             name: str
 
+        # handed over as unequal, with no field to show for it: the pair is the entry
         result = _build_equality_diff(Item("a"), Item("a"))
         assert_that(result.kind).is_equal_to("dataclass")
-        assert_that(result.entries).is_length(0)
+        assert_that([(entry.path, entry.actual) for entry in result.entries]).is_equal_to([(".", Item("a"))])
 
     def test_different_dataclass_types(self):
         @dataclass
@@ -282,7 +283,7 @@ class TestBuildEqualityDiffNamedtuple:
         Point = namedtuple("Point", ["x", "y"])
         result = _build_equality_diff(Point(1, 2), Point(1, 2))
         assert_that(result.kind).is_equal_to("namedtuple")
-        assert_that(result.entries).is_length(0)
+        assert_that([(entry.path, entry.actual) for entry in result.entries]).is_equal_to([(".", Point(1, 2))])
 
     def test_different_types_with_fields(self):
         A = namedtuple("A", ["x", "y"])
@@ -1172,40 +1173,21 @@ class TestSubDiffNamedtupleCoverage:
         assert_that(result[0].expected).is_equal_to(99)
 
 
-class TestBuildEqualityDiffCircularRef:
-    def test_circular_ref_in_build_equality_diff(self):
-        mapping = {"x": 1}
-        result = _build_equality_diff(mapping, mapping, _seen={id(mapping)})
-        assert_that(result.kind).is_equal_to("scalar")
-        assert_that(result.entries[0].actual).is_equal_to("<circular ref>")
+class TestAPairMetAgainIsNoEntry:
+    """A value that leads back to itself is read as far as it differs: the way back is not a row."""
 
-    def test_a_circular_entry_keeps_both_sides(self):
-        # dropping the expected side rendered a pure deletion and shipped "expected": null into the attachment
-        mapping = {"x": 1}
-        entry = _build_equality_diff(mapping, mapping, _seen={id(mapping)}).entries[0]
-        assert_that(entry.actual).is_equal_to("<circular ref>")
-        assert_that(entry.expected).is_equal_to("<circular ref>")
-
-    def test_a_nested_circular_entry_keeps_both_sides(self):
+    def test_a_value_compared_with_itself_has_nothing_under_it(self):
         circular = [1]
         circular.append(circular)
-        entries = _sub_diff_entries(circular, circular, _Path("x"), _seen={id(circular)})
-        assert_that(entries).is_length(1)
-        assert_that(entries[0].actual).is_equal_to("<circular ref>")
-        assert_that(entries[0].expected).is_equal_to("<circular ref>")
+        assert_that(_sub_diff_entries(circular, circular, _Path("x"))).is_equal_to([])
 
-    def test_seen_passed_through(self):
-        result = _build_equality_diff([1, 2], [1, 3], _seen=set())
-        assert_that(result.kind).is_equal_to("sequence")
-        assert_that(result.entries).is_length(1)
-
-    def test_one_side_already_seen_is_enough(self):
-        actual, expected = {"x": 1}, {"x": 2}
-        for seen in ({id(actual)}, {id(expected)}):
-            entries = _build_equality_diff(actual, expected, _seen=seen).entries
-            assert_that([(entry.actual, entry.expected) for entry in entries]).is_equal_to(
-                [("<circular ref>", "<circular ref>")]
-            )
+    def test_no_entry_holds_a_value_neither_side_has(self):
+        actual = {"x": 1}
+        actual["self"] = actual
+        expected = {"x": 2}
+        expected["self"] = expected
+        entries = _sub_diff_entries(actual, expected)
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in entries]).is_equal_to([("x", 1, 2)])
 
 
 class TestSubDiffDataclassMissingField:
@@ -1253,22 +1235,22 @@ class TestCircularRefProtection:
         inner_b = {"val": 2}
         inner_b["loop"] = inner_b
         result = _sub_diff_entries(inner_a, inner_b, _Path("root"))
-        assert_that(result).is_not_none()
-        paths = [entry.path for entry in result]
-        assert_that(paths).contains("root.val")
-        has_circular = any("circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in result)
-        assert_that(has_circular).is_true()
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in result]).is_equal_to([("root.val", 1, 2)])
 
     def test_asymmetric_circular_ref_in_sub_diff(self):
-        # only actual's id is in `seen` at that recursion, so the guard must fire on either side rather than both
+        # one side met again beside a new partner is a new pair: it is walked until the finite side ends
         actual = {"name": "x"}
         actual["ref"] = actual
         expected = {"name": "y", "ref": {"name": "z"}}
         result = _sub_diff_entries(actual, expected, _Path("root"))
-        paths = [entry.path for entry in result]
-        assert_that(paths).contains("root.ref")
-        entry = next(entry for entry in result if entry.path == "root.ref")
-        assert_that(entry.actual).is_equal_to("<circular ref>")
+        rows = [(entry.path, entry.actual, entry.expected, entry.absent) for entry in result]
+        assert_that(rows).is_equal_to(
+            [
+                ("root.name", "x", "y", None),
+                ("root.ref.name", "x", "z", None),
+                ("root.ref.ref", actual, None, "expected"),
+            ]
+        )
 
     def test_circular_list_item_in_diff(self):
         inner_a = {"val": 1}
@@ -1277,12 +1259,9 @@ class TestCircularRefProtection:
         inner_b["self"] = inner_b
         result = _build_equality_diff([inner_a], [inner_b])
         assert_that(result.kind).is_equal_to("sequence")
-        paths = [entry.path for entry in result.entries]
-        assert_that(paths).contains("[0].val")
-        has_circular = any(
-            "circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in result.entries
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in result.entries]).is_equal_to(
+            [("[0].val", 1, 2)]
         )
-        assert_that(has_circular).is_true()
 
     def test_circular_in_dict_err(self):
         actual = {"a": 1}
@@ -1291,12 +1270,8 @@ class TestCircularRefProtection:
         expected["self"] = expected
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
-        diff = getattr(exc_info.value, "diff", None)
-        assert_that(diff).is_not_none()
-        has_circular = any(
-            "circular" in str(entry.actual) or "circular" in str(entry.expected) for entry in diff.entries
-        )
-        assert_that(has_circular).is_true()
+        diff = exc_info.value.diff
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in diff.entries]).is_equal_to([("a", 1, 2)])
 
     def test_mutual_circular_ref(self):
         left = {"key": "a_val"}
@@ -1494,9 +1469,10 @@ class TestDictCircularRefNotEqual:
     def test_circular_dict_not_equal_returns_false(self):
         mapping = {"x": 1}
         mapping["self"] = mapping
+        twin = {"x": 1}
+        twin["self"] = twin
         mixin = type("M", (HelpersMixin,), {"val": None, "description": "", "kind": None, "expected": None})()
-        result = mixin._dict_not_equal(mapping, mapping, _seen={(id(mapping), id(mapping))})
-        assert_that(result).is_false()
+        assert_that(mixin._dict_not_equal(mapping, twin, ignore="missing")).is_false()
 
 
 class TestDiffOrderingActualGreater:
@@ -2202,7 +2178,7 @@ class TestConfigLeafRowsHoldBothSides:
 
 
 class TestCycleGuardOnEveryDescent:
-    """A value that contains itself is reported at the index or field that closes the loop."""
+    """A value that contains itself is read to where it differs, and the way back into it is no row."""
 
     def test_a_self_referential_list_reports_the_cycle_at_its_own_index(self):
         actual = [1, 2]
@@ -2212,7 +2188,7 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("[1]", 2), ("[2]", "<circular ref>")])
+        assert_that(rows).is_equal_to([("[1]", 2)])
 
     def test_a_self_referential_list_survives_an_aligned_pairing(self):
         actual = [1, 2, 3]
@@ -2222,7 +2198,7 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("expected[0]", None), ("[3]", "<circular ref>")])
+        assert_that(rows).is_equal_to([("expected[0]", None)])
 
     def test_a_self_referential_dataclass_reports_the_cycle_at_its_own_field(self):
         @dataclass
@@ -2235,7 +2211,7 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([(".tag", "a"), (".child", "<circular ref>")])
+        assert_that(rows).is_equal_to([(".tag", "a")])
 
     def test_a_self_referential_dataclass_nested_in_a_dict_reports_the_cycle(self):
         @dataclass
@@ -2248,7 +2224,7 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"n": actual}).is_equal_to({"n": expected})
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("n.tag", "a"), ("n.child", "<circular ref>")])
+        assert_that(rows).is_equal_to([("n.tag", "a")])
 
     def test_a_self_referential_namedtuple_reports_the_cycle_at_its_own_field(self):
         Box = namedtuple("Box", "tag holder")
@@ -2259,7 +2235,8 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([(".tag", "a"), (".holder[0]", "<circular ref>")])
+        # the holders differ as the boxes they hold do, which is the row above and not a second one
+        assert_that(rows).is_equal_to([(".tag", "a")])
 
     def test_a_self_referential_namedtuple_nested_in_a_dict_reports_the_cycle(self):
         Box = namedtuple("Box", "tag holder")
@@ -2270,17 +2247,17 @@ class TestCycleGuardOnEveryDescent:
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"b": actual}).is_equal_to({"b": expected})
         rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("b.tag", "a"), ("b.holder[0]", "<circular ref>")])
+        assert_that(rows).is_equal_to([("b.tag", "a")])
 
     def test_a_cycle_on_the_expected_side_alone_is_reported(self):
-        # the guard fires on either side being seen; only the actual side was ever pinned
+        # the looping side is walked beside the finite one until that one ends, which is the difference
         expected = {"tag": "x"}
         expected["child"] = expected
         actual = {"tag": "y", "child": {"tag": "x", "child": {"tag": "x"}}}
         with pytest.raises(AssertionError) as exc_info:
             assert_that(actual).is_equal_to(expected)
-        entry = next(entry for entry in exc_info.value.diff.entries if entry.path == "child")
-        assert_that(entry.expected).is_equal_to("<circular ref>")
+        rows = [(entry.path, entry.actual, entry.expected, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to([("tag", "y", "x", None), ("child.child.child", None, expected, "actual")])
 
     def test_a_cycle_on_only_one_side_of_a_nested_namedtuple_is_reported(self):
         Box = namedtuple("Box", "tag holder")
@@ -2290,21 +2267,34 @@ class TestCycleGuardOnEveryDescent:
         finite = Box("c", [Box("d", [])])
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"b": looping}).is_equal_to({"b": finite})
-        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("b.tag", "a"), ("b.holder[0]", "<circular ref>")])
+        rows = [(entry.path, entry.actual, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to(
+            [("b.tag", "a", None), ("b.holder[0].tag", "a", None), ("b.holder[0].holder[0]", looping, "expected")]
+        )
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"b": finite}).is_equal_to({"b": looping})
-        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("b.tag", "c"), ("b.holder[0]", "<circular ref>")])
+        rows = [(entry.path, entry.expected, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to(
+            [("b.tag", "a", None), ("b.holder[0].tag", "a", None), ("b.holder[0].holder[0]", looping, "actual")]
+        )
 
-    def test_a_cycle_on_one_side_only_is_caught_where_it_closes(self):
+    def test_a_cycle_on_one_side_only_is_walked_until_the_other_side_ends(self):
         looping = [1]
         looping.append(looping)
         finite = [2, [2, [2]]]
-        for actual, expected in ((looping, finite), (finite, looping)):
-            entries = _build_equality_diff(actual, expected).entries
-            assert_that([entry.path for entry in entries]).is_equal_to(["[0]", "[1]"])
-            assert_that((entries[1].actual, entries[1].expected)).is_equal_to(("<circular ref>", "<circular ref>"))
+        entries = _build_equality_diff(looping, finite).entries
+        assert_that([(entry.path, entry.actual, entry.expected, entry.absent) for entry in entries]).is_equal_to(
+            [
+                ("[0]", 1, 2, None),
+                ("[1][0]", 1, 2, None),
+                ("[1][1][0]", 1, 2, None),
+                ("[1][1][1]", looping, None, "expected"),
+            ]
+        )
+        entries = _build_equality_diff(finite, looping).entries
+        assert_that([(entry.path, entry.absent) for entry in entries]).is_equal_to(
+            [("[0]", None), ("[1][0]", None), ("[1][1][0]", None), ("[1][1][1]", "actual")]
+        )
 
     def test_a_model_field_that_points_back_at_the_model(self):
         class Model:
@@ -2316,8 +2306,11 @@ class TestCycleGuardOnEveryDescent:
 
         actual, expected = Model(), Model()
         actual.child, expected.child = actual, expected
+        # nothing under the pair differs, so the pair handed over as unequal is the entry
         entries = _build_equality_diff(actual, expected).entries
-        assert_that([(entry.path, entry.actual) for entry in entries]).is_equal_to([(".child", "<circular ref>")])
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in entries]).is_equal_to(
+            [(".", actual, expected)]
+        )
 
     def test_a_none_on_one_side_is_a_value_and_not_a_cycle(self):
         """``None`` is a value at every depth, so its id never belongs in the seen set."""
@@ -2343,8 +2336,15 @@ class TestCycleGuardOnEveryDescent:
         finite = _FakeModel(tag="c", child=_FakeModel(tag="c", child=_FakeModel(tag="c")))
         with pytest.raises(AssertionError) as exc_info:
             assert_that({"m": looping}).is_equal_to({"m": finite})
-        rows = [(entry.path, entry.actual) for entry in exc_info.value.diff.entries]
-        assert_that(rows).is_equal_to([("m.tag", "a"), ("m.child", "<circular ref>")])
+        rows = [(entry.path, entry.actual, entry.absent) for entry in exc_info.value.diff.entries]
+        assert_that(rows).is_equal_to(
+            [
+                ("m.tag", "a", None),
+                ("m.child.tag", "a", None),
+                ("m.child.child.tag", "a", None),
+                ("m.child.child.child", looping, "expected"),
+            ]
+        )
 
 
 class TestOneSidedEntriesNameTheAbsentSide:

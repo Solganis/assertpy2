@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from ..errors import _safe_format
 from ._compare import (
+    _EQ_ATOMIC,
     _guarded_equal,
     _keyed_types_differ,
     _kinds_never_equal,
@@ -35,8 +36,9 @@ from ._compare import (
     _resolve_comparator,
     _spec_matches,
     _types_differ,
+    _walked_equal,
 )
-from ._diff import _escaped_stop, _sub_diff_entries
+from ._diff import _child_entries, _escaped_stop, _sub_diff_entries
 from ._introspection import (
     TakenApart,
     is_attrs_instance,
@@ -56,8 +58,8 @@ if TYPE_CHECKING:
     from ._compare import _CompareConfig
     from ._introspection import MappingLike
 
-    _KeysFrame = tuple[Iterator[Any], tuple[int, int]]
-    """A mapping's keys still to compare, and the pair it put on the path."""
+    _KeysFrame = tuple[Iterator[Any], tuple[int, int] | None]
+    """A mapping's keys still to compare, and the pair it put on the path, which under key specs it does not."""
 
 
 def normalize_key_specs(specs: object, param: str) -> list:
@@ -94,7 +96,10 @@ def comparable_fields(obj: object) -> dict | None:
     ``ignore=`` failed on two instances ``==`` holds equal.
 
     A value of a builtin kind is not a bag of fields even when it carries a ``__dict__``: a subclass of
-    `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.
+    `Decimal` or `str` has an empty one, and reading it made every two such values compare equal.  Nor is any
+    value that holds something outside its ``__dict__`` (`_holds_only_its_dict`): two lists of a class of the
+    caller's own were equal under ``ignore=`` whatever they held, and so were two exceptions, whose ``args``
+    are not in it.
     """
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return cast("dict", _fields_through(obj, frozenset({"dataclass"})))
@@ -117,24 +122,50 @@ def comparable_fields(obj: object) -> dict | None:
         uuid.UUID,
         pathlib.PurePath,
     )
-    if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds):
+    if hasattr(obj, "__dict__") and not isinstance(obj, builtin_kinds) and _holds_only_its_dict(type(obj)):
         return TakenApart(type(obj), vars(obj))
     return None
 
 
-def _flattened(node: Any, through: frozenset[str]) -> Any:
+def _holds_only_its_dict(kind: type) -> bool:
+    """Whether an instance of *kind* holds nothing but its ``__dict__``, read off the layout of its class.
+
+    A slot, the items of a builtin container and the fields of a type written in C are all room in the instance
+    past the object's own header, its ``__dict__`` and its weak reference list.  A list of kinds was the first
+    answer, and each one found missing was a comparison that passed: `list`, `array.array`, an exception.
+    """
+    read = type.__getattribute__
+    spare = read(kind, "__basicsize__") - object.__basicsize__
+    spare -= tuple.__itemsize__ * ((read(kind, "__dictoffset__") > 0) + (read(kind, "__weakrefoffset__") > 0))
+    return spare == 0
+
+
+class _NestedTooDeepError(Exception):
+    """`_flattened` went deeper than a value that ends is expected to: it may lead back to itself."""
+
+
+def _flattened(node: Any, through: frozenset[str], depth: int = 0) -> Any:
     """Fields by reference, as each value's ``==`` reads them, taken apart through the kinds *through* names.
 
     A nested value is taken apart where the conversion each kind used to go through took it apart, so a
     nested value is judged as it was: `dataclasses.asdict` went through dataclasses, `attrs.asdict` through
     attrs instances, and `model_dump()` through models and the dataclasses inside them.  What is read is
     what is held, though, not what a serialiser or a copy makes of it.
+
+    Nothing met is remembered, so a value that leads back to itself would never end: past 64 levels this gives
+    up with `_NestedTooDeepError`.  The number is where remembering starts to pay, not a promise about the stack:
+    a ring of three records took 2.25 ms found by `RecursionError` and 0.9 ms found here.
     """
+    if type(node) in _EQ_ATOMIC:
+        return node
+    deeper = depth + 1
+    if deeper > 64:
+        raise _NestedTooDeepError
     if "dataclass" in through and dataclasses.is_dataclass(node) and not isinstance(node, type):
         return TakenApart(
             type(node),
             {
-                field.name: _flattened(getattr(node, field.name), through)
+                field.name: _flattened(getattr(node, field.name), through, deeper)
                 for field in dataclasses.fields(node)
                 if field.compare
             },
@@ -146,46 +177,86 @@ def _flattened(node: Any, through: frozenset[str]) -> Any:
             type(node),
             {
                 attribute.name: getattr(node, attribute.name)
-                if keys[attribute.name]
-                else _flattened(getattr(node, attribute.name), through)
+                if keys[attribute.name] is not None
+                else _flattened(getattr(node, attribute.name), through, deeper)
                 for attribute in compared
             },
             {name: key for name, key in keys.items() if key is not None},
         )
     if "model" in through and is_model_dump_object(node):
         return TakenApart(
-            type(node), {name: _flattened(value, through) for name, value in model_field_values(node).items()}
+            type(node),
+            {name: _flattened(value, through, deeper) for name, value in model_field_values(node).items()},
         )
     if isinstance(node, tuple) and hasattr(node, "_fields"):
-        return type(node)(*[_flattened(item, through) for item in node])
+        return type(node)(*[_flattened(item, through, deeper) for item in node])
     if isinstance(node, (list, tuple)):
-        return type(node)(_flattened(item, through) for item in node)
+        return type(node)(_flattened(item, through, deeper) for item in node)
     if isinstance(node, dict):
         # a key stays as held: taken apart, a record used as one could not be hashed
-        return {key: _flattened(value, through) for key, value in node.items()}
+        rebuilt = {key: _flattened(value, through, deeper) for key, value in node.items()}
+        # a dict of a class of its own keeps the class: rebuilt plain, ``strict_types`` held it equal to a dict
+        return rebuilt if type(node) is dict else TakenApart(type(node), rebuilt)
     return node
 
 
 def _fields_through(node: object, through: frozenset[str]) -> Any:
-    """*node* taken apart (`_flattened`), and where that does not end, because the value leads back to itself, taken
-    apart once per value met (`_flattened_once`).
+    """*node* taken apart (`_flattened`), and where that goes too deep to be a value that ends, taken apart once
+    per value met (`_flattened_once`).
 
     The second way is not the first one's price: remembering every value cost a fifth of a comparison under
-    ``ignore``, which a value that holds itself now pays alone, after one walk that ran out of stack.
+    ``ignore``, which a value that holds itself, or one nested deeper than the first way goes, now pays alone.
+    It also takes a frame a level where the first takes two, so it is tried where the first ran out of them.
     """
     try:
         return _flattened(node, through)
-    except RecursionError:
-        return _flattened_once(node, through, {})
+    except (_NestedTooDeepError, RecursionError):
+        memo: dict[int, Any] = {}
+        taken = _flattened_once(node, through, memo)
+        _mend(memo)
+        return taken
+
+
+def _mend(memo: dict[int, Any]) -> None:
+    """Put the rebuilt value where `_flattened_once` left one as it was, met again while still being rebuilt.
+
+    Left there, a tuple led back to the values not taken apart, and a record behind it was compared whole.  A
+    dict or a list is the place to put it.  A tuple holding one is made again, and tuples alone lead back to
+    nothing, so that ends.  A field attrs compares through a key is held raw, and stays so.
+    """
+    for rebuilt in list(memo.values()):
+        if isinstance(rebuilt, dict):
+            raw = rebuilt.compared_by if isinstance(rebuilt, TakenApart) else ()
+            for key, value in rebuilt.items():
+                if key not in raw:
+                    rebuilt[key] = _mended(value, memo)
+        elif isinstance(rebuilt, list):
+            rebuilt[:] = [_mended(item, memo) for item in rebuilt]
+
+
+def _mended(value: Any, memo: dict[int, Any]) -> Any:
+    """*value* as it was rebuilt where it was left as it was, or made again where it is a tuple holding such a one."""
+    rebuilt = memo.get(id(value), value)
+    if rebuilt is not value or not isinstance(value, tuple):
+        return rebuilt
+    items = [_mended(item, memo) for item in value]
+    if all(new is old for new, old in zip(items, value, strict=True)):
+        return value
+    return type(value)(*items) if hasattr(value, "_fields") else type(value)(items)
 
 
 def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) -> Any:
     """`_flattened`, with each value taken apart once: met again, it is what it came apart into the first time.
 
     So a value that holds itself comes apart into fields that hold themselves, and the walk over them meets the
-    pair again as it does in a graph of dicts.  A list, tuple or dict met again while it is still being rebuilt
-    stays as it is.  Every value met is held by the one being taken apart, so its id stays its own.
+    pair again as it does in a graph of dicts.  A dict or a list is on record before its items are rebuilt, so one
+    met again inside itself is the rebuilt one: left as it was, it led back to the values not taken apart, and a
+    record behind it was compared whole.  A tuple cannot be, having no items until it is made, so one met again
+    while it is still being rebuilt stays as it is here, and `_mend` puts the rebuilt one in its place afterwards.
+    Every value met is held by the one being taken apart, so its id stays its own.
     """
+    if type(node) in _EQ_ATOMIC:
+        return node
     if id(node) in memo:
         return memo[id(node)]
     held = _held(node, through)
@@ -197,14 +268,21 @@ def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) ->
         return taken
     if not isinstance(node, (list, tuple, dict)):
         return node
-    memo[id(node)] = node
+    # no generator: through one a level was three frames on Python 3.10, 331 levels deep against 496
+    rebuilt: Any
     if isinstance(node, dict):
-        rebuilt: Any = {key: _flattened_once(value, through, memo) for key, value in node.items()}
-    elif hasattr(node, "_fields"):
-        rebuilt = type(node)(*[_flattened_once(item, through, memo) for item in node])
-    else:
-        rebuilt = type(node)(_flattened_once(item, through, memo) for item in node)
-    memo[id(node)] = rebuilt
+        rebuilt = memo[id(node)] = {} if type(node) is dict else TakenApart(type(node), {})
+        for key, value in node.items():
+            rebuilt[key] = _flattened_once(value, through, memo)
+        return rebuilt
+    if type(node) is list:
+        rebuilt = memo[id(node)] = []
+        for item in node:
+            rebuilt.append(_flattened_once(item, through, memo))
+        return rebuilt
+    memo[id(node)] = node
+    items = [_flattened_once(item, through, memo) for item in node]
+    rebuilt = memo[id(node)] = type(node)(*items) if hasattr(node, "_fields") else type(node)(items)
     return rebuilt
 
 
@@ -228,7 +306,7 @@ def _key_of(attribute: Any) -> Any:
     return getattr(attribute, "eq_key", None)
 
 
-def _as_fields(value: object) -> dict | None:
+def as_fields(value: object) -> dict | None:
     """A plain dict as itself, anything else through `comparable_fields`."""
     return value if isinstance(value, dict) else comparable_fields(value)
 
@@ -383,7 +461,11 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         # identity first, as Python's containers do.  Not at the root, where `nan` made `strict_types` the weaker rule
         return False
     if config is None:
-        return not _guarded_equal(value, other)
+        equal = _walked_equal(value, other)
+        if equal is None:
+            # a graph `==` cannot finish, reached under a key option: the walk reads it, a pair met again being equal
+            return bool(_child_entries(value, other, _ROOT, descended_for="unanswered"))
+        return not equal
     if at_root and config.comparators and _resolve_comparator(value, config, field=None) is not None:
         # a comparator owns the root too, where the walk below starts at the children
         return _node_decision(value, other, config, at_root=True) == "leaf"
@@ -391,10 +473,8 @@ def values_differ(value: object, other: object, config: _CompareConfig | None, *
         return True
     entries = _sub_diff_entries(value, other, _ROOT, config=config)
     if entries is None:
-        # a leaf the walker does not decompose: `strict_types` asked here called two equal sets unequal
-        if config.tolerance is not None or config.comparators:
-            return _node_decision(value, other, config) not in ("equal", "strict")
-        return not _guarded_equal(value, other)
+        # a leaf the walker does not decompose, so "strict" is equal: there is nothing inside for it to look at
+        return _node_decision(value, other, config, at_root=at_root) not in ("equal", "strict")
     return bool(entries)
 
 
@@ -440,7 +520,6 @@ def mapping_differs(
     ignore: object = None,
     include: object = None,
     config: _CompareConfig | None = None,
-    seen: frozenset | None = None,
 ) -> bool:
     """Whether two dict-like values differ under the given filtering and compare config.
 
@@ -450,9 +529,14 @@ def mapping_differs(
 
     Walked on a list of frames as the structural diff is, `_Walk`, and for the same reasons: a mapping nested
     past Python's recursion limit is answered, and the pairs on the path are one set rather than a copy a level.
+
+    A pair met again inside itself is equal as far as that pair goes, where it is the same question: the pair
+    compared whole.  Under key specs still to apply it is another question each time, since a spec applies at its
+    own level and a path loses a segment a level, so such a pair is neither put on the path nor found there.  The
+    specs run out after the longest path, which is where that ends.
     """
-    on_path: set[tuple[int, int]] = set() if seen is None else set(seen)
-    opened = _mapping_opened(actual, expected, ignore, include, config, on_path)
+    on_path: set[tuple[int, int]] = set()
+    opened = _mapping_opened(actual, expected, ignore, include, config, on_path, inside=False)
     if isinstance(opened, bool):
         return opened
     stack = [opened]
@@ -484,22 +568,27 @@ def _mapping_opened(
     include: object,
     config: _CompareConfig | None,
     on_path: set[tuple[int, int]],
+    *,
+    inside: bool,
 ) -> bool | _KeysFrame:
-    """The verdict on two mappings where it is reached before their keys, else the frame over the keys."""
+    """The verdict on two mappings where it is reached before their keys, else the frame over the keys.
+
+    *inside* says the pair was reached by a walk rather than handed to one.
+    """
     # one cast at the top beats a suppression on each of the six lookups below
     left = cast("MappingLike", actual)
     right = cast("MappingLike", expected)
-    pair = (id(actual), id(expected))
+    ignoring, including = key_specs_given(ignore), key_specs_given(include)
+    pair = None if ignoring or including else (id(actual), id(expected))
     if pair in on_path:
         return False
 
-    ignoring, including = key_specs_given(ignore), key_specs_given(include)
-    if not (ignoring or including or config is not None):
+    if pair is not None and config is None:
         try:
             return not _guarded_equal(actual, expected)
         except RecursionError:
             # inside a walk, a graph `==` cannot finish is taken key by key below, where a pair met again is equal
-            if not on_path:
+            if not inside:
                 raise
 
     ignores = ignore_specs(ignore) if ignoring else []
@@ -529,7 +618,8 @@ def _mapping_opened(
     ):
         # `{True: "a"}` and `{1: "a"}` are equal to Python and not under strict types; only the keys still compared
         return True
-    on_path.add(pair)
+    if pair is not None:
+        on_path.add(pair)
     keys = _differing_keys(left, right, keys_in_actual, ignores, nested_paths, config, on_path, ignoring, including)
     return keys, pair
 
@@ -610,12 +700,13 @@ def _nested_differs(
     A verdict, or the frame over the keys of a mapping still to compare, which `mapping_differs()` walks.
     """
     if mapping_shaped(left, check_values=False) and mapping_shaped(right, check_values=False):
-        return _mapping_opened(left, right, ignore, include, config, on_path)
+        return _mapping_opened(left, right, ignore, include, config, on_path, inside=True)
     if key_specs_given(ignore) or key_specs_given(include):
-        # a path that goes on into a dataclass, a model or an object is followed through its fields
-        left_fields, right_fields = comparable_fields(left), comparable_fields(right)
+        # a path that goes on into a value is followed through its fields, which for a mapping are its keys
+        left_fields = left if mapping_shaped(left, check_values=False) else comparable_fields(left)
+        right_fields = right if mapping_shaped(right, check_values=False) else comparable_fields(right)
         if left_fields is not None and right_fields is not None:
-            return _mapping_opened(left_fields, right_fields, ignore, include, config, on_path)
+            return _mapping_opened(left_fields, right_fields, ignore, include, config, on_path, inside=True)
     return values_differ(left, right, config)
 
 
@@ -645,7 +736,7 @@ def filtered_differs(
 def _filtered_pair_differs(
     actual: object, expected: object, *, ignore: object, include: object, config: _CompareConfig | None, at_root: bool
 ) -> bool:
-    left, right = _as_fields(actual), _as_fields(expected)
+    left, right = as_fields(actual), as_fields(expected)
     if left is None or right is None:
         return at_root or values_differ(actual, expected, config)
     return mapping_differs(left, right, ignore=ignore, include=include, config=config)

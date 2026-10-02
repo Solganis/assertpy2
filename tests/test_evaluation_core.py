@@ -436,6 +436,7 @@ class TestTheCoreItself:
 
         Two *different* self-referential mappings still reach Python's own `==` when nothing is filtered and no
         config is given, and that raises `RecursionError` from the interpreter, as it did before this core existed.
+        A value met under a key option is past that: there the walk reads what `==` cannot finish.
         """
         left: dict = {"name": "a"}
         right: dict = {"name": "a"}
@@ -443,9 +444,12 @@ class TestTheCoreItself:
         right["self"] = right
         assert_that(mapping_differs(left, right, ignore="nothing")).is_false()
         assert_that(mapping_differs(left, right, config=_CompareConfig())).is_false()
-        for bare in (lambda: mapping_differs(left, right), lambda: values_differ(left, right, None)):
-            with pytest.raises(RecursionError):
-                bare()
+        with pytest.raises(RecursionError):
+            mapping_differs(left, right)
+        assert_that(values_differ(left, right, None)).is_false()
+        assert_that(values_differ([left], [right], None)).is_false()
+        right["name"] = "b"
+        assert_that(values_differ([left], [right], None)).is_true()
 
     def test_identity_short_circuits_before_equality(self):
         # NaN is the one value where the two disagree, and the walker must not be asked about it twice

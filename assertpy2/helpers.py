@@ -3,21 +3,23 @@ import collections.abc
 import datetime
 import decimal
 import numbers
+from typing import cast
 
 from assertpy2.errors import DiffResult, _safe_format, _safe_repr, _safe_str, _truncated, _windowed
 
 from ._engine._compare import (
     _CompareConfig,
     _config_note,
-    _guarded_equal,
     _is_nan,
     _node_decision,
     _spec_matches,
+    _walked_equal,
     zero_of,
 )
-from ._engine._diff import _aligned_match_indices, _sub_diff_entries, readable, run_nested
+from ._engine._diff import _aligned_match_indices, _graphs_differ, _sub_diff_entries, readable, run_nested
 from ._engine._equality import (
     IncludeKeysMissingError,
+    as_fields,
     carries_callable,
     comparable_fields,
     ignore_specs,
@@ -154,7 +156,10 @@ def _elided_seq_repr(seq, counterpart) -> str:
         if aligned is not None:
             matched = index in aligned
         else:
-            matched = index < len(others) and _guarded_equal(value, others[index])
+            matched = index < len(others) and (
+                (equal := _walked_equal(value, others[index]))
+                or (equal is None and not _graphs_differ(value, others[index]))
+            )
         if matched:
             pending = True
             continue
@@ -166,6 +171,11 @@ def _elided_seq_repr(seq, counterpart) -> str:
         parts.append(_ELIDED)
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
     return _joined_parts(parts, opener=opener, closer=closer)
+
+
+def _read_by_fields(value: object) -> object:
+    """*value* as the mapping a key path reads it through, a snapshot of its keys or its fields, or ``None``."""
+    return keyed_snapshot(value) if mapping_shaped(value, check_values=False) else comparable_fields(value)
 
 
 def _keyed_pair(value: object, other: object) -> tuple[MappingLike, MappingLike] | None:
@@ -364,7 +374,7 @@ class HelpersMixin(_MixinBase):
         if check_getitem and not supports_subscript(val):
             refuse(val, "a value with a [] accessor", subject=name)
 
-    def _dict_not_equal(self, val, other, ignore=None, include=None, config: _CompareConfig | None = None, _seen=None):
+    def _dict_not_equal(self, val, other, ignore=None, include=None, config: _CompareConfig | None = None):
         """Whether two dict-like values differ, under optional ignore/include specs and a compare config.
 
         The decision lives in `_engine._equality`, where a matcher reaches it too.  What stays here is
@@ -376,14 +386,7 @@ class HelpersMixin(_MixinBase):
         Returns ``None`` once that is reported rather than a verdict.
         """
         try:
-            return mapping_differs(
-                val,
-                other,
-                ignore=ignore,
-                include=include,
-                config=config,
-                seen=None if _seen is None else frozenset(_seen),
-            )
+            return mapping_differs(val, other, ignore=ignore, include=include, config=config)
         except IncludeKeysMissingError as found:
             absent = found
         # reported outside the except block: a failure raised inside carries the signal as its `__context__`
@@ -414,7 +417,9 @@ class HelpersMixin(_MixinBase):
         """Include-specs for one comparison; see `_engine._equality`."""
         return include_specs(include)
 
-    def _selected_keys_only(self, mapping: object, ignore: object, include: object) -> object:
+    def _selected_keys_only(
+        self, mapping: object, ignore: object, include: object, held_as: type = dict, beside: object = None
+    ) -> object:
         """A copy of ``mapping`` holding only the keys the comparison actually looked at.
 
         `_dict_not_equal()` picks those keys to reach its verdict, and both the repr and the diff used
@@ -423,6 +428,14 @@ class HelpersMixin(_MixinBase):
         ``a`` as a difference in the same breath as saying it was ignored.
 
         Returns ``mapping`` itself when no filter is set, so the ordinary path allocates nothing.
+
+        *held_as* is the class of the value ``mapping`` was read from.  The copy carries it, as a `TakenApart`,
+        where it is not a plain dict: copied as one, a dict of a class of its own lost the class ``strict_types``
+        had held it apart by, and the diff then had no entry where the comparison failed.
+
+        *beside* is the mapping this one was compared with.  A value a key path goes on into is copied with its
+        keys left out only where the value beside it was read by its fields too: compared whole, it is kept whole,
+        or the copy differed from a counterpart the value itself equals.
         """
         ignoring, including = key_specs_given(ignore), key_specs_given(include)
         if not (ignoring or including):
@@ -432,8 +445,11 @@ class HelpersMixin(_MixinBase):
         # an OrderedDict keeps its type and a TakenApart its class, both part of what was compared
         if isinstance(mapping, TakenApart):
             kept: dict = TakenApart(mapping.kind, {}, mapping.compared_by)
+        elif isinstance(mapping, collections.OrderedDict):
+            ordered = held_as if issubclass(held_as, collections.OrderedDict) else collections.OrderedDict
+            kept = collections.OrderedDict.__new__(ordered)
         else:
-            kept = collections.OrderedDict() if isinstance(mapping, collections.OrderedDict) else {}
+            kept = {} if held_as is dict else TakenApart(held_as, {})
         for key in mapping:  # ty: ignore[not-iterable]  # only ever called on the dict-like branch
             value = mapping[key]  # ty: ignore[not-subscriptable]  # same
             if ignoring and _spec_matches(key, value, ignores):
@@ -446,13 +462,71 @@ class HelpersMixin(_MixinBase):
             ] or None
             if nested_ignore or nested_include:
                 # the snapshot and not the value: recursing into the original would read it a third time
-                kept_value = (
-                    keyed_snapshot(value) if mapping_shaped(value, check_values=False) else comparable_fields(value)
-                )
-                if kept_value is not None:
-                    value = self._selected_keys_only(kept_value, nested_ignore, nested_include)
+                kept_value = _read_by_fields(value)
+                found, counterpart = (False, None) if beside is None else lookup(beside, key)
+                other_value = _read_by_fields(counterpart) if found else None
+                if kept_value is not None and (other_value is not None or not found):
+                    value = self._selected_keys_only(
+                        kept_value, nested_ignore, nested_include, type(value), other_value
+                    )
             kept[key] = value
         return kept
+
+    def _failure_views(self, val, other, ignore, include, config, dict_repr, list_repr) -> tuple[str, list, str, str]:
+        """What a failed comparison shows, by the shape of the pair: the kind of diff, its entries and the two reprs.
+
+        *dict_repr* and *list_repr* are `_dict_err`'s own walks, which render a pair with what matched left out.
+        """
+        filtered = key_specs_given(ignore) or key_specs_given(include)
+        if (keyed := _keyed_pair(val, other)) is not None:
+            reported_val = self._selected_keys_only(keyed[0], ignore, include, beside=keyed[1])
+            reported_other = self._selected_keys_only(keyed[1], ignore, include, beside=keyed[0])
+            val_repr, other_repr = _informative(
+                val,
+                other,
+                run_nested(dict_repr(reported_val, reported_other)),
+                run_nested(dict_repr(reported_other, reported_val)),
+                # a compare config hides no key, so only a key filter keeps the whole values out of the message
+                whole=not filtered,
+            )
+            entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
+            return "dict", entries, val_repr, other_repr
+        if filtered and _both_list_like(val, other):
+            actual_items, expected_items = cast("list | tuple", val), cast("list | tuple", other)
+            reported_val = self._selected_items_only(actual_items, expected_items, ignore, include)
+            reported_other = self._selected_items_only(expected_items, actual_items, ignore, include)
+            entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
+            if _aligned_match_indices(reported_val, reported_other) is None:
+                val_repr = run_nested(list_repr(reported_val, reported_other))
+                other_repr = run_nested(list_repr(reported_other, reported_val))
+            else:
+                # two sequences that shifted apart are paired by alignment in the diff, so in the message too
+                val_repr = _elided_seq_repr(reported_val, reported_other)
+                other_repr = _elided_seq_repr(reported_other, reported_val)
+            return "sequence", entries, val_repr, other_repr
+        # the shape said keyed and the value is not, so the richer message is the thing given up here
+        return "scalar", [], _safe_repr(val), _safe_repr(other)
+
+    def _selected_items_only(
+        self, items: list | tuple, others: list | tuple, ignore: object, include: object
+    ) -> list | tuple:
+        """A copy of a sequence whose elements compared by their fields hold only the keys that were looked at.
+
+        An element is compared by its fields where its counterpart in *others* has fields too, and whole where it
+        has none.  Copied with keys left out all the same, a value its counterpart equals was shown as differing.
+        Two sequences of different lengths have no counterparts: no element of them was compared, and the diff
+        pairs them by alignment, so there every element with fields is copied without the keys left out.
+        """
+        paired = len(items) == len(others)
+        kept = []
+        for index, item in enumerate(items):
+            fields = as_fields(item)
+            beside = as_fields(others[index]) if paired else None
+            if fields is None or (paired and beside is None):
+                kept.append(item)
+            else:
+                kept.append(self._selected_keys_only(fields, ignore, include, type(item), beside))
+        return tuple(kept) if isinstance(items, tuple) else kept
 
     def _key_filter_note(self, ignore: object, include: object) -> str:
         """The ` ignoring keys ...` / ` including keys ...` tail of a dict failure, or an empty string."""
@@ -474,7 +548,7 @@ class HelpersMixin(_MixinBase):
         include: object = None,
         config: _CompareConfig | None = None,
     ) -> None:
-        """Helper to construct error message for dict comparison.
+        """Helper to construct error message for dict comparison, and for two sequences under a key option.
 
         A compare ``config`` is routed through both the textual repr (a tolerated / comparator-equal leaf is
         ellipsized, never shown) and the structured diff, so the message and diff agree on what differs.
@@ -526,8 +600,8 @@ class HelpersMixin(_MixinBase):
         def _list_repr(seq, counterpart):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
             the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}, ..]``
-            instead of dumping the whole list.  Always reached through ``_dict_repr``, a list only ever being
-            a nested value.  Both are walks for `run_nested()`, which sends back each nested repr."""
+            instead of dumping the whole list.  Both are walks for `run_nested()`, which sends back each nested
+            repr."""
             if id(seq) in on_path:
                 return "[<circular ref>]"
             on_path.add(id(seq))
@@ -557,26 +631,15 @@ class HelpersMixin(_MixinBase):
             if pending:
                 parts.append(_ELIDED)
             on_path.discard(id(seq))
-            opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")  # keep tuples looking like tuples
+            # keep tuples looking like tuples, a tuple of one with its comma
+            opener, closer = ("(", ",)" if len(seq) == 1 else ")") if isinstance(seq, tuple) else ("[", "]")
             return _joined_parts(parts, opener=opener, closer=closer)
 
-        if (keyed := _keyed_pair(val, other)) is not None:
-            reported_val = self._selected_keys_only(keyed[0], ignore, include)
-            reported_other = self._selected_keys_only(keyed[1], ignore, include)
-            diff_entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
-            diff = DiffResult(kind="dict", entries=diff_entries) if diff_entries else None
-            val_repr, other_repr = _informative(
-                val,
-                other,
-                run_nested(_dict_repr(reported_val, reported_other)),
-                run_nested(_dict_repr(reported_other, reported_val)),
-                # a compare config hides no key, so only a key filter keeps the whole values out of the message
-                whole=not (key_specs_given(ignore) or key_specs_given(include)),
-            )
-        else:
-            # the shape said keyed and the value is not, so the richer message is the thing given up here
-            diff = None
-            val_repr, other_repr = _safe_repr(val), _safe_repr(other)
+        kind, diff_entries, val_repr, other_repr = self._failure_views(
+            val, other, ignore, include, config, _dict_repr, _list_repr
+        )
+        # the comparison has failed, so where the walk shows nothing under the pair, the pair is the entry
+        diff = DiffResult(kind=kind, entries=diff_entries or [_ROOT.leaf_entry(actual=val, expected=other)])
         self.error(
             f"Expected <{val_repr}> to be equal to <{other_repr}>{self._key_filter_note(ignore, include)}, but was not."
             f"{_config_note(config)}",

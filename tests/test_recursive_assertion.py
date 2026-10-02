@@ -84,17 +84,28 @@ class TestWalkLeavesTraversal:
         leaves = [(path.text or ".", leaf) for path, leaf in _walk_leaves(value)]
         assert_that(leaves).is_equal_to([(".", value)])
 
-    def test_circular_reference_yields_one_leaf(self):
+    def test_a_value_met_again_inside_itself_is_no_leaf(self):
         data = {"a": 1}
         data["self"] = data
         leaves = _leaf_texts(_walk_leaves(data))
-        assert_that(leaves).is_equal_to({"a": 1, "self": "<circular ref>"})
+        assert_that(leaves).is_equal_to({"a": 1})
+
+    def test_a_graph_with_no_leaf_yields_none(self):
+        only = {}
+        only["self"] = only
+        assert_that(list(_walk_leaves(only))).is_empty()
+
+    def test_a_none_past_a_cycle_is_still_reached(self):
+        data = {"a": [None]}
+        data["self"] = data
+        leaves = _leaf_texts(_walk_leaves(data))
+        assert_that(leaves).is_equal_to({"a[0]": None})
 
     def test_circular_through_list_is_guarded(self):
         lst = [1]
         lst.append(lst)
         leaves = _leaf_texts(_walk_leaves(lst))
-        assert_that(leaves).is_equal_to({"[0]": 1, "[1]": "<circular ref>"})
+        assert_that(leaves).is_equal_to({"[0]": 1})
 
     def test_circular_through_dataclass_is_guarded(self):
         @dataclass
@@ -105,21 +116,21 @@ class TestWalkLeavesTraversal:
         node = Node(1)
         node.child = node
         leaves = _leaf_texts(_walk_leaves(node))
-        assert_that(leaves).is_equal_to({"value": 1, "child": "<circular ref>"})
+        assert_that(leaves).is_equal_to({"value": 1})
 
     def test_circular_through_namedtuple_is_guarded(self):
         holder = []
         pair = Pair(holder, 2)
         holder.append(pair)
         leaves = _leaf_texts(_walk_leaves(pair))
-        assert_that(leaves).is_equal_to({"a[0]": "<circular ref>", "b": 2})
+        assert_that(leaves).is_equal_to({"b": 2})
 
     def test_circular_through_model_is_guarded(self):
         holder = []
         model = FakeModel(items=holder)
         holder.append(model)
         leaves = _leaf_texts(_walk_leaves(model))
-        assert_that(leaves).is_equal_to({"items[0]": "<circular ref>"})
+        assert_that(leaves).is_equal_to({})
 
     def test_empty_container_yields_no_leaves(self):
         assert_that(list(_walk_leaves({}))).is_empty()

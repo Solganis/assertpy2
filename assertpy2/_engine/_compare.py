@@ -620,7 +620,7 @@ def _both_decline(actual: Any, expected: Any) -> bool:
 
 
 def _node_decision(actual, expected, config: _CompareConfig | None, *, field=None, at_root: bool = False) -> str:
-    """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"`` or ``"strict"``.
+    """Classify a node as ``"equal"``, ``"leaf"``, ``"recurse"``, ``"unanswered"`` or ``"strict"``.
 
     With ``config is None`` this is exactly the engine's historical behavior: differing values ``"recurse"``
     (to decompose into a sub-diff), equal values are ``"equal"`` (skipped); ``"leaf"`` never occurs.  With a
@@ -631,6 +631,9 @@ def _node_decision(actual, expected, config: _CompareConfig | None, *, field=Non
     look inside, because a container's ``==`` says nothing about the types of its members, nor about what a
     comparator says of them.  It differs from ``"recurse"`` only in what an undecomposable value means,
     which `assertpy2._engine._diff._Walk.descend()` is the single place to know.
+
+    ``"unanswered"`` is a graph ``==`` ran out of stack on.  It is walked as ``"recurse"`` is, and the walk is
+    then the only judge of the pair, where under ``"recurse"`` the pair is already known to differ.
     """
     if config is not None:
         if config.ignore_null and field is not None and as_held(expected) is None:
@@ -693,7 +696,9 @@ def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root:
     equal = _walked_equal(actual, expected)
     if equal:
         return "equal"
-    return "leaf" if equal is False and config is not None and _kinds_never_equal(actual, expected) else "recurse"
+    if equal is None:
+        return "unanswered"
+    return "leaf" if config is not None and _kinds_never_equal(actual, expected) else "recurse"
 
 
 def _walked_equal(actual, expected) -> bool | None:
