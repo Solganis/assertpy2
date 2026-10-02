@@ -8,7 +8,7 @@ from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds, require_integer
 from ._engine._require import _shown, argument, refuse, require_type
-from .errors import _safe_format, _safe_str
+from .errors import _capped, _capped_format
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -20,7 +20,7 @@ def _fmt_operand(value: object) -> str:
     """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else as interpolated."""
     if isinstance(value, datetime.datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
-    return _safe_format(value)
+    return _capped_format(value)
 
 
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
@@ -155,7 +155,7 @@ class NumericMixin(_MixinBase):
         self._validate_number()
         self._validate_real()
         if not _is_nan(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be <NaN>, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be <NaN>, but was not.")
         return self
 
     def is_not_nan(self) -> Self:
@@ -198,7 +198,7 @@ class NumericMixin(_MixinBase):
         self._validate_number()
         self._validate_real()
         if not _is_infinite(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be <Inf>, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be <Inf>, but was not.")
         return self
 
     def is_not_inf(self) -> Self:
@@ -515,7 +515,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** even
         """
         if self._integer_value() % 2 != 0:
-            return self.error(f"Expected <{_safe_str(self.val)}> to be even, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be even, but was not.")
         return self
 
     def is_odd(self) -> Self:
@@ -535,7 +535,7 @@ class NumericMixin(_MixinBase):
             AssertionError: if val is **not** odd
         """
         if self._integer_value() % 2 == 0:
-            return self.error(f"Expected <{_safe_str(self.val)}> to be odd, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be odd, but was not.")
         return self
 
     def is_divisible_by(self, divisor: SupportsIndex) -> Self:
@@ -562,7 +562,8 @@ class NumericMixin(_MixinBase):
             raise ValueError("given divisor arg must not be zero")
         if value % modulus != 0:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be divisible by <{divisor}>, but was not.", expected=divisor
+                f"Expected <{_capped(self.val)}> to be divisible by <{_capped_format(divisor)}>, but was not.",
+                expected=divisor,
             )
         return self
 
@@ -619,8 +620,8 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to be close to <{_safe_format(other)}> within tolerance "
-                    f"<{tolerance}>, but was not.",
+                    f"Expected <{_capped(self.val)}> to be close to <{_capped_format(other)}> within tolerance "
+                    f"<{_capped_format(tolerance)}>, but was not.",
                     expected=(other, tolerance),
                 )
         return self
@@ -665,7 +666,7 @@ class NumericMixin(_MixinBase):
                 )
             else:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to not be close to <{_safe_format(other)}> within tolerance "
-                    f"<{tolerance}>, but was.",
+                    f"Expected <{_capped(self.val)}> to not be close to <{_capped_format(other)}> within tolerance "
+                    f"<{_capped_format(tolerance)}>, but was.",
                 )
         return self

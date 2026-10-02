@@ -33,7 +33,7 @@ from .errors import _class_names, _safe_repr, _safe_str
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from .errors import DiffEntry, DiffResult
+    from .errors import DiffEntry, DiffResult, Step
 
     # a step's wording: fixed, or decided from the shape of the pairs it is describing
     _Label = str | Callable[[Sequence[tuple[object, object]]], str]
@@ -268,6 +268,74 @@ def diagnose(
         # the elements moved, and where two of them print the same no row shows which went where
         return _UNSEEN_ORDER_FACT if any(_prints_alike(left, right) for left, right in pairs) else _ORDER_FACT
     return _unseen(pairs, comparators=comparators)
+
+
+def placed(diff: DiffResult | None) -> str | None:
+    """Where the differences of a diff sit, when they repeat at one to three places down a sequence, or ``None``.
+
+    Forty rows that differ in one field are forty rows of diff to read before that can be said, and past the
+    fiftieth the rows are not printed at all: a single difference of another field among them went unseen.
+    A place is the path with every position replaced by ``[*]``.  It is a fact about where, said beside
+    whatever is said about why, and it recommends nothing.
+    """
+    if diff is None or diff.kind not in _VALUE_KINDS or len(diff.entries) < 3:
+        return None
+    counted: dict[tuple[tuple[str, str], ...], int] = {}
+    for entry in diff.entries:
+        place = _place(entry.steps)
+        if place is None:
+            return None
+        counted[place] = counted.get(place, 0) + 1
+        if len(counted) > 3:
+            return None
+    total = len(diff.entries)
+    spelled = {place: _spelled(place) for place in counted}
+    # nothing repeats, two places read the same (a key and a field of one name), or one is too long to be a line
+    if (
+        len(counted) == total
+        or len(set(spelled.values())) != len(spelled)
+        or any(len(text) > 200 for text in spelled.values())
+    ):
+        return None
+    if len(counted) == 1:
+        return f"all {total} differences here are at <{next(iter(spelled.values()))}>"
+    # by how many, and among equals by which came first, which is the order a dict keeps and a stable sort leaves
+    ranked = [f"<{spelled[place]}> ({count})" for place, count in sorted(counted.items(), key=lambda item: -item[1])]
+    return f"the {total} differences here are at {', '.join(ranked[:-1])} and {ranked[-1]}"
+
+
+def _place(steps: Sequence[Step]) -> tuple[tuple[str, str], ...] | None:
+    """*steps* with every position made one, or ``None`` where they name no field.
+
+    The kind of each hop is kept, so a key and a field of one name are two places.  Only a name that is
+    exactly a `str` counts: ``1`` and ``"1"`` are two keys and read as one.  A place with no position in it
+    is met once and so never repeats, which is why none is asked for.
+    """
+    place: list[tuple[str, str]] = []
+    named = False
+    for step in steps:
+        kind = step.kind
+        if kind == "index":
+            place.append(("index", "*"))
+        elif kind in ("key", "attr") and type(step.value) is str:
+            place.append((kind, step.value))
+            named = True
+        elif kind != "json":
+            return None
+    return tuple(place) if named else None
+
+
+def _spelled(place: tuple[tuple[str, str], ...]) -> str:
+    """A place as a path.  A name that is no identifier is quoted: ``[*]['a.b']`` is one key, ``[*].a.b`` two."""
+    parts: list[str] = []
+    for kind, name in place:
+        if kind == "index":
+            parts.append("[*]")
+        elif not name.isidentifier():
+            parts.append(f"[{name!r}]")
+        else:
+            parts.append(f".{name}" if parts else name)
+    return "".join(parts)
 
 
 def _beside_a_nan(entries: Sequence[DiffEntry], *, comparators: bool) -> str:

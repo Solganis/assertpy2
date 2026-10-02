@@ -24,7 +24,7 @@ from ._engine._require import argument, refuse, reject_unknown_kwargs, require_t
 from ._hints import identity_candidate
 from ._matcher_impls import _require_class_info
 from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
-from .errors import _disambiguated, _safe_format, _safe_str, _told_apart, _truncated, _type_expression_name
+from .errors import _capped, _capped_format, _disambiguated, _safe_str, _told_apart, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
@@ -453,7 +453,7 @@ class BaseMixin(SatisfiesMixin):
         """
         if self.val is not other:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be identical to <{_safe_format(other)}>, but was not.",
+                f"Expected <{_capped(self.val)}> to be identical to <{_capped_format(other)}>, but was not.",
                 expected=other,
             )
         return self
@@ -487,7 +487,7 @@ class BaseMixin(SatisfiesMixin):
         """
         if self.val is other:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be not identical to <{_safe_format(other)}>, but was."
+                f"Expected <{_capped(self.val)}> to be not identical to <{_capped_format(other)}>, but was."
             )
         return self
 
@@ -515,7 +515,7 @@ class BaseMixin(SatisfiesMixin):
                 whatever awaiting it would have answered
         """
         if not verdict(self.val, subject="the call under test"):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be <True>, but was not.", expected=True)
+            return self.error(f"Expected <{_capped(self.val)}> to be <True>, but was not.", expected=True)
         return self
 
     def is_false(self) -> Self:
@@ -542,7 +542,7 @@ class BaseMixin(SatisfiesMixin):
                 whatever awaiting it would have answered
         """
         if verdict(self.val, subject="the call under test"):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be <False>, but was not.", expected=False)
+            return self.error(f"Expected <{_capped(self.val)}> to be <False>, but was not.", expected=False)
         return self
 
     def is_none(self) -> Self:
@@ -561,7 +561,7 @@ class BaseMixin(SatisfiesMixin):
             AssertionError: if val is **not** none
         """
         if self.val is not None:
-            return self.error(f"Expected <{_safe_str(self.val)}> to be <None>, but was not.", expected=None)
+            return self.error(f"Expected <{_capped(self.val)}> to be <None>, but was not.", expected=None)
         return self
 
     def is_not_none(self) -> Self:
@@ -619,7 +619,7 @@ class BaseMixin(SatisfiesMixin):
         if type(self.val) is not some_type:
             type_name = self._type(self.val)
             return self.error(
-                f"Expected <{_safe_str(self.val)}:{type_name}> to be of type <{some_type.__name__}>, but was not.",
+                f"Expected <{_capped(self.val)}:{type_name}> to be of type <{some_type.__name__}>, but was not.",
                 expected=some_type,
             )
         return self
@@ -669,8 +669,7 @@ class BaseMixin(SatisfiesMixin):
             type_name = self._type(self.val)
             some_class_name = _type_expression_name(some_class)
             return self.error(
-                f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of class "
-                f"<{some_class_name}>, but was not.",
+                f"Expected <{_capped(self.val)}:{type_name}> to be instance of class <{some_class_name}>, but was not.",
                 expected=some_class,
             )
         return self
@@ -704,7 +703,7 @@ class BaseMixin(SatisfiesMixin):
             type_name = self._type(self.val)
             class_names = ", ".join(_type_expression_name(some_class) for some_class in some_classes)
             return self.error(
-                f"Expected <{_safe_str(self.val)}:{type_name}> to be instance of any of <{class_names}>, but was not.",
+                f"Expected <{_capped(self.val)}:{type_name}> to be instance of any of <{class_names}>, but was not.",
                 expected=some_classes,
             )
         return self
@@ -777,7 +776,7 @@ class BaseMixin(SatisfiesMixin):
             raise ValueError("given arg must be a positive int")
         if sized_len(self.val) != wanted:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be of length <{length}>, but was <{sized_len(self.val)}>.",
+                f"Expected <{_capped(self.val)}> to be of length <{length}>, but was <{sized_len(self.val)}>.",
                 expected=length,
             )
         return self
@@ -817,7 +816,7 @@ class BaseMixin(SatisfiesMixin):
             raise ValueError("given low arg must be less than given high arg")
         if not least <= sized_len(self.val) <= most:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be of length between <{low}> and <{high}>, "
+                f"Expected <{_capped(self.val)}> to be of length between <{low}> and <{high}>, "
                 f"but was <{sized_len(self.val)}>.",
                 expected=(low, high),
             )

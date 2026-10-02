@@ -16,7 +16,7 @@ from ._engine._ordering import (
 )
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
 from ._satisfies import _warn_vacuous
-from .errors import _safe_format, _safe_str
+from .errors import _capped, _capped_format
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -126,7 +126,7 @@ class CollectionMixin(_MixinBase):
             searched_in = read[0] if len(read) == 1 else read
             if missing:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to be subset of <{_safe_format(searched_in)}>, "
+                    f"Expected <{_capped(self.val)}> to be subset of <{_capped_format(searched_in)}>, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
                     expected=searched_in,
                 )
@@ -145,7 +145,7 @@ class CollectionMixin(_MixinBase):
                 superset_values = collected
             if missing:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to be subset of {self._fmt_items(superset_values)}, "
+                    f"Expected <{_capped(self.val)}> to be subset of {self._fmt_items(superset_values)}, "
                     f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
                     expected=superset_values,
                 )
@@ -220,7 +220,7 @@ class CollectionMixin(_MixinBase):
             index, earlier, later = broken
             direction = " reverse" if reverse else ""
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to be sorted{direction}, "
+                f"Expected <{_capped(self.val)}> to be sorted{direction}, "
                 f"but subset {self._fmt_items([earlier, later])} at index {index} is not."
             )
         if not walked:
@@ -252,7 +252,7 @@ class CollectionMixin(_MixinBase):
         other_len = sized_len(other, subject=argument("other"))
         if actual_len != other_len:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to have same size as <{_safe_format(other)}>"
+                f"Expected <{_capped(self.val)}> to have same size as <{_capped_format(other)}>"
                 f" of length <{other_len}>, but was length <{actual_len}>.",
                 expected=other_len,
             )
@@ -285,7 +285,7 @@ class CollectionMixin(_MixinBase):
         actual = sized_len(self.val)
         if actual <= bound:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to have size greater than <{size}>, but was <{actual}>.",
+                f"Expected <{_capped(self.val)}> to have size greater than <{size}>, but was <{actual}>.",
                 expected=size,
             )
         return self
@@ -317,7 +317,7 @@ class CollectionMixin(_MixinBase):
         actual = sized_len(self.val)
         if actual >= bound:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to have size less than <{size}>, but was <{actual}>.", expected=size
+                f"Expected <{_capped(self.val)}> to have size less than <{size}>, but was <{actual}>.", expected=size
             )
         return self
 
@@ -351,7 +351,7 @@ class CollectionMixin(_MixinBase):
             raise ValueError("given low arg must be less than given high arg")
         if not least <= sized_len(self.val) <= most:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to have size between <{low}> "
+                f"Expected <{_capped(self.val)}> to have size between <{low}> "
                 f"and <{high}>, but was <{sized_len(self.val)}>.",
                 expected=(low, high),
             )

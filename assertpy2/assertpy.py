@@ -89,9 +89,10 @@ from .errors import (
     DiffEntry,
     DiffResult,
     Step,
-    _safe_repr,
+    _capped,
+    _capped_repr,
+    _diff_sides,
     _safe_str,
-    _told_apart,
     _truncated,
     _windowed,
 )
@@ -390,13 +391,11 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
     shown = entries[:5]  # bound once: a slice and a separate threshold would drift apart
     for entry in shown:
         if entry.absent == "expected":  # an extra item, which has no counterpart to contrast with
-            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)}")
+            lines.append(f"{indent}{entry.path}: {_capped_repr(entry.actual)}")
         elif entry.absent == "actual":  # a missing one
-            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.expected)}")
+            lines.append(f"{indent}{entry.path}: {_capped_repr(entry.expected)}")
         else:
-            actual_side, expected_side = _told_apart(
-                _safe_repr(entry.actual), _safe_repr(entry.expected), entry.actual, entry.expected
-            )
+            actual_side, expected_side = _diff_sides(entry.actual, entry.expected, 4000)
             lines.append(f"{indent}{entry.path}: {actual_side} != {expected_side}")
     if len(entries) > len(shown):
         lines.append(f"{indent}... and {len(entries) - len(shown)} more")
@@ -1296,9 +1295,9 @@ class NegatedBuilder(Generic[_S]):
         """
         desc = f"[{self._builder.description}] " if self._builder.description else ""
         rendered = ", ".join(
-            [_safe_repr(arg) for arg in args] + [f"{key}={_safe_repr(value)}" for key, value in kwargs.items()]
+            [_capped_repr(arg) for arg in args] + [f"{key}={_capped_repr(value)}" for key, value in kwargs.items()]
         )
-        return f"{desc}Expected <{_safe_str(self._builder.val)}> to NOT satisfy: {name}({rendered})"
+        return f"{desc}Expected <{_capped(self._builder.val)}> to NOT satisfy: {name}({rendered})"
 
     def _asked(self, attr: Callable[..., object], name: str, *args: object, **kwargs: object) -> Requirement:
         """What the negated call asked for, bound to the underlying assertion's parameter names.
@@ -1862,6 +1861,9 @@ class AssertionBuilder(
         if hint is not None and hint not in out:
             # on its own line, so the original message stays a prefix and a `match=` written against it keeps working
             out = f"{out}\n{hint}"
+        places = _hints.placed(diff)
+        if places is not None and places not in out:
+            out = f"{out}\n{places}"
         response = self._response if self._response is not None else response_of(self.val)
         note = response_note(response) if response is not None else None
         if note is not None:

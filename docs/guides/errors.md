@@ -417,6 +417,27 @@ except AssertionError as failure:
     # a difference here prints the same on both sides, so what holds the two apart is not in their repr (attributes that differ: currency)
 ```
 
+Where the differences repeat down a sequence, a line says where they sit. A place is the path with
+every position written `[*]`, and every entry of the diff is counted, the ones past the fiftieth that are
+not printed included:
+
+```python
+from assertpy2 import assert_that
+
+rows = [{"id": n, "name": f"user{n}", "updated_at": f"10:00:{n:02d}"} for n in range(51)]
+other = [dict(row, updated_at=f"11:00:{n:02d}") for n, row in enumerate(rows)]
+other[50]["name"] = "renamed"
+
+try:
+    assert_that(rows).is_equal_to(other)
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # the 52 differences here are at <[*].updated_at> (51) and <[*].name> (1)
+```
+
+It is said for three or more differences at one to three places, under whatever line says why. It names
+where and recommends nothing: whether `updated_at` belongs under `ignore=` is your call.
+
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
 ```text
@@ -654,9 +675,16 @@ masker at all.
 | `failure.diff` | per-path actual and expected, capped when rendered | the same |
 | a snapshot file | the serialised value | `__snapshots/*.json`, normally committed |
 
-The caps are on rendering only: a row is cut at 400 characters and the whole diff block at 20 KB, and
-matching parts of a structure collapse to `..`. None of that shrinks what `failure.actual` holds, and
-`failure.actual` is what a reporting integration serialises.
+The caps are on rendering only. The value under test, a value it is held against, a pattern and a list
+of items are printed whole up to 4000 characters in every assertion. Past that the message says how much
+it left out, and what it keeps depends on what the assertion is about: `is_equal_to` keeps the first 4000
+characters and leaves the rest to its diff, two texts held against each other (`starts_with`,
+`ends_with`, the comparisons that ignore case or whitespace) are cut around the place they part, and
+anything else keeps its first 3000 and last 1000. A name or a count you pass, a key, a class, a file, a
+length, prints as given. A row of a diff is cut at 400 characters, a row a `soft_assertions()` block
+keeps at 4000 a side, and the whole diff block at 20 KB, and matching parts of a structure collapse to
+`..`. None of that shrinks what `failure.actual` holds, and `failure.actual` is what a reporting
+integration serialises.
 
 ### Keeping a value out
 

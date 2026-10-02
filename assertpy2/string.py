@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import broadcasts, equal_past
 from ._engine._require import argument, refuse, require_type, sized_len
-from .errors import _safe_format, _safe_repr, _safe_str
+from .errors import _capped, _capped_format, _capped_repr, _first_difference, _formatted, _parted, _safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -16,6 +16,43 @@ if TYPE_CHECKING:
     from ._engine._compat import Self
 
 __tracebackhide__ = True
+
+
+def _parted_from_the_end(text: str, ending: str) -> tuple[int, int]:
+    """Where *text* stops matching *ending*, read from their ends: the place in each."""
+    shared = _first_difference(text[::-1], ending[::-1])
+    return len(text) - shared - 1, len(ending) - shared - 1
+
+
+def _raw_place(text: str, lowered: str, place: int) -> int:
+    """The place in *text* of the character that *place* in its lowered form came from.
+
+    Lowering can lengthen a text, ``İ`` becoming two characters, so a place found in the lowered form runs
+    ahead of the raw one by one for each such character before it: by 3000 after 3000 of them, which put the
+    cut past the difference it was made for.
+    """
+    if len(lowered) == len(text):
+        return place
+    reached = 0
+    for index, character in enumerate(text):
+        reached += len(character.lower())
+        if reached > place:
+            return index
+    return len(text)
+
+
+def _parted_past_spacing(text: str, other: str) -> tuple[int, int]:
+    """Where two texts first differ with whitespace left out, as the place in each."""
+    at = other_at = 0
+    while True:
+        while at < len(text) and text[at].isspace():
+            at += 1
+        while other_at < len(other) and other[other_at].isspace():
+            other_at += 1
+        if at >= len(text) or other_at >= len(other) or text[at] != other[other_at]:
+            return at, other_at
+        at += 1
+        other_at += 1
 
 
 class StringMixin(_MixinBase):
@@ -32,7 +69,7 @@ class StringMixin(_MixinBase):
             raise ValueError("val is empty")
         if not is_valid(self.val):
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to contain only {description}, but did not.", expected=description
+                f"Expected <{_capped(self.val)}> to contain only {description}, but did not.", expected=description
             )
         return self
 
@@ -61,8 +98,16 @@ class StringMixin(_MixinBase):
         require_type(other, str, "a string", subject=argument("other"))
         if self.val.lower() == other.lower():
             return self
+        lowered, other_lowered = self.val.lower(), other.lower()
+        parted = _first_difference(lowered, other_lowered)
+        actual_text, other_text = _parted(
+            _safe_str(self.val),
+            _formatted(other),
+            _raw_place(self.val, lowered, parted),
+            _raw_place(other, other_lowered, parted),
+        )
         return self.error(
-            f"Expected <{_safe_str(self.val)}> to be case-insensitive equal to <{_safe_format(other)}>, but was not.",
+            f"Expected <{actual_text}> to be case-insensitive equal to <{other_text}>, but was not.",
             expected=other,
         )
 
@@ -94,9 +139,11 @@ class StringMixin(_MixinBase):
         require_type(other, str, "a string", subject=argument("other"))
         if "".join(self.val.split()) == "".join(other.split()):
             return self
+        actual_text, other_text = _parted(
+            _safe_str(self.val), _formatted(other), *_parted_past_spacing(self.val, other)
+        )
         return self.error(
-            f"Expected <{_safe_str(self.val)}> to be equal to <{_safe_format(other)}> ignoring whitespace,"
-            " but was not.",
+            f"Expected <{actual_text}> to be equal to <{other_text}> ignoring whitespace, but was not.",
             expected=other,
         )
 
@@ -129,8 +176,8 @@ class StringMixin(_MixinBase):
                 require_type(items[0], str, "a string", subject=argument("item"))
                 if items[0].lower() not in self.val.lower():
                     return self.error(
-                        f"Expected <{_safe_str(self.val)}> to case-insensitive contain item"
-                        f" <{_safe_format(items[0])}>, but did not.",
+                        f"Expected <{_capped(self.val)}> to case-insensitive contain item"
+                        f" <{_capped_format(items[0])}>, but did not.",
                         expected=items[0],
                     )
             else:
@@ -142,7 +189,7 @@ class StringMixin(_MixinBase):
                         missing.append(item)
                 if missing:
                     return self.error(
-                        f"Expected <{_safe_str(self.val)}> to case-insensitive contain items"
+                        f"Expected <{_capped(self.val)}> to case-insensitive contain items"
                         f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}.",
                         expected=items,
                     )
@@ -158,7 +205,7 @@ class StringMixin(_MixinBase):
                     missing.append(item)
             if missing:
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to case-insensitive contain items"
+                    f"Expected <{_capped(self.val)}> to case-insensitive contain items"
                     f" {self._fmt_items(items)}, but did not contain {self._fmt_items(missing)}.",
                     expected=items,
                 )
@@ -194,8 +241,10 @@ class StringMixin(_MixinBase):
             if len(text_prefix) == 0:
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(text_prefix):
+                parted = _first_difference(self.val, text_prefix)
+                actual_text, prefix_text = _parted(_safe_str(self.val), _formatted(text_prefix), parted)
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to start with <{_safe_format(text_prefix)}>, but did not.",
+                    f"Expected <{actual_text}> to start with <{prefix_text}>, but did not.",
                     expected=prefix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
@@ -205,7 +254,7 @@ class StringMixin(_MixinBase):
                 raise ValueError("given prefix arg must not be empty")
             if not self.val.startswith(raw_prefix):
                 return self.error(
-                    f"Expected <{_safe_repr(self.val)}> to start with <{_safe_repr(raw_prefix)}>, but did not.",
+                    f"Expected <{_capped_repr(self.val)}> to start with <{_capped_repr(raw_prefix)}>, but did not.",
                     expected=prefix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
@@ -221,7 +270,7 @@ class StringMixin(_MixinBase):
                 starts = equal_past(first, prefix, refusal)
             if not starts:
                 return self.error(
-                    f"Expected {_safe_str(self.val)} to start with <{_safe_format(prefix)}>, but did not.",
+                    f"Expected {_capped(self.val)} to start with <{_capped_format(prefix)}>, but did not.",
                     expected=prefix,
                 )
         else:
@@ -256,8 +305,11 @@ class StringMixin(_MixinBase):
             if len(text_suffix) == 0:
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(text_suffix):
+                actual_text, suffix_text = _parted(
+                    _safe_str(self.val), _formatted(text_suffix), *_parted_from_the_end(self.val, text_suffix)
+                )
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to end with <{_safe_format(text_suffix)}>, but did not.",
+                    f"Expected <{actual_text}> to end with <{suffix_text}>, but did not.",
                     expected=suffix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
@@ -267,7 +319,7 @@ class StringMixin(_MixinBase):
                 raise ValueError("given suffix arg must not be empty")
             if not self.val.endswith(raw_suffix):
                 return self.error(
-                    f"Expected <{_safe_repr(self.val)}> to end with <{_safe_repr(raw_suffix)}>, but did not.",
+                    f"Expected <{_capped_repr(self.val)}> to end with <{_capped_repr(raw_suffix)}>, but did not.",
                     expected=suffix,
                 )
         elif isinstance(self.val, collections.abc.Iterable):
@@ -281,7 +333,7 @@ class StringMixin(_MixinBase):
                 ends = equal_past(items[-1], suffix, refusal)
             if not ends:
                 return self.error(
-                    f"Expected {_safe_str(self.val)} to end with <{_safe_format(suffix)}>, but did not.",
+                    f"Expected {_capped(self.val)} to end with <{_capped_format(suffix)}>, but did not.",
                     expected=suffix,
                 )
         else:
@@ -316,9 +368,16 @@ class StringMixin(_MixinBase):
         if len(prefix) == 0:
             raise ValueError("given prefix arg must not be empty")
         if not self.val.lower().startswith(prefix.lower()):
+            lowered, prefix_lowered = self.val.lower(), prefix.lower()
+            parted = _first_difference(lowered, prefix_lowered)
+            actual_text, prefix_text = _parted(
+                _safe_str(self.val),
+                _formatted(prefix),
+                _raw_place(self.val, lowered, parted),
+                _raw_place(prefix, prefix_lowered, parted),
+            )
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to case-insensitive start with <{_safe_format(prefix)}>,"
-                " but did not.",
+                f"Expected <{actual_text}> to case-insensitive start with <{prefix_text}>, but did not.",
                 expected=prefix,
             )
         return self
@@ -351,8 +410,16 @@ class StringMixin(_MixinBase):
         if len(suffix) == 0:
             raise ValueError("given suffix arg must not be empty")
         if not self.val.lower().endswith(suffix.lower()):
+            lowered, suffix_lowered = self.val.lower(), suffix.lower()
+            parted, suffix_parted = _parted_from_the_end(lowered, suffix_lowered)
+            actual_text, suffix_text = _parted(
+                _safe_str(self.val),
+                _formatted(suffix),
+                _raw_place(self.val, lowered, parted),
+                _raw_place(suffix, suffix_lowered, suffix_parted),
+            )
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to case-insensitive end with <{_safe_format(suffix)}>, but did not.",
+                f"Expected <{actual_text}> to case-insensitive end with <{suffix_text}>, but did not.",
                 expected=suffix,
             )
         return self
@@ -412,7 +479,8 @@ class StringMixin(_MixinBase):
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is None:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to match pattern <{pattern}>, but did not.", expected=pattern
+                f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",
+                expected=pattern,
             )
         return self
 
@@ -442,7 +510,9 @@ class StringMixin(_MixinBase):
         if len(pattern) == 0:
             raise ValueError("given pattern arg must not be empty")
         if re.search(pattern, self.val) is not None:
-            return self.error(f"Expected <{_safe_str(self.val)}> to not match pattern <{pattern}>, but did.")
+            return self.error(
+                f"Expected <{_capped(self.val)}> to not match pattern <{_capped_format(pattern)}>, but did."
+            )
         return self
 
     def is_alpha(self) -> Self:
@@ -567,7 +637,7 @@ class StringMixin(_MixinBase):
             require_type(item, str, "a string", subject=argument("item"))
         if not any(item in self.val for item in items):
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to contain any of {self._fmt_items(items)}, but did not.",
+                f"Expected <{_capped(self.val)}> to contain any of {self._fmt_items(items)}, but did not.",
                 expected=items,
             )
         return self
@@ -597,7 +667,7 @@ class StringMixin(_MixinBase):
         found = [item for item in items if item in self.val]
         if found:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to contain none of {self._fmt_items(items)},"
+                f"Expected <{_capped(self.val)}> to contain none of {self._fmt_items(items)},"
                 f" but did contain {self._fmt_items(found)}."
             )
         return self
@@ -620,7 +690,7 @@ class StringMixin(_MixinBase):
             AssertionError: if val is **not** a ``str``
         """
         if not isinstance(self.val, str):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be unicode, but was <{type(self.val).__name__}>.")
+            return self.error(f"Expected <{_capped(self.val)}> to be unicode, but was <{type(self.val).__name__}>.")
         return self
 
     def extracting_group(self, pattern: str, group: int | str = 0) -> Self:
@@ -660,21 +730,23 @@ class StringMixin(_MixinBase):
         match_obj = re.search(pattern, self.val)
         if match_obj is None:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to match pattern <{pattern}>, but did not.", expected=pattern
+                f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",
+                expected=pattern,
             )
         try:
             extracted = match_obj.group(group)
         except IndexError:
             self._unmet(
-                f"Expected pattern <{pattern}> to have group <{group}>, but it does not.",
+                f"Expected pattern <{_capped_format(pattern)}> to have group <{_capped_format(group)}>,"
+                " but it does not.",
                 suppress_context=True,
                 expected=pattern,
             )
             return self
         if extracted is None:
             return self.error(
-                f"Expected group <{group}> of pattern <{pattern}> to be matched in <{_safe_str(self.val)}>, "
-                f"but it was not.",
+                f"Expected group <{_capped_format(group)}> of pattern <{_capped_format(pattern)}> to be matched in"
+                f" <{_capped(self.val)}>, but it was not.",
                 expected=pattern,
             )
         return self.builder(extracted, self.description, self.kind, logger=self.logger)
@@ -717,7 +789,8 @@ class StringMixin(_MixinBase):
         match_obj = re.search(pattern, self.val)
         if match_obj is None:
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to match pattern <{pattern}>, but did not.", expected=pattern
+                f"Expected <{_capped(self.val)}> to match pattern <{_capped_format(pattern)}>, but did not.",
+                expected=pattern,
             )
         groupdict = match_obj.groupdict()
         result = groupdict or match_obj.groups()

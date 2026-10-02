@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
-from .errors import _safe_str
+from .errors import _capped
 
 if TYPE_CHECKING:
     from ._engine._compat import Self
@@ -96,7 +96,7 @@ class FileMixin(_MixinBase):
         """
         require_type(self.val, (str, os.PathLike), "a path")
         if os.path.exists(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to not exist, but was found.")
+            return self.error(f"Expected <{_capped(self.val)}> to not exist, but was found.")
         return self
 
     def is_file(self) -> Self:
@@ -142,7 +142,7 @@ class FileMixin(_MixinBase):
         if missing is not None:
             return self.error(missing)
         if not os.path.isdir(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be a directory, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be a directory, but was not.")
         return self
 
     def is_named(self, filename: str) -> Self:
@@ -234,7 +234,7 @@ class FileMixin(_MixinBase):
         if not self._require_existing():
             return self
         if not os.access(self.val, os.R_OK):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be readable, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be readable, but was not.")
         return self
 
     def is_writable(self) -> Self:
@@ -257,7 +257,7 @@ class FileMixin(_MixinBase):
         if not self._require_existing():
             return self
         if not os.access(self.val, os.W_OK):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be writable, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be writable, but was not.")
         return self
 
     def is_executable(self) -> Self:
@@ -280,7 +280,7 @@ class FileMixin(_MixinBase):
         if not self._require_existing():
             return self
         if not os.access(self.val, os.X_OK):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be executable, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be executable, but was not.")
         return self
 
     def _missing(self) -> str | None:
@@ -292,14 +292,14 @@ class FileMixin(_MixinBase):
         require_type(self.val, (str, os.PathLike), "a path")
         if os.path.exists(self.val):
             return None
-        return f"Expected <{_safe_str(self.val)}> to exist, but was not found."
+        return f"Expected <{_capped(self.val)}> to exist, but was not found."
 
     def _not_a_file(self) -> str | None:
         """The failure for a path that is not an existing file, or ``None`` when it is one."""
         missing = self._missing()
         if missing is not None or os.path.isfile(self.val):
             return missing
-        return f"Expected <{_safe_str(self.val)}> to be a file, but was not."
+        return f"Expected <{_capped(self.val)}> to be a file, but was not."
 
     def _require_existing(self) -> bool:
         """Whether val exists, after reporting as a prerequisite that it does not.

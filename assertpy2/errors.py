@@ -33,17 +33,64 @@ def _safe_str(value: object) -> str:
         return _safe_repr(value)
 
 
-def _safe_format(value: object) -> str:
+def _capped_format(value: object) -> str:
     """``f"{value}"`` as an exact `str`, falling back to `_safe_repr` on any `Exception`.
 
     Not `_safe_str`: ``format()`` and ``str()`` disagree on a ``numpy.float32`` and, below 3.12, on a mixed-in
-    enum, so an operand a message interpolated keeps the text it always had.
+    enum, so an operand a message interpolated keeps the text it always had.  Capped (`_ends_kept`): every use
+    is an operand in a message.
     """
+    return _ends_kept(_formatted(value))
+
+
+def _formatted(value: object) -> str:
     try:
         # a lone field hands back what `__format__` returned, which may be a `str` subclass formatting itself again
         return str.__str__(f"{value}")
     except Exception:
         return _safe_repr(value)
+
+
+def _ends_kept(text: str) -> str:
+    """*text* as a message prints a value: whole up to 4000 characters, past that its two ends.
+
+    Whole, a value of 300 rows put 15 000 characters ahead of the predicate the message is about.  Both ends
+    and not the head alone, since ``ends_with`` is about the end and a container closes there.
+    """
+    if len(text) <= 4000:
+        return text
+    return f"{text[:3000]}... ({len(text) - 4000} more chars) ...{text[-1000:]}"
+
+
+def _capped(value: object) -> str:
+    """`_safe_str` of a value a message prints, capped (`_ends_kept`)."""
+    return _ends_kept(_safe_str(value))
+
+
+def _capped_repr(value: object) -> str:
+    """`_safe_repr` of a value a message prints, capped (`_ends_kept`)."""
+    return _ends_kept(_safe_repr(value))
+
+
+def _parted(actual_text: str, other_text: str, at: int, other_at: int | None = None) -> tuple[str, str]:
+    """Two texts a message holds against each other: whole up to 4000 characters, past that cut where they part.
+
+    *at* is where the first parts from the second by the rule of the assertion that held them, and *other_at*
+    the same place in the second where the two are not read in step.  Capped by their ends, two long texts
+    that part in the middle read the same on both sides, and cut at the first raw difference a comparison
+    that ignores case or spacing showed a difference it ignores.
+    """
+    return _around(actual_text, at), _around(other_text, at if other_at is None else other_at)
+
+
+def _around(text: str, at: int) -> str:
+    """*text* whole up to 4000 characters, past that the 4000 around *at*, with what is left out counted each side."""
+    if len(text) <= 4000:
+        return text
+    start = max(0, min(at - 2000, len(text) - 4000))
+    after = len(text) - start - 4000
+    before = f"({start} more chars) ..." if start else ""
+    return f"{before}{text[start : start + 4000]}{f'... ({after} more chars)' if after else ''}"
 
 
 def _callable_name(value: object) -> str:

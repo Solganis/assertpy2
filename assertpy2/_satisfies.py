@@ -12,7 +12,7 @@ from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
 from ._engine._require import VerdictError, argument, refuse, verdict
 from ._matcher_impls import _has_own_evaluate
-from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _safe_format, _safe_str
+from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _capped, _capped_format
 from .matchers import (
     IsNotNoneMatcher,
     Matcher,
@@ -241,7 +241,7 @@ class SatisfiesMixin(_MixinBase):
         elif callable(matcher):
             if not verdict(cast("Callable[..., object]", matcher)(self.val)):
                 return self.error(
-                    f"Expected <{_safe_str(self.val)}> to satisfy {_describe_matcher(matcher)}, but did not.",
+                    f"Expected <{_capped(self.val)}> to satisfy {_describe_matcher(matcher)}, but did not.",
                     expected=_describe_matcher(matcher),
                 )
         else:
@@ -303,7 +303,7 @@ class SatisfiesMixin(_MixinBase):
                     description = outcome.description
                     return self.error(
                         f"Expected all items to satisfy {description},"
-                        f" but item at index {i} <{_safe_format(item)}> did not:"
+                        f" but item at index {i} <{_capped_format(item)}> did not:"
                         f" {outcome.mismatch}.",
                         actual=item,
                         expected=description,
@@ -317,7 +317,7 @@ class SatisfiesMixin(_MixinBase):
                 if not verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected all items to satisfy {_describe_matcher(matcher)},"
-                        f" but item at index {i} <{_safe_format(item)}> did not.",
+                        f" but item at index {i} <{_capped_format(item)}> did not.",
                         expected=_describe_matcher(matcher),
                     )
         if not walked:
@@ -366,7 +366,7 @@ class SatisfiesMixin(_MixinBase):
                 mismatch.path.entry(actual=mismatch.actual, expected=mismatch.expected_desc) for mismatch in mismatches
             ]
             return self.error(
-                f"Expected <{_safe_str(self.val)}> to match structure {matcher.describe()}, but"
+                f"Expected <{_capped(self.val)}> to match structure {matcher.describe()}, but"
                 f" {matcher.render_mismatch(mismatches)}.",
                 actual=self.val,
                 expected=spec,
@@ -390,7 +390,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val is **not** callable
         """
         if not callable(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to be callable, but was not.")
+            return self.error(f"Expected <{_capped(self.val)}> to be callable, but was not.")
         return self
 
     def is_not_callable(self) -> Self:
@@ -409,7 +409,7 @@ class SatisfiesMixin(_MixinBase):
             AssertionError: if val **is** callable
         """
         if callable(self.val):
-            return self.error(f"Expected <{_safe_str(self.val)}> to not be callable, but was.")
+            return self.error(f"Expected <{_capped(self.val)}> to not be callable, but was.")
         return self
 
     def any_satisfy(self, matcher: Matcher[Any] | Callable[..., bool]) -> Self:
@@ -521,14 +521,14 @@ class SatisfiesMixin(_MixinBase):
                 if verdict(matcher.matches(item), subject="the matcher"):
                     return self.error(
                         f"Expected no item to satisfy {matcher.describe()},"
-                        f" but item at index {i} <{_safe_format(item)}> did."
+                        f" but item at index {i} <{_capped_format(item)}> did."
                     )
         elif callable(matcher):
             for i, item in enumerate(self.val):
                 if verdict(cast("Callable[..., object]", matcher)(item)):
                     return self.error(
                         f"Expected no item to satisfy {_describe_matcher(matcher)},"
-                        f" but item at index {i} <{_safe_format(item)}> did."
+                        f" but item at index {i} <{_capped_format(item)}> did."
                     )
         else:
             refuse(matcher, "a Matcher or a callable", subject=argument("matcher"))

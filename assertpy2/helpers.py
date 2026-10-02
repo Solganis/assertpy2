@@ -5,7 +5,16 @@ import decimal
 import numbers
 from typing import cast
 
-from assertpy2.errors import DiffResult, _safe_format, _safe_repr, _safe_str, _truncated, _windowed
+from assertpy2.errors import (
+    DiffResult,
+    _capped,
+    _capped_format,
+    _capped_repr,
+    _ends_kept,
+    _safe_repr,
+    _truncated,
+    _windowed,
+)
 
 from ._engine._compare import (
     _CompareConfig,
@@ -188,11 +197,11 @@ def _spelling(mapping: object) -> tuple[str, str, collections.abc.Callable[[obje
 
 
 def _entry_part(key: object, text: str) -> str:
-    return f"{_safe_repr(key)}: {text}"
+    return f"{_capped_repr(key)}: {text}"
 
 
 def _field_part(key: object, text: str) -> str:
-    return f"{_safe_str(key)}={text}"
+    return f"{_capped(key)}={text}"
 
 
 def _read_by_fields(value: object) -> object:
@@ -291,14 +300,14 @@ class HelpersMixin(_MixinBase):
         if len(items) == 0:
             return "<>"
         elif len(items) == 1 and hasattr(items, "__getitem__"):
-            return f"<{_safe_format(items[0])}>"
+            return f"<{_capped_format(items[0])}>"
         elif type(items) is tuple or type(items) is list:
             try:
-                return f"<{str.__str__(str(items))[1:-1]}>"
+                return f"<{_ends_kept(str.__str__(str(items))[1:-1])}>"
             except Exception:
                 # one element at a time, so one bad `__repr__` spoils only itself
-                return f"<{', '.join(map(_safe_repr, items))}>"
-        return f"<{_safe_str(items)}>"
+                return f"<{_ends_kept(', '.join(map(_safe_repr, items)))}>"
+        return f"<{_capped(items)}>"
 
     def _fmt_args_kwargs(self, *some_args, **some_kwargs):
         """Helper to convert the given args and kwargs into a string."""
@@ -418,7 +427,7 @@ class HelpersMixin(_MixinBase):
             [".".join([str(segment) for segment in key]) if type(key) is tuple else key for key in absent.includes]
         )
         self._unmet(
-            f"Expected <{_safe_format(absent.mapping)}> to include key{keys_suffix} {includes_fmt},"
+            f"Expected <{_capped_format(absent.mapping)}> to include key{keys_suffix} {includes_fmt},"
             f" but did not include key{missing_suffix} {self._fmt_items(absent.missing)}."
         )
         # reported: falsy, so no second failure follows it, and `None` so a caller walking items stops there

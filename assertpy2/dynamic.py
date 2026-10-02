@@ -6,7 +6,7 @@ from typing import Any
 
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
-from .errors import _safe_format
+from .errors import _first_difference, _formatted, _parted
 from .http_mixin import response_of
 from .outcome import Requirement
 
@@ -128,9 +128,12 @@ class DynamicMixin(_MixinBase):
                 if actual == expected:
                     return self
                 kind = "key" if is_dict else "attribute"
+                actual_text, expected_text = _formatted(actual), _formatted(expected)
+                actual_text, expected_text = _parted(
+                    actual_text, expected_text, _first_difference(actual_text, expected_text)
+                )
                 return self.error(
-                    f"Expected <{_safe_format(actual)}> to be equal to <{_safe_format(expected)}>"
-                    f" on {kind} <{attr_name}>, but was not.",
+                    f"Expected <{actual_text}> to be equal to <{expected_text}> on {kind} <{attr_name}>, but was not.",
                     requirement=asked,
                 )
 
