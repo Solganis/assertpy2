@@ -100,12 +100,27 @@ def comparable_fields(obj: object) -> dict | None:
     value that holds something outside its ``__dict__`` (`_holds_only_its_dict`): two lists of a class of the
     caller's own were equal under ``ignore=`` whatever they held, and so were two exceptions, whose ``args``
     are not in it.
+
+    An exception is read as its class, its ``args`` and the attributes in its ``__dict__``, where its class
+    has no room in the instance for more (`_holds_only_its_args`): an `OSError` keeps a ``filename`` in
+    neither, and stays with its own ``==``.  The class is a field of its own, ``__class__``, because what an
+    error is starts with its class: read as a record is, a `ValueError` and a `TypeError` of one message were
+    equal.  The two names are the reader's: an entry of the ``__dict__`` under either does not replace them.
+    An exception that is a dataclass, an attrs class or a model is read as that record, by the fields it
+    declares, as its own generated ``==`` reads it.
     """
     through = _read_through(obj)
     if through is not None:
         return cast("dict", _fields_through(obj, through))
     if is_namedtuple(obj):
         return TakenApart(type(obj), obj._asdict())
+    if issubclass(type(obj), BaseException):
+        if not _holds_only_its_args(type(obj)):
+            return None
+        # off the slots of `BaseException`: a class may give itself an ``args`` or a ``__dict__`` of its own
+        slots = BaseException.__dict__
+        read = {"__class__": type(obj), "args": slots["args"].__get__(obj)}
+        return TakenApart(type(obj), {**read, **slots["__dict__"].__get__(obj), **read})
     builtin_kinds = (
         type,
         numbers.Number,
@@ -124,6 +139,18 @@ def comparable_fields(obj: object) -> dict | None:
     return None
 
 
+def fields_held(obj: object) -> collections.abc.Mapping | None:
+    """The fields of a record as it holds them, one level deep, or ``None`` for a value that is no record.
+
+    For a question asked of many rows about their own fields: taking each apart all the way down, as
+    `comparable_fields` does, cost a failed ``contains`` over 300 records 0.72 ms against 0.58 ms read this way.
+    """
+    held = _held(obj, frozenset({"dataclass", "attrs", "model"}))
+    if held is not None:
+        return held[0]
+    return obj._asdict() if is_namedtuple(obj) else None
+
+
 def _holds_only_its_dict(kind: type) -> bool:
     """Whether an instance of *kind* holds nothing but its ``__dict__``, read off the layout of its class.
 
@@ -131,10 +158,28 @@ def _holds_only_its_dict(kind: type) -> bool:
     past the object's own header, its ``__dict__`` and its weak reference list.  A list of kinds was the first
     answer, and each one found missing was a comparison that passed: `list`, `array.array`, an exception.
     """
-    read = type.__getattribute__
-    spare = read(kind, "__basicsize__") - object.__basicsize__
-    spare -= tuple.__itemsize__ * ((read(kind, "__dictoffset__") > 0) + (read(kind, "__weakrefoffset__") > 0))
+    spare = _basic_size(kind) - object.__basicsize__
+    spare -= tuple.__itemsize__ * ((_dict_offset(kind) > 0) + (_weakref_offset(kind) > 0))
     return spare == 0
+
+
+# off the slots of `type`: a metaclass may spell a size or an offset of its own
+_basic_size, _dict_offset, _weakref_offset = (
+    type.__dict__[name].__get__ for name in ("__basicsize__", "__dictoffset__", "__weakrefoffset__")
+)
+
+
+def _holds_only_its_args(kind: type) -> bool:
+    """Whether an exception of *kind* has no room in the instance past what `BaseException` has, by its layout.
+
+    `BaseException` has the ``__dict__`` in it already, so past it a class of the caller's own adds a weak
+    reference list and nothing else.  `OSError`, `ImportError`, `SyntaxError`, `StopIteration`, an exception
+    group and a class with a slot add room, and what is in it is in neither ``args`` nor ``__dict__``.
+    State a class keeps outside the instance, a property over a table of its own, is not seen by this or by
+    any reading of the instance.
+    """
+    spare = _basic_size(kind) - BaseException.__basicsize__
+    return spare == tuple.__itemsize__ * (_weakref_offset(kind) > 0)
 
 
 class _NestedTooDeepError(Exception):
@@ -192,9 +237,35 @@ def _flattened(node: Any, through: frozenset[str], depth: int = 0) -> Any:
     if isinstance(node, dict):
         # a key stays as held: taken apart, a record used as one could not be hashed
         rebuilt = {key: _flattened(value, through, deeper) for key, value in node.items()}
-        # a dict of a class of its own keeps the class: rebuilt plain, ``strict_types`` held it equal to a dict
-        return rebuilt if type(node) is dict else TakenApart(type(node), rebuilt)
+        return rebuilt if type(node) is dict else _as_its_class(node, rebuilt)
     return node
+
+
+def _as_its_class(node: dict, rebuilt: dict) -> dict:
+    """*rebuilt* as a dict of the class *node* is of (`_of_its_class`)."""
+    kept = _of_its_class(node)
+    put = _put_into(kept)
+    for key, value in rebuilt.items():
+        put(kept, key, value)
+    return kept
+
+
+def _put_into(kept: dict) -> Any:
+    """What puts an item into a dict being rebuilt, past a ``__setitem__`` its class may have of its own."""
+    ordered = issubclass(type(kept), collections.OrderedDict)
+    return collections.OrderedDict.__setitem__ if ordered else dict.__setitem__
+
+
+def _of_its_class(node: dict) -> dict:
+    """An empty dict to rebuild *node* into, which keeps what its class means for equality.
+
+    An `OrderedDict` stays one: its ``==`` reads the order, and taken apart into a plain mapping two that hold
+    the same items in another order were equal under a record.  Any other dict of a class of its own keeps the
+    class as a `TakenApart`: rebuilt plain, ``strict_types`` held it equal to a dict.
+    """
+    if issubclass(type(node), collections.OrderedDict):
+        return collections.OrderedDict.__new__(type(node))
+    return TakenApart(type(node), {})
 
 
 def _fields_through(node: object, through: frozenset[str]) -> Any:
@@ -239,7 +310,16 @@ def _mended(value: Any, memo: dict[int, Any]) -> Any:
     items = [_mended(item, memo) for item in value]
     if all(new is old for new, old in zip(items, value, strict=True)):
         return value
-    return type(value)(*items) if hasattr(value, "_fields") else type(value)(items)
+    return _of_its_kind(value, items)
+
+
+def _of_its_kind(node: Any, items: list) -> Any:
+    """A sequence of the class *node* is of over *items*, handed to its constructor as `_flattened` hands them.
+
+    A named tuple takes them as arguments.  Any other takes a generator and not the list: a class may be built
+    differently from the two, and one value taken apart the two ways then came out as two.
+    """
+    return type(node)(*items) if hasattr(node, "_fields") else type(node)(item for item in items)
 
 
 def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) -> Any:
@@ -268,9 +348,10 @@ def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) ->
     # no generator: through one a level was three frames on Python 3.10, 331 levels deep against 496
     rebuilt: Any
     if isinstance(node, dict):
-        rebuilt = memo[id(node)] = {} if type(node) is dict else TakenApart(type(node), {})
+        rebuilt = memo[id(node)] = {} if type(node) is dict else _of_its_class(node)
+        put = _put_into(rebuilt)
         for key, value in node.items():
-            rebuilt[key] = _flattened_once(value, through, memo)
+            put(rebuilt, key, _flattened_once(value, through, memo))
         return rebuilt
     if type(node) is list:
         rebuilt = memo[id(node)] = []
@@ -279,7 +360,7 @@ def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) ->
         return rebuilt
     memo[id(node)] = node
     items = [_flattened_once(item, through, memo) for item in node]
-    rebuilt = memo[id(node)] = type(node)(*items) if hasattr(node, "_fields") else type(node)(items)
+    rebuilt = memo[id(node)] = _of_its_kind(node, items)
     return rebuilt
 
 

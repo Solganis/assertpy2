@@ -330,7 +330,12 @@ class BaseMixin(SatisfiesMixin):
                 " (dataclass, namedtuple, attrs, Pydantic model, or object with __dict__)"
             )
         if self._dict_not_equal(actual_dict, expected_dict, ignore=ignore, include=include, config=config):
-            self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config)
+            # a dict read beside a record is a copy, and the failure hands back the caller's own
+            held = (
+                actual if isinstance(actual, dict) else actual_dict,
+                expected if isinstance(expected, dict) else expected_dict,
+            )
+            self._dict_err(actual_dict, expected_dict, ignore=ignore, include=include, config=config, held=held)
         else:
             self._note_if_nothing_compared(actual_dict, expected_dict, ignore=ignore, include=include)
 

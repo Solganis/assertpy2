@@ -438,6 +438,26 @@ except AssertionError as failure:
 It is said for three or more differences at one to three places, under whatever line says why. It names
 where and recommends nothing: whether `updated_at` belongs under `ignore=` is your call.
 
+A failed `contains()` is explained the same way. Where a row shares a key with the item, the closest
+one is named with what differs, for dicts and for dataclasses, attrs instances, named tuples and models.
+And where one fact about the item not found accounts for it, a line says so: it is a NaN, an element
+reads the same and is of another plain type, or an element prints the same and their class compares by
+identity.
+
+```python
+import json
+
+from assertpy2 import assert_that
+
+payload = json.loads('{"ids": [7, 8]}')
+
+try:
+    assert_that(payload["ids"]).contains("7")
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # an element reads the same as the item not found and is of another type: int, not str
+```
+
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
 ```text
@@ -685,6 +705,9 @@ length, prints as given. A row of a diff is cut at 400 characters, a row a `soft
 keeps at 4000 a side, and the whole diff block at 20 KB, and matching parts of a structure collapse to
 `..`. None of that shrinks what `failure.actual` holds, and `failure.actual` is what a reporting
 integration serialises.
+
+Under `pytest -vv` a message and the values of the report section are printed whole, as pytest prints
+its own output there. The rows of a diff stay cut.
 
 ### Keeping a value out
 

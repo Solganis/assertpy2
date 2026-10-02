@@ -17,6 +17,8 @@ def _plain_messages(monkeypatch):
     instead; the off-pytest diff-in-message path has its own targeted tests that opt back in.
     """
     monkeypatch.setattr(_errors, "_RENDER_DIFF_IN_MESSAGE", False)
+    # and the cap on: at -vv the plugin lifts it, and a run of this suite at -vv must read as any other
+    monkeypatch.setattr(_errors, "_WHOLE_VALUES", False)
 
 
 @pytest.fixture(autouse=True)

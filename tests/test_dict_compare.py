@@ -876,7 +876,94 @@ class TestADictBesideARecordIsReadAsDeep:
             assert_that(record).is_equal_to(payload, ignore="missing")
         assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["next.v"])
 
+    def test_the_failure_hands_back_the_dict_it_was_given_and_not_the_copy_it_read(self):
+        record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(2)}
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(payload).is_equal_to(record, ignore="missing")
+        assert_that(caught.value.actual).is_same_as(payload)
+        assert_that(caught.value.actual["next"]).is_same_as(payload["next"])
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(record).is_equal_to(payload, ignore="missing")
+        assert_that(caught.value.expected).is_same_as(payload)
+
+    def test_a_record_with_no_equality_of_its_own_is_read_by_its_fields_on_either_side(self):
+        # under a key option the fields are what is compared, as they are under a record
+        token = dataclasses.make_dataclass("Token", [("value", str)], eq=False)
+        assert_that(_Holder(0, token("a"))).is_equal_to({"v": 9, "next": token("a")}, ignore="v")
+        assert_that(_Holder(0, token("a"))).is_equal_to(_Holder(9, token("a")), ignore="v")
+        with pytest.raises(AssertionFailure):
+            assert_that(_Holder(0, token("a"))).is_equal_to({"v": 9, "next": token("b")}, ignore="v")
+
+    def test_a_record_under_two_dicts_is_read_by_its_fields_only_where_a_path_enters_it(self):
+        actual, expected = {"v": 0, "next": _Holder(1)}, {"v": 9, "next": {"v": 1, "next": None}}
+        with pytest.raises(AssertionFailure):
+            assert_that(actual).is_equal_to(expected, ignore="v")
+        assert_that(actual).is_equal_to(expected, ignore=["v", ("next", "missing")])
+
     def test_the_matcher_answers_as_the_builder_does(self):
         record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(1)}
         assert_that(match.equal_to(payload, ignore="v").matches(record)).is_true()
         assert_that(match.equal_to(record, ignore="v").matches(payload)).is_true()
+
+
+class TestWhatARecordHoldsIsRebuiltAsItIs:
+    """Taken apart for a key option, a value under a record is rebuilt, and the rebuilt one compares as the held one."""
+
+    def test_an_ordered_dict_keeps_its_order(self):
+        ordered = collections.OrderedDict
+        one, other = _Holder(0, ordered(a=1, b=2)), _Holder(9, ordered(b=2, a=1))
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(one).is_equal_to(other, ignore="v")
+        assert_that([(entry.path, entry.actual, entry.expected) for entry in caught.value.diff.entries]).is_equal_to(
+            [("next", ["a", "b"], ["b", "a"])]
+        )
+        with pytest.raises(AssertionFailure):
+            assert_that(one).is_equal_to({"v": 9, "next": ordered(b=2, a=1)}, ignore="v")
+        assert_that(one).is_equal_to(_Holder(9, ordered(a=1, b=2)), ignore="v")
+        # against a plain dict an ordered one is equal whatever the order, as its own ``==`` has it
+        assert_that(one).is_equal_to(_Holder(9, {"b": 2, "a": 1}), ignore="v")
+
+    def test_an_ordered_dict_past_the_depth_the_plain_way_goes_keeps_its_order_too(self):
+        ordered = collections.OrderedDict
+        deep: object = None
+        for _ in range(70):
+            deep = [deep]
+        one = _Holder(0, {"o": ordered(a=1, b=2), "deep": deep})
+        with pytest.raises(AssertionFailure):
+            assert_that(one).is_equal_to(_Holder(9, {"o": ordered(b=2, a=1), "deep": deep}), ignore="v")
+        assert_that(one).is_equal_to(_Holder(9, {"o": ordered(a=1, b=2), "deep": deep}), ignore="v")
+
+    def test_an_ordered_dict_of_a_class_of_its_own_keeps_the_class_and_runs_none_of_its_code(self):
+        class Recorded(collections.OrderedDict):
+            calls: typing.ClassVar[list[str]] = []
+
+            def __init__(self, *args, **kwargs):
+                self.calls.append("init")
+                super().__init__(*args, **kwargs)
+
+            def __setitem__(self, key, value):
+                self.calls.append("set")
+                super().__setitem__(key, value)
+
+        one, other = _Holder(0, Recorded(a=1)), _Holder(9, Recorded(a=1))
+        Recorded.calls.clear()
+        assert_that(one).is_equal_to(other, ignore="v", strict_types=True)
+        assert_that(Recorded.calls).is_empty()
+        with pytest.raises(AssertionFailure):
+            assert_that(one).is_equal_to(_Holder(9, collections.OrderedDict(a=1)), ignore="v", strict_types=True)
+
+    def test_a_list_of_a_class_of_its_own_is_built_one_way_whichever_way_it_is_taken_apart(self):
+        # built from a generator on the plain way and from a list past its depth, this one came out as two
+        class Reversing(list):
+            def __init__(self, items):
+                super().__init__(items)
+                if not isinstance(items, list):
+                    self.reverse()
+
+        deep: object = None
+        for _ in range(70):
+            deep = [deep]
+        record = _Holder(0, {"value": Reversing([1, 2]), "deep": deep})
+        assert_that(record).is_equal_to(
+            {"v": 0, "next": {"value": Reversing([1, 2]), "deep": None}}, ignore=("next", "deep")
+        )

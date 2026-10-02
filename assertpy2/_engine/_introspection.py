@@ -148,7 +148,12 @@ class TakenApart(dict):
     def __repr__(self) -> str:
         if self.keyed:
             return f"{class_name(self.kind)}({dict.__repr__(self)})"
-        return f"{class_name(self.kind)}({', '.join(f'{field}={value!r}' for field, value in self.items())})"
+        fields = ", ".join(f"{field}={value!r}" for field, value in self.items() if not self._says_its_class(field))
+        return f"{class_name(self.kind)}({fields})"
+
+    def _says_its_class(self, field: object) -> bool:
+        """Whether *field* is the class an exception is read with, which the name ahead of the bracket has said."""
+        return field == "__class__" and self[field] is self.kind and issubclass(self.kind, BaseException)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, dict):

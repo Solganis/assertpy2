@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._engine._compare import _guarded_equal
 from ._engine._diff import _sub_diff_entries
-from ._engine._equality import mapping_shaped
+from ._engine._equality import fields_held, mapping_shaped
 from ._engine._introspection import materialized
 from ._engine._membership import (
     _hash_safe,
@@ -24,6 +24,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
+from ._hints import not_found, reads_as
 from .errors import DiffEntry, DiffResult, _capped, _capped_format, _safe_repr, _told_apart
 from .matchers import _is_matcher
 
@@ -106,27 +107,60 @@ def _multiset_diff_entries(val_items, given_items):
     return entries
 
 
+def _as_row(value: object) -> Any:
+    """*value* as the keys or fields a closest element is looked for by, or ``None`` where it has neither."""
+    return value if mapping_shaped(value, check_values=False) else fields_held(value)
+
+
+def _why(item: object, values: Iterable[object]) -> str:
+    """The line that says why *item* was not found, on a line of its own under the sentence, or nothing."""
+    line = not_found(item, values)
+    return "" if line is None else f"\n{line}"
+
+
+def _related(mine: object, other: object) -> bool:
+    """Whether two values under one key agree: equal, or two plain values of two types that read the same."""
+    if _guarded_equal(mine, other):
+        return True
+    return reads_as(mine, other)
+
+
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
 
     def _closest_element(self, item, values=None):
-        """The dict-like element of val most similar to a dict-like ``item``, with its diff entries, or
-        ``None`` when nothing shares enough structure to be an actionable 'did you mean' hint.
+        """The element of val most similar to ``item``, with its diff entries, or ``None`` when nothing shares
+        enough structure to be an actionable 'did you mean' hint.
 
-        Similarity is the fewest differing paths among elements that share at least one equal key, so an
-        unrelated element is never offered.  Runs only on a failed ``contains``, never on the hot path.
+        Asked of dict-like values and of records, a dataclass, an attrs instance, a named tuple or a model: a list
+        of rows is as often one as the other.  Similarity is the fewest differing paths among elements that share
+        a key whose values are equal or read the same, so an element that shares no value is not offered and
+        ``{"id": 7}`` is offered for ``{"id": "7"}``.  Runs only on a failed ``contains``, never on the hot path.
+
+        Reading a row runs its code, a field of a record or an item of a mapping, and what that raises costs
+        the hint and not the failure it was for.
         """
-        if not mapping_shaped(item, check_values=False):
+        try:
+            return self._closest_row(item, self.val if values is None else values)
+        except Exception:  # a diagnostic must never outrank the failure it is describing
+            return None
+
+    @staticmethod
+    def _closest_row(item, values):
+        sought = _as_row(item)
+        if sought is None:
             return None
         best = None
-        for element in self.val if values is None else values:
-            if not mapping_shaped(element, check_values=False):
+        for element in values:
+            held = _as_row(element)
+            if held is None:
                 continue
-            shared = ((element[key], *lookup(item, key)) for key in element)
-            if not any(found and _guarded_equal(mine, other) for mine, found, other in shared):
-                continue  # no shared equal key -> not related enough to suggest
-            entries = _sub_diff_entries(element, item, _ROOT, config=None) or []
-            if best is None or len(entries) < len(best[1]):
+            shared = ((held[key], *lookup(sought, key)) for key in held)
+            if not any(found and _related(mine, other) for mine, found, other in shared):
+                continue  # no shared key that agrees -> not related enough to suggest
+            entries = _sub_diff_entries(element, item, _ROOT, config=None)
+            # an element the walk finds nothing under, two records of a class with no equality, names no difference
+            if entries and (best is None or len(entries) < len(best[1])):
                 best = (element, entries)
         return best
 
@@ -205,7 +239,8 @@ class ContainsMixin(_MixinBase):
                         entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)],
                     )
                     return self.error(
-                        f"Expected <{_capped_format(values)}> to contain key <{_capped_format(item)}>, but did not.",
+                        f"Expected <{_capped_format(values)}> to contain key <{_capped_format(item)}>, but did not."
+                        f"{_why(item, values)}",
                         diff=diff,
                         expected=items,
                     )
@@ -214,7 +249,8 @@ class ContainsMixin(_MixinBase):
                     element, entries = closest
                     return self.error(
                         f"Expected <{_capped_format(values)}> to contain item <{_capped_format(item)}>, but did not."
-                        f" Closest element <{_capped_format(element)}> differs at {self._fmt_closest(entries)}.",
+                        f" Closest element <{_capped_format(element)}> differs at {self._fmt_closest(entries)}."
+                        f"{_why(item, values)}",
                         diff=DiffResult(kind="contains", entries=entries),
                         expected=items,
                     )
@@ -222,7 +258,8 @@ class ContainsMixin(_MixinBase):
                     kind="contains", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)]
                 )
                 return self.error(
-                    f"Expected <{_capped_format(values)}> to contain item <{_capped_format(item)}>, but did not.",
+                    f"Expected <{_capped_format(values)}> to contain item <{_capped_format(item)}>, but did not."
+                    f"{_why(item, values)}",
                     diff=diff,
                     expected=items,
                 )
@@ -240,19 +277,18 @@ class ContainsMixin(_MixinBase):
                     ],
                 )
                 if mapping_shaped(values):
-                    return self.error(
+                    sentence = (
                         f"Expected <{_capped_format(values)}> to contain keys {self._fmt_items(items)},"
-                        f" but did not contain key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}.",
-                        diff=diff,
-                        expected=items,
+                        f" but did not contain key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}."
                     )
                 else:
-                    return self.error(
+                    sentence = (
                         f"Expected <{_capped_format(values)}> to contain items {self._fmt_items(items)},"
-                        f" but did not contain {self._fmt_items(missing_desc)}.",
-                        diff=diff,
-                        expected=items,
+                        f" but did not contain {self._fmt_items(missing_desc)}."
                     )
+                # one item not found has one reason to give; asked past the printing, which runs code of the values
+                why = _why(missing[0], values) if len(missing) == 1 and not _is_matcher(missing[0]) else ""
+                return self.error(sentence + why, diff=diff, expected=items)
         return self
 
     def does_not_contain(self, *items: object) -> Self:

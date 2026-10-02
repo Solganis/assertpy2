@@ -577,12 +577,16 @@ class HelpersMixin(_MixinBase):
         ignore: object = None,
         include: object = None,
         config: _CompareConfig | None = None,
+        held: tuple[object, object] | None = None,
     ) -> None:
         """Helper to construct error message for dict comparison, and for two sequences under a key option.
 
         A compare ``config`` is routed through both the textual repr (a tolerated / comparator-equal leaf is
         ellipsized, never shown) and the structured diff, so the message and diff agree on what differs.
         ``ignore`` / ``include`` are applied to both for the same reason.
+
+        *held* is what the failure hands back as ``actual`` and ``expected`` where that is not what was walked:
+        a dict taken apart to be read beside a record is a copy, and the failure holds the caller's own.
         """
 
         on_path: set[int] = set()
@@ -671,11 +675,12 @@ class HelpersMixin(_MixinBase):
         )
         # the comparison has failed, so where the walk shows nothing under the pair, the pair is the entry
         diff = DiffResult(kind=kind, entries=diff_entries or [_ROOT.leaf_entry(actual=val, expected=other)])
+        actual, expected = held or (val, other)
         self.error(
             f"Expected <{val_repr}> to be equal to <{other_repr}>{self._key_filter_note(ignore, include)}, but was not."
             f"{_config_note(config)}",
-            actual=val,
-            expected=other,
+            actual=actual,
+            expected=expected,
             diff=diff,
         )
 

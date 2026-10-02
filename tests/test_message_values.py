@@ -23,7 +23,7 @@ import sys
 
 import pytest
 
-from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
+from assertpy2 import AssertionFailure, assert_that, errors, match, soft_assertions
 
 _PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "assertpy2"
 _RAW = frozenset({"_safe_str", "_safe_repr", "str", "repr"})
@@ -300,3 +300,46 @@ def test_an_operand_and_a_list_of_items_are_capped_too():
     with pytest.raises(AssertionFailure) as caught:
         assert_that([0]).contains(*range(1, 3000))
     assert_that(len(caught.value._message.splitlines()[0])).is_less_than(2 * _CAP + 200)
+
+
+class TestWhereTheWholeValueIsAskedFor:
+    """One switch lifts the cap, and the pytest plugin turns it on at ``-vv``."""
+
+    def test_a_value_an_operand_and_a_list_of_items_print_whole(self, monkeypatch):
+        monkeypatch.setattr(errors, "_WHOLE_VALUES", True)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(_ROWS).is_length(299)
+        assert_that(caught.value._message).is_equal_to(f"Expected <{_ROWS}> to be of length <299>, but was <300>.")
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that([0]).contains(*range(1, 3000))
+        assert_that(caught.value._message).does_not_contain("more chars)")
+
+    def test_two_texts_held_against_each_other_print_whole(self, monkeypatch):
+        monkeypatch.setattr(errors, "_WHOLE_VALUES", True)
+        one, other = "a" * 6000 + "X", "a" * 6000 + "Y"
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(one).is_equal_to_ignoring_case(other)
+        assert_that(caught.value._message).is_equal_to(
+            f"Expected <{one}> to be case-insensitive equal to <{other}>, but was not."
+        )
+
+    def test_the_two_values_of_an_equality_print_whole(self, monkeypatch):
+        monkeypatch.setattr(errors, "_WHOLE_VALUES", True)
+        one, other = object.__new__(_Wide), object.__new__(_Wide)
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(one).is_equal_to(other)
+        assert_that(caught.value._message).does_not_contain("more chars)").contains("w" * 9000)
+
+    def test_a_row_of_a_diff_and_a_value_of_a_report_stay_cut(self, monkeypatch):
+        monkeypatch.setattr(errors, "_WHOLE_VALUES", True)
+        assert_that(errors._truncated("x" * 9000, 400)).is_length(400 + len("... (8600 more chars)"))
+        assert_that(errors._json_safe("x" * 9000)).ends_with("... (5000 more chars)")
+
+    def test_without_it_the_cap_holds(self):
+        assert_that(errors._WHOLE_VALUES).is_false()
+        assert_that(errors._truncated("x" * 9000)).ends_with("... (5000 more chars)")
+
+
+class _Wide:
+    def __repr__(self) -> str:
+        return "w" * 9000

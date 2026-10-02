@@ -57,7 +57,7 @@ def _ends_kept(text: str) -> str:
     Whole, a value of 300 rows put 15 000 characters ahead of the predicate the message is about.  Both ends
     and not the head alone, since ``ends_with`` is about the end and a container closes there.
     """
-    if len(text) <= 4000:
+    if len(text) <= 4000 or _WHOLE_VALUES:
         return text
     return f"{text[:3000]}... ({len(text) - 4000} more chars) ...{text[-1000:]}"
 
@@ -85,7 +85,7 @@ def _parted(actual_text: str, other_text: str, at: int, other_at: int | None = N
 
 def _around(text: str, at: int) -> str:
     """*text* whole up to 4000 characters, past that the 4000 around *at*, with what is left out counted each side."""
-    if len(text) <= 4000:
+    if len(text) <= 4000 or _WHOLE_VALUES:
         return text
     start = max(0, min(at - 2000, len(text) - 4000))
     after = len(text) - start - 4000
@@ -116,12 +116,17 @@ def _type_expression_name(expected: object) -> str:
     return expected.__name__ if isinstance(expected, type) else str(expected)
 
 
-def _truncated(text: str, limit: int = 4000) -> str:
+def _truncated(text: str, limit: int | None = None) -> str:
     """Cap *text* for embedding into a failure message; normal-sized values stay byte-identical.
 
     Bounds only the rendered message: the structured payload (`AssertionFailure.actual` /
-    ``.expected`` / ``.diff``) always keeps the full data.
+    ``.expected`` / ``.diff``) always keeps the full data.  With no *limit* given the text is a value of a
+    message, cut at 4000 characters and printed whole where `_WHOLE_VALUES` says so.
     """
+    if limit is None:
+        if _WHOLE_VALUES:
+            return text
+        limit = 4000
     if len(text) <= limit:
         return text
     return f"{text[:limit]}... ({len(text) - limit} more chars)"
@@ -205,7 +210,7 @@ def _json_safe(value, _depth=0, _seen=None) -> _JsonSafe:
     try:
         return _json_native(value, _depth, set() if _seen is None else _seen)
     except Exception:  # a value's own method raised, and one value must not cost the whole attachment
-        return {"__repr__": _truncated(_safe_repr(value))}
+        return {"__repr__": _truncated(_safe_repr(value), 4000)}
 
 
 def _json_native(value, depth: int, seen: set[int]) -> _JsonSafe:
@@ -218,9 +223,9 @@ def _json_native(value, depth: int, seen: set[int]) -> _JsonSafe:
     if isinstance(value, float):
         return value if math.isfinite(value) else {"__repr__": repr(value)}
     if isinstance(value, str):
-        return _truncated(value)
+        return _truncated(value, 4000)
     if depth >= 6:
-        return {"__repr__": _truncated(_safe_repr(value))}
+        return {"__repr__": _truncated(_safe_repr(value), 4000)}
     if id(value) in seen:
         return {"__repr__": "<circular ref>"}
     if isinstance(value, dict):
@@ -251,7 +256,7 @@ def _json_native(value, depth: int, seen: set[int]) -> _JsonSafe:
     if isinstance(value, (set, frozenset)):
         items = sorted(value, key=_safe_repr)
         return {"__type__": "set", "__data__": [_json_safe(item, depth + 1, seen) for item in items[:100]]}
-    return {"__repr__": _truncated(_safe_repr(value))}
+    return {"__repr__": _truncated(_safe_repr(value), 4000)}
 
 
 class DanglingAssertionWarning(UserWarning):
@@ -610,6 +615,14 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
 
     return _within_budget(lines)
 
+
+_WHOLE_VALUES: bool = False
+"""Whether a message prints a value whole, whatever its length.
+
+The pytest plugin turns it on at ``-vv``, where pytest stops shortening its own output.  The cap keeps a
+failure readable, and what it leaves out has to be within reach of someone reading the report: a row of a
+report section and a value of a message were the only places a response body was printed.
+"""
 
 _RENDER_DIFF_IN_MESSAGE: bool = True
 """Whether `AssertionFailure.__str__` appends the rendered diff to its message.

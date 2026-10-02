@@ -26,12 +26,19 @@ from collections import Counter
 from typing import TYPE_CHECKING, Final
 
 from ._engine._equality import comparable_fields
-from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object, kind_of
+from ._engine._introspection import (
+    class_name,
+    definition_of,
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    kind_of,
+)
 from ._engine._ordering import equals, nan_operand
 from .errors import _class_names, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from .errors import DiffEntry, DiffResult, Step
 
@@ -52,6 +59,13 @@ _ORDER_FACT = "both sides hold the same elements, in a different order"
 _UNSEEN_ORDER_FACT = f"{_ORDER_FACT}, and their repr does not show which is which"
 # exact types whose repr differs wherever their values do, so ``==`` answers for the repr at a fraction of its cost
 _PRINTED_AS_HELD: Final = frozenset({int, str, bytes, bool})
+_NAN_SOUGHT = "the item not found is a NaN, and one NaN is not equal to another"
+_IDENTITY_SOUGHT = (
+    "an element prints the same as the item not found, and their class leaves __eq__ to object,"
+    " which compares by identity"
+)
+# the plain values a payload spells one way and a test another: an id as text, a flag as a word
+_READ_AS_TEXT: Final = frozenset({int, float, str, bool})
 
 _VALUE_KINDS: Final = frozenset(
     {"dict", "sequence", "dataclass", "namedtuple", "model", "attrs", "set", "string", "scalar"}
@@ -336,6 +350,44 @@ def _spelled(place: tuple[tuple[str, str], ...]) -> str:
         else:
             parts.append(f".{name}" if parts else name)
     return "".join(parts)
+
+
+def reads_as(one: object, other: object) -> bool:
+    """Whether two plain values of two types read the same: ``7`` and ``"7"``."""
+    kind, other_kind = type(one), type(other)
+    return kind is not other_kind and kind in _READ_AS_TEXT and other_kind in _READ_AS_TEXT and str(one) == str(other)
+
+
+def not_found(item: object, searched: Iterable[object]) -> str | None:
+    """One line on why *item* was not found in *searched*, where a fact about the item says it, or ``None``.
+
+    Said of the item sought and never of the collection: a NaN somewhere in a list does not explain a ``2`` that
+    is missing from it.  Three facts are looked for.  The item is a NaN.  An element reads the same and is of
+    another plain type.  An element prints the same, is of the item's class, and that class leaves ``==`` to
+    `object`.  Each states what is so and leaves the reader to draw the rest.
+    """
+    try:
+        if nan_operand(item):
+            return _NAN_SOUGHT
+        kind = type(item)
+        identity: bool | None = None
+        for element in searched:
+            if type(element) is not kind:
+                if reads_as(element, item):
+                    held, sought = class_name(type(element)), class_name(kind)
+                    return (
+                        f"an element reads the same as the item not found and is of another type: {held}, not {sought}"
+                    )
+                continue
+            if identity is None:
+                # a fact about the class, so asked of the first element of it and not of each
+                identity = identity_candidate(item, element)
+            # asked again past the two reprs, which are code of the class and may change what it compares by
+            if identity and _safe_repr(element) == _safe_repr(item) and identity_candidate(item, element):
+                return _IDENTITY_SOUGHT
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return None
+    return None
 
 
 def _beside_a_nan(entries: Sequence[DiffEntry], *, comparators: bool) -> str:

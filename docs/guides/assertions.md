@@ -448,9 +448,23 @@ A key applies at the level it names. A nested-path tuple goes on into the value 
 reads that value by its fields, which for a mapping are its keys: under `ignore=("user", "id")` a dict
 and a dataclass that hold the same under `user` are equal, as they are at the top.
 
-A plain object is read by its attributes where they are all it holds. A subclass of a builtin container,
-an exception (which holds its `args`) and a class with a slot hold more than their `__dict__`, so they
-are compared by their own `==`, and at the top they are refused as a plain `set` is.
+A dataclass, attrs instance or model is read through its fields all the way down, and so is a dict held
+against one: a record under either is compared by its fields, whatever `==` it has of its own. Under two
+plain dicts a record is compared by its `==` unless a path enters it. An `OrderedDict` under a record
+keeps its order, as its `==` reads it.
+
+On a failure `failure.actual` and `failure.expected` are the fields that were compared where the value is
+a record, and your own object where it is a dict or a sequence.
+
+A plain object is read by its attributes where they are all it holds. A subclass of a builtin container
+and a class with a slot hold more than their `__dict__`, so they are compared by their own `==`, and at
+the top they are refused as a plain `set` is.
+
+An exception is read as three things: its class, under the name `__class__`, its `args` and the
+attributes in its `__dict__`. Two errors of two classes differ, and so do two with different messages,
+unless you leave `__class__` or `args` out by name. An exception whose instance has room for more than
+those, an `OSError` with its `filename`, an exception group, a class with a slot, is compared by its own
+`==`. One that is a dataclass, an attrs class or a model is read as that record, by the fields it declares.
 
 The filter accepts a single key, a nested-path tuple, or a `list`/`set`/`frozenset` of those. Any other
 iterable (a generator, an iterator, `dict.keys()`) raises `TypeError`.

@@ -744,6 +744,23 @@ class TestAContainerOfAClassOfItsOwnIsNoBagOfFields:
     def test_what_a_value_holds_is_read_off_the_layout_of_its_class(self, kind, only_its_dict):
         assert_that(_equality._holds_only_its_dict(kind)).is_equal_to(only_its_dict)
 
+    def test_the_layout_is_read_off_type_and_not_as_a_metaclass_spells_it(self):
+        size = type.__dict__["__basicsize__"].__get__
+
+        class Spelling(type):
+            __basicsize__ = property(lambda cls: size(cls) - tuple.__itemsize__)
+
+        class Slotted(metaclass=Spelling):
+            __slots__ = ("__dict__", "__weakref__", "code")
+
+            def __init__(self, code):
+                self.code = code
+
+        assert_that(Slotted.__basicsize__).is_equal_to(_Weak.__basicsize__)
+        assert_that(_equality._holds_only_its_dict(Slotted)).is_false()
+        with pytest.raises(AssertionFailure):
+            assert_that([Slotted(1)]).is_equal_to([Slotted(2)], ignore="unrelated")
+
     def test_a_value_that_is_its_dict_is_still_read_by_it(self):
         space = types.SimpleNamespace
         assert_that([space(id=1, n=1)]).is_equal_to([space(id=2, n=1)], ignore="id")

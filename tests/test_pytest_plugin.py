@@ -1348,6 +1348,57 @@ class TestPytestConfigure:
         pytest_unconfigure(config)
         assert_that(errors_module._RENDER_DIFF_IN_MESSAGE).is_true()
 
+    @pytest.mark.parametrize(("verbosity", "whole"), [(0, False), (1, False), (2, True), (3, True), (None, False)])
+    def test_at_two_levels_of_verbosity_a_message_prints_its_values_whole(self, monkeypatch, verbosity, whole):
+        monkeypatch.setattr(errors_module, "_WHOLE_VALUES", False)
+        config = _make_config()
+        config.getoption.side_effect = lambda name: verbosity if name == "verbose" else False
+        pytest_configure(config)
+        assert_that(errors_module._WHOLE_VALUES).is_equal_to(whole)
+        pytest_unconfigure(config)
+        assert_that(errors_module._WHOLE_VALUES).is_false()
+
+    def test_unconfigure_puts_back_what_it_found_and_not_off(self, monkeypatch):
+        monkeypatch.setattr(errors_module, "_WHOLE_VALUES", True)
+        config = _make_config()
+        pytest_configure(config)
+        assert_that(errors_module._WHOLE_VALUES).is_false()
+        pytest_unconfigure(config)
+        assert_that(errors_module._WHOLE_VALUES).is_true()
+
+    def test_the_values_a_report_section_names_follow_the_same_switch(self, monkeypatch):
+        with pytest.raises(AssertionFailure) as failure:
+            assert_that({"a": "x" * 3000}).is_equal_to({"a": "y" * 3000})
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure.value))
+        assert_that(dict(_sections(report))["AssertionFailure"]).contains("more chars)")
+        monkeypatch.setattr(errors_module, "_WHOLE_VALUES", True)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure.value))
+        body = dict(_sections(report))["AssertionFailure"]
+        assert_that(body).is_equal_to(f"  actual:   {failure.value.actual!r}\n  expected: {failure.value.expected!r}")
+
+    def test_whole_a_side_named_alone_is_printed_alone_and_a_pair_that_reads_alike_is_told_apart(self, monkeypatch):
+        text = "x" * 3000
+        report = _make_report()
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", actual=text)))
+        assert_that(dict(_sections(report))["AssertionFailure"]).ends_with("... (2602 more chars)")
+        monkeypatch.setattr(errors_module, "_WHOLE_VALUES", True)
+        for named, row in (({"actual": text}, f"  actual:   {text!r}"), ({"expected": text}, f"  expected: {text!r}")):
+            report = _make_report()
+            _run_hook(report, _make_call(exc=AssertionFailure("fail", **named)))
+            assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to(row)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=AssertionFailure("fail", actual=1, expected=_ReadsAsOne())))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to(
+            "  actual:   1:int\n  expected: 1:_ReadsAsOne"
+        )
+
+
+class _ReadsAsOne:
+    def __repr__(self) -> str:
+        return "1"
+
 
 class TestSnapshotUpdateOption:
     def test_addoption_registers_flag(self):
@@ -2202,7 +2253,8 @@ class _RegisteredConfig:
     def __init__(self, *, ini=None, options=None):
         parser = _registered_parser()
         self._ini = {name: spec[-1] for name, spec in parser._inidict.items()} | dict(ini or {})
-        self._options = vars(parser.parse([])) | dict(options or {})
+        # `verbose` is pytest's own, the one option the plugin reads that it did not register
+        self._options = {"verbose": 0} | vars(parser.parse([])) | dict(options or {})
 
     def getini(self, name):
         if name not in self._ini:

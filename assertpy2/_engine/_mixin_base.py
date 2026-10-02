@@ -179,6 +179,7 @@ class _MixinBase:
             ignore: object = ...,
             include: object = ...,
             config: _CompareConfig | None = ...,
+            held: tuple[object, object] | None = ...,
         ) -> None: ...
 
         @staticmethod

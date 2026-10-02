@@ -12,7 +12,7 @@ from . import _clustering, _dangling, _inline, _satisfies, async_assertions, err
 from . import snapshot as _snapshot
 from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
-from .errors import _diff_side, _diff_sides, _json_safe, _render_diff
+from .errors import _diff_side, _diff_sides, _json_safe, _render_diff, _safe_repr, _told_apart
 from .exception import _leaves
 
 if TYPE_CHECKING:
@@ -42,6 +42,7 @@ class _Stashing(Protocol):
     _assertpy2_diff_enabled: bool
     _assertpy2_diff_max: int
     _assertpy2_prev_diff_in_message: bool
+    _assertpy2_prev_whole_values: bool
     _assertpy2_prev_vacuous: bool
     _assertpy2_cluster_minimum: int | None
     _assertpy2_poll_threshold: float | None
@@ -366,6 +367,9 @@ def pytest_configure(config: pytest.Config) -> None:
     # the plugin hangs the diff on the failure itself; the prior value is restored, not forced, so hooks stay balanced
     stashed._assertpy2_prev_diff_in_message = errors._RENDER_DIFF_IN_MESSAGE
     errors._RENDER_DIFF_IN_MESSAGE = False
+    # at -vv pytest stops shortening, and so does a message: what the cap left out is whole there
+    stashed._assertpy2_prev_whole_values = errors._WHOLE_VALUES
+    errors._WHOLE_VALUES = int(config.getoption("verbose") or 0) >= 2
     stashed._assertpy2_cluster_minimum = _cluster_minimum(config.getini("assertpy2_failure_clusters"))
     _session_config[0] = config
     stashed._assertpy2_failures = []
@@ -387,6 +391,7 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def pytest_unconfigure(config: pytest.Config) -> None:
     errors._RENDER_DIFF_IN_MESSAGE = getattr(config, "_assertpy2_prev_diff_in_message", True)
+    errors._WHOLE_VALUES = getattr(config, "_assertpy2_prev_whole_values", False)
     async_assertions._COLLECT_RETRIES = False
     async_assertions._RETRIES.clear()
     # the report reads this at the end of a session, so a second one in the same process reported the first
@@ -966,6 +971,23 @@ def _add_section(report: pytest.TestReport, name: str, content: str) -> None:
         report.sections.append((name, content))
 
 
+def _value_rows(actual: object, expected: object, *, paired: bool, named_actual: bool) -> list[str]:
+    """The rows of a report section for the values a failure named, a side it did not name left unread.
+
+    Cut like a diff row, the untouched values staying on the exception, and whole where `errors._WHOLE_VALUES`
+    says so.  A pair is told apart by class where its two sides read alike, cut or whole.
+    """
+    if not paired:
+        side = _safe_repr if errors._WHOLE_VALUES else _diff_side
+        return [f"  actual:   {side(actual)}"] if named_actual else [f"  expected: {side(expected)}"]
+    if errors._WHOLE_VALUES:
+        left, right = _told_apart(_safe_repr(actual), _safe_repr(expected), actual, expected)
+    else:
+        # windowed as a pair: capping each side alone prints two values that look identical while saying they differ
+        left, right = _diff_sides(actual, expected)
+    return [f"  actual:   {left}", f"  expected: {right}"]
+
+
 def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
     """Add the readable detail a failure of ours carries: the named values, the diff, the poll trace.
 
@@ -981,18 +1003,8 @@ def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
     named_values = named_actual if getattr(exc, "_outcome", None) is not None else (named_actual or named_expected)
 
     if named_values:
-        # capped like the diff rows; the untouched values stay on the exception for anything that wants them
-        lines = []
-        if named_actual and named_expected:
-            # windowed as a pair: capping each side alone prints two values that look identical while saying they differ
-            left, right = _diff_sides(actual, expected)
-            lines.append(f"  actual:   {left}")
-            lines.append(f"  expected: {right}")
-        elif named_actual:
-            lines.append(f"  actual:   {_diff_side(actual)}")
-        else:
-            lines.append(f"  expected: {_diff_side(expected)}")
-        _add_section(report, f"AssertionFailure{suffix}", "\n".join(lines))
+        rows = _value_rows(actual, expected, paired=named_actual and named_expected, named_actual=named_actual)
+        _add_section(report, f"AssertionFailure{suffix}", "\n".join(rows))
 
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):
         max_entries = getattr(item.config, "_assertpy2_diff_max", 50)
