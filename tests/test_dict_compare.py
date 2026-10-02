@@ -841,3 +841,42 @@ class TestAMisspeltOptionIsRefused:
             ignore_null=False,
             strict_types=False,
         )
+
+
+@dataclasses.dataclass
+class _Holder:
+    v: int
+    next: object = None
+
+
+class TestADictBesideARecordIsReadAsDeep:
+    """A record is taken apart all the way down for a key option, and so is the dict it is compared with.
+
+    Read one level deep, the dict held an equal record whole against the fields of the one the record holds,
+    and the comparison failed on two values that are equal.
+    """
+
+    @pytest.mark.parametrize("option", [{"ignore": "v"}, {"ignore": "missing"}, {"include": "next"}])
+    def test_at_the_top_on_either_side(self, option):
+        record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(1)}
+        assert_that(record).is_equal_to(payload, **option)
+        assert_that(payload).is_equal_to(record, **option)
+
+    def test_as_an_element_of_a_sequence(self):
+        assert_that([_Holder(0, [_Holder(1)])]).is_equal_to([{"v": 9, "next": [_Holder(1)]}], ignore="v")
+
+    def test_under_a_path_that_enters_both(self):
+        actual, expected = {"o": {"v": 0, "next": _Holder(1)}}, {"o": _Holder(9, _Holder(1))}
+        assert_that(actual).is_equal_to(expected, ignore=("o", "v"))
+        assert_that(expected).is_equal_to(actual, ignore=("o", "v"))
+
+    def test_a_record_under_them_that_differs_still_fails_at_its_field(self):
+        record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(2)}
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(record).is_equal_to(payload, ignore="missing")
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["next.v"])
+
+    def test_the_matcher_answers_as_the_builder_does(self):
+        record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(1)}
+        assert_that(match.equal_to(payload, ignore="v").matches(record)).is_true()
+        assert_that(match.equal_to(record, ignore="v").matches(payload)).is_true()

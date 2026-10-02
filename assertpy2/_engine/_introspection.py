@@ -13,6 +13,7 @@ import collections
 import collections.abc
 import dataclasses
 import itertools
+import reprlib
 import sys
 import types
 from typing import TYPE_CHECKING, Any, Final, Protocol, TypeGuard, TypeVar, cast, runtime_checkable
@@ -121,6 +122,9 @@ class TakenApart(dict):
     under ``strict_types`` and ``ignore`` together, which the rule says holds at every depth.  A field
     declared with an ``eq=`` key is compared through it against the same field of another instance, as
     attrs' own ``==`` does, and as held against anything else, a payload's value included.
+
+    Printed as the class it was read from, ``Row(name='a')`` for a record and ``Kept({'x': 1})`` for a dict of
+    a class of its own, so a failure names what was compared.
     """
 
     __slots__ = ("compared_by", "kind")
@@ -134,6 +138,17 @@ class TakenApart(dict):
         super().__init__(fields)
         self.kind = kind
         self.compared_by = compared_by or {}
+
+    @property
+    def keyed(self) -> bool:
+        """Whether the class this was read from is a dict's, whose parts are keys rather than fields."""
+        return issubclass(self.kind, dict)
+
+    @reprlib.recursive_repr()
+    def __repr__(self) -> str:
+        if self.keyed:
+            return f"{class_name(self.kind)}({dict.__repr__(self)})"
+        return f"{class_name(self.kind)}({', '.join(f'{field}={value!r}' for field, value in self.items())})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, dict):
@@ -196,11 +211,17 @@ def keyed_pair(fields: Any, counterpart: Any, name: object) -> tuple[KeyedValue,
     )
 
 
+def class_name(kind: type) -> str:
+    """The name of a class as an exact `str`, read off the slot: a metaclass can make the attribute raise."""
+    return str.__str__(type.__dict__["__name__"].__get__(kind))
+
+
 def kind_of(value: object) -> type:
     """The class *value* was read from: its own, the one a `TakenApart` holds the fields of, or a keyed field's."""
     if type(value) is KeyedValue:
         return type(value.held)
-    return value.kind if isinstance(value, TakenApart) else type(value)
+    # by the type itself: `isinstance` reads a ``__class__`` the value may answer with code of its own
+    return value.kind if type(value) is TakenApart else type(value)
 
 
 def eq_keyed(attribute: Any, value: object) -> object:

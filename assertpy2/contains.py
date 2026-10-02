@@ -24,7 +24,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
-from .errors import DiffEntry, DiffResult, _safe_format, _safe_repr, _safe_str
+from .errors import DiffEntry, DiffResult, _safe_format, _safe_repr, _safe_str, _told_apart
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -134,7 +134,11 @@ class ContainsMixin(_MixinBase):
     def _fmt_closest(entries, limit=3):
         """A compact 'path (actual != expected)' summary of the closest element's differences."""
         parts = [
-            f"{entry.path} ({_safe_repr(entry.actual)} != {_safe_repr(entry.expected)})" for entry in entries[:limit]
+            "{} ({} != {})".format(
+                entry.path,
+                *_told_apart(_safe_repr(entry.actual), _safe_repr(entry.expected), entry.actual, entry.expected),
+            )
+            for entry in entries[:limit]
         ]
         if len(entries) > limit:
             parts.append(f"and {len(entries) - limit} more")

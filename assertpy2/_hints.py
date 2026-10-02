@@ -28,11 +28,12 @@ from typing import TYPE_CHECKING, Final
 from ._engine._equality import comparable_fields
 from ._engine._introspection import definition_of, is_attrs_instance, is_mapping_like, is_model_dump_object, kind_of
 from ._engine._ordering import equals, nan_operand
+from .errors import _class_names, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
-    from .errors import DiffResult
+    from .errors import DiffEntry, DiffResult
 
     # a step's wording: fixed, or decided from the shape of the pairs it is describing
     _Label = str | Callable[[Sequence[tuple[object, object]]], str]
@@ -41,6 +42,16 @@ _NAN_FACT = "a NaN takes part in this comparison, and a NaN is equal to nothing,
 _IDENTITY_FACT = (
     "these values compare with object's __eq__, so equality is identity and no two separate instances are equal"
 )
+
+_UNSEEN_FACT = "a difference here prints the same on both sides, so what holds the two apart is not in their repr"
+_UNSEEN_IDENTITY_FACT = (
+    "a difference here prints the same on both sides, and the class of the two leaves __eq__ to object,"
+    " so two separate instances are never equal"
+)
+_ORDER_FACT = "both sides hold the same elements, in a different order"
+_UNSEEN_ORDER_FACT = f"{_ORDER_FACT}, and their repr does not show which is which"
+# exact types whose repr differs wherever their values do, so ``==`` answers for the repr at a fraction of its cost
+_PRINTED_AS_HELD: Final = frozenset({int, str, bytes, bool})
 
 _VALUE_KINDS: Final = frozenset(
     {"dict", "sequence", "dataclass", "namedtuple", "model", "attrs", "set", "string", "scalar"}
@@ -171,6 +182,7 @@ def diagnose(
     expected: object = None,
     *,
     identity: bool = False,
+    comparators: bool = False,
 ) -> str | None:
     """The one line to add to a failure message, or ``None`` when nothing can be said.
 
@@ -180,6 +192,8 @@ def diagnose(
         expected: the value it was compared against.
         identity: whether the comparison was an unconfigured equality one that `identity_candidate`
             found identity-bound *before* it ran.  Only then does identity account for the failure.
+        comparators: whether the comparison was given ``comparators=``.  Identity is then not said of a pair
+            inside the diff, whose verdict may be the predicate's.
 
     Returns:
         A lowercase clause to put on its own line under the message, or ``None``.
@@ -204,7 +218,7 @@ def diagnose(
         left, right = entry.actual, entry.expected
         if nan_operand(left) or nan_operand(right):
             # with a NaN in the comparison no other value would make it pass, so it comes before anything else
-            return _NAN_FACT
+            return _beside_a_nan(entries, comparators=comparators)
         absent = entry.absent
         if absent is None:
             pairs.append((left, right))
@@ -230,7 +244,7 @@ def diagnose(
 
     # a mixture of absent sides and differing values has no single statement that covers it
     if absent_seen:
-        return None
+        return _unseen(pairs, comparators=comparators)
 
     # a DTO against the payload it was built from, said before the leaf steps because the shape is the narrower claim
     if all(type(left) is not type(right) and _fields_match(left, right) for left, right in pairs):
@@ -251,8 +265,80 @@ def diagnose(
         and positional
         and all(len(group) >= 2 and _same_values(group) for group in per_container.values())
     ):
-        return "both sides hold the same elements, in a different order"
-    return None
+        # the elements moved, and where two of them print the same no row shows which went where
+        return _UNSEEN_ORDER_FACT if any(_prints_alike(left, right) for left, right in pairs) else _ORDER_FACT
+    return _unseen(pairs, comparators=comparators)
+
+
+def _beside_a_nan(entries: Sequence[DiffEntry], *, comparators: bool) -> str:
+    """The NaN fact, and under it what is said of a pair no NaN takes part in that prints the same on both sides."""
+    others = [
+        (entry.actual, entry.expected)
+        for entry in entries
+        if entry.absent is None and not (nan_operand(entry.actual) or nan_operand(entry.expected))
+    ]
+    unseen = _unseen(others, comparators=comparators)
+    return _NAN_FACT if unseen is None else f"{_NAN_FACT}\n{unseen}"
+
+
+def _prints_alike(left: object, right: object) -> bool:
+    """Whether a row of these two reads the same on both sides: one class, or two nothing tells apart, one repr."""
+    kind = type(left)
+    if kind is type(right) and kind in _PRINTED_AS_HELD:
+        return left == right
+    return _class_names(left, right) is None and _safe_repr(left) == _safe_repr(right)
+
+
+def _unseen(pairs: Sequence[tuple[object, object]], *, comparators: bool) -> str | None:
+    """What to say of pairs that print the same on both sides and are one class, or ``None`` where none does.
+
+    Such a row names no difference a reader can see, and nothing above accounted for it.  Where no comparator
+    took part and every one of them is two instances of a class that leaves ``==`` to `object`, that is the
+    reason.  Otherwise the reason is in the comparison itself, a comparator or an ``__eq__`` of the value's
+    own, and the line says what is known: the repr does not show it, and which attributes of the two differ
+    where they hold any.  Asked of every pair: how many rows a diff prints is the renderer's to decide.
+
+    The identity line here is not the top pair's.  That one speaks of the two values compared, and is asked
+    before they are.  A pair inside has no before short of walking both values on every passing comparison
+    (23 times the cost of one over 200 rows), so its line speaks of the row and of the class as it stands now.
+    """
+    alike = [(left, right) for left, right in pairs if _prints_alike(left, right)]
+    if not alike:
+        return None
+    if not comparators and all(identity_candidate(left, right) for left, right in alike):
+        return _UNSEEN_IDENTITY_FACT
+    names: dict[str, None] = {}
+    for left, right in alike:
+        _attributes_apart(left, right, names)
+        if len(names) > 5:
+            break
+    if not names:
+        return _UNSEEN_FACT
+    shown = list(names)
+    return f"{_UNSEEN_FACT} (attributes that differ: {', '.join(shown[:5])}{', ..' if len(shown) > 5 else ''})"
+
+
+def _attributes_apart(left: object, right: object, known: dict[str, None]) -> None:
+    """Add to *known* the attributes two values hold that differ between them, up to the six a line can use.
+
+    An attribute whose comparison raises is left out: nothing is known of it.
+    """
+    try:
+        held, other = vars(left), vars(right)
+        for name in (*held, *(name for name in other if name not in held)):
+            if name not in held or name not in other or _held_apart(held[name], other[name]):
+                known[_safe_str(name)] = None
+                if len(known) > 5:
+                    return
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return
+
+
+def _held_apart(one: object, other: object) -> bool:
+    try:
+        return not equals(one, other)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return False
 
 
 def _fields_of(value: object) -> dict | None:

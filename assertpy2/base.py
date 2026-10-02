@@ -16,7 +16,7 @@ from ._engine._compare import (
     _types_differ,
 )
 from ._engine._diff import _build_equality_diff, _child_entries
-from ._engine._equality import as_fields, filtered_to_nothing, key_specs_given, mapping_shaped
+from ._engine._equality import fields_pair, filtered_to_nothing, key_specs_given, mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._ordering import require_integer
 from ._engine._path import _ROOT
@@ -24,7 +24,7 @@ from ._engine._require import argument, refuse, reject_unknown_kwargs, require_t
 from ._hints import identity_candidate
 from ._matcher_impls import _require_class_info
 from ._satisfies import SatisfiesMixin, _guarding, _warn_nothing_compared
-from .errors import _disambiguated, _safe_format, _safe_str, _truncated, _type_expression_name
+from .errors import _disambiguated, _safe_format, _safe_str, _told_apart, _truncated, _type_expression_name
 from .helpers import _both_list_like, _elided_seq_repr, _elided_text_repr
 
 if TYPE_CHECKING:
@@ -236,10 +236,18 @@ class BaseMixin(SatisfiesMixin):
             raise _array_equality_error("is_equal_to", operand)
 
         # cleared however this leaves, since a soft block goes on using the builder after a failure it collected
+        # stored only for a call given comparators: a second attribute stored on every one cost a passing dict 200 ns
+        compared_through = config is not None and bool(config.comparators)
+        enclosing = False
         try:
+            if compared_through:
+                enclosing, self._comparators_took_part = self._comparators_took_part, True
             compared = self._compare_to(other, ignore=ignore, include=include, config=config)
         finally:
             self._equality_comparison = False
+            if compared_through:
+                # as it was: a comparator may assert on this same builder while the comparison it serves runs
+                self._comparators_took_part = enclosing
         if self._compared_nothing:
             self._compared_nothing = False
             _warn_nothing_compared()
@@ -301,9 +309,11 @@ class BaseMixin(SatisfiesMixin):
         """`is_equal_to` under a compare config, decided by the structural walk from the root down."""
         diff = _build_equality_diff(self.val, other, config=config)
         if diff.entries:
+            actual_text, expected_text = _told_apart(
+                _truncated(_safe_str(self.val)), _truncated(_safe_str(other)), self.val, other
+            )
             return self.error(
-                f"Expected <{_truncated(_safe_str(self.val))}> to be equal to"
-                f" <{_truncated(_safe_str(other))}>, but was not.{_config_note(config)}",
+                f"Expected <{actual_text}> to be equal to <{expected_text}>, but was not.{_config_note(config)}",
                 actual=self.val,
                 expected=other,
                 diff=diff,
@@ -313,7 +323,7 @@ class BaseMixin(SatisfiesMixin):
     def _obj_equal_with_filter(self, actual, expected, *, ignore=None, include=None, config=None):
         """Compare two objects by converting to dicts and applying ignore/include filters."""
         # a plain dict against an object is what the sequence path already compares element by element
-        actual_dict, expected_dict = as_fields(actual), as_fields(expected)
+        actual_dict, expected_dict = fields_pair(actual, expected)
         if actual_dict is None or expected_dict is None:
             raise TypeError(
                 "ignore/include requires dict-like objects or objects with introspectable fields"
@@ -353,7 +363,7 @@ class BaseMixin(SatisfiesMixin):
 
     def _item_differs(self, actual_item, expected_item, ignore, include, config) -> bool | None:
         """Whether one element of a sequence differs from its counterpart, or ``None`` once a prerequisite failed."""
-        actual_fields, expected_fields = as_fields(actual_item), as_fields(expected_item)
+        actual_fields, expected_fields = fields_pair(actual_item, expected_item)
         if actual_fields is not None and expected_fields is not None:
             return self._dict_not_equal(actual_fields, expected_fields, ignore=ignore, include=include, config=config)
         decision = _node_decision(actual_item, expected_item, config)

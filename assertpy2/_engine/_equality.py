@@ -101,14 +101,11 @@ def comparable_fields(obj: object) -> dict | None:
     caller's own were equal under ``ignore=`` whatever they held, and so were two exceptions, whose ``args``
     are not in it.
     """
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return cast("dict", _fields_through(obj, frozenset({"dataclass"})))
+    through = _read_through(obj)
+    if through is not None:
+        return cast("dict", _fields_through(obj, through))
     if is_namedtuple(obj):
         return TakenApart(type(obj), obj._asdict())
-    if is_model_dump_object(obj):
-        return cast("dict", _fields_through(obj, frozenset({"model", "dataclass"})))
-    if is_attrs_instance(obj):
-        return cast("dict", _fields_through(obj, frozenset({"attrs"})))
     builtin_kinds = (
         type,
         numbers.Number,
@@ -306,9 +303,37 @@ def _key_of(attribute: Any) -> Any:
     return getattr(attribute, "eq_key", None)
 
 
-def as_fields(value: object) -> dict | None:
-    """A plain dict as itself, anything else through `comparable_fields`."""
-    return value if isinstance(value, dict) else comparable_fields(value)
+def _read_through(obj: object) -> frozenset[str] | None:
+    """The kinds of record `comparable_fields` takes *obj* apart through, all the way down, or ``None``.
+
+    ``None`` for a value read one level deep or not at all: a named tuple, an object through its ``__dict__``.
+    """
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return frozenset({"dataclass"})
+    if is_namedtuple(obj):
+        return None
+    if is_model_dump_object(obj):
+        return frozenset({"model", "dataclass"})
+    if is_attrs_instance(obj):
+        return frozenset({"attrs"})
+    return None
+
+
+def as_fields(value: object, beside: object = None) -> dict | None:
+    """A plain dict as itself, anything else through `comparable_fields`.
+
+    A dict *beside* a record taken apart all the way down is taken apart as deep.  Left as held, a record the
+    dict holds was compared whole against the fields of the equal one the record holds, and the two differed.
+    """
+    if not isinstance(value, dict):
+        return comparable_fields(value)
+    through = None if isinstance(beside, dict) else _read_through(beside)
+    return value if through is None else cast("dict", _fields_through(value, through))
+
+
+def fields_pair(value: object, other: object) -> tuple[dict | None, dict | None]:
+    """Two values through their fields, each read beside the other (`as_fields`)."""
+    return as_fields(value, other), as_fields(other, value)
 
 
 def _plain_sequence(value: object) -> bool:
@@ -703,11 +728,17 @@ def _nested_differs(
         return _mapping_opened(left, right, ignore, include, config, on_path, inside=True)
     if key_specs_given(ignore) or key_specs_given(include):
         # a path that goes on into a value is followed through its fields, which for a mapping are its keys
-        left_fields = left if mapping_shaped(left, check_values=False) else comparable_fields(left)
-        right_fields = right if mapping_shaped(right, check_values=False) else comparable_fields(right)
+        left_fields, right_fields = _keyed(left, right), _keyed(right, left)
         if left_fields is not None and right_fields is not None:
             return _mapping_opened(left_fields, right_fields, ignore, include, config, on_path, inside=True)
     return values_differ(left, right, config)
+
+
+def _keyed(value: object, beside: object) -> Any:
+    """A mapping as what a key path reads it through, its keys, and anything else through its fields."""
+    if mapping_shaped(value, check_values=False) and not isinstance(value, dict):
+        return value
+    return as_fields(value, beside)
 
 
 def filtered_differs(
@@ -736,7 +767,7 @@ def filtered_differs(
 def _filtered_pair_differs(
     actual: object, expected: object, *, ignore: object, include: object, config: _CompareConfig | None, at_root: bool
 ) -> bool:
-    left, right = as_fields(actual), as_fields(expected)
+    left, right = fields_pair(actual, expected)
     if left is None or right is None:
         return at_root or values_differ(actual, expected, config)
     return mapping_differs(left, right, ignore=ignore, include=include, config=config)

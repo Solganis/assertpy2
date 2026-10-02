@@ -163,7 +163,7 @@ _SITES = {
     "include-fields": Site(
         _Flat(2),
         _including_field,
-        "Expected <{'y': 2}> to include key <x>, but did not include key <x>.",
+        "Expected <_Flat(y=2)> to include key <x>, but did not include key <x>.",
         (Met(_Point(1, 5), _including_field, True), Met(_Point(3, 2), _including_field, False)),
     ),
     "include-per-item": Site(

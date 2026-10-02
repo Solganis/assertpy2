@@ -203,7 +203,7 @@ class TestAKeyComparedFieldIsReadThroughItsKey:
         with pytest.raises(AssertionFailure) as caught:
             assert_that(Tag("X", 1)).is_equal_to(Tag("x", 2), ignore="unrelated")
         assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["weight"])
-        assert_that(str(caught.value)).starts_with("Expected <{.., 'weight': 1}>")
+        assert_that(str(caught.value)).starts_with("Expected <Tag(.., weight=1)>")
 
     def test_a_payload_that_is_not_a_dict_is_compared_as_held(self):
         assert_that(Holder(Tag("X"))).is_equal_to(

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from types import UnionType
 from typing import TYPE_CHECKING, Literal, NamedTuple, TypeAlias
 
+from ._engine._introspection import class_name, kind_of
+
 if TYPE_CHECKING:
     from .outcome import AssertionOutcome, Requirement
 
@@ -19,9 +21,8 @@ def _safe_repr(value: object) -> str:
     try:
         return str.__str__(repr(value))  # a `__repr__` may return a `str` subclass whose own methods raise
     except Exception:  # any user exception here must not shadow the assertion failure being rendered
-        # the slot itself as an exact str: a metaclass or an assigned `str` subclass can make the name raise
-        name = str.__str__(type.__dict__["__name__"].__get__(type(value)))
-        return f"<unreprable {name}>"
+        # the class a value taken apart was read from, since that is the one whose `__repr__` raised
+        return f"<unreprable {class_name(kind_of(value))}>"
 
 
 def _safe_str(value: object) -> str:
@@ -84,11 +85,51 @@ def _disambiguated(actual: object, other: object) -> tuple[str, str]:
 
     So ``is_equal_to`` on ``"1"`` vs ``1`` reads ``<1:str>`` / ``<1:int>`` instead of a baffling
     ``<1>`` / ``<1>``, ``but was not`` - the difference is the type, and now the message says so.
+    Two classes of one name are told apart by their modules.
     """
     actual_str, other_str = _truncated(_safe_str(actual)), _truncated(_safe_str(other))
     if actual_str == other_str:
-        return f"{actual_str}:{type(actual).__name__}", f"{other_str}:{type(other).__name__}"
+        names = _class_names(actual, other) or (class_name(type(actual)), class_name(type(other)))
+        return f"{actual_str}:{names[0]}", f"{other_str}:{names[1]}"
     return actual_str, other_str
+
+
+def _class_names(actual: object, expected: object) -> tuple[str, str] | None:
+    """What tells the classes of two values apart: their names, or their modules too where the names are one.
+
+    ``None`` for two values of one class, and for two classes nothing a reader would see tells apart.  A value
+    taken apart for a comparison answers with the class it was read from.
+    """
+    one, other = kind_of(actual), kind_of(expected)
+    if one is other:
+        return None
+    names = class_name(one), class_name(other)
+    if names[0] != names[1]:
+        return names
+    qualified = f"{_module_name(one)}.{names[0]}", f"{_module_name(other)}.{names[1]}"
+    return qualified if qualified[0] != qualified[1] else None
+
+
+def _module_name(kind: type) -> str:
+    """The module a class says it is of, read off the slot, or ``?`` for a class made without one."""
+    try:
+        return _safe_str(type.__dict__["__module__"].__get__(kind))
+    except AttributeError:
+        return "?"
+
+
+def _told_apart(actual_text: str, expected_text: str, actual: object, expected: object) -> tuple[str, str]:
+    """Two renderings of a pair, each followed by ``:class`` where they read alike and the classes differ.
+
+    A row of two sides that print the same says nothing, and the reader takes it for a fault of the diff: a dict
+    of a class of its own against a plain one under ``strict_types``, two records of two modules' ``Row``.
+    """
+    if actual_text != expected_text:
+        return actual_text, expected_text
+    names = _class_names(actual, expected)
+    if names is None:
+        return actual_text, expected_text
+    return f"{actual_text}:{names[0]}", f"{expected_text}:{names[1]}"
 
 
 _JsonSafe: TypeAlias = bool | int | float | str | list["_JsonSafe"] | dict[str, "_JsonSafe"] | None
@@ -295,9 +336,10 @@ def _diff_sides(actual: object, expected: object, limit: int = 400) -> tuple[str
     `_diff_side` caps each side on its own, which is right for a row that stands alone.  A pair read
     together needs the pair's window: two 10 000-character strings differing in the middle were both
     cut at character 400, so the section printed two identical-looking values under a heading saying
-    they were not equal, while the diff below it pointed straight at the change.
+    they were not equal, while the diff below it pointed straight at the change.  Two sides that read alike
+    all through are told apart by their classes (`_told_apart`).
     """
-    return _windowed(_safe_repr(actual), _safe_repr(expected), limit)
+    return _told_apart(*_windowed(_safe_repr(actual), _safe_repr(expected), limit), actual, expected)
 
 
 def _first_difference(actual: str, expected: str) -> int:
@@ -378,7 +420,9 @@ def _both_texts(actual: object, expected: object) -> bool:
     same kind of text; against a number or a list it would point into a repr the reader is not
     comparing character by character.
     """
-    return isinstance(actual, (str, bytes, bytearray)) and isinstance(expected, (str, bytes, bytearray))
+    # by the type itself: `isinstance` reads a ``__class__`` the value may answer with code of its own
+    texts = (str, bytes, bytearray)
+    return issubclass(type(actual), texts) and issubclass(type(expected), texts)
 
 
 def _append_text_leaf(lines: list[str], entry: DiffEntry, *, red: str, green: str, reset: str) -> None:
@@ -505,12 +549,14 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
                 lines.append(f"  {red}{path}: - {_diff_side(entry.actual)}{reset}")
             elif entry.absent == "actual":
                 lines.append(f"  {green}{path}: + {_diff_side(entry.expected)}{reset}")
-            elif _both_texts(entry.actual, entry.expected):
+            elif _both_texts(entry.actual, entry.expected) and _safe_repr(entry.actual) != _safe_repr(entry.expected):
                 _append_text_leaf(lines, entry, red=red, green=green, reset=reset)
             else:
+                # as a pair: each side capped alone, two long values differing past the cap printed alike
+                actual_side, expected_side = _diff_sides(entry.actual, entry.expected)
                 lines.append(f"  {path}:")
-                lines.append(f"    {red}- {_diff_side(entry.actual)}{reset}")
-                lines.append(f"    {green}+ {_diff_side(entry.expected)}{reset}")
+                lines.append(f"    {red}- {actual_side}{reset}")
+                lines.append(f"    {green}+ {expected_side}{reset}")
 
     if truncated:
         lines.append(f"  ... and {truncated} more entries")

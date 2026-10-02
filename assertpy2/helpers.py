@@ -22,6 +22,7 @@ from ._engine._equality import (
     as_fields,
     carries_callable,
     comparable_fields,
+    fields_pair,
     ignore_specs,
     include_specs,
     key_specs_given,
@@ -33,6 +34,7 @@ from ._engine._equality import (
 from ._engine._introspection import (
     MappingLike,
     TakenApart,
+    class_name,
     is_namedtuple,
     keyed_names,
     keyed_pair,
@@ -171,6 +173,26 @@ def _elided_seq_repr(seq, counterpart) -> str:
         parts.append(_ELIDED)
     opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
     return _joined_parts(parts, opener=opener, closer=closer)
+
+
+def _spelling(mapping: object) -> tuple[str, str, collections.abc.Callable[[object, str], str]]:
+    """How a mapping is written in a message: what opens it, what closes it, and one part of it.
+
+    A dict is written as a dict.  A value taken apart is written as the class it was read from, as its own
+    repr writes it: ``Row(name='a')`` for a record, ``Kept({'x': 1})`` for a mapping of a class of its own.
+    """
+    if type(mapping) is not TakenApart:
+        return "{", "}", _entry_part
+    name = class_name(mapping.kind)
+    return (f"{name}({{", "})", _entry_part) if mapping.keyed else (f"{name}(", ")", _field_part)
+
+
+def _entry_part(key: object, text: str) -> str:
+    return f"{_safe_repr(key)}: {text}"
+
+
+def _field_part(key: object, text: str) -> str:
+    return f"{_safe_str(key)}={text}"
 
 
 def _read_by_fields(value: object) -> object:
@@ -520,8 +542,7 @@ class HelpersMixin(_MixinBase):
         paired = len(items) == len(others)
         kept = []
         for index, item in enumerate(items):
-            fields = as_fields(item)
-            beside = as_fields(others[index]) if paired else None
+            fields, beside = fields_pair(item, others[index]) if paired else (as_fields(item), None)
             if fields is None or (paired and beside is None):
                 kept.append(item)
             else:
@@ -558,8 +579,9 @@ class HelpersMixin(_MixinBase):
         on_path: set[int] = set()
 
         def _dict_repr(mapping, counterpart):
+            opener, closer, part_of = _spelling(mapping)
             if id(mapping) in on_path:
-                return "{<circular ref>}"
+                return f"{opener}<circular ref>{closer}"
             on_path.add(id(mapping))
             keyed_fields = keyed_names(mapping, counterpart)
             parts: list[_Part] = []
@@ -568,7 +590,7 @@ class HelpersMixin(_MixinBase):
             for key, value in ((key, mapping[key]) for key in mapping):
                 found, other_value = lookup(counterpart, key)
                 if not found:
-                    part = f"{_safe_repr(key)}: {_safe_repr(value)}"
+                    part = part_of(key, _safe_repr(value))
                 else:
                     decision = (
                         _node_decision(*keyed_pair(mapping, counterpart, key), config, field=key)
@@ -579,7 +601,7 @@ class HelpersMixin(_MixinBase):
                         pending = True
                         continue
                     if decision == "leaf":
-                        part = f"{_safe_repr(key)}: {_safe_repr(value)}"
+                        part = part_of(key, _safe_repr(value))
                     else:  # recurse
                         if (keyed := _keyed_pair(value, other_value)) is not None:
                             value_repr = yield _dict_repr(*keyed)
@@ -587,7 +609,7 @@ class HelpersMixin(_MixinBase):
                             value_repr = yield _list_repr(value, other_value)
                         else:
                             value_repr = _safe_repr(value)
-                        part = f"{_safe_repr(key)}: {value_repr}"
+                        part = part_of(key, value_repr)
                 if pending:
                     parts.append(_ELIDED)
                     pending = False
@@ -595,7 +617,7 @@ class HelpersMixin(_MixinBase):
             if pending:
                 parts.append(_ELIDED)
             on_path.discard(id(mapping))
-            return _joined_parts(parts, opener="{", closer="}")
+            return _joined_parts(parts, opener=opener, closer=closer)
 
         def _list_repr(seq, counterpart):
             """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into

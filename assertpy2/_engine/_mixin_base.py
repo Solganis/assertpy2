@@ -27,6 +27,13 @@ class _MixinBase:
     where they sit, and a comparator of the caller's own owns its leaves outright.
     """
 
+    _comparators_took_part = False
+    """Whether the comparison being reported was given ``comparators=``.
+
+    Read by the failure composer for a pair inside the diff that prints the same on both sides: identity is
+    the reason for it only where no predicate of the caller's could have been what turned it down.
+    """
+
     _answering_another = False
     """Whether the assertion running on this builder answers another assertion rather than the caller.
 

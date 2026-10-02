@@ -16,7 +16,7 @@ import pytest
 
 from assertpy2 import assert_that
 from assertpy2._engine._path import _ROOT
-from assertpy2._hints import _explains, diagnose, identity_candidate
+from assertpy2._hints import _UNSEEN_FACT, _explains, diagnose, identity_candidate
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 
 
@@ -776,14 +776,17 @@ class _MappingRow:
 
 
 class TestATypeDifferenceIsClaimedOnlyWhereTheTypesDiffer:
-    """Both lines about types read the two sides of one comparison, and one side is not enough."""
+    """Both lines about types read the two sides of one comparison, and one side is not enough.
 
-    def test_two_sides_of_one_type_that_read_alike_are_left_alone(self):
-        assert_that(_hint({"a": _SameText()}, {"a": _SameText()})).is_none()
+    Two sides of one type that read alike get the one line that is true of them: their repr does not show what
+    holds them apart."""
+
+    def test_two_sides_of_one_type_that_read_alike_are_not_called_two_types(self):
+        assert_that(_hint({"a": _SameText()}, {"a": _SameText()})).is_equal_to(_UNSEEN_FACT)
 
     def test_field_for_field_is_not_said_when_both_sides_are_the_same_type(self):
         entry = DiffEntry(path="row", actual=_MappingRow("a"), expected=_MappingRow("a"))
-        assert_that(diagnose(DiffResult(kind="dict", entries=[entry]))).is_none()
+        assert_that(diagnose(DiffResult(kind="dict", entries=[entry]))).is_equal_to(_UNSEEN_FACT)
 
 
 class TestEachLineIsStatedInFull:

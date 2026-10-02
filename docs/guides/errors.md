@@ -369,6 +369,54 @@ that cannot help.
 Exceptions are the everyday case, since they carry identity equality too. Your own `comparators=` entry
 over those values silences it, the verdict there being your predicate's rather than the type's.
 
+The same holds one level down. A row of the diff whose two sides print the same is never left to stand
+alone. Two sides of two classes are each printed with its class, and with its module where the classes
+share a name:
+
+```python
+from assertpy2 import assert_that
+
+
+class Kept(dict):
+    pass
+
+
+try:
+    assert_that({"a": Kept(x=1)}).is_equal_to({"a": {"x": 1}}, strict_types=True)
+except AssertionError as failure:
+    print("\n".join(str(failure).splitlines()[-2:]))
+    #     - {'x': 1}:Kept
+    #     + {'x': 1}:dict
+```
+
+Two sides of one class that print the same get a line instead. Where the class leaves `__eq__` to
+`object` and no `comparators=` took part, the line says so of the row: `a difference here prints the same
+on both sides, and the class of the two leaves __eq__ to object, so two separate instances are never
+equal`. Anywhere else it says what is known, that the repr does not show the difference, and lists the
+attributes of the two that differ:
+
+```python
+from assertpy2 import assert_that
+
+
+class Money:
+    def __init__(self, amount, currency):
+        self.amount, self.currency = amount, currency
+
+    def __eq__(self, other):
+        return (self.amount, self.currency) == (other.amount, other.currency)
+
+    def __repr__(self):
+        return f"Money({self.amount})"
+
+
+try:
+    assert_that({"total": Money(5, "EUR")}).is_equal_to({"total": Money(5, "USD")})
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # a difference here prints the same on both sides, so what holds the two apart is not in their repr (attributes that differ: currency)
+```
+
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
 ```text

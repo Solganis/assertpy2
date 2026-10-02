@@ -84,7 +84,17 @@ from .dataframe import DataFrameMixin
 from .date import DateMixin
 from .dict import DictMixin
 from .dynamic import DynamicMixin
-from .errors import AssertionFailure, DiffEntry, DiffResult, Step, _safe_repr, _safe_str, _truncated, _windowed
+from .errors import (
+    AssertionFailure,
+    DiffEntry,
+    DiffResult,
+    Step,
+    _safe_repr,
+    _safe_str,
+    _told_apart,
+    _truncated,
+    _windowed,
+)
 from .exception import _UNSET, ExceptionMixin
 from .extracting import ExtractingMixin
 from .file import FileMixin
@@ -384,7 +394,10 @@ def _indented_diff(diff: object, indent: str) -> list[str]:
         elif entry.absent == "actual":  # a missing one
             lines.append(f"{indent}{entry.path}: {_safe_repr(entry.expected)}")
         else:
-            lines.append(f"{indent}{entry.path}: {_safe_repr(entry.actual)} != {_safe_repr(entry.expected)}")
+            actual_side, expected_side = _told_apart(
+                _safe_repr(entry.actual), _safe_repr(entry.expected), entry.actual, entry.expected
+            )
+            lines.append(f"{indent}{entry.path}: {actual_side} != {expected_side}")
     if len(entries) > len(shown):
         lines.append(f"{indent}... and {len(entries) - len(shown)} more")
     return lines
@@ -1842,7 +1855,9 @@ class AssertionBuilder(
         if self._value_origin and not len(self.val):
             # an empty derived value carries no context of its own, so name the step that produced it
             out = f"{out} The value is empty because {self._value_origin}."
-        hint = _hints.diagnose(diff, actual, expected, identity=self._equality_comparison)
+        hint = _hints.diagnose(
+            diff, actual, expected, identity=self._equality_comparison, comparators=self._comparators_took_part
+        )
         # a message quoting a failure that already carries the hint printed it twice, the poll timeout among them
         if hint is not None and hint not in out:
             # on its own line, so the original message stays a prefix and a `match=` written against it keeps working
