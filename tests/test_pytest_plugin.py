@@ -1395,6 +1395,100 @@ class TestPytestConfigure:
         body = dict(_sections(report))["AssertionFailure"]
         assert_that(body).is_equal_to(f"  actual:   {failure.value.actual!r}\n  expected: {failure.value.expected!r}")
 
+    @pytest.mark.parametrize("option", [{"ignore": "page"}, {"include": "items"}], ids=["ignore=", "include="])
+    def test_under_a_key_option_the_rows_are_the_two_views_that_were_compared(self, monkeypatch, option):
+        # windowed over the whole values the rows parted at `page`, the key left out, and cut `Paris` away
+        actual = {"page": 1, "items": [{"id": n, "name": f"user{n}", "city": "Oslo"} for n in range(40)]}
+        expected = {"page": 2, "items": [dict(row) for row in actual["items"]]}
+        expected["items"][17]["city"] = "Paris"
+        failure = _failure_of(lambda: assert_that(actual).is_equal_to(expected, **option))
+        assert_that(failure.actual).is_same_as(actual)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure))
+        rows = dict(_sections(report))["AssertionFailure"].splitlines()
+        assert_that(rows).is_length(2)
+        assert_that(rows[0]).starts_with("  actual:   ...").contains("'city': 'Oslo'}, {'id': 18").does_not_contain(
+            "page"
+        )
+        assert_that(rows[1]).starts_with("  expected: ...").contains("'city': 'Paris'}, {'id': 18").does_not_contain(
+            "page"
+        )
+        monkeypatch.setattr(errors_module, "_WHOLE_VALUES", True)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to(
+            f"  actual:   {failure._compared[0]!r}\n  expected: {failure._compared[1]!r}"
+        )
+
+    def test_a_record_under_a_key_option_is_a_row_of_the_fields_read_of_it(self):
+        failure = _failure_of(
+            lambda: assert_that(_Order(1, "Oslo", 5)).is_equal_to(_Order(1, "Paris", 9), ignore="seen_at")
+        )
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to(
+            "  actual:   _Order(id=1, city='Oslo')\n  expected: _Order(id=1, city='Paris')"
+        )
+
+    def test_where_no_pair_was_kept_the_rows_are_the_values_named(self):
+        actual, expected = {"page": 1, "price": 1.0}, {"page": 2, "price": 2.0}
+        failure = _failure_of(lambda: assert_that(actual).is_equal_to(expected, ignore="page", tolerance=0.1))
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to(
+            f"  actual:   {actual!r}\n  expected: {expected!r}"
+        )
+
+    def test_each_failure_of_a_group_gets_the_rows_of_its_own_pair(self):
+        one = _failure_of(lambda: assert_that({"a": 1, "at": 5}).is_equal_to({"a": 2, "at": 9}, ignore="at"))
+        other = _failure_of(lambda: assert_that({"b": 1, "at": 5}).is_equal_to({"b": 2, "at": 9}, ignore="at"))
+        report = _make_report()
+        _run_hook(report, _make_call(exc=ExceptionGroup("teardown", [one, other])))
+        sections = dict(_sections(report))
+        assert_that(sections["AssertionFailure (1 of 2)"]).is_equal_to("  actual:   {'a': 1}\n  expected: {'a': 2}")
+        assert_that(sections["AssertionFailure (2 of 2)"]).is_equal_to("  actual:   {'b': 1}\n  expected: {'b': 2}")
+
+    def test_a_builder_used_again_gives_each_failure_the_rows_of_its_own_comparison(self):
+        builder = assert_that({"page": 1, "city": "Oslo"})
+        first = builder.check().is_equal_to({"page": 2, "city": "Paris"}, ignore="page")
+        assert_that(first.passed).is_false()
+        under_a_config = _failure_of(lambda: builder.is_equal_to({"page": 2, "city": "Rome"}, tolerance=0.1))
+        another = _failure_of(lambda: builder.contains_key("zip"))
+        plain = _failure_of(lambda: builder.is_equal_to({"page": 3, "city": "Bern"}))
+        bodies = []
+        for failure in (under_a_config, another, plain):
+            report = _make_report()
+            _run_hook(report, _make_call(exc=failure))
+            bodies.append(dict(_sections(report)).get("AssertionFailure"))
+        assert_that(bodies).is_equal_to(
+            [
+                "  actual:   {'page': 1, 'city': 'Oslo'}\n  expected: {'page': 2, 'city': 'Rome'}",
+                None,
+                "  actual:   {'page': 1, 'city': 'Oslo'}\n  expected: {'page': 3, 'city': 'Bern'}",
+            ]
+        )
+
+    def test_a_failure_that_named_one_side_has_the_row_of_that_side(self):
+        failure = AssertionFailure("built by hand", actual=1)
+        failure._compared = (5, 6)
+        report = _make_report()
+        _run_hook(report, _make_call(exc=failure))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to("  actual:   1")
+
+    def test_a_failure_that_cannot_be_asked_for_its_pair_keeps_the_rows_of_its_values(self):
+        class GuardedError(AssertionFailure):
+            @property
+            def _compared(self):
+                raise RuntimeError("no pair here")
+
+            @_compared.setter
+            def _compared(self, pair):
+                pass
+
+        report = _make_report()
+        _run_hook(report, _make_call(exc=GuardedError("guarded", actual=1, expected=2)))
+        assert_that(dict(_sections(report))["AssertionFailure"]).is_equal_to("  actual:   1\n  expected: 2")
+
     def test_whole_a_side_named_alone_is_printed_alone_and_a_pair_that_reads_alike_is_told_apart(self, monkeypatch):
         text = "x" * 3000
         report = _make_report()
@@ -1709,6 +1803,7 @@ class TestTheDiffTravelsWithTheFailure:
     def _run(self, tmp_path, *arguments, conftest=""):
         (tmp_path / "test_travel.py").write_text(self._SUITE, encoding="utf-8")
         (tmp_path / "conftest.py").write_text(self._DUMP + conftest, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
             [
                 *(sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-p", "no:randomly"),

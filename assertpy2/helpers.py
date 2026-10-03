@@ -3,7 +3,7 @@ import collections.abc
 import datetime
 import decimal
 import numbers
-from typing import cast
+from typing import Any, cast
 
 from assertpy2.errors import (
     DiffResult,
@@ -180,8 +180,10 @@ def _elided_seq_repr(seq, counterpart) -> str:
         parts.append(_safe_repr(value))
     if pending:
         parts.append(_ELIDED)
-    opener, closer = ("(", ")") if isinstance(seq, tuple) else ("[", "]")
-    return _joined_parts(parts, opener=opener, closer=closer)
+    if isinstance(seq, tuple):
+        # a tuple of one takes its comma, or the text reads as that one element in brackets
+        return _joined_parts(parts, opener="(", closer=",)" if len(items) == 1 else ")")
+    return _joined_parts(parts, opener="[", closer="]")
 
 
 def _spelling(mapping: object) -> tuple[str, str, collections.abc.Callable[[object, str], str]]:
@@ -290,6 +292,99 @@ def _swapped_as_ordered(low, high, refusal: Exception) -> bool:
     if failure.kind == "kind":
         refuse(high, "a number", subject=argument("high"))
     refuse(high, f"comparable with given low arg {_shown(low)}", subject=argument("high"))
+
+
+_ElidedWalk = collections.abc.Callable[[Any, Any], collections.abc.Generator[Any, Any, str]]
+
+
+def _elided_walks(config: _CompareConfig | None) -> tuple[_ElidedWalk, _ElidedWalk]:
+    """The two walks that render a pair with what matched left out: one of two mappings, one of two sequences.
+
+    Both are walks for `run_nested()`, which sends each nested rendering back.  Made as a pair, for one failure:
+    the two share the containers on the path, which is where a value that holds itself stops.
+    """
+    on_path: set[int] = set()
+
+    def _dict_repr(mapping, counterpart):
+        opener, closer, part_of = _spelling(mapping)
+        if id(mapping) in on_path:
+            return f"{opener}<circular ref>{closer}"
+        on_path.add(id(mapping))
+        keyed_fields = keyed_names(mapping, counterpart)
+        parts: list[_Part] = []
+        pending = False
+        # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
+        for key, value in ((key, mapping[key]) for key in mapping):
+            found, other_value = lookup(counterpart, key)
+            if not found:
+                part = part_of(key, _safe_repr(value))
+            else:
+                decision = (
+                    _node_decision(*keyed_pair(mapping, counterpart, key), config, field=key)
+                    if key in keyed_fields
+                    else _node_decision(value, other_value, config, field=key)
+                )
+                if decision == "equal":
+                    pending = True
+                    continue
+                if decision == "leaf":
+                    part = part_of(key, _safe_repr(value))
+                else:  # recurse
+                    if (keyed := _keyed_pair(value, other_value)) is not None:
+                        value_repr = yield _dict_repr(*keyed)
+                    elif _both_list_like(value, other_value):
+                        value_repr = yield _list_repr(value, other_value)
+                    else:
+                        value_repr = _safe_repr(value)
+                    part = part_of(key, value_repr)
+            if pending:
+                parts.append(_ELIDED)
+                pending = False
+            parts.append(part)
+        if pending:
+            parts.append(_ELIDED)
+        on_path.discard(id(mapping))
+        return _joined_parts(parts, opener=opener, closer=closer)
+
+    def _list_repr(seq, counterpart):
+        """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
+        the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}, ..]``
+        instead of dumping the whole list.  Both are walks for `run_nested()`, which sends back each nested
+        repr."""
+        if id(seq) in on_path:
+            return "[<circular ref>]"
+        on_path.add(id(seq))
+        parts: list[_Part] = []
+        pending = False
+        for index, value in enumerate(seq):
+            if index >= len(counterpart):
+                part = _safe_repr(value)  # extra element beyond the counterpart's length
+            else:
+                other_value = counterpart[index]
+                decision = _node_decision(value, other_value, config, field=None)
+                if decision == "equal":
+                    pending = True
+                    continue
+                if decision == "leaf":
+                    part = _safe_repr(value)
+                elif (keyed := _keyed_pair(value, other_value)) is not None:
+                    part = yield _dict_repr(*keyed)
+                elif _both_list_like(value, other_value):
+                    part = yield _list_repr(value, other_value)
+                else:
+                    part = _safe_repr(value)
+            if pending:
+                parts.append(_ELIDED)
+                pending = False
+            parts.append(part)
+        if pending:
+            parts.append(_ELIDED)
+        on_path.discard(id(seq))
+        # keep tuples looking like tuples, a tuple of one with its comma
+        opener, closer = ("(", ",)" if len(seq) == 1 else ")") if isinstance(seq, tuple) else ("[", "]")
+        return _joined_parts(parts, opener=opener, closer=closer)
+
+    return _dict_repr, _list_repr
 
 
 class HelpersMixin(_MixinBase):
@@ -592,87 +687,7 @@ class HelpersMixin(_MixinBase):
         a dict taken apart to be read beside a record is a copy, and the failure holds the caller's own.
         """
 
-        on_path: set[int] = set()
-
-        def _dict_repr(mapping, counterpart):
-            opener, closer, part_of = _spelling(mapping)
-            if id(mapping) in on_path:
-                return f"{opener}<circular ref>{closer}"
-            on_path.add(id(mapping))
-            keyed_fields = keyed_names(mapping, counterpart)
-            parts: list[_Part] = []
-            pending = False
-            # left in the mapping's order, which the diff prints: sorting here made the two halves disagree
-            for key, value in ((key, mapping[key]) for key in mapping):
-                found, other_value = lookup(counterpart, key)
-                if not found:
-                    part = part_of(key, _safe_repr(value))
-                else:
-                    decision = (
-                        _node_decision(*keyed_pair(mapping, counterpart, key), config, field=key)
-                        if key in keyed_fields
-                        else _node_decision(value, other_value, config, field=key)
-                    )
-                    if decision == "equal":
-                        pending = True
-                        continue
-                    if decision == "leaf":
-                        part = part_of(key, _safe_repr(value))
-                    else:  # recurse
-                        if (keyed := _keyed_pair(value, other_value)) is not None:
-                            value_repr = yield _dict_repr(*keyed)
-                        elif _both_list_like(value, other_value):
-                            value_repr = yield _list_repr(value, other_value)
-                        else:
-                            value_repr = _safe_repr(value)
-                        part = part_of(key, value_repr)
-                if pending:
-                    parts.append(_ELIDED)
-                    pending = False
-                parts.append(part)
-            if pending:
-                parts.append(_ELIDED)
-            on_path.discard(id(mapping))
-            return _joined_parts(parts, opener=opener, closer=closer)
-
-        def _list_repr(seq, counterpart):
-            """List counterpart of ``_dict_repr``: collapse equal elements to ``..`` and drill only into
-            the differing ones, so a one-element change in a long list reads as ``[.., {.., 'v': 'y'}, ..]``
-            instead of dumping the whole list.  Both are walks for `run_nested()`, which sends back each nested
-            repr."""
-            if id(seq) in on_path:
-                return "[<circular ref>]"
-            on_path.add(id(seq))
-            parts: list[_Part] = []
-            pending = False
-            for index, value in enumerate(seq):
-                if index >= len(counterpart):
-                    part = _safe_repr(value)  # extra element beyond the counterpart's length
-                else:
-                    other_value = counterpart[index]
-                    decision = _node_decision(value, other_value, config, field=None)
-                    if decision == "equal":
-                        pending = True
-                        continue
-                    if decision == "leaf":
-                        part = _safe_repr(value)
-                    elif (keyed := _keyed_pair(value, other_value)) is not None:
-                        part = yield _dict_repr(*keyed)
-                    elif _both_list_like(value, other_value):
-                        part = yield _list_repr(value, other_value)
-                    else:
-                        part = _safe_repr(value)
-                if pending:
-                    parts.append(_ELIDED)
-                    pending = False
-                parts.append(part)
-            if pending:
-                parts.append(_ELIDED)
-            on_path.discard(id(seq))
-            # keep tuples looking like tuples, a tuple of one with its comma
-            opener, closer = ("(", ",)" if len(seq) == 1 else ")") if isinstance(seq, tuple) else ("[", "]")
-            return _joined_parts(parts, opener=opener, closer=closer)
-
+        _dict_repr, _list_repr = _elided_walks(config)
         kind, diff_entries, val_repr, other_repr, copies = self._failure_views(
             val, other, ignore, include, config, _dict_repr, _list_repr
         )

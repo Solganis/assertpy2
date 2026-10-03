@@ -83,12 +83,12 @@ def _field_dict(obj, is_model):
     )
 
 
-def _child_entries(actual, expected, path: _Path, *, descended_for, config=None) -> list[DiffEntry]:
+def _child_entries(actual, expected, path: _Path, *, descended_for, config=None, aligns=True) -> list[DiffEntry]:
     """The entries of one child, walked on its own by a caller outside a walk.
 
     `_Walk.descend()` is where the walker's answer for the child is read, given why it was descended into.
     """
-    walk = _Walk(config)
+    walk = _Walk(config, aligns=aligns)
     frame = walk.descend(actual, expected, path, descended_for)
     return walk.entries if frame is None else walk.run(*frame)
 
@@ -359,8 +359,14 @@ def _graphs_differ(actual, expected) -> bool:
     Counted as a difference unasked, two equal values that hold themselves tipped a pairing towards alignment,
     which then listed one as removed and the other as added.  Asked only of such a pair: as a wrapper around every
     ``==`` it cost a failing comparison of 200 rows 8%.
+
+    Answered by a walk that pairs every two sequences by index.  Choosing a pairing is what asks this, so a
+    walk that chose one under an asking asked again from inside it, each asking a walk of its own that
+    remembers none above it, and two graphs holding sequences of different lengths asked it of each other
+    until the stack ran out.  The answer is the same either way: two sequences of one length are never
+    aligned, and two of different lengths leave an entry however they are paired.
     """
-    return bool(_child_entries(actual, expected, _ROOT, descended_for="unanswered"))
+    return bool(_child_entries(actual, expected, _ROOT, descended_for="unanswered", aligns=False))
 
 
 def _aligned_difference_count(opcodes) -> int:
@@ -470,10 +476,12 @@ class _Walk:
     whatever it holds (`_differs_of_itself()`).
     """
 
-    __slots__ = ("config", "entries", "paired", "stack")
+    __slots__ = ("aligns", "config", "entries", "paired", "stack")
 
-    def __init__(self, config: _CompareConfig | None) -> None:
+    def __init__(self, config: _CompareConfig | None, *, aligns: bool = True) -> None:
         self.config = config
+        self.aligns = aligns
+        """Whether two sequences may be paired by alignment: not in a walk `_graphs_differ` runs."""
         self.entries: list[DiffEntry] = []
         self.paired: dict[tuple[int, int], tuple[object, object]] = {}
         self.stack: list[_Frame] = []
@@ -710,7 +718,7 @@ class _Walk:
         of the value's own that the walk turns into `RuntimeError` reaches `_escaped_stop()` with no frame between.
         """
         actual, expected = readable(actual), readable(expected)
-        opcodes = _alignment_opcodes_if_useful(actual, expected)
+        opcodes = _alignment_opcodes_if_useful(actual, expected) if self.aligns else None
         if opcodes is not None:
             return self.aligned(actual, expected, prefix, opcodes)
         return self.positional(actual, expected, prefix)
@@ -764,6 +772,30 @@ class _Walk:
                             yield frame
 
 
+def _pair_itself(actual: object, expected: object) -> DiffResult:
+    """The diff of two values that differ and cannot be walked: one entry, the pair, which reads nothing again."""
+    return DiffResult(kind="scalar", entries=[_ROOT.leaf_entry(actual=actual, expected=expected)])
+
+
+def _set_diff(actual: set | frozenset, expected: set | frozenset, prefix: _Path, *, found_unequal: bool) -> DiffResult:
+    """The members only one of two sets holds.
+
+    Two sets *found_unequal* that hold the same members, as a set of a class of its own can be, differ as a
+    pair: a diff with no entry rendered as nothing under a failure saying the two were not equal.
+    """
+    entries = [
+        prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected")
+        for item in sorted(_absent_from(_members(actual), expected), key=_safe_repr)
+    ]
+    entries.extend(
+        prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item)
+        for item in sorted(_absent_from(_members(expected), actual), key=_safe_repr)
+    )
+    if not entries and found_unequal:
+        return DiffResult(kind="scalar", entries=[prefix.leaf_entry(actual=actual, expected=expected)])
+    return DiffResult(kind="set", entries=entries)
+
+
 def _build_equality_diff(actual: object, expected: object, *, _prefix: _Path = _ROOT, config=None) -> DiffResult:
     """The diff of a top-level pair.  Without a config the caller has found the two unequal, so the root owes."""
     walk = _Walk(config)
@@ -798,15 +830,7 @@ def _build_equality_diff(actual: object, expected: object, *, _prefix: _Path = _
     if isinstance(actual, (list, tuple)) and isinstance(expected, (list, tuple)):
         return DiffResult(kind="sequence", entries=walk.run(walk.sequence(actual, expected, _prefix), pair, owed))
     if isinstance(actual, (set, frozenset)) and isinstance(expected, (set, frozenset)):
-        entries = [
-            _prefix.member(item, "extra").entry(actual=item, expected=None, absent="expected")
-            for item in sorted(_absent_from(_members(actual), expected), key=_safe_repr)
-        ]
-        entries.extend(
-            _prefix.member(item, "missing").entry(actual=None, absent="actual", expected=item)
-            for item in sorted(_absent_from(_members(expected), actual), key=_safe_repr)
-        )
-        return DiffResult(kind="set", entries=entries)
+        return _set_diff(actual, expected, _prefix, found_unequal=owed is not None)
     # under a strict descent this means the two sides were already equal, not that they differ
     if strict_descent:
         return DiffResult(kind="scalar", entries=[])

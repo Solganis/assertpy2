@@ -345,6 +345,56 @@ class TestBuildEqualityDiffRecursive:
 
 
 class TestContainsDiff:
+    @pytest.mark.parametrize(
+        ("ask", "rows"),
+        [
+            (lambda: assert_that([{"id": 1}]).contains({"id": 99}), ["  missing: {'id': 99}"]),
+            (lambda: assert_that([1, 2]).contains(3, 4), ["  missing: 3, 4"]),
+            (lambda: assert_that([1, 2]).contains_only(1, 3), ["  extra:   2", "  missing: 3"]),
+            (lambda: assert_that([{1}]).contains({2}), ["  missing: {2}"]),
+        ],
+        ids=["a dict", "two items", "one too many and one short", "a set looked for"],
+    )
+    def test_the_items_are_printed_as_they_are_with_no_braces_round_them(self, ask, rows):
+        # braces round a dict looked for in a list read `missing: {{'id': 99}}`, a set no Python holds
+        with pytest.raises(AssertionError) as exc_info:
+            ask()
+        assert_that(str(exc_info.value.diff).splitlines()).is_equal_to(["diff (contains):", *rows])
+
+    def test_two_sets_found_unequal_that_hold_the_same_members_differ_as_a_pair(self):
+        # a diff with no entry rendered as nothing, under a failure that said the two were not equal
+        class Odd(set):
+            def __eq__(self, other: object) -> bool:
+                return False
+
+            __hash__ = None  # ty: ignore[invalid-assignment, invalid-method-override]  # a set is unhashable anyway
+
+        for held in (Odd(), Odd({1})):
+            operand = set(held)
+            result = _build_equality_diff(held, operand)
+            assert_that((result.kind, len(result.entries))).is_equal_to(("scalar", 1))
+            assert_that(result.entries[0].actual).is_same_as(held)
+            assert_that(result.entries[0].expected).is_same_as(operand)
+            with pytest.raises(AssertionError) as plain:
+                assert_that(held).is_equal_to(operand)
+            with pytest.raises(AssertionError) as named:
+                assert_that({"items": held}).has_items(operand)
+            for failure in (plain.value, named.value):
+                assert_that([(entry.actual, entry.expected) for entry in failure.diff.entries]).is_length(1)
+        config = _build_compare_config(None, None, strict_types=True)
+        assert_that(_build_equality_diff({1}, {1}, config=config).entries).is_empty()
+
+    def test_the_members_of_a_set_keep_the_braces_of_a_set(self):
+        rendered = str(_build_equality_diff({1, 3}, {1, 2}))
+        assert_that(rendered.splitlines()).is_equal_to(["diff (set):", "  extra:   {3}", "  missing: {2}"])
+
+    def test_color_wraps_the_row_whichever_way_it_is_written(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([{"id": 1}]).contains({"id": 99})
+        assert_that(_format_diff(exc_info.value.diff, color=True)).ends_with("\033[32mmissing: {'id': 99}\033[0m")
+        colored = _format_diff(_build_equality_diff({1, 3}, {1, 2}), color=True)
+        assert_that(colored).contains("\033[31mextra:   {3}\033[0m").ends_with("\033[32mmissing: {2}\033[0m")
+
     def test_contains_missing_items_diff(self):
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains(7, 9)
@@ -641,6 +691,7 @@ class TestPytestPluginDiffRendering:
             "def test_list_diff():\n"
             "    assert_that([1, 2, 3]).is_equal_to([1, 9, 3])\n",
         )
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
             ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,
@@ -655,6 +706,7 @@ class TestPytestPluginDiffRendering:
         test_file.write_text(
             "from assertpy2 import assert_that\ndef test_scalar():\n    assert_that(42).is_equal_to(99)\n",
         )
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
             ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,
@@ -668,6 +720,7 @@ class TestPytestPluginDiffRendering:
         test_file.write_text(
             "from assertpy2 import assert_that\ndef test_x():\n    assert_that([1]).is_equal_to([2])\n",
         )
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
             ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short", "-o", "assertpy2_diff=off"],
             capture_output=True,
@@ -686,6 +739,7 @@ class TestPytestPluginDiffRendering:
             "        'address': match.structure({'city': match.equal_to('NYC')}),\n"
             "    })\n",
         )
+        (tmp_path / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
         result = subprocess.run(
             ["uv", "run", "pytest", str(test_file), "-v", "--no-header", "--tb=short"],
             capture_output=True,

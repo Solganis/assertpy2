@@ -34,7 +34,7 @@ from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
-from assertpy2._engine import _equality, _introspection
+from assertpy2._engine import _diff, _equality, _introspection
 from assertpy2._engine._introspection import TakenApart, compares_by_parts
 from tests.test_duality import _PAIRS, Case
 
@@ -465,6 +465,13 @@ def _graph_pairs(draw: st.DrawFn) -> tuple[_Graph, _Graph]:
     pair=((_Node("list", 0, 1, shift=2), _Node("dict", 0)), (_Node("list", 0, 1), _Node("dict", 0))),
     option="ignore a key",
 )
+@example(
+    pair=(
+        (_Node("list", 0, 0, 0),),
+        (_Node("list", 0, 1, shift=1), _Node("list", 0, 1, 0)),
+    ),
+    option="comparators",
+)
 @given(pair=_graph_pairs(), option=st.sampled_from(sorted(_OPTIONS)))
 def test_a_graph_is_read_as_the_tree_it_unfolds_into(pair: tuple[_Graph, _Graph], option: str) -> None:
     actual, expected = pair
@@ -473,6 +480,73 @@ def test_a_graph_is_read_as_the_tree_it_unfolds_into(pair: tuple[_Graph, _Graph]
     if _size(actual, depth) + _size(expected, depth) > 4000:
         return
     _hold_the_graph(actual, expected, options)
+
+
+def _ring_of_pairs(size: int) -> tuple[list, list]:
+    """Two rings of lists, each list holding itself and, in a list of another length than its twin's, the next."""
+    left: list[list] = [[0] for _ in range(size)]
+    right: list[list] = [[0] for _ in range(size)]
+    for index in range(size):
+        following = (index + 1) % size
+        left[index] += [left[index], [left[following], 7]]
+        right[index] += [right[index], [right[following]]]
+    return left[0], right[0]
+
+
+class TestAPairingAsksWhetherTwoGraphsDiffer:
+    """Two lists of different lengths ask of their elements whether those differ, to choose between pairing them
+    by index and by alignment.  The asking is a walk of its own.  A walk that chose a pairing in turn asked again
+    from inside the asking, and two graphs that hold such lists asked it of each other until the stack ran out,
+    under an option and without one.  A walk run by an asking pairs by index and asks nothing."""
+
+    _OPTIONS = ({"tolerance": 0.5}, {"strict_types": True}, {"comparators": {str: _same_case}})
+
+    def test_a_graph_that_reaches_its_own_asking_is_answered(self) -> None:
+        one: list = [0]
+        one += [one, one]
+        inner: list = [0]
+        other: list = ["first", 0, inner, None]
+        inner += [inner, other]
+        for options in ({}, *self._OPTIONS):
+            verdict, failure = _outcome(lambda options=options: assert_that(one).is_equal_to(other, **options))
+            assert_that(verdict).described_as(str(sorted(options))).is_equal_to("failed")
+            assert_that(failure.diff.entries).is_not_empty()
+        assert_that(_diff._graphs_differ(one, other)).is_true()
+        assert_that(_diff._graphs_differ(one, one)).is_false()
+
+    @pytest.mark.parametrize("size", [1, 2, 3, 40])
+    def test_a_ring_of_pairs_that_reach_one_another_is_answered(self, size: int) -> None:
+        """No pair comes round again until the ring closes, so remembering the pairs being asked did not end it:
+        every asking still stood on the one before.  A ring of 1200, past the stack, is answered too, in minutes."""
+        one, other = _ring_of_pairs(size)
+        assert_that(_diff._graphs_differ(one, other)).is_true()
+        for options in self._OPTIONS:
+            verdict, failure = _outcome(lambda options=options: assert_that(one).is_equal_to(other, **options))
+            assert_that(verdict).described_as(str(sorted(options))).is_equal_to("failed")
+            assert_that(failure.diff.entries).described_as(str(sorted(options))).is_length(size)
+
+    def test_an_asking_chooses_no_pairing(self, monkeypatch) -> None:
+        def chosen(actual: object, expected: object) -> None:
+            raise AssertionError("a walk run by an asking chose a pairing")
+
+        one, other = _ring_of_pairs(3)
+        monkeypatch.setattr(_diff, "_alignment_opcodes_if_useful", chosen)
+        assert_that(_diff._graphs_differ(one, other)).is_true()
+        assert_that(_diff._graphs_differ([1, [2, 3]], [1, [2]])).is_true()
+        assert_that(_diff._graphs_differ([1, [2, 3]], [1, [2, 3]])).is_false()
+
+    @settings(deadline=None, max_examples=600, suppress_health_check=[HealthCheck.too_slow])
+    @given(pair=_graph_pairs())
+    def test_an_asking_answers_by_index_what_it_answered_choosing_a_pairing(self, pair: tuple[_Graph, _Graph]) -> None:
+        """The answer is whether the walk found anything, and that is one answer however two sequences are
+        paired: two of one length are never aligned, two of different lengths leave an entry either way."""
+        actual, expected = _built(pair[0]), _built(pair[1])
+        try:
+            aligned = bool(_diff._child_entries(actual, expected, _diff._ROOT, descended_for="unanswered"))
+        except RecursionError:
+            return
+        by_index = _diff._child_entries(actual, expected, _diff._ROOT, descended_for="unanswered", aligns=False)
+        assert_that(bool(by_index)).is_equal_to(aligned)
 
 
 class TestAGraphInASequenceThatShifted:

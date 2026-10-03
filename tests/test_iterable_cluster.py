@@ -248,7 +248,7 @@ class TestContainsOnlyOnce:
     def test_the_duplicate_diff_renders(self):
         with pytest.raises(AssertionFailure) as exc_info:
             assert_that([1, 1, 2]).does_not_contain_duplicates()
-        assert_that(str(exc_info.value.diff)).contains("extra:", "{1}")
+        assert_that(str(exc_info.value.diff)).is_equal_to("diff (contains):\n  extra:   1")
 
     def test_missing_and_duplicated_fails(self):
         with pytest.raises(AssertionFailure) as exc_info:

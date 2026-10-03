@@ -204,6 +204,11 @@ That section carries the values the assertion named. Every failure holds the val
 `failure.actual`, but most messages open with it, so a `contains_key()` failure shows the diff without
 repeating its subject above it.
 
+For a failed `is_equal_to()` under `ignore=` or `include=` the two rows are the views that were
+compared: without the keys left out, and a dataclass or a model as the fields read of it. `failure.actual`
+stays the value you passed. Beside `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=` the
+rows stay the two values.
+
 The diff for that failure, and the other diff shapes, render like this.
 
 The comparison is recursive, so for a very large or deeply nested value it walks the whole object graph.
@@ -477,7 +482,11 @@ except AssertionError as failure:
 
 A failed `contains_entry()` says what the key holds, or that the key is not there. A failed
 `has_<name>()` fails as `is_equal_to()` on the value it read: the failure carries that value, the
-operand and their diff, and two values that print the same are told apart by class.
+operand and their diff, and two values that print the same are told apart by class. Two dicts are
+printed as `is_equal_to()` prints them, the keys that match collapsed to `..`, and so are two lists or
+two plain tuples too long to print whole, unless the two collapsed texts read alike or the values cannot
+be compared a second time: then both are printed as texts, cut around the place they part. Where the
+two cannot be read a second time the diff is one entry, the pair itself.
 
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
@@ -762,7 +771,8 @@ keeps at 4000 a side, and the whole diff block at 20 KB, and matching parts of a
 integration serialises.
 
 Under `pytest -vv` a message and the values of the report section are printed whole, as pytest prints
-its own output there. The rows of a diff stay cut.
+its own output there. Under `ignore=` or `include=` alone those are the two views compared, whole. The
+rows of a diff stay cut.
 
 ### Keeping a value out
 

@@ -932,8 +932,13 @@ def _compared_pair(exc: BaseException) -> tuple[object, object] | None:
     A listener hears it once this hook's wrapper has resumed, which is before any report is logged: one that
     reads the pair in a report wrapper of its own that resumes earlier does not.
     """
-    # a failure of this library's class: anything may sit under the name on another exception
-    pair = getattr(exc, "_compared", None) if isinstance(exc, errors.AssertionFailure) else None
+    if not isinstance(exc, errors.AssertionFailure):
+        # anything may sit under the name on another exception
+        return None
+    try:
+        pair = exc._compared
+    except Exception:  # a subclass may answer the name with code of its own, which must not cost the report
+        return None
     return pair if type(pair) is tuple and len(pair) == 2 else None
 
 
@@ -1017,7 +1022,10 @@ def _value_rows(actual: object, expected: object, *, paired: bool, named_actual:
     """The rows of a report section for the values a failure named, a side it did not name left unread.
 
     Cut like a diff row, the untouched values staying on the exception, and whole where `errors._WHOLE_VALUES`
-    says so.  A pair is told apart by class where its two sides read alike, cut or whole.
+    says so.  A pair is told apart by class where its two sides read alike, cut or whole.  For a failed
+    equality the caller hands the pair compared (`_compared_pair`): under ``ignore=`` or ``include=`` alone the
+    two views without the keys left out, in both modes.  Beside a compare option no pair is kept, and the rows
+    are the two values.
     """
     if not paired:
         side = _safe_repr if errors._WHOLE_VALUES else _diff_side
@@ -1045,7 +1053,12 @@ def _attach_report_sections(item, report, exc, *, suffix: str = "") -> None:
     named_values = named_actual if getattr(exc, "_outcome", None) is not None else (named_actual or named_expected)
 
     if named_values:
-        rows = _value_rows(actual, expected, paired=named_actual and named_expected, named_actual=named_actual)
+        paired = named_actual and named_expected
+        # windowed over whole values, a row could show a key left out and cut away what the failure is about
+        compared = _compared_pair(exc) if paired else None
+        if compared is not None:
+            actual, expected = compared
+        rows = _value_rows(actual, expected, paired=paired, named_actual=named_actual)
         _add_section(report, f"AssertionFailure{suffix}", "\n".join(rows))
 
     if diff is not None and getattr(item.config, "_assertpy2_diff_enabled", True):

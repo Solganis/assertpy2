@@ -590,10 +590,12 @@ def _render_diff(diff: object, *, color: bool = False, max_entries: int = 50) ->
         # `absent` rather than the rendered label: a mapping key spelled "extra" used to land in the wrong group
         extra = ", ".join(_diff_side(entry.actual) for entry in visible if entry.absent == "expected")
         missing = ", ".join(_diff_side(entry.expected) for entry in visible if entry.absent == "actual")
+        # braces go round the members of a set: round a dict looked for in a list they read `{{'id': 99}}`
+        opener, closer = ("{", "}") if kind == "set" else ("", "")
         if extra:
-            lines.append(f"  {red}extra:   {{{extra}}}{reset}")
+            lines.append(f"  {red}extra:   {opener}{extra}{closer}{reset}")
         if missing:
-            lines.append(f"  {green}missing: {{{missing}}}{reset}")
+            lines.append(f"  {green}missing: {opener}{missing}{closer}{reset}")
     else:
         for entry in visible:
             path = entry.path

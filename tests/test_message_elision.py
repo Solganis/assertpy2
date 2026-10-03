@@ -54,6 +54,17 @@ class TestSequenceElisionBoundaries:
         actual = (*(1,) * 20, 2)
         assert_that(_elided_seq_repr(actual, (1,) * 21)).is_equal_to("(.., 2)")
 
+    def test_a_tuple_of_one_keeps_its_comma(self):
+        # without it `('aaa')` read as that one text in brackets, not as a tuple holding it
+        long = "a" * 70
+        assert_that(_elided_seq_repr((long,), ("b",))).is_equal_to(f"('{long}',)")
+        assert_that(_elided_seq_repr((long,), (long,))).is_equal_to("(..,)")
+        assert_that(_elided_seq_repr([long], ["b"])).is_equal_to(f"['{long}']")
+        assert_that(_elided_seq_repr((long, long), ("b", "c"))).is_equal_to(f"('{long}', '{long}')")
+        with pytest.raises(AssertionError) as caught:
+            assert_that((long,)).is_equal_to(("b" * 70,))
+        assert_that(str(caught.value)).starts_with(f"Expected <('{long}',)> to be equal to <('{'b' * 70}',)>")
+
 
 class TestTextElisionBoundary:
     def test_three_lines_are_printed_whole(self):

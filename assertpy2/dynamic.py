@@ -4,12 +4,13 @@ import collections.abc
 import inspect
 from typing import Any
 
-from ._engine._diff import _build_equality_diff, _sub_diff_entries
+from ._engine._diff import _build_equality_diff, _pair_itself
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
-from .errors import DiffResult, _first_difference, _formatted, _parted, _told_apart
+from .errors import DiffResult, _first_difference, _formatted, _parted, _told_apart, _truncated
+from .helpers import _both_list_like, _elided_seq_repr, _elided_walks
 from .http_mixin import response_of
 from .outcome import MISSING, Requirement
 
@@ -27,12 +28,52 @@ def _one_operand(args: tuple[object, ...], kwargs: dict[str, object]) -> dict[st
         return {"args": args, "kwargs": kwargs}
 
 
-def _pair_diff(actual: object, expected: object) -> DiffResult:
-    """The diff `is_equal_to` builds for two values found unequal: two mappings by key, any other pair by its kind."""
+def _read_again(builder: Any, actual: object, expected: object) -> tuple[tuple[str, str] | None, DiffResult]:
+    """What `is_equal_to` reads of two values found unequal: their two collapsed texts, where they have any, and
+    their diff.
+
+    Two mappings, as the pair stands once ``==`` has answered, by the call `is_equal_to` fails with on two
+    mappings (`_failure_views`): it renders each side and then builds the entries, three readings of the
+    pair, and where the values refuse any of them the three are given up together, for no texts and the
+    pair itself.  Two plain sequences are collapsed as `is_equal_to` collapses them, and there the texts
+    and the diff are given up each on its own.  ``==`` of two lists stops at the first pair that differs,
+    and every one of these readings goes on past it, to an element the verdict never asked.
+    """
     if mapping_shaped(actual, check_values=False) and mapping_shaped(expected, check_values=False):
-        entries = _sub_diff_entries(actual, expected, _ROOT, config=None)
-        return DiffResult(kind="dict", entries=entries or [_ROOT.leaf_entry(actual=actual, expected=expected)])
-    return _build_equality_diff(actual, expected)
+        try:
+            kind, entries, actual_text, expected_text, _copies = builder._failure_views(
+                actual, expected, None, None, None, *_elided_walks(None)
+            )
+        except Exception:  # a diagnostic must never outrank the failure it is describing
+            return None, _pair_itself(actual, expected)
+        diff = DiffResult(kind=kind, entries=entries or [_ROOT.leaf_entry(actual=actual, expected=expected)])
+        return (actual_text, expected_text), diff
+    texts = None
+    if _both_list_like(actual, expected):
+        try:
+            texts = _truncated(_elided_seq_repr(actual, expected)), _truncated(_elided_seq_repr(expected, actual))
+        except Exception:  # as above
+            texts = None
+    try:
+        return texts, _build_equality_diff(actual, expected)
+    except Exception:  # as above
+        return texts, _pair_itself(actual, expected)
+
+
+def _as_equality_fails(builder: Any, actual: object, expected: object) -> tuple[str, str, DiffResult]:
+    """The two sides of a failed ``has_<name>()`` as its message prints them, and the diff it carries.
+
+    Collapsed as `is_equal_to` collapses them where they are two mappings or two plain sequences
+    (`_read_again`).  Any other pair as two texts cut around the place they part, which is also what those two
+    fall back to where the collapsed texts read alike or could not be made.  So the message differs from the
+    one `is_equal_to` prints exactly there: it keeps two texts that read alike.
+    """
+    collapsed, diff = _read_again(builder, actual, expected)
+    if collapsed is not None and collapsed[0] != collapsed[1]:
+        return *collapsed, diff
+    actual_text, expected_text = _formatted(actual), _formatted(expected)
+    parted = _parted(actual_text, expected_text, _first_difference(actual_text, expected_text))
+    return *_told_apart(*parted, actual, expected), diff
 
 
 class DynamicMixin(_MixinBase):
@@ -140,10 +181,7 @@ class DynamicMixin(_MixinBase):
                 if actual == expected:
                     return self
                 kind = "key" if is_dict else "attribute"
-                actual_text, expected_text = _formatted(actual), _formatted(expected)
-                parted = _parted(actual_text, expected_text, _first_difference(actual_text, expected_text))
-                actual_text, expected_text = _told_apart(*parted, actual, expected)
-                diff = _pair_diff(actual, expected)
+                actual_text, expected_text, diff = _as_equality_fails(self, actual, expected)
                 self._compared = (actual, expected)
                 return self.error(
                     f"Expected <{actual_text}> to be equal to <{expected_text}> on {kind} <{attr_name}>, but was not.",
