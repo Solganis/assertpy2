@@ -18,6 +18,25 @@ class TestTemporalMatchers:
         assert_that(datetime.now() - timedelta(seconds=1)).satisfies(match.is_now(3))
         assert_that(match.is_now(3).matches(datetime.now() - timedelta(seconds=30))).is_false()
 
+    @pytest.mark.parametrize(
+        "delta", [-5, -0.5, -0.0000001, -1e20, -(10**30), timedelta(seconds=-5), timedelta(microseconds=-1)]
+    )
+    def test_is_now_refuses_a_delta_below_nothing(self, delta):
+        with pytest.raises(ValueError, match=r"^given delta arg must not be negative$"):
+            match.is_now(delta)
+
+    def test_is_now_built_without_the_factory_refuses_it_too(self):
+        with pytest.raises(ValueError, match="given delta arg must not be negative"):
+            type(match.is_now())(timedelta(seconds=-5))
+
+    def test_is_now_refuses_what_is_no_span_as_it_did(self):
+        with pytest.raises(TypeError, match="unsupported type for timedelta seconds component"):
+            match.is_now("soon")
+
+    def test_is_now_takes_a_delta_of_nothing(self):
+        assert_that(match.is_now(0).describe()).is_equal_to("a datetime within 0:00:00 of now")
+        assert_that(match.is_now(timedelta()).matches(datetime.now() - timedelta(seconds=1))).is_false()
+
     def test_is_now_default_window_is_two_seconds(self):
         # every other case holds under any positive default, so the default itself was pinned by nothing
         assert_that(match.is_now().matches(datetime.now() - timedelta(seconds=1.5))).is_true()
@@ -214,7 +233,7 @@ class TestCloseToMatcher:
 
     def test_a_negative_numpy_tolerance_is_refused_at_construction(self):
         numpy = pytest.importorskip("numpy")
-        with pytest.raises(ValueError, match="given tolerance arg must be positive"):
+        with pytest.raises(ValueError, match="given tolerance arg must not be negative"):
             match.close_to(1, numpy.float32(-1))
 
     def test_a_number_claiming_to_be_numpys_is_not_asked_at_construction(self):

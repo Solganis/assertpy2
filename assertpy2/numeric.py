@@ -8,6 +8,7 @@ from ._engine._compare import _is_infinite, _is_nan, _within_tolerance
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import UnorderableError, compare, holds, require_integer
 from ._engine._require import _shown, argument, refuse, require_type
+from ._hints import apart_in_time, out_of_order, under
 from .errors import _capped, _capped_format
 
 if TYPE_CHECKING:
@@ -16,19 +17,12 @@ if TYPE_CHECKING:
 __tracebackhide__ = True
 
 
-def _fmt_operand(value: object) -> str:
-    """Format a relational operand: datetimes as ``%Y-%m-%d %H:%M:%S``, everything else as interpolated."""
-    if isinstance(value, datetime.datetime):
-        return value.strftime("%Y-%m-%d %H:%M:%S")
-    return _capped_format(value)
-
-
 def _fmt_tolerance(tolerance: datetime.timedelta) -> str:
-    """Format a timedelta tolerance as ``h:mm:ss``."""
-    tolerance_seconds = tolerance.days * 86400 + tolerance.seconds + tolerance.microseconds / 1000000
-    hours, remainder = divmod(tolerance_seconds, 3600)
+    """A timedelta tolerance as ``h:mm:ss``, its hours counted on past a day, with its fraction where it has one."""
+    hours, remainder = divmod(tolerance.days * 86400 + tolerance.seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
-    return f"{int(hours)}:{int(minutes):02d}:{int(seconds):02d}"
+    fraction = f".{tolerance.microseconds:06d}" if tolerance.microseconds else ""
+    return f"{hours}:{minutes:02d}:{seconds:02d}{fraction}"
 
 
 class NumericMixin(_MixinBase):
@@ -258,7 +252,8 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not holds(self.val, other, "gt"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be greater than <{_fmt_operand(other)}>, but was not.",
+                f"Expected <{_capped_format(self.val)}> to be greater than <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=False, strict=True))}",
                 expected=other,
             )
         return self
@@ -295,8 +290,9 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not holds(self.val, other, "ge"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be greater than or equal to"
-                f" <{_fmt_operand(other)}>, but was not.",
+                f"Expected <{_capped_format(self.val)}> to be greater than or equal to"
+                f" <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=False, strict=False))}",
                 expected=other,
             )
         return self
@@ -335,7 +331,8 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not holds(self.val, other, "lt"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be less than <{_fmt_operand(other)}>, but was not.",
+                f"Expected <{_capped_format(self.val)}> to be less than <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=True, strict=True))}",
                 expected=other,
             )
         return self
@@ -373,8 +370,9 @@ class NumericMixin(_MixinBase):
         self._validate_compareable(other)
         if not holds(self.val, other, "le"):  # positive form so NaN (unordered) fails instead of slipping through
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be less than or equal to"
-                f" <{_fmt_operand(other)}>, but was not.",
+                f"Expected <{_capped_format(self.val)}> to be less than or equal to"
+                f" <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=True, strict=False))}",
                 expected=other,
             )
         return self
@@ -459,8 +457,8 @@ class NumericMixin(_MixinBase):
 
         if not self._within(low, high):  # positive form so NaN (unordered) fails instead of passing
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to be between"
-                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was not.",
+                f"Expected <{_capped_format(self.val)}> to be between"
+                f" <{_capped_format(low)}> and <{_capped_format(high)}>, but was not.",
                 expected=(low, high),
             )
         return self
@@ -489,8 +487,8 @@ class NumericMixin(_MixinBase):
 
         if self._within(low, high):
             return self.error(
-                f"Expected <{_fmt_operand(self.val)}> to not be between"
-                f" <{_fmt_operand(low)}> and <{_fmt_operand(high)}>, but was."
+                f"Expected <{_capped_format(self.val)}> to not be between"
+                f" <{_capped_format(low)}> and <{_capped_format(high)}>, but was."
             )
         return self
 
@@ -580,7 +578,7 @@ class NumericMixin(_MixinBase):
 
         Args:
             other (object): the other value, expected to be close to val within tolerance
-            tolerance (object): the tolerance
+            tolerance (object): the tolerance, zero or more
 
         Examples:
             Usage:
@@ -613,9 +611,10 @@ class NumericMixin(_MixinBase):
         if nan or not self._close(other, tolerance):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
-                    f"Expected <{_fmt_operand(self.val)}> to be close to"
-                    f" <{_fmt_operand(other)}> within tolerance"
-                    f" <{_fmt_tolerance(tolerance)}>, but was not.",
+                    f"Expected <{_capped_format(self.val)}> to be close to"
+                    f" <{_capped_format(other)}> within tolerance"
+                    f" <{_fmt_tolerance(tolerance)}>, but was not."
+                    f"{under(apart_in_time(self.val, other, tolerance, close=True))}",
                     expected=(other, tolerance),
                 )
             else:
@@ -638,7 +637,7 @@ class NumericMixin(_MixinBase):
 
         Args:
             other (object): the other value
-            tolerance (object): the tolerance
+            tolerance (object): the tolerance, zero or more
 
         Examples:
             Usage:
@@ -660,9 +659,10 @@ class NumericMixin(_MixinBase):
         if self._close(other, tolerance):
             if isinstance(tolerance, datetime.timedelta):
                 return self.error(
-                    f"Expected <{_fmt_operand(self.val)}> to not be close to"
-                    f" <{_fmt_operand(other)}> within tolerance"
-                    f" <{_fmt_tolerance(tolerance)}>, but was.",
+                    f"Expected <{_capped_format(self.val)}> to not be close to"
+                    f" <{_capped_format(other)}> within tolerance"
+                    f" <{_fmt_tolerance(tolerance)}>, but was."
+                    f"{under(apart_in_time(self.val, other, tolerance, close=False))}",
                 )
             else:
                 return self.error(

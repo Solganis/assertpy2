@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from ._engine._mixin_base import _MixinBase
 from ._engine._require import argument, require_type
+from ._hints import out_of_order, under
 from .errors import _capped, _capped_format
 
 if TYPE_CHECKING:
@@ -77,7 +78,8 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val >= other:
             return self.error(
-                f"Expected <{_capped(self.val)}> to be before <{_capped_format(other)}>, but was not.",
+                f"Expected <{_capped(self.val)}> to be before <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=True, strict=True))}",
                 expected=other,
             )
         return self
@@ -115,7 +117,8 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val <= other:
             return self.error(
-                f"Expected <{_capped(self.val)}> to be after <{_capped_format(other)}>, but was not.",
+                f"Expected <{_capped(self.val)}> to be after <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=False, strict=True))}",
                 expected=other,
             )
         return self
@@ -148,7 +151,8 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val > other:
             return self.error(
-                f"Expected <{_capped(self.val)}> to be before or equal to <{_capped_format(other)}>, but was not.",
+                f"Expected <{_capped(self.val)}> to be before or equal to <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=True, strict=False))}",
                 expected=other,
             )
         return self
@@ -181,7 +185,8 @@ class DateMixin(_MixinBase):
         _require_comparable_datetimes(self.val, other)
         if self.val < other:
             return self.error(
-                f"Expected <{_capped(self.val)}> to be after or equal to <{_capped_format(other)}>, but was not.",
+                f"Expected <{_capped(self.val)}> to be after or equal to <{_capped_format(other)}>, but was not."
+                f"{under(out_of_order(self.val, other, before=False, strict=False))}",
                 expected=other,
             )
         return self

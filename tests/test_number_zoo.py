@@ -102,9 +102,9 @@ _FINITE_TOLERANCES = ("0", "tiny", "half", "bignum")
 _UNBOUNDED = {"inf", "decimal-inf"}
 """Tolerances every finite pair lies within."""
 _CLOSE_TO_REFUSES = {
-    "-1": "positive",
-    "-half": "positive",
-    "decimal-neg": "positive",
+    "-1": "not-negative",
+    "-half": "not-negative",
+    "decimal-neg": "not-negative",
     "nan": "nan-tolerance",
     "true": "bool-tolerance",
 }
@@ -117,13 +117,13 @@ _TOLERANCE_REFUSES = {
     "true": "real-tolerance",
 }
 """The tolerances `is_equal_to(tolerance=)` refuses, before it looks at the operands at all."""
-_MATCHER_REFUSES = {"-1": "positive", "-half": "positive", "decimal-neg": "positive"}
+_MATCHER_REFUSES = {"-1": "not-negative", "-half": "not-negative", "decimal-neg": "not-negative"}
 """The tolerances `match.close_to` refuses at construction; nothing lies within a NaN or a bool one."""
 
 if numpy is not None:
     _TOLERANCES.update({"f32-neg": numpy.float32(-1), "f32-neg-inf": numpy.float32("-inf"), "i64-neg": numpy.int64(-1)})
     for negative in ("f32-neg", "f32-neg-inf", "i64-neg"):
-        _CLOSE_TO_REFUSES[negative] = _MATCHER_REFUSES[negative] = "positive"
+        _CLOSE_TO_REFUSES[negative] = _MATCHER_REFUSES[negative] = "not-negative"
         _TOLERANCE_REFUSES[negative] = "not-negative"
 
 _SHOWN = r"<[^<>\n]+> \((?:[A-Za-z_]\w*\.)*[A-Za-z_]\w*\)"
@@ -132,11 +132,6 @@ _REFUSALS: dict[str, tuple[type[Exception], str, Callable[[], object]]] = {
         ValueError,
         "given tolerance arg must not be NaN",
         lambda: assert_that(0).is_close_to(0, math.nan),
-    ),
-    "positive": (
-        ValueError,
-        "given tolerance arg must be positive",
-        lambda: assert_that(0).is_close_to(0, -1),
     ),
     "not-negative": (
         ValueError,

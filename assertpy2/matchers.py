@@ -499,10 +499,19 @@ class _MatchNamespace:
         """Matcher for a ``datetime`` within ``delta`` of the current time.
 
         Args:
-            delta: tolerance as seconds (a number) or a ``timedelta``; defaults to 2 seconds. Naive and
-                timezone-aware values are both handled (compared against ``now`` in the same awareness).
+            delta: tolerance as seconds (a number) or a ``timedelta``, zero or more; defaults to 2 seconds.
+                Naive and timezone-aware values are both handled (compared against ``now`` in the same
+                awareness).
+
+        Raises:
+            ValueError: if delta is negative
         """
-        return IsNowMatcher(delta if isinstance(delta, timedelta) else timedelta(seconds=delta))
+        if not isinstance(delta, timedelta):
+            # asked of the number: made a span, a tenth of a microsecond below nothing is none, and 1e20 overflows
+            if isinstance(delta, (int, float)) and delta < 0:
+                raise ValueError("given delta arg must not be negative")
+            delta = timedelta(seconds=delta)
+        return IsNowMatcher(delta)
 
     @staticmethod
     def is_before(other: datetime) -> IsBeforeMatcher:

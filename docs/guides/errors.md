@@ -538,6 +538,46 @@ line endings and surrounding whitespace. These lines are said of plain text alon
 class of its own, bytes and the first element of a list get none. `is_equal_to()` is the exception,
 and reads bytes and a `str` of any class as it did before.
 
+Two moments say how far apart they are. `is_before()`, `is_after()` and their `_or_equal_to` twins
+give the distance on the other side, or say that the two are the same moment:
+
+```text
+Expected <2026-01-01 12:00:00+00:00> to be before <2026-01-01 13:30:00+02:00>, but was not.
+the value is 0:30:00 after the moment given
+```
+
+`is_close_to()` and `is_not_close_to()` on two datetimes give the distance and how far it is from the
+tolerance:
+
+```text
+Expected <2026-01-01 12:00:00> to be close to <2026-01-01 12:00:07> within tolerance <0:00:05>, but was not.
+the two are 0:00:07 apart, 0:00:02 more than the tolerance
+```
+
+The distance is `datetime`'s own subtraction, exact to the microsecond, printed as a `timedelta` prints.
+It is said where `datetime` itself made the verdict. A subclass that writes its own comparison, a pandas
+`Timestamp` for one, gets no line, and one that writes its own `-` or `+`, as pendulum's does, gets the
+line of the four ordering assertions and not the one of closeness. The tolerance has to be exactly a
+`timedelta`.
+
+`is_less_than()`, `is_greater_than()` and their `_or_equal_to` forms, which take two datetimes as well,
+say of them what `is_before()` and its kin say. `is_between()` says nothing.
+
+Two datetimes that share one zone object are compared by Python on their wall clocks, which is the
+time between the two only while the zone keeps one offset. Across a change of its clocks it is not, and
+the two readings of a repeated hour compare equal. The line then speaks of the clock and not of the
+moments:
+
+```text
+Expected <2026-10-25 02:30:00+02:00> to be before <2026-10-25 02:30:00+01:00>, but was not.
+the two read the same on the clock they share
+```
+
+Two in different zones are compared as the moments they are, and the line gives the time between them.
+The line itself asks a zone for its offset only where the zone is `datetime.timezone` or
+`zoneinfo.ZoneInfo`. With a zone of another library, pytz's or dateutil's, two that share it get the
+line about their clock, and two in different zones get none.
+
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
 ```text

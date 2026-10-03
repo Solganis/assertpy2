@@ -91,6 +91,7 @@ on the switch in either direction, and each row below is measured against assert
 |---|---|---|
 | `is_close_to()` with a `bool` value, expected value or tolerance | measured `True` as `1` | raises `TypeError` |
 | `is_close_to()` with a NaN tolerance | passed | raises `ValueError` |
+| `is_close_to()` and `is_not_close_to()` on datetimes with a negative `timedelta` tolerance | found nothing close, so `is_not_close_to()` passed for any two | raises `ValueError`, as a negative number does |
 | a NaN as the value or the operand of `is_less_than()`, `is_greater_than()`, their `_or_equal_to` forms and `is_close_to()`, or as the value of `is_between()`, `is_positive()` and `is_negative()` | passed | fails |
 | an infinity against a finite number under an infinite tolerance | passed | fails |
 | `is_in()` and `is_not_in()` when the items hold the very NaN object under test | `is_in()` failed and `is_not_in()` passed | the reverse, as `in` answers |

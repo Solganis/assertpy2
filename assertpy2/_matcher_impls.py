@@ -723,7 +723,7 @@ class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
         zero = timedelta(0) if isinstance(tolerance, timedelta) else zero_of(tolerance)
         if _swapped(zero, tolerance):
-            raise ValueError("given tolerance arg must be positive")
+            raise ValueError("given tolerance arg must not be negative")
         self.expected = expected
         self.tolerance = tolerance
         self._duration: bool = type(tolerance) not in (int, float) and numpy_duration(tolerance)
@@ -1352,6 +1352,8 @@ class IsNowMatcher(BaseMatcher):
     """Matches a ``datetime`` within a tolerance of the current time."""
 
     def __init__(self, delta: timedelta):
+        if isinstance(delta, timedelta) and timedelta.__lt__(delta, timedelta(0)):
+            raise ValueError("given delta arg must not be negative")
         self._delta = delta
 
     def matches(self, value: Any) -> bool:

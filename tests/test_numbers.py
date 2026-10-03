@@ -589,7 +589,7 @@ def test_a_bool_operand_is_refused_as_tolerance_compares_it_exactly(assertion, v
 def test_is_close_to_negative_tolerance_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_close_to(123, -1)
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be positive")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must not be negative")
 
 
 def test_is_close_to_nan_val_failure():
@@ -657,7 +657,7 @@ def test_is_not_close_to_bad_tolerance_arg_type_failure():
 def test_is_not_close_to_negative_tolerance_failure():
     with pytest.raises(ValueError) as exc_info:
         assert_that(123.01).is_not_close_to(123, -1)
-    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must be positive")
+    assert_that(str(exc_info.value)).is_equal_to("given tolerance arg must not be negative")
 
 
 def test_comparable_duck_typing():

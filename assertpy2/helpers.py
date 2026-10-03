@@ -3,7 +3,7 @@ import collections.abc
 import datetime
 import decimal
 import numbers
-from typing import Any, cast
+from typing import Any, Final, cast
 
 from assertpy2.errors import (
     DiffResult,
@@ -387,6 +387,10 @@ def _elided_walks(config: _CompareConfig | None) -> tuple[_ElidedWalk, _ElidedWa
     return _dict_repr, _list_repr
 
 
+# built once: a passing `is_close_to` on datetimes paid 76 ns for the check with it built each time, 29 ns kept
+_NO_SPAN: Final = datetime.timedelta()
+
+
 class HelpersMixin(_MixinBase):
     """Helpers mixin.  For internal use only."""
 
@@ -465,14 +469,18 @@ class HelpersMixin(_MixinBase):
 
         if isinstance(val, datetime.datetime):
             require_type(other, datetime.datetime, "a datetime, to match val", subject=argument("other"))
-            require_type(tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance"))
+            span = require_type(
+                tolerance, datetime.timedelta, "a timedelta, to match val", subject=argument("tolerance")
+            )
+            if datetime.timedelta.__lt__(span, _NO_SPAN):
+                raise ValueError("given tolerance arg must not be negative")
         else:
             plain = type(val) in (int, float) and type(other) in (int, float) and type(tolerance) in (int, float)
             zero = 0 if plain else _zero_for(val, other, tolerance)
             if _is_nan(tolerance):
                 raise ValueError("given tolerance arg must not be NaN")
             if tolerance < zero:
-                raise ValueError("given tolerance arg must be positive")
+                raise ValueError("given tolerance arg must not be negative")
 
     def _is_dict_like(self, candidate, check_keys=True, check_values=True, check_getitem=True):
         """Return whether *candidate* has the requested dict-like attributes."""

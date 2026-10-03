@@ -148,7 +148,7 @@ def test_is_greater_than_failure():
         other_time = reference_time + datetime.timedelta(seconds=1)
         assert_that(reference_time).is_greater_than(other_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than "
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be greater than "
         r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
@@ -170,7 +170,7 @@ def test_is_greater_than_or_equal_to_failure():
         other_time = reference_time + datetime.timedelta(seconds=1)
         assert_that(reference_time).is_greater_than_or_equal_to(other_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be greater than or equal to "
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be greater than or equal to "
         r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
@@ -193,7 +193,7 @@ def test_is_less_than_failure():
         other_time = reference_time + datetime.timedelta(seconds=1)
         assert_that(other_time).is_less_than(reference_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than "
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be less than "
         r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
@@ -215,7 +215,7 @@ def test_is_less_than_or_equal_to_failure():
         other_time = reference_time + datetime.timedelta(seconds=1)
         assert_that(other_time).is_less_than_or_equal_to(reference_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be less than or equal to "
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be less than or equal to "
         r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
@@ -240,8 +240,9 @@ def test_is_between_failure():
         third_time = reference_time + datetime.timedelta(seconds=2)
         assert_that(reference_time).is_between(other_time, third_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be between "
-        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be between "
+        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>"
+        + r" and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was not."
     )
 
 
@@ -270,8 +271,8 @@ def test_is_not_between_failure():
         third_time = reference_time + datetime.timedelta(minutes=10)
         assert_that(other_time).is_not_between(reference_time, third_time)
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to not be between "
-        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}>, but was."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to not be between "
+        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> and <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?>, but was."
     )
 
 
@@ -298,8 +299,8 @@ def test_is_close_to_failure():
         other_time = reference_time + datetime.timedelta(minutes=5)
         assert_that(reference_time).is_close_to(other_time, datetime.timedelta(minutes=1))
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to be close to "
-        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> within tolerance <\d+:\d+:\d+>, but was not."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to be close to "
+        + r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> within tolerance <\d+:\d+:\d+>, but was not."
     )
 
 
@@ -330,8 +331,8 @@ def test_is_not_close_to_failure():
         other_time = reference_time + datetime.timedelta(seconds=1)
         assert_that(reference_time).is_not_close_to(other_time, datetime.timedelta(minutes=5))
     assert_that(str(exc_info.value)).matches(
-        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> to not be close to "
-        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}> within tolerance <\d+:\d+:\d+>, but was."
+        r"Expected <\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> to not be close to "
+        r"<\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?> within tolerance <\d+:\d+:\d+>, but was."
     )
 
 
@@ -492,13 +493,159 @@ def test_datetime_subclass_still_fails_real_mismatch():
         assert_that(later).is_before(earlier)
 
 
+@pytest.mark.parametrize("name", ["is_close_to", "is_not_close_to"])
+@pytest.mark.parametrize("apart", [datetime.timedelta(), datetime.timedelta(seconds=1)], ids=["equal", "apart"])
+@pytest.mark.parametrize("below", [datetime.timedelta(seconds=-5), datetime.timedelta(microseconds=-1)])
+def test_closeness_refuses_a_timedelta_tolerance_below_nothing(name, apart, below):
+    # as a negative number is refused: under it `is_not_close_to` passed for every two different moments
+    with pytest.raises(ValueError, match=r"^given tolerance arg must not be negative$"):
+        getattr(assert_that(reference_time), name)(reference_time + apart, below)
+
+
+def test_closeness_takes_a_timedelta_tolerance_of_nothing():
+    nothing = datetime.timedelta()
+    assert_that(reference_time).is_close_to(reference_time, nothing)
+    assert_that(reference_time).is_not_close_to(reference_time + datetime.timedelta(microseconds=1), nothing)
+
+
+def test_a_tolerance_below_nothing_is_refused_by_what_it_holds_and_not_by_what_its_class_answers():
+    class NeverLess(datetime.timedelta):
+        def __lt__(self, other):
+            return False
+
+    with pytest.raises(ValueError, match="given tolerance arg must not be negative"):
+        assert_that(reference_time).is_close_to(reference_time, NeverLess(seconds=-5))
+
+
 def test_is_close_to_tolerance_format():
     base = datetime.datetime(2026, 1, 1, 0, 0, 0)
     other = datetime.datetime(2026, 1, 3, 0, 0, 0)
-    tolerance = datetime.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=500000)
+    tolerance = datetime.timedelta(days=1, hours=2, minutes=3, seconds=4)
     with pytest.raises(AssertionError) as exc_info:
         assert_that(base).is_close_to(other, tolerance)
     assert_that(str(exc_info.value)).contains("within tolerance <26:03:04>")
+
+
+_NOON = datetime.datetime(2026, 1, 1, 12)
+_NOON_UTC = _NOON.replace(tzinfo=datetime.timezone.utc)
+_EAST = datetime.timezone(datetime.timedelta(hours=2))
+_FRACTION, _OTHER_FRACTION = _NOON.replace(microsecond=123456), _NOON.replace(microsecond=120001)
+
+
+def _headline(call) -> str:
+    with pytest.raises(AssertionError) as caught:
+        call()
+    return str(caught.value).splitlines()[0]
+
+
+@pytest.mark.parametrize(
+    ("ask", "said"),
+    [
+        (
+            lambda: assert_that(_NOON).is_close_to(
+                _NOON + datetime.timedelta(milliseconds=900), datetime.timedelta(milliseconds=500)
+            ),
+            "Expected <2026-01-01 12:00:00> to be close to <2026-01-01 12:00:00.900000>"
+            " within tolerance <0:00:00.500000>, but was not.",
+        ),
+        (
+            lambda: assert_that(_NOON_UTC).is_close_to(_NOON.replace(tzinfo=_EAST), datetime.timedelta(minutes=5)),
+            "Expected <2026-01-01 12:00:00+00:00> to be close to <2026-01-01 12:00:00+02:00>"
+            " within tolerance <0:05:00>, but was not.",
+        ),
+        (
+            lambda: assert_that(_FRACTION).is_not_close_to(_OTHER_FRACTION, datetime.timedelta(seconds=1)),
+            "Expected <2026-01-01 12:00:00.123456> to not be close to <2026-01-01 12:00:00.120001>"
+            " within tolerance <0:00:01>, but was.",
+        ),
+        (
+            lambda: assert_that(_FRACTION).is_less_than(_OTHER_FRACTION),
+            "Expected <2026-01-01 12:00:00.123456> to be less than <2026-01-01 12:00:00.120001>, but was not.",
+        ),
+        (
+            lambda: assert_that(_NOON_UTC).is_less_than(_NOON.replace(hour=13, minute=30, tzinfo=_EAST)),
+            "Expected <2026-01-01 12:00:00+00:00> to be less than <2026-01-01 13:30:00+02:00>, but was not.",
+        ),
+        (
+            lambda: assert_that(_FRACTION).is_less_than_or_equal_to(_OTHER_FRACTION),
+            "Expected <2026-01-01 12:00:00.123456> to be less than or equal to <2026-01-01 12:00:00.120001>,"
+            " but was not.",
+        ),
+        (
+            lambda: assert_that(_OTHER_FRACTION).is_greater_than(_FRACTION),
+            "Expected <2026-01-01 12:00:00.120001> to be greater than <2026-01-01 12:00:00.123456>, but was not.",
+        ),
+        (
+            lambda: assert_that(_OTHER_FRACTION).is_greater_than_or_equal_to(_FRACTION),
+            "Expected <2026-01-01 12:00:00.120001> to be greater than or equal to <2026-01-01 12:00:00.123456>,"
+            " but was not.",
+        ),
+        (
+            lambda: assert_that(_OTHER_FRACTION).is_between(_FRACTION, _NOON_UTC.replace(tzinfo=None, second=1)),
+            "Expected <2026-01-01 12:00:00.120001> to be between <2026-01-01 12:00:00.123456>"
+            " and <2026-01-01 12:00:01>, but was not.",
+        ),
+        (
+            lambda: assert_that(_FRACTION).is_not_between(_OTHER_FRACTION, _NOON.replace(second=1)),
+            "Expected <2026-01-01 12:00:00.123456> to not be between <2026-01-01 12:00:00.120001>"
+            " and <2026-01-01 12:00:01>, but was.",
+        ),
+        (
+            lambda: assert_that(datetime.datetime(999, 1, 2, 3, 4, 5)).is_less_than(datetime.datetime(998, 1, 2)),
+            "Expected <0999-01-02 03:04:05> to be less than <0998-01-02 00:00:00>, but was not.",
+        ),
+    ],
+)
+def test_a_headline_prints_what_a_moment_holds_past_the_second(ask, said):
+    assert_that(_headline(ask)).is_equal_to(said)
+
+
+@pytest.mark.parametrize(
+    ("ask", "said"),
+    [
+        (
+            lambda: assert_that(_NOON).is_close_to(
+                _NOON + datetime.timedelta(days=3), datetime.timedelta(hours=26, minutes=3, seconds=4)
+            ),
+            "Expected <2026-01-01 12:00:00> to be close to <2026-01-04 12:00:00>"
+            " within tolerance <26:03:04>, but was not.",
+        ),
+        (
+            lambda: assert_that(_NOON).is_not_close_to(_NOON.replace(second=1), datetime.timedelta(seconds=5)),
+            "Expected <2026-01-01 12:00:00> to not be close to <2026-01-01 12:00:01>"
+            " within tolerance <0:00:05>, but was.",
+        ),
+        (
+            lambda: assert_that(_NOON).is_greater_than_or_equal_to(_NOON.replace(hour=15)),
+            "Expected <2026-01-01 12:00:00> to be greater than or equal to <2026-01-01 15:00:00>, but was not.",
+        ),
+        (
+            lambda: assert_that(_NOON).is_between(_NOON.replace(hour=13), _NOON.replace(hour=14)),
+            "Expected <2026-01-01 12:00:00> to be between <2026-01-01 13:00:00>"
+            " and <2026-01-01 14:00:00>, but was not.",
+        ),
+    ],
+)
+def test_a_headline_that_dropped_nothing_reads_as_it_did(ask, said):
+    assert_that(_headline(ask)).is_equal_to(said)
+
+
+@pytest.mark.parametrize(
+    ("tolerance", "said"),
+    [
+        (datetime.timedelta(seconds=5), "0:00:05"),
+        (datetime.timedelta(hours=26, minutes=3, seconds=4), "26:03:04"),
+        (datetime.timedelta(days=400), "9600:00:00"),
+        (datetime.timedelta(milliseconds=500), "0:00:00.500000"),
+        (datetime.timedelta(microseconds=1), "0:00:00.000001"),
+        (datetime.timedelta(days=1, hours=2, minutes=3, seconds=4, microseconds=500000), "26:03:04.500000"),
+        (datetime.timedelta(days=10**6, microseconds=1), "24000000:00:00.000001"),
+        (datetime.timedelta.max, "23999999999:59:59.999999"),
+    ],
+)
+def test_a_tolerance_prints_exactly(tolerance, said):
+    headline = _headline(lambda: assert_that(_NOON).is_not_close_to(_NOON, tolerance))
+    assert_that(headline).ends_with(f"within tolerance <{said}>, but was.")
 
 
 def test_is_before_after_reject_equal():

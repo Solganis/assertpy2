@@ -20,12 +20,14 @@ code path.
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import difflib
 import enum
 import json
 import re
+import sys
 from collections import Counter
-from typing import TYPE_CHECKING, Final, NamedTuple
+from typing import TYPE_CHECKING, Final, NamedTuple, cast
 
 from ._engine._equality import comparable_fields
 from ._engine._introspection import (
@@ -505,6 +507,153 @@ def but_for_case(value: object, other: object) -> str | None:
     if "".join(value.split()).lower() == "".join(other.split()).lower():
         return "the two are equal ignoring whitespace once case is ignored too"
     return None
+
+
+def _own_datetime(standing: type) -> type[datetime.datetime]:
+    """The standard library's datetime under the class that stands at `datetime.datetime`.
+
+    A library that freezes time puts a class of its own at that name, made of the real one.  The real one is
+    the last to write `utcoffset` on the line of bases the class takes its layout from (`__base__`).  Not the
+    last of the whole tree: a mixin that writes one comes after it there.  And not the class of an instance
+    the class hands out: its `min` may be an instance of the class itself.
+    """
+    found, base = standing, standing
+    while base is not None:
+        if "utcoffset" in class_namespace(base):
+            found = base
+        base = type.__dict__["__base__"].__get__(base)
+    return cast("type[datetime.datetime]", found)
+
+
+# in a tuple: such a library also rewrites each attribute of a module that is the real class
+_MOMENT: Final = (_own_datetime(datetime.datetime),)
+_ORDERED_BY: Final = ("__lt__", "__le__", "__gt__", "__ge__")
+
+
+def out_of_order(value: object, other: object, *, before: bool, strict: bool) -> str | None:
+    """One line on a moment that is not before another, or not after it: how far on the other side it is.
+
+    Said by the four assertions of dates and by the four single relations of numbers, which take two datetimes
+    too.  *before* is the side the assertion asked for, and *strict* whether the same moment fails it as well.  The
+    distance is `datetime.datetime`'s own subtraction, exact to the microsecond.  Where that is only the
+    distance between two readings of one clock (`_time_between`), the line says so.
+    """
+    measured = _time_between(value, other, _ORDERED_BY)
+    if measured is None:
+        return None
+    apart, moments = measured
+    if not apart:
+        return _same(moments) if strict else None
+    late = apart > datetime.timedelta()
+    if late is not before:
+        return None
+    side = "after" if late else "before"
+    if moments:
+        return f"the value is {abs(apart)} {side} the moment given"
+    return f"the value reads {abs(apart)} {side} the moment given on the clock the two share"
+
+
+def apart_in_time(value: object, other: object, tolerance: object, *, close: bool) -> str | None:
+    """One line on two moments held against a tolerance: how far apart they are, and how far that is from it.
+
+    *close* is what the assertion asked for.  Measured as `out_of_order` measures.  Nothing is said of a pair
+    found close whose distance is past the tolerance: a window round either moment reached the other where the
+    distance did not.  The tolerance is read where it is exactly a `datetime.timedelta`, and the assertion has
+    refused one below nothing.
+    """
+    measured = _time_between(
+        value, other, (*_ORDERED_BY, "__eq__", "__sub__", "__rsub__", "__add__", "__radd__", "__float__")
+    )
+    if measured is None or type(tolerance) is not datetime.timedelta:
+        return None
+    apart, moments = measured
+    distance = abs(apart)
+    if not distance:
+        return None if close else _same(moments)
+    told = f"the two are {distance} apart" if moments else f"the two read {distance} apart on the clock they share"
+    if close:
+        return f"{told}, {distance - tolerance} more than the tolerance" if distance > tolerance else None
+    if distance > tolerance:
+        return None
+    if distance == tolerance:
+        return f"{told}, which is the tolerance"
+    return f"{told}, {tolerance - distance} less than the tolerance"
+
+
+def _same(moments: bool) -> str:
+    return "the two are the same moment" if moments else "the two read the same on the clock they share"
+
+
+def _time_between(value: object, other: object, asked: tuple[str, ...]) -> tuple[datetime.timedelta, bool] | None:
+    """*value* minus *other* by `datetime.datetime`'s own subtraction, and whether that is the time between them.
+
+    Read only for two whose classes leave *asked* to the base type: a class that writes one of those operators
+    made the verdict its own way, on what it holds past the microsecond or anywhere else.
+
+    Two that share one zone object, or have none, the base type compares and subtracts on their wall clocks,
+    asking the zone nothing.  That is the time between the two where there is no zone, or where the zone gives
+    both one offset.  Across a change of its clocks it is not: four hours read off a clock that went back for
+    five that passed, and the two readings of the repeated hour found equal.  Then, and for a zone that is not
+    asked, the answer is ``False`` and the line speaks of the clock the two share.
+
+    A zone is asked only where it is one of the standard library's own (`_own_zone`), since a line read past the
+    verdict cannot know what another zone's code told the verdict.  Two in different zones are measured as
+    moments, which asks both, so a pair with a zone from elsewhere among them gets nothing.
+    """
+    moment = _MOMENT[0]
+    if not isinstance(value, moment) or not isinstance(other, moment):
+        return None
+    try:
+        if not (_left_to_datetime(type(value), asked) and _left_to_datetime(type(other), asked)):
+            return None
+        zone, other_zone = moment.tzinfo.__get__(value), moment.tzinfo.__get__(other)
+        if zone is not other_zone:
+            if not (_own_zone(zone) and _own_zone(other_zone)):
+                return None
+            return moment.__sub__(value, other), True
+        apart = moment.__sub__(value, other)
+        if zone is None:
+            return apart, True
+        if not _own_zone(zone):
+            return apart, False
+        offset = moment.utcoffset(value)
+        one = offset is not None and datetime.timedelta.__eq__(offset, moment.utcoffset(other)) is True
+        return apart, one
+    except Exception:  # a naive moment against an aware one refuses to subtract, and no line outranks the failure
+        return None
+
+
+def _own_zone(zone: object) -> bool:
+    """Whether *zone* is none, or one of the standard library's own, whose offset its code alone answers.
+
+    The class of `zoneinfo` is read where it is loaded and not imported: no zone of its class exists without
+    it, and the import costs 4.9 ms, measured, which every importer of the library would pay.  It is read off
+    the two modules that implement it and not off `zoneinfo.ZoneInfo`: that is a name a test may put a class
+    of its own at, and what such a class says of itself, its name and its module, is the class's to say.
+    """
+    kind = type(zone)
+    if zone is None or kind is datetime.timezone:
+        return True
+    implemented_in = ("_zoneinfo", "zoneinfo._zoneinfo")
+    return any(kind is getattr(sys.modules.get(name), "ZoneInfo", None) for name in implemented_in)
+
+
+def _left_to_datetime(klass: type, asked: tuple[str, ...]) -> bool:
+    """Whether *klass* is `datetime.datetime`, or leaves every operator in *asked* to it, read off its tree.
+
+    The keys are read before any name is looked up: a key of a class of its own answers a lookup with its code.
+    """
+    if klass is _MOMENT[0]:
+        return True
+    if not _plainly_keyed(klass):
+        return False
+    for base in class_tree(klass):
+        if base is _MOMENT[0]:
+            return True
+        written = class_namespace(base)
+        if any(name in written for name in asked):
+            return False
+    return False
 
 
 _JOINTS: Final = re.compile(r"[\s_.\-]+")

@@ -1696,7 +1696,7 @@ class TestNumbersBeyondFloat:
         ("build", "message"),
         [
             pytest.param(lambda: match.between(9, 1), "low arg must be less than", id="between"),
-            pytest.param(lambda: match.close_to(5, -1), "tolerance arg must be positive", id="close_to"),
+            pytest.param(lambda: match.close_to(5, -1), "tolerance arg must not be negative", id="close_to"),
         ],
     )
     def test_a_matcher_refuses_what_the_builder_refuses(self, build, message):
@@ -1707,7 +1707,7 @@ class TestNumbersBeyondFloat:
         assert_that(match.close_to(datetime.datetime(2026, 1, 1), datetime.timedelta(hours=1)).describe()).contains(
             "within"
         )
-        with pytest.raises(ValueError, match="tolerance arg must be positive"):
+        with pytest.raises(ValueError, match="tolerance arg must not be negative"):
             match.close_to(datetime.datetime(2026, 1, 1), datetime.timedelta(hours=-1))
 
     @pytest.mark.parametrize(
@@ -2170,7 +2170,7 @@ class TestBoundsAreCheckedOnlyWhereTheyCanBe:
             match.between(10, 1)
 
     def test_a_negative_tolerance_is_still_refused_at_construction(self):
-        with pytest.raises(ValueError, match="positive"):
+        with pytest.raises(ValueError, match="must not be negative"):
             match.close_to(1, -1)
 
     def test_a_zero_tolerance_is_allowed(self):
