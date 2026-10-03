@@ -21,8 +21,6 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/Solganis/assertpy2"><img src="https://img.shields.io/ossf-scorecard/github.com/Solganis/assertpy2?label=OpenSSF%20Scorecard" alt="OpenSSF Scorecard"></a>
 </p>
 
----
-
 <h2 align="center"><a href="https://solganis.github.io/assertpy2/getting-started/quickstart/">Quick start</a></h2>
 
 ```bash
