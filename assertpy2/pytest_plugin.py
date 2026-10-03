@@ -14,6 +14,7 @@ from ._engine._diff import _sub_diff_entries
 from ._engine._path import _ROOT
 from .errors import _diff_side, _diff_sides, _json_safe, _render_diff, _safe_repr, _told_apart
 from .exception import _leaves
+from .outcome import AssertionOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -41,6 +42,7 @@ class _Stashing(Protocol):
     _assertpy2_dangling: dict[Path, list[_dangling.Finding]]
     _assertpy2_diff_enabled: bool
     _assertpy2_diff_max: int
+    _assertpy2_comparison_enabled: bool
     _assertpy2_prev_diff_in_message: bool
     _assertpy2_prev_whole_values: bool
     _assertpy2_prev_vacuous: bool
@@ -135,6 +137,14 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addini(
         "assertpy2_diff",
         help="Structured diff sections in failure reports: on (default), off",
+        default="on",
+    )
+    parser.addini(
+        "assertpy2_comparison",
+        help=(
+            "Hand the two values of a failed is_equal_to() to pytest_assertrepr_compare listeners, which is how"
+            " an IDE's test runner opens its comparison window: on (default), off"
+        ),
         default="on",
     )
     parser.addini(
@@ -360,6 +370,7 @@ def pytest_configure(config: pytest.Config) -> None:
     stashed._assertpy2_dangling_enabled = _dangling_enabled(config)
     stashed._assertpy2_dangling_entries = _dangling_entries(config)
     stashed._assertpy2_diff_enabled = config.getini("assertpy2_diff") != "off"
+    stashed._assertpy2_comparison_enabled = config.getini("assertpy2_comparison") != "off"
     try:
         stashed._assertpy2_diff_max = int(config.getini("assertpy2_diff_max_entries"))
     except (ValueError, TypeError):
@@ -893,6 +904,47 @@ def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[Any]) -> 
             _attach_report_sections(item, report, leaf, suffix=suffix)
         with contextlib.suppress(Exception):
             _attach_to_allure(item, report, leaf)
+
+    # one pair is all a listener keeps, so a group of failures hands none
+    if len(leaves) == 1 and getattr(item.config, "_assertpy2_comparison_enabled", True):
+        # the record is on an exception of anyone's and a listener is another plugin's code: neither costs the report
+        with contextlib.suppress(Exception):
+            compared = _plain_equality(leaves[0])
+            if compared is not None:
+                item.config.hook.pytest_assertrepr_compare(
+                    config=item.config, op="==", left=compared[0], right=compared[1]
+                )
+
+
+def _plain_equality(exc: BaseException) -> tuple[object, object] | None:
+    """The value and the operand of a failed ``is_equal_to()`` given no option, or ``None`` for any other failure.
+
+    `pytest_assertrepr_compare` is the hook pytest calls for a failed ``assert left == right``, and a test runner
+    that shows the two sides in a comparison window listens to it: PyCharm's does.  It gave assertpy's failures
+    that window by reading their message, which a failure of this class no longer matches.
+
+    Only that one shape is handed over, because a text comparison of the two whole values is true only of it.
+    Under ``ignore=`` it would show what the assertion was told to leave out, under ``strict_types=`` it would
+    show nothing where the assertion found a difference, and a negation, a membership and a block of several
+    failures hold no pair that was compared.
+
+    A listener hears it once this hook's wrapper has resumed, which is before any report is logged: one that
+    reads the pair in a report wrapper of its own that resumes earlier does not.
+    """
+    # a failure of this library's class holding a record of a failure: anything may sit under the name elsewhere
+    outcome = getattr(exc, "_outcome", None) if isinstance(exc, errors.AssertionFailure) else None
+    if type(outcome) is not AssertionOutcome or outcome.passed:
+        return None
+    asked = outcome.requirement
+    if (
+        asked is None
+        or asked.operation != "is_equal_to"
+        or asked.negated
+        or asked.parameters.get("kwargs")
+        or not (outcome.actual_provided and outcome.has_expected)
+    ):
+        return None
+    return outcome.actual, outcome.expected
 
 
 def _named(exc) -> tuple[bool, bool]:

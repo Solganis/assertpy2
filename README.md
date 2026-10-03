@@ -243,12 +243,14 @@ Anything else you build can too.
 - [**Structured errors**](https://solganis.github.io/assertpy2/guides/errors/#structured-errors): `AssertionFailure` carries `.actual`, `.expected` and `.diff`, and the diff renders into the message, so it shows off pytest too.
 - [**Assertions as values**](https://solganis.github.io/assertpy2/guides/errors/#asking-instead-of-asserting): `check()` runs the next assertion for its verdict instead of raising, handing back an `AssertionOutcome`.
 - [**Rich pytest diffs**](https://solganis.github.io/assertpy2/guides/errors/#rich-pytest-diffs): recursive diffs across containers, dataclasses, attrs and Pydantic models, with intra-line carets for strings.
+- [**Failures that say why**](https://solganis.github.io/assertpy2/guides/errors/#some-failures-say-why-not-only-what): where one fact explains a failure, a line under the message says it. An id the payload holds as text (`7` against `"7"`), a NaN, two instances compared by identity, surrounding whitespace. A failed `contains()` or `is_in()` names the closest row, and forty rows that differ in one field are named as one place.
 
 **Plugin for pytest**
 
 Set from the command line or from `[tool.pytest.ini_options]`, not from a call.
 
 - [**Failure clustering**](https://solganis.github.io/assertpy2/guides/errors/#what-the-failures-had-in-common): forty failing tests are usually not forty problems. Where three or more differ at the same place, the run ends with a line saying where. On by default, `assertpy2_failure_clusters = "off"` turns it off.
+- [**IDE comparison window**](https://solganis.github.io/assertpy2/guides/errors/#the-comparison-window-of-an-ide): a failed `is_equal_to()` gets PyCharm's "Click to see difference" link, as a plain `assert` does, and the window shows both values whole. The plugin hands them to `pytest_assertrepr_compare`, the hook the IDE's runner listens to. On by default, `assertpy2_comparison = "off"` turns it off.
 - [**Diagnostic profiles**](https://solganis.github.io/assertpy2/guides/errors/#configuration): `assertpy2_profile` turns the guards below on in one line. `compatible` (default) leaves them off, `safe` warns, `strict` fails the tests they find. A setting you name yourself still wins.
 - [**Vacuous-assertion guard**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-checked-nothing): `--assertpy2-vacuous` warns when a universal assertion passes over an empty collection, having checked nothing.
 - [**Dangling-assertion detector**](https://solganis.github.io/assertpy2/guides/assertions/#assertions-that-never-ran): `--assertpy2-dangling` warns when a chain builds an assertion and never runs it. `assert assert_that(x).is_positive` passes on any value, and neither ruff nor coverage sees it.

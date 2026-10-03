@@ -107,6 +107,11 @@ class CollectionMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** subset of given superset (or supersets)
+
+        Note:
+            Where one element of val is not found, the failure says what is nearest to it: the closest row among
+            the items of the superset, and on a line under the message why it is not there, where one fact about
+            it says so.
         """
         require_type(self.val, collections.abc.Iterable, "iterable")
         if len(supersets) == 0:

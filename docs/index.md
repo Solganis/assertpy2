@@ -80,6 +80,15 @@ port = assert_that(8080).is_instance_of(int).is_positive().value
 
     [:octicons-arrow-right-24: Errors & reporting](guides/errors.md)
 
+-   :material-lightbulb-on-outline:{ .lg .middle } __Failures that say why__
+
+    ---
+
+    Where one fact explains a failure, a line under the message says it: an id held as text, a NaN, two
+    instances compared by identity. A failed `contains()` names the closest row.
+
+    [:octicons-arrow-right-24: Some failures say why](guides/errors.md#some-failures-say-why-not-only-what)
+
 -   :material-help-circle-outline:{ .lg .middle } __Assertions as values__
 
     ---

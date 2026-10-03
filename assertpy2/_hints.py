@@ -28,7 +28,8 @@ from typing import TYPE_CHECKING, Final, NamedTuple
 from ._engine._equality import comparable_fields
 from ._engine._introspection import (
     class_name,
-    definition_of,
+    class_namespace,
+    class_tree,
     is_attrs_instance,
     is_mapping_like,
     is_model_dump_object,
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     # a step's wording: fixed, or decided from the shape of the pairs it is describing
     _Label = str | Callable[[Sequence[tuple[object, object]]], str]
 
+_OBJECT_EQUALITY: Final = object.__dict__["__eq__"]
 _NAN_FACT = "a NaN takes part in this comparison, and a NaN is equal to nothing, not even itself"
 _IDENTITY_FACT = (
     "these values compare with object's __eq__, so equality is identity and no two separate instances are equal"
@@ -486,34 +488,37 @@ def _fields_of(value: object) -> dict | None:
     return None
 
 
-def _defined_as(klass: type, name: str) -> bool:
-    """Whether the definition of *name* the class tree carries is the one ``object`` carries."""
-    found = definition_of(klass, name)
-    # pragma: no cover on the `None` half - `object` ends every tree and defines the name asked here
-    return found is not None and found[1] is object.__dict__[name]
-
-
 def identity_candidate(left: object, right: object) -> bool:
     """Whether ``==`` between these two comes down to identity, asked *before* the comparison runs.
 
-    A type that leaves ``__eq__`` to ``object`` is equal only to itself, so no value on the other side
-    would have made the comparison pass.  That is a fact about the type rather than about what the two
-    hold, which is the only claim worth making: state can live in a slot, in a descriptor's own table or
-    in a C field, and a line that promised to have read all of it would be promising more than any
-    reading can deliver.
+    Two separate instances of a type that leaves ``__eq__`` to ``object`` are never equal, whatever they
+    hold.  That is a fact about the type rather than about what the two hold, which is the only claim worth
+    making: state can live in a slot, in a descriptor's own table or in a C field, and a line that promised
+    to have read all of it would be promising more than any reading can deliver.  It is said of two of one
+    type only: a value of another type may answer the reflected comparison its own way.
 
     Three details make the answer trustworthy, and each was put here by a case that defeated the one
     before it.  It is asked before the comparison, because a type may rewrite its own ``__eq__`` while
     answering one, and a question asked afterwards would be answered by the type it left behind.  It
-    never reads an attribute the ordinary way, because a metaclass is free to answer with something
-    other than what the operator will run, or to install one as a side effect of being asked.  And what
-    it finally reads is the class tree's own definitions, the way `slot_tp_richcompare` reads them,
-    because a class-level descriptor can answer one way for the class and another for an instance.
+    reads no attribute of the class, not even through `type.__getattribute__`: that runs a descriptor
+    the class holds under the name, and one that installs an equality while being asked failed a pair
+    its own ``==`` held equal.  And what it reads is the class tree's own namespaces, in the order the
+    tree has them, the way `slot_tp_richcompare` reads them, off the slots of `type`, which a metaclass
+    cannot spell.  The tree is the real one: a metaclass's own ``mro()`` can put another class first, and
+    that class's equality is then the one ``==`` runs.
 
-    The cheap look comes first so the ordinary case, a type that does define equality, stops at 97 ns
-    and never pays for the walk.  The walk itself is another 465 ns, spent only on a pair of separate
-    instances of a type that compares by identity, which is a comparison that is about to fail anyway.
-    Scalars reach none of it: their comparison returns before this is asked.
+    ``None`` is an answer: a class that writes ``__eq__ = None`` has said what its equality is.  A tree in
+    which no class writes one, which reassigning ``__bases__`` under such a metaclass can leave behind, is
+    no claim of identity.  A list and a tuple are answered before any namespace is read.  Scalars reach
+    none of it: their comparison returns before this is asked.
+
+    One thing a namespace can still run: a key of a class of its own, a `str` subclass, that compares itself
+    and may answer one lookup one way and the next another.  Identity is therefore claimed only of a tree whose
+    namespaces hold exact `str` keys alone (`_plainly_keyed`), which is read where the claim is about to be
+    made and nowhere else: a tree that writes an equality of its own never pays for it.
+
+    The first class of the tree answers for a type that writes its equality itself, at 105 ns where the
+    look through the class it replaces took 76.  One that inherits it pays about 50 ns more a level.
 
     ``__ne__`` is not asked about: the comparison a failing assertion runs is ``actual == expected``, so a
     type defining only ``__ne__`` still compares by identity.
@@ -521,15 +526,20 @@ def identity_candidate(left: object, right: object) -> bool:
     try:
         klass = type(left)
         # one object against itself is equal under identity too, so a failure can never be about that
-        if left is right or klass is not type(right):
+        if left is right or klass is not type(right) or klass is list or klass is tuple:
             return False
-        # a cheap look first, so a type that does define equality pays only for this
-        if type.__getattribute__(klass, "__eq__") is not object.__eq__:
-            return False
-        return _defined_as(klass, "__eq__")
-    except Exception:  # pragma: no cover - no input is known to reach it, see below
-        # every lookup above runs none of the type's own code, and the guard stays because a failure is on the way
+        for base in class_tree(klass):
+            written = class_namespace(base)
+            if "__eq__" in written:
+                return written["__eq__"] is _OBJECT_EQUALITY and _plainly_keyed(klass)
+    except Exception:  # a key of a class of its own raised from its ``__eq__``: no claim, and a failure is on the way
         return False
+    return False
+
+
+def _plainly_keyed(klass: type) -> bool:
+    """Whether every namespace of *klass*'s tree holds exact `str` keys alone, so a lookup in it ran no code."""
+    return all(type(key) is str for base in class_tree(klass) for key in class_namespace(base))
 
 
 def _fields_match(left: object, right: object) -> bool:

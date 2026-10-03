@@ -514,6 +514,10 @@ def _written_again(owner: type, written: object) -> bool:
     )
 
 
+# off the slots of `type`: asked through the class, a metaclass may spell a tree or a namespace of its own
+class_tree, class_namespace = (type.__dict__[name].__get__ for name in ("__mro__", "__dict__"))
+
+
 def definition_of(klass: type, name: str) -> tuple[type, object] | None:
     """The class in *klass*'s tree that defines *name*, and the definition itself, or ``None``.
 
@@ -524,8 +528,8 @@ def definition_of(klass: type, name: str) -> tuple[type, object] | None:
     hashable base above it.  Callers that care ask the class about `__hash__` directly, which is the
     cheaper question anyway.
     """
-    for base in type.__getattribute__(klass, "__mro__"):
-        found = type.__getattribute__(base, "__dict__").get(name)
+    for base in class_tree(klass):
+        found = class_namespace(base).get(name)
         if found is not None:
             return base, found
     return None

@@ -1,5 +1,6 @@
 import contextlib
 import copy
+import dataclasses
 import io
 import json
 import os
@@ -17,9 +18,10 @@ from _pytest._code.code import TerminalRepr
 from _pytest._io import TerminalWriter
 from _pytest.config.argparsing import Parser
 
-from assertpy2 import _clustering, assert_that, async_assertions, match
+from assertpy2 import _clustering, assert_that, async_assertions, match, soft_assertions
 from assertpy2 import _satisfies as _satisfies_module
 from assertpy2 import errors as errors_module
+from assertpy2 import outcome as outcome_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
 from assertpy2._clustering import Observation, Signature
@@ -95,6 +97,7 @@ def _make_item(*, allure_mode="diff"):
     item.config._assertpy2_allure_mode = allure_mode
     item.config._assertpy2_diff_enabled = True
     item.config._assertpy2_diff_max = 50
+    item.config._assertpy2_comparison_enabled = True
     return item
 
 
@@ -116,7 +119,7 @@ class TestPluginLoaded:
     def test_addoption_registers_ini(self):
         parser = MagicMock()
         pytest_addoption(parser)
-        assert_that(parser.addini.call_count).is_equal_to(9)
+        assert_that(parser.addini.call_count).is_equal_to(10)
         names = [call[0][0] for call in parser.addini.call_args_list]
         assert_that(names).contains("assertpy2_allure")
         assert_that(names).contains("assertpy2_diff")
@@ -1292,6 +1295,7 @@ def _make_config(
     entries=(),
     profile="compatible",
     vacuous="off",
+    comparison="on",
 ):
     config = MagicMock()
     # every key answered by name: a catch-all fed the allure mode to every other reader, and a guard was
@@ -1299,6 +1303,7 @@ def _make_config(
     per_key = {
         "assertpy2_allure": ini,
         "assertpy2_diff": "on",
+        "assertpy2_comparison": comparison,
         "assertpy2_diff_max_entries": "50",
         "assertpy2_poll_report": poll_report,
         "assertpy2_failure_clusters": clusters,
@@ -2883,3 +2888,278 @@ class TestTheNearTimeoutReportIsPerSession:
         pytest_configure(config)
         pytest_unconfigure(config)
         assert_that(pytest_plugin._retried).is_empty()
+
+
+def _failure_of(call):
+    with pytest.raises(AssertionError) as caught:
+        call()
+    return caught.value
+
+
+def _several():
+    with soft_assertions():
+        assert_that([1]).is_equal_to([2])
+
+
+def _handed(exc, *, item=None, report=None):
+    """What the plugin handed to the comparison hook for *exc*: the calls the hook received."""
+    item = _make_item() if item is None else item
+    _run_hook(_make_report() if report is None else report, _make_call(exc=exc), item=item)
+    return item.config.hook.pytest_assertrepr_compare.call_args_list
+
+
+class TestAFailedEqualityIsHandedToComparisonListeners:
+    """`pytest_assertrepr_compare` is the hook pytest calls for a failed ``assert left == right``.
+
+    A test runner that opens a comparison window listens to it, PyCharm's among them.  A failed
+    ``is_equal_to()`` is that comparison written another way, so its two values are handed to the same
+    listeners: whole, the value on the left.  Nothing else is, because a text comparison of two whole values
+    says what the assertion found only there.
+    """
+
+    def test_the_value_and_the_operand_whole_and_in_that_order(self):
+        actual, expected = [{"id": 1, "city": "Oslo"}], [{"id": 1, "city": "Paris"}]
+        item = _make_item()
+        calls = _handed(_failure_of(lambda: assert_that(actual).is_equal_to(expected)), item=item)
+        assert_that(calls).is_length(1)
+        assert_that(calls[0].args).is_empty()
+        assert_that(set(calls[0].kwargs)).is_equal_to({"config", "op", "left", "right"})
+        assert_that(calls[0].kwargs["config"]).is_same_as(item.config)
+        assert_that(calls[0].kwargs["op"]).is_equal_to("==")
+        assert_that(calls[0].kwargs["left"]).is_same_as(actual)
+        assert_that(calls[0].kwargs["right"]).is_same_as(expected)
+
+    @pytest.mark.parametrize(
+        "ask",
+        [
+            pytest.param(lambda: assert_that(1).is_equal_to(2), id="two scalars"),
+            pytest.param(lambda: assert_that("a\nb").is_equal_to("a\nc"), id="two texts"),
+            pytest.param(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}), id="two dicts"),
+            pytest.param(lambda: assert_that(None).is_equal_to(0), id="None against a value"),
+            pytest.param(lambda: assert_that(1).is_equal_to(None), id="a value against None"),
+            pytest.param(lambda: assert_that(1).described_as("why").is_equal_to(2), id="described"),
+            pytest.param(lambda: assert_that([{"a": 1}]).extracting("a").is_equal_to([2]), id="after a pivot"),
+            pytest.param(
+                lambda: assert_that(lambda: [1]).eventually_sync().within(0.02).every(0.01).is_equal_to([2]),
+                id="the last value of a poll that ran out of time",
+            ),
+        ],
+    )
+    def test_every_plain_equality_is_handed(self, ask):
+        failure = _failure_of(ask)
+        calls = _handed(failure)
+        assert_that(calls).is_length(1)
+        assert_that((calls[0].kwargs["left"], calls[0].kwargs["right"])).is_equal_to((failure.actual, failure.expected))
+
+    @pytest.mark.parametrize(
+        "ask",
+        [
+            pytest.param(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}, ignore="b"), id="ignore="),
+            pytest.param(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}, include="a"), id="include="),
+            pytest.param(lambda: assert_that([1.0]).is_equal_to([2.0], tolerance=0.1), id="tolerance="),
+            pytest.param(lambda: assert_that([1]).is_equal_to([1.0], strict_types=True), id="strict_types="),
+            pytest.param(
+                lambda: assert_that([1]).is_equal_to([2], comparators={int: lambda one, other: False}),
+                id="comparators=",
+            ),
+            pytest.param(lambda: assert_that({"a": None}).is_equal_to({"a": 1}, ignore_null=True), id="ignore_null="),
+            pytest.param(
+                lambda: assert_that({"a": 1.0}).is_equal_to({"a": 2.0}, ignore="b", tolerance=0.1),
+                id="two options",
+            ),
+            pytest.param(lambda: assert_that(1).not_.is_equal_to(1), id="a negation"),
+            pytest.param(lambda: assert_that(1).is_not_equal_to(1), id="is_not_equal_to"),
+            pytest.param(lambda: assert_that([1]).is_same_as([1]), id="is_same_as"),
+            pytest.param(lambda: assert_that([1]).contains(2), id="contains"),
+            pytest.param(lambda: assert_that([1]).is_in([2], [3]), id="is_in"),
+            pytest.param(lambda: assert_that({"id": 1}).has_id(2), id="has_<name>"),
+            pytest.param(lambda: assert_that([1]).is_length(2), id="is_length"),
+            pytest.param(lambda: assert_that({"a": 1}).matches_structure({"a": 2}), id="matches_structure"),
+            pytest.param(lambda: assert_that(1).satisfies(match.equal_to(2)), id="a matcher"),
+            pytest.param(_several, id="a block of several"),
+        ],
+    )
+    def test_nothing_else_is(self, ask):
+        assert_that(_handed(_failure_of(ask))).is_empty()
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            AssertionFailure("built by hand", actual=1, expected=2),
+            AssertionError("Expected <1> to be equal to <2>, but was not."),
+            ValueError("not an assertion"),
+        ],
+        ids=["a failure built by hand", "an AssertionError of another library", "another exception"],
+    )
+    def test_a_failure_with_no_record_of_what_was_asked_is_not_handed(self, exc):
+        assert_that(_handed(exc)).is_empty()
+
+    def test_a_failure_that_did_not_name_its_value_is_not_handed(self):
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        recorded = failure._outcome
+        for unnamed in ({"actual_provided": False}, {"expected": outcome_module.MISSING}):
+            failure._outcome = dataclasses.replace(recorded, **unnamed)
+            assert_that(_handed(failure)).is_empty()
+        failure._outcome = recorded
+        assert_that(_handed(failure)).is_length(1)
+
+    def test_an_exception_that_cannot_be_asked_for_its_record_costs_nothing(self):
+        class GuardedError(AssertionFailure):
+            @property
+            def _outcome(self):
+                raise RuntimeError("no record here")
+
+            @_outcome.setter
+            def _outcome(self, record):
+                pass
+
+        report = _make_report()
+        assert_that(_handed(GuardedError("guarded"), report=report)).is_empty()
+        assert_that(report.failed).is_true()
+
+    def test_a_record_this_library_did_not_write_is_not_read(self):
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        written = failure._outcome
+        failure._outcome = SimpleNamespace(
+            passed=False,
+            requirement=written.requirement,
+            actual_provided=True,
+            has_expected=True,
+            actual=[1],
+            expected=[2],
+        )
+        assert_that(_handed(failure)).is_empty()
+
+    def test_a_record_of_an_assertion_that_held_is_no_failed_comparison(self):
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        failure._outcome = dataclasses.replace(failure._outcome, passed=True)
+        assert_that(_handed(failure)).is_empty()
+
+    def test_a_record_on_an_exception_of_another_class_is_not_read(self):
+        class CarryingError(AssertionError):
+            pass
+
+        carried = CarryingError("another library's")
+        carried._outcome = _failure_of(lambda: assert_that([1]).is_equal_to([2]))._outcome
+        assert_that(_handed(carried)).is_empty()
+
+    def test_a_negation_is_not_handed_whatever_it_named(self):
+        # under `not_` the operand is what the value must not be, so the two are no pair to hold against each other
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        asked = dataclasses.replace(failure._outcome.requirement, negated=True)
+        failure._outcome = dataclasses.replace(failure._outcome, requirement=asked)
+        assert_that(_handed(failure)).is_empty()
+
+    def test_a_group_of_two_failures_hands_none_and_a_group_of_one_hands_it(self):
+        one = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        other = _failure_of(lambda: assert_that([3]).is_equal_to([4]))
+        assert_that(_handed(ExceptionGroup("teardown", [one, other]))).is_empty()
+        assert_that(_handed(ExceptionGroup("teardown", [one, ValueError("not ours")]))).is_empty()
+        assert_that(_handed(ExceptionGroup("teardown", [one]))).is_length(1)
+
+    def test_a_test_that_did_not_fail_hands_nothing(self):
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        assert_that(_handed(failure, report=_make_report(failed=False))).is_empty()
+
+    def test_turned_off_it_hands_nothing_and_the_diff_setting_is_not_asked(self):
+        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        item = _make_item()
+        item.config._assertpy2_comparison_enabled = False
+        assert_that(_handed(failure, item=item)).is_empty()
+        item = _make_item()
+        item.config._assertpy2_diff_enabled = False
+        assert_that(_handed(failure, item=item)).is_length(1)
+
+    @pytest.mark.parametrize(("written", "enabled"), [("on", True), ("off", False), ("", True), ("yes", True)])
+    def test_the_setting_is_read_at_configure(self, written, enabled):
+        config = _make_config(comparison=written)
+        pytest_configure(config)
+        try:
+            assert_that(config._assertpy2_comparison_enabled).is_equal_to(enabled)
+        finally:
+            pytest_unconfigure(config)
+
+    def test_a_listener_that_raises_costs_neither_the_report_nor_its_sections(self):
+        failure = _failure_of(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}))
+        item, report = _make_item(), _make_report()
+        item.config.hook.pytest_assertrepr_compare.side_effect = RuntimeError("a listener of another plugin")
+        calls = _handed(failure, item=item, report=report)
+        assert_that(calls).is_length(1)
+        assert_that(dict(_sections(report))).contains_key("AssertionFailure", "Structured Diff")
+
+
+class TestTheHandoffInARealRun:
+    """The hook as pytest dispatches it, heard by a plugin written as a runner's is."""
+
+    _SUITE = (
+        "from assertpy2 import assert_that\n\n\n"
+        "ACTUAL = {'items': [{'id': n, 'city': 'Oslo'} for n in range(3)]}\n"
+        "EXPECTED = {'items': [{'id': n, 'city': 'Oslo' if n != 1 else 'Paris'} for n in range(3)]}\n\n\n"
+        "def test_plain():\n"
+        "    assert_that(ACTUAL).is_equal_to(EXPECTED)\n\n\n"
+        "def test_under_an_option():\n"
+        "    assert_that(ACTUAL).is_equal_to(EXPECTED, ignore='page')\n\n\n"
+        "def test_membership():\n"
+        "    assert_that(ACTUAL['items']).contains({'id': 9})\n\n\n"
+        "def test_passing():\n"
+        "    assert_that(ACTUAL).is_equal_to(ACTUAL)\n"
+    )
+
+    # a listener the way a runner writes one: it keeps the pair when the hook is called, and reads it when the
+    # report of that test is logged, which is after every report hook has run
+    _LISTENER = (
+        "import json\n\n"
+        "import pytest\n\n"
+        "import assertpy2.pytest_plugin\n\n"
+        "with open('plugin.txt', 'w', encoding='utf-8') as sink:\n"
+        "    sink.write(assertpy2.pytest_plugin.__file__)\n\n"
+        "kept = {}\n\n\n"
+        "def pytest_assertrepr_compare(config, op, left, right):\n"
+        "    kept['pair'] = (op, left, right)\n\n\n"
+        "@pytest.hookimpl(trylast=True)\n"
+        "def pytest_runtest_logreport(report):\n"
+        "    if report.when == 'call':\n"
+        "        with open('heard.jsonl', 'a', encoding='utf-8') as sink:\n"
+        "            sink.write(json.dumps([report.nodeid.split('::')[-1], report.outcome, kept.pop('pair', None)]))\n"
+        "            sink.write('\\n')\n"
+    )
+
+    def _run(self, tmp_path, *settings):
+        (tmp_path / "test_handoff.py").write_text(self._SUITE, encoding="utf-8")
+        (tmp_path / "conftest.py").write_text(self._LISTENER, encoding="utf-8")
+        (tmp_path / "pytest.ini").write_text("\n".join(["[pytest]", *settings, ""]), encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", "-p", "no:randomly"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+            env={**os.environ, "PYTHONPATH": _CHECKOUT},
+        )
+        assert_that(result.returncode).described_as(f"the child run: {result.stdout}{result.stderr}").is_equal_to(1)
+        imported = pathlib.Path((tmp_path / "plugin.txt").read_text(encoding="utf-8")).resolve()
+        assert_that(imported).described_as("the plugin the child ran").is_equal_to(
+            pathlib.Path(pytest_plugin.__file__).resolve()
+        )
+        heard = [json.loads(line) for line in (tmp_path / "heard.jsonl").read_text(encoding="utf-8").splitlines()]
+        return result, {name: (outcome, pair) for name, outcome, pair in heard}
+
+    def test_a_listener_hears_the_pair_before_the_report_of_that_test_is_logged(self, tmp_path):
+        result, heard = self._run(tmp_path)
+        actual = {"items": [{"id": n, "city": "Oslo"} for n in range(3)]}
+        expected = {"items": [{"id": n, "city": "Oslo" if n != 1 else "Paris"} for n in range(3)]}
+        assert_that(heard).is_equal_to(
+            {
+                "test_plain": ("failed", ["==", actual, expected]),
+                "test_under_an_option": ("failed", None),
+                "test_membership": ("failed", None),
+                "test_passing": ("passed", None),
+            }
+        )
+        # the failure is still this library's own, with what the plugin hangs on it
+        assert_that(result.stdout).contains("assertpy2.AssertionFailure: Expected <").contains("Structured Diff")
+
+    def test_turned_off_in_the_ini_nothing_is_heard(self, tmp_path):
+        _result, heard = self._run(tmp_path, "assertpy2_comparison = off")
+        assert_that({pair for _outcome, pair in heard.values()}).is_equal_to({None})

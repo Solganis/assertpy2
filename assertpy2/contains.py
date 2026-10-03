@@ -352,6 +352,10 @@ class ContainsMixin(_MixinBase):
             AssertionError: if val does **not** contain the item or items
             TypeError: if val is not a container or iterable
 
+        Note:
+            Where one item is not found, the failure says what is nearest to it: the closest row among the elements,
+            and on a line under the message why it is not there, where one fact about it says so.
+
         Tip:
             Use the [`contains_key()`][assertpy2.dict.DictMixin.contains_key] alias when working with
             *dict-like* objects to be self-documenting.
@@ -532,6 +536,11 @@ class ContainsMixin(_MixinBase):
 
         Raises:
             AssertionError: if val contains anything **not** item or items
+
+        Note:
+            Where one item is not found, the failure says what is nearest to it: the closest row among the
+            elements nobody asked for, and on a line under the message why it is not there, where one fact about
+            it says so.
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")
@@ -941,6 +950,10 @@ class ContainsMixin(_MixinBase):
 
         Raises:
             AssertionError: if val is **not** in the given items
+
+        Note:
+            The failure says what is nearest to val: the closest row among the given items, and on a line under
+            the message why val is in none of them, where one fact about it says so.
         """
         if len(items) == 0:
             raise ValueError("one or more args must be given")

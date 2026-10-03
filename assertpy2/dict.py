@@ -162,6 +162,10 @@ class DictMixin(_MixinBase):
 
         Raises:
             AssertionError: if val does **not** contain the entry or entries
+
+        Note:
+            Where one entry is not found, the failure says what its key holds, or that the key is not there, and
+            on a line under the message why the value held is not the one expected, where one fact says so.
         """
         self._require_dict_like(self.val, check_values=False)
         entries = list(args) + [{key: value} for key, value in kwargs.items()]

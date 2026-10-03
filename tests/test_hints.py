@@ -15,6 +15,7 @@ import enum
 import pytest
 
 from assertpy2 import assert_that
+from assertpy2._engine._introspection import definition_of
 from assertpy2._engine._path import _ROOT
 from assertpy2._hints import _UNSEEN_FACT, _explains, diagnose, identity_candidate
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
@@ -717,19 +718,29 @@ class TestEqualityDecidedByIdentity:
 
         assert_that(_message(Guarded(1), Guarded(1))).contains("to be equal to")
 
-    def test_a_class_tree_that_names_no_equality_at_all_is_not_read_as_identity(self):
+    def test_a_metaclass_that_spells_a_tree_or_a_namespace_of_its_own_is_not_believed(self):
         class Meta(type):
             @property
             def __mro__(cls):
                 return ()
 
+            @property
+            def __dict__(cls):
+                return {"__eq__": lambda self, other: True}
+
         class Blank(metaclass=Meta):
             def __init__(self, value):
                 self.value = value
 
-        assert_that(identity_candidate(Blank(1), Blank(1))).is_false()
+        assert_that((Blank.__mro__, "__eq__" in Blank.__dict__)).is_equal_to(((), True))
+        assert_that(Blank(1) == Blank(1)).is_false()
+        assert_that(identity_candidate(Blank(1), Blank(1))).is_true()
+        assert_that(definition_of(Blank, "__eq__")).is_equal_to((object, object.__dict__["__eq__"]))
 
-    def test_a_metaclass_descriptor_raising_on_the_equality_lookup_is_survived(self):
+    def test_a_name_no_class_of_the_tree_writes_has_no_definition(self):
+        assert_that(definition_of(_NoEq, "no_such_name")).is_none()
+
+    def test_an_equality_of_the_metaclass_is_not_the_one_two_instances_are_compared_by(self):
         class Raising:
             def __get__(self, instance, owner=None):
                 raise RuntimeError("no lookups here")
@@ -744,7 +755,133 @@ class TestEqualityDecidedByIdentity:
             def __init__(self, value):
                 self.value = value
 
-        assert_that(identity_candidate(Guarded(1), Guarded(1))).is_false()
+        assert_that(Guarded(1) == Guarded(1)).is_false()
+        assert_that(identity_candidate(Guarded(1), Guarded(1))).is_true()
+
+    def test_asking_runs_no_descriptor_the_class_holds_under_its_equality(self):
+        # read through the class, this one installed an equality that failed a pair its own ``==`` held equal
+        class Equality:
+            asked_of_the_class = 0
+
+            def __get__(self, instance, owner):
+                if instance is None:
+                    Equality.asked_of_the_class += 1
+                    owner.__eq__ = lambda self, other: False
+                    return object.__eq__
+                return lambda other: True
+
+        class Token:
+            __eq__ = Equality()
+            __hash__ = object.__hash__
+
+        assert_that(identity_candidate(Token(), Token())).is_false()
+        assert_that(Equality.asked_of_the_class).is_equal_to(0)
+        assert_that(Token() == Token()).is_true()
+        assert_that(Token()).is_equal_to(Token())
+        assert_that([Token()]).is_equal_to([Token()])
+
+    def test_the_tree_is_read_in_the_order_it_has_and_not_from_the_class_down(self):
+        class Other:
+            def __eq__(self, other):
+                return type(other) is type(self) and vars(other) == vars(self)
+
+            __hash__ = None
+
+        class First(type):
+            def mro(cls):
+                return [Other, cls, object] if cls.__name__ == "Behind" else type.mro(cls)
+
+        class Behind(metaclass=First):
+            # what the class writes itself is not what ``==`` runs: the class ahead of it in the tree answers
+            __eq__ = object.__eq__
+            __hash__ = None
+
+            def __init__(self, held):
+                self.held = held
+
+        assert_that(Behind(1) == Behind(1)).is_true()
+        assert_that(identity_candidate(Behind(1), Behind(1))).is_false()
+        assert_that(_hint(Behind(1), Behind(2))).is_none()
+
+    def test_a_tree_in_which_no_class_writes_an_equality_is_no_claim_of_identity(self):
+        class Later(type):
+            short = False
+
+            def mro(cls):
+                return [cls] if Later.short else type.mro(cls)
+
+        class Base:
+            pass
+
+        class Under(Base, metaclass=Later):
+            pass
+
+        one, other = Under(), Under()
+        Later.short = True
+        Under.__bases__ = (Base,)
+        assert_that(type.__dict__["__mro__"].__get__(Under)).is_equal_to((Under,))
+        assert_that(identity_candidate(one, other)).is_false()
+
+    def test_a_namespace_keyed_by_more_than_plain_text_gets_no_claim(self):
+        # a key of a class of its own answers the lookup of a name, and may answer the next lookup otherwise
+        class Key(str):
+            silent_once = raising_once = False
+
+            def __hash__(self):
+                return hash(str(self))
+
+            def __eq__(self, other):
+                if Key.raising_once:
+                    Key.raising_once = False
+                    raise RuntimeError("no lookups here")
+                if Key.silent_once:
+                    Key.silent_once = False
+                    return False
+                return str.__eq__(self, other)
+
+        def by_what_is_held(self, other):
+            return type(other) is type(self) and vars(other) == vars(self)
+
+        keyed = type("Keyed", (), {Key("__eq__"): by_what_is_held, "__hash__": None})
+        one, same, other = keyed(), keyed(), keyed()
+        other.held = 1
+        assert_that(one == same).is_true()
+
+        Key.silent_once = True
+        assert_that(identity_candidate(one, same)).is_false()
+        assert_that(Key.silent_once).is_false()
+        Key.silent_once = True
+        assert_that(_hint(one, other)).is_none()
+        Key.silent_once = True
+        assert_that(one).is_equal_to(same)
+
+        Key.raising_once = True
+        assert_that(identity_candidate(one, same)).is_false()
+        assert_that(Key.raising_once).is_false()
+
+    def test_an_equality_written_as_none_is_an_equality_written(self):
+        class Refusing:
+            __eq__ = None
+
+        class Under(Refusing):
+            pass
+
+        assert_that(identity_candidate(Refusing(), Refusing())).is_false()
+        assert_that(identity_candidate(Under(), Under())).is_false()
+
+    def test_an_equality_is_found_however_far_up_the_tree_it_is_written(self):
+        @dataclasses.dataclass
+        class Row:
+            id: int
+
+        below = Row
+        plain = _NoEq
+        for _ in range(4):
+            below, plain = type("Below", (below,), {}), type("Plain", (plain,), {})
+
+        assert_that(identity_candidate(below(1), below(1))).is_false()
+        assert_that(identity_candidate(plain("ada", "london"), plain("ada", "london"))).is_true()
+        assert_that(_message(plain("ada", "london"), plain("ada", "london"))).contains("compare with object's __eq__")
 
 
 class _SameText:
