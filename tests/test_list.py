@@ -608,6 +608,7 @@ class TestContainsExactlyInAnyOrder:
             assert_that([1, 2, 2]).contains_exactly_in_any_order(1, 2)
         assert_that(str(exc_info.value)).is_equal_to(
             "Expected <[1, 2, 2]> to contain exactly <1, 2> in any order, but did not."
+            " <2> is held 2 times and was asked for 1 time."
         )
 
     def test_missing_duplicate_failure(self):

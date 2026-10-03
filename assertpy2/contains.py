@@ -267,19 +267,52 @@ def _both_ways(extra: Sequence[object], missing: Sequence[object], values: objec
     named as that, and the line among every element.  Or, where it lacks none, of the one element nobody asked
     for, against the items given.
 
-    Nothing where the item is held after all, or the element was asked for: counted, a collection can be one
-    short of an item it has, and "not found" would be false of it.
+    Counted, a collection can be short of an item it has, or hold one it was asked for once too often: "not
+    found" and "not expected" would be false of it, so there the two counts are said instead (`_counted`).
     """
     held = cast("Iterable[object]", values)
     if missing:
-        if len(missing) == 1 and _is_held(missing[0], held):
-            return ""
+        short = _the_one(missing)
+        if short is not _SEVERAL and _is_held(short, held):
+            return _counted(short, held, items, short=True)
         if extra:
             return _one_not_found(missing, extra, noun="unexpected element", searched=held)
         return _one_not_found(missing, held)
-    if len(extra) == 1 and _is_held(extra[0], items):
-        return ""
+    over = _the_one(extra)
+    if over is not _SEVERAL and _is_held(over, items):
+        return _counted(over, held, items, short=False)
     return _one_not_found(extra, items, noun=None, roles=Roles("the element not expected", "a given item"))
+
+
+_SEVERAL: Final = object()
+
+
+def _the_one(entries: Sequence[object]) -> object:
+    """The item every one of *entries* is, or `_SEVERAL` where they are of more than one, or there are none."""
+    try:
+        if entries and all(entry is entries[0] or equals(entry, entries[0]) for entry in entries[1:]):
+            return entries[0]
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return _SEVERAL
+    return _SEVERAL
+
+
+def _counted(item: object, values: Iterable[object], items: Sequence[object], *, short: bool) -> str:
+    """How often a collection holds *item* against how often it was asked for, where it is *short* of it or over.
+
+    Counted again for the sentence, past the verdict and past every printing, that of the item included, all
+    of which run code of the values: said only where the two counts still show what the verdict found, held
+    fewer times than asked for or more.
+    """
+    shown = _capped_repr(item)
+    try:
+        held, asked = occurrences(list(values), [item])[0], occurrences(list(items), [item])[0]
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return ""
+    if not (0 < held < asked if short else held > asked > 0):
+        return ""
+    times = [f"{count} time{'' if count == 1 else 's'}" for count in (held, asked)]
+    return f" <{shown}> is held {times[0]} and was asked for {times[1]}."
 
 
 def _value_not_found(mapping: Any, missing: Sequence[object]) -> str:

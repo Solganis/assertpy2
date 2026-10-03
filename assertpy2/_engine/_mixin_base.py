@@ -65,6 +65,15 @@ class _MixinBase:
     _run_pivots: list[Any] | None = None
     """The pivots made during the verdict run this builder holds, released by `_release_pivots()` when it ends."""
 
+    _compared: tuple[object, object] | None = None
+    """The two values a failed equality held against each other, set just ahead of `error()`, which takes it.
+
+    The pair ``==`` alone decided: the value and the operand where nothing was left out, and the copies
+    without the keys left out under ``ignore=`` or ``include=``.  Not set where something else decided, under
+    ``tolerance=``, ``comparators=``, ``strict_types=`` or ``ignore_null=``.  Kept on the failure for a listener
+    that shows two values side by side.
+    """
+
     _compared_nothing = False
     """Whether a comparison under ``ignore``/``include`` passed with no key left to compare.
 

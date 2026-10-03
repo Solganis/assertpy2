@@ -8,6 +8,7 @@ import pathlib
 import pickle
 import subprocess
 import sys
+import types
 import warnings
 import xml.etree.ElementTree as ET
 from types import SimpleNamespace
@@ -17,14 +18,25 @@ import pytest
 from _pytest._code.code import TerminalRepr
 from _pytest._io import TerminalWriter
 from _pytest.config.argparsing import Parser
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
-from assertpy2 import _clustering, assert_that, async_assertions, match, soft_assertions
+from assertpy2 import (
+    _clustering,
+    add_extension,
+    assert_that,
+    async_assertions,
+    match,
+    remove_extension,
+    soft_assertions,
+)
 from assertpy2 import _satisfies as _satisfies_module
 from assertpy2 import errors as errors_module
-from assertpy2 import outcome as outcome_module
 from assertpy2 import pytest_plugin as pytest_plugin
 from assertpy2 import snapshot as snapshot_module
 from assertpy2._clustering import Observation, Signature
+from assertpy2._engine._diff import _sub_diff_entries
+from assertpy2._engine._path import _ROOT
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult, PollSample, PollTrace
 from assertpy2.pytest_plugin import (
     _PROFILES,
@@ -2901,6 +2913,10 @@ def _several():
         assert_that([1]).is_equal_to([2])
 
 
+def is_seven(self):
+    return self.is_equal_to(7)
+
+
 def _handed(exc, *, item=None, report=None):
     """What the plugin handed to the comparison hook for *exc*: the calls the hook received."""
     item = _make_item() if item is None else item
@@ -2908,13 +2924,217 @@ def _handed(exc, *, item=None, report=None):
     return item.config.hook.pytest_assertrepr_compare.call_args_list
 
 
+_KEYS = st.sampled_from(["id", "name", "at", "meta"])
+_PAYLOADS = st.dictionaries(
+    _KEYS,
+    st.recursive(
+        st.sampled_from([0, 1, 2, "a", "b", None, 1.5]),
+        lambda inner: st.dictionaries(_KEYS, inner, max_size=3) | st.lists(inner, max_size=3),
+        max_leaves=8,
+    ),
+    max_size=4,
+)
+
+
+@dataclasses.dataclass
+class _Order:
+    id: int
+    city: str
+    seen_at: int = 0
+
+
+class TestAFailedEqualityKeepsWhatItCompared:
+    """A failed equality keeps the two values it held against each other, `AssertionFailure._compared`.
+
+    They are what a text comparison of two values is true of.  Where nothing was left out those are the value
+    and the operand themselves.  Under ``ignore=`` or ``include=`` they are the two copies the diff is of,
+    without the keys left out.  Where the comparison was by a tolerance, a comparator or a type no two texts
+    say what was compared, and nothing is kept.
+    """
+
+    @pytest.mark.parametrize("kind", [dict, types.MappingProxyType], ids=["dict", "mappingproxy"])
+    def test_the_value_and_the_operand_themselves_where_nothing_was_left_out(self, kind):
+        # a mapping that is no dict is read through a copy to be compared: the pair kept is still the caller's own
+        actual, expected = kind({"id": 1, "city": "Oslo"}), kind({"id": 1, "city": "Paris"})
+        compared = _failure_of(lambda: assert_that(actual).is_equal_to(expected))._compared
+        assert_that(compared[0]).is_same_as(actual)
+        assert_that(compared[1]).is_same_as(expected)
+
+    @pytest.mark.parametrize(
+        ("actual", "expected", "options", "compared"),
+        [
+            pytest.param(
+                {"id": 1, "city": "Oslo", "seen_at": 5},
+                {"id": 1, "city": "Paris", "seen_at": 9},
+                {"ignore": "seen_at"},
+                ({"id": 1, "city": "Oslo"}, {"id": 1, "city": "Paris"}),
+                id="a key left out",
+            ),
+            pytest.param(
+                {"id": 1, "city": "Oslo", "seen_at": 5},
+                {"id": 2, "city": "Paris", "seen_at": 9},
+                {"include": "city"},
+                ({"city": "Oslo"}, {"city": "Paris"}),
+                id="one key looked at",
+            ),
+            pytest.param(
+                {"order": {"city": "Oslo", "seen_at": 5}, "n": 1},
+                {"order": {"city": "Paris", "seen_at": 9}, "n": 1},
+                {"ignore": ("order", "seen_at")},
+                ({"order": {"city": "Oslo"}, "n": 1}, {"order": {"city": "Paris"}, "n": 1}),
+                id="a key left out by its path",
+            ),
+            pytest.param(
+                [{"city": "Oslo", "seen_at": 5}],
+                [{"city": "Paris", "seen_at": 9}],
+                {"ignore": "seen_at"},
+                ([{"city": "Oslo"}], [{"city": "Paris"}]),
+                id="down a sequence",
+            ),
+        ],
+    )
+    def test_the_two_copies_without_the_keys_left_out(self, actual, expected, options, compared):
+        failure = _failure_of(lambda: assert_that(actual).is_equal_to(expected, **options))
+        assert_that(failure._compared).is_equal_to(compared)
+        assert_that(failure.actual).is_same_as(actual)
+        # the pair kept is the pair the diff is of
+        again = _sub_diff_entries(*failure._compared, _ROOT, config=None)
+        assert_that([entry.path for entry in again]).is_equal_to([entry.path for entry in failure.diff.entries])
+
+    @settings(deadline=None, max_examples=400, suppress_health_check=[HealthCheck.too_slow])
+    @given(actual=_PAYLOADS, expected=_PAYLOADS, left_out=st.sets(_KEYS, min_size=1, max_size=2))
+    def test_whatever_is_left_out_the_pair_kept_is_the_pair_the_diff_is_of(self, actual, expected, left_out):
+        try:
+            assert_that(actual).is_equal_to(expected, ignore=sorted(left_out))
+        except AssertionFailure as failure:
+            kept, held = failure._compared
+            assert_that(left_out & (set(kept) | set(held))).is_empty()
+            assert_that(kept == held).is_false()
+            again = _sub_diff_entries(kept, held, _ROOT, config=None)
+            assert_that([entry.path for entry in again]).is_equal_to([entry.path for entry in failure.diff.entries])
+
+    @pytest.mark.parametrize(
+        "held",
+        [lambda value: value, lambda value: [value], lambda value: {"a": value}],
+        ids=["at the top", "in a list", "in a dict"],
+    )
+    def test_the_value_kept_is_the_value_compared_whatever_its_code_puts_on_the_builder(self, held):
+        class Replacing:
+            builder = None
+
+            def __eq__(self, other: object) -> bool:
+                Replacing.builder.val = "replaced"
+                return False
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # a class that defines `__eq__` alone is unhashable anyway
+
+            def __repr__(self) -> str:
+                Replacing.builder.val = "replaced"
+                return "replacing"
+
+        actual, expected = held(Replacing()), held(1)
+        Replacing.builder = assert_that(actual)
+        failure = _failure_of(lambda: Replacing.builder.is_equal_to(expected))
+        assert_that(failure._compared[0]).is_same_as(actual)
+        assert_that(failure._compared[1]).is_same_as(expected)
+        assert_that(failure.actual).is_same_as(actual)
+        assert_that(str(failure)).contains("replacing").does_not_contain("replaced")
+
+    def test_a_record_under_a_key_option_is_kept_as_what_was_read_of_it(self):
+        failure = _failure_of(
+            lambda: assert_that(_Order(1, "Oslo", 5)).is_equal_to(_Order(1, "Paris", 9), ignore="seen_at")
+        )
+        assert_that([repr(side) for side in failure._compared]).is_equal_to(
+            ["_Order(id=1, city='Oslo')", "_Order(id=1, city='Paris')"]
+        )
+
+    @pytest.mark.parametrize(
+        "ask",
+        [
+            pytest.param(lambda: assert_that([1.0]).is_equal_to([2.0], tolerance=0.1), id="tolerance="),
+            pytest.param(lambda: assert_that([1]).is_equal_to([1.0], strict_types=True), id="strict_types="),
+            pytest.param(
+                lambda: assert_that([1]).is_equal_to([2], comparators={int: lambda one, other: False}),
+                id="comparators=",
+            ),
+            pytest.param(lambda: assert_that({"a": None}).is_equal_to({"a": 1}, ignore_null=True), id="ignore_null="),
+            pytest.param(
+                lambda: assert_that({"a": 1.0, "at": 1}).is_equal_to({"a": 2.0, "at": 2}, ignore="at", tolerance=0.1),
+                id="a key left out beside a tolerance",
+            ),
+            pytest.param(
+                lambda: assert_that({"a": 1}).is_equal_to({"a": True}, include="a", strict_types=True),
+                id="a key looked at beside strict types",
+            ),
+            pytest.param(lambda: assert_that(1).not_.is_equal_to(1), id="a negation"),
+            pytest.param(lambda: assert_that(1).is_not_equal_to(1), id="is_not_equal_to"),
+            pytest.param(lambda: assert_that([1]).is_same_as([1]), id="is_same_as"),
+            pytest.param(lambda: assert_that([1]).contains(2), id="contains"),
+            pytest.param(lambda: assert_that([1]).is_in([2], [3]), id="is_in"),
+            pytest.param(lambda: assert_that({"id": 1}).has_idd(2), id="has_<name> on a name that is not there"),
+            pytest.param(lambda: assert_that([1]).is_length(2), id="is_length"),
+            pytest.param(lambda: assert_that({"a": 1}).matches_structure({"a": 2}), id="matches_structure"),
+            pytest.param(lambda: assert_that(1).satisfies(match.equal_to(2)), id="a matcher"),
+            pytest.param(_several, id="a block of several"),
+        ],
+    )
+    def test_nothing_is_kept_where_no_two_texts_say_what_was_compared(self, ask):
+        assert_that(_failure_of(ask)._compared).is_none()
+
+    def test_the_value_a_dynamic_assertion_read_and_its_operand(self):
+        failure = _failure_of(lambda: assert_that(_Order(7, "Oslo")).has_id("7"))
+        assert_that(failure._compared).is_equal_to((7, "7"))
+
+    def test_the_last_value_of_a_poll_that_ran_out_of_time(self):
+        failure = _failure_of(
+            lambda: assert_that(lambda: [1]).eventually_sync().within(0.02).every(0.01).is_equal_to([2])
+        )
+        assert_that(failure._compared).is_equal_to(([1], [2]))
+
+    def test_a_timeout_carries_the_pair_of_a_failure_of_this_library_and_of_no_other(self):
+        class CarryingError(AssertionError):
+            pass
+
+        class GuardedError(AssertionFailure):
+            @property
+            def _compared(self):
+                raise RuntimeError("no pair here")
+
+            @_compared.setter
+            def _compared(self, pair):
+                pass
+
+        carried = CarryingError("another library's")
+        carried._compared = ([1], [2])
+        assert_that(async_assertions._timed_out("out of time", None, carried)._compared).is_none()
+        timed_out = async_assertions._timed_out("out of time", None, GuardedError("guarded"))
+        assert_that((str(timed_out), timed_out._compared)).is_equal_to(("out of time", None))
+        kept = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
+        assert_that(async_assertions._timed_out("out of time", None, kept)._compared).is_same_as(kept._compared)
+
+    def test_an_equality_asked_by_an_extension_keeps_its_pair(self):
+        add_extension(is_seven)
+        try:
+            failure = _failure_of(lambda: assert_that(8).is_seven())
+        finally:
+            remove_extension(is_seven)
+        assert_that(failure.requirement.operation).is_equal_to("is_seven")
+        assert_that(failure._compared).is_equal_to((8, 7))
+
+    def test_a_pair_does_not_outlive_the_failure_it_was_kept_for(self):
+        # collected and not raised, the failure takes the pair with it all the same
+        with pytest.raises(AssertionError), soft_assertions():
+            chain = assert_that([1]).is_equal_to([2])
+        assert_that(chain._compared).is_none()
+        assert_that(_failure_of(lambda: chain.contains(3))._compared).is_none()
+
+
 class TestAFailedEqualityIsHandedToComparisonListeners:
     """`pytest_assertrepr_compare` is the hook pytest calls for a failed ``assert left == right``.
 
-    A test runner that opens a comparison window listens to it, PyCharm's among them.  A failed
-    ``is_equal_to()`` is that comparison written another way, so its two values are handed to the same
-    listeners: whole, the value on the left.  Nothing else is, because a text comparison of two whole values
-    says what the assertion found only there.
+    A test runner that opens a comparison window listens to it, PyCharm's among them.  A failed equality is
+    that comparison written another way, so the pair it kept is handed to the same listeners, the value on the
+    left.  Nothing else is.
     """
 
     def test_the_value_and_the_operand_whole_and_in_that_order(self):
@@ -2943,43 +3163,33 @@ class TestAFailedEqualityIsHandedToComparisonListeners:
                 lambda: assert_that(lambda: [1]).eventually_sync().within(0.02).every(0.01).is_equal_to([2]),
                 id="the last value of a poll that ran out of time",
             ),
+            pytest.param(
+                lambda: assert_that({"a": 1, "at": 5}).is_equal_to({"a": 2, "at": 9}, ignore="at"), id="ignore="
+            ),
+            pytest.param(
+                lambda: assert_that({"a": 1, "at": 5}).is_equal_to({"a": 2, "at": 9}, include="a"), id="include="
+            ),
+            pytest.param(lambda: assert_that({"id": 1}).has_id(2), id="has_<name>"),
         ],
     )
-    def test_every_plain_equality_is_handed(self, ask):
+    def test_the_pair_a_failure_kept_is_the_pair_handed(self, ask):
         failure = _failure_of(ask)
         calls = _handed(failure)
         assert_that(calls).is_length(1)
-        assert_that((calls[0].kwargs["left"], calls[0].kwargs["right"])).is_equal_to((failure.actual, failure.expected))
+        assert_that(calls[0].kwargs["left"]).is_same_as(failure._compared[0])
+        assert_that(calls[0].kwargs["right"]).is_same_as(failure._compared[1])
 
     @pytest.mark.parametrize(
         "ask",
         [
-            pytest.param(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}, ignore="b"), id="ignore="),
-            pytest.param(lambda: assert_that({"a": 1}).is_equal_to({"a": 2}, include="a"), id="include="),
             pytest.param(lambda: assert_that([1.0]).is_equal_to([2.0], tolerance=0.1), id="tolerance="),
             pytest.param(lambda: assert_that([1]).is_equal_to([1.0], strict_types=True), id="strict_types="),
-            pytest.param(
-                lambda: assert_that([1]).is_equal_to([2], comparators={int: lambda one, other: False}),
-                id="comparators=",
-            ),
-            pytest.param(lambda: assert_that({"a": None}).is_equal_to({"a": 1}, ignore_null=True), id="ignore_null="),
-            pytest.param(
-                lambda: assert_that({"a": 1.0}).is_equal_to({"a": 2.0}, ignore="b", tolerance=0.1),
-                id="two options",
-            ),
             pytest.param(lambda: assert_that(1).not_.is_equal_to(1), id="a negation"),
-            pytest.param(lambda: assert_that(1).is_not_equal_to(1), id="is_not_equal_to"),
-            pytest.param(lambda: assert_that([1]).is_same_as([1]), id="is_same_as"),
             pytest.param(lambda: assert_that([1]).contains(2), id="contains"),
-            pytest.param(lambda: assert_that([1]).is_in([2], [3]), id="is_in"),
-            pytest.param(lambda: assert_that({"id": 1}).has_id(2), id="has_<name>"),
-            pytest.param(lambda: assert_that([1]).is_length(2), id="is_length"),
-            pytest.param(lambda: assert_that({"a": 1}).matches_structure({"a": 2}), id="matches_structure"),
-            pytest.param(lambda: assert_that(1).satisfies(match.equal_to(2)), id="a matcher"),
             pytest.param(_several, id="a block of several"),
         ],
     )
-    def test_nothing_else_is(self, ask):
+    def test_a_failure_that_kept_no_pair_hands_nothing(self, ask):
         assert_that(_handed(_failure_of(ask))).is_empty()
 
     @pytest.mark.parametrize(
@@ -2991,64 +3201,36 @@ class TestAFailedEqualityIsHandedToComparisonListeners:
         ],
         ids=["a failure built by hand", "an AssertionError of another library", "another exception"],
     )
-    def test_a_failure_with_no_record_of_what_was_asked_is_not_handed(self, exc):
+    def test_a_failure_no_assertion_of_this_library_raised_is_not_handed(self, exc):
         assert_that(_handed(exc)).is_empty()
 
-    def test_a_failure_that_did_not_name_its_value_is_not_handed(self):
+    @pytest.mark.parametrize("kept", [[1, 2], (1,), (1, 2, 3), "12", {"left": 1, "right": 2}])
+    def test_anything_under_the_name_but_a_pair_is_not_handed(self, kept):
         failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
-        recorded = failure._outcome
-        for unnamed in ({"actual_provided": False}, {"expected": outcome_module.MISSING}):
-            failure._outcome = dataclasses.replace(recorded, **unnamed)
-            assert_that(_handed(failure)).is_empty()
-        failure._outcome = recorded
-        assert_that(_handed(failure)).is_length(1)
+        failure._compared = kept
+        assert_that(_handed(failure)).is_empty()
 
-    def test_an_exception_that_cannot_be_asked_for_its_record_costs_nothing(self):
+    def test_an_exception_that_cannot_be_asked_for_its_pair_costs_nothing(self):
         class GuardedError(AssertionFailure):
             @property
-            def _outcome(self):
-                raise RuntimeError("no record here")
+            def _compared(self):
+                raise RuntimeError("no pair here")
 
-            @_outcome.setter
-            def _outcome(self, record):
+            @_compared.setter
+            def _compared(self, pair):
                 pass
 
         report = _make_report()
         assert_that(_handed(GuardedError("guarded"), report=report)).is_empty()
         assert_that(report.failed).is_true()
 
-    def test_a_record_this_library_did_not_write_is_not_read(self):
-        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
-        written = failure._outcome
-        failure._outcome = SimpleNamespace(
-            passed=False,
-            requirement=written.requirement,
-            actual_provided=True,
-            has_expected=True,
-            actual=[1],
-            expected=[2],
-        )
-        assert_that(_handed(failure)).is_empty()
-
-    def test_a_record_of_an_assertion_that_held_is_no_failed_comparison(self):
-        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
-        failure._outcome = dataclasses.replace(failure._outcome, passed=True)
-        assert_that(_handed(failure)).is_empty()
-
-    def test_a_record_on_an_exception_of_another_class_is_not_read(self):
+    def test_a_pair_on_an_exception_of_another_class_is_not_read(self):
         class CarryingError(AssertionError):
             pass
 
         carried = CarryingError("another library's")
-        carried._outcome = _failure_of(lambda: assert_that([1]).is_equal_to([2]))._outcome
+        carried._compared = ([1], [2])
         assert_that(_handed(carried)).is_empty()
-
-    def test_a_negation_is_not_handed_whatever_it_named(self):
-        # under `not_` the operand is what the value must not be, so the two are no pair to hold against each other
-        failure = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
-        asked = dataclasses.replace(failure._outcome.requirement, negated=True)
-        failure._outcome = dataclasses.replace(failure._outcome, requirement=asked)
-        assert_that(_handed(failure)).is_empty()
 
     def test_a_group_of_two_failures_hands_none_and_a_group_of_one_hands_it(self):
         one = _failure_of(lambda: assert_that([1]).is_equal_to([2]))
@@ -3093,12 +3275,16 @@ class TestTheHandoffInARealRun:
 
     _SUITE = (
         "from assertpy2 import assert_that\n\n\n"
-        "ACTUAL = {'items': [{'id': n, 'city': 'Oslo'} for n in range(3)]}\n"
-        "EXPECTED = {'items': [{'id': n, 'city': 'Oslo' if n != 1 else 'Paris'} for n in range(3)]}\n\n\n"
+        "ACTUAL = {'page': 1, 'items': [{'id': n, 'city': 'Oslo'} for n in range(3)]}\n"
+        "EXPECTED = {'page': 2, 'items': [{'id': n, 'city': 'Oslo' if n != 1 else 'Paris'} for n in range(3)]}\n\n\n"
         "def test_plain():\n"
         "    assert_that(ACTUAL).is_equal_to(EXPECTED)\n\n\n"
-        "def test_under_an_option():\n"
+        "def test_a_key_left_out():\n"
         "    assert_that(ACTUAL).is_equal_to(EXPECTED, ignore='page')\n\n\n"
+        "def test_a_name_read():\n"
+        "    assert_that(ACTUAL).has_page(2)\n\n\n"
+        "def test_a_tolerance():\n"
+        "    assert_that(ACTUAL).is_equal_to(EXPECTED, tolerance=0.5)\n\n\n"
         "def test_membership():\n"
         "    assert_that(ACTUAL['items']).contains({'id': 9})\n\n\n"
         "def test_passing():\n"
@@ -3151,8 +3337,10 @@ class TestTheHandoffInARealRun:
         expected = {"items": [{"id": n, "city": "Oslo" if n != 1 else "Paris"} for n in range(3)]}
         assert_that(heard).is_equal_to(
             {
-                "test_plain": ("failed", ["==", actual, expected]),
-                "test_under_an_option": ("failed", None),
+                "test_plain": ("failed", ["==", {"page": 1, **actual}, {"page": 2, **expected}]),
+                "test_a_key_left_out": ("failed", ["==", actual, expected]),
+                "test_a_name_read": ("failed", ["==", 1, 2]),
+                "test_a_tolerance": ("failed", None),
                 "test_membership": ("failed", None),
                 "test_passing": ("passed", None),
             }

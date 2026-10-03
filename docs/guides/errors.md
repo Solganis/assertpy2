@@ -450,6 +450,11 @@ All of them but the two that walk in order, the keys and the entry also name the
 differs, where a row shares a key with the item: for dicts and for dataclasses, attrs instances, named
 tuples and models. Both are said of one item not found. Several would each need their own.
 
+`contains_exactly()` and `contains_exactly_in_any_order()` count. Where everything missing is one item
+the value does hold, the failure says the two counts of that item instead:
+`<'7'> is held 1 time and was asked for 2 times.` With nothing missing, where everything left over is
+one item that was asked for, it says the two counts of that one.
+
 ```python
 import json
 
@@ -500,8 +505,8 @@ An [`eventually()`](testing.md#async-assertions) timeout attaches its convergenc
 
 pytest calls the hook `pytest_assertrepr_compare` for a failed `assert left == right`, and a test
 runner that opens a two-pane comparison listens to it. A failed `is_equal_to()` is the same comparison,
-so the plugin hands its two values to those listeners: whole, the value under test as `left` and the
-operand as `right`.
+so the plugin hands the two values it compared to those listeners, the value under test as `left` and
+the operand as `right`.
 
 PyCharm's runner is one of them. Run from PyCharm, a failed `assert_that(actual).is_equal_to(expected)`
 gets the "Click to see difference" link a plain `assert actual == expected` gets. The window it opens
@@ -509,12 +514,20 @@ shows the operand under Expected and the value under test under Actual, both who
 PyCharm 2026.3 on a response of forty nested rows. As for a plain `assert`, PyCharm also prints the two
 values above the link.
 
-Only an `is_equal_to()` given no option is handed over. Under `ignore=`, `include=`, `tolerance=`,
-`comparators=`, `strict_types=` or `ignore_null=` a text comparison of the two whole values would show
-differences the assertion was told to leave out, or none where it found one. A negation, a membership
-assertion, a `has_<name>()` and a `soft_assertions()` block are not handed over either, nor is a group
-of several failures. The failure is what it was: its message, `failure.diff` and the report sections do
-not change.
+What is handed over is the pair the assertion compared. For `is_equal_to()` that is the value and the
+operand. Under `ignore=` or `include=` it is the two copies without the keys left out, so a key the
+assertion passed over is in neither pane. A failed `has_<name>()` hands over the value it read and the
+operand.
+
+The window compares two texts, as it does for a plain `assert`. Two values `==` holds equal that print
+differently, `1` and `True`, show there as a difference, and two that differ and print the same, two
+NaNs, show as none. The failure's own diff is the one built from the comparison.
+
+Nothing is handed over under `tolerance=`, `comparators=`, `strict_types=` or `ignore_null=`: there a
+text comparison of two values would show a difference the assertion let pass, or none where it found
+one. A negation, a membership assertion and a `soft_assertions()` block are not handed over either, nor
+is a group of several failures. The failure is what it was: its message, `failure.diff` and the report
+sections do not change.
 
 The hook is called while the report of the test is being made, before it is logged. A listener that
 reads the pair when the report is logged hears it, which is how PyCharm's runner reads. Under
@@ -691,7 +704,7 @@ Failure clustering is not escalated and cannot be: it reads a run that already w
 [tool.pytest.ini_options]
 assertpy2_diff = "off"              # disable structured diff sections entirely
 assertpy2_diff_max_entries = "100"  # max entries to show (default 50, 0 = unlimited)
-assertpy2_comparison = "off"        # do not hand a failed is_equal_to() to comparison listeners
+assertpy2_comparison = "off"        # do not hand a failed equality to comparison listeners
 assertpy2_poll_report = "off"       # silence the near-timeout poll report (default 0.7)
 assertpy2_failure_clusters = "off"  # stop grouping failures that share one difference (default 3)
 assertpy2_dangling = "on"           # warn about assert_that() statements that assert nothing

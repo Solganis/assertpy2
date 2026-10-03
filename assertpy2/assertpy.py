@@ -1792,11 +1792,14 @@ class AssertionBuilder(
             AssertionBuilder: this instance, to chain the next assertion, whenever the failure was
                 delivered some other way than by raising.
         """
+        # taken ahead of anything that can raise, so a pair never outlives the failure it was set for
+        compared, self._compared = self._compared, None
         failure = self._deliver(
             self._compose(msg, actual=actual, expected=expected, diff=diff, trace=trace, requirement=requirement)
         )
         if failure is None:
             return self
+        failure._compared = compared
         # the raise stays here: a failure's traceback ends at `error`, three frames deep, pinned in test_traceback.py
         if suppress_context:
             raise failure from None
@@ -1880,7 +1883,7 @@ class AssertionBuilder(
             requirement=_what_was_asked(self, requirement),
         )
 
-    def _deliver(self, outcome: AssertionOutcome) -> AssertionError | None:
+    def _deliver(self, outcome: AssertionOutcome) -> AssertionFailure | None:
         """Act on a composed failure according to the builder's mode.
 
         Returns the exception the caller should raise, or ``None`` when the failure was collected or

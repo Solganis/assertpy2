@@ -352,7 +352,22 @@ def _timed_out(message: str, trace: PollTrace | None, last_error: Exception | No
         requirement=getattr(last_error, "requirement", None),
     )
     failure._outcome = getattr(last_error, "_outcome", None)
+    failure._compared = _pair_kept(last_error)
     return failure
+
+
+def _pair_kept(last_error: Exception | None) -> tuple[object, object] | None:
+    """The pair the attempt that kept failing compared, read off a failure of this library's class alone.
+
+    Anything may sit under the name on another exception, and one that raises when read must not cost the
+    timeout it is being read for.
+    """
+    if not isinstance(last_error, AssertionFailure):
+        return None
+    try:
+        return last_error._compared
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return None
 
 
 def _normalize_ignoring(ignoring) -> tuple[type[Exception], ...]:

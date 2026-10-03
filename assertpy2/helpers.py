@@ -503,8 +503,11 @@ class HelpersMixin(_MixinBase):
             kept[key] = value
         return kept
 
-    def _failure_views(self, val, other, ignore, include, config, dict_repr, list_repr) -> tuple[str, list, str, str]:
-        """What a failed comparison shows, by the shape of the pair: the kind of diff, its entries and the two reprs.
+    def _failure_views(
+        self, val, other, ignore, include, config, dict_repr, list_repr
+    ) -> tuple[str, list, str, str, tuple[object, object] | None]:
+        """What a failed comparison shows, by the shape of the pair: the kind of diff, its entries, the two reprs,
+        and under a key option the two copies the diff is of, without the keys left out.
 
         *dict_repr* and *list_repr* are `_dict_err`'s own walks, which render a pair with what matched left out.
         """
@@ -521,7 +524,7 @@ class HelpersMixin(_MixinBase):
                 whole=not filtered,
             )
             entries = _sub_diff_entries(reported_val, reported_other, _ROOT, config=config) or []
-            return "dict", entries, val_repr, other_repr
+            return "dict", entries, val_repr, other_repr, (reported_val, reported_other) if filtered else None
         if filtered and _both_list_like(val, other):
             actual_items, expected_items = cast("list | tuple", val), cast("list | tuple", other)
             reported_val = self._selected_items_only(actual_items, expected_items, ignore, include)
@@ -534,9 +537,9 @@ class HelpersMixin(_MixinBase):
                 # two sequences that shifted apart are paired by alignment in the diff, so in the message too
                 val_repr = _elided_seq_repr(reported_val, reported_other)
                 other_repr = _elided_seq_repr(reported_other, reported_val)
-            return "sequence", entries, val_repr, other_repr
+            return "sequence", entries, val_repr, other_repr, (reported_val, reported_other)
         # the shape said keyed and the value is not, so the richer message is the thing given up here
-        return "scalar", [], _safe_repr(val), _safe_repr(other)
+        return "scalar", [], _safe_repr(val), _safe_repr(other), None
 
     def _selected_items_only(
         self, items: list | tuple, others: list | tuple, ignore: object, include: object
@@ -670,19 +673,19 @@ class HelpersMixin(_MixinBase):
             opener, closer = ("(", ",)" if len(seq) == 1 else ")") if isinstance(seq, tuple) else ("[", "]")
             return _joined_parts(parts, opener=opener, closer=closer)
 
-        kind, diff_entries, val_repr, other_repr = self._failure_views(
+        kind, diff_entries, val_repr, other_repr, copies = self._failure_views(
             val, other, ignore, include, config, _dict_repr, _list_repr
         )
         # the comparison has failed, so where the walk shows nothing under the pair, the pair is the entry
         diff = DiffResult(kind=kind, entries=diff_entries or [_ROOT.leaf_entry(actual=val, expected=other)])
         actual, expected = held or (val, other)
-        self.error(
+        message = (
             f"Expected <{val_repr}> to be equal to <{other_repr}>{self._key_filter_note(ignore, include)}, but was not."
-            f"{_config_note(config)}",
-            actual=actual,
-            expected=expected,
-            diff=diff,
+            f"{_config_note(config)}"
         )
+        # under a compare config `==` did not decide alone: a tolerated leaf differs in the two and held
+        self._compared = None if config is not None else copies or (actual, expected)
+        self.error(message, actual=actual, expected=expected, diff=diff)
 
     @staticmethod
     def _to_comparable_dict(obj):

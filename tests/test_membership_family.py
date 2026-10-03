@@ -21,6 +21,7 @@ import dataclasses
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, match
+from assertpy2 import contains as contains_module
 from assertpy2.assertpy import AssertionBuilder
 
 _ITEM, _ELEMENT = "the item not found", "an element"
@@ -311,28 +312,110 @@ class TestContainsOnly:
         )
 
 
-class TestCountedItIsOneShortOfAnItemItHas:
+class TestCountedItHoldsAnItemTooFewOrTooManyTimes:
     """``contains_exactly`` counts.  One ``"7"`` short of two, the collection still has ``"7"``: "not found" is
-    false of it, and so is "not expected" of one too many."""
+    false of it, and so is "not expected" of one too many.  What is true is the two counts."""
+
+    @pytest.mark.parametrize(
+        ("ask", "said"),
+        [
+            (
+                lambda: assert_that([7, "7"]).contains_exactly(7, "7", "7"),
+                " <'7'> is held 1 time and was asked for 2 times.",
+            ),
+            (
+                lambda: assert_that([7, "7"]).contains_exactly_in_any_order("7", "7", 7),
+                " <'7'> is held 1 time and was asked for 2 times.",
+            ),
+            (
+                lambda: assert_that([7, "7", "7"]).contains_exactly(7, "7"),
+                " <'7'> is held 2 times and was asked for 1 time.",
+            ),
+            (
+                lambda: assert_that([1]).contains_exactly(1, 1, 1),
+                " <1> is held 1 time and was asked for 3 times.",
+            ),
+            (
+                lambda: assert_that([1, 2, 2]).contains_exactly_in_any_order(1, 1, 2),
+                " <1> is held 1 time and was asked for 2 times.",
+            ),
+            (
+                lambda: assert_that([1, 1, 1]).contains_exactly_in_any_order(1),
+                " <1> is held 3 times and was asked for 1 time.",
+            ),
+            (
+                lambda: assert_that([7, "7", 9]).contains_exactly(7, "7", "7"),
+                " <'7'> is held 1 time and was asked for 2 times.",
+            ),
+            (
+                lambda: assert_that([User(1, "ann"), User(1, "bob")]).contains_exactly(
+                    User(1, "ann"), User(1, "bob"), User(1, "bob")
+                ),
+                " <User(id=1, name='bob')> is held 1 time and was asked for 2 times.",
+            ),
+        ],
+    )
+    def test_the_two_counts_are_said(self, ask, said):
+        message = _message(ask)
+        assert_that(message.splitlines()).is_length(1)
+        assert_that(message).ends_with(f"but did not.{said}")
 
     @pytest.mark.parametrize(
         "ask",
         [
-            lambda: assert_that([7, "7"]).contains_exactly(7, "7", "7"),
-            lambda: assert_that([7, "7"]).contains_exactly_in_any_order("7", "7", 7),
-            lambda: assert_that([7, "7", "7"]).contains_exactly(7, "7"),
-            lambda: assert_that([7, "7", "7"]).contains_exactly_in_any_order("7", 7),
-            lambda: assert_that([User(1, "ann"), User(1, "bob")]).contains_exactly(
-                User(1, "ann"), User(1, "bob"), User(1, "bob")
-            ),
+            lambda: assert_that([2]).contains_exactly(1, 1),
+            lambda: assert_that([1, 2]).contains_exactly_in_any_order(1, 2, 3, 4),
+            lambda: assert_that([1, 2, 3, 3]).contains_exactly_in_any_order(1, 1, 2, 2, 3),
+            lambda: assert_that([1, 2, 5, 6]).contains_exactly_in_any_order(1, 2),
+            lambda: assert_that([1, 2, 5, 5]).contains_exactly_in_any_order(1, 2),
         ],
     )
-    def test_nothing_is_said_of_it(self, ask):
-        message = _message(ask)
-        assert_that(message.splitlines()).is_length(1)
-        assert_that(message).ends_with("but did not.")
+    def test_an_item_it_does_not_hold_and_several_items_have_no_counts(self, ask):
+        assert_that(_message(ask)).ends_with("but did not.")
 
-    def test_a_collection_that_cannot_be_searched_again_is_taken_to_hold_it(self):
+    def test_counts_that_no_longer_show_what_was_found_are_not_said(self):
+        # printing runs code of the values, and the sentence is counted past it: here every one is equal by then
+        class Shifting:
+            every_one_equal = False
+
+            def __init__(self, held: int) -> None:
+                self.held = held
+
+            def __eq__(self, other: object) -> bool:
+                return Shifting.every_one_equal or (type(other) is Shifting and other.held == self.held)
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # a class that defines `__eq__` alone is unhashable anyway
+
+            def __repr__(self) -> str:
+                Shifting.every_one_equal = True
+                return f"shifting({self.held})"
+
+        message = _message(
+            lambda: assert_that([Shifting(1), Shifting(2)]).contains_exactly_in_any_order(Shifting(1), Shifting(1))
+        )
+        assert_that(message).ends_with("in any order, but did not.")
+
+    def test_the_item_is_printed_ahead_of_the_counts_said_of_it(self):
+        class Flipping:
+            every_one_equal = False
+
+            def __init__(self, held: int) -> None:
+                self.held = held
+
+            def __eq__(self, other: object) -> bool:
+                return Flipping.every_one_equal or (type(other) is Flipping and other.held == self.held)
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # a class that defines `__eq__` alone is unhashable anyway
+
+            def __repr__(self) -> str:
+                Flipping.every_one_equal = True
+                return f"flipping({self.held})"
+
+        one = Flipping(1)
+        said = contains_module._counted(one, [Flipping(1), Flipping(2)], [one, one], short=True)
+        assert_that(said).is_empty()
+
+    def test_an_item_that_cannot_be_counted_costs_only_the_counts(self):
         class Once:
             asked = 0
 
@@ -349,7 +432,21 @@ class TestCountedItIsOneShortOfAnItemItHas:
 
         message = _message(lambda: assert_that([Once()]).contains_exactly_in_any_order(float("nan")))
         assert_that(message).is_equal_to("Expected <[once]> to contain exactly <nan> in any order, but did not.")
-        assert_that(Once.asked).is_equal_to(2)
+        assert_that(Once.asked).is_greater_than(1)
+
+    def test_entries_that_cannot_be_told_from_each_other_are_taken_for_several(self):
+        class Unequal:
+            def __eq__(self, other: object) -> bool:
+                raise RuntimeError("no equality")
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # as above
+
+            def __repr__(self) -> str:
+                return "unequal"
+
+        with pytest.raises(RuntimeError, match="no equality"):
+            assert_that([1]).contains_exactly(Unequal(), Unequal())
+        assert_that(contains_module._the_one([Unequal(), Unequal()])).is_same_as(contains_module._SEVERAL)
 
 
 class TestAnEntryNotFound:

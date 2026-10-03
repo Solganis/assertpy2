@@ -111,8 +111,9 @@ You get these the moment you switch, without touching any test code:
   terminal, JUnit reports and IDE runners all show, recursive for lists, dicts, dataclasses,
   namedtuples, attrs classes and Pydantic models. Set `assertpy2_diff = "off"` to turn that section off.
 - **The comparison window of an IDE.** PyCharm's runner gave the original's failures its "Click to see
-  difference" link by reading their message. A failed `is_equal_to()` reaches the same runner through
-  the hook pytest calls for a failed `assert left == right`, with both values whole. See
+  difference" link by reading their message. A failed `is_equal_to()` or `has_<name>()` reaches the
+  same runner through the hook pytest calls for a failed `assert left == right`, with the two values it
+  compared. See
   [The comparison window of an IDE](../guides/errors.md#the-comparison-window-of-an-ide).
 - **Failures that say why.** Where one fact explains a failure, a line under the message says it: an id
   the payload holds as text, a NaN, two instances compared by identity. See

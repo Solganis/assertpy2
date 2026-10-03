@@ -213,11 +213,13 @@ class BaseMixin(SatisfiesMixin):
                     expected_repr = _truncated(_elided_text_repr(other, self.val))
                 else:
                     actual_repr, expected_repr = _disambiguated(self.val, other)
+                diff = _build_equality_diff(self.val, other)
+                self._compared = (self.val, other)
                 return self.error(
                     f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
                     actual=self.val,
                     expected=other,
-                    diff=_build_equality_diff(self.val, other),
+                    diff=diff,
                 )
             ignore = include = config = None
         else:
@@ -255,51 +257,54 @@ class BaseMixin(SatisfiesMixin):
 
     def _compare_to(self, other: object, *, ignore: object, include: object, config: _CompareConfig | None) -> Self:
         """The dispatch of `is_equal_to` once its options are parsed, so the caller can scope them."""
-        if config is not None and config.comparators and _resolve_comparator(self.val, config, field=None) is not None:
+        # read once: code of the value can put another on the builder while it is compared and printed
+        val = self.val
+        if config is not None and config.comparators and _resolve_comparator(val, config, field=None) is not None:
             # a comparator owns the root as it owns any node, ahead of strict types and of the key walk
             return self._config_verdict(other, config)
-        if config is not None and config.strict_types and _types_differ(self.val, other):
+        if config is not None and config.strict_types and _types_differ(val, other):
             # the key walk never sees the pair, so an OrderedDict against a dict would pass a strict comparison
-            actual_repr, expected_repr = _disambiguated(self.val, other)
+            actual_repr, expected_repr = _disambiguated(val, other)
             return self.error(
                 f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.{_config_note(config)}",
-                actual=self.val,
+                actual=val,
                 expected=other,
-                diff=_build_equality_diff(self.val, other, config=config),
+                diff=_build_equality_diff(val, other, config=config),
             )
 
-        if mapping_shaped(self.val, check_values=False) and mapping_shaped(other, check_values=False):
-            if self._dict_not_equal(self.val, other, ignore=ignore, include=include, config=config):
-                self._dict_err(self.val, other, ignore=ignore, include=include, config=config)
+        if mapping_shaped(val, check_values=False) and mapping_shaped(other, check_values=False):
+            if self._dict_not_equal(val, other, ignore=ignore, include=include, config=config):
+                self._dict_err(val, other, ignore=ignore, include=include, config=config)
             else:
-                self._note_if_nothing_compared(self.val, other, ignore=ignore, include=include)
+                self._note_if_nothing_compared(val, other, ignore=ignore, include=include)
         elif key_specs_given(ignore) or key_specs_given(include):
-            val_is_namedtuple = is_namedtuple(self.val)
+            val_is_namedtuple = is_namedtuple(val)
             other_is_namedtuple = is_namedtuple(other)
             if (
-                isinstance(self.val, (list, tuple))
+                isinstance(val, (list, tuple))
                 and isinstance(other, (list, tuple))
                 and not val_is_namedtuple
                 and not other_is_namedtuple
             ):
-                self._seq_equal_with_filter(self.val, other, ignore=ignore, include=include, config=config)
+                self._seq_equal_with_filter(val, other, ignore=ignore, include=include, config=config)
             else:
-                self._obj_equal_with_filter(self.val, other, ignore=ignore, include=include, config=config)
+                self._obj_equal_with_filter(val, other, ignore=ignore, include=include, config=config)
         elif config is not None:
             return self._config_verdict(other, config)
         else:
             # the one branch deciding with `==`, asked first since a type may rewrite its own `__eq__` while answering
-            self._equality_comparison = identity_candidate(self.val, other)
-            if not _guarded_equal(self.val, other):
-                if _both_list_like(self.val, other):
-                    actual_repr = _truncated(_elided_seq_repr(self.val, other))
-                    expected_repr = _truncated(_elided_seq_repr(other, self.val))
+            self._equality_comparison = identity_candidate(val, other)
+            if not _guarded_equal(val, other):
+                if _both_list_like(val, other):
+                    actual_repr = _truncated(_elided_seq_repr(val, other))
+                    expected_repr = _truncated(_elided_seq_repr(other, val))
                 else:
-                    actual_repr, expected_repr = _disambiguated(self.val, other)
-                diff = _build_equality_diff(self.val, other)
+                    actual_repr, expected_repr = _disambiguated(val, other)
+                diff = _build_equality_diff(val, other)
+                self._compared = (val, other)
                 return self.error(
                     f"Expected <{actual_repr}> to be equal to <{expected_repr}>, but was not.",
-                    actual=self.val,
+                    actual=val,
                     expected=other,
                     diff=diff,
                 )

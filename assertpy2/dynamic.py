@@ -143,11 +143,13 @@ class DynamicMixin(_MixinBase):
                 actual_text, expected_text = _formatted(actual), _formatted(expected)
                 parted = _parted(actual_text, expected_text, _first_difference(actual_text, expected_text))
                 actual_text, expected_text = _told_apart(*parted, actual, expected)
+                diff = _pair_diff(actual, expected)
+                self._compared = (actual, expected)
                 return self.error(
                     f"Expected <{actual_text}> to be equal to <{expected_text}> on {kind} <{attr_name}>, but was not.",
                     actual=actual,
                     expected=expected,
-                    diff=_pair_diff(actual, expected),
+                    diff=diff,
                     requirement=asked,
                 )
 

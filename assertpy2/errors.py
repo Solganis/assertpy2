@@ -708,6 +708,13 @@ class AssertionFailure(AssertionError):  # noqa: N818  # public exception name; 
         ``soft_assertions()`` block raises when it closes.  The aggregate's message is these rendered
         into a list; this is the same thing before it became a string.
         """
+        self._compared: tuple[object, object] | None = None
+        """The two values a failed equality held against each other, or ``None`` for any other failure.
+
+        The value and the operand, or under ``ignore=`` / ``include=`` the copies without the keys left out:
+        the pair ``==`` alone decided.  Read by the pytest plugin for a listener that shows two values side
+        by side.
+        """
         self._outcome: AssertionOutcome | None = None
         """The record this failure was composed from, set by the delivery half of `error()`.
 
