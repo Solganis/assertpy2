@@ -15,7 +15,9 @@ from ._engine._ordering import (
     require_integer,
 )
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
+from ._hints import Roles
 from ._satisfies import _warn_vacuous
+from .contains import _one_not_found, _pair_why
 from .errors import _capped, _capped_format
 from .matchers import _is_matcher
 
@@ -127,7 +129,8 @@ class CollectionMixin(_MixinBase):
             if missing:
                 return self.error(
                     f"Expected <{_capped(self.val)}> to be subset of <{_capped_format(searched_in)}>, "
-                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
+                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
+                    + _pair_why(missing, read),
                     expected=searched_in,
                 )
             if not entries:
@@ -144,9 +147,11 @@ class CollectionMixin(_MixinBase):
             except TypeError:
                 superset_values = collected
             if missing:
+                roles = Roles("the item missing", "an item of the superset")
                 return self.error(
                     f"Expected <{_capped(self.val)}> to be subset of {self._fmt_items(superset_values)}, "
-                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing.",
+                    f"but {self._fmt_items(missing)} {'was' if len(missing) == 1 else 'were'} missing."
+                    + _one_not_found(missing, collected, noun="item", item_is_actual=True, roles=roles),
                     expected=superset_values,
                 )
             if not walked:

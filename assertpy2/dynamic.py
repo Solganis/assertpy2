@@ -4,11 +4,14 @@ import collections.abc
 import inspect
 from typing import Any
 
+from ._engine._diff import _build_equality_diff, _sub_diff_entries
+from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
-from .errors import _first_difference, _formatted, _parted
+from ._engine._path import _ROOT
+from .errors import DiffResult, _first_difference, _formatted, _parted, _told_apart
 from .http_mixin import response_of
-from .outcome import Requirement
+from .outcome import MISSING, Requirement
 
 __tracebackhide__ = True
 
@@ -22,6 +25,14 @@ def _one_operand(args: tuple[object, ...], kwargs: dict[str, object]) -> dict[st
         return dict(_ONE_OPERAND.bind_partial(*args, **kwargs).arguments)
     except TypeError:
         return {"args": args, "kwargs": kwargs}
+
+
+def _pair_diff(actual: object, expected: object) -> DiffResult:
+    """The diff `is_equal_to` builds for two values found unequal: two mappings by key, any other pair by its kind."""
+    if mapping_shaped(actual, check_values=False) and mapping_shaped(expected, check_values=False):
+        entries = _sub_diff_entries(actual, expected, _ROOT, config=None)
+        return DiffResult(kind="dict", entries=entries or [_ROOT.leaf_entry(actual=actual, expected=expected)])
+    return _build_equality_diff(actual, expected)
 
 
 class DynamicMixin(_MixinBase):
@@ -101,7 +112,8 @@ class DynamicMixin(_MixinBase):
             # named here rather than read off the stack: the operation is the attribute, not this closure
             asked = Requirement(attr, _one_operand(args, kwargs))
             if err_msg:
-                self._unmet(err_msg, requirement=asked)  # ok to raise now that we are inside wrapper
+                # ok to raise now that we are inside wrapper
+                self._unmet(err_msg, expected=asked.parameters.get("other", MISSING), requirement=asked)
                 return self
             else:
                 try:
@@ -129,11 +141,13 @@ class DynamicMixin(_MixinBase):
                     return self
                 kind = "key" if is_dict else "attribute"
                 actual_text, expected_text = _formatted(actual), _formatted(expected)
-                actual_text, expected_text = _parted(
-                    actual_text, expected_text, _first_difference(actual_text, expected_text)
-                )
+                parted = _parted(actual_text, expected_text, _first_difference(actual_text, expected_text))
+                actual_text, expected_text = _told_apart(*parted, actual, expected)
                 return self.error(
                     f"Expected <{actual_text}> to be equal to <{expected_text}> on {kind} <{attr_name}>, but was not.",
+                    actual=actual,
+                    expected=expected,
+                    diff=_pair_diff(actual, expected),
                     requirement=asked,
                 )
 

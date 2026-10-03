@@ -23,7 +23,7 @@ import dataclasses
 import enum
 import json
 from collections import Counter
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, NamedTuple
 
 from ._engine._equality import comparable_fields
 from ._engine._introspection import (
@@ -59,11 +59,6 @@ _ORDER_FACT = "both sides hold the same elements, in a different order"
 _UNSEEN_ORDER_FACT = f"{_ORDER_FACT}, and their repr does not show which is which"
 # exact types whose repr differs wherever their values do, so ``==`` answers for the repr at a fraction of its cost
 _PRINTED_AS_HELD: Final = frozenset({int, str, bytes, bool})
-_NAN_SOUGHT = "the item not found is a NaN, and one NaN is not equal to another"
-_IDENTITY_SOUGHT = (
-    "an element prints the same as the item not found, and their class leaves __eq__ to object,"
-    " which compares by identity"
-)
 # the plain values a payload spells one way and a test another: an id as text, a flag as a word
 _READ_AS_TEXT: Final = frozenset({int, float, str, bool})
 
@@ -358,7 +353,20 @@ def reads_as(one: object, other: object) -> bool:
     return kind is not other_kind and kind in _READ_AS_TEXT and other_kind in _READ_AS_TEXT and str(one) == str(other)
 
 
-def not_found(item: object, searched: Iterable[object]) -> str | None:
+class Roles(NamedTuple):
+    """What the assertion asking calls the item it looked for and a candidate it looked among.
+
+    ``is_in`` looks for the value among the items given, a subset for its own element in the superset.
+    """
+
+    sought: str = "the item not found"
+    held: str = "an element"
+
+
+_OF_AN_ITEM: Final = Roles()
+
+
+def not_found(item: object, searched: Iterable[object], roles: Roles = _OF_AN_ITEM) -> str | None:
     """One line on why *item* was not found in *searched*, where a fact about the item says it, or ``None``.
 
     Said of the item sought and never of the collection: a NaN somewhere in a list does not explain a ``2`` that
@@ -366,25 +374,27 @@ def not_found(item: object, searched: Iterable[object]) -> str | None:
     another plain type.  An element prints the same, is of the item's class, and that class leaves ``==`` to
     `object`.  Each states what is so and leaves the reader to draw the rest.
     """
+    sought, held = roles
     try:
         if nan_operand(item):
-            return _NAN_SOUGHT
+            return f"{sought} is a NaN, and one NaN is not equal to another"
         kind = type(item)
         identity: bool | None = None
         for element in searched:
             if type(element) is not kind:
                 if reads_as(element, item):
-                    held, sought = class_name(type(element)), class_name(kind)
-                    return (
-                        f"an element reads the same as the item not found and is of another type: {held}, not {sought}"
-                    )
+                    types = f"{class_name(type(element))}, not {class_name(kind)}"
+                    return f"{held} reads the same as {sought} and is of another type: {types}"
                 continue
             if identity is None:
                 # a fact about the class, so asked of the first element of it and not of each
                 identity = identity_candidate(item, element)
             # asked again past the two reprs, which are code of the class and may change what it compares by
             if identity and _safe_repr(element) == _safe_repr(item) and identity_candidate(item, element):
-                return _IDENTITY_SOUGHT
+                return (
+                    f"{held} prints the same as {sought}, and their class leaves __eq__ to object,"
+                    " which compares by identity"
+                )
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return None
     return None

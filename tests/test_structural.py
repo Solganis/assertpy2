@@ -4953,3 +4953,25 @@ class TestMatchesStructureAcceptsAnyMapping:
 
     def test_the_matcher_form_declines_a_non_mapping(self):
         assert_that(match.structure({"a": 1}).matches(5)).is_false()
+
+
+class TestALeafThatPrintsTheSame:
+    """An id a payload holds as text read ``expected <7>, but was <7>``."""
+
+    def test_is_told_apart_by_class(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that({"id": 7}).matches_structure({"id": "7"})
+        assert_that(caught.value._message).ends_with("at <id>: expected <7:str>, but was <7:int>.")
+        assert_that(match.structure({"id": 7}).describe_mismatch({"id": "7"})).is_equal_to(
+            "at <id>: expected <7:int>, but was <7:str>"
+        )
+
+    def test_one_that_prints_otherwise_is_printed_as_it_was(self):
+        assert_that(match.structure({"id": 7}).describe_mismatch({"id": 8})).is_equal_to(
+            "at <id>: expected <7>, but was <8>"
+        )
+
+    def test_a_value_where_a_mapping_was_expected_is_printed_as_it_is(self):
+        assert_that(match.structure({"a": {"b": 1}}).describe_mismatch({"a": 5})).is_equal_to(
+            "at <a>: expected a mapping, but was <5>"
+        )

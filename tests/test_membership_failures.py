@@ -18,8 +18,13 @@ import enum
 import pytest
 
 from assertpy2 import AssertionFailure, assert_that, match, soft_assertions
-from assertpy2._hints import _IDENTITY_SOUGHT, _NAN_SOUGHT, not_found, reads_as
+from assertpy2._hints import not_found, reads_as
 
+_NAN_SOUGHT = "the item not found is a NaN, and one NaN is not equal to another"
+_IDENTITY_SOUGHT = (
+    "an element prints the same as the item not found, and their class leaves __eq__ to object,"
+    " which compares by identity"
+)
 _TYPED = "an element reads the same as the item not found and is of another type: "
 
 
@@ -132,7 +137,10 @@ class TestTheItemNotFoundIsExplained:
     def test_a_key_that_reads_the_same_in_another_type(self):
         message = _message(lambda: assert_that({"7": 1}).contains(7))
         assert_that(message.splitlines()).is_equal_to(
-            ["Expected <{'7': 1}> to contain key <7>, but did not.", f"{_TYPED}str, not int"]
+            [
+                "Expected <{'7': 1}> to contain key <7>, but did not.",
+                "a key reads the same as the key not found and is of another type: str, not int",
+            ]
         )
 
     def test_two_plain_values_of_one_type_or_of_no_plain_type_do_not_read_as_each_other(self):

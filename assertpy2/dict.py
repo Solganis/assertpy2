@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, member
 from ._engine._require import argument, refuse
+from .contains import _entry_not_found, _value_not_found
 from .errors import _capped
 
 if TYPE_CHECKING:
@@ -93,7 +94,7 @@ class DictMixin(_MixinBase):
         if missing:
             return self.error(
                 f"Expected <{_capped(self.val)}> to contain values {self._fmt_items(values)},"
-                f" but did not contain {self._fmt_items(missing)}.",
+                f" but did not contain {self._fmt_items(missing)}." + _value_not_found(self.val, missing),
                 expected=values,
             )
         return self
@@ -186,7 +187,7 @@ class DictMixin(_MixinBase):
         if missing:
             return self.error(
                 f"Expected <{_capped(self.val)}> to contain entries {self._fmt_items(entries)},"
-                f" but did not contain {self._fmt_items(missing)}.",
+                f" but did not contain {self._fmt_items(missing)}." + _entry_not_found(self.val, missing),
                 expected=entries,
             )
         return self

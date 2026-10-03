@@ -438,11 +438,17 @@ except AssertionError as failure:
 It is said for three or more differences at one to three places, under whatever line says why. It names
 where and recommends nothing: whether `updated_at` belongs under `ignore=` is your call.
 
-A failed `contains()` is explained the same way. Where a row shares a key with the item, the closest
-one is named with what differs, for dicts and for dataclasses, attrs instances, named tuples and models.
-And where one fact about the item not found accounts for it, a line says so: it is a NaN, an element
-reads the same and is of another plain type, or an element prints the same and their class compares by
-identity.
+A failed `contains()` is explained the same way, and so is every assertion that looks for something.
+Where one fact about the item not found accounts for it, a line says so in the words of the assertion
+that failed: the item is a NaN, a candidate reads the same and is of another plain type, or a candidate
+prints the same and their class compares by identity. That holds for `contains()`, `contains_key()`,
+`contains_only()`, `contains_exactly()`, `contains_exactly_in_any_order()`, `contains_only_once()`,
+`contains_sequence()`, `contains_in_order()`, `is_in()`, `is_subset_of()`, `contains_value()` and
+`contains_entry()`.
+
+All of them but the two that walk in order, the keys and the entry also name the closest row with what
+differs, where a row shares a key with the item: for dicts and for dataclasses, attrs instances, named
+tuples and models. Both are said of one item not found. Several would each need their own.
 
 ```python
 import json
@@ -456,7 +462,17 @@ try:
 except AssertionError as failure:
     print(str(failure).splitlines()[1])
     # an element reads the same as the item not found and is of another type: int, not str
+
+try:
+    assert_that("7").is_in(*payload["ids"])
+except AssertionError as failure:
+    print(str(failure).splitlines()[1])
+    # a given item reads the same as the value and is of another type: int, not str
 ```
+
+A failed `contains_entry()` says what the key holds, or that the key is not there. A failed
+`has_<name>()` fails as `is_equal_to()` on the value it read: the failure carries that value, the
+operand and their diff, and two values that print the same are told apart by class.
 
 A third line appears when the value came from an HTTP response, naming the request it answered:
 

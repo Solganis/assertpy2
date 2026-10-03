@@ -86,7 +86,7 @@ _ASKS_ABOUT_THE_VALUE_ALONE = {
     "is_writable",
 }
 
-# Not assertions: a refused subject, an exhausted poll, a walk reporting its own find, the dynamic hook
+# Not assertions: a refused subject, an exhausted poll, a walk reporting its own find
 _NOT_AN_ASSERTION = {
     "_check_placeholders",
     "_dict_not_equal",
@@ -94,7 +94,6 @@ _NOT_AN_ASSERTION = {
     "_require_existing",
     "_require_file",
     "_require_group",
-    "_wrapper",
     "conforms_to_openapi",
     "matches_contract_snapshot",
 }
@@ -190,6 +189,9 @@ def test_no_excused_name_stands_for_two_different_assertions() -> None:
         # a payload the assertion normalised before measuring against it, and a value it derived
         (lambda: assert_that({"a": 1}).contains_entry(a=2), [{"a": 2}]),
         (lambda: assert_that([1, 2]).has_same_size_as([1]), 1),
+        # the dynamic hook: the operand, on the comparison and on the name the value does not have
+        (lambda: assert_that({"a": 1}).has_a(2), 2),
+        (lambda: assert_that({"a": 1}).has_b(2), 2),
     ],
     ids=lambda value: getattr(value, "__name__", str(value)),
 )

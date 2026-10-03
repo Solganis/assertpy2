@@ -1,4 +1,5 @@
 import collections
+import decimal
 
 import pytest
 
@@ -238,7 +239,7 @@ def test_contains_sequence_tail_prefix_absent_fails_cleanly():
     with pytest.raises(AssertionError) as exc_info:
         assert_that([1, 2, 3]).contains_sequence(3, 9)
     assert_that(str(exc_info.value)).is_equal_to(
-        "Expected <[1, 2, 3]> to contain sequence <3, 9>, but did not. No run started with <3>."
+        "Expected <[1, 2, 3]> to contain sequence <3, 9>, but did not. The longest run that matched was <3>."
     )
 
 
@@ -685,13 +686,55 @@ class TestOrderingFailuresNameTheBreakPoint:
             assert_that([1, 2, 3]).contains_sequence(1, 2, 9)
         assert_that(str(exc_info.value)).contains("The longest run that matched was <1, 2>")
 
-    def test_sequence_with_no_matching_start_says_so_without_overclaiming(self):
-        # 3 is in the list, just never where a two-element run fits: the wording must not call it absent
+    def test_a_run_that_starts_too_late_to_fit_is_a_run_that_matched(self):
+        # 3 is in the list, at a place the two-element run cannot fit: "no run started with <3>" was false of it
         with pytest.raises(AssertionError) as exc_info:
             assert_that([1, 2, 3]).contains_sequence(3, 4)
-        message = str(exc_info.value)
-        assert_that(message).contains("No run started with <3>")
-        assert_that(message).does_not_contain("No element equals")
+        assert_that(str(exc_info.value)).ends_with("but did not. The longest run that matched was <3>.")
+
+    def test_a_value_shorter_than_the_sequence_names_how_far_it_lined_up(self):
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1]).contains_sequence(1, 2)
+        assert_that(str(exc_info.value)).is_equal_to(
+            "Expected <[1]> to contain sequence <1, 2>, but did not. The longest run that matched was <1>."
+        )
+        with pytest.raises(AssertionError) as exc_info:
+            assert_that([1]).contains_sequence(2, 1)
+        assert_that(str(exc_info.value)).ends_with("but did not. No run started with <2>.")
+        assert_that([1, 2]).contains_sequence(1, 2)
+        assert_that([0, 1, 2]).contains_sequence(1, 2)
+
+    def test_a_late_run_is_counted_for_the_message_and_decides_nothing(self):
+        class Raising:
+            def __eq__(self, other: object) -> bool:
+                raise RuntimeError("no equality")
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # a class that defines `__eq__` alone is unhashable anyway
+
+            def __repr__(self) -> str:
+                return "raising"
+
+        class Flip:
+            asked = 0
+
+            def __eq__(self, other: object) -> bool:
+                Flip.asked += 1
+                return Flip.asked > 1
+
+            __hash__ = None  # ty: ignore[invalid-assignment]  # as above
+
+            def __repr__(self) -> str:
+                return "flip"
+
+        # the element past the last start that fits was never compared, and comparing it for the message raised
+        with pytest.raises(AssertionFailure) as exc_info:
+            assert_that([0, Raising()]).contains_sequence(1, 2)
+        assert_that(exc_info.value._message).is_equal_to(
+            "Expected <[0, raising]> to contain sequence <1, 2>, but did not. No run started with <1>."
+        )
+        # the walk that decided is not run again for it: this element answers otherwise the second time
+        with pytest.raises(AssertionFailure):
+            assert_that([Flip(), 2, decimal.Decimal("sNaN")]).contains_sequence(1, 2)
 
     def test_string_sequence_names_the_substring_that_broke_the_chain(self):
         with pytest.raises(AssertionError) as exc_info:

@@ -90,7 +90,7 @@ from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
-from .errors import _capped, _capped_format, _capped_repr, _safe_repr, _type_expression_name
+from .errors import _capped, _capped_format, _capped_repr, _safe_repr, _told_apart, _type_expression_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -1631,5 +1631,7 @@ class StructureMatcher(BaseMatcher):
                 else:
                     mismatches.append(_SpecMismatch(path.key(key), actual, "a mapping", None))
             elif not _guarded_equal(actual, expected, method="matches_structure"):
-                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{_capped_format(expected)}>", None))
+                # told apart by class where the two print the same: an id held as text read "expected <7>, but was <7>"
+                wanted, was = _told_apart(_capped_format(expected), _capped_format(actual), expected, actual)
+                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{wanted}>", f"was <{was}>"))
         return mismatches

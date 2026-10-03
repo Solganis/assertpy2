@@ -955,6 +955,9 @@ assert_that(
 ).has_first_name("Fred").has_last_name("Smith")
 ```
 
+A failure is the one `is_equal_to()` gives for the value read: `failure.actual` is that value,
+`failure.expected` the operand, and `failure.diff` their diff.
+
 ## Exceptions
 
 Exception and warning assertions wrap a *callable* rather than a value: you assert on what calling the

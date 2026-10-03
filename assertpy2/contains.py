@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final, cast
 
 from ._engine._compare import _guarded_equal
 from ._engine._diff import _sub_diff_entries
@@ -24,8 +24,8 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
-from ._hints import not_found, reads_as
-from .errors import DiffEntry, DiffResult, _capped, _capped_format, _safe_repr, _told_apart
+from ._hints import Roles, not_found, reads_as
+from .errors import DiffEntry, DiffResult, _capped, _capped_format, _capped_repr, _safe_repr, _told_apart
 from .matchers import _is_matcher
 
 if TYPE_CHECKING:
@@ -81,6 +81,24 @@ def _sequence_break(values, items, *, answered=False) -> int | None:
     return best_prefix
 
 
+def _late_run(values, items) -> int:
+    """How many items lined up in the longest run that starts too late in *values* to fit, for the message alone.
+
+    Left out, a value shorter than the sequence had started no run at all.  Asked once the verdict is settled,
+    of elements the verdict never compared: one whose comparison raises costs the count and not the failure.
+    """
+    best = 0
+    try:
+        for i in range(max(len(values) - len(items) + 1, 0), len(values)):
+            j = 0
+            while i + j < len(values) and equals(values[i + j], items[j]):
+                j += 1
+            best = max(best, j)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return best
+    return best
+
+
 def _walked_difference(val_items, given_items):
     """``(extra, missing)`` by quadratic multiset subtraction through ``==``."""
     missing = list(given_items)
@@ -112,10 +130,27 @@ def _as_row(value: object) -> Any:
     return value if mapping_shaped(value, check_values=False) else fields_held(value)
 
 
-def _why(item: object, values: Iterable[object]) -> str:
+_OF_AN_ITEM: Final = Roles()
+_OF_A_KEY: Final = Roles("the key not found", "a key")
+
+
+def _why(item: object, values: Iterable[object], roles: Roles = _OF_AN_ITEM) -> str:
     """The line that says why *item* was not found, on a line of its own under the sentence, or nothing."""
-    line = not_found(item, values)
+    line = not_found(item, values, roles)
     return "" if line is None else f"\n{line}"
+
+
+def _is_held(item: object, values: object) -> bool:
+    """Whether *values* holds *item* after all, asked for a line of a failure: a search that raises says it may."""
+    try:
+        return member(item, values)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return True
+
+
+def _why_absent(item: object, values: Iterable[object]) -> str:
+    """`_why` for an item a failure names that the collection may still hold out of place: said where it does not."""
+    return "" if _is_held(item, values) else _why(item, values)
 
 
 def _related(mine: object, other: object) -> bool:
@@ -125,58 +160,171 @@ def _related(mine: object, other: object) -> bool:
     return reads_as(mine, other)
 
 
+def _closest(item, values, *, item_is_actual=False):
+    """The element of *values* most similar to *item*, with its diff entries, or ``None`` when nothing shares
+    enough structure to be an actionable 'did you mean' hint.
+
+    Asked of dict-like values and of records, a dataclass, an attrs instance, a named tuple or a model: a list
+    of rows is as often one as the other.  Similarity is the fewest differing paths among elements that share
+    a key whose values are equal or read the same, so an element that shares no value is not offered and
+    ``{"id": 7}`` is offered for ``{"id": "7"}``.  Runs only on a failed assertion, never on the hot path.
+
+    *item_is_actual* is which side of the entries the item is on: ``contains`` looks for what was expected among
+    what is held, ``is_in`` and a subset for what is held among what was given.
+
+    Reading a row runs its code, a field of a record or an item of a mapping, and what that raises costs
+    the hint and not the failure it was for.
+    """
+    try:
+        return _closest_row(item, values, item_is_actual)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return None
+
+
+def _closest_row(item, values, item_is_actual):
+    sought = _as_row(item)
+    if sought is None:
+        return None
+    best = None
+    for element in values:
+        held = _as_row(element)
+        if held is None:
+            continue
+        shared = ((held[key], *lookup(sought, key)) for key in held)
+        if not any(found and _related(mine, other) for mine, found, other in shared):
+            continue  # no shared key that agrees -> not related enough to suggest
+        actual, expected = (item, element) if item_is_actual else (element, item)
+        entries = _sub_diff_entries(actual, expected, _ROOT, config=None)
+        # an element the walk finds nothing under, two records of a class with no equality, names no difference
+        if entries and (best is None or len(entries) < len(best[1])):
+            best = (element, entries)
+    return best
+
+
+def _differences(entries, limit=3):
+    """A compact 'path (actual != expected)' summary of the closest element's differences."""
+    parts = ["{} ({} != {})".format(entry.path, *_two_sides(entry)) for entry in entries[:limit]]
+    if len(entries) > limit:
+        parts.append(f"and {len(entries) - limit} more")
+    return ", ".join(parts)
+
+
+def _two_sides(entry: DiffEntry) -> tuple[str, str]:
+    """Both sides of one difference as text, a side that is not there named as such: its ``None`` read as a value."""
+    if entry.absent == "actual":
+        return "<missing>", _safe_repr(entry.expected)
+    if entry.absent == "expected":
+        return _safe_repr(entry.actual), "<missing>"
+    return _told_apart(_safe_repr(entry.actual), _safe_repr(entry.expected), entry.actual, entry.expected)
+
+
+def _one_not_found(
+    missing: Sequence[object],
+    candidates: Iterable[object],
+    *,
+    noun: str | None = "element",
+    item_is_actual: bool = False,
+    roles: Roles = _OF_AN_ITEM,
+    searched: Iterable[object] | None = None,
+) -> str:
+    """What a membership failure says of the one item it did not find: the nearest row there is, and why not it.
+
+    Nothing for several items, each of which would need its own, and nothing for a matcher, which is no item.
+    *noun* is what the assertion calls a candidate, or ``None`` where a nearest one is not looked for.  The line
+    is asked for last, past everything the sentence prints: printing runs code of the values.  It looks among
+    *searched* where that is more than the candidates for the nearest row.
+    """
+    if len(missing) != 1 or _is_matcher(missing[0]):
+        return ""
+    item = missing[0]
+    nearest = ""
+    closest = None if noun is None else _closest(item, candidates, item_is_actual=item_is_actual)
+    if closest is not None:
+        element, entries = closest
+        nearest = f" Closest {noun} <{_capped_format(element)}> differs at {_differences(entries)}."
+    return nearest + _why(item, candidates if searched is None else searched, roles)
+
+
+def _lone_pair(extra: Sequence[object], missing: Sequence[object]) -> tuple[str, str] | None:
+    """One element nobody asked for and one item not found, each as it is printed, told apart by class where the
+    two print the same.  ``None`` for any other count: a list of several is printed as a list."""
+    if len(extra) != 1 or len(missing) != 1:
+        return None
+    shown = _told_apart(_capped_format(extra[0]), _capped_format(missing[0]), extra[0], missing[0])
+    return f"<{shown[0]}>", f"<{shown[1]}>"
+
+
+def _unmatched(entries: Sequence[DiffEntry]) -> tuple[list[object], list[object]]:
+    """The ``(extra, missing)`` a multiset diff holds, as the values themselves."""
+    extra = [entry.actual for entry in entries if entry.absent == "expected"]
+    return extra, [entry.expected for entry in entries if entry.absent == "actual"]
+
+
+def _both_ways(extra: Sequence[object], missing: Sequence[object], values: object, items: Sequence[object]) -> str:
+    """What is said where a collection was to hold the items given and nothing else.
+
+    Of the one item it lacks: its nearest row among the elements nobody asked for where there are any, which is
+    named as that, and the line among every element.  Or, where it lacks none, of the one element nobody asked
+    for, against the items given.
+
+    Nothing where the item is held after all, or the element was asked for: counted, a collection can be one
+    short of an item it has, and "not found" would be false of it.
+    """
+    held = cast("Iterable[object]", values)
+    if missing:
+        if len(missing) == 1 and _is_held(missing[0], held):
+            return ""
+        if extra:
+            return _one_not_found(missing, extra, noun="unexpected element", searched=held)
+        return _one_not_found(missing, held)
+    if len(extra) == 1 and _is_held(extra[0], items):
+        return ""
+    return _one_not_found(extra, items, noun=None, roles=Roles("the element not expected", "a given item"))
+
+
+def _value_not_found(mapping: Any, missing: Sequence[object]) -> str:
+    """What a failed ``contains_value`` says of the one value not found, among the values read again for it."""
+    try:
+        held = list(mapping.values())
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return ""
+    return _one_not_found(missing, held, noun="value", roles=Roles(held="a value"))
+
+
+def _entry_not_found(mapping: object, missing: Sequence[dict[Any, Any]]) -> str:
+    """What a failed ``contains_entry`` says of the one entry not found: what its key holds, and why not it."""
+    if len(missing) != 1:
+        return ""
+    ((key, wanted),) = missing[0].items()
+    try:
+        found, held = lookup(mapping, key)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return ""
+    if not found:
+        return f" There is no key <{_capped_format(key)}>." + _why(key, cast("Iterable[object]", mapping), _OF_A_KEY)
+    reason = _why(wanted, (held,), Roles("the value expected", "the value held"))
+    return f" Key <{_capped_format(key)}> holds <{_capped_repr(held)}>.{reason}"
+
+
+def _pair_why(missing: Sequence[dict[Any, Any]], supersets: Sequence[dict[Any, Any]]) -> str:
+    """The line on why the one pair of a mapping no superset holds is not the pair a superset has under its key.
+
+    Nothing where no superset has the key: the pair is missing for that, whatever its value is.
+    """
+    if len(missing) != 1:
+        return ""
+    ((key, wanted),) = missing[0].items()
+    try:
+        held = [superset[key] for superset in supersets if key in superset]
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return ""
+    if not held:
+        return ""
+    return _why(wanted, held, Roles("the value missing", "the value the superset holds under the key"))
+
+
 class ContainsMixin(_MixinBase):
     """Containment assertions mixin."""
-
-    def _closest_element(self, item, values=None):
-        """The element of val most similar to ``item``, with its diff entries, or ``None`` when nothing shares
-        enough structure to be an actionable 'did you mean' hint.
-
-        Asked of dict-like values and of records, a dataclass, an attrs instance, a named tuple or a model: a list
-        of rows is as often one as the other.  Similarity is the fewest differing paths among elements that share
-        a key whose values are equal or read the same, so an element that shares no value is not offered and
-        ``{"id": 7}`` is offered for ``{"id": "7"}``.  Runs only on a failed ``contains``, never on the hot path.
-
-        Reading a row runs its code, a field of a record or an item of a mapping, and what that raises costs
-        the hint and not the failure it was for.
-        """
-        try:
-            return self._closest_row(item, self.val if values is None else values)
-        except Exception:  # a diagnostic must never outrank the failure it is describing
-            return None
-
-    @staticmethod
-    def _closest_row(item, values):
-        sought = _as_row(item)
-        if sought is None:
-            return None
-        best = None
-        for element in values:
-            held = _as_row(element)
-            if held is None:
-                continue
-            shared = ((held[key], *lookup(sought, key)) for key in held)
-            if not any(found and _related(mine, other) for mine, found, other in shared):
-                continue  # no shared key that agrees -> not related enough to suggest
-            entries = _sub_diff_entries(element, item, _ROOT, config=None)
-            # an element the walk finds nothing under, two records of a class with no equality, names no difference
-            if entries and (best is None or len(entries) < len(best[1])):
-                best = (element, entries)
-        return best
-
-    @staticmethod
-    def _fmt_closest(entries, limit=3):
-        """A compact 'path (actual != expected)' summary of the closest element's differences."""
-        parts = [
-            "{} ({} != {})".format(
-                entry.path,
-                *_told_apart(_safe_repr(entry.actual), _safe_repr(entry.expected), entry.actual, entry.expected),
-            )
-            for entry in entries[:limit]
-        ]
-        if len(entries) > limit:
-            parts.append(f"and {len(entries) - limit} more")
-        return ", ".join(parts)
 
     def contains(self, *items: object) -> Self:
         """Asserts that val contains the given item or items.
@@ -240,16 +388,16 @@ class ContainsMixin(_MixinBase):
                     )
                     return self.error(
                         f"Expected <{_capped_format(values)}> to contain key <{_capped_format(item)}>, but did not."
-                        f"{_why(item, values)}",
+                        f"{_why(item, values, _OF_A_KEY)}",
                         diff=diff,
                         expected=items,
                     )
-                closest = self._closest_element(item, values)
+                closest = _closest(item, values)
                 if closest is not None:
                     element, entries = closest
                     return self.error(
                         f"Expected <{_capped_format(values)}> to contain item <{_capped_format(item)}>, but did not."
-                        f" Closest element <{_capped_format(element)}> differs at {self._fmt_closest(entries)}."
+                        f" Closest element <{_capped_format(element)}> differs at {_differences(entries)}."
                         f"{_why(item, values)}",
                         diff=DiffResult(kind="contains", entries=entries),
                         expected=items,
@@ -281,14 +429,14 @@ class ContainsMixin(_MixinBase):
                         f"Expected <{_capped_format(values)}> to contain keys {self._fmt_items(items)},"
                         f" but did not contain key{'' if len(missing) == 1 else 's'} {self._fmt_items(missing_desc)}."
                     )
+                    said = _one_not_found(missing, values, noun=None, roles=_OF_A_KEY)
                 else:
                     sentence = (
                         f"Expected <{_capped_format(values)}> to contain items {self._fmt_items(items)},"
                         f" but did not contain {self._fmt_items(missing_desc)}."
                     )
-                # one item not found has one reason to give; asked past the printing, which runs code of the values
-                why = _why(missing[0], values) if len(missing) == 1 and not _is_matcher(missing[0]) else ""
-                return self.error(sentence + why, diff=diff, expected=items)
+                    said = _one_not_found(missing, values)
+                return self.error(sentence + said, diff=diff, expected=items)
         return self
 
     def does_not_contain(self, *items: object) -> Self:
@@ -397,15 +545,16 @@ class ContainsMixin(_MixinBase):
             # both halves at once: reporting only the extras sends the reader to rerun into the other
             faults = []
             entries = []
+            had, lacked = _lone_pair(extra, missing) or (self._fmt_items(extra), self._fmt_items(missing))
             if extra:
-                faults.append(f"did contain {self._fmt_items(extra)}")
+                faults.append(f"did contain {had}")
                 entries += [DiffEntry(path="extra", actual=item, expected=None, absent="expected") for item in extra]
             if missing:
-                faults.append(f"did not contain {self._fmt_items(missing)}")
+                faults.append(f"did not contain {lacked}")
                 entries += [DiffEntry(path="missing", actual=None, absent="actual", expected=item) for item in missing]
             return self.error(
                 f"Expected <{_capped_format(values)}> to contain only {self._fmt_items(items)},"
-                f" but {' and '.join(faults)}.",
+                f" but {' and '.join(faults)}." + _both_ways(extra, missing, values, items),
                 diff=DiffResult(kind="contains", entries=entries),
                 expected=items,
             )
@@ -463,6 +612,7 @@ class ContainsMixin(_MixinBase):
             best_prefix = _sequence_break(values, items, answered=True)
         if best_prefix is None:
             return self
+        best_prefix = max(best_prefix, _late_run(values, items))
         # the longest run that lined up says where the sequence broke down
         detail = (
             f" The longest run that matched was {self._fmt_items(items[:best_prefix])}."
@@ -471,7 +621,8 @@ class ContainsMixin(_MixinBase):
             else f" No run started with <{_capped_format(items[0])}>."
         )
         return self.error(
-            f"Expected <{_capped_format(values)}> to contain sequence {self._fmt_items(items)}, but did not.{detail}",
+            f"Expected <{_capped_format(values)}> to contain sequence {self._fmt_items(items)}, but did not.{detail}"
+            + _why_absent(items[best_prefix], values),
             expected=items,
         )
 
@@ -623,6 +774,7 @@ class ContainsMixin(_MixinBase):
         index = None if entries else next(disagreeing, None)
         if index is None:
             diff = DiffResult(kind="contains", entries=entries)
+            message += _both_ways(*_unmatched(entries), val_list, expected_list)
         else:
             message += f" Same items, but the order differs at index {index}."
             diff = DiffResult(
@@ -670,7 +822,7 @@ class ContainsMixin(_MixinBase):
         if entries:
             return self.error(
                 f"Expected <{_capped(self.val)}> to contain exactly {self._fmt_items(items)} in any order, "
-                f"but did not.",
+                f"but did not." + _both_ways(*_unmatched(entries), val_list, items),
                 diff=DiffResult(kind="contains", entries=entries),
                 expected=items,
             )
@@ -714,7 +866,8 @@ class ContainsMixin(_MixinBase):
             trail = f" after {self._fmt_items(matched)}" if matched else ""
             return self.error(
                 f"Expected <{_capped(self.val)}> to contain {self._fmt_items(items)} in order, "
-                f"but <{_capped_format(items[item_index])}> did not follow{trail}.",
+                f"but <{_capped_format(items[item_index])}> did not follow{trail}."
+                + _why_absent(items[item_index], val_list),
                 expected=items,
             )
         return self
@@ -765,7 +918,7 @@ class ContainsMixin(_MixinBase):
                 problems.append(f"contained {self._fmt_items(duplicated)} more than once")
             return self.error(
                 f"Expected <{_capped_format(val_list)}> to contain {self._fmt_items(items)} only once,"
-                f" but {' and '.join(problems)}.",
+                f" but {' and '.join(problems)}." + _one_not_found(missing, val_list),
                 diff=DiffResult(kind="contains", entries=entries),
                 expected=items,
             )
@@ -794,8 +947,11 @@ class ContainsMixin(_MixinBase):
         # identity first, as `in` asks: the very NaN a tuple holds is in it, and `==` alone said no
         if member(self.val, items):
             return self
+        roles = Roles("the value", "a given item")
         return self.error(
-            f"Expected <{_capped(self.val)}> to be in {self._fmt_items(items)}, but was not.", expected=items
+            f"Expected <{_capped(self.val)}> to be in {self._fmt_items(items)}, but was not."
+            + _one_not_found((self.val,), items, noun="item", item_is_actual=True, roles=roles),
+            expected=items,
         )
 
     def is_not_in(self, *items: object) -> Self:
