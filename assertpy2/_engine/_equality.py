@@ -230,14 +230,17 @@ def _flattened(node: Any, through: frozenset[str], depth: int = 0) -> Any:
             type(node),
             {name: _flattened(value, through, deeper) for name, value in model_field_values(node).items()},
         )
-    if isinstance(node, tuple) and hasattr(node, "_fields"):
-        return type(node)(*[_flattened(item, through, deeper) for item in node])
-    if isinstance(node, (list, tuple)):
-        return type(node)(_flattened(item, through, deeper) for item in node)
-    if isinstance(node, dict):
+    # what a value is, is asked of its class from here on: a value may answer `isinstance` itself
+    held: Any = node
+    kind = type(held)
+    if issubclass(kind, tuple) and hasattr(held, "_fields"):
+        return kind(*[_flattened(item, through, deeper) for item in held])
+    if issubclass(kind, (list, tuple)):
+        return kind(_flattened(item, through, deeper) for item in held)
+    if issubclass(kind, dict):
         # a key stays as held: taken apart, a record used as one could not be hashed
-        rebuilt = {key: _flattened(value, through, deeper) for key, value in node.items()}
-        return rebuilt if type(node) is dict else _as_its_class(node, rebuilt)
+        rebuilt = {key: _flattened(value, through, deeper) for key, value in held.items()}
+        return rebuilt if kind is dict else _as_its_class(held, rebuilt)
     return node
 
 
@@ -293,19 +296,19 @@ def _mend(memo: dict[int, Any]) -> None:
     nothing, so that ends.  A field attrs compares through a key is held raw, and stays so.
     """
     for rebuilt in list(memo.values()):
-        if isinstance(rebuilt, dict):
+        if issubclass(type(rebuilt), dict):
             raw = rebuilt.compared_by if isinstance(rebuilt, TakenApart) else ()
             for key, value in rebuilt.items():
                 if key not in raw:
                     rebuilt[key] = _mended(value, memo)
-        elif isinstance(rebuilt, list):
+        elif issubclass(type(rebuilt), list):
             rebuilt[:] = [_mended(item, memo) for item in rebuilt]
 
 
 def _mended(value: Any, memo: dict[int, Any]) -> Any:
     """*value* as it was rebuilt where it was left as it was, or made again where it is a tuple holding such a one."""
     rebuilt = memo.get(id(value), value)
-    if rebuilt is not value or not isinstance(value, tuple):
+    if rebuilt is not value or not issubclass(type(value), tuple):
         return rebuilt
     items = [_mended(item, memo) for item in value]
     if all(new is old for new, old in zip(items, value, strict=True)):
@@ -343,11 +346,11 @@ def _flattened_once(node: Any, through: frozenset[str], memo: dict[int, Any]) ->
         for name, value in fields.items():
             taken[name] = value if name in taken.compared_by else _flattened_once(value, through, memo)
         return taken
-    if not isinstance(node, (list, tuple, dict)):
+    if not issubclass(type(node), (list, tuple, dict)):
         return node
     # no generator: through one a level was three frames on Python 3.10, 331 levels deep against 496
     rebuilt: Any
-    if isinstance(node, dict):
+    if issubclass(type(node), dict):
         rebuilt = memo[id(node)] = {} if type(node) is dict else _of_its_class(node)
         put = _put_into(rebuilt)
         for key, value in node.items():
@@ -400,19 +403,30 @@ def _read_through(obj: object) -> frozenset[str] | None:
     return None
 
 
-def as_fields(value: object, beside: object = None) -> dict | None:
-    """A plain dict as itself, anything else through `comparable_fields`.
+def as_fields(value: object, beside: object = None) -> Any:
+    """A dict or another mapping by its keys, anything else through `comparable_fields`.
 
     A dict *beside* a record taken apart all the way down is taken apart as deep.  Left as held, a record the
     dict holds was compared whole against the fields of the equal one the record holds, and the two differed.
+    A dict that is a record as well stays as held: taken apart it was read by its fields, and a key it held
+    beside them was gone.
+
+    What is a dict is asked of the class, since a value may answer `isinstance` itself.  A mapping that is no
+    dict and no record is its keys too: refused, a `MappingProxyType` beside a record was called not dict-like,
+    and a `ChainMap` was read through the attribute it keeps its maps in.
     """
-    if not isinstance(value, dict):
-        return comparable_fields(value)
-    through = None if isinstance(beside, dict) else _read_through(beside)
-    return value if through is None else cast("dict", _fields_through(value, through))
+    if not issubclass(type(value), dict):
+        own = _read_through(value)
+        if own is not None:
+            return _fields_through(value, own)
+        return value if mapping_shaped(value, check_values=False) else comparable_fields(value)
+    through = None if issubclass(type(beside), dict) else _read_through(beside)
+    if through is None or _read_through(value) is not None:
+        return value
+    return _fields_through(value, through)
 
 
-def fields_pair(value: object, other: object) -> tuple[dict | None, dict | None]:
+def fields_pair(value: object, other: object) -> tuple[Any, Any]:
     """Two values through their fields, each read beside the other (`as_fields`)."""
     return as_fields(value, other), as_fields(other, value)
 
@@ -817,7 +831,7 @@ def _nested_differs(
 
 def _keyed(value: object, beside: object) -> Any:
     """A mapping as what a key path reads it through, its keys, and anything else through its fields."""
-    if mapping_shaped(value, check_values=False) and not isinstance(value, dict):
+    if mapping_shaped(value, check_values=False) and not issubclass(type(value), dict):
         return value
     return as_fields(value, beside)
 

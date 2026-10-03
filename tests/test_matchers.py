@@ -1,12 +1,12 @@
 import io
 import re
 import typing
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from math import inf, nan
 
 import pytest
 
-from assertpy2 import AssertionFailure, Matcher, assert_that, match
+from assertpy2 import AssertionFailure, Matcher, _matcher_impls, assert_that, match
 from assertpy2.matchers import AllOfMatcher, AnyOfMatcher, BaseMatcher, EachMatcher, HasPropertyMatcher, NotMatcher
 
 
@@ -32,6 +32,55 @@ class TestTemporalMatchers:
     def test_is_now_refuses_what_is_no_span_as_it_did(self):
         with pytest.raises(TypeError, match="unsupported type for timedelta seconds component"):
             match.is_now("soon")
+
+    def test_is_now_holds_the_two_readings_of_a_repeated_hour_an_hour_apart(self, monkeypatch):
+        class FallsBack(tzinfo):
+            """Two hours east until its clocks read 03:00 on 1 November 2026, then 02:00 again and one hour east."""
+
+            def utcoffset(self, moment):
+                wall = moment.replace(tzinfo=None)
+                early = wall < datetime(2026, 11, 1, 2) or (wall < datetime(2026, 11, 1, 3) and not moment.fold)
+                return timedelta(hours=2 if early else 1)
+
+            def tzname(self, moment):
+                return "falls back"
+
+            def dst(self, moment):
+                return None
+
+        real = datetime
+        second = datetime(2026, 11, 1, 2, 30, tzinfo=FallsBack(), fold=1)
+
+        class EveryDatetimeIsOne(type):
+            def __instancecheck__(cls, instance):
+                return isinstance(instance, real)
+
+        class Pinned(datetime, metaclass=EveryDatetimeIsOne):
+            @classmethod
+            def now(cls, tz=None):
+                return second.astimezone(tz)
+
+        monkeypatch.setattr(_matcher_impls, "datetime", Pinned)
+        first = second.replace(fold=0)
+        assert_that(first == second).is_true()
+        assert_that(first.utcoffset() - second.utcoffset()).is_equal_to(timedelta(hours=1))
+        assert_that(match.is_now(0).matches(second)).is_true()
+        assert_that(match.is_now(0).matches(first)).is_false()
+        assert_that(match.is_now(timedelta(minutes=59)).matches(first)).is_false()
+        assert_that(match.is_now(timedelta(hours=1)).matches(first)).is_true()
+
+    def test_is_now_reads_a_zone_that_gives_no_offset_as_no_zone(self):
+        class GivesNoOffset(tzinfo):
+            def utcoffset(self, moment):
+                return None
+
+            def tzname(self, moment):
+                return None
+
+            def dst(self, moment):
+                return None
+
+        assert_that(match.is_now(5).matches(datetime.now().replace(tzinfo=GivesNoOffset()))).is_true()
 
     def test_is_now_takes_a_delta_of_nothing(self):
         assert_that(match.is_now(0).describe()).is_equal_to("a datetime within 0:00:00 of now")

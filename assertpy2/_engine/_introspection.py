@@ -316,7 +316,8 @@ def is_mapping_like(obj: object) -> TypeGuard[MappingLike]:
         return True
     if type(obj) in _ATOMIC_TYPES:
         return False
-    return isinstance(obj, MappingLike) and callable(obj.keys)
+    # read with a default: a value may say it is a dict through `__class__` and have no `keys` at all
+    return isinstance(obj, MappingLike) and callable(getattr(obj, "keys", None))
 
 
 def keyed_snapshot(candidate: object) -> MappingLike | None:

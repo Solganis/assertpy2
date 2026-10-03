@@ -1,6 +1,7 @@
 import collections
 import dataclasses
 import sys
+import types
 import typing
 
 import pytest
@@ -899,6 +900,122 @@ class TestADictBesideARecordIsReadAsDeep:
         with pytest.raises(AssertionFailure):
             assert_that(actual).is_equal_to(expected, ignore="v")
         assert_that(actual).is_equal_to(expected, ignore=["v", ("next", "missing")])
+
+    def test_the_diff_of_a_failed_sequence_goes_as_deep_on_the_dict_side(self):
+        actual, expected = [{"v": 0, "next": _Holder(1)}], [_Holder(0, _Holder(2))]
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that(actual).is_equal_to(expected, ignore="missing")
+        assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["[0].next.v"])
+
+    def test_a_dict_that_is_a_record_as_well_keeps_its_keys(self):
+        @dataclasses.dataclass
+        class Keyed(dict):
+            v: int
+
+        @dataclasses.dataclass
+        class Record:
+            v: int
+
+        held = Keyed(1)
+        held["extra"] = 2
+        for value, other in ((held, Record(1)), (Record(1), held)):
+            with pytest.raises(AssertionFailure):
+                assert_that(value).is_equal_to(other, ignore="missing")
+        assert_that(held).is_equal_to({"extra": 2}, ignore="missing")
+        assert_that(_equality.as_fields(held, Record(1))).is_same_as(held)
+
+    def test_what_is_a_dict_is_asked_of_the_class_and_not_of_the_value(self):
+        class SaysDict:
+            __class__ = property(lambda self: dict)
+
+            def __init__(self):
+                self.v = 0
+                self.next = None
+
+        says = SaysDict()
+        assert_that(isinstance(says, dict)).is_true()
+        assert_that(_equality.as_fields(says)).is_not_same_as(says)
+        assert_that(_equality.as_fields({"v": 0}, says)).is_equal_to({"v": 0})
+        assert_that(says).is_equal_to(_Holder(0), ignore="missing")
+        assert_that(_Holder(0)).is_equal_to(says, ignore="missing")
+        assert_that({"o": says}).is_equal_to({"o": _Holder(9)}, ignore=("o", "v"))
+
+    @pytest.mark.parametrize("kind", [dict, list, tuple])
+    def test_a_value_that_says_what_it_is_not_is_left_whole_where_it_is_held(self, kind):
+        says = type("Says", (), {"__class__": property(lambda self: kind), "_fields": ()})()
+        assert_that(isinstance(says, kind)).is_true()
+        a_list_that_says = type("AListThatSays", (list,), {"__class__": property(lambda self: kind)})([1])
+        a_tuple_that_says = type("ATupleThatSays", (tuple,), {"__class__": property(lambda self: kind)})((1,))
+        ring = {"v": 0, "next": says, "more": a_list_that_says, "and": a_tuple_that_says}
+        ring["me"] = ring
+        for payload in ({"v": 0, "next": says}, {"v": 0, "next": [says]}, _Holder(0, says), ring):
+            with pytest.raises(AssertionFailure):
+                assert_that(payload).is_equal_to(_Holder(0, _Holder(1)), ignore="missing")
+
+    def test_a_dict_that_is_a_record_is_read_where_it_is_held_as_its_own_equality_reads_it(self):
+        @dataclasses.dataclass
+        class Keyed(dict):
+            v: int
+
+        @dataclasses.dataclass
+        class Plain:
+            v: int
+
+        held = Keyed(1)
+        held["extra"] = 2
+        assert_that(held == Keyed(1)).is_true()
+        # by its fields, which is how a record holding it was always read: its own `==` does not read its keys
+        assert_that(_Holder(0, held)).is_equal_to(_Holder(0, Plain(1)), ignore="missing")
+        assert_that({"v": 0, "next": held}).is_equal_to(_Holder(0, Plain(1)), ignore="missing")
+
+    @pytest.mark.parametrize(
+        "mapping",
+        [types.MappingProxyType, lambda held: collections.ChainMap(held)],
+        ids=["a mapping proxy", "a chain map"],
+    )
+    def test_a_mapping_that_is_no_dict_is_read_by_its_keys_beside_a_record(self, mapping):
+        record = _Holder(0, None)
+        assert_that(mapping({"v": 0, "next": None})).is_equal_to(record, ignore="missing")
+        assert_that(record).is_equal_to(mapping({"v": 0, "next": None}), ignore="missing")
+        assert_that(record).is_equal_to(mapping({"v": 9, "next": None}), ignore="v")
+        for value, other in ((mapping({"v": 1, "next": None}), record), (record, mapping({"v": 1, "next": None}))):
+            with pytest.raises(AssertionFailure) as caught:
+                assert_that(value).is_equal_to(other, ignore="missing")
+            assert_that([entry.path for entry in caught.value.diff.entries]).is_equal_to(["v"])
+        with pytest.raises(AssertionFailure):
+            assert_that(mapping({"v": 0, "next": None, "more": 1})).is_equal_to(record, ignore="missing")
+
+    def test_a_record_that_answers_as_a_mapping_is_still_read_by_its_fields(self):
+        @dataclasses.dataclass
+        class Row:
+            v: int
+            next: object = None
+
+            def keys(self):
+                return ["column"]
+
+            def __getitem__(self, key):
+                return "cell"
+
+            def __iter__(self):
+                return iter(self.keys())
+
+        assert_that(Row(0)).is_equal_to(_Holder(0), ignore="missing")
+        assert_that(_Holder(0)).is_equal_to(Row(0), ignore="missing")
+        with pytest.raises(AssertionFailure):
+            assert_that(Row(1)).is_equal_to(_Holder(0), ignore="missing")
+
+    def test_a_dict_beside_a_model_is_read_through_the_dataclasses_a_model_is_read_through(self):
+        pydantic = pytest.importorskip("pydantic")
+
+        class Shape(pydantic.BaseModel):
+            at: _Holder
+            name: str = "s"
+
+        shape, payload = Shape(at=_Holder(1)), {"at": {"v": 1, "next": None}, "name": "s"}
+        assert_that(payload).is_equal_to(shape, ignore="missing")
+        assert_that(shape).is_equal_to(payload, ignore="missing")
+        assert_that({"at": _Holder(1), "name": "s"}).is_equal_to(shape, ignore="missing")
 
     def test_the_matcher_answers_as_the_builder_does(self):
         record, payload = _Holder(0, _Holder(1)), {"v": 0, "next": _Holder(1)}

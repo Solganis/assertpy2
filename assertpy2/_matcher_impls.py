@@ -5,7 +5,7 @@ import re
 import sys
 import uuid as _uuid_mod
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from fractions import Fraction
 from types import UnionType
@@ -1359,8 +1359,9 @@ class IsNowMatcher(BaseMatcher):
     def matches(self, value: Any) -> bool:
         if not isinstance(value, datetime):
             return False
-        # `datetime.now(tzinfo)` matches the value's awareness, so the subtraction never mixes naive and aware
-        return abs(value - datetime.now(value.tzinfo)) <= self._delta
+        # as moments: on one zone object the two readings of a repeated hour subtract to nothing, an hour apart
+        now = datetime.now(timezone.utc) if value.utcoffset() is not None else datetime.now()
+        return abs(value - now) <= self._delta
 
     def describe(self) -> str:
         return f"a datetime within {self._delta} of now"
