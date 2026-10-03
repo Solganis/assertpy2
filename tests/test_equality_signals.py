@@ -101,6 +101,38 @@ def test_a_scalar_numpy_broadcasts_against_a_list_holding_a_signalling_nan_is_un
     assert_that(assert_that([decimal.Decimal("sNaN"), 1]).check().is_equal_to(numpy.float32(1)).passed).is_false()
 
 
+def test_a_walk_reads_a_numpy_scalar_against_a_sequence_as_the_verdict_does():
+    """A walk asks ``==`` of a pair itself, and `numpy` answers a scalar against a list with an array that is true."""
+    numpy = pytest.importorskip("numpy")
+    under_a_key_option = assert_that({"a": numpy.int64(5), "b": 1}).check().is_equal_to({"a": [5], "b": 2}, ignore="b")
+    assert_that(under_a_key_option.passed).is_false()
+    in_a_diff = assert_that([numpy.int64(5), 1]).check().is_equal_to([[5], 2])
+    assert_that([entry.path for entry in in_a_diff.diff.entries]).is_equal_to(["[0]", "[1]"])
+
+
+@pytest.mark.parametrize(
+    "ask",
+    [
+        lambda held, other: assert_that([held]).is_equal_to([other]),
+        lambda held, other: assert_that([held]).is_not_equal_to([other]),
+        lambda held, other: assert_that({"a": [held], "b": 1}).is_equal_to({"a": [other], "b": 2}, ignore="b"),
+    ],
+    ids=["equal", "not-equal", "under-a-key-option"],
+)
+def test_a_frame_that_refuses_its_truth_with_a_type_error_is_named_inside_a_list(ask):
+    """`polars` refuses the truth of a frame with a `TypeError`, where `numpy` refuses an array's with `ValueError`."""
+    polars = pytest.importorskip("polars")
+    with pytest.raises(TypeError, match=r"equal_to\(\) cannot directly compare <DataFrame>"):
+        ask(polars.DataFrame({"a": [1, 2]}), polars.DataFrame({"a": [1, 2]}))
+
+
+def test_a_signal_ahead_of_an_array_is_answered_as_the_signal():
+    """``==`` stopped at the signalling NaN and never asked the array after it, so the array is not what refused."""
+    numpy = pytest.importorskip("numpy")
+    held = [decimal.Decimal("sNaN"), numpy.array([1, 2])]
+    assert_that(held).is_not_equal_to([decimal.Decimal("sNaN"), numpy.array([1, 2])])
+
+
 class _ListOfItsOwn(list):
     def __eq__(self, other: object) -> bool:
         return list.__eq__(self, other)

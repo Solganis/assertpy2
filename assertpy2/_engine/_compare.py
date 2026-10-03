@@ -272,13 +272,17 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
         if type(equal) is bool or type(actual) is type(expected):
             return bool(equal)
         return not broadcasts(actual, expected, answer=equal) and bool(equal)
-    except (ValueError, TypeError) as error:
+    except REFUSALS as refusal:
+        return _equal_past_refusal(actual, expected, refusal, method)
+
+
+def _equal_past_refusal(actual, expected, refusal: Exception, method: str) -> bool:
+    """What a pair whose ``==`` raised *refusal* answers: the actionable error for an array, else `equal_past`."""
+    if isinstance(refusal, (ValueError, TypeError)):
         operand = _find_ambiguous_operand(actual, expected)
         if operand is not None:
-            raise _array_equality_error(method, operand) from error
-        return equal_past(actual, expected, error)
-    except (decimal.InvalidOperation, OverflowError) as refusal:
-        return equal_past(actual, expected, refusal)
+            raise _array_equality_error(method, operand) from refusal
+    return equal_past(actual, expected, refusal)
 
 
 def _is_real_number(value) -> bool:
@@ -703,9 +707,19 @@ def _plain_decision(actual, expected, config: _CompareConfig | None, *, at_root:
 
 def _walked_equal(actual, expected) -> bool | None:
     """`_guarded_equal` for a walk, which has its own answer where ``==`` has none: ``None`` for a graph ``==``
-    runs out of stack on, which the walk then enters, counting a pair it meets again as equal."""
+    runs out of stack on, which the walk then enters, counting a pair it meets again as equal.
+
+    It asks ``==`` itself: a walk asks this of every pair, and asked through `_guarded_equal` the frame between
+    cost 11 ns a pair, a tenth of a failing comparison of two lists of 500.
+    """
     try:
-        return _guarded_equal(actual, expected)
+        try:
+            equal = actual == expected
+            if type(equal) is bool or type(actual) is type(expected):
+                return bool(equal)
+            return not broadcasts(actual, expected, answer=equal) and bool(equal)
+        except REFUSALS as refusal:
+            return _equal_past_refusal(actual, expected, refusal, "is_equal_to")
     except RecursionError:
         return None
 

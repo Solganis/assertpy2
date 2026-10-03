@@ -1053,6 +1053,46 @@ def test_an_integral_class_is_kept_at_most_so_many_times(monkeypatch):
     assert_that(kept).is_length(256)
 
 
+def test_a_class_that_holds_no_number_is_read_once(monkeypatch):
+    """Kept once found, and answered from there: read afresh, each side of every row of a failure cost 1.3 us."""
+    kept: set[type] = set()
+    monkeypatch.setattr(_ordering, "_UNREAD_KINDS", kept)
+    plain = type("Plain", (), {})
+    assert_that(_ordering.nan_operand(plain())).is_false()
+    assert_that(kept).is_equal_to({plain})
+    read = []
+    monkeypatch.setattr(_ordering, "_exact_real", read.append)
+    assert_that(_ordering.nan_operand(plain())).is_false()
+    assert_that(read).is_empty()
+
+
+@pytest.mark.parametrize(("held", "after"), [(255, 256), (256, 256)], ids=["room-for-one", "full"])
+def test_a_class_that_holds_no_number_is_kept_at_most_so_many_times(monkeypatch, held, after):
+    """Answered past the bound, and not kept: classes made on the fly cannot grow the cache without end."""
+    kept = set(range(held))
+    monkeypatch.setattr(_ordering, "_UNREAD_KINDS", kept)
+    assert_that(_ordering.nan_operand(type("Plain", (), {})())).is_false()
+    assert_that(kept).is_length(after)
+
+
+def test_a_class_whose_numbers_are_read_is_never_kept(monkeypatch):
+    """Not for a value of it that gave no exact value either: an infinity under an ordering of the class's own.
+
+    Kept on that answer, the class would then call its NaN no NaN.
+    """
+    numpy = pytest.importorskip("numpy")
+
+    class OrdersItself(numpy.float32):
+        def __gt__(self, other: object) -> bool:
+            return False
+
+    kept: set[type] = set()
+    monkeypatch.setattr(_ordering, "_UNREAD_KINDS", kept)
+    for value, holds in [(numpy.float32("inf"), False), (OrdersItself("inf"), False), (OrdersItself("nan"), True)]:
+        assert_that(_ordering.nan_operand(value)).is_equal_to(holds)
+    assert_that(kept).is_empty()
+
+
 class _OrderingOverflowsOfItsOwn(fractions.Fraction):
     """A `Fraction` whose own ordering overflows, which the exact order is not allowed to paper over."""
 

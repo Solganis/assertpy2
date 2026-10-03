@@ -919,7 +919,12 @@ def _accounted(
 
     One step, then two.  Then the kind or amount of whitespace, alone and beside one step: it takes in line
     endings and surrounding whitespace, so said first it would stand in for the two narrower facts.
+
+    Nothing is asked where the first pair holds no text, bytes or enum member: no step reads such a pair, every
+    step has to account for it, and asking all nineteen was most of what a failure of two numbers spent here.
     """
+    if not any(isinstance(side, (str, bytes, enum.Enum)) for side in pairs[0]):
+        return None
     for step, label in steps:
         if _explains(pairs, (step,)):
             return _worded(label, pairs)

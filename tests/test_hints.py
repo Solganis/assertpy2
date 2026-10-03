@@ -354,7 +354,8 @@ class TestSilenceOnEverythingElse:
         ]
         assert_that(diagnose(DiffResult(kind="sequence", entries=entries))).is_none()
 
-    def test_a_value_whose_comparison_raises_cannot_break_the_failure(self):
+    @pytest.mark.parametrize("beside", ["another of it", "a text, which the ladder is asked about"])
+    def test_a_value_whose_comparison_raises_cannot_break_the_failure(self, beside):
         # an opinionated `__eq__` raises from `==`, and this runs while an assertion error is already on its way out
         class Ambiguous:
             def __eq__(self, other):
@@ -363,7 +364,7 @@ class TestSilenceOnEverythingElse:
             def __hash__(self):
                 return 0
 
-        entries = [DiffEntry(path="a", actual=Ambiguous(), expected=Ambiguous())]
+        entries = [DiffEntry(path="a", actual=Ambiguous(), expected=Ambiguous() if beside == "another of it" else "a")]
         assert_that(diagnose(DiffResult(kind="dict", entries=entries))).is_none()
 
 

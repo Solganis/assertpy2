@@ -67,15 +67,22 @@ def nan_operand(value: Any) -> bool:
     let a `Decimal`'s signal out and passed `is_sorted` over a list a `float` NaN fails.  Subclasses
     included, and only off a class built by `type` itself, since a metaclass of anybody's answers reads.  An
     integer, built in or registered, is never one, and is not read at all.
+
+    A class that holds no number this reads is kept once found, as `integral_kind` keeps its own: its bases decide
+    it.  Asked afresh, a text or a ``None`` cost 1.3 us, and a failure asks this of both sides of every row it reports.
     """
     if isinstance(value, float):
         return bool(float.__ne__(value, value))
     if isinstance(value, decimal.Decimal):
         return decimal.Decimal.is_nan(value)
     kind = type(value)
-    if kind is int or type(kind) is not type or kind in _INTEGRAL_KINDS or integral_kind(kind):
+    if kind is int or type(kind) is not type or kind in _UNREAD_KINDS or kind in _INTEGRAL_KINDS or integral_kind(kind):
         return False
-    return _exact_real(value) == "nan"
+    read = _exact_real(value)
+    unread = read is None and _known_number_method(kind, "as_integer_ratio", types.MethodDescriptorType) is None
+    if unread and len(_UNREAD_KINDS) < 256:
+        _UNREAD_KINDS.add(kind)
+    return read == "nan"
 
 
 def integral_kind(kind: type) -> bool:
@@ -98,6 +105,9 @@ def integral_kind(kind: type) -> bool:
 
 _INTEGRAL_KINDS: set[type] = set()
 """What `integral_kind` has found, only classes built by `type` itself, so hashed as `type` hashes."""
+
+_UNREAD_KINDS: set[type] = set()
+"""What `nan_operand` has found to hold no number it reads, kept and bounded as `_INTEGRAL_KINDS` is."""
 
 
 def _kind_of(value: Any) -> type | None:
