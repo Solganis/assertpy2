@@ -20,8 +20,10 @@ code path.
 from __future__ import annotations
 
 import dataclasses
+import difflib
 import enum
 import json
+import re
 from collections import Counter
 from typing import TYPE_CHECKING, Final, NamedTuple
 
@@ -36,7 +38,7 @@ from ._engine._introspection import (
     kind_of,
 )
 from ._engine._ordering import equals, nan_operand
-from .errors import _class_names, _safe_repr, _safe_str
+from .errors import _capped, _class_names, _safe_repr, _safe_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
@@ -79,12 +81,20 @@ authoritative-sounding line about whitespace in a predicate.
 
 def _newlines(value: object) -> object:
     if isinstance(value, bytes):
-        return value.replace(b"\r\n", b"\n")
-    return value.replace("\r\n", "\n") if isinstance(value, str) else value
+        return bytes.replace(value, b"\r\n", b"\n")
+    return str.replace(value, "\r\n", "\n") if isinstance(value, str) else value
 
 
 def _stripped(value: object) -> object:
-    return value.strip() if isinstance(value, (str, bytes)) else value
+    if isinstance(value, bytes):
+        return bytes.strip(value)
+    return str.strip(value) if isinstance(value, str) else value
+
+
+def _spaced(value: object) -> object:
+    if isinstance(value, bytes):
+        return b" ".join(bytes.split(value))
+    return " ".join(str.split(value)) if isinstance(value, str) else value
 
 
 def _parsed_json(value: object) -> object:
@@ -122,13 +132,16 @@ def _json_label(pairs: Sequence[tuple[object, object]]) -> str:
     return "unparsed JSON text"
 
 
+_OF_SPACE: list[tuple[Callable[[object], object], _Label]] = [
+    (_newlines, "line endings"),
+    (_stripped, "surrounding whitespace"),
+]
 # ordered, narrower first: a step explains a pair only if the pair differed before it ran
 _STEPS: list[tuple[Callable[[object], object], _Label]] = [
     (_parsed_json, _json_label),
     (_decoded, "bytes against decoded text"),
     (_enum_value, "enum members against their values"),
-    (_newlines, "line endings"),
-    (_stripped, "surrounding whitespace"),
+    *_OF_SPACE,
 ]
 
 
@@ -244,7 +257,7 @@ def diagnose(
             positional = False
 
     if diff.kind == "string":
-        # the whole strings: `splitlines()` folds "  " into " ", so a text differing in both yields one entry
+        # the whole strings: `splitlines()` reads "\r\n" as "\n", so a text differing in both yields one entry
         if not isinstance(actual, (str, bytes)) or not isinstance(expected, (str, bytes)):
             return None
         return _named([(actual, expected)])
@@ -363,6 +376,8 @@ class Roles(NamedTuple):
 
     sought: str = "the item not found"
     held: str = "an element"
+    named: bool = False
+    """Whether what it looked among are names, keys or attributes: one spelled almost the same is then said."""
 
 
 _OF_AN_ITEM: Final = Roles()
@@ -374,9 +389,11 @@ def not_found(item: object, searched: Iterable[object], roles: Roles = _OF_AN_IT
     Said of the item sought and never of the collection: a NaN somewhere in a list does not explain a ``2`` that
     is missing from it.  Three facts are looked for.  The item is a NaN.  An element reads the same and is of
     another plain type.  An element prints the same, is of the item's class, and that class leaves ``==`` to
-    `object`.  Each states what is so and leaves the reader to draw the rest.
+    `object`.  Each states what is so and leaves the reader to draw the rest.  Among names a fourth: one that
+    reads almost the same (`_near_name`).
     """
-    sought, held = roles
+    sought, held = roles.sought, roles.held
+    names: list[str] = []
     try:
         if nan_operand(item):
             return f"{sought} is a NaN, and one NaN is not equal to another"
@@ -388,6 +405,8 @@ def not_found(item: object, searched: Iterable[object], roles: Roles = _OF_AN_IT
                     types = f"{class_name(type(element))}, not {class_name(kind)}"
                     return f"{held} reads the same as {sought} and is of another type: {types}"
                 continue
+            if roles.named and kind is str and isinstance(element, str):
+                names.append(element)
             if identity is None:
                 # a fact about the class, so asked of the first element of it and not of each
                 identity = identity_candidate(item, element)
@@ -397,9 +416,172 @@ def not_found(item: object, searched: Iterable[object], roles: Roles = _OF_AN_IT
                     f"{held} prints the same as {sought}, and their class leaves __eq__ to object,"
                     " which compares by identity"
                 )
+        if names and isinstance(item, str):
+            return _near_name(item, names, held)
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return None
     return None
+
+
+_RUNS: Final = re.compile(r"\s+")
+
+
+def under(line: str | None) -> str:
+    """*line* on a line of its own under a sentence, or nothing."""
+    return "" if line is None else f"\n{line}"
+
+
+def not_at_an_end(value: object, piece: object, *, start: bool, cased: bool = True) -> str | None:
+    """One line on why a text does not start with another, or end with it, where one fact says it.
+
+    Four are looked for, the narrowest first, each the relation itself holding once one thing is set aside:
+    whitespace at that end of the value, case, whitespace round the text given, and the text held somewhere
+    else in the value.  *cased* is whether the assertion minded case: where it did not, the two are read
+    lowercased, so case is never the fact found.  Read off exact `str` alone, which runs no code of the values.
+    """
+    if type(value) is not str or type(piece) is not str:
+        return None
+    named, edge, side = ("prefix", "starts", "past") if start else ("suffix", "ends", "before")
+    holds = str.startswith if start else str.endswith
+    text, wanted = (value, piece) if cased else (value.lower(), piece.lower())
+    if holds(text, wanted):
+        return None
+    bare = text.lstrip() if start else text.rstrip()
+    if bare != text and holds(bare, wanted):
+        gap = text[: len(text) - len(bare)] if start else text[len(bare) :]
+        what = "a line break" if gap in ("\n", "\r\n", "\r") else "whitespace"
+        return f"the value {edge} with {what}, and {edge} with the {named} {side} it"
+    if holds(text.lower(), wanted.lower()):
+        return f"the value {edge} with the {named} once case is ignored"
+    trimmed = wanted.strip()
+    if trimmed and trimmed != wanted and holds(text, trimmed):
+        return f"the {named} given starts or ends with whitespace, and the value {edge} with it without that"
+    if wanted in text:
+        return f"the value holds the {named}, and not at its {'start' if start else 'end'}"
+    return None
+
+
+def not_in_text(value: object, piece: object, *, cased: bool = True) -> str | None:
+    """One line on why a text does not hold another, where one fact says it.
+
+    It holds it once case is ignored, or once every run of whitespace is read as one space, which is what a
+    line break, a tab, a no-break space and two spaces in a row all come to, or once both are.  *cased* as in
+    `not_at_an_end`.  Read off exact `str` alone.
+    """
+    if type(value) is not str or type(piece) is not str:
+        return None
+    text, wanted = (value, piece) if cased else (value.lower(), piece.lower())
+    if wanted in text:
+        return None
+    if wanted.lower() in text.lower():
+        return "the value holds it once case is ignored"
+    # a run is read as one space and not taken out: stripped, a text given with a space before it was held
+    spaced_text, spaced = _RUNS.sub(" ", text), _RUNS.sub(" ", wanted)
+    if spaced in spaced_text:
+        return "the value holds it once every run of whitespace is read as one space"
+    if spaced.lower() in spaced_text.lower():
+        return "the value holds it once case is ignored and every run of whitespace is read as one space"
+    return None
+
+
+def but_for_whitespace(value: object, other: object) -> str | None:
+    """One line on two texts that are not equal without regard to case, where whitespace alone holds them apart.
+
+    It names the whitespace as `is_equal_to` does for two texts.  Read off exact `str` alone.
+    """
+    if type(value) is not str or type(other) is not str:
+        return None
+    apart = _accounted([(value.lower(), other.lower())], _OF_SPACE)
+    return None if apart is None else f"the two are equal without regard to case but for {apart}"
+
+
+def but_for_case(value: object, other: object) -> str | None:
+    """One line on two texts that are not equal ignoring whitespace, where case alone holds them apart.
+
+    Read off exact `str` alone.
+    """
+    if type(value) is not str or type(other) is not str:
+        return None
+    if "".join(value.split()).lower() == "".join(other.split()).lower():
+        return "the two are equal ignoring whitespace once case is ignored too"
+    return None
+
+
+_JOINTS: Final = re.compile(r"[\s_.\-]+")
+"""What joins the words of a name: a space, an underscore, a dot, a hyphen."""
+
+
+def _near_name(name: str, names: Sequence[str], held: str) -> str | None:
+    """One line on a name among *names* that reads almost as *name*, which was asked for and is not there.
+
+    Two facts and one likeness, the narrowest first.  A name is the same once both are lowercased.  A name is
+    the same once both are lowercased and what joins their words is taken out, ``userId`` beside ``user_id``.
+    One spelling alone is almost the same (`_almost`), and the names of that spelling are named, the first
+    three of them and how many more: two that differ only in case or joints are one spelling.  The last is a
+    likeness and is worded as one: which name was meant is the reader's to say, and where two spellings come
+    that close nothing is said.
+
+    Read off exact `str` alone, which runs no code of the values.  By ``lower()`` and not ``casefold()``, which
+    calls ``ß`` and ``ss`` one text, a difference that is not of case.  The likeness is looked for only where
+    the name asked for and the name held are of a hundred characters at most, as they were written: past that
+    it is no name, and the search is quadratic.
+    """
+    others = [each for each in names if each != name]
+    lowered = name.lower()
+    alike = [each for each in others if each.lower() == lowered]
+    if alike:
+        return f"{held} reads the same but for its case: {_listed(alike)}"
+    plain = _JOINTS.sub("", lowered)
+    if not plain:
+        return None
+    joined: dict[str, list[str]] = {}
+    for each in others:
+        joined.setdefault(_JOINTS.sub("", each.lower()), []).append(each)
+    if plain in joined:
+        return f"{held} reads the same but for how its words are joined: {_listed(joined[plain])}"
+    if len(name) > 100:
+        return None
+    # one matcher for the name: built for every key, the ratio cost a failure over 200 keys 0.8 ms
+    texts = difflib.SequenceMatcher(None, b=plain, autojunk=False)
+    short = (each for each, held_as in joined.items() if each and all(len(key) <= 100 for key in held_as))
+    close = [each for each in short if _almost(plain, each, texts)]
+    if len(close) == 1:
+        return f"{held} is spelled almost the same: {_listed(joined[close[0]])}"
+    return None
+
+
+def _almost(one: str, other: str, texts: difflib.SequenceMatcher[str]) -> bool:
+    """Whether two names are one slip apart, or nearly one text.
+
+    A slip is two neighbouring letters swapped, one letter too many, or one too few.  A letter in place of
+    another is not one: that is how two words differ, ``date`` and ``data``.  Nearly one text is a `difflib`
+    ratio of 0.85, which a long name reaches with a few letters dropped or replaced, ``created`` beside
+    ``created_at`` and seventeen of one letter beside twenty.  Measured on 54 labelled typos and 46 pairs of
+    unrelated key names: 52 named and 6, four of the six a singular beside its plural.  The ratio alone named
+    49 and 5 at this floor, and 52 and 9 at 0.8.  *texts* holds *one* and is asked the ratio last, past its
+    two upper bounds.
+    """
+    if len(one) == len(other):
+        apart = [index for index in range(len(one)) if one[index] != other[index]]
+        if (
+            len(apart) == 2
+            and apart[1] == apart[0] + 1
+            and one[apart[0]] == other[apart[1]]
+            and one[apart[1]] == other[apart[0]]
+        ):
+            return True
+    elif abs(len(one) - len(other)) == 1:
+        shorter, longer = sorted((one, other), key=len)
+        parted = next((index for index in range(len(shorter)) if shorter[index] != longer[index]), len(shorter))
+        if longer[parted + 1 :] == shorter[parted:]:
+            return True
+    texts.set_seq1(other)
+    return texts.real_quick_ratio() >= 0.85 and texts.quick_ratio() >= 0.85 and texts.ratio() >= 0.85
+
+
+def _listed(names: Sequence[str]) -> str:
+    shown = ", ".join(f"<{_capped(each)}>" for each in names[:3])
+    return shown if len(names) <= 3 else f"{shown} and {len(names) - 3} more"
 
 
 def _beside_a_nan(entries: Sequence[DiffEntry], *, comparators: bool) -> str:
@@ -577,16 +759,31 @@ def _same_values(pairs: Sequence[tuple[object, object]]) -> bool:
 
 def _named(pairs: Sequence[tuple[object, object]]) -> str | None:
     """The narrowest set of steps that accounts for every pair, worded, or ``None``."""
+    accounted = _accounted(pairs, _STEPS)
+    return None if accounted is None else f"every difference here is one of {accounted}"
 
-    for step, label in _STEPS:
+
+def _accounted(
+    pairs: Sequence[tuple[object, object]], steps: Sequence[tuple[Callable[[object], object], _Label]]
+) -> str | None:
+    """What accounts for every pair, of *steps* and of whitespace of any kind and amount, the narrowest first.
+
+    One step, then two.  Then the kind or amount of whitespace, alone and beside one step: it takes in line
+    endings and surrounding whitespace, so said first it would stand in for the two narrower facts.
+    """
+    for step, label in steps:
         if _explains(pairs, (step,)):
-            return f"every difference here is one of {_worded(label, pairs)}"
-    # only now pairs of steps: `"a   "` against `"a "` needs both, and neither alone equalises it
-    for index, (first_step, first_label) in enumerate(_STEPS):
-        for second_step, second_label in _STEPS[index + 1 :]:
+            return _worded(label, pairs)
+    # only now pairs of steps: `"a\r\nb "` against `"a\nb"` needs both, and neither alone equalises it
+    for index, (first_step, first_label) in enumerate(steps):
+        for second_step, second_label in steps[index + 1 :]:
             if _explains(pairs, (first_step, second_step)):
-                first, second = _worded(first_label, pairs), _worded(second_label, pairs)
-                return f"every difference here is one of {first} and {second}"
+                return f"{_worded(first_label, pairs)} and {_worded(second_label, pairs)}"
+    if _explains(pairs, (_spaced,)):
+        return "the kind or amount of whitespace"
+    for step, label in steps:
+        if step not in (_newlines, _stripped) and _explains(pairs, (step, _spaced)):
+            return f"{_worded(label, pairs)} and the kind or amount of whitespace"
     return None
 
 

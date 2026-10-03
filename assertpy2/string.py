@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import broadcasts, equal_past
 from ._engine._require import argument, refuse, require_type, sized_len
+from ._hints import but_for_case, but_for_whitespace, not_at_an_end, not_in_text, under
 from .errors import _capped, _capped_format, _capped_repr, _first_difference, _formatted, _parted, _safe_str
 
 if TYPE_CHECKING:
@@ -107,7 +108,8 @@ class StringMixin(_MixinBase):
             _raw_place(other, other_lowered, parted),
         )
         return self.error(
-            f"Expected <{actual_text}> to be case-insensitive equal to <{other_text}>, but was not.",
+            f"Expected <{actual_text}> to be case-insensitive equal to <{other_text}>, but was not."
+            f"{under(but_for_whitespace(self.val, other))}",
             expected=other,
         )
 
@@ -143,7 +145,8 @@ class StringMixin(_MixinBase):
             _safe_str(self.val), _formatted(other), *_parted_past_spacing(self.val, other)
         )
         return self.error(
-            f"Expected <{actual_text}> to be equal to <{other_text}> ignoring whitespace, but was not.",
+            f"Expected <{actual_text}> to be equal to <{other_text}> ignoring whitespace, but was not."
+            f"{under(but_for_case(self.val, other))}",
             expected=other,
         )
 
@@ -177,7 +180,8 @@ class StringMixin(_MixinBase):
                 if items[0].lower() not in self.val.lower():
                     return self.error(
                         f"Expected <{_capped(self.val)}> to case-insensitive contain item"
-                        f" <{_capped_format(items[0])}>, but did not.",
+                        f" <{_capped_format(items[0])}>, but did not."
+                        f"{under(not_in_text(self.val, items[0], cased=False))}",
                         expected=items[0],
                     )
             else:
@@ -244,7 +248,8 @@ class StringMixin(_MixinBase):
                 parted = _first_difference(self.val, text_prefix)
                 actual_text, prefix_text = _parted(_safe_str(self.val), _formatted(text_prefix), parted)
                 return self.error(
-                    f"Expected <{actual_text}> to start with <{prefix_text}>, but did not.",
+                    f"Expected <{actual_text}> to start with <{prefix_text}>, but did not."
+                    f"{under(not_at_an_end(self.val, text_prefix, start=True))}",
                     expected=prefix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
@@ -309,7 +314,8 @@ class StringMixin(_MixinBase):
                     _safe_str(self.val), _formatted(text_suffix), *_parted_from_the_end(self.val, text_suffix)
                 )
                 return self.error(
-                    f"Expected <{actual_text}> to end with <{suffix_text}>, but did not.",
+                    f"Expected <{actual_text}> to end with <{suffix_text}>, but did not."
+                    f"{under(not_at_an_end(self.val, text_suffix, start=False))}",
                     expected=suffix,
                 )
         elif isinstance(self.val, (bytes, bytearray)):
@@ -377,7 +383,8 @@ class StringMixin(_MixinBase):
                 _raw_place(prefix, prefix_lowered, parted),
             )
             return self.error(
-                f"Expected <{actual_text}> to case-insensitive start with <{prefix_text}>, but did not.",
+                f"Expected <{actual_text}> to case-insensitive start with <{prefix_text}>, but did not."
+                f"{under(not_at_an_end(self.val, prefix, start=True, cased=False))}",
                 expected=prefix,
             )
         return self
@@ -419,7 +426,8 @@ class StringMixin(_MixinBase):
                 _raw_place(suffix, suffix_lowered, suffix_parted),
             )
             return self.error(
-                f"Expected <{actual_text}> to case-insensitive end with <{suffix_text}>, but did not.",
+                f"Expected <{actual_text}> to case-insensitive end with <{suffix_text}>, but did not."
+                f"{under(not_at_an_end(self.val, suffix, start=False, cased=False))}",
                 expected=suffix,
             )
         return self

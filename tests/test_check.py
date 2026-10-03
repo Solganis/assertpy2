@@ -262,7 +262,7 @@ class TestAPivotInsideAnExtensionAnswersForIt:
         assert_that(assert_that("code=404").check().carries_code_other_than("500", "404").passed).is_true()
 
     def test_a_prerequisite_the_pivot_misses_is_delivered_as_it_stands(self):
-        missing = "Expected key <cod>, but val has no key <cod>."
+        missing = "Expected key <cod>, but val has no key <cod>.\na key is spelled almost the same: <code>"
         with pytest.raises(AssertionError) as exc_info:
             assert_that("code=404").not_.names_a_code()
         outcome = assert_that("code=404").check().not_.names_a_code()

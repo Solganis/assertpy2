@@ -340,7 +340,10 @@ def test_starts_with_ignoring_case():
 def test_starts_with_ignoring_case_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that("FooBar").starts_with_ignoring_case("bar")
-    assert_that(str(exc_info.value)).is_equal_to("Expected <FooBar> to case-insensitive start with <bar>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <FooBar> to case-insensitive start with <bar>, but did not."
+        "\nthe value holds the prefix, and not at its start"
+    )
 
 
 def test_starts_with_ignoring_case_bad_value_type_failure():
@@ -370,7 +373,10 @@ def test_ends_with_ignoring_case():
 def test_ends_with_ignoring_case_failure():
     with pytest.raises(AssertionError) as exc_info:
         assert_that("FooBar").ends_with_ignoring_case("foo")
-    assert_that(str(exc_info.value)).is_equal_to("Expected <FooBar> to case-insensitive end with <foo>, but did not.")
+    assert_that(str(exc_info.value)).is_equal_to(
+        "Expected <FooBar> to case-insensitive end with <foo>, but did not."
+        "\nthe value holds the suffix, and not at its end"
+    )
 
 
 def test_ends_with_ignoring_case_bad_value_type_failure():

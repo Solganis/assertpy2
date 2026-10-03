@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import collections.abc
 import inspect
-from typing import Any
+from typing import Any, cast
 
 from ._engine._diff import _build_equality_diff, _pair_itself
 from ._engine._equality import mapping_shaped
 from ._engine._introspection import is_namedtuple
 from ._engine._mixin_base import _MixinBase
 from ._engine._path import _ROOT
+from ._hints import Roles, not_found
 from .errors import DiffResult, _first_difference, _formatted, _parted, _told_apart, _truncated
 from .helpers import _both_list_like, _elided_seq_repr, _elided_walks
 from .http_mixin import response_of
@@ -26,6 +27,28 @@ def _one_operand(args: tuple[object, ...], kwargs: dict[str, object]) -> dict[st
         return dict(_ONE_OPERAND.bind_partial(*args, **kwargs).arguments)
     except TypeError:
         return {"args": args, "kwargs": kwargs}
+
+
+def _near(name: str, value: object, *, keyed: bool) -> str:
+    """A line, on a line of its own, on a key or an attribute of *value* that reads almost as *name*, or nothing.
+
+    The keys are read by walking the value once, as `contains_key` walks it.  The attributes are the public
+    names its ``__dir__`` lists that the object does hold, looked up without calling a property: a ``__dir__``
+    of the value's own may list what is not there.  Asked of the type and not through `dir`, which sorts what
+    it is given, and sorting compares names that may be no plain text.
+    """
+    try:
+        if keyed:
+            names = cast("collections.abc.Iterable[object]", value)
+            line = not_found(name, names, Roles("the key not found", "a key", named=True))
+        else:
+            listed = type.__getattribute__(type(value), "__dir__")(value)
+            public = [each for each in listed if type(each) is str and not each.startswith("_")]
+            held = [each for each in public if inspect.getattr_static(value, each, MISSING) is not MISSING]
+            line = not_found(name, held, Roles("the attribute not found", "an attribute", named=True))
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return ""
+    return "" if line is None else f"\n{line}"
 
 
 def _read_again(builder: Any, actual: object, expected: object) -> tuple[tuple[str, str] | None, DiffResult]:
@@ -154,7 +177,8 @@ class DynamicMixin(_MixinBase):
             asked = Requirement(attr, _one_operand(args, kwargs))
             if err_msg:
                 # ok to raise now that we are inside wrapper
-                self._unmet(err_msg, expected=asked.parameters.get("other", MISSING), requirement=asked)
+                near = _near(attr_name, self.val, keyed=is_dict and not val_is_namedtuple)
+                self._unmet(err_msg + near, expected=asked.parameters.get("other", MISSING), requirement=asked)
                 return self
             else:
                 try:

@@ -24,7 +24,7 @@ from ._engine._mixin_base import _MixinBase
 from ._engine._ordering import REFUSALS, equals, lookup, may_broadcast, member
 from ._engine._path import _ROOT
 from ._engine._require import argument, refuse, require_type, sized_len, verdict
-from ._hints import Roles, not_found, reads_as
+from ._hints import Roles, not_found, not_in_text, reads_as, under
 from .errors import DiffEntry, DiffResult, _capped, _capped_format, _capped_repr, _safe_repr, _told_apart
 from .matchers import _is_matcher
 
@@ -131,7 +131,7 @@ def _as_row(value: object) -> Any:
 
 
 _OF_AN_ITEM: Final = Roles()
-_OF_A_KEY: Final = Roles("the key not found", "a key")
+_OF_A_KEY: Final = Roles("the key not found", "a key", named=True)
 
 
 def _why(item: object, values: Iterable[object], roles: Roles = _OF_AN_ITEM) -> str:
@@ -442,9 +442,10 @@ class ContainsMixin(_MixinBase):
                 diff = DiffResult(
                     kind="contains", entries=[DiffEntry(path="missing", actual=None, absent="actual", expected=item)]
                 )
+                in_text = type(values) is str and type(item) is str
                 return self.error(
                     f"Expected <{_capped_format(values)}> to contain item <{_capped_format(item)}>, but did not."
-                    f"{_why(item, values)}",
+                    f"{under(not_in_text(values, item)) if in_text else _why(item, values)}",
                     diff=diff,
                     expected=items,
                 )

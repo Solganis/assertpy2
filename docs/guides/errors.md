@@ -455,6 +455,30 @@ All of them but the two that walk in order, the keys and the entry also name the
 differs, where a row shares a key with the item: for dicts and for dataclasses, attrs instances, named
 tuples and models. Both are said of one item not found. Several would each need their own.
 
+Where the thing not found is a key, and the value holds one that reads almost the same, the line names
+it. `contains_key()`, `contains()` on a mapping, `contains_entry()` and `has_<name>()` say it, the
+last of an attribute as well:
+
+```text
+Expected <{'user_id': 2, 'email': 'a@b'}> to contain key <userId>, but did not.
+a key reads the same but for how its words are joined: <user_id>
+```
+
+Three things are looked for, the narrowest first. A key is the same once both are lowercased. A key is
+the same once both are lowercased and what joins their words is taken out (a space, an underscore, a
+dot, a hyphen), `userId` beside `user_id`. One spelling alone is almost the same: two neighbouring
+letters swapped, a letter too many or too few, or the two nearly one text, a `difflib` ratio of 0.85 once
+lowercased and unjoined, which a long name reaches with a few letters dropped or replaced. The first two
+are facts. The third is a likeness and is worded as one. Where two spellings come that close nothing is
+said, and keys that differ only in case or joining are one spelling, named together: the first three,
+and how many more there are.
+
+The line is said of one key not found: where several are missing none is named. Only keys that are plain
+text are read, and of an object only the public names it holds. The likeness is looked for among names
+of a hundred characters at most. A `has_<name>()` asked under `not_` for
+a name that is not there fails as it does without `not_`, the line included. Over the keys of three
+real payloads, a key asked for with one slip was named in 99.3% of 2529 cases, and no other key ever was.
+
 `contains_exactly()` and `contains_exactly_in_any_order()` count. Where everything missing is one item
 the value does hold, the failure says the two counts of that item instead:
 `<'7'> is held 1 time and was asked for 2 times.` With nothing missing, where everything left over is
@@ -487,6 +511,32 @@ printed as `is_equal_to()` prints them, the keys that match collapsed to `..`, a
 two plain tuples too long to print whole, unless the two collapsed texts read alike or the values cannot
 be compared a second time: then both are printed as texts, cut around the place they part. Where the
 two cannot be read a second time the diff is one entry, the pair itself.
+
+A text held against a text is explained the same way. Where the relation asked holds once one thing is
+set aside, the line names that thing:
+
+```text
+Expected <Total: 42 EUR> to contain item <Total: 42>, but did not.
+the value holds it once every run of whitespace is read as one space
+```
+
+The space after `Total:` in the value is a no-break space, which the sentence cannot show.
+
+`starts_with()` and `ends_with()` name whitespace at that end of the value (a single `\n`, `\r\n` or
+`\r` is called a line break), case, whitespace at an end of the text given, or that the value holds the
+text somewhere else.
+`contains()` on a text names case, or that every run of whitespace has to be read as one space, which
+is what a line break, a tab, a no-break space and two spaces in a row all come to, or both.
+`starts_with_ignoring_case()`, `ends_with_ignoring_case()` and `contains_ignoring_case()` say all of
+that but case. `is_equal_to_ignoring_case()` names the whitespace that still holds the two apart, and
+`is_equal_to_ignoring_whitespace()` names case. For two texts `is_equal_to()` named line endings and
+surrounding whitespace before: it names the kind or amount of whitespace too, past those two.
+
+One fact is said, the narrowest. Two at once get no line, a leading space and another case for
+`starts_with()`: only `contains()` has a line for case and whitespace together, and equality one for
+line endings and surrounding whitespace. These lines are said of plain text alone: a `str` of a
+class of its own, bytes and the first element of a list get none. `is_equal_to()` is the exception,
+and reads bytes and a `str` of any class as it did before.
 
 A third line appears when the value came from an HTTP response, naming the request it answered:
 
