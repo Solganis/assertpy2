@@ -6,14 +6,30 @@ import warnings
 from typing import TYPE_CHECKING, Any, cast
 
 from ._engine._diff import _walk_leaves
-from ._engine._introspection import is_attrs_instance, is_mapping_like, is_model_dump_object, materialized
+from ._engine._introspection import (
+    class_name,
+    is_attrs_instance,
+    is_mapping_like,
+    is_model_dump_object,
+    materialized,
+    plainly_hashed,
+)
 from ._engine._mixin_base import _MixinBase
 from ._engine._pairing import maximum_pairing
 from ._engine._path import _ROOT
 from ._engine._require import VerdictError, argument, refuse, verdict
 from ._hints import class_in_spec, under
-from ._matcher_impls import _has_own_evaluate
-from .errors import DiffEntry, DiffResult, VacuousAssertionWarning, _capped, _capped_format
+from ._matcher_impls import _A_STRUCTURE, _describe_spec_value, _has_own_evaluate
+from .errors import (
+    DiffEntry,
+    DiffResult,
+    VacuousAssertionWarning,
+    _capped,
+    _capped_format,
+    _safe_repr,
+    _truncated,
+)
+from .helpers import _ELIDED, _entry_part, _field_part, _joined_parts, _Part
 from .matchers import (
     IsNotNoneMatcher,
     Matcher,
@@ -32,6 +48,80 @@ if TYPE_CHECKING:
     from ._engine._compat import Self
 
 __tracebackhide__ = True
+
+
+_Kept = dict[int, tuple[object, Any]]
+"""The keys of one level of a spec that lead to a mismatch, by the identity of the key, each with the level under it."""
+
+
+def _kept_keys(entries: list[DiffEntry]) -> _Kept:
+    """The keys on the way to every mismatch of a spec, level by level, read off the steps its walk recorded."""
+    kept: _Kept = {}
+    for entry in entries:
+        level = kept
+        for step in entry.steps:
+            level = level.setdefault(id(step.value), (step.value, {}))[1]
+    return kept
+
+
+def _elided_spec(expected: object, kept: _Kept) -> str:
+    """What a spec value is described as, with the keys that matched left out as ``..``.
+
+    Whole where nothing under it failed, and where the spec there is no exact dict: its keys are found by
+    identity, and a dict of a class of its own may hand out other objects each time it is read.
+    """
+    spec = expected._spec if type(expected) is StructureMatcher else expected
+    if not kept or type(spec) is not dict:
+        return _describe_spec_value(expected)
+    parts: list[_Part] = []
+    pending = False
+    for key, value in spec.items():
+        found = kept.get(id(key))
+        if found is None:
+            pending = True
+            continue
+        if pending:
+            parts.append(_ELIDED)
+            pending = False
+        parts.append(f"{key}: {_elided_spec(value, found[1])}")
+    if pending:
+        parts.append(_ELIDED)
+    described = _joined_parts(parts, opener="{", closer="}")
+    return described if spec is expected else f"{_A_STRUCTURE} {described}"
+
+
+def _elided_mapping(
+    mapping: object, kept: _Kept, opener: str, closer: str, part_of: Callable[[object, str], str]
+) -> str | None:
+    """*mapping* as a failed spec leaves it in a message: the keys on the way to a mismatch, ``..`` for the rest.
+
+    ``None`` where it is not read that way: nothing under it failed, it is no exact dict, or a key of it or of
+    the spec's on the way is of a class whose lookup runs that class's ``__hash__`` or ``__eq__``.  And where it
+    is written as a record and a key to show is no name: ``x=1, y`` as a field would read as two.
+    """
+    if not kept or type(mapping) is not dict:
+        return None
+    if not all(plainly_hashed(key) for key, _ in kept.values()) or not all(map(plainly_hashed, mapping)):
+        return None
+    below_of = dict(kept.values())
+    parts: list[_Part] = []
+    pending = False
+    # read before anything is printed: the repr of a value may take a key out of the dict that holds it
+    for key, value in list(mapping.items()):
+        below = below_of.get(key)
+        if below is None:
+            pending = True
+            continue
+        if part_of is _field_part and not (type(key) is str and key.isidentifier()):
+            return None
+        if pending:
+            parts.append(_ELIDED)
+            pending = False
+        nested = _elided_mapping(value, below, "{", "}", _entry_part)
+        parts.append(part_of(key, _safe_repr(value) if nested is None else nested))
+    if pending:
+        parts.append(_ELIDED)
+    return _joined_parts(parts, opener=opener, closer=closer)
 
 
 def _describe_unpaired(matcher, raised_count):
@@ -334,6 +424,9 @@ class SatisfiesMixin(_MixinBase):
         ``spec`` maps to either a `Matcher`, a raw value (checked via ``==``), or a nested ``dict``
         for recursive matching.  Extra keys in val that are absent from the spec are allowed.
 
+        A failure prints the spec with what matched left out as ``..``, and val the same way where it is read
+        as plain dicts with plain keys, a model and an attrs instance among them.  It holds both whole.
+
         Args:
             spec: a dict where values can be Matcher instances, raw values, or nested dicts
 
@@ -360,14 +453,21 @@ class SatisfiesMixin(_MixinBase):
         if not isinstance(spec, dict):
             refuse(spec, "a dict", subject=argument("spec"))
         matcher = StructureMatcher(spec)
+        mapped = matcher._as_mapping(self.val)
         # one walk, read twice: the entries want every mismatch, the message wants the first one in words
-        mismatches = matcher.walk_mismatches(self.val)
+        mismatches = matcher._walk(mapped, spec, _ROOT, set())
         if mismatches:
             entries = [
                 mismatch.path.entry(actual=mismatch.actual, expected=mismatch.expected_desc) for mismatch in mismatches
             ]
+            kept = _kept_keys(entries)
+            spelling = (
+                ("{", "}", _entry_part) if mapped is self.val else (f"{class_name(type(self.val))}(", ")", _field_part)
+            )
+            shown = _elided_mapping(mapped, kept, *spelling)
             return self.error(
-                f"Expected <{_capped(self.val)}> to match structure {matcher.describe()}, but"
+                f"Expected <{_capped(self.val) if shown is None else _truncated(shown)}> to match structure"
+                f" {_elided_spec(matcher, kept)}, but"
                 f" {matcher.render_mismatch(mismatches)}."
                 f"{under(class_in_spec((one.path.text, one.actual, one.literal) for one in mismatches))}",
                 actual=self.val,

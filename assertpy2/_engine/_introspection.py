@@ -180,7 +180,12 @@ def laid_out(value: object) -> object:
     return _laid_out(value, {}, set())
 
 
-def _plainly_hashed(key: object) -> bool:
+def plainly_hashed(key: object) -> bool:
+    """Whether *key* is exactly one of the six plain kinds, whose own hash and equality are the interpreter's.
+
+    A lookup runs no other code only where every key the dict holds is one too: a key of another class that
+    hashes the same is asked its own ``__eq__``.
+    """
     kind = type(key)
     return kind is str or kind is int or kind is bool or kind is float or kind is bytes or key is None
 
@@ -203,7 +208,7 @@ def _laid_out(value: object, done: dict[int, object], above: set[int]) -> object
             made = kind(parts)
     else:
         held = list(dict.items(cast("dict[object, object]", value)))
-        if all(_plainly_hashed(key) for key, _ in held):
+        if all(plainly_hashed(key) for key, _ in held):
             # a copy keeps the hashes it was made with, and putting a value back compares plain keys alone
             fields = dict.copy(cast("dict[object, object]", value))
             for key, old in held:

@@ -24,7 +24,7 @@ Assert on the response rather than on `resp.status_code` and `resp.json()`, and 
 says which response it came from, with the request line where the client kept one:
 
 ```text
-Expected <{'id': 42, 'status': 'refunded'}> to match structure ..., but at <status>: ...
+Expected <{.., 'status': 'refunded'}> to match structure ..., but at <status>: ...
 from GET https://api.example.com/orders/42 -> 200
 ```
 

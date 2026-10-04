@@ -209,6 +209,28 @@ value is an instance of the class the spec holds. Where it is not, the failure s
 model, the failure says the type whatever the value is, since asking such a class whether the value is
 its instance would run the class's own code.
 
+A failure prints the value and the spec with what matched left out, as a failed `is_equal_to()` does,
+so one wrong field of a wide record stays one short sentence:
+
+```python
+try:
+    assert_that({"id": 7, "name": "Alice", "age": 15, "active": True}).matches_structure({
+        "name": "Alice",
+        "age": match.between(18, 120),
+        "active": True,
+    })
+except AssertionError as failure:
+    print(str(failure).splitlines()[0])
+    # Expected <{.., 'age': 15, ..}> to match structure a mapping matching structure {.., age: a value between <18> and <120>, ..}, but at <age>: expected a value between <18> and <120>, but was <15>.
+```
+
+A plain dict, a model and an attrs instance are written that way, a record under its class name:
+`Customer(.., address={'city': 'Oslo', ..}, ..)`. It takes every key on the way, the value's and the
+spec's, to be exactly a `str`, an `int`, a `bool`, a `float`, a `bytes` or `None`, and a record's field
+names to read as names. Anything else is printed whole: a mapping of another class, and a record that a
+dict or an attrs instance holds. A model's nested models are dicts once it is read, and are left out of
+like any dict. The failure holds the whole value as `actual` either way.
+
 The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
 attrs instance - a model or attrs instance is normalized to its dict first, so the same spec works
 either way, including inside `satisfies()` and the `==` form.

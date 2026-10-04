@@ -1477,6 +1477,9 @@ class _MissingSentinel:
 _MISSING: Final = _MissingSentinel()
 
 
+_A_STRUCTURE: Final = "a mapping matching structure"
+
+
 def _describe_spec_value(value: object) -> str:
     """Describe a single structure-spec value (matcher, nested dict spec, or raw value)."""
     if _is_matcher(value):
@@ -1527,7 +1530,7 @@ class StructureMatcher(BaseMatcher):
         return not self._walk(mapping, self._spec, _ROOT, set())
 
     def describe(self) -> str:
-        return f"a mapping matching structure {_describe_spec_value(self._spec)}"
+        return f"{_A_STRUCTURE} {_describe_spec_value(self._spec)}"
 
     def describe_mismatch(self, value: Any) -> str:
         mapping = self._as_mapping(value)
