@@ -468,10 +468,7 @@ async def _a_number_later() -> int:
 
 
 async def _polls_over_an_async_probe() -> None:
-    """The probe is awaited on every poll, so the chain is over what it returns rather than a coroutine.
-
-    ty answers `Unknown` for the chain, so it refuses neither line.
-    """
+    """The probe is awaited on every poll, so the chain is over what it returns rather than a coroutine."""
     await assert_that(_a_number_later).eventually().is_positive()  # case: valid-poll-over-an-async-probe
     await assert_that(_a_number_later).eventually().starts_with("x")  # case: text-assertion-on-an-async-probe
 

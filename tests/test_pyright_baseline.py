@@ -33,6 +33,9 @@ _ROOT = pathlib.Path(__file__).resolve().parent.parent
 # diagnostic of the same rule, and each refusal is about its TypeVar rather than about a number.
 _REFUSED_VARIANCE: tuple[tuple[str, str, str, str], ...] = (
     ("assertpy2/_engine/_typing.py", "_RepeatableAssertion", "_E", "contravariant"),
+    # `returned()` hands back the invariant builder over it. Invariant, the covariant views that lead here would
+    # be asked to follow, down to the callable one, whose rungs a subclass value reaches only through covariance
+    ("assertpy2/_engine/_typing.py", "_WarnedAssertion", "_P_co", "invariant"),
     # `_NumericAssertion` is out because `check()` reads `_N` back in a return position, answering the
     # suggestion. `_CheckDictAssertion` gains one: dropping the chaining return leaves `_V` read-only
     ("assertpy2/_engine/_check_typing.py", "_CheckRepeatableAssertion", "_E", "contravariant"),

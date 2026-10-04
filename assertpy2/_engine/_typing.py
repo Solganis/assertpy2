@@ -1109,8 +1109,8 @@ if TYPE_CHECKING:
 
         def check(self) -> _CheckWarnedAssertion[_P_co]: ...
 
-        # bound through `self`, the builder being invariant; ty needs a member using the parameter, not a twin's
-        def returned(self: _WarnedAssertion[_R]) -> AssertionBuilder[_R]: ...
+        # named outright: bound through `self`, ty found no member here that uses the parameter and read `Unknown`
+        def returned(self) -> AssertionBuilder[_P_co]: ...
 
     class _CallableAssertion(_CoreAssertion, Protocol[_P_co]):
         """Assertions available for callable values.
@@ -1136,7 +1136,7 @@ if TYPE_CHECKING:
         # an `async def` probe is awaited on every poll, so the chain is over what the coroutine returns
         @overload
         def eventually(
-            self: _CallableAssertion[Awaitable[_R]],
+            self: _Holding[Callable[..., Awaitable[_R]]],
             *,
             timeout: float = ...,
             interval: float = ...,

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     import logging
     import pathlib
     import sys
-    from collections.abc import Callable, Iterator, Mapping, Sequence
+    from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
     from typing import Any, cast
 
     from typing_extensions import TypeIs, assert_type
@@ -287,6 +287,12 @@ if TYPE_CHECKING:
 
     async def _settled() -> None:
         assert_type((await assert_that(_counts).eventually().first()).value, int)
+
+    async def _a_count_later() -> int: ...
+
+    # an `async def` probe is awaited on every poll, so the chain is over what the coroutine hands back
+    assert_type(assert_that(_a_count_later).eventually(), _AsyncPoll[int])
+    assert_type(assert_that(cast("Callable[..., Awaitable[int]]", _a_count_later)).eventually(), _AsyncPoll[int])
 
     def _maybe_counts() -> list[int] | None: ...
     def _maybe_grid() -> list[list[int]] | None: ...
@@ -641,8 +647,8 @@ if TYPE_CHECKING:
     assert_type(
         assert_that(lambda: int("1")).does_not_raise(ValueError).when_called_with().returned(), AssertionBuilder[int]
     )
-    # after `warns()` ty reads the builder over `Unknown`: the view only passes its parameter on to its twins
-    assert_that(len).warns().when_called_with().returned().is_positive()
+    assert_type(assert_that(lambda: int("1")).warns().when_called_with().returned(), AssertionBuilder[int])
+    assert_type(assert_that(len).warns().when_called_with().not_.contains("x").returned().value, int)
     assert_type(assert_that(lambda: int("1")).does_not_warn().when_called_with().returned().value, int)
     assert_that(len).does_not_raise(ValueError).when_called_with().returned().is_positive()
 

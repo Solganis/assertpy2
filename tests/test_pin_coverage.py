@@ -44,6 +44,8 @@ import ast
 import pathlib
 import re
 
+import pytest
+
 from assertpy2 import assert_that
 
 _ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -60,8 +62,6 @@ _UNPINNABLE = {
     ("_CapableAssertion", "decoded_as", "AssertionBuilder", ""),
     ("_CapableAssertion", "extracting_group", "AssertionBuilder", ""),
     ("_CapableAssertion", "matches_with_groups", "AssertionBuilder", ""),
-    # after `warns()` ty reads the builder over `Unknown`: the view only passes its parameter on to its twins
-    ("_WarnedAssertion", "returned", "AssertionBuilder", ""),
     # the fallback for a bare `type` is ty's alone: mypy takes the first rung as `Never`, the others as `Unknown`
     ("_CapableAssertion", "raises", "_ExpectedRaiseAssertion[Any, BaseException]", ""),
     ("_InvokedAssertion", "error_of", "_InvokedAssertion[BaseException]", ""),
@@ -385,7 +385,8 @@ def _pin_narrowing(expression: ast.expr, member: str, predicates: dict[str, str]
     """What this pin narrows on, taken from wherever the member keeps it.
 
     `satisfies` from the helper it is given, `is_instance_of` and the exception family from the class,
-    `is_not_none` from the `cast` the subject was written as. Anything else has none, which every rung answers.
+    `is_not_none` and `eventually` from the `cast` the subject was written as. Anything else has none, which
+    every rung answers.
     """
     if member == "satisfies":
         given = expression.args[0] if isinstance(expression, ast.Call) and expression.args else None
@@ -395,11 +396,25 @@ def _pin_narrowing(expression: ast.expr, member: str, predicates: dict[str, str]
         if isinstance(given, ast.Call) and getattr(given.func, "id", None) == "cast":
             return _flattened(_inside(ast.literal_eval(given.args[0]), "type["))
         return _flattened(ast.unparse(given)) if given is not None else ""
-    if member == "is_not_none":
-        for node in ast.walk(expression):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "cast" and node.args:
-                return _flattened(ast.literal_eval(node.args[0]).removesuffix(" | None"))
+    if member in ("is_not_none", "eventually"):
+        subject = _subject(expression)
+        if isinstance(subject, ast.Call) and getattr(subject.func, "id", None) == "cast" and subject.args:
+            return _flattened(ast.literal_eval(subject.args[0]).removesuffix(" | None"))
     return ""
+
+
+def _subject(expression: ast.expr) -> ast.expr | None:
+    """What the chain's own `assert_that` was given, reached down its receivers: a call in an argument is not it."""
+    node: ast.AST = expression
+    while True:
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "assert_that":
+            return node.args[0] if node.args else None
+        if isinstance(node, ast.Call):
+            node = node.func
+        elif isinstance(node, (ast.Attribute, ast.Await)):
+            node = node.value
+        else:
+            return None
 
 
 def _pinned(protocols: dict[str, ast.ClassDef]) -> set[tuple[str | None, str, str, str]]:
@@ -479,16 +494,29 @@ def test_every_type_changing_member_is_pinned() -> None:
     ).is_empty()
 
 
-def test_the_rungs_of_is_not_none_are_told_apart() -> None:
+@pytest.mark.parametrize(
+    ("owner", "member", "keyed"),
+    [("_ObjectAssertion", "is_not_none", 15), ("_CallableAssertion", "eventually", 1)],
+)
+def test_the_rungs_keyed_on_the_receiver_are_told_apart(owner: str, member: str, keyed: int) -> None:
     """A narrowing that cannot be read is empty, two empty ones are one requirement, and a rung drops out unasked.
 
     The protocol their `self` is keyed on was renamed once, and the two rungs handing back
     `_IterableAssertion` became one that either pin answered, with every test here still green.
     """
     typevars = frozenset(_typevars())
-    _, rungs = _members("_ObjectAssertion", _protocols())["is_not_none"]
+    _, rungs = _members(owner, _protocols())[member]
     narrowings = [_narrowed_to(narrows, typevars) for _, narrows in rungs if narrows]
-    assert_that(narrowings).is_length(15).does_not_contain("").does_not_contain_duplicates()
+    assert_that(narrowings).is_length(keyed).does_not_contain("").does_not_contain_duplicates()
+
+
+def test_a_pin_narrows_on_its_subject_and_not_on_a_cast_elsewhere() -> None:
+    """A cast in an argument says nothing of the receiver: read as the narrowing, it answered for a rung unreached."""
+    awaited = 'cast("Callable[..., Awaitable[int]]", later)'
+    on_the_subject = ast.parse(f"assert_that({awaited}).eventually()", mode="eval").body
+    in_an_argument = ast.parse(f"assert_that(count).eventually(timeout=({awaited}, 1.0)[1])", mode="eval").body
+    assert_that(_pin_narrowing(on_the_subject, "eventually", {})).is_equal_to("Callable[...,Awaitable[int]]")
+    assert_that(_pin_narrowing(in_an_argument, "eventually", {})).is_empty()
 
 
 def test_no_recorded_rung_became_pinnable() -> None:
