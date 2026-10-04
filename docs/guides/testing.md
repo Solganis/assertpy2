@@ -253,8 +253,8 @@ and the error or failure it produced:
 
 ```text
   t=+0.0s error x2: ConnectionError('boot')
-  t=+0.5s fail x2: Expected <'PENDING'> to be equal to <'PAID'>, but was not.
-  t=+1.5s fail x5: Expected <'SHIPPED'> to be equal to <'PAID'>, but was not.
+  t=+0.5s fail x2: Expected <PENDING> to be equal to <PAID>, but was not.
+  t=+1.5s fail x5: Expected <SHIPPED> to be equal to <PAID>, but was not.
 ```
 
 Allure receives the same timeline as a typed `Polling Trace` JSON attachment, with diffs between

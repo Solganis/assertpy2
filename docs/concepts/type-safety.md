@@ -84,7 +84,7 @@ def what_a_checker_allows(anything: object, someone: Person) -> None:
 Both type-check, and both raise at runtime with the library's own refusal rather than the operator's:
 
 ```text
-given other arg must be comparable with val <...>, but was <'text'> (str)
+given other arg must be comparable with val <...> (object), but was <'text'> (str)
 val must be a number or a date, which is what an ordering is defined for, but was <...> (Person)
 ```
 

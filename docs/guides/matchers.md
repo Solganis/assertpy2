@@ -146,7 +146,7 @@ own `matches()` raises still propagates, and so does a coroutine handed back whe
 | `match.ends_with(suffix)` | text ending with `suffix`, on `str` and on `bytes` |
 | `match.is_uuid()` | a string parseable as a UUID |
 | `match.is_non_empty_string()` | a non-empty string |
-| `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`) of now. Handles naive and tz-aware values |
+| `match.is_now(delta=2)` | a `datetime` within `delta` (seconds or a `timedelta`, zero or more) of now. Handles naive and tz-aware values |
 | `match.is_before(dt)` | a `datetime` strictly before `dt` (a non-comparable value never matches) |
 | `match.is_after(dt)` | a `datetime` strictly after `dt` (a non-comparable value never matches) |
 | `match.ignore()` | anything (placeholder for structural matching) |

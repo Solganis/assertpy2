@@ -440,7 +440,8 @@ assert_that({"a": 1, "b": 2}).does_not_contain_entry({"a": 2})
 ### Selective comparison (ignore / include)
 
 `is_equal_to()` can ignore or include specific keys or fields. It works across dicts, dataclasses,
-namedtuples, Pydantic models, attrs classes, and plain objects. For a sequence, each element is
+namedtuples, Pydantic models, attrs classes, and plain objects. A mapping that is not a `dict`, a
+`MappingProxyType` or a `ChainMap` for one, is read by its keys. For a sequence, each element is
 compared pairwise under the same filters, and a failure is one for the two sequences: its diff lists
 every element that differs, at a path that starts at the sequence (`[1].name`).
 
