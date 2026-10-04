@@ -445,6 +445,7 @@ if TYPE_CHECKING:
     assert_type(assert_that(anything).is_instance_of((_Alpha, _Beta)).value, _Alpha | _Beta)
     assert_type(assert_that(anything).is_instance_of((int, str, bytes)), _ObjectAssertion[int | str | bytes])
     assert_type(assert_that(anything).is_instance_of_any(_Alpha, _Beta), _ObjectAssertion[_Alpha | _Beta])
+    assert_type(assert_that(anything).is_instance_of_any(_Alpha, _Beta, str), _ObjectAssertion[_Alpha | _Beta | str])
     # past the arities that bind, and for a tuple nested to any depth, the widest rung answers
     assert_type(assert_that(anything).is_instance_of((_Alpha, (_Beta, str))), _ObjectAssertion[object])
     assert_type(assert_that(anything).is_instance_of_any((_Alpha, _Beta), (str, bytes)), _ObjectAssertion[object])
@@ -821,6 +822,10 @@ if TYPE_CHECKING:
     assert_type(assert_that(_Countable()).satisfies(_is_anything), AssertionBuilder[_Order])
     assert_type(assert_that(_Countable()).is_instance_of(str), AssertionBuilder[str])
     assert_type(assert_that(_Countable()).is_instance_of_any(str, int), AssertionBuilder[str | int])
+    # two and three classes are rungs of their own, on the facade as on the object view
+    assert_type(assert_that(_Countable()).is_instance_of((str, int)), AssertionBuilder[str | int])
+    assert_type(assert_that(_Countable()).is_instance_of((str, int, bytes)), AssertionBuilder[str | int | bytes])
+    assert_type(assert_that(_Countable()).is_instance_of_any(str, int, bytes), AssertionBuilder[str | int | bytes])
     # pivots the runtime writes `-> Self`: a list from the three a claimed value answers, an open builder otherwise
     assert_type(assert_that(_Countable()).extracting("id"), _ListAssertion[Any])
     assert_type(assert_that(_Countable()).filtered_on(lambda item: True), _ListAssertion[Any])
@@ -838,3 +843,13 @@ if TYPE_CHECKING:
     assert_type(assert_that(_Rowish()).last(), AssertionBuilder[str])
     assert_type(assert_that(_Rowish()).single(), AssertionBuilder[str])
     assert_type(assert_that(_Rowish()).element(0), AssertionBuilder[str])
+    # each pivot has two rungs that hand back the builder, told apart by what the claimed value is: a mapping
+    # yields its keys, any other source of elements what it holds
+    assert_type(assert_that(cast("Mapping[str, int]", {"a": 1})).first(), AssertionBuilder[str])
+    assert_type(assert_that(cast("Mapping[str, int]", {"a": 1})).last(), AssertionBuilder[str])
+    assert_type(assert_that(cast("Mapping[str, int]", {"a": 1})).element(0), AssertionBuilder[str])
+    assert_type(assert_that(cast("Mapping[str, int]", {"a": 1})).single(), AssertionBuilder[str])
+    assert_type(assert_that(cast("Sequence[bytes]", [b"a"])).first(), AssertionBuilder[bytes])
+    assert_type(assert_that(cast("Sequence[bytes]", [b"a"])).last(), AssertionBuilder[bytes])
+    assert_type(assert_that(cast("Sequence[bytes]", [b"a"])).element(0), AssertionBuilder[bytes])
+    assert_type(assert_that(cast("Sequence[bytes]", [b"a"])).single(), AssertionBuilder[bytes])

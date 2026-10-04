@@ -30,9 +30,11 @@ one per view they narrow to, and a rung is an independent mapping from the narro
 changing one is invisible to a pin on any other.
 
 Rungs returning one view are told apart by what they narrow on, since `satisfies(TypeIs[int])` and
-`satisfies(TypeIs[float])` both hand back `_NumericAssertion` and one pin must not answer for both. Each
-of the three ladders keeps that in a different place: `satisfies` in a `TypeIs[...]` argument,
-`is_instance_of` in a `type[...]` one, `is_not_none` in the `self` annotation.
+`satisfies(TypeIs[float])` both hand back `_NumericAssertion` and one pin must not answer for both. The
+ladders keep that in different places: `satisfies` in a `TypeIs[...]` argument, `is_instance_of` in a
+`type[...]` one or in how many classes it is given, `is_not_none`, `eventually` and the pivots of a claimed
+value in the protocol `self` is annotated with. A rung keyed on a type variable alone is the catch-all, and
+a pin is its witness only where no named rung of the same view takes what the pin narrows on.
 
 A rung with no portable pin is recorded in `_UNPINNABLE` with what refuses it: the badge promises zero
 suppressions, so there is nowhere to put a difference between checkers but there.
@@ -41,8 +43,11 @@ suppressions, so there is nowhere to put a difference between checkers but there
 from __future__ import annotations
 
 import ast
+import builtins
+import functools
 import pathlib
 import re
+import sys
 
 import pytest
 
@@ -93,6 +98,8 @@ _UNPINNABLE = {
 }
 """Rungs no pin can claim, each with what refuses it written above."""
 _THE_SUBJECT = "<the subject's own type>"
+_CLASSES = "<{} classes>"
+_UNREAD = "<unread>"
 _NAME = re.compile(r"_[A-Za-z][A-Za-z0-9_]*")
 
 
@@ -137,12 +144,16 @@ def _flattened(written: str) -> str:
 def _narrowed_to(annotation: str, typevars: frozenset[str]) -> str:
     """What a rung narrows to, with type variables wildcarded so the declaration and a pin meet.
 
-    Three shapes because the three ladders keep it in three places, and a rung whose narrowing this
-    cannot read carries an empty one, which any pin answers.
+    Four shapes because the ladders keep it in four places: a `TypeIs[...]` argument, a `type[...]` one, the
+    number of classes where a rung takes two or three, and the protocol `self` is annotated with, whatever its
+    name.  A rung whose narrowing this cannot read carries an empty one, which any pin answers.
     """
+    if annotation.count("type[") > 1:
+        return _CLASSES.format(annotation.count("type["))
     inside = next((found for opener in ("TypeIs[", "type[") if (found := _inside(annotation, opener))), "")
-    if not inside and annotation.startswith("_Holding["):
-        inside = _inside(annotation, "_Holding[").removesuffix(" | None")
+    keyed = _NAME.match(annotation)
+    if not inside and keyed is not None and annotation.startswith("[", keyed.end()):
+        inside = _inside(annotation, f"{keyed.group()}[").removesuffix(" | None")
     if not inside:
         return ""
     written = inside
@@ -231,7 +242,9 @@ def _members(
             and (not body.name.startswith("_") or body.name == "not_")
         ):
             arguments = [
-                ast.unparse(argument.annotation) for argument in body.args.args if argument.annotation is not None
+                ast.unparse(argument.annotation)
+                for argument in (*body.args.posonlyargs, *body.args.args)
+                if argument.annotation is not None
             ]
             narrows = " ".join(arguments)
             declared.setdefault(body.name, []).append((ast.unparse(body.returns), narrows))
@@ -263,23 +276,29 @@ def _views_a_caller_can_hold(protocols: dict[str, ast.ClassDef]) -> set[str]:
     return held
 
 
-def _required() -> dict[tuple[str, str], set[tuple[str, str]]]:
-    """Owner and member to what each rung hands back and what it narrows on, if anything."""
+def _rungs() -> dict[tuple[str, str], list[tuple[str, str]]]:
+    """Owner and member to every rung that changes the type: what it hands back and what it narrows on."""
     protocols = _protocols()
-    typevars = _typevars()
-    claims: dict[tuple[str, str], set[tuple[str, str]]] = {}
+    typevars = frozenset(_typevars())
+    found: dict[tuple[str, str], list[tuple[str, str]]] = {}
     for view in _views_a_caller_can_hold(protocols):
         for member, (owner, returns) in _members(view, protocols).items():
-            changing = {
+            changing = [
                 (
-                    _THE_SUBJECT if returned.strip() in typevars else _view(returned, frozenset(typevars)),
-                    _narrowed_to(narrows, frozenset(typevars)),
+                    _THE_SUBJECT if returned.strip() in typevars else _view(returned, typevars),
+                    _narrowed_to(narrows, typevars),
                 )
                 for returned, narrows in returns
                 if returned not in _UNCHANGED and _flattened(returned) not in _itself(owner, protocols)
-            }
+            ]
             if changing:
-                claims.setdefault((owner, member), set()).update(changing)
+                found[owner, member] = changing
+    return found
+
+
+def _required() -> dict[tuple[str, str], set[tuple[str, str]]]:
+    """Owner and member to what each rung hands back and what it narrows on, if anything."""
+    claims = {key: set(rungs) for key, rungs in _rungs().items()}
     # a narrowing only earns its place where two rungs would otherwise be one requirement
     return {
         key: {
@@ -384,23 +403,101 @@ def _receiver_view(expression: ast.expr, protocols: dict[str, ast.ClassDef]) -> 
 def _pin_narrowing(expression: ast.expr, member: str, predicates: dict[str, str]) -> str:
     """What this pin narrows on, taken from wherever the member keeps it.
 
-    `satisfies` from the helper it is given, `is_instance_of` and the exception family from the class,
-    `is_not_none` and `eventually` from the `cast` the subject was written as. Anything else has none, which
-    every rung answers.
+    `satisfies` from the helper it is given, `is_instance_of` and the exception family from the class, or from
+    how many classes where there are several, and everything else from the `cast` the subject was written as.
+    A pin with none answers only a rung that has nothing to be told apart from.
+
+    Only what the pin file itself establishes is read.  A name bound by assignment could be a tuple of classes
+    or an alias of a mapping, and the cast a chain started from says nothing of the value after a pivot, so
+    each of those is unread, which answers no rung that is told apart from another.
     """
     if member == "satisfies":
         given = expression.args[0] if isinstance(expression, ast.Call) and expression.args else None
         return predicates.get(getattr(given, "id", ""), "")
+    several = _several_classes(expression, member)
+    if several:
+        return several
     if member in ("is_instance_of", "raises", "caused_by", "has_root_cause", "error_of"):
         given = expression.args[0] if isinstance(expression, ast.Call) and expression.args else None
         if isinstance(given, ast.Call) and getattr(given.func, "id", None) == "cast":
             return _flattened(_inside(ast.literal_eval(given.args[0]), "type["))
-        return _flattened(ast.unparse(given)) if given is not None else ""
-    if member in ("is_not_none", "eventually"):
-        subject = _subject(expression)
-        if isinstance(subject, ast.Call) and getattr(subject.func, "id", None) == "cast" and subject.args:
-            return _flattened(ast.literal_eval(subject.args[0]).removesuffix(" | None"))
+        if given is None:
+            return ""
+        return _flattened(ast.unparse(given)) if _names_a_class(given) else _UNREAD
+    receiver = (
+        expression.func.value
+        if isinstance(expression, ast.Call) and isinstance(expression.func, ast.Attribute)
+        else None
+    )
+    subject = _subject(expression)
+    if isinstance(subject, ast.Call) and getattr(subject.func, "id", None) == "cast" and subject.args:
+        written = ast.literal_eval(subject.args[0])
+        reached_at_once = isinstance(receiver, ast.Call) and getattr(receiver.func, "id", None) == "assert_that"
+        return _flattened(written.removesuffix(" | None")) if reached_at_once and _spelled_out(written) else _UNREAD
     return ""
+
+
+@functools.cache
+def _established() -> frozenset[str]:
+    """The names the pin file did not make up: what it imports, the classes it declares, and the builtin types."""
+    tree = _parsed(_PINS)
+    imported = {
+        (alias.asname or alias.name).split(".", 1)[0]
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    declared = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
+    return frozenset(imported | declared | {name for name, value in vars(builtins).items() if isinstance(value, type)})
+
+
+def _names_a_class(node: ast.expr) -> bool:
+    """Whether an argument is a class by its own spelling: a name the file did not assign, or one off a module."""
+    while isinstance(node, ast.Attribute):
+        node = node.value
+    return isinstance(node, ast.Name) and node.id in _established()
+
+
+def _spelled_out(written: str) -> bool:
+    """Whether a type is written in names the file did not assign: an alias reads as nothing a rung is keyed on."""
+    roots = {found.split(".", 1)[0] for found in re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", written)}
+    return roots <= _established() | {"None"}
+
+
+def _several_classes(expression: ast.expr, member: str) -> str:
+    """How many classes a pin hands `is_instance_of` in a tuple, or `is_instance_of_any` one by one, if several.
+
+    A union or a tuple among them lands on the rung that takes any class info, and so may a name the file
+    assigned: counted as two classes, `(A, (B, C))` answered for the rung of two that it never reached.
+    """
+    given = list(expression.args) if isinstance(expression, ast.Call) else []
+    if member == "is_instance_of" and given and isinstance(given[0], ast.Tuple):
+        given = given[0].elts
+    elif member != "is_instance_of_any":
+        return ""
+    return _CLASSES.format(len(given)) if len(given) > 1 and all(map(_names_a_class, given)) else _UNREAD
+
+
+def _starts_at_assert_that(expression: ast.expr) -> bool:
+    """Whether a chain is one off `assert_that`, or off a name the pin file bound to such a chain."""
+    node: ast.AST = expression
+    while isinstance(node, (ast.Call, ast.Attribute, ast.Await)):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "assert_that":
+            return True
+        node = node.func if isinstance(node, ast.Call) else node.value
+    return isinstance(node, ast.Name) and node.id in _chains_by_name()
+
+
+@functools.cache
+def _chains_by_name() -> frozenset[str]:
+    """The names the pin file binds to a chain off `assert_that`, which several pins then go on from."""
+    return frozenset(
+        target.id
+        for node in ast.walk(_parsed(_PINS))
+        if isinstance(node, ast.Assign) and _subject(node.value) is not None
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    )
 
 
 def _subject(expression: ast.expr) -> ast.expr | None:
@@ -426,21 +523,28 @@ def _pinned(protocols: dict[str, ast.ClassDef]) -> set[tuple[str | None, str, st
     pins: set[tuple[str | None, str, str, str]] = set()
     predicates = _predicates()
     for node in ast.walk(_parsed(_PINS)):
-        if not (isinstance(node, ast.Call) and getattr(node.func, "id", None) == "assert_type" and len(node.args) == 2):
-            continue
-        outermost = node.args[0]
-        while isinstance(outermost, ast.Call):
-            outermost = outermost.func
-        if not isinstance(outermost, ast.Attribute):
-            continue
-        view = _receiver_view(node.args[0], protocols)
-        owner = None if view is None else _members(view, protocols).get(outermost.attr, (None, []))[0]
-        claimed = _view(ast.unparse(node.args[1]))
-        narrowed = _pin_narrowing(node.args[0], outermost.attr, predicates)
-        pins |= {
-            (owner, outermost.attr, claim, narrowed) for claim in (claimed, claimed.split("[", 1)[0], _THE_SUBJECT)
-        }
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "assert_type" and len(node.args) == 2:
+            pins |= _pin(node.args[0], node.args[1], protocols, predicates)
     return pins
+
+
+def _pin(
+    pinned: ast.expr, claimed_as: ast.expr, protocols: dict[str, ast.ClassDef], predicates: dict[str, str]
+) -> set[tuple[str | None, str, str, str]]:
+    """What one `assert_type` pins, which is nothing where its chain is not one off `assert_that`.
+
+    Off anything else, a member of the same name and shape on a protocol of one's own was a witness of the library's.
+    """
+    outermost = pinned
+    while isinstance(outermost, ast.Call):
+        outermost = outermost.func
+    if not isinstance(outermost, ast.Attribute) or not _starts_at_assert_that(pinned):
+        return set()
+    view = _receiver_view(pinned, protocols)
+    owner = None if view is None else _members(view, protocols).get(outermost.attr, (None, []))[0]
+    claimed = _view(ast.unparse(claimed_as))
+    narrowed = _pin_narrowing(pinned, outermost.attr, predicates)
+    return {(owner, outermost.attr, claim, narrowed) for claim in (claimed, claimed.split("[", 1)[0], _THE_SUBJECT)}
 
 
 def _answers(pattern: str, narrowed: str) -> bool:
@@ -448,9 +552,26 @@ def _answers(pattern: str, narrowed: str) -> bool:
 
     A rung narrowing on a union is answered by a pin narrowing on any one of its arms: `list[str]` is
     what a caller writes for a rung declared `list[_E] | tuple[_E, ...]`. A rung with nothing to be told
-    apart from carries no pattern, and any pin answers it.
+    apart from carries no pattern, and any pin answers it.  A type is never spelled with `<`, which is how a
+    count of classes stays out of the reach of a rung that takes one.
     """
-    return not pattern or any(re.fullmatch(re.escape(arm).replace(r"\*", ".+"), narrowed) for arm in pattern.split("|"))
+    return not pattern or any(
+        re.fullmatch(re.escape(arm).replace(r"\*", "[^<]+"), narrowed) for arm in pattern.split("|")
+    )
+
+
+def _reaches(narrowed: str, pinned: str, claim: str, rungs: set[tuple[str, str]]) -> bool:
+    """Whether a pin narrowing on *pinned* is a witness of this rung and not of a sibling handing back the same.
+
+    The catch-all rung takes what no named rung does, as the overloads do: a pin on a mapping answers the
+    rung keyed on a mapping, and counted for the catch-all too it stood in for a pin nobody wrote.  By
+    spelling, which is all there is to read here: a mapping written as `MutableMapping[...]` is taken for the
+    catch-all.
+    """
+    if not _answers(narrowed, pinned):
+        return False
+    named = [other for other_claim, other in rungs if other_claim == claim and other not in ("", "*")]
+    return narrowed != "*" or not any(_answers(other, pinned) for other in named)
 
 
 def _only_owner_of(
@@ -479,7 +600,7 @@ def test_every_type_changing_member_is_pinned() -> None:
             )
             and pinned_member == member
             and pinned_claim == claim
-            and _answers(narrowed, pinned_narrowing)
+            and _reaches(narrowed, pinned_narrowing, claim, claims)
             for pinned_owner, pinned_member, pinned_claim, pinned_narrowing in pinned
         )
         and not any(
@@ -494,20 +615,20 @@ def test_every_type_changing_member_is_pinned() -> None:
     ).is_empty()
 
 
-@pytest.mark.parametrize(
-    ("owner", "member", "keyed"),
-    [("_ObjectAssertion", "is_not_none", 15), ("_CallableAssertion", "eventually", 1)],
-)
-def test_the_rungs_keyed_on_the_receiver_are_told_apart(owner: str, member: str, keyed: int) -> None:
-    """A narrowing that cannot be read is empty, two empty ones are one requirement, and a rung drops out unasked.
+def test_every_type_changing_rung_is_a_requirement_of_its_own() -> None:
+    """Two rungs that hand back one view and narrow on one thing are one requirement, and either pin answers it.
 
-    The protocol their `self` is keyed on was renamed once, and the two rungs handing back
-    `_IterableAssertion` became one that either pin answered, with every test here still green.
+    Seven rungs were held by no pin that way, with every test here green: the two and three classes of
+    `is_instance_of` and `is_instance_of_any`, and the pivots of a claimed value that is a source of elements.
+    A narrowing that cannot be read is empty, so a protocol `self` is keyed on, renamed, did the same once.
     """
-    typevars = frozenset(_typevars())
-    _, rungs = _members(owner, _protocols())[member]
-    narrowings = [_narrowed_to(narrows, typevars) for _, narrows in rungs if narrows]
-    assert_that(narrowings).is_length(keyed).does_not_contain("").does_not_contain_duplicates()
+    merged = sorted(
+        f"{owner}.{member} -> {claim}" + (f" narrowing on {narrowed}" if narrowed else "")
+        for (owner, member), rungs in _rungs().items()
+        for claim, narrowed in set(rungs)
+        if rungs.count((claim, narrowed)) > 1
+    )
+    assert_that(merged).described_as("rungs of one member that nothing tells apart").is_empty()
 
 
 def test_a_pin_narrows_on_its_subject_and_not_on_a_cast_elsewhere() -> None:
@@ -517,6 +638,72 @@ def test_a_pin_narrows_on_its_subject_and_not_on_a_cast_elsewhere() -> None:
     in_an_argument = ast.parse(f"assert_that(count).eventually(timeout=({awaited}, 1.0)[1])", mode="eval").body
     assert_that(_pin_narrowing(on_the_subject, "eventually", {})).is_equal_to("Callable[...,Awaitable[int]]")
     assert_that(_pin_narrowing(in_an_argument, "eventually", {})).is_empty()
+
+
+@pytest.mark.parametrize(
+    ("pin", "narrowing"),
+    [
+        ('assert_that(cast("Mapping[str, int]", row)).first()', "Mapping[str,int]"),
+        # after a pivot the value is another one, and the cast the chain started from says nothing of it
+        ('assert_that(cast("Mapping[str, int]", row)).mapped(encode).first()', "<unread>"),
+        # an alias the file assigned may be a mapping, so its spelling is no witness of the rung for anything else
+        ('assert_that(cast("KeyMap", row)).first()', "<unread>"),
+    ],
+)
+def test_a_pin_reads_its_subject_only_where_the_member_is_reached_on_it(pin: str, narrowing: str) -> None:
+    """What a rung is keyed on is the receiver, so a cast is its narrowing only as the receiver's own subject."""
+    assert_that(_pin_narrowing(ast.parse(pin, mode="eval").body, "first", {})).is_equal_to(narrowing)
+
+
+def test_a_member_reached_off_anything_but_assert_that_is_no_pin() -> None:
+    """A protocol of one's own with a member of the same name and shape was a witness of the library's rung."""
+    claimed = ast.parse("AssertionBuilder[str | int]", mode="eval").body
+    foreign = ast.parse('cast("Foreign", anything).is_instance_of((str, int))', mode="eval").body
+    assert_that(_pin(foreign, claimed, _protocols(), {})).is_empty()
+    off_a_name_never_bound_to_a_chain = ast.parse("rows.is_instance_of((str, int))", mode="eval").body
+    assert_that(_pin(off_a_name_never_bound_to_a_chain, claimed, _protocols(), {})).is_empty()
+    genuine = ast.parse("assert_that(_Countable()).is_instance_of((str, int))", mode="eval").body
+    assert_that(_pin(genuine, claimed, _protocols(), {})).contains(
+        ("_CapableAssertion", "is_instance_of", "AssertionBuilder", "<2 classes>")
+    )
+    assert_that(_chains_by_name()).contains("polled").does_not_contain("rows")
+
+
+@pytest.mark.parametrize(
+    ("pin", "narrowing"),
+    [
+        ("assert_that(order).is_instance_of((Paid, Refund))", "<2 classes>"),
+        ("assert_that(order).is_instance_of((Paid, Refund, orders.Void))", "<3 classes>"),
+        ("assert_that(order).is_instance_of_any(Paid, Refund, Void)", "<3 classes>"),
+        ("assert_that(order).is_instance_of((Paid, (Refund, Void)))", "<unread>"),
+        ("assert_that(order).is_instance_of_any(Paid, Refund | Void)", "<unread>"),
+        ("assert_that(order).is_instance_of_any(Paid)", "<unread>"),
+        ("assert_that(order).is_instance_of(Paid)", "Paid"),
+        # a name the file assigned may hold a tuple of classes, so it is neither one class nor one of several
+        ("assert_that(order).is_instance_of(classes)", "<unread>"),
+        ("assert_that(order).is_instance_of_any(classes, Paid)", "<unread>"),
+        ("assert_that(order).is_instance_of((classes, Paid))", "<unread>"),
+    ],
+)
+def test_a_pin_on_several_classes_says_how_many(pin: str, narrowing: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A union or a tuple among them is no class: it lands on the rung for any class info, and is not counted."""
+    monkeypatch.setattr(sys.modules[__name__], "_established", lambda: frozenset({"Paid", "Refund", "Void", "orders"}))
+    expression = ast.parse(pin, mode="eval").body
+    assert isinstance(expression, ast.Call)
+    member = expression.func.attr if isinstance(expression.func, ast.Attribute) else ""
+    assert_that(_pin_narrowing(expression, member, {})).is_equal_to(narrowing)
+
+
+def test_a_catch_all_rung_is_not_reached_by_a_pin_a_named_rung_takes() -> None:
+    """A pin on a mapping is a witness of the rung keyed on a mapping, and of that one alone."""
+    rungs = {("AssertionBuilder", "Mapping[*,*]"), ("AssertionBuilder", "*"), ("_ListAssertion", "*")}
+    assert_that(_reaches("Mapping[*,*]", "Mapping[str,int]", "AssertionBuilder", rungs)).is_true()
+    assert_that(_reaches("*", "Mapping[str,int]", "AssertionBuilder", rungs)).is_false()
+    assert_that(_reaches("*", "Sequence[int]", "AssertionBuilder", rungs)).is_true()
+    assert_that(_reaches("*", "Mapping[str,int]", "_ListAssertion", rungs)).is_true()
+    assert_that(_reaches("*", "<2 classes>", "AssertionBuilder", rungs)).is_false()
+    assert_that(_reaches("*", _UNREAD, "AssertionBuilder", rungs)).is_false()
+    assert_that(_reaches("Mapping[*,*]", _UNREAD, "AssertionBuilder", rungs)).is_false()
 
 
 def test_no_recorded_rung_became_pinnable() -> None:
