@@ -90,7 +90,7 @@ from ._engine._size import length_of
 from ._engine._text import contains as text_contains
 from ._engine._text import ends_with as text_ends_with
 from ._engine._text import starts_with as text_starts_with
-from ._hints import matcher_for_a_class
+from ._hints import matcher_for_a_class, type_beside_a_class
 from .errors import _capped, _capped_format, _capped_repr, _safe_repr, _told_apart, _type_expression_name
 
 if TYPE_CHECKING:
@@ -1640,6 +1640,9 @@ class StructureMatcher(BaseMatcher):
                     mismatches.append(_SpecMismatch(path.key(key), actual, "a mapping", None))
             elif not _guarded_equal(actual, expected, method="matches_structure"):
                 # told apart by class where the two print the same: an id held as text read "expected <7>, but was <7>"
-                wanted, was = _told_apart(_capped_format(expected), _capped_format(actual), expected, actual)
-                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{wanted}>", f"was <{was}>", expected))
+                shown = _capped_format(actual)
+                wanted, was = _told_apart(_capped_format(expected), shown, expected, actual)
+                # two sides told apart by their classes have said the type already
+                kind = type_beside_a_class(actual, expected) if was == shown else ""
+                mismatches.append(_SpecMismatch(path.key(key), actual, f"<{wanted}>", f"was <{was}>{kind}", expected))
         return mismatches

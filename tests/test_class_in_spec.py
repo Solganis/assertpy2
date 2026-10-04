@@ -176,6 +176,73 @@ class TestAClassInASpec:
             assert_that({"id": value}).matches_structure({"id": match.is_instance_of(klass)})
 
 
+def _sentence(payload: object, spec: dict) -> str:
+    return _lines(payload, spec)[0]
+
+
+class TestAValueOfAnotherTypeBesideAClass:
+    """The sentence prints a value by its text, so the text ``'7'`` beside the class `int` read ``<7>``."""
+
+    @pytest.mark.parametrize(
+        ("value", "klass", "written"),
+        [("7", int, "<7> of type <str>"), (7, str, "<7> of type <int>"), (None, int, "<None> of type <NoneType>")],
+    )
+    def test_the_sentence_says_the_type_of_a_value_that_is_no_instance(self, value, klass, written):
+        assert_that(_sentence({"id": value}, {"id": klass})).ends_with(f"but was {written}.")
+
+    def test_it_reads_as_the_matcher_for_an_instance_does(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that({"id": "7"}).matches_structure({"id": match.is_instance_of(int)})
+
+        assert_that(caught.value._message).ends_with("but was <7> of type <str>.")
+        assert_that(_sentence({"id": "7"}, {"id": int})).ends_with("but was <7> of type <str>.")
+
+    def test_an_instance_gets_the_line_and_no_type(self):
+        assert_that(_sentence({"id": 7}, {"id": int})).ends_with("expected <<class 'int'>>, but was <7>.")
+
+    def test_a_class_with_a_metaclass_of_its_own_gets_the_type_whatever_the_value_is(self):
+        assert_that(_sentence({"id": _Sized()}, {"id": collections.abc.Sized})).ends_with(" of type <_Sized>.")
+        assert_that(_sentence({"id": 7}, {"id": collections.abc.Sized})).ends_with("but was <7> of type <int>.")
+
+    def test_a_value_held_against_what_is_no_class_gets_none(self):
+        assert_that(_sentence({"id": "7"}, {"id": 8})).ends_with("expected <8>, but was <7>.")
+        assert_that(_sentence({"id": "7"}, {"id": int | None})).ends_with("but was <7>.")
+
+    def test_two_sides_told_apart_by_their_classes_get_none(self):
+        assert_that(_sentence({"id": "<class 'int'>"}, {"id": int})).ends_with(
+            "expected <<class 'int'>:type>, but was <<class 'int'>:str>."
+        )
+
+    def test_the_class_the_value_was_built_from_is_named_and_not_the_one_it_claims(self):
+        assert_that(_sentence({"id": mock.Mock(spec=int)}, {"id": int})).ends_with(" of type <Mock>.")
+
+    def test_a_class_whose_name_cannot_be_asked_is_named_off_its_slot(self):
+        class Lying(type):
+            @property
+            def __name__(cls):
+                raise RuntimeError("asked")
+
+        class Held(metaclass=Lying):
+            def __repr__(self) -> str:
+                return "held"
+
+        assert_that(_sentence({"id": Held()}, {"id": int})).ends_with("but was <held> of type <Held>.")
+
+    def test_a_matcher_used_as_a_matcher_says_it_too(self):
+        with pytest.raises(AssertionFailure) as caught:
+            assert_that({"id": "7"}).satisfies(match.structure({"id": int}))
+        assert_that(caught.value._message).contains("but was <7> of type <str>")
+
+    @given(
+        value=st.one_of(st.integers(), st.floats(allow_nan=False), st.booleans(), st.none(), st.binary()),
+        klass=st.sampled_from([int, float, str, bool, bytes, object, list, type(None)]),
+    )
+    def test_the_type_is_said_exactly_where_the_value_is_no_instance(self, value, klass):
+        sentence = _sentence({"id": value}, {"id": klass})
+
+        assert_that(sentence.endswith(f" of type <{type(value).__name__}>.")).is_equal_to(not isinstance(value, klass))
+
+
 class TestAClassWhereAMatcherIsWanted:
     @pytest.mark.parametrize(
         "build",

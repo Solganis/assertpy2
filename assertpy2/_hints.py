@@ -455,9 +455,25 @@ def class_in_spec(leaves: Iterable[tuple[str, object, object]]) -> str | None:
     it stands in the tree of the value's class, so neither is asked anything.
     """
     for where, value, literal in leaves:
-        if type(literal) is type and any(base is literal for base in class_tree(type(value))):
+        if _an_instance_by_the_tree(value, literal):
             return f"at <{where}> the spec holds a class itself and the value is an instance of it: {_INSTANCE_MATCHER}"
     return None
+
+
+def _an_instance_by_the_tree(value: object, literal: object) -> bool:
+    return type(literal) is type and any(base is literal for base in class_tree(type(value)))
+
+
+def type_beside_a_class(value: object, literal: object) -> str:
+    """What follows a value held against a class it was not found to be an instance of: its type, as the matcher for
+    an instance words it.
+
+    A sentence prints a value by its text, so the text ``'7'`` beside the class `int` read ``<7>``.  Nothing where
+    `class_in_spec` speaks of the same pair.
+    """
+    if not issubclass(type(literal), type) or _an_instance_by_the_tree(value, literal):
+        return ""
+    return f" of type <{class_name(type(value))}>"
 
 
 def not_at_an_end(value: object, piece: object, *, start: bool, cased: bool = True) -> str | None:

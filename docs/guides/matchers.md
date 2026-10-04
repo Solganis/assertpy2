@@ -204,7 +204,10 @@ A value in a spec that is neither a matcher nor a nested dict is compared with `
 `"name": "Alice"` reads the same as `match.equal_to("Alice")`. A class is such a value too:
 `{"id": int}` asks whether the value is equal to the class `int`, which `7` is not. The matcher for
 an instance is `match.is_instance_of(int)`, and a failed `matches_structure()` names it where the
-value is an instance of the class the spec holds.
+value is an instance of the class the spec holds. Where it is not, the failure says the value's type:
+`but was <7> of type <str>`. Beside a class with a metaclass of its own, an abstract base class or a
+model, the failure says the type whatever the value is, since asking such a class whether the value is
+its instance would run the class's own code.
 
 The value under test can be a plain dict, a Pydantic model (anything exposing `model_dump()`), or an
 attrs instance - a model or attrs instance is normalized to its dict first, so the same spec works
