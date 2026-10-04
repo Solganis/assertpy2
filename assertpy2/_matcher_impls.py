@@ -82,6 +82,7 @@ from ._engine._require import (
     VerdictError,
     argument,
     raised_inside,
+    raised_on_purpose,
     refuse,
     reject_unknown_kwargs,
     verdict,
@@ -107,6 +108,7 @@ if TYPE_CHECKING:
     # stopped being a type error.  A PEP 695 `type` statement is read by all three and is a SyntaxError on 3.10
     ClassInfo: TypeAlias = type | UnionType | tuple[type | UnionType | tuple["ClassInfo", ...], ...]
 
+__tracebackhide__ = raised_on_purpose
 
 _M_contra = TypeVar("_M_contra", contravariant=True)
 
@@ -203,9 +205,10 @@ def _require_matcher(operand: object, operator: str) -> None:
     attribute 'matches'`` at assertion time, far from the line that built it.
     """
     if not _is_matcher(operand):
-        raise TypeError(
-            f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'{matcher_for_a_class(operand)}"
-        )
+        named = matcher_for_a_class(operand)
+        message = f"cannot combine a Matcher with <{type(operand).__name__}> using '{operator}'{named}"
+        _assertpy2_refusal = True
+        raise TypeError(message)
 
 
 def _require_matcher_argument(value: object) -> Matcher[Any]:
@@ -263,6 +266,7 @@ class BaseMatcher:
 
     def matches(self, value: Any) -> bool:
         if type(self).evaluate is BaseMatcher.evaluate:
+            _assertpy2_refusal = True
             raise NotImplementedError("a matcher must implement matches() or evaluate()")
         return self.evaluate(value).matched
 
@@ -275,12 +279,14 @@ class BaseMatcher:
         which is how a matcher over a one-shot iterator used to name the wrong element.
         """
         if type(self).matches is BaseMatcher.matches:
+            _assertpy2_refusal = True
             raise NotImplementedError("a matcher must implement matches() or evaluate()")
         if verdict(self.matches(value), subject="the matcher"):
             return MatchResult(matched=True, description=self.describe())
         return _refused(self, value)
 
     def describe(self) -> str:
+        _assertpy2_refusal = True
         raise NotImplementedError
 
     def describe_mismatch(self, value: Any) -> str:
@@ -694,6 +700,7 @@ def _swapped(low: object, high: object) -> bool:
 class BetweenMatcher(BaseMatcher):
     def __init__(self, low: object, high: object):
         if _swapped(low, high):
+            _assertpy2_refusal = True
             raise ValueError("given low arg must be less than given high arg")
         self.low = low
         self.high = high
@@ -726,6 +733,7 @@ class CloseToMatcher(BaseMatcher):
     def __init__(self, expected: object, tolerance: object):
         zero = timedelta(0) if isinstance(tolerance, timedelta) else zero_of(tolerance)
         if _swapped(zero, tolerance):
+            _assertpy2_refusal = True
             raise ValueError("given tolerance arg must not be negative")
         self.expected = expected
         self.tolerance = tolerance
@@ -883,6 +891,7 @@ class HasLengthMatcher(BaseMatcher):
     def __init__(self, expected_length: SupportsIndex):
         self.expected_length: int = require_integer(expected_length, "length")
         if self.expected_length < 0:
+            _assertpy2_refusal = True
             raise ValueError("given arg must be a positive int")
 
     def matches(self, value: Any) -> bool:
@@ -979,6 +988,7 @@ class IsDivisibleByMatcher(BaseMatcher):
     def __init__(self, divisor: SupportsIndex):
         self.divisor: int = require_integer(divisor, "divisor")
         if self.divisor == 0:
+            _assertpy2_refusal = True
             raise ValueError("given divisor arg must not be zero")
 
     def matches(self, value: Any) -> bool:
@@ -1141,6 +1151,7 @@ class ContainsMatcher(BaseMatcher):
 
     def __init__(self, *items: object):
         if not items:
+            _assertpy2_refusal = True
             raise ValueError("one or more items must be given")
         self.items = items
 
@@ -1193,6 +1204,7 @@ class ContainsOnlyMatcher(BaseMatcher):
 
     def __init__(self, *items: object):
         if not items:
+            _assertpy2_refusal = True
             raise ValueError("one or more items must be given")
         self.items = items
 
@@ -1236,6 +1248,7 @@ class IsSubsetOfMatcher(BaseMatcher):
 
     def __init__(self, *superset: object):
         if not superset:
+            _assertpy2_refusal = True
             raise ValueError("one or more items must be given")
         given = superset[0] if len(superset) == 1 and is_searchable(superset[0]) else superset
         # drained here, not per call: a generator handed in as the superset was consumed by the first `matches()`
@@ -1356,6 +1369,7 @@ class IsNowMatcher(BaseMatcher):
 
     def __init__(self, delta: timedelta):
         if isinstance(delta, timedelta) and timedelta.__lt__(delta, timedelta(0)):
+            _assertpy2_refusal = True
             raise ValueError("given delta arg must not be negative")
         self._delta = delta
 

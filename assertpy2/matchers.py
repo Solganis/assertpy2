@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, NamedTuple, SupportsIndex, TypeVar, cast, overload
 
 from ._engine._introspection import is_same_implementation
-from ._engine._require import argument, refuse, verdict
+from ._engine._require import argument, raised_on_purpose, refuse, verdict
 from ._matcher_impls import (
     AllOfMatcher,
     AnyOfMatcher,
@@ -75,6 +75,8 @@ if TYPE_CHECKING:
     _Item = TypeVar("_Item")
 
     from ._matcher_impls import ClassInfo
+
+__tracebackhide__ = raised_on_purpose
 
 
 class _Resolved(NamedTuple):
@@ -213,12 +215,16 @@ def register_matcher(
     if not isinstance(name, str):
         refuse(name, "a string", subject=argument("name"))
     if not name.isidentifier():
-        raise ValueError(f"name must be a valid Python identifier, got {name!r}")
+        message = f"name must be a valid Python identifier, got {name!r}"
+        _assertpy2_refusal = True
+        raise ValueError(message)
     if hasattr(_MatchNamespace, name):
-        raise ValueError(
+        message = (
             f"match.{name} is a built-in matcher, and attribute lookup reaches it before this "
             f"registry: a custom {name!r} would never be called. Register it under another name."
         )
+        _assertpy2_refusal = True
+        raise ValueError(message)
 
     def decorator(func: Callable[..., BaseMatcher]) -> Callable[..., BaseMatcher]:
         if not callable(func):
@@ -227,10 +233,12 @@ def register_matcher(
             # a module imported twice, or a per-module fixture, is not two libraries fighting over one name
             clash = name in _custom_matchers and not is_same_implementation(_custom_matchers[name], func)
             if clash and not override:
-                raise ValueError(
+                message = (
                     f"a custom matcher named {name!r} is already registered; pass override=True to "
                     f"replace it, or unregister_matcher({name!r}) first"
                 )
+                _assertpy2_refusal = True
+                raise ValueError(message)
             _custom_matchers[name] = func
         return func
 
@@ -248,7 +256,9 @@ def unregister_matcher(name: str) -> None:
     """
     with _custom_matchers_lock:
         if name not in _custom_matchers:
-            raise KeyError(f"no custom matcher registered with name {name!r}")
+            message = f"no custom matcher registered with name {name!r}"
+            _assertpy2_refusal = True
+            raise KeyError(message)
         del _custom_matchers[name]
 
 
@@ -509,6 +519,7 @@ class _MatchNamespace:
         if not isinstance(delta, timedelta):
             # asked of the number: made a span, a tenth of a microsecond below nothing is none, and 1e20 overflows
             if isinstance(delta, (int, float)) and delta < 0:
+                _assertpy2_refusal = True
                 raise ValueError("given delta arg must not be negative")
             delta = timedelta(seconds=delta)
         return IsNowMatcher(delta)
@@ -608,7 +619,9 @@ class _MatchNamespace:
             try:
                 factory = _custom_matchers[name]
             except KeyError:
-                raise AttributeError(f"match has no matcher {name!r}") from None
+                message = f"match has no matcher {name!r}"
+                _assertpy2_refusal = True
+                raise AttributeError(message) from None
         return factory
 
 

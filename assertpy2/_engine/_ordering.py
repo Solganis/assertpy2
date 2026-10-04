@@ -27,10 +27,12 @@ import types
 from datetime import date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
-from ._require import argument, pure_decimal_code, raised_inside, refuse
+from ._require import argument, pure_decimal_code, raised_inside, raised_on_purpose, refuse
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Sequence
+
+__tracebackhide__ = raised_on_purpose
 
 # ordering exists for real numbers and not for complex ones, whatever `numbers.Number` says
 _UNORDERED = frozenset({complex})

@@ -28,12 +28,32 @@ import difflib
 import functools
 import inspect
 import types
-from typing import Final, NoReturn, TypeVar
+from typing import Any, Final, NoReturn, TypeVar
 
 from ..errors import _safe_repr, _truncated
 from ._size import length_of
 
 _T = TypeVar("_T")
+
+
+def raised_on_purpose(excinfo: Any = None) -> bool:
+    """Whether pytest hides a frame of the module that names this as its ``__tracebackhide__``.
+
+    Only where the frame the exception was born in is a refusal of this library: one sets a name of its own,
+    ``_assertpy2_refusal``, where it raises, and then no frame of the library says anything of the mistake.
+    Anything else keeps its frames, what the caller's code or another library raised, hidden by pytest's own
+    flag or not, and a defect of this one, since they are what locate it.
+    """
+    try:
+        last = excinfo.tb
+        while last.tb_next is not None:
+            last = last.tb_next
+        return last.tb_frame.f_locals.get("_assertpy2_refusal") is True
+    except Exception:
+        return True
+
+
+__tracebackhide__ = raised_on_purpose
 
 # a refusal is read on one terminal line, so the cap is well below the one a diff row uses
 _SHOWN = 60
@@ -129,7 +149,9 @@ def pure_decimal_code() -> frozenset[types.CodeType]:
 
 def refuse(value: object, expectation: str, *, subject: str = "val", note: str = "") -> NoReturn:
     """Raise the refusal for *value*, for a check the caller has already made, with *note* after it."""
-    raise TypeError(f"{subject} must be {expectation}, but was {_shown(value)}{note}")
+    message = f"{subject} must be {expectation}, but was {_shown(value)}{note}"
+    _assertpy2_refusal = True
+    raise TypeError(message)
 
 
 def require_type(
@@ -184,7 +206,9 @@ def reject_unknown_kwargs(kwargs: dict, known: frozenset, method: str) -> None:
         close = difflib.get_close_matches(str(name), sorted(known), n=1)
         named.append(f"{name!r}" + (f" (did you mean {close[0]!r}?)" if close else ""))
     plural = "" if len(named) == 1 else "s"
-    raise TypeError(f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}")
+    message = f"{method}() got an unexpected keyword argument{plural} {', '.join(named)}"
+    _assertpy2_refusal = True
+    raise TypeError(message)
 
 
 class VerdictError(TypeError):
@@ -255,13 +279,17 @@ def verdict(answer: object, *, subject: str = "predicate") -> object:
     # subclasses a coroutine, so `is` asks the same question
     if type(answer) is types.CoroutineType:
         answer.close()
-        raise CoroutineVerdictError(
+        message = (
             f"{subject} handed back a coroutine instead of an answer; assertions here are synchronous, "
             "so await the call yourself and assert on what it returned"
         )
+        _assertpy2_refusal = True
+        raise CoroutineVerdictError(message)
     if _answers_like_a_matcher(answer):
-        raise MatcherVerdictError(
+        message = (
             f"{subject} handed back a matcher instead of an answer; pass the matcher where one is taken, "
             "or ask it about the value and answer with what it said"
         )
+        _assertpy2_refusal = True
+        raise MatcherVerdictError(message)
     return answer
