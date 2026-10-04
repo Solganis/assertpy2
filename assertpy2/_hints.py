@@ -156,6 +156,9 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
     so the first step in the ladder took the credit and the reader was told that a comparison holding
     no JSON at all was one of unparsed JSON text.
 
+    A pair the steps left as it was is not accounted for either, and is not asked again: an ``==`` that answered
+    otherwise the second time credited a step that had done nothing.
+
     Comparison failures count as "not explained" rather than propagating.  This runs while a failure
     is already being raised, on values the caller wrote, and a numpy array or any object with an
     opinionated ``__eq__`` can raise from ``==``.  Letting that out would replace the assertion error
@@ -165,10 +168,10 @@ def _explains(pairs: Sequence[tuple[object, object]], steps: Sequence[Callable[[
         for left, right in pairs:
             if equals(left, right):
                 return False
+            read_left, read_right = left, right
             for step in steps:
-                left, right = step(left), step(right)
-            explained = equals(left, right)
-            if not explained:
+                read_left, read_right = step(read_left), step(read_right)
+            if (read_left is left and read_right is right) or not equals(read_left, read_right):
                 return False
     except Exception:  # a diagnostic must never outrank the failure it is describing
         return False
@@ -920,10 +923,10 @@ def _accounted(
     One step, then two.  Then the kind or amount of whitespace, alone and beside one step: it takes in line
     endings and surrounding whitespace, so said first it would stand in for the two narrower facts.
 
-    Nothing is asked where the first pair holds no text, bytes or enum member: no step reads such a pair, every
-    step has to account for it, and asking all nineteen was most of what a failure of two numbers spent here.
+    Nothing is asked where no step reads the first pair (`_unread_by_any_step`): every step has to account for
+    it, and asking all nineteen was most of what a failure of two numbers spent here.
     """
-    if not any(isinstance(side, (str, bytes, enum.Enum)) for side in pairs[0]):
+    if _unread_by_any_step(pairs[0]):
         return None
     for step, label in steps:
         if _explains(pairs, (step,)):
@@ -939,6 +942,18 @@ def _accounted(
         if step not in (_newlines, _stripped) and _explains(pairs, (step, _spaced)):
             return f"{_worded(label, pairs)} and the kind or amount of whitespace"
     return None
+
+
+def _unread_by_any_step(pair: tuple[object, object]) -> bool:
+    """Whether neither side of *pair* is a text, a ``bytes`` or an enum member, which is all a step reads.
+
+    Asked as each step asks it.  Where a value's ``__class__`` is code of its own that raises, the pair is unread
+    too: every step would have ended in that same error, and `_explains` counts it as no.
+    """
+    try:
+        return not any(isinstance(side, (str, bytes, enum.Enum)) for side in pair)
+    except Exception:  # a diagnostic must never outrank the failure it is describing
+        return True
 
 
 def _worded(label: _Label, pairs: Sequence[tuple[object, object]]) -> str:

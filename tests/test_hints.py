@@ -17,7 +17,7 @@ import pytest
 from assertpy2 import assert_that
 from assertpy2._engine._introspection import definition_of
 from assertpy2._engine._path import _ROOT
-from assertpy2._hints import _UNSEEN_FACT, _explains, diagnose, identity_candidate
+from assertpy2._hints import _STEPS, _UNSEEN_FACT, _accounted, _explains, diagnose, identity_candidate
 from assertpy2.errors import AssertionFailure, DiffEntry, DiffResult
 
 
@@ -366,6 +366,47 @@ class TestSilenceOnEverythingElse:
 
         entries = [DiffEntry(path="a", actual=Ambiguous(), expected=Ambiguous() if beside == "another of it" else "a")]
         assert_that(diagnose(DiffResult(kind="dict", entries=entries))).is_none()
+
+    def test_a_value_that_says_it_is_an_enum_member_is_read_as_the_step_reads_it(self):
+        # the ladder is entered by the question its steps ask, so what a step accounts for is still said
+        class SaysItIsACode:
+            value = 1
+            __hash__ = None
+
+            @property
+            def __class__(self):
+                return _Code
+
+            def __eq__(self, other):
+                return False
+
+        entries = [DiffEntry(path="a", actual=SaysItIsACode(), expected=1)]
+        said = diagnose(DiffResult(kind="dict", entries=entries))
+        assert_that(said).is_equal_to("every difference here is one of enum members against their values")
+
+    @pytest.mark.parametrize("held", [0, "x"], ids=["a number, which no step reads", "a text, which no step changes"])
+    def test_an_equality_that_answers_otherwise_when_asked_again_earns_no_line(self, held):
+        # a pair no step changed is not asked twice: the second answer used to read as a step having accounted for it
+        class AnswersOtherwiseNextTime(type(held)):
+            __hash__ = None
+            asked = 0
+
+            def __eq__(self, other):
+                self.asked += 1
+                return self.asked % 2 == 0
+
+        other = AnswersOtherwiseNextTime(type(held)("1"))
+        entries = [DiffEntry(path="a", actual=AnswersOtherwiseNextTime(held), expected=other)]
+        assert_that(diagnose(DiffResult(kind="dict", entries=entries))).is_none()
+
+    def test_a_value_whose_class_cannot_be_asked_does_not_break_the_ladder(self):
+        # the ladder asks what a value is before any step does, and that asking is the value's own code too
+        class NobodyAsksMyClass:
+            @property
+            def __class__(self):
+                raise RuntimeError("class inspected")
+
+        assert_that(_accounted([(NobodyAsksMyClass(), 1)], _STEPS)).is_none()
 
 
 class TestTheMessageStaysUsableAsAPrefix:

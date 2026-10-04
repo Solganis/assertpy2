@@ -278,7 +278,7 @@ def _guarded_equal(actual, expected, *, method="is_equal_to") -> bool:
 
 def _equal_past_refusal(actual, expected, refusal: Exception, method: str) -> bool:
     """What a pair whose ``==`` raised *refusal* answers: the actionable error for an array, else `equal_past`."""
-    if isinstance(refusal, (ValueError, TypeError)):
+    if issubclass(type(refusal), (ValueError, TypeError)):
         operand = _find_ambiguous_operand(actual, expected)
         if operand is not None:
             raise _array_equality_error(method, operand) from refusal

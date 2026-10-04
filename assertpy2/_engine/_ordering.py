@@ -68,8 +68,9 @@ def nan_operand(value: Any) -> bool:
     included, and only off a class built by `type` itself, since a metaclass of anybody's answers reads.  An
     integer, built in or registered, is never one, and is not read at all.
 
-    A class that holds no number this reads is kept once found, as `integral_kind` keeps its own: its bases decide
-    it.  Asked afresh, a text or a ``None`` cost 1.3 us, and a failure asks this of both sides of every row it reports.
+    A class that holds no number this reads is kept once found, as `integral_kind` keeps its own, and one given
+    another `as_integer_ratio` after it was asked is not followed.  Asked afresh, a text or a ``None`` cost 1.3 us,
+    and a failure asks this of both sides of every row it reports.
     """
     if isinstance(value, float):
         return bool(float.__ne__(value, value))
@@ -78,11 +79,12 @@ def nan_operand(value: Any) -> bool:
     kind = type(value)
     if kind is int or type(kind) is not type or kind in _UNREAD_KINDS or kind in _INTEGRAL_KINDS or integral_kind(kind):
         return False
-    read = _exact_real(value)
-    unread = read is None and _known_number_method(kind, "as_integer_ratio", types.MethodDescriptorType) is None
-    if unread and len(_UNREAD_KINDS) < 256:
-        _UNREAD_KINDS.add(kind)
-    return read == "nan"
+    ratio = _known_number_method(kind, "as_integer_ratio", types.MethodDescriptorType)
+    if ratio is None:
+        if len(_UNREAD_KINDS) < 256:
+            _UNREAD_KINDS.add(kind)
+        return False
+    return _read_by(value, ratio) == "nan"
 
 
 def integral_kind(kind: type) -> bool:
@@ -562,8 +564,11 @@ def _exact_real(value: Any) -> tuple[int, fractions.Fraction] | str | None:
     if type(value) is fractions.Fraction:
         return 0, value
     ratio = _known_number_method(type(value), "as_integer_ratio", types.MethodDescriptorType)
-    if ratio is None:
-        return None
+    return None if ratio is None else _read_by(value, ratio)
+
+
+def _read_by(value: Any, ratio: Any) -> tuple[int, fractions.Fraction] | str | None:
+    """What `_exact_real` answers for *value* through *ratio*, the `as_integer_ratio` its class holds."""
     try:
         numerator, denominator = ratio(value)
     except OverflowError:

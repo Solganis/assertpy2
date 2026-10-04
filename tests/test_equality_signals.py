@@ -126,6 +126,34 @@ def test_a_frame_that_refuses_its_truth_with_a_type_error_is_named_inside_a_list
         ask(polars.DataFrame({"a": [1, 2]}), polars.DataFrame({"a": [1, 2]}))
 
 
+@pytest.mark.parametrize(
+    "ask",
+    [
+        lambda value: assert_that(value).is_equal_to(0),
+        lambda value: assert_that({"a": value, "b": 1}).is_equal_to({"a": 0, "b": 2}, ignore="b"),
+    ],
+    ids=["verdict", "walk"],
+)
+def test_a_refusal_whose_class_cannot_be_asked_comes_out_as_it_was_raised(ask):
+    """What handles a refusal is read off its type, as ``except`` reads it: its ``__class__`` is never asked."""
+
+    class InspectedError(OverflowError):
+        @property
+        def __class__(self):
+            raise RuntimeError("class inspected")
+
+    class RefusesEveryone:
+        def __eq__(self, other: object) -> bool:
+            raise InspectedError("mine")
+
+    try:
+        ask(RefusesEveryone())
+    except OverflowError as refusal:
+        assert_that(type(refusal)).is_same_as(InspectedError)
+    else:
+        pytest.fail("the refusal of == was answered instead of handed on")
+
+
 def test_a_signal_ahead_of_an_array_is_answered_as_the_signal():
     """``==`` stopped at the signalling NaN and never asked the array after it, so the array is not what refused."""
     numpy = pytest.importorskip("numpy")

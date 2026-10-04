@@ -1060,10 +1060,30 @@ def test_a_class_that_holds_no_number_is_read_once(monkeypatch):
     plain = type("Plain", (), {})
     assert_that(_ordering.nan_operand(plain())).is_false()
     assert_that(kept).is_equal_to({plain})
-    read = []
-    monkeypatch.setattr(_ordering, "_exact_real", read.append)
+    looked_up = []
+    monkeypatch.setattr(_ordering, "_known_number_method", lambda *asked: looked_up.append(asked))
     assert_that(_ordering.nan_operand(plain())).is_false()
-    assert_that(read).is_empty()
+    assert_that(looked_up).is_empty()
+
+
+def test_a_class_is_asked_for_its_method_once_at_its_first_reading(monkeypatch):
+    """Asked a second time to decide whether to keep the class, a method that answers once raised out of a failure."""
+
+    class AnswersOnce:
+        asked = 0
+
+        @property
+        def __objclass__(self) -> None:
+            type(self).asked += 1
+            if type(self).asked > 1:
+                raise RuntimeError("asked twice")
+
+    class Plain:
+        as_integer_ratio = AnswersOnce()
+
+    monkeypatch.setattr(_ordering, "_UNREAD_KINDS", set())
+    assert_that(_ordering.nan_operand(Plain())).is_false()
+    assert_that(AnswersOnce.asked).is_equal_to(1)
 
 
 @pytest.mark.parametrize(("held", "after"), [(255, 256), (256, 256)], ids=["room-for-one", "full"])
