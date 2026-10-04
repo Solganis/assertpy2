@@ -227,12 +227,15 @@ def _itself(owner: str, protocols: dict[str, ast.ClassDef]) -> set[str]:
 def _members(
     name: str, protocols: dict[str, ast.ClassDef], seen: frozenset[str] = frozenset()
 ) -> dict[str, tuple[str, list[str]]]:
-    """Member to its owner and every overload's return, bases first so a child shadows what it overrides."""
+    """Member to its owner and every overload's return, bases first so a child shadows what it overrides.
+
+    The bases last to first, so that of two declaring one member the earlier wins, as it does for a caller.
+    """
     if name in seen or name not in protocols:
         return {}
     node = protocols[name]
     found: dict[str, tuple[str, list[str]]] = {}
-    for base in _NAME.findall(", ".join(ast.unparse(base) for base in node.bases)):
+    for base in reversed(_NAME.findall(", ".join(ast.unparse(base) for base in node.bases))):
         found.update(_members(base, protocols, seen | {name}))
     declared: dict[str, list[tuple[str, str]]] = {}
     for body in node.body:
@@ -439,7 +442,11 @@ def _pin_narrowing(expression: ast.expr, member: str, predicates: dict[str, str]
 
 @functools.cache
 def _established() -> frozenset[str]:
-    """The names the pin file did not make up: what it imports, the classes it declares, and the builtin types."""
+    """The names the pin file did not make up: what it imports, the classes it declares, and the builtin types.
+
+    Less every name it assigns anywhere: a class of one scope and a tuple of another can share a name, and the
+    file is not read scope by scope.
+    """
     tree = _parsed(_PINS)
     imported = {
         (alias.asname or alias.name).split(".", 1)[0]
@@ -448,7 +455,9 @@ def _established() -> frozenset[str]:
         for alias in node.names
     }
     declared = {node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)}
-    return frozenset(imported | declared | {name for name, value in vars(builtins).items() if isinstance(value, type)})
+    assigned = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store)}
+    builtin = {name for name, value in vars(builtins).items() if isinstance(value, type)}
+    return frozenset((imported | declared | builtin) - assigned)
 
 
 def _names_a_class(node: ast.expr) -> bool:
@@ -494,10 +503,19 @@ def _chains_by_name() -> frozenset[str]:
     return frozenset(
         target.id
         for node in ast.walk(_parsed(_PINS))
-        if isinstance(node, ast.Assign) and _subject(node.value) is not None
+        if isinstance(node, ast.Assign) and _still_a_view(node.value)
         for target in node.targets
         if isinstance(target, ast.Name)
     )
+
+
+def _still_a_view(expression: ast.expr) -> bool:
+    """Whether a chain off `assert_that` ends on a view: read through `value` or `val` it is the subject."""
+    outermost = expression
+    while isinstance(outermost, ast.Call):
+        outermost = outermost.func
+    left = isinstance(outermost, ast.Attribute) and outermost.attr in ("value", "val")
+    return _subject(expression) is not None and not left
 
 
 def _subject(expression: ast.expr) -> ast.expr | None:
@@ -667,6 +685,37 @@ def test_a_member_reached_off_anything_but_assert_that_is_no_pin() -> None:
         ("_CapableAssertion", "is_instance_of", "AssertionBuilder", "<2 classes>")
     )
     assert_that(_chains_by_name()).contains("polled").does_not_contain("rows")
+    assert_that(
+        _still_a_view(ast.parse("assert_that(len).raises(KeyError).when_called_with()", mode="eval").body)
+    ).is_true()
+    # the subject read back is whatever it is, and a member of the same name on it is not the library's
+    assert_that(_still_a_view(ast.parse('assert_that(cast("Foreign", anything)).value', mode="eval").body)).is_false()
+    assert_that(_still_a_view(ast.parse("assert_that(rows).first().val", mode="eval").body)).is_false()
+
+
+def test_a_name_the_file_assigns_is_not_established(monkeypatch: pytest.MonkeyPatch, tmp_path: pathlib.Path) -> None:
+    """A class of one scope and a tuple of another can share a name, so an assigned name is no class anywhere."""
+    pins = tmp_path / "pins.py"
+    pins.write_text(
+        "import decimal\n\n\ndef scope():\n    class classes: ...\n\n\nclass Paid: ...\n\n\nclasses = (Paid, int)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_PINS", pins)
+    established = _established.__wrapped__()
+    assert_that(established).contains("Paid", "decimal", "int").does_not_contain("classes")
+
+
+def test_of_two_bases_declaring_one_member_the_earlier_is_its_owner() -> None:
+    """As for a caller: resolved last base first, the later base won and a rung nobody reaches was asked for a pin."""
+    source = (
+        "class _First:\n    def pivot(self) -> int: ...\n\n\n"
+        "class _Second:\n    def pivot(self) -> str: ...\n    def other(self) -> str: ...\n\n\n"
+        "class _Both(_First, _Second): ...\n"
+    )
+    protocols = {node.name: node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.ClassDef)}
+    members = _members("_Both", protocols)
+    assert_that(members["pivot"]).is_equal_to(("_First", [("int", "")]))
+    assert_that(members["other"][0]).is_equal_to("_Second")
 
 
 @pytest.mark.parametrize(
