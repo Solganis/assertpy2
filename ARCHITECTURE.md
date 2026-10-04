@@ -18,7 +18,7 @@ Most of it is not yours to edit:
 
 | file | protocols | declarations |
 |---|---|---|
-| `_engine/_typing.py` | 42 | 413 |
+| `_engine/_typing.py` | 43 | 414 |
 | `_engine/_check_typing.py` | 34 | 325 |
 | `_engine/_builder_check_typing.py` | 1 | 317 |
 | `_engine/_capable_typing.py` | 10 | 323 |

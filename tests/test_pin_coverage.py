@@ -34,10 +34,8 @@ Rungs returning one view are told apart by what they narrow on, since `satisfies
 of the three ladders keeps that in a different place: `satisfies` in a `TypeIs[...]` argument,
 `is_instance_of` in a `type[...]` one, `is_not_none` in the `self` annotation.
 
-Four rungs have no portable pin, recorded in `UNPINNABLE` with what refuses them. `is_not_none` on a
-nullable `bool`, `int`, `float` or `datetime` resolves to `Unknown` on ty while mypy `--strict` reads all
-four correctly, and the badge promises zero suppressions, so there is nowhere to put the difference but
-here.
+A rung with no portable pin is recorded in `_UNPINNABLE` with what refuses it: the badge promises zero
+suppressions, so there is nowhere to put a difference between checkers but there.
 """
 
 from __future__ import annotations
@@ -55,10 +53,6 @@ _LADDER = _ROOT / "assertpy2" / "assertpy.py"
 _PINS = _ROOT / "tests" / "test_typing.py"
 _UNCHANGED = frozenset({"Self", "None"})
 _UNPINNABLE = {
-    ("_ObjectAssertion", "is_not_none", "_BoolAssertion", "bool"),
-    ("_ObjectAssertion", "is_not_none", "_NumericAssertion[int]", "int"),
-    ("_ObjectAssertion", "is_not_none", "_NumericAssertion[float]", "float"),
-    ("_ObjectAssertion", "is_not_none", "_DateTimeAssertion", "datetime.datetime"),
     # no expression produces its receiver: a nullable capable value resolves to the object fallback,
     # measured, so `_CapableAssertion[_U | None]` is a `self` nothing hands back
     ("_CapableAssertion", "is_not_none", "_CapableAssertion", "*|None"),
@@ -147,8 +141,8 @@ def _narrowed_to(annotation: str, typevars: frozenset[str]) -> str:
     cannot read carries an empty one, which any pin answers.
     """
     inside = next((found for opener in ("TypeIs[", "type[") if (found := _inside(annotation, opener))), "")
-    if not inside and annotation.startswith("_ObjectAssertion["):
-        inside = _inside(annotation, "_ObjectAssertion[").removesuffix(" | None")
+    if not inside and annotation.startswith("_Holding["):
+        inside = _inside(annotation, "_Holding[").removesuffix(" | None")
     if not inside:
         return ""
     written = inside
@@ -483,6 +477,18 @@ def test_every_type_changing_member_is_pinned() -> None:
     assert_that(unpinned).described_as(
         "members handing back something other than `Self` with no `assert_type` pinning what"
     ).is_empty()
+
+
+def test_the_rungs_of_is_not_none_are_told_apart() -> None:
+    """A narrowing that cannot be read is empty, two empty ones are one requirement, and a rung drops out unasked.
+
+    The protocol their `self` is keyed on was renamed once, and the two rungs handing back
+    `_IterableAssertion` became one that either pin answered, with every test here still green.
+    """
+    typevars = frozenset(_typevars())
+    _, rungs = _members("_ObjectAssertion", _protocols())["is_not_none"]
+    narrowings = [_narrowed_to(narrows, typevars) for _, narrows in rungs if narrows]
+    assert_that(narrowings).is_length(15).does_not_contain("").does_not_contain_duplicates()
 
 
 def test_no_recorded_rung_became_pinnable() -> None:

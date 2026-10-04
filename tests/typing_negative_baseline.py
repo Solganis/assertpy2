@@ -97,6 +97,9 @@ _NOT_CALLABLE: dict[str, frozenset[str]] = {
 CAUGHT: dict[str, dict[str, frozenset[str]]] = {
     "contains-item-of-another-type": _ARGUMENT,
     "numeric-compared-to-text": _ARGUMENT,
+    "narrowed-number-compared-to-text": _ARGUMENT,
+    "narrowed-items-of-another-type": _ARGUMENT,
+    "narrowed-moment-before-text": _ARGUMENT,
     "mapping-key-of-another-type": _ARGUMENT,
     "mapping-value-of-another-type": _ARGUMENT,
     "numeric-range-of-text": _ARGUMENT,

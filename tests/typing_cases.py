@@ -138,10 +138,26 @@ class _Ordered:
         return False
 
 
+def _maybe_count() -> int | None:
+    """An optional number, which `is_not_none()` has to land on the numeric view for the operand to be read."""
+    return 1
+
+
+def _maybe_counts() -> list[int] | None:
+    return [1]
+
+
+def _maybe_moment() -> datetime.datetime | None:
+    return None
+
+
 def _incompatible_operands() -> None:
     """Pairs where the two sides cannot be compared, whatever the runtime does with them."""
     assert_that([1, 2, 3]).contains("wrong type")  # case: contains-item-of-another-type
     assert_that(1).is_greater_than("wrong type")  # case: numeric-compared-to-text
+    assert_that(_maybe_count()).is_not_none().is_greater_than("wrong type")  # case: narrowed-number-compared-to-text
+    assert_that(_maybe_counts()).is_not_none().contains("wrong type")  # case: narrowed-items-of-another-type
+    assert_that(_maybe_moment()).is_not_none().is_before("wrong type")  # case: narrowed-moment-before-text
     assert_that({"id": 1}).contains_key(3.14)  # case: mapping-key-of-another-type
     assert_that({"id": 1}).contains_value(object())  # case: mapping-value-of-another-type
     assert_that(1).is_between("a", "b")  # case: numeric-range-of-text

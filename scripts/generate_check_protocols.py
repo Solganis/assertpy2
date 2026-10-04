@@ -65,6 +65,7 @@ if TYPE_CHECKING:
         _ArrayT_co,
         _CapableT,
         _FrameT_co,
+        _Holding,
         _Landed,
         _NegatedObjectAssertion,
         _ObjectAssertion,
