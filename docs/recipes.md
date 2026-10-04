@@ -81,6 +81,49 @@ assert_that(actual).matches_structure({
 `is_equal_to(ignore=...)` does the same for object graphs (dataclasses, attrs, Pydantic models), by key,
 nested path, regex, or type - see [Selective comparison](guides/assertions.md#selective-comparison-ignore--include).
 
+## Compare rows that arrive in any order
+
+Where every row carries a key of its own, sort both sides by it and compare them as lists. `ignore`
+leaves the volatile fields out, and a failure points at the row and the field:
+
+```python
+def by_id(row):
+    return row["id"]
+
+
+rows = [
+    {"id": 3, "name": "Cy", "role": "reader", "updated_at": "2026-03-01T10:00:00Z"},
+    {"id": 1, "name": "Ann", "role": "admin", "updated_at": "2026-03-01T10:00:02Z"},
+    {"id": 2, "name": "Bo", "role": "reader", "updated_at": "2026-03-01T10:00:01Z"},
+]
+expected = [
+    {"id": 1, "name": "Ann", "role": "admin"},
+    {"id": 2, "name": "Bo", "role": "reader"},
+    {"id": 3, "name": "Cy", "role": "reader"},
+]
+
+assert_that(sorted(rows, key=by_id)).is_equal_to(sorted(expected, key=by_id), ignore="updated_at")
+```
+
+Had the second row been expected as an editor:
+
+```text
+Expected <[.., {.., 'role': 'reader'}, ..]> to be equal to <[.., {.., 'role': 'editor'}, ..]> ignoring keys <updated_at>, but was not.
+diff (sequence):
+  [1].role:
+    - 'reader'
+    + 'editor'
+```
+
+This holds where every row has the key, the keys can be ordered against each other, and no two rows
+share one. Two rows with the same key are paired in the order they arrived, which need not be the pair
+you meant.
+
+Where the rows have no such key,
+[`contains_exactly_in_any_order()`](guides/assertions.md#lists) compares them as a multiset, and takes
+`match.equal_to(row, ignore="updated_at")` in place of a row to leave a field out. Its failure lists the
+rows it did not find and the rows nobody asked for, whole, and does not point into them.
+
 ## Choose a snapshot style
 
 Store the expected value in a **file** with `snapshot()`, or **inline** in the test source with
